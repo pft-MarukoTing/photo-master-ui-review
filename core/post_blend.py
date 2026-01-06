@@ -1090,49 +1090,75 @@ class FaceDetailRestorer:
         mask = np.maximum(mask_L, mask_R)
         return mask
 
-    def restore_core(self, img_a, img_b, mode="add", output_folder=None):
-        if img_a is None or img_b is None:
-            if DEBUG:
-                print("Error: Could not read images.")
-            return
-
-        # ==========================================
-        # Detection & Cropping
-        # ==========================================
-        TARGET_SIZE = 1024
+    def analyze_face(self, img, target_size=1024, padding=1.4):
+        """
+        Pre-process stage.
+        Detects, Crops, Aligns, Segment, and calculates all landmarks.
+        Returns a dictionary containing all necessary data for restoration.
+        """
+        # 1. Detection
+        rect = self.pipeline.detect(img, bypass=False)
+        if rect is None:
+            return {"success": False}
         
-        rect_a = self.pipeline.detect(img_a, bypass=False)
-        if rect_a is None:
-            print("Face A not found")
-            return img_b
+        # 2. Crop Matrix
+        M = self._get_crop_matrix(rect, img.shape[1], img.shape[0], target_size, padding)
         
-        M_a = self._get_crop_matrix(rect_a, img_a.shape[1], img_a.shape[0], TARGET_SIZE, padding=1.4)
-        img_a_crop = cv2.warpAffine(img_a, M_a, (TARGET_SIZE, TARGET_SIZE))
+        # 3. Crop Image (Align)
+        crop_img = cv2.warpAffine(img, M, (target_size, target_size))
         
-        rect_b = self.pipeline.detect(img_b, bypass=False)
-        if rect_b is None:
-            print("Face B not found")
-            return img_b
-        
-        M_b = self._get_crop_matrix(rect_b, img_b.shape[1], img_b.shape[0], TARGET_SIZE, padding=1.4)
-        img_b_crop = cv2.warpAffine(img_b, M_b, (TARGET_SIZE, TARGET_SIZE))
-        
-        # === Step 1: Landmark Detection ===
         try:
-            pts_a, pts_84_a = self.get_landmarks(img_a_crop)
-            pts_b, pts_84_b = self.get_landmarks(img_b_crop)
-            aux_forehead_a = self._get_forehead_points(np.array(pts_a), img_a_crop.shape)
-            aux_forehead_b = self._get_forehead_points(np.array(pts_b), img_b_crop.shape)
-            aux_cheek_a = self._get_cheek_points(pts_a)
-            aux_cheek_b = self._get_cheek_points(pts_b)
-            pts_a_extended = pts_a + aux_forehead_a + aux_cheek_a
-            pts_b_extended = pts_b + aux_forehead_b + aux_cheek_b
-        except ValueError as e:
-            return img_b
-        
-        # =========== Step 1.1: Segmentation ===========
-        seg_mask_a = self.pipeline.segment(img_a_crop, pts_84_a)
-        seg_mask_b = self.pipeline.segment(img_b_crop, pts_84_b)
+            # 4. Landmarks
+            pts, pts_84 = self.get_landmarks(crop_img)
+            
+            # 5. Aux Points (Forehead & Cheek)
+            aux_forehead = self._get_forehead_points(np.array(pts), crop_img.shape)
+            aux_cheek = self._get_cheek_points(pts)
+            
+            # 6. Segmentation
+            seg_mask = self.pipeline.segment(crop_img, pts_84) # Can be None
+            
+            return {
+                "success": True,
+                "crop_img": crop_img, # OpenCV BGR
+                "M": M,
+                "pts": pts,
+                "pts_84": pts_84,
+                "seg_mask": seg_mask, # (H,W,3) 0-1 float or similar
+                "aux_forehead": aux_forehead,
+                "aux_cheek": aux_cheek
+            }
+        except Exception as e:
+            if DEBUG: print(f"Analysis failed: {e}")
+            return {"success": False}
+
+    def restore_face_from_data(self, 
+                               img_a_crop, mask_a, data_a, 
+                               img_b_crop, mask_b, data_b, 
+                               full_img_b, mode="add"):
+        """
+        New Function: Post-process stage.
+        Takes explicitly provided images/masks and metadata.
+        """
+        if not data_a.get("success") or not data_b.get("success"):
+            return full_img_b
+
+        # Unpack Data B (Target)
+        pts_b = data_b["pts"]
+        M_b = data_b["M"]
+        pts_b_extended = pts_b + data_b["aux_forehead"] + data_b["aux_cheek"]
+        seg_mask_b = mask_b if mask_b is not None else data_b.get("seg_mask")
+
+        # Unpack Data A (Reference)
+        pts_a = data_a["pts"]
+        pts_a_extended = pts_a + data_a["aux_forehead"] + data_a["aux_cheek"]
+        seg_mask_a = mask_a if mask_a is not None else data_a.get("seg_mask")
+
+        # Ensure masks are valid for calculations (numpy array)
+        if seg_mask_a is None:
+             seg_mask_a = np.zeros(img_a_crop.shape, dtype=np.float32)
+        if seg_mask_b is None:
+             seg_mask_b = np.zeros(img_b_crop.shape, dtype=np.float32)
 
         # === Step 2: Texture Extraction ===
         texture_a = self.extract_texture(img_a_crop)
@@ -1143,19 +1169,17 @@ class FaceDetailRestorer:
                 pts_a, 
                 img_a_crop.shape,
                 seg_mask=seg_mask_a, 
-                shrink_override=10, #40
-                blur_override=10, #20
+                shrink_override=10, 
+                blur_override=10, 
                 fade_power=1.0 
             )
-            if seg_mask_a is not None:
-                final_mask_a = final_mask_a * seg_mask_a
         else: # "add" mode & "eyes_replacement" mode
             mask_a_strict = self.create_blending_mask(
                 pts_a, 
                 img_a_crop.shape,
                 seg_mask=seg_mask_a, 
-                shrink_override=10, #40
-                blur_override=10, #20
+                shrink_override=10, 
+                blur_override=10, 
                 fade_power=1.0,
                 exclude_features=True,
                 seg_erosion=45, 
@@ -1164,7 +1188,7 @@ class FaceDetailRestorer:
             mask_a_broad = self.create_blending_mask(
                 pts_a, img_a_crop.shape, seg_mask=seg_mask_a, 
                 shrink_override=5, blur_override=10, fade_power=1.0,
-                exclude_features=False, # <--- 不挖洞
+                exclude_features=False, 
                 seg_erosion=45, 
             )
 
@@ -1185,14 +1209,14 @@ class FaceDetailRestorer:
             img_b_crop.shape,
             seg_mask=seg_mask_b,
             shrink_override=self.mask_shrink_size,
-            blur_override=40, #40
+            blur_override=40,
             fade_power=1.5,
             exclude_features=True
         )
 
         if mode == "replace":
             mask_b = mask_b_strict
-        else: # "add" mode & "eyes_replacement" mode
+        else: 
             mask_b_broad = self.create_blending_mask(
                 pts_b, img_b_crop.shape, seg_mask=seg_mask_b,
                 shrink_override=0, blur_override=40, fade_power=1.5,
@@ -1240,13 +1264,10 @@ class FaceDetailRestorer:
                     (texture_a_warped * self.detail_strength * ratio_add_a)
         else:
             texture_b = l - l_blurred
+            RATIO_A = 1.0 
+            RATIO_B = 0.0 
             
-            RATIO_A = 1.0 # 越大添加越多
-            RATIO_B = 0.0 # 越小保留越多
-            # 計算 B 細節的保留率
             ratio_keep_b = 1.0 - (mask_single * RATIO_B) 
-            
-            # 計算 A 細節的添加率
             ratio_add_a = mask_single * RATIO_A
             
             l_final = l_blurred + \
@@ -1259,10 +1280,36 @@ class FaceDetailRestorer:
         
         img_b_lab_new = cv2.merge([l_final, a_final, b_final])
         final_crop = cv2.cvtColor(img_b_lab_new.astype(np.uint8), cv2.COLOR_LAB2BGR)
-        final_img = self._paste_back(img_b, final_crop, mask_b, M_b)
+        
+        final_img = self._paste_back(full_img_b, final_crop, mask_b, M_b)
 
         return final_img
 
+    def restore_core(self, img_a, img_b, mode="add", output_folder=None):
+        if img_a is None or img_b is None:
+            if DEBUG: print("Error: Could not read images.")
+            return
+
+        # 1. Analyze A
+        data_a = self.analyze_face(img_a)
+        if not data_a["success"]:
+            print("Face A not found")
+            return img_b
+        
+        # 2. Analyze B
+        data_b = self.analyze_face(img_b)
+        if not data_b["success"]:
+            print("Face B not found")
+            return img_b
+        
+        # 3. Restore
+        # Legacy support: use the data in the dict directly
+        return self.restore_face_from_data(
+            data_a["crop_img"], data_a["seg_mask"], data_a,
+            data_b["crop_img"], data_b["seg_mask"], data_b,
+            img_b, mode=mode
+        )
+    
     def restore_core_addon(self, img_a, img_b, output_folder=None):
         return self.restore_core(img_a, img_b, mode="add", output_folder=output_folder)
 
