@@ -660,7 +660,7 @@ class FaceDetailRestorer:
         ]
     
     def create_blending_mask(self, points, shape, seg_mask=None, shrink_override=None, blur_override=None, \
-                             roi_dilate_size=41, fade_power=2.0, exclude_features=True):
+                             roi_dilate_size=41, fade_power=2.0, exclude_features=True, seg_erosion=0):
         """
         Creates a soft mask based on Landmarks + Optional Segmentation Mask.
         Logic: (Dilated ROI * SegMask) - (Mouth + NoseTip + Eyes)
@@ -746,7 +746,60 @@ class FaceDetailRestorer:
             else:
                 seg_mask_single = seg_mask
                 
-            mask_combined = mask_float * seg_mask_single
+            if seg_erosion > 0:
+                kernel_seg = np.ones((seg_erosion, seg_erosion), np.uint8)
+                seg_u8 = (seg_mask_single * 255).astype(np.uint8)
+                seg_eroded_u8 = cv2.erode(seg_u8, kernel_seg, iterations=1)
+                seg_eroded_f = seg_eroded_u8.astype(np.float32) / 255.0
+                
+                erosion_weight = np.zeros(shape[:2], dtype=np.float32)
+                
+                p0 = np.array(points[0])   # 左鬢角
+                p16 = np.array(points[16]) # 右鬢角
+                
+                vec_x = p16[0] - p0[0]
+                vec_y = p16[1] - p0[1]
+                face_width = np.hypot(vec_x, vec_y)
+                
+                if face_width == 0: face_width = 1.0
+                
+                dir_right_x = vec_x / face_width
+                dir_right_y = vec_y / face_width
+                dir_up_x = dir_right_y
+                dir_up_y = -dir_right_x
+                
+                ext_w = face_width * 1.0 
+                ext_h = face_width * 2.0
+                
+                p16_far = p16 + np.array([dir_right_x, dir_right_y]) * ext_w
+                p0_far = p0 - np.array([dir_right_x, dir_right_y]) * ext_w
+                p16_sky = p16_far + np.array([dir_up_x, dir_up_y]) * ext_h
+                p0_sky = p0_far + np.array([dir_up_x, dir_up_y]) * ext_h
+                
+                brows_right = [points[i] for i in range(26, 21, -1)]
+                brows_left = [points[i] for i in range(21, 16, -1)]
+                
+                upper_zone_poly = np.array([
+                    p16_sky,         # 右上
+                    p16_far,         # 右側
+                    p16,             # 右鬢角 (接合點)
+                    *brows_right,    # 右眉上緣
+                    *brows_left,     # 左眉上緣
+                    p0,              # 左鬢角 (接合點)
+                    p0_far,          # 左側
+                    p0_sky           # 左上
+                ], dtype=np.int32)
+                
+                cv2.fillPoly(erosion_weight, [upper_zone_poly], 1.0)
+                
+                erosion_weight = cv2.GaussianBlur(erosion_weight, (101, 101), 50)
+                
+                seg_mask_final = seg_eroded_f * erosion_weight + seg_mask_single * (1.0 - erosion_weight)
+            else:
+                seg_mask_final = seg_mask_single
+            
+            mask_combined = mask_float * seg_mask_final
+            #mask_combined = mask_float * seg_mask_single
             mask_u8 = (mask_combined * 255).astype(np.uint8)
 
         # ==========================================
@@ -965,7 +1018,6 @@ class FaceDetailRestorer:
         Calculates a dynamic polygon covering the Crow's Feet area.
         Adapts to head rotation (yaw) by using face contour landmarks.
         """
-        # 定義關鍵點索引
         if side == 'left':
             idx_eye_corner = [39, 40, 41, 36]  # 左眼下緣
             idx_brow_tail = 17   # 左眉尾
@@ -1097,7 +1149,7 @@ class FaceDetailRestorer:
             )
             if seg_mask_a is not None:
                 final_mask_a = final_mask_a * seg_mask_a
-        else:
+        else: # "add" mode & "eyes_replacement" mode
             mask_a_strict = self.create_blending_mask(
                 pts_a, 
                 img_a_crop.shape,
@@ -1105,13 +1157,15 @@ class FaceDetailRestorer:
                 shrink_override=10, #40
                 blur_override=10, #20
                 fade_power=1.0,
-                exclude_features=True 
+                exclude_features=True,
+                seg_erosion=45, 
             )
             
             mask_a_broad = self.create_blending_mask(
                 pts_a, img_a_crop.shape, seg_mask=seg_mask_a, 
                 shrink_override=5, blur_override=10, fade_power=1.0,
-                exclude_features=False # <--- 不挖洞
+                exclude_features=False, # <--- 不挖洞
+                seg_erosion=45, 
             )
 
             raw_mask_a = (mask_a_broad * 0.4) + (mask_a_strict * 0.6)
@@ -1138,7 +1192,7 @@ class FaceDetailRestorer:
 
         if mode == "replace":
             mask_b = mask_b_strict
-        else:
+        else: # "add" mode & "eyes_replacement" mode
             mask_b_broad = self.create_blending_mask(
                 pts_b, img_b_crop.shape, seg_mask=seg_mask_b,
                 shrink_override=0, blur_override=40, fade_power=1.5,
