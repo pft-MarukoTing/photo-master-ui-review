@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import os
+import math
 import time
 from .face_model_pipe import OnnxFacePipeline
 
@@ -1114,17 +1115,109 @@ class FaceDetailRestorer:
         
         return mask
 
-    def analyze_face(self, img, target_size=1024, padding=1.4):
+    def _select_best_pair(self, candidates_a, candidates_b, img_w, img_h):
+        """
+        Selects the best pair of faces (rect_a, rect_b) based on:
+        1. Overlap (IoU) - Primary factor (Must be the same face position)
+        2. Size (Area) - Secondary factor (Prefer larger faces)
+        3. Centricity - Tertiary factor (Prefer centered faces)
+        """
+        if not candidates_a or not candidates_b:
+            return None, None
+
+        best_pair = (None, None)
+        best_score = -1.0
+        
+        img_cx, img_cy = img_w / 2.0, img_h / 2.0
+        img_diag = math.sqrt(img_w**2 + img_h**2)
+
+        # Helper: 計算 IoU
+        def get_iou(r1, r2):
+            # r = [x, y, w, h]
+            x1 = max(r1[0], r2[0])
+            y1 = max(r1[1], r2[1])
+            x2 = min(r1[0]+r1[2], r2[0]+r2[2])
+            y2 = min(r1[1]+r1[3], r2[1]+r2[3])
+            
+            inter_w = max(0, x2 - x1)
+            inter_h = max(0, y2 - y1)
+            inter_area = inter_w * inter_h
+            
+            area1 = r1[2] * r1[3]
+            area2 = r2[2] * r2[3]
+            union_area = area1 + area2 - inter_area
+            
+            if union_area <= 0: return 0
+            return inter_area / union_area
+        
+        for rect_a in candidates_a[:3]:
+            for rect_b in candidates_b[:3]:
+                
+                iou_val = get_iou(rect_a, rect_b)
+                
+                if iou_val < 0.3: 
+                    continue
+                
+                avg_area = (rect_a[2] * rect_a[3] + rect_b[2] * rect_b[3]) / 2.0
+                size_score = math.sqrt(avg_area) / math.sqrt(img_w * img_h)
+                
+                cx_a = rect_a[0] + rect_a[2] / 2
+                cy_a = rect_a[1] + rect_a[3] / 2
+                cx_b = rect_b[0] + rect_b[2] / 2
+                cy_b = rect_b[1] + rect_b[3] / 2
+                
+                avg_cx = (cx_a + cx_b) / 2
+                avg_cy = (cy_a + cy_b) / 2
+                
+                dist_to_center = math.sqrt((avg_cx - img_cx)**2 + (avg_cy - img_cy)**2)
+                center_score = 1.0 - (dist_to_center / (img_diag / 2))
+                
+                # === 綜合評分 ===
+                # 權重設定：
+                # IoU 最重要 (確保是同一個人)
+                # Size 次之 (確保是主角)
+                # Center 用來當 Size 差不多時的決勝點
+                total_score = (iou_val * 2.0) + (size_score * 1.5) + (center_score * 0.5)
+                
+                if total_score > best_score:
+                    best_score = total_score
+                    best_pair = (rect_a, rect_b)
+        
+        if best_pair[0] is None:
+            print("[Best Match] No matching pair found (IoU too low). Falling back to largest faces.")
+            return candidates_a[0], candidates_b[0]
+            
+        return best_pair
+    
+    def get_paired_face_rects(self, img_a, img_b):
+        """
+        Stage 1: Comparison & Selection.
+        Detects faces in both images and selects the best corresponding pair based on heuristics.
+        Returns: (rect_a, rect_b)
+        """
+        if self.is_pre_aligned:
+            h_a, w_a = img_a.shape[:2]
+            h_b, w_b = img_b.shape[:2]
+            return [0, 0, w_a, h_a], [0, 0, w_b, h_b]
+        
+        rect_a_large, full_detect_a = self.pipeline.detect(img_a, bypass=False)
+        rect_b_large, full_detect_b = self.pipeline.detect(img_b, bypass=False)
+
+        rect_a, rect_b = self._select_best_pair(
+            full_detect_a, full_detect_b, img_a.shape[1], img_a.shape[0]
+        )
+
+        if rect_a is None or rect_b is None:
+            rect_a, rect_b = rect_a_large, rect_b_large # fallback to largest faces
+        
+        return rect_a, rect_b
+    
+    def analyze_face(self, img, rect=None, target_size=1024, padding=1.4):
         """
         Pre-process stage.
-        Detects, Crops, Aligns, Segment, and calculates all landmarks.
+        Detects, Crops, Aligns, Segment, and calculates landmarks.
         Returns a dictionary containing all necessary data for restoration.
         """
-        # 1. Detection
-        rect = self.pipeline.detect(img, bypass=self.is_pre_aligned)
-        if rect is None:
-            return {"success": False}
-        
         # 2. Crop Matrix
         M = self._get_crop_matrix(rect, img.shape[1], img.shape[0], target_size, padding)
         
@@ -1320,14 +1413,16 @@ class FaceDetailRestorer:
             if DEBUG: print("Error: Could not read images.")
             return
 
+        rect_a, rect_b = self.get_paired_face_rects(img_a, img_b)
+
         # 1. Analyze A
-        data_a = self.analyze_face(img_a)
+        data_a = self.analyze_face(img_a, rect=rect_a)
         if not data_a["success"]:
             print("Face A not found")
             return img_b
         
         # 2. Analyze B
-        data_b = self.analyze_face(img_b)
+        data_b = self.analyze_face(img_b, rect=rect_b)
         if not data_b["success"]:
             print("Face B not found")
             return img_b

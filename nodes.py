@@ -69,10 +69,10 @@ class FaceDetailRestorerNode:
                 "pipeline": ("FACE_PIPELINE",),
                 "image_origin": ("IMAGE",),      # 原始圖 (Reference)
                 "image_generated": ("IMAGE",),   # 生成圖 (Smile)
-                "mode": (["add", "replace", "eyes_replacement"],{"default": "eyes_replacement"}),
+                #"mode": (["add", "replace", "eyes_replacement"],{"default": "eyes_replacement"}),
                 "sigma": ("INT", {"default": 7, "min": 1, "max": 50}),
                 "detail_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
-                "forehead_strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.05}),
+                #"forehead_strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.05}),
                 "mask_shrink_size": ("INT", {"default": 0, "min": 0, "max": 100}),
             }
         }
@@ -81,7 +81,9 @@ class FaceDetailRestorerNode:
     FUNCTION = "restore_face"
     CATEGORY = "FaceRestoration"
 
-    def restore_face(self, pipeline, image_origin, image_generated, mode, sigma, detail_strength, forehead_strength, mask_shrink_size):
+    def restore_face(self, pipeline, image_origin, image_generated, sigma, detail_strength, mask_shrink_size):
+        mode = "eyes_replacement" # ["add", "replace", "eyes_replacement"]
+        forehead_strength = 0.5
         return self._restore_common(pipeline, image_origin, image_generated, sigma, detail_strength, forehead_strength, mask_shrink_size, mode=mode)
 
     def _restore_common(self, pipeline, image_origin, image_generated, sigma, detail_strength, forehead_strength, mask_shrink_size, mode):

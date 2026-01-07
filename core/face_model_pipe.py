@@ -125,7 +125,7 @@ class OnnxFacePipeline:
         img = cv2.resize(src_img, target_shape, interpolation=cv2.INTER_AREA)
 
         # Run internal detect logic
-        best_rect = self._detect_face_internal(self.detect_model, img)
+        best_rect, full_detect = self._detect_face_internal(self.detect_model, img)
         if DEBUG:
             print(f"Best detected rect (scaled): {best_rect}")
         
@@ -134,7 +134,15 @@ class OnnxFacePipeline:
 
         # Scale back to original size
         x, y, w, h = best_rect
-        return [x / scale, y / scale, w / scale, h / scale]
+        def _rescale_rect(rect, scale):
+            rx, ry, rw, rh = rect
+            return [rx / scale, ry / scale, rw / scale, rh / scale]
+        
+        for i in range(len(full_detect)):
+            fx, fy, fw, fh = full_detect[i][0]
+            full_detect[i] = _rescale_rect((fx, fy, fw, fh), scale)
+        
+        return [x / scale, y / scale, w / scale, h / scale], full_detect
 
     def _detect_face_internal(self, model, src_img):
         anchor_list_dict = {
@@ -236,11 +244,11 @@ class OnnxFacePipeline:
             
             passed_tuple.sort(key=get_priority, reverse=True)
             
-            best_detect = passed_tuple[0][0]
+            best_detect, full_detect = passed_tuple[0][0], passed_tuple
         else:
-            best_detect = None
+            best_detect, full_detect = None, None
 
-        return best_detect
+        return best_detect, full_detect
 
 if __name__ == "__main__":
     sess = ort.InferenceSession("LVOcclusionONNX/alignment_0407_fp16.onnx")
