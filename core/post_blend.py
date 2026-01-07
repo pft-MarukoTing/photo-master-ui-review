@@ -7,12 +7,13 @@ from .face_model_pipe import OnnxFacePipeline
 DEBUG = False
 
 class FaceDetailRestorer:
-    def __init__(self, pipeline, sigma=7, detail_strength=0.7, mask_shrink_size=12, is_pre_aligned=False):
+    def __init__(self, pipeline, sigma=7, detail_strength=0.7, forehead_strength=0.7, mask_shrink_size=12, is_pre_aligned=False):
         """
         Initialize the restorer
         """
         self.sigma = sigma
         self.detail_strength = detail_strength
+        self.forehead_strength = forehead_strength # eyereplacement mode support
         self.mask_shrink_size = mask_shrink_size
         self.is_pre_aligned = is_pre_aligned
         self.pipeline = pipeline
@@ -402,27 +403,6 @@ class FaceDetailRestorer:
             cv2.putText(canvas, str(i), (p[0]+3, p[1]-2), font, font_scale, (0, 0, 255), 1, cv2.LINE_AA)
             
         cv2.imwrite(filename, canvas)
-
-    """
-    # Original RGB-based gray scale texture extraction
-    def extract_texture(self, img):
-        img_float = img.astype(np.float32)
-        blurred = cv2.GaussianBlur(img_float, (0, 0), self.sigma)
-        
-        texture_rgb = img_float - blurred
-        
-        # 2. transfer to Luminance
-        # Y = 0.299*R + 0.587*G + 0.114*B
-        texture_gray = (texture_rgb[:, :, 0] * 0.114 + 
-                        texture_rgb[:, :, 1] * 0.587 + 
-                        texture_rgb[:, :, 2] * 0.299)
-        
-        CLIP_LIMIT = 10.0
-        texture_gray = np.clip(texture_gray, -CLIP_LIMIT, CLIP_LIMIT)
-        
-        texture_monochrome = cv2.merge([texture_gray, texture_gray, texture_gray])
-        return texture_monochrome
-    """
 
     def extract_texture(self, img):
         """
@@ -1089,6 +1069,50 @@ class FaceDetailRestorer:
         
         mask = np.maximum(mask_L, mask_R)
         return mask
+    
+    def _create_forehead_intensity_mask(self, points, shape):
+        """
+        Creates a soft mask specifically for the forehead area to adjust texture intensity.
+        Returns: 1.0 on forehead, 0.0 on lower face.
+        """
+        h, w = shape[:2]
+        mask = np.zeros((h, w), dtype=np.float32)
+        
+        p0 = np.array(points[0])   # 左鬢角
+        p16 = np.array(points[16]) # 右鬢角
+        
+        vec_x = p16[0] - p0[0]
+        vec_y = p16[1] - p0[1]
+        face_width = np.hypot(vec_x, vec_y)
+        if face_width == 0: face_width = 1.0
+        
+        dir_up_x = vec_y / face_width
+        dir_up_y = -vec_x / face_width
+        
+        dir_right_x = vec_x / face_width
+        dir_right_y = vec_y / face_width
+        
+        ext_h = face_width * 2.0
+        ext_w = face_width * 1.0
+        
+        p16_far = p16 + np.array([dir_right_x, dir_right_y]) * ext_w
+        p0_far = p0 - np.array([dir_right_x, dir_right_y]) * ext_w
+        p16_sky = p16_far + np.array([dir_up_x, dir_up_y]) * ext_h
+        p0_sky = p0_far + np.array([dir_up_x, dir_up_y]) * ext_h
+        
+        brows_right = [points[i] for i in range(26, 21, -1)]
+        brows_left = [points[i] for i in range(21, 16, -1)]
+        
+        poly = np.array([
+            p16_sky, p16_far, p16,
+            *brows_right, *brows_left,
+            p0, p0_far, p0_sky
+        ], dtype=np.int32)
+        cv2.fillPoly(mask, [poly], 1.0)
+        
+        mask = cv2.GaussianBlur(mask, (101, 101), 50)
+        
+        return mask
 
     def analyze_face(self, img, target_size=1024, padding=1.4):
         """
@@ -1097,7 +1121,7 @@ class FaceDetailRestorer:
         Returns a dictionary containing all necessary data for restoration.
         """
         # 1. Detection
-        rect = self.pipeline.detect(img, bypass=False)
+        rect = self.pipeline.detect(img, bypass=self.is_pre_aligned)
         if rect is None:
             return {"success": False}
         
@@ -1247,6 +1271,11 @@ class FaceDetailRestorer:
             mask_eye_zone = self._create_eye_surround_mask(pts_b, img_b_crop.shape)
             l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
             texture_b = l - l_blurred
+
+            # add extra forehead intensity mask
+            mask_forehead_zone = self._create_forehead_intensity_mask(pts_b, img_b_crop.shape)
+            strength_map = self.detail_strength * (1.0 - mask_forehead_zone) + \
+                       self.forehead_strength * mask_forehead_zone
             
             KEEP_B_CHEEK = 1.0
             KEEP_B_EYE   = 0.0
@@ -1257,11 +1286,12 @@ class FaceDetailRestorer:
             ADD_A_EYE   = 1.0
             
             target_add_a_map = ADD_A_CHEEK * (1.0 - mask_eye_zone) + ADD_A_EYE * mask_eye_zone
-            ratio_add_a = mask_single * target_add_a_map * self.detail_strength
+            #ratio_add_a = mask_single * target_add_a_map * self.detail_strength
+            ratio_add_a = mask_single * target_add_a_map * strength_map
             
             l_final = l_blurred + \
                     (texture_b * ratio_keep_b) + \
-                    (texture_a_warped * self.detail_strength * ratio_add_a)
+                    (texture_a_warped * ratio_add_a)
         else:
             texture_b = l - l_blurred
             RATIO_A = 1.0 
