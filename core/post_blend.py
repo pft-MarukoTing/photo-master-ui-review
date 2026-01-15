@@ -876,7 +876,7 @@ class FaceDetailRestorer:
         if shrink_size > 0:
             kernel = np.ones((shrink_size, shrink_size), np.uint8)
             mask_u8 = cv2.erode(mask_u8, kernel, iterations=1)
-        
+
         dist_map = cv2.distanceTransform(mask_u8, cv2.DIST_L2, 5)
         fade_width = float(blur_size if blur_size is not None else 30)
         mask_geom_f = np.clip(dist_map / fade_width, 0.0, 1.0)
@@ -924,6 +924,55 @@ class FaceDetailRestorer:
         mask_f = cv2.GaussianBlur(mask_f, (blur_k, blur_k), blur_sigma)
         
         return cv2.merge([mask_f, mask_f, mask_f])
+    
+    def _create_target_smoothness_map(self, l_channel, sensitivity=0.5, min_strength=0.2, max_strength=1.0):
+        """
+        Analyzes the Target Image (L-channel) to find smooth areas vs. structured areas.
+        Returns a weight map indicating desired texture strength.
+        
+        Args:
+            l_channel: The L channel of the target image (float32).
+            sensitivity: Controls gradient detection threshold. Lower = more sensitive to edges.
+            min_strength: Texture strength on edges (keep low to avoid dirty look).
+            max_strength: Texture strength on smooth skin (boost to remove plastic look).
+        """
+        l_blur = cv2.GaussianBlur(l_channel, (0, 0), 2.0)
+        
+        grad_x = cv2.Sobel(l_blur, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(l_blur, cv2.CV_32F, 0, 1, ksize=3)
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        
+        mag_norm = magnitude / 50.0
+        
+        base_weight = 1.0 / (1.0 + np.power(mag_norm / sensitivity, 4.0))
+        
+        smoothness_map = min_strength + (base_weight * (max_strength - min_strength))
+        
+        kernel = np.ones((5, 5), np.uint8)
+        smoothness_map = cv2.erode(smoothness_map, kernel, iterations=1)
+        smoothness_map = cv2.GaussianBlur(smoothness_map, (9, 9), 0)
+        
+        return smoothness_map
+    
+    def _calculate_luminance_protection(self, l_channel, threshold_low=30, threshold_high=225):
+        """
+        Calculates a weight map to protect highlights and shadows from clipping.
+        - Near 255 or 0: Weight -> 0.0 (Stop adding texture)
+        - Mid-tones: Weight -> 1.0 (Safe to add)
+        """
+        l_norm = l_channel.astype(np.float32) / 255.0
+        
+        high_limit = threshold_high / 255.0
+        protect_high = np.clip((1.0 - l_norm) / (1.0 - high_limit), 0.0, 1.0)
+        protect_high = protect_high * protect_high * (3.0 - 2.0 * protect_high)
+        
+        low_limit = threshold_low / 255.0
+        protect_low = np.clip(l_norm / low_limit, 0.0, 1.0)
+        protect_low = protect_low * protect_low * (3.0 - 2.0 * protect_low)
+        
+        protection_map = protect_high * protect_low
+        
+        return protection_map
     
     def _get_crop_matrix(self, rect, src_w, src_h, target_size=1024, padding=2.0):
         """
@@ -1387,6 +1436,15 @@ class FaceDetailRestorer:
         # === LAB Blending ===
         img_b_lab = cv2.cvtColor(img_b_crop, cv2.COLOR_BGR2LAB).astype(np.float32)
         l, a, b = cv2.split(img_b_lab)
+
+        target_smoothness_map = self._create_target_smoothness_map(
+            l, 
+            sensitivity=0.3, 
+            min_strength=0.2, 
+            max_strength=1.0
+        )
+        
+        luminance_safe_map = self._calculate_luminance_protection(l, threshold_low=20, threshold_high=230)
         
         # 1. Base from B
         l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
@@ -1420,8 +1478,7 @@ class FaceDetailRestorer:
             ADD_A_EYE   = 1.0
             
             target_add_a_map = ADD_A_CHEEK * (1.0 - mask_eye_zone) + ADD_A_EYE * mask_eye_zone
-            #ratio_add_a = mask_single * target_add_a_map * self.detail_strength
-            ratio_add_a = mask_single * target_add_a_map * strength_map
+            ratio_add_a = mask_single * target_add_a_map * strength_map * target_smoothness_map * luminance_safe_map
             
             l_final = l_blurred + \
                     (texture_b * ratio_keep_b) + \
