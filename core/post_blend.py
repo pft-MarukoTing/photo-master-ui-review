@@ -876,23 +876,25 @@ class FaceDetailRestorer:
         if shrink_size > 0:
             kernel = np.ones((shrink_size, shrink_size), np.uint8)
             mask_u8 = cv2.erode(mask_u8, kernel, iterations=1)
-
-        #k_size = int(blur_size * 2) + 1
-        #if k_size % 2 == 0: k_size += 1
         
-        #mask_f = mask_u8.astype(np.float32) / 255.0
-        #mask_f = cv2.GaussianBlur(mask_f, (k_size, k_size), blur_size)
-
-        # Distance Transform for smoother feathering
         dist_map = cv2.distanceTransform(mask_u8, cv2.DIST_L2, 5)
         fade_width = float(blur_size if blur_size is not None else 30)
-        mask_f = np.clip(dist_map / fade_width, 0.0, 1.0)
-        mask_f = mask_f * mask_f * (3.0 - 2.0 * mask_f)
-        if fade_power != 1.0:
-            mask_f = np.power(mask_f, fade_power)
-        mask_f = cv2.GaussianBlur(mask_f, (5, 5), 0)
+        mask_geom_f = np.clip(dist_map / fade_width, 0.0, 1.0)
+        mask_geom_f = mask_geom_f * mask_geom_f * (3.0 - 2.0 * mask_geom_f) # Smoothstep
         
-        return cv2.merge([mask_f, mask_f, mask_f])
+        if seg_mask is not None:
+            seg_blur_size = int(fade_width) | 1
+            seg_mask_soft = cv2.GaussianBlur(seg_mask_final, (seg_blur_size, seg_blur_size), 0)
+            mask_final_f = np.minimum(mask_geom_f, seg_mask_soft)
+        else:
+            mask_final_f = mask_geom_f
+        
+        if fade_power != 1.0:
+            mask_final_f = np.power(mask_final_f, fade_power)
+        
+        mask_final_f = cv2.GaussianBlur(mask_final_f, (5, 5), 0)
+        
+        return cv2.merge([mask_final_f, mask_final_f, mask_final_f])
 
     def _create_structure_mask(self, img, threshold=15, dilation_size=9):
         """
