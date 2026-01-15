@@ -1115,6 +1115,38 @@ class FaceDetailRestorer:
         
         return mask
 
+    def _suppress_halos_by_gradient(self, texture, src_img, sensitivity=0.5, gain=5.0):
+        """
+        Suppresses texture in areas with high structural gradients (like shadow edges)
+        using a soft, continuous curve instead of a hard binary mask.
+        
+        Args:
+            texture: The extracted texture (3-channel).
+            src_img: The original crop image (used to detect edges).
+            sensitivity: Controls how much gradient triggers suppression (Lower = more sensitive).
+            gain: Controls how hard the suppression is (Higher = stronger reduction).
+        """
+        gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        blurred_src = cv2.GaussianBlur(gray, (0, 0), 2.0)
+        
+        grad_x = cv2.Sobel(blurred_src, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(blurred_src, cv2.CV_32F, 0, 1, ksize=3)
+        
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        magnitude_norm = magnitude / 100.0
+        
+        weight_map = 1.0 / (1.0 + np.power(magnitude_norm / sensitivity, gain))
+        
+        kernel_size = 9 
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        weight_map = cv2.erode(weight_map, kernel, iterations=1)
+        
+        weight_map = cv2.GaussianBlur(weight_map, (5, 5), 0)
+        weight_map_3c = cv2.merge([weight_map, weight_map, weight_map])
+        texture_suppressed = texture * weight_map_3c
+        
+        return texture_suppressed
+
     def _select_best_pair(self, candidates_a, candidates_b, img_w, img_h):
         """
         Selects the best pair of faces (rect_a, rect_b) based on:
@@ -1254,7 +1286,7 @@ class FaceDetailRestorer:
                                img_b_crop, mask_b, data_b, 
                                full_img_b, mode="add"):
         """
-        New Function: Post-process stage.
+        Post-process stage.
         Takes explicitly provided images/masks and metadata.
         """
         if not data_a.get("success") or not data_b.get("success"):
@@ -1279,6 +1311,13 @@ class FaceDetailRestorer:
 
         # === Step 2: Texture Extraction ===
         texture_a = self.extract_texture(img_a_crop)
+        
+        texture_a = self._suppress_halos_by_gradient(
+            texture_a, 
+            img_a_crop, 
+            sensitivity=0.4, 
+            gain=4.0
+        )
         
         # === Step 3: Mask Creation & Cleaning ===
         if mode == "replace":
