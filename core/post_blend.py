@@ -819,6 +819,7 @@ class FaceDetailRestorer:
             cv2.fillPoly(mask_u8, [left_eyebrow], 0)
             cv2.fillPoly(mask_u8, [right_eyebrow], 0)
             
+            '''
             # 4. Nose Sidewalls
             inner_gap = 0.6   # 內側保留: 數值越大，鼻樑留得越寬
             outer_reach = 0.55 # 外側覆蓋: 數值越大，遮住的陰影越多
@@ -869,6 +870,7 @@ class FaceDetailRestorer:
                 p28_out_R
             ], dtype=np.int32)
             cv2.fillPoly(mask_u8, [nose_slope_right], 0)
+            '''
 
         # ==========================================
         # Step D: Final Post-Processing
@@ -1403,7 +1405,7 @@ class FaceDetailRestorer:
             final_mask_a = np.clip(raw_mask_a, 0, 1.0)
 
         texture_a = texture_a * final_mask_a
-        texture_a = self._suppress_mouth_corner_shadows(texture_a, pts_a, img_a_crop.shape)
+        #texture_a = self._suppress_mouth_corner_shadows(texture_a, pts_a, img_a_crop.shape)
 
         # === Step 4: Texture Warping & Mesh Generation ===
         warped_texture, tri_indices = self.generate_warped_texture(
@@ -1461,6 +1463,10 @@ class FaceDetailRestorer:
             l_final = l * (1.0 - mask_single) + l_replaced * mask_single
         elif mode == "eyes_replacement":
             mask_eye_zone = self._create_eye_surround_mask(pts_b, img_b_crop.shape)
+
+            global_constraints = target_smoothness_map * luminance_safe_map
+            final_adaptive_map = global_constraints * (1.0 - mask_eye_zone) + 1.0 * mask_eye_zone
+
             l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
             texture_b = l - l_blurred
 
@@ -1478,7 +1484,7 @@ class FaceDetailRestorer:
             ADD_A_EYE   = 1.0
             
             target_add_a_map = ADD_A_CHEEK * (1.0 - mask_eye_zone) + ADD_A_EYE * mask_eye_zone
-            ratio_add_a = mask_single * target_add_a_map * strength_map * target_smoothness_map * luminance_safe_map
+            ratio_add_a = mask_single * target_add_a_map * strength_map * final_adaptive_map
             
             l_final = l_blurred + \
                     (texture_b * ratio_keep_b) + \
