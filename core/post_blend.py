@@ -24,7 +24,7 @@ class FaceDetailRestorer:
     class LevelAnchorTransform:
         """Helper class to handle coordinate system transformation (Eye-Level)."""
         def __init__(self, left_eye_center, right_eye_center):
-            # 建立基底向量
+            # Create base vector
             diff = right_eye_center - left_eye_center
             dist = np.linalg.norm(diff)
             
@@ -59,40 +59,37 @@ class FaceDetailRestorer:
         Estimates Roll, Yaw, Tilt from 68 landmarks for the algorithm.
         Returns: (roll, yaw, tilt) in radians.
         """
-        # 1. Roll: 兩眼連線的角度
+        # 1. Roll: Angle of the line connecting both eyes
         left_eye_center = np.mean(points[36:42], axis=0)
         right_eye_center = np.mean(points[42:48], axis=0)
         dY = right_eye_center[1] - left_eye_center[1]
         dX = right_eye_center[0] - left_eye_center[0]
         roll = np.arctan2(dY, dX)
 
-        # 2. Yaw: 鼻頭 (30) 在兩眼寬度中的相對位置
-        nose_top = points[27] # 鼻根
-        nose_tip = points[30] # 鼻頭
+        # 2. Yaw: Relative position of nose tip (30) within the eye width
+        nose_top = points[27] # nose bridge top
+        nose_tip = points[30] # nose tip
         
-        # 投影到眼睛連線向量上計算比例
         eye_dist = np.linalg.norm(right_eye_center - left_eye_center)
         if eye_dist == 0: eye_dist = 1.0
         
-        # 向量：鼻頭 - 鼻根
+        # Vector: nose tip - nose bridge top
         vec_nose = nose_tip - nose_top
-        # 旋轉校正 Roll
+        # Rotation correction Roll
         vec_nose_rot = np.array([
             vec_nose[0] * np.cos(-roll) - vec_nose[1] * np.sin(-roll),
             vec_nose[0] * np.sin(-roll) + vec_nose[1] * np.cos(-roll)
         ])
         
-        # X 位移代表 Yaw
-        yaw = np.arctan2(vec_nose_rot[0], eye_dist * 0.5) * 1.5 # 係數調整
+        # X displacement represents Yaw
+        yaw = np.arctan2(vec_nose_rot[0], eye_dist * 0.5) * 1.5 # coefficient adjustment
 
-        # 3. Tilt: 鼻子長度 vs 臉部長度
+        # 3. Tilt: nose length vs face length
         chin = points[8]
         nose_len = np.linalg.norm(points[30] - points[27])
         face_len = np.linalg.norm(points[8] - points[27])
         
-        # 正常比例約 1:3 左右? 這裡做一個經驗法則估算
         ratio = nose_len / (face_len + 1e-6)
-        # 基準值 0.25, 大於它代表抬頭，小於代表低頭
         tilt = (ratio - 0.25) * 2.0 
 
         return roll, yaw, tilt
@@ -414,17 +411,6 @@ class FaceDetailRestorer:
         
         l_blurred = cv2.GaussianBlur(l_channel, (0, 0), self.sigma)
         texture_l = l_channel - l_blurred
-
-        '''
-        # Shadow Attenuation
-        shadow_indices = texture_l < 0
-        texture_l[shadow_indices] *= 0.5 
-        
-        # Clamping
-        CLIP_POS = 30.0
-        CLIP_NEG = 15.0
-        texture_l = np.clip(texture_l, -CLIP_NEG, CLIP_POS)
-        '''
         
         texture_monochrome = cv2.merge([texture_l, texture_l, texture_l])
         
@@ -535,10 +521,10 @@ class FaceDetailRestorer:
         def p(idx): return (int(points[idx][0]), int(points[idx][1]))
 
         poly_left = np.array([
-            p(31), # 鼻翼
-            p(48), # 嘴角
-            p(6),  # 下顎轉角 (木偶紋終點)
-            p(4)   # 臉頰外側 (讓範圍寬一點)
+            p(31), # Nose wing
+            p(48), # Mouth corner
+            p(6),  # Jaw angle (end of marionette lines)
+            p(4)   # Outer cheek (widens the area)
         ], dtype=np.int32)
         
         poly_right = np.array([
@@ -586,18 +572,17 @@ class FaceDetailRestorer:
             if DEBUG:
                 print(f"Error in YMK forehead logic: {e}. Falling back to simple logic.")
         
-            # 1. 臉的垂直方向
+            # 1. Face vertical direction
             brow_center = (points[21] + points[22]) / 2.0
             nose_bridge = points[27]
             up_vec = brow_center - nose_bridge
             
-            # 2. 計算額頭中心點 (Top Mid)
-            # scale，3.0 ~ 3.5 差不多是髮際線高度
+            # 2. Calculate forehead center point (Top Mid), roughly 3.0 ~ 3.5
             scale = 3.0
             top_mid = brow_center + up_vec * scale
             
-            # 3. 計算左右額頭點 (Top Left / Top Right)
-            # 19(左眉峰)、24(右眉峰)
+            # 3. Calculate forehead left and right points (Top Left / Top Right)
+            # 19 (left brow peak), 24 (right brow peak)
             anchor_left = points[19]
             anchor_right = points[24]
             
@@ -625,13 +610,13 @@ class FaceDetailRestorer:
         Calculates 2 auxiliary points for the center of the cheeks (Steiner Points).
         This breaks the large triangles on cheeks to prevent ghosting artifacts.
         """
-        # 左臉頰中心 (Left Cheek)
-        # 取決於: 左眼外角(36), 左鼻翼(31), 左嘴角(48), 左下顎角(4)
+        # Left cheek center
+        # Depends on: Left eye outer corner (36), Left nose wing (31), Left mouth corner (48), Left jaw angle (4)
         left_cheek_x = (points[36][0] + points[31][0] + points[48][0] + points[4][0]) / 4.0
         left_cheek_y = (points[36][1] + points[31][1] + points[48][1] + points[4][1]) / 4.0
         
-        # 右臉頰中心 (Right Cheek)
-        # 取決於: 右眼外角(45), 右鼻翼(35), 右嘴角(54), 右下顎角(12)
+        # Right cheek center (Right Cheek)
+        # Depends on: Right eye outer corner (45), Right nose wing (35), Right mouth corner (54), Right jaw angle (12)
         right_cheek_x = (points[45][0] + points[35][0] + points[54][0] + points[12][0]) / 4.0
         right_cheek_y = (points[45][1] + points[35][1] + points[54][1] + points[12][1]) / 4.0
         
@@ -677,31 +662,31 @@ class FaceDetailRestorer:
         ]
         cv2.fillPoly(mask_u8, [np.array(forehead_poly, dtype=np.int32)], 255)
 
-        # 左眼窩 (Left Socket): 連接 左眉毛(17-21) 與 左眼上緣(36-39)
+        # Left eye socket (Left Socket): Connects left eyebrow (17-21) and left upper eye (36-39)
         left_eyelid_poly = [
-            points[36], # 左眼外角
-            points[17], # 左眉尾
+            points[36], # Left eye outer corner
+            points[17], # Left eyebrow tail
             points[18],
             points[19],
             points[20],
-            points[21], # 左眉頭
-            points[39], # 左眼內角
-            points[38], # 左眼上緣
-            points[37]  # 左眼上緣
+            points[21], # Left eyebrow head
+            points[39], # Left eye inner corner
+            points[38], # Left eye upper edge
+            points[37]  # Left eye upper edge
         ]
         cv2.fillPoly(mask_u8, [np.array(left_eyelid_poly, dtype=np.int32)], 255)
 
-        # 右眼窩 (Right Socket): 連接 右眉毛(22-26) 與 右眼上緣(42-45)
+        # Right eye socket (Right Socket): Connects right eyebrow (22-26) and right upper eye (42-45)
         right_eyelid_poly = [
-            points[45], # 右眼外角
-            points[26], # 右眉尾
+            points[45], # Right eye outer corner
+            points[26], # Right eyebrow tail
             points[25],
             points[24],
             points[23],
-            points[22], # 右眉頭
-            points[42], # 右眼內角
-            points[43], # 右眼上緣
-            points[44]  # 右眼上緣
+            points[22], # Right eyebrow head
+            points[42], # Right eye inner corner
+            points[43], # Right eye upper edge
+            points[44]  # Right eye upper edge
         ]
         cv2.fillPoly(mask_u8, [np.array(right_eyelid_poly, dtype=np.int32)], 255)
 
@@ -735,8 +720,8 @@ class FaceDetailRestorer:
                 
                 erosion_weight = np.zeros(shape[:2], dtype=np.float32)
                 
-                p0 = np.array(points[0])   # 左鬢角
-                p16 = np.array(points[16]) # 右鬢角
+                p0 = np.array(points[0])   # Left temple
+                p16 = np.array(points[16]) # Right temple
                 
                 vec_x = p16[0] - p0[0]
                 vec_y = p16[1] - p0[1]
@@ -761,14 +746,14 @@ class FaceDetailRestorer:
                 brows_left = [points[i] for i in range(21, 16, -1)]
                 
                 upper_zone_poly = np.array([
-                    p16_sky,         # 右上
-                    p16_far,         # 右側
-                    p16,             # 右鬢角 (接合點)
-                    *brows_right,    # 右眉上緣
-                    *brows_left,     # 左眉上緣
-                    p0,              # 左鬢角 (接合點)
-                    p0_far,          # 左側
-                    p0_sky           # 左上
+                    p16_sky,         # Upper right
+                    p16_far,         # Right side
+                    p16,             # Right temple (junction)
+                    *brows_right,    # Right eyebrow upper edge
+                    *brows_left,     # Left eyebrow upper edge
+                    p0,              # Left temple (junction)
+                    p0_far,          # Left side
+                    p0_sky           # Upper left
                 ], dtype=np.int32)
                 
                 cv2.fillPoly(erosion_weight, [upper_zone_poly], 1.0)
@@ -818,59 +803,6 @@ class FaceDetailRestorer:
             right_eyebrow = np.array(points[22:26], dtype=np.int32)
             cv2.fillPoly(mask_u8, [left_eyebrow], 0)
             cv2.fillPoly(mask_u8, [right_eyebrow], 0)
-            
-            '''
-            # 4. Nose Sidewalls
-            inner_gap = 0.6   # 內側保留: 數值越大，鼻樑留得越寬
-            outer_reach = 0.55 # 外側覆蓋: 數值越大，遮住的陰影越多
-            flare_ratio = 1.3  # 鼻翼外擴: 針對鼻溝陰影
-
-            # --- 左側鼻坡 (Left Slope Exclusion) ---
-            # 內緣
-            p27_in_L = get_extended_point(points[27], points[39], ratio=inner_gap)
-            p28_in_L = get_extended_point(points[28], points[39], ratio=inner_gap)
-            p29_in_L = get_extended_point(points[29], points[39], ratio=inner_gap)
-            
-            # 外緣
-            p28_out_L = get_extended_point(points[28], points[39], ratio=outer_reach)
-            p29_out_L = get_extended_point(points[29], points[39], ratio=outer_reach)
-            
-            # 鼻翼外擴點 (針對法令紋起點)
-            p31_flare_L = get_extended_point(points[30], points[31], ratio=flare_ratio)
-
-            nose_slope_left = np.array([
-                p27_in_L,     # 上內
-                p28_in_L,     # 中內
-                p29_in_L,     # 下內
-                p31_flare_L,  # 下外 (Flare)
-                p29_out_L,    # 中外
-                p28_out_L     # 上外
-            ], dtype=np.int32)
-            cv2.fillPoly(mask_u8, [nose_slope_left], 0)
-
-            # --- 右側鼻坡 (Right Slope Exclusion) ---
-            # 內緣
-            p27_in_R = get_extended_point(points[27], points[42], ratio=inner_gap)
-            p28_in_R = get_extended_point(points[28], points[42], ratio=inner_gap)
-            p29_in_R = get_extended_point(points[29], points[42], ratio=inner_gap)
-            
-            # 外緣
-            p28_out_R = get_extended_point(points[28], points[42], ratio=outer_reach)
-            p29_out_R = get_extended_point(points[29], points[42], ratio=outer_reach)
-            
-            # Flare
-            p35_flare_R = get_extended_point(points[30], points[35], ratio=flare_ratio)
-
-            nose_slope_right = np.array([
-                p27_in_R,
-                p28_in_R,
-                p29_in_R,
-                p35_flare_R,
-                p29_out_R,
-                p28_out_R
-            ], dtype=np.int32)
-            cv2.fillPoly(mask_u8, [nose_slope_right], 0)
-            '''
 
         # ==========================================
         # Step D: Final Post-Processing
@@ -982,12 +914,12 @@ class FaceDetailRestorer:
         
         Args:
             rect: [x, y, w, h] from detection.
-            padding: 擴張係數。
-                     1.0 = 剛好框住臉 (太擠，會切到額頭/下巴)
-                     2.0 = 框住臉並包含周圍背景 (建議值，確保包含額頭與髮際線)
+            padding: Padding coefficient.
+                 1.0 = Fits only the face (too tight, might cut off forehead/chin)
+                 2.0 = Frames the face and includes surrounding background 
+                   (recommended value to ensure forehead and hairline are included)
         """
         if rect is None:
-            # 如果沒有框 (例如 pre-aligned)，直接 Resize
             scale = target_size / max(src_w, src_h)
             M = np.array([
                 [scale, 0, (target_size - src_w * scale) * 0.5],
@@ -997,18 +929,13 @@ class FaceDetailRestorer:
 
         x, y, w, h = rect
         
-        # 1. 計算中心點
         center_x = x + w * 0.5
         center_y = y + h * 0.5
         
-        # 2. 決定裁切大小 (取長邊並乘上 padding)
         box_size = max(w, h) * padding
         
-        # 3. 計算縮放比例 (目標 1024 / 實際裁切大小)
         scale = target_size / box_size
         
-        # 4. 建立仿射矩陣 [Scale, 0, TransX; 0, Scale, TransY]
-        # TransX = (目標中心) - (原圖中心 * 縮放)
         M = np.array([
             [scale, 0, target_size * 0.5 - center_x * scale],
             [0, scale, target_size * 0.5 - center_y * scale]
@@ -1053,8 +980,8 @@ class FaceDetailRestorer:
         Adapts to head rotation (yaw) by using face contour landmarks.
         """
         if side == 'left':
-            idx_eye_corner = [39, 40, 41, 36]  # 左眼下緣
-            idx_brow_tail = 17   # 左眉尾
+            idx_eye_corner = [39, 40, 41, 36]
+            idx_brow_tail = 17
             idx_jaw = [0, 1, 2]
         else: # right
             idx_eye_corner = [42, 47, 46, 45]
@@ -1132,8 +1059,8 @@ class FaceDetailRestorer:
         h, w = shape[:2]
         mask = np.zeros((h, w), dtype=np.float32)
         
-        p0 = np.array(points[0])   # 左鬢角
-        p16 = np.array(points[16]) # 右鬢角
+        p0 = np.array(points[0])
+        p16 = np.array(points[16])
         
         vec_x = p16[0] - p0[0]
         vec_y = p16[1] - p0[1]
@@ -1216,7 +1143,7 @@ class FaceDetailRestorer:
         img_cx, img_cy = img_w / 2.0, img_h / 2.0
         img_diag = math.sqrt(img_w**2 + img_h**2)
 
-        # Helper: 計算 IoU
+        # Helper: Calculate Intersection over Union (IoU)
         def get_iou(r1, r2):
             # r = [x, y, w, h]
             x1 = max(r1[0], r2[0])
@@ -1257,11 +1184,11 @@ class FaceDetailRestorer:
                 dist_to_center = math.sqrt((avg_cx - img_cx)**2 + (avg_cy - img_cy)**2)
                 center_score = 1.0 - (dist_to_center / (img_diag / 2))
                 
-                # === 綜合評分 ===
-                # 權重設定：
-                # IoU 最重要 (確保是同一個人)
-                # Size 次之 (確保是主角)
-                # Center 用來當 Size 差不多時的決勝點
+                # === Combined Score ===
+                # Weights:
+                # IoU is most important (ensure same person)
+                # Size is next (ensure main subject)
+                # Center is the tiebreaker when sizes are similar
                 total_score = (iou_val * 2.0) + (size_score * 1.5) + (center_score * 0.5)
                 
                 if total_score > best_score:

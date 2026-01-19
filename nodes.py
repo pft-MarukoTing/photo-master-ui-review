@@ -67,8 +67,8 @@ class FaceDetailRestorerNode:
         return {
             "required": {
                 "pipeline": ("FACE_PIPELINE",),
-                "image_origin": ("IMAGE",),      # 原始圖 (Reference)
-                "image_generated": ("IMAGE",),   # 生成圖 (Smile)
+                "image_origin": ("IMAGE",),      # Reference
+                "image_generated": ("IMAGE",),   # Generated (Smile)
                 #"mode": (["add", "replace", "eyes_replacement"],{"default": "eyes_replacement"}),
                 "sigma": ("INT", {"default": 7, "min": 1, "max": 50}),
                 "detail_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
