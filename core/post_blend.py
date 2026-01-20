@@ -351,7 +351,7 @@ class FaceDetailRestorer:
         h, w = img.shape[:2]
         
         # 1. Detection
-        rect_list = self.pipeline.detect(img, bypass=True) # return [x, y, w, h]
+        rect_list, _ = self.pipeline.detect(img, bypass=True) # return [x, y, w, h]
         if rect_list is None:
             raise ValueError("No face detected.")
         

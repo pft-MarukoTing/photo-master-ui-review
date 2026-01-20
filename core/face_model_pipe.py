@@ -115,7 +115,7 @@ class OnnxFacePipeline:
         if self.detect_model is None or bypass:
             if DEBUG:
                 print("[KerasPipeline] Detect bypassed. Using full image bounds.")
-            return [0, 0, width, height]
+            return [0, 0, width, height], None
 
         scale = 1
         if height > self.MAX_IMAGE_SIDE or width > self.MAX_IMAGE_SIDE:
@@ -130,7 +130,7 @@ class OnnxFacePipeline:
             print(f"Best detected rect (scaled): {best_rect}")
         
         if best_rect is None:
-            return None
+            return None, None
 
         # Scale back to original size
         x, y, w, h = best_rect
