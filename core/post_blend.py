@@ -1224,7 +1224,19 @@ class FaceDetailRestorer:
         
         return rect_a, rect_b
     
-    def analyze_face(self, img, rect=None, target_size=1024, padding=1.4):
+    def get_face_rect(self, img):
+        """
+        Detects faces in single image
+        """
+        if self.is_pre_aligned:
+            h, w = img.shape[:2]
+            return [0, 0, w, h]
+        
+        rect_large, full_detect = self.pipeline.detect(img, bypass=False)
+
+        return rect_large
+    
+    def analyze_face(self, img, rect, target_size=1024, padding=1.4):
         """
         Pre-process stage.
         Detects, Crops, Aligns, Segment, and calculates landmarks.
@@ -1249,6 +1261,7 @@ class FaceDetailRestorer:
             
             return {
                 "success": True,
+                "rect": rect,
                 "crop_img": crop_img, # OpenCV BGR
                 "M": M,
                 "pts": pts,
@@ -1471,3 +1484,98 @@ class FaceDetailRestorer:
 
     def restore_core_replacement(self, img_a, img_b, output_folder=None):
         return self.restore_core(img_a, img_b, mode="replace", output_folder=output_folder)
+    
+    def restore_with_metadata(self, img_b, metadata_a, mode="add"):
+        if not metadata_a.get("success"):
+            print("Metadata A contains no valid face data.")
+            return img_b
+        
+        rect_a = metadata_a.get("rect")
+        
+        data_b = self.analyze_face(img_b, rect=rect_a)
+        
+        if not data_b["success"]:
+            print("Face B analysis failed.")
+            return img_b
+        
+        return self.restore_face_from_data(
+            metadata_a["crop_img"], metadata_a["seg_mask"], metadata_a,
+            data_b["crop_img"], data_b["seg_mask"], data_b,
+            img_b, mode=mode
+        )
+
+    def pre_detect(self, img):
+        rect = self.get_face_rect(img)
+
+        metadata = self.analyze_face(img, rect=rect)
+        # if analysis failed or no face found return all black mask
+        if not metadata.get("success", False):
+            h, w = img.shape[:2]
+            black_mask = np.zeros((h, w), dtype=np.float32)
+            return black_mask, metadata
+        
+        seg_mask = metadata.get("seg_mask", None)
+        if seg_mask is None:
+            h, w = img.shape[:2]
+            black_mask = np.zeros((h, w), dtype=np.float32)
+            return black_mask, metadata
+
+        # preprocessing mask: only under Eyebrow to Chin
+        points = metadata.get("pts", None)
+        if points is not None:
+            h, w = seg_mask.shape[:2]
+            mask_u8 = np.zeros((h, w), dtype=np.uint8)
+
+            face_contour = np.array(points[0:17], dtype=np.int32)
+            brow_left = np.array(points[17:22], dtype=np.int32)
+            brow_right = np.array(points[22:27], dtype=np.int32)
+            head_line = np.vstack([face_contour[::-1], brow_left, brow_right])
+            cv2.fillPoly(mask_u8, [head_line], 255)
+
+            blur_radius = 21 
+            mask_blurred = cv2.GaussianBlur(mask_u8, (blur_radius, blur_radius), 0)
+            mask_soft = mask_blurred.astype(np.float32) / 255.0
+
+            if len(seg_mask.shape) == 3 and seg_mask.shape[2] > 1:
+                mask_soft = mask_soft[:, :, np.newaxis]
+            
+            seg_mask = seg_mask * mask_soft
+        
+        # if there is a segmentation mask, Dilation + Blur to make it smoother (kernel size based on image size)
+        h, w = seg_mask.shape[:2]
+        range_scale = 0.15 
+        blur_scale = 3.0
+        gain = 1.5 
+        # ------------------
+        dilation_size = max(3, int(min(h, w) * range_scale) | 1)
+        kernel = np.ones((dilation_size, dilation_size), np.uint8)
+
+        seg_mask_u8 = (seg_mask[:,:,0] * 255).astype(np.uint8)
+        seg_mask_dilated = cv2.dilate(seg_mask_u8, kernel, iterations=1)
+
+        blur_ksize = int(dilation_size * blur_scale) | 1
+        sigma = blur_ksize * 0.3
+
+        seg_mask_blurred = cv2.GaussianBlur(
+            seg_mask_dilated,
+            (blur_ksize, blur_ksize),
+            sigmaX=sigma,
+            sigmaY=sigma
+        )
+
+        seg_mask_float = seg_mask_blurred.astype(np.float32) / 255.0
+        seg_mask_boosted = seg_mask_float * gain
+        seg_mask_final = np.clip(seg_mask_boosted, 0.0, 1.0)
+
+        # paste-back mask
+        M = metadata.get("M", None)
+        if M is not None:
+            h_full, w_full = img.shape[:2]
+            seg_mask_final = cv2.warpAffine(
+                seg_mask_final, M, (w_full, h_full), 
+                flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT, borderValue=0
+            )
+        
+        
+        return seg_mask_final, metadata

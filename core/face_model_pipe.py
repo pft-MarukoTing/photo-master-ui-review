@@ -236,11 +236,19 @@ class OnnxFacePipeline:
             sorted_tuple = [t for t in sorted_tuple if iou(curr_rect, t[0]) < self.GROUP_THRESHOLD]
 
         if passed_tuple:
+            img_area = w_raw * h_raw
+            img_cx, img_cy = w_raw / 2, h_raw / 2
+            max_dist = ((w_raw / 2) ** 2 + (h_raw / 2) ** 2) ** 0.5
             def get_priority(item):
                 rect, score = item
-                w, h = rect[2], rect[3]
-                area = w * h
-                return area
+                x, y, w, h = rect
+                norm_area = (w * h) / img_area
+
+                box_cx = x + (w / 2)
+                box_cy = y + (h / 2)
+                dist = ((box_cx - img_cx) ** 2 + (box_cy - img_cy) ** 2) ** 0.5
+                norm_center = 1 - (dist / max_dist)
+                return score + norm_area + 0.5 * norm_center
             
             passed_tuple.sort(key=get_priority, reverse=True)
             
