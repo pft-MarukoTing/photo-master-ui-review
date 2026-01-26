@@ -1262,6 +1262,7 @@ class FaceDetailRestorer:
             return {
                 "success": True,
                 "rect": rect,
+                "original_img": img,
                 "crop_img": crop_img, # OpenCV BGR
                 "M": M,
                 "pts": pts,
@@ -1504,6 +1505,8 @@ class FaceDetailRestorer:
             img_b, mode=mode
         )
 
+
+
     def pre_detect(self, img):
         rect = self.get_face_rect(img)
 
@@ -1579,3 +1582,42 @@ class FaceDetailRestorer:
         
         
         return seg_mask_final, metadata
+
+    def pad_to_square(self, img):
+        """
+        Pads the image to be a square matching the largest dimension.
+        Returns:
+            padded_img: The square image.
+            pads: Tuple of (top, bottom, left, right) used for padding.
+        """
+        h, w = img.shape[:2]
+        if h == w:
+            return img, (0, 0, 0, 0)
+            
+        dim = max(h, w)
+        pad_h = dim - h
+        pad_w = dim - w
+        
+        top = pad_h // 2
+        bottom = pad_h - top
+        left = pad_w // 2
+        right = pad_w - left
+        
+        padded_img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+        return padded_img, (top, bottom, left, right)
+
+    def undo_pad_to_square(self, img, pads):
+        """
+        Removes the padding applied by pad_to_square.
+        Args:
+            img: The padded image.
+            pads: Tuple of (top, bottom, left, right).
+        """
+        top, bottom, left, right = pads
+        h, w = img.shape[:2]
+        
+        # Calculate new dimensions
+        new_h = h - top - bottom
+        new_w = w - left - right
+        
+        return img[top:top+new_h, left:left+new_w]

@@ -232,3 +232,74 @@ class FaceMaskRegionNode:
                 output_metadata.append({})
 
         return (torch.stack(output_masks), output_metadata)
+    
+class PadToSquareNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "PADDING_INFO")
+    RETURN_NAMES = ("image", "padding_info")
+    FUNCTION = "pad_image"
+    CATEGORY = "FaceRestoration"
+
+    def pad_image(self, image):
+        restorer = FaceDetailRestorer(None)
+        
+        output_images = []
+        output_pads = []
+        batch_count = image.shape[0]
+
+        for i in range(batch_count):
+            img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            
+            padded_bgr, pads = restorer.pad_to_square(img_bgr)
+            
+            img_rgb = cv2.cvtColor(padded_bgr, cv2.COLOR_BGR2RGB)
+            img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)
+            
+            output_images.append(img_tensor)
+            output_pads.append(pads)
+        
+        return (torch.stack(output_images), output_pads)
+
+class UndoPadNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "padding_info": ("PADDING_INFO",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "undo_pad_image"
+    CATEGORY = "FaceRestoration"
+
+    def undo_pad_image(self, image, padding_info):
+        restorer = FaceDetailRestorer(None)
+        
+        output_images = []
+        batch_count = image.shape[0]
+        
+        for i in range(batch_count):
+            img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
+            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
+            
+            pads = padding_info[i] if i < len(padding_info) else (0,0,0,0)
+            
+            unpadded_bgr = restorer.undo_pad_to_square(img_bgr, pads)
+            
+            img_rgb = cv2.cvtColor(unpadded_bgr, cv2.COLOR_BGR2RGB)
+            img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)
+            
+            output_images.append(img_tensor)
+
+        return (torch.stack(output_images),)
