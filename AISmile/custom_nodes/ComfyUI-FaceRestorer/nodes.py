@@ -1,4 +1,6 @@
 import torch
+import torch.nn.functional as F
+import math
 import numpy as np
 import cv2
 import os
@@ -198,6 +200,9 @@ class FaceMaskRegionNode:
             "required": {
                 "pipeline": ("FACE_PIPELINE",),
                 "image": ("IMAGE",),
+            },
+            "optional": {
+                "face_metadata": ("FACE_METADATA",),
             }
         }
 
@@ -206,7 +211,7 @@ class FaceMaskRegionNode:
     FUNCTION = "get_face_mask"
     CATEGORY = "FaceRestoration"
 
-    def get_face_mask(self, pipeline, image):
+    def get_face_mask(self, pipeline, image, face_metadata=None):
         # image is Tensor [B, H, W, C]
         # For this simple node, we don't need detailed restorer params
         restorer = FaceDetailRestorer(pipeline)
@@ -218,10 +223,14 @@ class FaceMaskRegionNode:
         for i in range(batch_count):
             img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-
+            
+            provided_rects = None
+            if face_metadata is not None and i < len(face_metadata):
+                provided_rects = face_metadata[i].get("aligned_rects", None)
+            
             try:
-                # pre_detect returns a float32 mask (H, W) range 0.0-1.0
-                mask_single, metadata = restorer.pre_detect(img_bgr)
+                mask_single, metadata = restorer.pre_detect_all_faces(img_bgr, provided_rects=provided_rects)
+                
                 output_masks.append(torch.from_numpy(mask_single))
                 output_metadata.append(metadata)
             except Exception as e:
@@ -248,25 +257,42 @@ class PadToSquareNode:
     CATEGORY = "FaceRestoration"
 
     def pad_image(self, image):
-        restorer = FaceDetailRestorer(None)
+        try:
+            padded_img, pads = self.pad_to_square(image)
+            return (padded_img, [pads] * image.shape[0])
+        except Exception as e:
+            print(f"Pad to Square Error: {e}")
+            return (image, [(0,0,0,0)] * image.shape[0])
+    
+    def pad_to_square(self, image):
+        """
+        Pads the batch of images to be square matching the largest dimension.
+        Args:
+            image: Tensor of shape (B, H, W, C)
+        Returns:
+            padded_img: Tensor of shape (B, Dim, Dim, C)
+            pads: Tuple of (top, bottom, left, right)
+        """
+        B, H, W, C = image.shape
         
-        output_images = []
-        output_pads = []
-        batch_count = image.shape[0]
-
-        for i in range(batch_count):
-            img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
-            img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            
-            padded_bgr, pads = restorer.pad_to_square(img_bgr)
-            
-            img_rgb = cv2.cvtColor(padded_bgr, cv2.COLOR_BGR2RGB)
-            img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)
-            
-            output_images.append(img_tensor)
-            output_pads.append(pads)
+        if H == W:
+            return image, (0, 0, 0, 0)
         
-        return (torch.stack(output_images), output_pads)
+        dim = max(H, W)
+        pad_h = dim - H
+        pad_w = dim - W
+        
+        top = pad_h // 2
+        bottom = pad_h - top
+        left = pad_w // 2
+        right = pad_w - left
+        
+        img_permuted = image.permute(0, 3, 1, 2)
+        padded_img_permuted = F.pad(img_permuted, (left, right, top, bottom), value=0)
+        
+        padded_img = padded_img_permuted.permute(0, 2, 3, 1)
+        
+        return padded_img, (top, bottom, left, right)
 
 class UndoPadNode:
     @classmethod
@@ -284,22 +310,279 @@ class UndoPadNode:
     CATEGORY = "FaceRestoration"
 
     def undo_pad_image(self, image, padding_info):
-        restorer = FaceDetailRestorer(None)
+        try:
+            output_img = self.undo_pad_to_square(image, padding_info)
+            return (output_img,)
+        except Exception as e:
+            print(f"Undo Pad Error: {e}")
+            return (image,)
+
+    def undo_pad_to_square(self, image, pads):
+        """
+        Removes the padding applied by pad_to_square.
+        Args:
+            image: The padded image tensor (B, Dim, Dim, C).
+            pads: list of tuples (top, bottom, left, right).
+        """
+        top, bottom, left, right = pads[0]
+        B, H, W, C = image.shape
+
+        if H - top - bottom <= 0 or W - left - right <= 0:
+            raise ValueError("Padding info error: crop area is invalid.")
+        
+        h_end = max(top + 1, H - bottom)
+        w_end = max(left + 1, W - right)
+        
+        restored_img = image[:, top:h_end, left:w_end, :]
+        
+        return restored_img
+
+class PadTo1MCustomNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "PADDING_INFO")
+    RETURN_NAMES = ("image", "padding_info")
+    FUNCTION = "pad_to_1M"
+    CATEGORY = "FaceRestoration"
+
+    def pad_to_1M(self, image):
+        try:
+            padded_images, pads_info = self.pad_to_1M_torch(image)
+            return (padded_images, pads_info)
+        except Exception as e:
+            print(f"Pad to 1M Error: {e}")
+            return (image, [(0,0,0,0)] * image.shape[0])
+    
+    def pad_to_1M_torch(self, image, target_pixel_count=1000000, align_factor=8):
+        B, H, W, C = image.shape
+        scale = math.sqrt(target_pixel_count / (W * H))
+        
+        target_w_raw = W * scale
+        target_h_raw = H * scale
+
+        target_w = int(round(target_w_raw / align_factor) * align_factor)
+        target_h = int(round(target_h_raw / align_factor) * align_factor)
+        
+        target_w = max(align_factor, target_w)
+        target_h = max(align_factor, target_h)
+        
+        ratio = min(target_w / W, target_h / H)
+        
+        new_unpad_w = int(round(W * ratio))
+        new_unpad_h = int(round(H * ratio))
+
+        img_permuted = image.permute(0, 3, 1, 2) 
+        
+        mode = 'area' if ratio < 1 else 'bilinear'
+        align_corners = False if mode != 'area' else None
+        
+        resized_img = F.interpolate(
+            img_permuted, 
+            size=(new_unpad_h, new_unpad_w), 
+            mode=mode, 
+            align_corners=align_corners
+        )
+
+        # 4. Calculate padding
+        dw = target_w - new_unpad_w
+        dh = target_h - new_unpad_h
+        
+        pad_left = dw // 2
+        pad_right = dw - pad_left
+        pad_top = dh // 2
+        pad_bottom = dh - pad_top
+        
+        padded_img = F.pad(resized_img, (pad_left, pad_right, pad_top, pad_bottom), mode='constant', value=0)
+        output_images = padded_img.permute(0, 2, 3, 1)
+
+        output_pads = []
+        info_dict = {
+            "original_shape": (H, W),
+            "pad_top": pad_top,
+            "pad_bottom": pad_bottom,
+            "pad_left": pad_left,
+            "pad_right": pad_right,
+            "ratio": ratio,
+            "final_shape": (target_h, target_w, C) 
+        }
+        
+        for _ in range(B):
+            output_pads.append(info_dict)
+
+        return output_images, output_pads
+
+class UndoPad1MCustomNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "padding_info": ("PADDING_INFO",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "undo_pad_1M"
+    CATEGORY = "FaceRestoration"
+
+    def undo_pad_1M(self, image, padding_info):
+        try:
+            restored_images = self.undo_pad_to_1M_torch(image, padding_info)
+            return (restored_images,)
+        except Exception as e:
+            print(f"Undo Pad to 1M Error: {e}")
+            return (image,)
+    
+    def undo_pad_to_1M_torch(self, processed_img, restore_info):
+        """
+        Undo padding and resize back to original size using Torch.
+        Supports Batch processing.
+        """
+        
+        B, H_curr, W_curr, C = processed_img.shape
+        
+        info = restore_info[0]
+        
+        top = info["pad_top"]
+        bottom = info["pad_bottom"]
+        left = info["pad_left"]
+        right = info["pad_right"]
+        h_orig, w_orig = info["original_shape"]
+        
+        crop_h_end = H_curr - bottom
+        crop_w_end = W_curr - right
+        
+        if crop_h_end <= top or crop_w_end <= left:
+            raise ValueError("Padding info error: crop area is invalid.")
+        
+        cropped_img = processed_img[:, top:crop_h_end, left:crop_w_end, :]
+        cropped_permuted = cropped_img.permute(0, 3, 1, 2)
+        
+        restored_img = F.interpolate(
+            cropped_permuted, 
+            size=(h_orig, w_orig), 
+            mode='bilinear', 
+            align_corners=False
+        )
+        
+        return restored_img.permute(0, 2, 3, 1)
+
+class FaceRegionCropNode:
+    """
+    Crops the region covering all detected faces from the image.
+    Returns the cropped image, crop coordinates, and metadata for the first detected face (relative to crop).
+    """
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "pipeline": ("FACE_PIPELINE",),
+                "image": ("IMAGE",),
+                "padding_factor": ("FLOAT", {"default": 0.45, "min": 0.0, "max": 1.0, "step": 0.05}),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE", "CROP_INFO", "FACE_METADATA")
+    RETURN_NAMES = ("crop_image", "crop_info", "face_metadata")
+    FUNCTION = "crop_face_region"
+    CATEGORY = "FaceRestoration"
+
+    def crop_face_region(self, pipeline, image, padding_factor):
+        restorer = FaceDetailRestorer(pipeline)
         
         output_images = []
+        output_crop_infos = []
+        output_metadata = []
         batch_count = image.shape[0]
-        
+
         for i in range(batch_count):
             img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             
-            pads = padding_info[i] if i < len(padding_info) else (0,0,0,0)
+            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor)
             
-            unpadded_bgr = restorer.undo_pad_to_square(img_bgr, pads)
-            
-            img_rgb = cv2.cvtColor(unpadded_bgr, cv2.COLOR_BGR2RGB)
+            img_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
             img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)
             
             output_images.append(img_tensor)
+            output_crop_infos.append(crop_info)
+            output_metadata.append(first_meta)
+        
+        # Note: If crops have different sizes (because faces are different sizes), 
+        # torch.stack will fail. This simple implementation assumes consistent sizes 
+        # or single batch usage.
+        if len(output_images) > 1:
+            try:
+                final_tensor = torch.stack(output_images)
+            except RuntimeError:
+                print("Warning: Crop sizes inconsistent in batch. Resizing to match the first image.")
+                target_h, target_w = output_images[0].shape[:2]
+                resized_images = []
+                for img in output_images:
+                    # image is H,W,C
+                    img_np = img.numpy()
+                    img_resized = cv2.resize(img_np, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+                    resized_images.append(torch.from_numpy(img_resized))
+                final_tensor = torch.stack(resized_images)
+        else:
+            final_tensor = torch.stack(output_images)
+
+        return (final_tensor, output_crop_infos, output_metadata)
+
+class FaceRegionPasteBackNode:
+    """
+    Pastes the processed crop back onto the original image using the coordinates from FaceRegionCropNode.
+    """
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "image_original": ("IMAGE",),      # The full canvas
+                "image_processed_crop": ("IMAGE",), # The processed crop
+                "crop_info": ("CROP_INFO",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image",)
+    FUNCTION = "paste_back"
+    CATEGORY = "FaceRestoration"
+
+    def paste_back(self, image_original, image_processed_crop, crop_info):
+        # We don't need a pipeline for pasting back, just the helper methods
+        restorer = FaceDetailRestorer(None)
+        
+        output_images = []
+        batch_count = image_original.shape[0]
+        
+        for i in range(batch_count):
+            # 1. Prepare Full Image
+            img_full_np = (image_original[i].cpu().numpy() * 255).astype(np.uint8)
+            img_full_bgr = cv2.cvtColor(img_full_np, cv2.COLOR_RGB2BGR)
+            
+            # 2. Prepare Crop Image 
+            # (Handle broadcasting if processed crop batch is smaller than original batch, usually 1:1)
+            idx_crop = i if i < image_processed_crop.shape[0] else 0
+            img_crop_np = (image_processed_crop[idx_crop].cpu().numpy() * 255).astype(np.uint8)
+            img_crop_bgr = cv2.cvtColor(img_crop_np, cv2.COLOR_RGB2BGR)
+            
+            # 3. Get Info
+            info = crop_info[i] if i < len(crop_info) else crop_info[-1]
+            
+            # 4. Paste
+            result_bgr = restorer.paste_back_crop_region(img_full_bgr, img_crop_bgr, info)
+            
+            # 5. Convert back
+            result_rgb = cv2.cvtColor(result_bgr, cv2.COLOR_BGR2RGB)
+            result_tensor = torch.from_numpy(result_rgb.astype(np.float32) / 255.0)
+            
+            output_images.append(result_tensor)
 
         return (torch.stack(output_images),)

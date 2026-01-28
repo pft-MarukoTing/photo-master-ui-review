@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 import os
+import torch
+import torch.nn.functional as F
 import math
 import time
 from .face_model_pipe import OnnxFacePipeline
@@ -1232,9 +1234,21 @@ class FaceDetailRestorer:
             h, w = img.shape[:2]
             return [0, 0, w, h]
         
-        rect_large, full_detect = self.pipeline.detect(img, bypass=False)
+        rect_large, _ = self.pipeline.detect(img, bypass=False)
 
         return rect_large
+    
+    def get_all_face_rects(self, img):
+        """
+        Detects faces in single image and returns all detected rectangles
+        """
+        if self.is_pre_aligned:
+            h, w = img.shape[:2]
+            return [[0, 0, w, h]]
+        
+        _, full_detect = self.pipeline.detect(img, bypass=False)
+
+        return full_detect
     
     def analyze_face(self, img, rect, target_size=1024, padding=1.4):
         """
@@ -1492,7 +1506,7 @@ class FaceDetailRestorer:
             return img_b
         
         rect_a = metadata_a.get("rect")
-        
+
         data_b = self.analyze_face(img_b, rect=rect_a)
         
         if not data_b["success"]:
@@ -1504,7 +1518,6 @@ class FaceDetailRestorer:
             data_b["crop_img"], data_b["seg_mask"], data_b,
             img_b, mode=mode
         )
-
 
 
     def pre_detect(self, img):
@@ -1582,42 +1595,273 @@ class FaceDetailRestorer:
         
         
         return seg_mask_final, metadata
+    
+    def pre_detect_all_faces(self, img, provided_rects=None):
+        h_img, w_img = img.shape[:2]
+        combined_final_mask = np.zeros((h_img, w_img), dtype=np.float32)
+        first_metadata = None
 
-    def pad_to_square(self, img):
-        """
-        Pads the image to be a square matching the largest dimension.
-        Returns:
-            padded_img: The square image.
-            pads: Tuple of (top, bottom, left, right) used for padding.
-        """
-        h, w = img.shape[:2]
-        if h == w:
-            return img, (0, 0, 0, 0)
+        if provided_rects is not None:
+            rects = provided_rects
+        else:
+            print("Detecting all faces for mask...")
+            rects = self.get_all_face_rects(img)
+        
+        if rects is None or len(rects) == 0:
+             return combined_final_mask, {"success": False}
+
+        for rect in rects:
+            metadata = self.analyze_face(img, rect=rect)
             
-        dim = max(h, w)
-        pad_h = dim - h
-        pad_w = dim - w
-        
-        top = pad_h // 2
-        bottom = pad_h - top
-        left = pad_w // 2
-        right = pad_w - left
-        
-        padded_img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=(0, 0, 0))
-        return padded_img, (top, bottom, left, right)
+            if not metadata.get("success", False):
+                continue
+            
+            # Save the first successful metadata found
+            if first_metadata is None:
+                first_metadata = metadata
+            
+            seg_mask = metadata.get("seg_mask", None)
+            if seg_mask is None:
+                continue
 
-    def undo_pad_to_square(self, img, pads):
+            # preprocessing mask: only under Eyebrow to Chin
+            points = metadata.get("pts", None)
+            if points is not None:
+                h, w = seg_mask.shape[:2]
+                mask_u8 = np.zeros((h, w), dtype=np.uint8)
+
+                face_contour = np.array(points[0:17], dtype=np.int32)
+                brow_left = np.array(points[17:22], dtype=np.int32)
+                brow_right = np.array(points[22:27], dtype=np.int32)
+                head_line = np.vstack([face_contour[::-1], brow_left, brow_right])
+                cv2.fillPoly(mask_u8, [head_line], 255)
+
+                blur_radius = 21 
+                mask_blurred = cv2.GaussianBlur(mask_u8, (blur_radius, blur_radius), 0)
+                mask_soft = mask_blurred.astype(np.float32) / 255.0
+
+                if len(seg_mask.shape) == 3 and seg_mask.shape[2] > 1:
+                    mask_soft = mask_soft[:, :, np.newaxis]
+                
+                seg_mask = seg_mask * mask_soft
+            
+            # if there is a segmentation mask, Dilation + Blur to make it smoother
+            h, w = seg_mask.shape[:2]
+            range_scale = 0.15 
+            blur_scale = 3.0
+            gain = 1.5 
+            
+            dilation_size = max(3, int(min(h, w) * range_scale) | 1)
+            kernel = np.ones((dilation_size, dilation_size), np.uint8)
+
+            seg_mask_u8 = (seg_mask[:,:,0] * 255).astype(np.uint8)
+            seg_mask_dilated = cv2.dilate(seg_mask_u8, kernel, iterations=1)
+
+            blur_ksize = int(dilation_size * blur_scale) | 1
+            sigma = blur_ksize * 0.3
+
+            seg_mask_blurred = cv2.GaussianBlur(
+                seg_mask_dilated,
+                (blur_ksize, blur_ksize),
+                sigmaX=sigma,
+                sigmaY=sigma
+            )
+
+            seg_mask_float = seg_mask_blurred.astype(np.float32) / 255.0
+            seg_mask_boosted = seg_mask_float * gain
+            seg_mask_final = np.clip(seg_mask_boosted, 0.0, 1.0)
+
+            # border fade-out for each face mask
+            h_m, w_m = seg_mask_final.shape[:2]
+            fade_size = max(4, int(min(h_m, w_m) * 0.05)) 
+            
+            fade_ramp = np.linspace(0, 1, fade_size, dtype=np.float32)
+            seg_mask_final[:fade_size, :] *= fade_ramp[:, np.newaxis]
+            seg_mask_final[-fade_size:, :] *= fade_ramp[::-1][:, np.newaxis]
+            seg_mask_final[:, :fade_size] *= fade_ramp[np.newaxis, :]
+            seg_mask_final[:, -fade_size:] *= fade_ramp[::-1][np.newaxis, :]
+            
+            seg_mask_final[0, :] = 0
+            seg_mask_final[-1, :] = 0
+            seg_mask_final[:, 0] = 0
+            seg_mask_final[:, -1] = 0
+
+            # paste-back mask
+            M = metadata.get("M", None)
+            if M is not None:
+                seg_mask_final_warped = cv2.warpAffine(
+                    seg_mask_final, M, (w_img, h_img), 
+                    flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT, borderValue=0
+                )
+                
+                combined_final_mask = np.maximum(combined_final_mask, seg_mask_final_warped)
+
+        # border fade-out
+        fade_border_size = 32 
+        fade_border_size = min(fade_border_size, h_img // 2, w_img // 2)
+
+        if fade_border_size > 0:
+            ramp = np.linspace(0, 1, fade_border_size, dtype=np.float32)
+            
+            combined_final_mask[:fade_border_size, :] *= ramp[:, np.newaxis]
+            combined_final_mask[-fade_border_size:, :] *= ramp[::-1][:, np.newaxis]
+            combined_final_mask[:, :fade_border_size] *= ramp[np.newaxis, :]
+            combined_final_mask[:, -fade_border_size:] *= ramp[::-1][np.newaxis, :]
+
+            combined_final_mask[0, :] = 0.0
+            combined_final_mask[-1, :] = 0.0
+            combined_final_mask[:, 0] = 0.0
+            combined_final_mask[:, -1] = 0.0
+
+        if first_metadata is None:
+            first_metadata = {"success": False}
+        return combined_final_mask, first_metadata
+    
+    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1000000, align_factor=8):
         """
-        Removes the padding applied by pad_to_square.
-        Args:
-            img: The padded image.
-            pads: Tuple of (top, bottom, left, right).
+        1. Detect faces on FULL image.
+        2. Analyze metadata on FULL image (Global coords).
+        3. Crop square region.
+        4. Resize to ~1M pixels AND force dimensions to be multiples of 8.
         """
-        top, bottom, left, right = pads
-        h, w = img.shape[:2]
+        h_img, w_img = img.shape[:2]
         
-        # Calculate new dimensions
-        new_h = h - top - bottom
-        new_w = w - left - right
+        # 1. Detect faces (Global)
+        rects = self.get_all_face_rects(img)
         
-        return img[top:top+new_h, left:left+new_w]
+        # Fallback if no faces found
+        if rects is None or len(rects) == 0:
+            # Fallback resizing with alignment
+            scale = math.sqrt(target_pixel_count / (w_img * h_img))
+            target_w = int(round(w_img * scale / align_factor) * align_factor)
+            target_h = int(round(h_img * scale / align_factor) * align_factor)
+            target_w = max(align_factor, target_w)
+            target_h = max(align_factor, target_h)
+            
+            resized_fallback = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            return resized_fallback, (0, 0, w_img, h_img), {"success": False}
+
+        # 2. Generate Metadata from ORIGINAL IMAGE
+        first_metadata = {"success": False}
+        if len(rects) > 0:
+            rx, ry, rw, rh = rects[0]
+            first_metadata = self.analyze_face(img, rect=[rx, ry, rw, rh])
+
+        # 3. Calculate Union Bounding Box
+        x1_min, y1_min = w_img, h_img
+        x2_max, y2_max = 0, 0
+        
+        for (rx, ry, rw, rh) in rects:
+            x1_min = min(x1_min, rx)
+            y1_min = min(y1_min, ry)
+            x2_max = max(x2_max, rx + rw)
+            y2_max = max(y2_max, ry + rh)
+            
+        # 4. Apply Padding
+        bbox_w = x2_max - x1_min
+        bbox_h = y2_max - y1_min
+        
+        pad_x = int(bbox_w * padding_factor)
+        pad_y = int(bbox_h * padding_factor)
+        
+        c_x1 = x1_min - pad_x
+        c_y1 = y1_min - pad_y
+        c_x2 = x2_max + pad_x
+        c_y2 = y2_max + pad_y
+
+        # --- Auto-Square Logic ---
+        cur_w = c_x2 - c_x1
+        cur_h = c_y2 - c_y1
+        final_dim = max(cur_w, cur_h)
+        
+        center_x = (c_x1 + c_x2) / 2
+        center_y = (c_y1 + c_y2) / 2
+        
+        c_x1 = int(center_x - final_dim / 2)
+        c_x2 = int(c_x1 + final_dim)
+        c_y1 = int(center_y - final_dim / 2)
+        c_y2 = int(c_y1 + final_dim)
+        
+        # 5. Shift to fit inside image
+        if c_x1 < 0:
+            c_x2 += abs(c_x1)
+            c_x1 = 0
+        if c_x2 > w_img:
+            c_x1 -= (c_x2 - w_img)
+            c_x2 = w_img
+            if c_x1 < 0: c_x1 = 0 
+            
+        if c_y1 < 0:
+            c_y2 += abs(c_y1)
+            c_y1 = 0
+        if c_y2 > h_img:
+            c_y1 -= (c_y2 - h_img)
+            c_y2 = h_img
+            if c_y1 < 0: c_y1 = 0
+
+        crop_info = (c_x1, c_y1, c_x2, c_y2)
+        
+        # 6. Crop the image (Raw Resolution)
+        raw_crop_img = img[c_y1:c_y2, c_x1:c_x2].copy()
+        
+        # 7. Resize to 1M Pixels AND Align to 8 (Key Change)
+        h_raw, w_raw = raw_crop_img.shape[:2]
+        
+        if h_raw > 0 and w_raw > 0:
+            scale = math.sqrt(target_pixel_count / (w_raw * h_raw))
+            
+            target_w_raw = w_raw * scale
+            target_h_raw = h_raw * scale
+            
+            new_w = int(round(target_w_raw / align_factor) * align_factor)
+            new_h = int(round(target_h_raw / align_factor) * align_factor)
+            
+            new_w = max(align_factor, new_w)
+            new_h = max(align_factor, new_h)
+            
+            interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+            resized_crop_img = cv2.resize(raw_crop_img, (new_w, new_h), interpolation=interp)
+        else:
+            resized_crop_img = raw_crop_img
+
+        # Calculate Aligned Rects for reuse
+        aligned_rects = []
+        h_new, w_new = resized_crop_img.shape[:2]
+        
+        if h_raw > 0 and w_raw > 0:
+            s_x = w_new / w_raw
+            s_y = h_new / h_raw
+            
+            for (rx, ry, rw, rh) in rects:
+                # Transform global rect to cropped & resized rect
+                nx = int((rx - c_x1) * s_x)
+                ny = int((ry - c_y1) * s_y)
+                nw = int(rw * s_x)
+                nh = int(rh * s_y)
+                aligned_rects.append([nx, ny, nw, nh])
+        
+        if isinstance(first_metadata, dict):
+            first_metadata["aligned_rects"] = aligned_rects 
+
+        return resized_crop_img, crop_info, first_metadata
+
+    def paste_back_crop_region(self, full_img, crop_img, crop_info):
+        """
+        Pastes the processed crop image back into the full image at the specified location.
+        """
+        x1, y1, x2, y2 = crop_info
+        
+        target_w = x2 - x1
+        target_h = y2 - y1
+        
+        if target_w <= 0 or target_h <= 0:
+            return full_img
+        
+        if crop_img.shape[1] != target_w or crop_img.shape[0] != target_h:
+            crop_img_resized = cv2.resize(crop_img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            crop_img_resized = crop_img
+        
+        full_img[y1:y2, x1:x2] = crop_img_resized
+        return full_img
