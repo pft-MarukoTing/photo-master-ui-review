@@ -1623,27 +1623,6 @@ class FaceDetailRestorer:
             seg_mask = metadata.get("seg_mask", None)
             if seg_mask is None:
                 continue
-
-            # preprocessing mask: only under Eyebrow to Chin
-            points = metadata.get("pts", None)
-            if points is not None:
-                h, w = seg_mask.shape[:2]
-                mask_u8 = np.zeros((h, w), dtype=np.uint8)
-
-                face_contour = np.array(points[0:17], dtype=np.int32)
-                brow_left = np.array(points[17:22], dtype=np.int32)
-                brow_right = np.array(points[22:27], dtype=np.int32)
-                head_line = np.vstack([face_contour[::-1], brow_left, brow_right])
-                cv2.fillPoly(mask_u8, [head_line], 255)
-
-                blur_radius = 21 
-                mask_blurred = cv2.GaussianBlur(mask_u8, (blur_radius, blur_radius), 0)
-                mask_soft = mask_blurred.astype(np.float32) / 255.0
-
-                if len(seg_mask.shape) == 3 and seg_mask.shape[2] > 1:
-                    mask_soft = mask_soft[:, :, np.newaxis]
-                
-                seg_mask = seg_mask * mask_soft
             
             # if there is a segmentation mask, Dilation + Blur to make it smoother
             h, w = seg_mask.shape[:2]
