@@ -1595,20 +1595,53 @@ class FaceDetailRestorer:
         
         
         return seg_mask_final, metadata
+
+    def enhanced_face_detection(self, img, detector_func):
+        """
+        detect face with multiple strategies:
+        1. Direct Detection
+        2. Padding (Zoom Out simulation)
+        """
+        h, w = img.shape[:2]
+        
+        # strategy 1: Direct Detection
+        #rects = detector_func(img)
+        #if rects and len(rects) > 0:
+        #    return rects
+
+        # strategy 2: Padding (Zoom Out simulation)
+        pad_h = int(h * 0.1)
+        pad_w = int(w * 0.1)
+        
+        padded_img = cv2.copyMakeBorder(img, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=(0,0,0))
+        
+        padded_rects = detector_func(padded_img)
+        
+        if padded_rects and len(padded_rects) > 0:
+            final_rects = []
+            for (x, y, rw, rh) in padded_rects:
+                real_x = x - pad_w
+                real_y = y - pad_h
+                
+                final_rects.append([real_x, real_y, rw, rh])
+                
+            return final_rects
+
+        return []
+
     
     def pre_detect_all_faces(self, img, provided_rects=None):
         h_img, w_img = img.shape[:2]
         combined_final_mask = np.zeros((h_img, w_img), dtype=np.float32)
         first_metadata = None
-
         if provided_rects is not None:
             rects = provided_rects
         else:
             print("Detecting all faces for mask...")
-            rects = self.get_all_face_rects(img)
+            rects = self.enhanced_face_detection(img, self.get_all_face_rects)
         
         if rects is None or len(rects) == 0:
-             return combined_final_mask, {"success": False}
+            return combined_final_mask, {"success": False}
 
         for rect in rects:
             metadata = self.analyze_face(img, rect=rect)
@@ -1707,7 +1740,7 @@ class FaceDetailRestorer:
         h_img, w_img = img.shape[:2]
         
         # 1. Detect faces (Global)
-        rects = self.get_all_face_rects(img)
+        rects = self.enhanced_face_detection(img, self.get_all_face_rects)
         
         # Fallback if no faces found
         if rects is None or len(rects) == 0:
