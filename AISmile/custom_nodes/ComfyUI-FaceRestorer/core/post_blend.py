@@ -1709,23 +1709,6 @@ class FaceDetailRestorer:
                 
                 combined_final_mask = np.maximum(combined_final_mask, seg_mask_final_warped)
 
-        # border fade-out
-        fade_border_size = 32 
-        fade_border_size = min(fade_border_size, h_img // 2, w_img // 2)
-
-        if fade_border_size > 0:
-            ramp = np.linspace(0, 1, fade_border_size, dtype=np.float32)
-            
-            combined_final_mask[:fade_border_size, :] *= ramp[:, np.newaxis]
-            combined_final_mask[-fade_border_size:, :] *= ramp[::-1][:, np.newaxis]
-            combined_final_mask[:, :fade_border_size] *= ramp[np.newaxis, :]
-            combined_final_mask[:, -fade_border_size:] *= ramp[::-1][np.newaxis, :]
-
-            combined_final_mask[0, :] = 0.0
-            combined_final_mask[-1, :] = 0.0
-            combined_final_mask[:, 0] = 0.0
-            combined_final_mask[:, -1] = 0.0
-
         if first_metadata is None:
             first_metadata = {"success": False}
         return combined_final_mask, first_metadata
