@@ -1741,16 +1741,19 @@ class FaceDetailRestorer:
             seg_mask_boosted = seg_mask_float * gain
             seg_mask_final = np.clip(seg_mask_boosted, 0.0, 1.0)
 
-            # border fade-out for each face mask
+            # border fade-out
             h_m, w_m = seg_mask_final.shape[:2]
-            fade_size = max(4, int(min(h_m, w_m) * 0.05)) 
+            fade_ratio = 0.12  
+            fade_size = max(8, int(min(h_m, w_m) * fade_ratio)) 
             
-            fade_ramp = np.linspace(0, 1, fade_size, dtype=np.float32)
+            t = np.linspace(0, 1, fade_size, dtype=np.float32)
+            fade_ramp = t * t * (3 - 2 * t) 
+
             seg_mask_final[:fade_size, :] *= fade_ramp[:, np.newaxis]
             seg_mask_final[-fade_size:, :] *= fade_ramp[::-1][:, np.newaxis]
             seg_mask_final[:, :fade_size] *= fade_ramp[np.newaxis, :]
             seg_mask_final[:, -fade_size:] *= fade_ramp[::-1][np.newaxis, :]
-            
+
             seg_mask_final[0, :] = 0
             seg_mask_final[-1, :] = 0
             seg_mask_final[:, 0] = 0
