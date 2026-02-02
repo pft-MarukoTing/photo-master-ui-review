@@ -71,7 +71,7 @@ class FaceDetailRestorerNode:
                 "pipeline": ("FACE_PIPELINE",),
                 "image_origin": ("IMAGE",),      # Reference
                 "image_generated": ("IMAGE",),   # Generated (Smile)
-                #"mode": (["add", "replace", "eyes_replacement"],{"default": "eyes_replacement"}),
+                #"mode": (["add", "replace", "eyes_replacement", "eyes_replacement_v2"],{"default": "eyes_replacement"}),
                 "sigma": ("INT", {"default": 7, "min": 1, "max": 50}),
                 "detail_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
                 #"forehead_strength": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.05}),
@@ -140,6 +140,7 @@ class FaceDetailRestorerwMetadataNode:
                 "sigma": ("INT", {"default": 7, "min": 1, "max": 50}),
                 "detail_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
                 "mask_shrink_size": ("INT", {"default": 0, "min": 0, "max": 100}),
+                #"mode": (["add", "replace", "eyes_replacement", "eyes_replacement_v2"],{"default": "eyes_replacement"}),
             }
         }
 
@@ -147,8 +148,8 @@ class FaceDetailRestorerwMetadataNode:
     FUNCTION = "restore_face_with_metadata"
     CATEGORY = "FaceRestoration"
 
-    def restore_face_with_metadata(self, pipeline, image_generated, face_metadata, sigma, detail_strength, mask_shrink_size):
-        mode = "eyes_replacement" # ["add", "replace", "eyes_replacement"]
+    def restore_face_with_metadata(self, pipeline, image_generated, face_metadata, sigma, detail_strength, mask_shrink_size, mode="eyes_replacement"):
+        mode = "eyes_replacement_v2" # ["add", "replace", "eyes_replacement", "eyes_replacement_v2"]
         forehead_strength = 0.5
         return self._restore_w_metadata(pipeline, image_generated, sigma, detail_strength, forehead_strength, mask_shrink_size, face_metadata, mode=mode)
 
@@ -223,7 +224,7 @@ class FaceMaskRegionNode:
         for i in range(batch_count):
             img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
-            
+
             provided_rects = None
             if face_metadata is not None and i < len(face_metadata):
                 provided_rects = face_metadata[i].get("aligned_rects", None)

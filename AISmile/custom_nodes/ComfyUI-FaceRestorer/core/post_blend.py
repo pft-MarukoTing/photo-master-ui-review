@@ -909,6 +909,49 @@ class FaceDetailRestorer:
         protection_map = protect_high * protect_low
         
         return protection_map
+
+    def _calculate_texture_energy_control(self, texture_a, detail_b, window_size=21, 
+                                          fidelity=1.0, min_limit=5.0, max_limit=30.0):
+        """
+        Adaptive Energy Budgeting.
+        Target: Result Energy <= Energy(A) * Fidelity
+        
+        Args:
+            fidelity (float): 1.0 means we target the exact roughness of Image A.
+                              0.8 makes it slightly smoother than A.
+                              1.2 makes it sharper/rougher than A.
+            min_limit (float): Minimum allowed budget (prevents over-smoothing on naturally smooth A areas).
+            max_limit (float): Maximum safety ceiling (prevents noise explosion).
+        """
+        # 1. calc RMS Energy
+        if len(texture_a.shape) == 3:
+            texture_a = texture_a[:,:,0]
+        
+        sq_a = texture_a * texture_a
+        sq_b = detail_b * detail_b
+        
+        sigma = (window_size - 1) / 6.0
+        mean_sq_a = cv2.GaussianBlur(sq_a, (window_size, window_size), sigma)
+        mean_sq_b = cv2.GaussianBlur(sq_b, (window_size, window_size), sigma)
+        
+        energy_a = np.sqrt(mean_sq_a)
+        energy_b = np.sqrt(mean_sq_b)
+        
+        adaptive_limit = energy_a * fidelity
+        target_limit_map = np.clip(adaptive_limit, min_limit, max_limit)
+        
+        # 2. Calculate remaining budget (Headroom)
+        # Headroom = Target - Current_B
+        headroom = target_limit_map - energy_b
+        
+        # 3. Calculate weight map
+        safe_energy_a = np.maximum(energy_a, 1e-5)
+        allowed_weight = headroom / safe_energy_a
+        
+        control_map = np.clip(allowed_weight, 0.0, 1.0)
+        control_map = cv2.GaussianBlur(control_map, (9, 9), 0)
+        
+        return control_map
     
     def _get_crop_matrix(self, rect, src_w, src_h, target_size=1024, padding=2.0):
         """
@@ -1393,15 +1436,6 @@ class FaceDetailRestorer:
         # === LAB Blending ===
         img_b_lab = cv2.cvtColor(img_b_crop, cv2.COLOR_BGR2LAB).astype(np.float32)
         l, a, b = cv2.split(img_b_lab)
-
-        target_smoothness_map = self._create_target_smoothness_map(
-            l, 
-            sensitivity=0.3, 
-            min_strength=0.2, 
-            max_strength=1.0
-        )
-        
-        luminance_safe_map = self._calculate_luminance_protection(l, threshold_low=20, threshold_high=230)
         
         # 1. Base from B
         l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
@@ -1416,14 +1450,36 @@ class FaceDetailRestorer:
             texture_boost = 1.0
             l_replaced = l_blurred + (texture_a_warped * self.detail_strength * texture_boost)
             l_final = l * (1.0 - mask_single) + l_replaced * mask_single
-        elif mode == "eyes_replacement":
-            mask_eye_zone = self._create_eye_surround_mask(pts_b, img_b_crop.shape)
-
-            global_constraints = target_smoothness_map * luminance_safe_map
-            final_adaptive_map = global_constraints * (1.0 - mask_eye_zone) + 1.0 * mask_eye_zone
-
+        elif mode == "eyes_replacement" or mode == "eyes_replacement_v2":
             l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
             texture_b = l - l_blurred
+
+            mask_eye_zone = self._create_eye_surround_mask(pts_b, img_b_crop.shape)
+
+            luminance_safe_map = self._calculate_luminance_protection(l, threshold_low=20, threshold_high=230)
+
+            # (CRURRENT) adaptive smoothness map
+            if mode == "eyes_replacement":
+                target_smoothness_map = self._create_target_smoothness_map(
+                    l, 
+                    sensitivity=0.3, 
+                    min_strength=0.2, 
+                    max_strength=1.0
+                )
+                global_constraints = target_smoothness_map * luminance_safe_map
+
+            else: # eyes_replacement_v2
+                energy_control_map = self._calculate_texture_energy_control(
+                    texture_a, 
+                    texture_b, 
+                    window_size=21,
+                    fidelity=1.0,
+                    min_limit=5.0,
+                    max_limit=30.0
+                )
+                global_constraints = energy_control_map * luminance_safe_map
+
+            final_adaptive_map = global_constraints * (1.0 - mask_eye_zone) + 1.0 * mask_eye_zone
 
             # add extra forehead intensity mask
             mask_forehead_zone = self._create_forehead_intensity_mask(pts_b, img_b_crop.shape)
@@ -1435,9 +1491,11 @@ class FaceDetailRestorer:
             target_keep_b_map = KEEP_B_CHEEK * (1.0 - mask_eye_zone) + KEEP_B_EYE * mask_eye_zone
             ratio_keep_b = 1.0 - (mask_single * (1.0 - target_keep_b_map))
 
-            ADD_A_CHEEK = 1.0
+            if mode == "eyes_replacement_v2":
+                ADD_A_CHEEK = 0.7
+            else:
+                ADD_A_CHEEK = 1.0
             ADD_A_EYE   = 1.0
-            
             target_add_a_map = ADD_A_CHEEK * (1.0 - mask_eye_zone) + ADD_A_EYE * mask_eye_zone
             ratio_add_a = mask_single * target_add_a_map * strength_map * final_adaptive_map
             
