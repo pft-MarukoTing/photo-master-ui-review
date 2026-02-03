@@ -84,7 +84,7 @@ class FaceDetailRestorerNode:
     CATEGORY = "FaceRestoration"
 
     def restore_face(self, pipeline, image_origin, image_generated, sigma, detail_strength, mask_shrink_size):
-        mode = "eyes_replacement" # ["add", "replace", "eyes_replacement"]
+        mode = "eyes_replacement_v2" # ["add", "replace", "eyes_replacement", "eyes_replacement_v2"]
         forehead_strength = 0.5
         return self._restore_common(pipeline, image_origin, image_generated, sigma, detail_strength, forehead_strength, mask_shrink_size, mode=mode)
 
