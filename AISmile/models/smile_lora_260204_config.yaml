@@ -1,0 +1,183 @@
+job: extension
+config:
+  name: smile_exp_067
+  process:
+  - type: diffusion_trainer
+    training_folder: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/output
+    sqlite_db_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/aitk_db.db
+    device: cuda
+    trigger_word: null
+    performance_log_every: 10
+    network:
+      type: lora
+      linear: 16
+      linear_alpha: 16
+      conv: 16
+      conv_alpha: 16
+      lokr_full_rank: true
+      lokr_factor: -1
+      network_kwargs:
+        ignore_if_contains: []
+      pretrained_lora_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/output/smile_exp_057/smile_exp_057.safetensors
+    save:
+      dtype: bf16
+      save_every: 100
+      max_step_saves_to_keep: 40
+      save_format: diffusers
+      push_to_hub: false
+    datasets:
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/dataset_004_classic_arcfold
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: mt-expression
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 1
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/dataset_004_control
+      control_path_2: null
+      control_path_3: null
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/dataset_004_close_lv4
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: mt-close
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 1
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/dataset_004_control
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/dataset_006_classic_arcfold-2
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: mt-expression
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 1
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/dataset_006_control
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/2_classic_1024x1024_alice
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: mt-expression
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 5
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/control_1024x1024_alice
+    train:
+      batch_size: 1
+      bypass_guidance_embedding: false
+      steps: 4000
+      gradient_accumulation: 1
+      train_unet: true
+      train_text_encoder: false
+      gradient_checkpointing: true
+      noise_scheduler: flowmatch
+      optimizer: adamw8bit
+      timestep_type: weighted
+      content_or_style: balanced
+      optimizer_params:
+        weight_decay: 0.0001
+      unload_text_encoder: false
+      cache_text_embeddings: true
+      lr: 0.0002
+      ema_config:
+        use_ema: true
+        ema_decay: 0.99
+      skip_first_sample: false
+      force_first_sample: false
+      disable_sampling: false
+      dtype: bf16
+      diff_output_preservation: false
+      diff_output_preservation_multiplier: 1
+      diff_output_preservation_class: person
+      switch_boundary_every: 1
+      loss_type: mse
+    logging:
+      log_every: 1
+      use_ui_logger: true
+    model:
+      name_or_path: Qwen/Qwen-Image-Edit-2509
+      quantize: true
+      qtype: qfloat8
+      quantize_te: true
+      qtype_te: qfloat8
+      arch: qwen_image_edit_plus
+      low_vram: true
+      model_kwargs:
+        match_target_res: false
+      layer_offloading: false
+      layer_offloading_text_encoder_percent: 1
+      layer_offloading_transformer_percent: 1
+    sample:
+      sampler: flowmatch
+      sample_every: 250
+      width: 1024
+      height: 1024
+      samples:
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/03cc2b13-692a-47e6-bbc6-336cbe1c13f0.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/acab5804-9ce2-4164-8262-5700ca72957a.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/d7c0385e-c3aa-4380-9320-1d6af4a49a0c.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/8fcd8910-134f-413d-a976-7c8843e262e2.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/ca715d4a-9eb3-4a82-a373-676a9e574624.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/e17e987e-3ff4-4c31-845a-ebbf6e16eb74.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/700419ed-91f1-4623-86a8-281bf29bda82.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/21ecfa0d-a570-41c6-a456-dc8c91d58747.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/90714422-8c81-44ba-9bf7-787dcebb3e14.jpg
+      - prompt: mt-expression
+        ctrl_img_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/data/images/964713cc-77f5-4ad3-84ca-ab1dcf37edd8.jpg
+      neg: ''
+      seed: 42
+      walk_seed: false
+      guidance_scale: 4
+      sample_steps: 10
+      num_frames: 1
+      fps: 1
+meta:
+  name: smile_exp_067
+  version: '1.0'
