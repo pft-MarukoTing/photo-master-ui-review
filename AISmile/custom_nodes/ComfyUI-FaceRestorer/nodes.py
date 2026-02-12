@@ -95,7 +95,7 @@ class FaceDetailRestorerNode:
             sigma=sigma,
             detail_strength=detail_strength,
             forehead_strength=forehead_strength,
-            mask_shrink_size=mask_shrink_size,
+            mask_shrink_size=mask_shrink_size
         )
 
         output_tensors = []
@@ -140,7 +140,7 @@ class FaceDetailRestorerwMetadataNode:
                 "sigma": ("INT", {"default": 7, "min": 1, "max": 50}),
                 "detail_strength": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.05}),
                 "mask_shrink_size": ("INT", {"default": 0, "min": 0, "max": 100}),
-                #"mode": (["add", "replace", "eyes_replacement", "eyes_replacement_v2"],{"default": "eyes_replacement"}),
+                #"mode": (["add", "replace", "eyes_replacement", "eyes_replacement_v2"],{"default": "eyes_replacement_v2"}),
             }
         }
 
@@ -201,6 +201,10 @@ class FaceMaskRegionNode:
             "required": {
                 "pipeline": ("FACE_PIPELINE",),
                 "image": ("IMAGE",),
+                "range_scale": ("FLOAT", {"default": 0.15, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "blur_scale": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 10.0, "step": 0.1}),
+                "gain": ("FLOAT", {"default": 1.5, "min": 0.0, "max": 5.0, "step": 0.1}),
+                "mask_type": (["rect", "circle", "seg"], {"default": "seg"}),
             },
             "optional": {
                 "face_metadata": ("FACE_METADATA",),
@@ -212,7 +216,7 @@ class FaceMaskRegionNode:
     FUNCTION = "get_face_mask"
     CATEGORY = "FaceRestoration"
 
-    def get_face_mask(self, pipeline, image, face_metadata=None):
+    def get_face_mask(self, pipeline, image, range_scale=0.15, blur_scale=3.0, gain=1.5, mask_type='seg', face_metadata=None):
         # image is Tensor [B, H, W, C]
         # For this simple node, we don't need detailed restorer params
         restorer = FaceDetailRestorer(pipeline)
@@ -230,7 +234,9 @@ class FaceMaskRegionNode:
                 provided_rects = face_metadata[i].get("aligned_rects", None)
             
             try:
-                mask_single, metadata = restorer.pre_detect_all_faces(img_bgr, provided_rects=provided_rects)
+                mask_single, metadata = restorer.pre_detect_all_faces(img_bgr, provided_rects=provided_rects, \
+                                                                      range_scale=range_scale, blur_scale=blur_scale, gain=gain, \
+                                                                      mask_type=mask_type)
                 
                 output_masks.append(torch.from_numpy(mask_single))
                 output_metadata.append(metadata)
@@ -487,6 +493,7 @@ class FaceRegionCropNode:
                 "pipeline": ("FACE_PIPELINE",),
                 "image": ("IMAGE",),
                 "padding_factor": ("FLOAT", {"default": 0.45, "min": 0.0, "max": 1.0, "step": 0.05}),
+                "bbox_padding_mode": (["shift", "pad"], {"default": "shift"}),
             }
         }
 
@@ -495,7 +502,7 @@ class FaceRegionCropNode:
     FUNCTION = "crop_face_region"
     CATEGORY = "FaceRestoration"
 
-    def crop_face_region(self, pipeline, image, padding_factor):
+    def crop_face_region(self, pipeline, image, padding_factor, bbox_padding_mode='shift'):
         restorer = FaceDetailRestorer(pipeline)
         
         output_images = []
@@ -507,7 +514,7 @@ class FaceRegionCropNode:
             img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             
-            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor)
+            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor, bbox_padding_mode=bbox_padding_mode)
             
             img_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
             img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)
