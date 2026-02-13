@@ -351,8 +351,7 @@ class FaceDetailRestorer:
     
     def get_landmarks(self, img, debug_save_path=None, detect_debug_path=None):
         h, w = img.shape[:2]
-        
-        # 1. Detection
+        # Detection
         rect_list, _ = self.pipeline.detect(img, bypass=True) # return [x, y, w, h]
         if rect_list is None:
             raise ValueError("No face detected.")
@@ -373,7 +372,7 @@ class FaceDetailRestorer:
             print(f"[Debug] Saving detection rect to {detect_debug_path}")
             cv2.imwrite(detect_debug_path, vis)
         
-        # 2. Alignment (84 points)
+        # Alignment (84 points)
         points_84 = self.pipeline.align(img, rect_list)[:84]
         
         # Debug Save Raw 84 points
@@ -1687,23 +1686,51 @@ class FaceDetailRestorer:
 
         return []
 
-    def pre_detect_all_faces(self, img, provided_rects=None, range_scale=0.15, blur_scale=3.0, gain=1.5, mask_type='seg'):
+    def pre_detect_all_faces(self, img, provided_rects=None, range_scale=0.15, blur_scale=3.0, gain=1.5, mask_type='seg', face_rect_metadata=None, provided_local_rects=None):
         """
-        mask_type: 
-            'seg'    - (Default) Use AI segmentation mask (precise face shape).
-            'rect'   - Use a full square mask covering the aligned face crop.
-            'circle' - Use a circular mask covering the aligned face crop.
+        Generate a mask for the faces.
+        
+        Args:
+            mask_type: 'seg' (AI mask), 'rect' (Square), 'circle' (Circle)
+            face_rect_metadata: dict (Optional)
+                {
+                    "face_rect_flag": bool,  # True: Use provided rect; False: Force Full Image Mask
+                    "face_rect": [x, y, w, h]
+                }
         """
         h_img, w_img = img.shape[:2]
         combined_final_mask = np.zeros((h_img, w_img), dtype=np.float32)
         first_metadata = None
         
-        if provided_rects is not None:
-            rects = provided_rects
-        else:
-            print("Detecting all faces for mask...")
-            rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+        # --- 1. Determine Logic Flow based on Metadata ---
+        rects = []
+        is_force_full_image = False
         
+        if face_rect_metadata is not None:
+            if face_rect_metadata.get("face_rect_flag", False):
+                # Mode: Use Provided Rect
+                if provided_local_rects is not None:
+                    rects = [provided_local_rects]
+                else:
+                    rects = [[0, 0, w_img, h_img]]
+            else:
+                # Mode: Force Full Image
+                is_force_full_image = True
+        else:
+            # Mode: Auto Detect
+            if provided_rects is not None:
+                rects = provided_rects
+            else:
+                print("Detecting all faces for mask...")
+                rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+
+        # --- 2. Handle Force Full Image Mode ---
+        if is_force_full_image:
+            full_white_mask = np.ones((h_img, w_img), dtype=np.float32)
+            dummy_meta = {"success": True, "force_full": True}
+            return full_white_mask, dummy_meta
+
+        # --- 3. Handle Face Masking (Loop through rects) ---
         if rects is None or len(rects) == 0:
             return combined_final_mask, {"success": False}
 
@@ -1716,6 +1743,7 @@ class FaceDetailRestorer:
             if first_metadata is None:
                 first_metadata = metadata
             
+            # --- Prepare Base Mask in Aligned Space ---
             seg_mask_ref = metadata.get("seg_mask", None)
             
             mask_size = 512
@@ -1745,6 +1773,7 @@ class FaceDetailRestorer:
             if base_mask is None:
                 continue
             
+            # --- Post-Processing (Blur & Warp) ---
             h_m, w_m = base_mask.shape[:2]
             
             if base_mask.max() > 1.0:
@@ -1779,6 +1808,7 @@ class FaceDetailRestorer:
             seg_mask_boosted = seg_mask_float * gain
             seg_mask_final = np.clip(seg_mask_boosted, 0.0, 1.0)
             
+            # --- Warp Back to Original Image ---
             M = metadata.get("M", None)
             if M is not None:
                 M_padded = M.copy()
@@ -1797,19 +1827,39 @@ class FaceDetailRestorer:
             first_metadata = {"success": False}
         return combined_final_mask, first_metadata
     
-    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1000000, align_factor=8, bbox_padding_mode='shift'):
+    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1000000, align_factor=8, bbox_padding_mode='shift', face_rect_metadata=None):
         """
         bbox_padding_mode: 
-            'shift' - (Default) Shifts the box to fit inside image boundaries. No black borders, but centers might shift.
-            'pad'   - Keeps the box centered and square, padding out-of-bound areas with zero (black).
+            'shift' - Shift to fit. If image is too small, crop might be rectangular.
+            'pad'   - Shift to fit first. If resulting crop is rectangular, pad to square.
+        
+        face_rect_metadata: dict (Optional)
+            {
+                "face_rect_flag": bool,  # True: Use provided rect; False: Use Full Image but detect faces for metadata
+                "face_rect": [x, y, w, h] # Used if flag is True
+            }
         """
         h_img, w_img = img.shape[:2]
         
-        # 1. Detect faces (Global)
-        rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+        # --- 1. Determine Logic Flow based on Metadata ---
+        force_full_image_crop = False
+        use_provided_rect = False
+        rects = []
+
+        if face_rect_metadata is not None:
+            if face_rect_metadata.get("face_rect_flag", False):
+                # with provided rect
+                use_provided_rect = True
+                rects = [face_rect_metadata.get("face_rect")]
+            else:
+                # full frame
+                force_full_image_crop = True
+                rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+        else:
+            # fallback to normal detection (no metadata)
+            rects = self.enhanced_face_detection(img, self.get_all_face_rects)
         
-        # Fallback if no faces found
-        if rects is None or len(rects) == 0:
+        if (rects is None or len(rects) == 0) and not force_full_image_crop:
             scale = math.sqrt(target_pixel_count / (w_img * h_img))
             target_w = int(round(w_img * scale / align_factor) * align_factor)
             target_h = int(round(h_img * scale / align_factor) * align_factor)
@@ -1818,36 +1868,45 @@ class FaceDetailRestorer:
             
             resized_fallback = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_AREA)
             return resized_fallback, (0, 0, w_img, h_img), {"success": False}
+        
+        if rects is None:
+            rects = []
 
-        # 2. Generate Metadata
+        # --- 2. Generate Metadata (Analyze the first face found/provided) ---
         first_metadata = {"success": False}
         if len(rects) > 0:
             rx, ry, rw, rh = rects[0]
             first_metadata = self.analyze_face(img, rect=[rx, ry, rw, rh])
-
-        # 3. Calculate Union Bounding Box
-        x1_min, y1_min = w_img, h_img
-        x2_max, y2_max = 0, 0
         
-        for (rx, ry, rw, rh) in rects:
-            x1_min = min(x1_min, rx)
-            y1_min = min(y1_min, ry)
-            x2_max = max(x2_max, rx + rw)
-            y2_max = max(y2_max, ry + rh)
+
+        # --- 3. Calculate Crop Bounding Box ---
+        if force_full_image_crop:
+            c_x1, c_y1 = 0, 0
+            c_x2, c_y2 = w_img, h_img
+        else:
+            # Union Bounding Box
+            x1_min, y1_min = w_img, h_img
+            x2_max, y2_max = 0, 0
             
-        # 4. Apply Padding
-        bbox_w = x2_max - x1_min
-        bbox_h = y2_max - y1_min
-        
-        pad_x = int(bbox_w * padding_factor)
-        pad_y = int(bbox_h * padding_factor)
-        
-        c_x1 = x1_min - pad_x
-        c_y1 = y1_min - pad_y
-        c_x2 = x2_max + pad_x
-        c_y2 = y2_max + pad_y
+            for (rx, ry, rw, rh) in rects:
+                x1_min = min(x1_min, rx)
+                y1_min = min(y1_min, ry)
+                x2_max = max(x2_max, rx + rw)
+                y2_max = max(y2_max, ry + rh)
+            
+            # Apply Padding
+            bbox_w = x2_max - x1_min
+            bbox_h = y2_max - y1_min
+            
+            pad_x = int(bbox_w * padding_factor)
+            pad_y = int(bbox_h * padding_factor)
+            
+            c_x1 = x1_min - pad_x
+            c_y1 = y1_min - pad_y
+            c_x2 = x2_max + pad_x
+            c_y2 = y2_max + pad_y
 
-        # --- Auto-Square Logic ---
+        # --- 4. Auto-Square Logic ---
         cur_w = c_x2 - c_x1
         cur_h = c_y2 - c_y1
         final_dim = int(max(cur_w, cur_h))
@@ -1855,12 +1914,13 @@ class FaceDetailRestorer:
         center_x = (c_x1 + c_x2) / 2
         center_y = (c_y1 + c_y2) / 2
         
+        # Calculate ideal square coordinates
         c_x1 = int(center_x - final_dim / 2)
         c_x2 = int(c_x1 + final_dim)
         c_y1 = int(center_y - final_dim / 2)
         c_y2 = int(c_y1 + final_dim)
         
-        # 5. Shift to fit inside image (Always apply Shift first)
+        # --- 5. Shift to fit inside image ---
         if c_x1 < 0:
             c_x2 += abs(c_x1)
             c_x1 = 0
@@ -1877,7 +1937,7 @@ class FaceDetailRestorer:
             c_y2 = h_img
             if c_y1 < 0: c_y1 = 0
 
-        # 6. Clamp coordinates & Crop
+        # --- 6. Clamp & Crop (Get Raw Image) ---
         safe_x1 = max(0, c_x1)
         safe_y1 = max(0, c_y1)
         safe_x2 = min(w_img, c_x2)
@@ -1885,7 +1945,7 @@ class FaceDetailRestorer:
         
         raw_crop_img = img[safe_y1:safe_y2, safe_x1:safe_x2].copy()
         
-        # 7. Post-Processing Padding & Coordinate Adjustment
+        # --- 7. Post-Processing Padding & Coordinate Adjustment ---
         final_crop_x1 = safe_x1
         final_crop_y1 = safe_y1
         final_crop_x2 = safe_x2
@@ -1894,7 +1954,10 @@ class FaceDetailRestorer:
         offset_x = 0
         offset_y = 0
 
-        if bbox_padding_mode == 'pad':
+        # 'pad' mode or full frame crop 
+        should_pad = (bbox_padding_mode == 'pad') or force_full_image_crop 
+        
+        if should_pad:
             h_crop, w_crop = raw_crop_img.shape[:2]
             
             if h_crop != w_crop and h_crop > 0 and w_crop > 0:
@@ -1924,7 +1987,7 @@ class FaceDetailRestorer:
 
         crop_info = (final_crop_x1, final_crop_y1, final_crop_x2, final_crop_y2)
 
-        # 8. Resize to Target Pixels AND Align to 8
+        # --- 8. Resize to Target Pixels AND Align ---
         h_raw, w_raw = raw_crop_img.shape[:2]
         
         if h_raw > 0 and w_raw > 0:
@@ -1944,7 +2007,7 @@ class FaceDetailRestorer:
         else:
             resized_crop_img = raw_crop_img
 
-        # 9. Calculate Aligned Rects
+        # --- 9. Calculate Aligned Rects ---
         aligned_rects = []
         h_new, w_new = resized_crop_img.shape[:2]
         
@@ -1967,6 +2030,11 @@ class FaceDetailRestorer:
         
         if isinstance(first_metadata, dict):
             first_metadata["aligned_rects"] = aligned_rects
+
+        if face_rect_metadata is not None and face_rect_metadata.get("face_rect_flag", False):
+            if len(aligned_rects) > 0:
+                first_metadata["face_rect_local"] = aligned_rects[0]
+                first_metadata["face_rect_flag"] = True
 
         return resized_crop_img, crop_info, first_metadata
 
