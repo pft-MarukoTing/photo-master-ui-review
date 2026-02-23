@@ -497,6 +497,7 @@ class FaceRegionCropNode:
                 "image": ("IMAGE",),
                 "padding_factor": ("FLOAT", {"default": 0.45, "min": 0.0, "max": 1.0, "step": 0.05}),
                 "bbox_padding_mode": (["shift", "pad"], {"default": "shift"}),
+                "alignment_reinfine": ("BOOLEAN", {"default": False}),
             },
             "optional": {
                 "face_rect_metadata": ("FACE_RECT_METADATA",),
@@ -508,7 +509,7 @@ class FaceRegionCropNode:
     FUNCTION = "crop_face_region"
     CATEGORY = "FaceRestoration"
 
-    def crop_face_region(self, pipeline, image, padding_factor, bbox_padding_mode='shift', face_rect_metadata=None):
+    def crop_face_region(self, pipeline, image, padding_factor, bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None):
         restorer = FaceDetailRestorer(pipeline)
         
         output_images = []
@@ -520,7 +521,7 @@ class FaceRegionCropNode:
             img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             
-            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor, bbox_padding_mode=bbox_padding_mode, face_rect_metadata=face_rect_metadata)
+            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor, bbox_padding_mode=bbox_padding_mode, alignment_reinfine=alignment_reinfine, face_rect_metadata=face_rect_metadata)
             
             img_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
             img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)

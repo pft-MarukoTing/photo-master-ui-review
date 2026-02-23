@@ -1827,7 +1827,7 @@ class FaceDetailRestorer:
             first_metadata = {"success": False}
         return combined_final_mask, first_metadata
     
-    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1000000, align_factor=8, bbox_padding_mode='shift', face_rect_metadata=None):
+    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1024*1024, align_factor=8, bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None):
         """
         bbox_padding_mode: 
             'shift' - Shift to fit. If image is too small, crop might be rectangular.
@@ -1879,32 +1879,33 @@ class FaceDetailRestorer:
             first_metadata = self.analyze_face(img, rect=[rx, ry, rw, rh])
         
         # calculate first_matadata pts_84 back to original image space and use it to refine the rects if possible
-        def scale_pts_back(pts, M):
-            if pts is None or M is None:
-                return None
+        if alignment_reinfine:
+            def scale_pts_back(pts, M):
+                if pts is None or M is None:
+                    return None
+                
+                M_inv = cv2.invertAffineTransform(M)
+                pts_scaled = []
+                for (x, y) in pts:
+                    x_s = M_inv[0, 0] * x + M_inv[0, 1] * y + M_inv[0, 2]
+                    y_s = M_inv[1, 0] * x + M_inv[1, 1] * y + M_inv[1, 2]
+                    pts_scaled.append((x_s, y_s))
+                return pts_scaled
             
-            M_inv = cv2.invertAffineTransform(M)
-            pts_scaled = []
-            for (x, y) in pts:
-                x_s = M_inv[0, 0] * x + M_inv[0, 1] * y + M_inv[0, 2]
-                y_s = M_inv[1, 0] * x + M_inv[1, 1] * y + M_inv[1, 2]
-                pts_scaled.append((x_s, y_s))
-            return pts_scaled
-        
-        # if with valid metadata, use alignment pts to refine rects
-        if first_metadata.get("success", False):
-            # use pts_84 and forehead aux pts
-            pts = first_metadata.get("pts_84", None)
-            aux_forehead = first_metadata.get("aux_forehead", None)
-            pts = np.vstack([pts, aux_forehead]) if aux_forehead is not None else pts
-            if pts is not None and len(pts) > 0:
-                xy_coords = scale_pts_back(pts, first_metadata.get("M", None))
-                if xy_coords is not None:
-                    x_coords = [p[0] for p in xy_coords]
-                    y_coords = [p[1] for p in xy_coords]
-                x_min, x_max = min(x_coords), max(x_coords)
-                y_min, y_max = min(y_coords), max(y_coords)
-                rects = [[x_min, y_min, x_max - x_min, y_max - y_min]]
+            # if with valid metadata, use alignment pts to refine rects
+            if first_metadata.get("success", False):
+                # use pts_84 and forehead aux pts
+                pts = first_metadata.get("pts_84", None)
+                aux_forehead = first_metadata.get("aux_forehead", None)
+                pts = np.vstack([pts, aux_forehead]) if aux_forehead is not None else pts
+                if pts is not None and len(pts) > 0:
+                    xy_coords = scale_pts_back(pts, first_metadata.get("M", None))
+                    if xy_coords is not None:
+                        x_coords = [p[0] for p in xy_coords]
+                        y_coords = [p[1] for p in xy_coords]
+                    x_min, x_max = min(x_coords), max(x_coords)
+                    y_min, y_max = min(y_coords), max(y_coords)
+                    rects = [[x_min, y_min, x_max - x_min, y_max - y_min]]
 
         # --- 3. Calculate Crop Bounding Box ---
         if force_full_image_crop:
