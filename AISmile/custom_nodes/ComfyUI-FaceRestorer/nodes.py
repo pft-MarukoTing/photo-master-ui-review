@@ -530,9 +530,6 @@ class FaceRegionCropNode:
             output_crop_infos.append(crop_info)
             output_metadata.append(first_meta)
         
-        # Note: If crops have different sizes (because faces are different sizes), 
-        # torch.stack will fail. This simple implementation assumes consistent sizes 
-        # or single batch usage.
         if len(output_images) > 1:
             try:
                 final_tensor = torch.stack(output_images)
@@ -601,3 +598,90 @@ class FaceRegionPasteBackNode:
             output_images.append(result_tensor)
 
         return (torch.stack(output_images),)
+
+class SelectFirstBBoxNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "face_bboxs": ("FACE_BBOXS", ),
+                "random_select": ("BOOLEAN", {"default": False}),
+                "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+                "format_mode": (["xywh", "xyxy"], {"default": "xywh"}),
+            },
+        }
+
+    RETURN_TYPES = ("INT", "INT", "INT", "INT")
+    RETURN_NAMES = ("x", "y", "w", "h")
+    FUNCTION = "execute"
+    CATEGORY = "FaceRestoration/tools"
+
+    def execute(self, face_bboxs, random_select, seed, format_mode):
+        if face_bboxs is None:
+            return (0, 0, 0, 0)
+        
+        if not isinstance(face_bboxs, np.ndarray):
+            face_bboxs = np.array(face_bboxs)
+            
+        if face_bboxs.size == 0:
+            print("Warning: Empty bboxes received.")
+            return (0, 0, 0, 0)
+
+        if random_select:
+            seed = seed & 0xffffffff
+            np.random.seed(seed)
+            idx = np.random.randint(0, len(face_bboxs))
+            first_bbox = face_bboxs[idx]
+        else:
+            first_bbox = face_bboxs[0]
+        
+        val_1, val_2, val_3, val_4 = first_bbox[:4]
+        
+        x, y, w, h = 0, 0, 0, 0
+
+        if format_mode == "xywh":
+            x, y, w, h = int(val_1), int(val_2), int(val_3), int(val_4)
+            
+        else:
+            x1, y1, x2, y2 = int(val_1), int(val_2), int(val_3), int(val_4)
+            x = x1
+            y = y1
+            w = x2 - x1
+            h = y2 - y1
+
+        print(f"Selected BBox: x={x}, y={y}, w={w}, h={h}")
+        return (x, y, w, h)
+
+class FaceRectMetadataNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "enabled": ("BOOLEAN", {"default": True}),
+                "x": ("INT", {"default": 0}),
+                "y": ("INT", {"default": 0}),
+                "w": ("INT", {"default": 512}),
+                "h": ("INT", {"default": 512}),
+            },
+        }
+
+    RETURN_TYPES = ("FACE_RECT_METADATA", )
+    RETURN_NAMES = ("face_rect_metadata", )
+    FUNCTION = "execute"
+    CATEGORY = "FaceRestoration/tools"
+
+    def execute(self, enabled, x, y, w, h):
+        # all values is zero or negative, treat as disabled
+        if w <= 0 or h <= 0:
+            enabled = False
+
+        metadata = {
+            "face_rect_flag": enabled,
+            "face_rect": [int(x), int(y), int(w), int(h)]
+        }
+        
+        # Debug print
+        status = "Active" if enabled else "Inactive (Force Full Image Mode)"
+        print(f"Generated Metadata [{status}]: {metadata}")
+        
+        return (metadata, )

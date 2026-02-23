@@ -1,6 +1,6 @@
 from .nodes import LoadOnnxFacePipelineNode, FaceDetailRestorerNode, FaceDetailRestorerwMetadataNode, \
                     FaceMaskRegionNode, PadToSquareNode, UndoPadNode, PadTo1MCustomNode, UndoPad1MCustomNode, \
-                    FaceRegionCropNode, FaceRegionPasteBackNode
+                    FaceRegionCropNode, FaceRegionPasteBackNode, SelectFirstBBoxNode, FaceRectMetadataNode
 
 NODE_CLASS_MAPPINGS = {
     "LoadOnnxFacePipeline": LoadOnnxFacePipelineNode,
@@ -12,7 +12,9 @@ NODE_CLASS_MAPPINGS = {
     "PadTo1MCustom": PadTo1MCustomNode,
     "UndoPad1MCustom": UndoPad1MCustomNode,
     "FaceRegionCrop": FaceRegionCropNode,
-    "FaceRegionPasteBack": FaceRegionPasteBackNode
+    "FaceRegionPasteBack": FaceRegionPasteBackNode,
+    "SelectFirstBBox": SelectFirstBBoxNode,
+    "FaceRectMetadata": FaceRectMetadataNode
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -25,7 +27,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PadTo1MCustom": "Pad Image to ~1M Pixels (Custom)",
     "UndoPad1MCustom": "Undo Pad to ~1M Pixels (Custom)",
     "FaceRegionCrop": "Crop Face Region from Image",
-    "FaceRegionPasteBack": "Paste Face Region Back to Image"
+    "FaceRegionPasteBack": "Paste Face Region Back to Image",
+    "SelectFirstBBox": "Select First Bounding Box",
+    "FaceRectMetadata": "Face Rectangle Metadata"
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
