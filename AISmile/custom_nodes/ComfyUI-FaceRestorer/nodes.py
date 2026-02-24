@@ -599,7 +599,7 @@ class FaceRegionPasteBackNode:
 
         return (torch.stack(output_images),)
 
-class SelectFirstBBoxNode:
+class SelectBBoxNode:
     @classmethod
     def INPUT_TYPES(s):
         return {
@@ -618,22 +618,27 @@ class SelectFirstBBoxNode:
 
     def execute(self, face_bboxs, random_select, seed, format_mode):
         if face_bboxs is None:
-            return (0, 0, 0, 0)
+            return (-1, -1, -1, -1)
         
         if not isinstance(face_bboxs, np.ndarray):
             face_bboxs = np.array(face_bboxs)
             
         if face_bboxs.size == 0:
             print("Warning: Empty bboxes received.")
-            return (0, 0, 0, 0)
+            return (-1, -1, -1, -1)
 
         if random_select:
             seed = seed & 0xffffffff
             np.random.seed(seed)
             idx = np.random.randint(0, len(face_bboxs))
-            first_bbox = face_bboxs[idx]
         else:
-            first_bbox = face_bboxs[0]
+            if format_mode == "xywh":
+                areas = face_bboxs[:, 2] * face_bboxs[:, 3]
+            else:
+                areas = (face_bboxs[:, 2] - face_bboxs[:, 0]) * (face_bboxs[:, 3] - face_bboxs[:, 1])
+            idx = np.argmax(areas)
+        
+        first_bbox = face_bboxs[idx]
         
         val_1, val_2, val_3, val_4 = first_bbox[:4]
         
