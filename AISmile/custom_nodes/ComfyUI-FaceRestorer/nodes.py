@@ -607,7 +607,7 @@ class SelectFirstBBoxNode:
                 "face_bboxs": ("FACE_BBOXS", ),
                 "random_select": ("BOOLEAN", {"default": False}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
-                "format_mode": (["xywh", "xyxy"], {"default": "xywh"}),
+                "format_mode": (["xywh", "xyxy"], {"default": "xyxy"}),
             },
         }
 
@@ -681,7 +681,27 @@ class FaceRectMetadataNode:
         }
         
         # Debug print
-        status = "Active" if enabled else "Inactive (Force Full Image Mode)"
+        status = "Active" if enabled else "Inactive"
         print(f"Generated Metadata [{status}]: {metadata}")
         
         return (metadata, )
+
+class FaceRectMetadataSwitchNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "face_rect_provided": ("FACE_RECT_METADATA",),
+                "face_rect_detected": ("FACE_RECT_METADATA",),
+            },
+        }
+
+    RETURN_TYPES = ("FACE_RECT_METADATA", "BOOLEAN")
+    RETURN_NAMES = ("face_rect_metadata", "fallback",)
+    FUNCTION = "execute"
+    CATEGORY = "FaceRestoration/tools"
+
+    def execute(self, face_rect_provided, face_rect_detected):
+        metadata = face_rect_provided if face_rect_provided["face_rect_flag"] else face_rect_detected
+        fallback = not metadata["face_rect_flag"]
+        return (metadata, fallback)
