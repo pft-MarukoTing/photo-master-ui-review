@@ -651,8 +651,8 @@ class SelectBBoxNode:
             img_cy = h / 2
             distances = np.sqrt((cx - img_cx)**2 + (cy - img_cy)**2)
             max_dist = np.sqrt(img_cx**2 + img_cy**2) + 1e-6
-            alpha = 2.0 
-            scores = areas * (1.0 - alpha * (distances / max_dist))
+            k = 5.0 
+            scores = areas * np.exp(-k * (distances / max_dist))
             idx = np.argmax(scores)
         
         first_bbox = face_bboxs[idx]
