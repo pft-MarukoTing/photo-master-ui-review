@@ -2083,6 +2083,25 @@ class FaceDetailRestorer:
             crop_img_resized = cv2.resize(crop_img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
         else:
             crop_img_resized = crop_img
+
+        # add feathering mask
+        min_dim = min(target_w, target_h)
+        feather_size = int(min_dim * 0.1)
+        if feather_size % 2 == 0: feather_size += 1
+
+        mask = np.ones((target_h, target_w), dtype=np.float32)
+
+        fade_margin = int(feather_size * 0.8) 
+        if fade_margin < 1: fade_margin = 1
+
+        mask[:fade_margin, :] = 0
+        mask[-fade_margin:, :] = 0
+        mask[:, :fade_margin] = 0
+        mask[:, -fade_margin:] = 0
+        
+        mask = cv2.GaussianBlur(mask, (feather_size, feather_size), 0)
+        
+        mask = np.stack([mask, mask, mask], axis=2)
         
         dy1 = max(0, y1)
         dx1 = max(0, x1)
@@ -2097,6 +2116,12 @@ class FaceDetailRestorer:
         sx2 = sx1 + (dx2 - dx1)
         sy2 = sy1 + (dy2 - dy1)
 
-        full_img[dy1:dy2, dx1:dx2] = crop_img_resized[sy1:sy2, sx1:sx2]
+        # alpha blending
+        bg_region = full_img[dy1:dy2, dx1:dx2].astype(np.float32)
+        fg_region = crop_img_resized[sy1:sy2, sx1:sx2].astype(np.float32)
+        mask_region = mask[sy1:sy2, sx1:sx2]
+        
+        blended_region = (fg_region * mask_region) + (bg_region * (1.0 - mask_region))
+        full_img[dy1:dy2, dx1:dx2] = blended_region.astype(np.uint8)
         
         return full_img
