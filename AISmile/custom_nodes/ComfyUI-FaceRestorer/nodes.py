@@ -604,6 +604,7 @@ class SelectBBoxNode:
     def INPUT_TYPES(s):
         return {
             "required": {
+                "image": ("IMAGE",),
                 "face_bboxs": ("FACE_BBOXS", ),
                 "random_select": ("BOOLEAN", {"default": False}),
                 "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
@@ -616,7 +617,9 @@ class SelectBBoxNode:
     FUNCTION = "execute"
     CATEGORY = "FaceRestoration/tools"
 
-    def execute(self, face_bboxs, random_select, seed, format_mode):
+    def execute(self, image, face_bboxs, random_select, seed, format_mode):
+        b, h, w, c = image.shape
+
         if face_bboxs is None:
             return (-1, -1, -1, -1)
         
@@ -633,10 +636,24 @@ class SelectBBoxNode:
             idx = np.random.randint(0, len(face_bboxs))
         else:
             if format_mode == "xywh":
-                areas = face_bboxs[:, 2] * face_bboxs[:, 3]
-            else:
-                areas = (face_bboxs[:, 2] - face_bboxs[:, 0]) * (face_bboxs[:, 3] - face_bboxs[:, 1])
-            idx = np.argmax(areas)
+                w_vals = face_bboxs[:, 2]
+                h_vals = face_bboxs[:, 3]
+                cx = face_bboxs[:, 0] + w_vals / 2
+                cy = face_bboxs[:, 1] + h_vals / 2
+            else: # xyxy
+                w_vals = face_bboxs[:, 2] - face_bboxs[:, 0]
+                h_vals = face_bboxs[:, 3] - face_bboxs[:, 1]
+                cx = (face_bboxs[:, 0] + face_bboxs[:, 2]) / 2
+                cy = (face_bboxs[:, 1] + face_bboxs[:, 3]) / 2
+                
+            areas = w_vals * h_vals
+            img_cx = w / 2
+            img_cy = h / 2
+            distances = np.sqrt((cx - img_cx)**2 + (cy - img_cy)**2)
+            max_dist = np.sqrt(img_cx**2 + img_cy**2) + 1e-6
+            alpha = 2.0 
+            scores = areas * (1.0 - alpha * (distances / max_dist))
+            idx = np.argmax(scores)
         
         first_bbox = face_bboxs[idx]
         
