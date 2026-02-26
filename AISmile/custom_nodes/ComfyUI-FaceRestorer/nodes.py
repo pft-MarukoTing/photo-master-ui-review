@@ -719,11 +719,11 @@ class FaceRectMetadataSwitchNode:
         }
 
     RETURN_TYPES = ("FACE_RECT_METADATA", "BOOLEAN")
-    RETURN_NAMES = ("face_rect_metadata", "fallback",)
+    RETURN_NAMES = ("face_rect_metadata", "is_face_detected",)
     FUNCTION = "execute"
     CATEGORY = "FaceRestoration/tools"
 
     def execute(self, face_rect_provided, face_rect_detected):
         metadata = face_rect_provided if face_rect_provided["face_rect_flag"] else face_rect_detected
-        fallback = not metadata["face_rect_flag"]
-        return (metadata, fallback)
+        is_face_detected = metadata["face_rect_flag"]
+        return (metadata, is_face_detected)
