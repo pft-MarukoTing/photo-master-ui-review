@@ -1,0 +1,383 @@
+{
+  "1": {
+    "inputs": {
+      "image": "example.jpg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Input Image"
+    }
+  },
+  "2": {
+    "inputs": {
+      "unet_name": "smile_prefused_260225.safetensors",
+      "weight_dtype": "fp8_e4m3fn"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet Loader"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE Loader"
+    }
+  },
+  "4": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP Loader"
+    }
+  },
+  "9": {
+    "inputs": {
+      "text": "smile with teeth visible, eyes stayed the same"
+    },
+    "class_type": "JWStringMultiline",
+    "_meta": {
+      "title": "Input Prompt"
+    }
+  },
+  "10": {
+    "inputs": {
+      "prompt": [
+        "9",
+        0
+      ],
+      "clip": [
+        "4",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Qwen (Positive)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "4",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "30",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Qwen (Negative)"
+    }
+  },
+  "12": {
+    "inputs": {
+      "pixels": [
+        "30",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "13": {
+    "inputs": {
+      "seed": 42,
+      "steps": 4,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "34",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "14": {
+    "inputs": {
+      "samples": [
+        "13",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "16": {
+    "inputs": {
+      "images": [
+        "33",
+        0
+      ]
+    },
+    "class_type": "SaveImageWebsocket",
+    "_meta": {
+      "title": "Output"
+    }
+  },
+  "18": {
+    "inputs": {
+      "ckpt_dir": "/workspace/models/comfy/aiSmile/LVOcclusionONNX"
+    },
+    "class_type": "LoadOnnxFacePipeline",
+    "_meta": {
+      "title": "Load Face Model Pipeline"
+    }
+  },
+  "24": {
+    "inputs": {
+      "model_path": "facert_model.onnx"
+    },
+    "class_type": "Facer_FaceDetection_ModelLoader",
+    "_meta": {
+      "title": "Face Detection Model Loader"
+    }
+  },
+  "25": {
+    "inputs": {
+      "model": [
+        "24",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ],
+      "max_image_size": 1024
+    },
+    "class_type": "Facer_FaceDetection_Inference",
+    "_meta": {
+      "title": "Face Detection"
+    }
+  },
+  "26": {
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "face_bboxs": [
+        "25",
+        0
+      ],
+      "random_select": false,
+      "index": 0,
+      "format_mode": "xyxy",
+      "seed": 0
+    },
+    "class_type": "SelectBBox",
+    "_meta": {
+      "title": "Select BBox"
+    }
+  },
+  "27": {
+    "inputs": {
+      "enabled": false,
+      "x": 0,
+      "y": 0,
+      "w": 512,
+      "h": 512
+    },
+    "class_type": "FaceRectMetadata",
+    "_meta": {
+      "title": "Face Rectangle Metadata (Provided)"
+    }
+  },
+  "28": {
+    "inputs": {
+      "enabled": true,
+      "x": [
+        "26",
+        0
+      ],
+      "y": [
+        "26",
+        1
+      ],
+      "w": [
+        "26",
+        2
+      ],
+      "h": [
+        "26",
+        3
+      ]
+    },
+    "class_type": "FaceRectMetadata",
+    "_meta": {
+      "title": "Face Rectangle Metadata (Detected)"
+    }
+  },
+  "29": {
+    "inputs": {
+      "face_rect_provided": [
+        "27",
+        0
+      ],
+      "face_rect_detected": [
+        "28",
+        0
+      ]
+    },
+    "class_type": "FaceRectMetadataSwitch",
+    "_meta": {
+      "title": "Face Rect Metadata Switch"
+    }
+  },
+  "30": {
+    "inputs": {
+      "pipeline": [
+        "18",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ],
+      "face_rect_metadata": [
+        "29",
+        0
+      ],
+      "padding_factor": 0.2,
+      "bbox_padding_mode": "pad",
+      "alignment_reinfine": false
+    },
+    "class_type": "FaceRegionCrop",
+    "_meta": {
+      "title": "Face Region Crop"
+    }
+  },
+  "31": {
+    "inputs": {
+      "image_original": [
+        "1",
+        0
+      ],
+      "image_processed_crop": [
+        "14",
+        0
+      ],
+      "crop_info": [
+        "30",
+        1
+      ]
+    },
+    "class_type": "FaceRegionPasteBack",
+    "_meta": {
+      "title": "Face Region Paste Back"
+    }
+  },
+  "32": {
+    "inputs": {
+      "pipeline": [
+        "18",
+        0
+      ],
+      "image_generated": [
+        "31",
+        0
+      ],
+      "face_metadata": [
+        "30",
+        2
+      ],
+      "sigma": 7,
+      "detail_strength": 1.0,
+      "mask_shrink_size": 0
+    },
+    "class_type": "FaceDetailRestorerwMetadata",
+    "_meta": {
+      "title": "Face Detail Restorer w/ Metadata"
+    }
+  },
+  "33": {
+    "inputs": {
+      "on_false": [
+        "1",
+        0
+      ],
+      "on_true": [
+        "32",
+        0
+      ],
+      "switch": [
+        "29",
+        1
+      ]
+    },
+    "class_type": "LazySwitchKJ",
+    "_meta": {
+      "title": "Lazy Switch (face detected?)"
+    }
+  },
+  "34": {
+    "inputs": {
+      "model": [
+        "2",
+        0
+      ],
+      "backend": "inductor",
+      "fullgraph": false,
+      "mode": "default",
+      "dynamic": false,
+      "compile_transformer_blocks_only": true,
+      "dynamo_cache_size_limit": 64
+    },
+    "class_type": "TorchCompileModelQwenImage",
+    "_meta": {
+      "title": "Torch Compile Model"
+    }
+  }
+}
