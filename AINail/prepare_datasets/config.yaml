@@ -1,0 +1,35 @@
+sources:
+  bing:
+    enabled: true
+    max_num: 200  # images to attempt per keyword
+
+keywords:
+  - "bare nails close up hand"
+  - "nail polish hand"
+  - "gel nail polish"
+  - "manicure nails"
+  - "acrylic nails hand"
+  - "french manicure hand"
+  - "nail art hand"
+  - "natural nails woman hand"
+
+resolution:
+  min_megapixels: 1.0  # >= 1,000,000 total pixels
+
+hand_detection:
+  enabled: true
+  min_detection_confidence: 0.5
+  fallback_confidence: 0.3  # retry threshold for partially-cropped hands
+
+output:
+  dir: "output"
+  jpg_quality: 92
+
+dedup:
+  enabled: true
+  phash_threshold: 8  # Hamming distance; <=8 treated as duplicate
+  state_file: "seen_hashes.json"
+
+logging:
+  log_dir: "logs"
+  level: "INFO"
