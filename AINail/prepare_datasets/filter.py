@@ -1,26 +1,26 @@
 import json
 import logging
 import os
-import urllib.request
 from dataclasses import dataclass
 
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_HAND_LANDMARKER_URL = (
-    "https://storage.googleapis.com/mediapipe-models/"
-    "hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
-)
-_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", "hand_landmarker.task")
+_MODEL_REPO = "Bingsu/adetailer"
+_MODEL_FILE = "hand_yolov8n.pt"
+_MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "models", _MODEL_FILE)
 
 
 def _ensure_model():
     if not os.path.exists(_MODEL_PATH):
         os.makedirs(os.path.dirname(_MODEL_PATH), exist_ok=True)
-        logger.info("Downloading hand landmarker model to %s ...", _MODEL_PATH)
-        urllib.request.urlretrieve(_HAND_LANDMARKER_URL, _MODEL_PATH)
-        logger.info("Model downloaded.")
+        logger.info("Downloading %s from HuggingFace ...", _MODEL_FILE)
+        from huggingface_hub import hf_hub_download
+        src = hf_hub_download(repo_id=_MODEL_REPO, filename=_MODEL_FILE)
+        import shutil
+        shutil.copy(src, _MODEL_PATH)
+        logger.info("Model saved to %s", _MODEL_PATH)
 
 
 @dataclass
@@ -44,46 +44,20 @@ class FilterStats:
 
 
 class HandDetector:
-    def __init__(self, min_detection_confidence: float = 0.5,
-                 fallback_confidence: float = 0.3):
+    def __init__(self, min_detection_confidence: float = 0.5):
         self._conf = min_detection_confidence
-        self._fallback = fallback_confidence
-        self._detector = None
-        self._fallback_detector = None
+        self._model = None
 
-    def _build(self, confidence: float):
-        import mediapipe as mp
-        from mediapipe.tasks import python as mp_python
-        from mediapipe.tasks.python import vision as mp_vision
+    def _ensure_model(self):
+        if self._model is None:
+            from ultralytics import YOLO
+            _ensure_model()
+            self._model = YOLO(_MODEL_PATH)
 
-        _ensure_model()
-        base_options = mp_python.BaseOptions(model_asset_path=_MODEL_PATH)
-        options = mp_vision.HandLandmarkerOptions(
-            base_options=base_options,
-            num_hands=4,
-            min_hand_detection_confidence=confidence,
-        )
-        return mp_vision.HandLandmarker.create_from_options(options)
-
-    def _ensure_detectors(self):
-        if self._detector is None:
-            self._detector = self._build(self._conf)
-        if self._fallback < self._conf and self._fallback_detector is None:
-            self._fallback_detector = self._build(self._fallback)
-
-    def _run(self, detector, rgb_image: np.ndarray) -> bool:
-        import mediapipe as mp
-        image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_image)
-        result = detector.detect(image)
-        return len(result.hand_landmarks) > 0
-
-    def detect(self, rgb_image: np.ndarray) -> bool:
-        self._ensure_detectors()
-        if self._run(self._detector, rgb_image):
-            return True
-        if self._fallback_detector is not None:
-            return self._run(self._fallback_detector, rgb_image)
-        return False
+    def detect(self, bgr_image: np.ndarray) -> bool:
+        self._ensure_model()
+        results = self._model(bgr_image, device="cpu", verbose=False, conf=self._conf)
+        return len(results[0].boxes) > 0
 
 
 def check_resolution(image_path: str, min_megapixels: float) -> tuple:
@@ -166,12 +140,9 @@ def filter_image(image_path: str, config: dict, detector: HandDetector,
         if img_bgr is None:
             stats.errors += 1
             return False
-        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
         conf = config["hand_detection"].get("min_detection_confidence", 0.5)
-        fallback = config["hand_detection"].get("fallback_confidence", 0.3)
         detector._conf = conf
-        detector._fallback = fallback
-        if not detector.detect(img_rgb):
+        if not detector.detect(img_bgr):
             stats.rejected_no_hand += 1
             logger.debug("No hand detected: %s", image_path)
             return False

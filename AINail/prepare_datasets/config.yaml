@@ -18,8 +18,7 @@ resolution:
 
 hand_detection:
   enabled: true
-  min_detection_confidence: 0.5
-  fallback_confidence: 0.3  # retry threshold for partially-cropped hands
+  min_detection_confidence: 0.3
 
 output:
   dir: "output"
