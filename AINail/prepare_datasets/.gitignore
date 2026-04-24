@@ -1,4 +1,5 @@
 output/
+preview.jpg
 staging/
 logs/
 seen_hashes.json
