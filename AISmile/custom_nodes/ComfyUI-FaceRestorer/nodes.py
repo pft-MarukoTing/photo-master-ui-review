@@ -501,6 +501,7 @@ class FaceRegionCropNode:
             },
             "optional": {
                 "face_rect_metadata": ("FACE_RECT_METADATA",),
+                "all_bboxs": ("FACE_BBOXS_XYWH",),
             }
         }
 
@@ -509,7 +510,7 @@ class FaceRegionCropNode:
     FUNCTION = "crop_face_region"
     CATEGORY = "FaceRestoration"
 
-    def crop_face_region(self, pipeline, image, padding_factor, bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None):
+    def crop_face_region(self, pipeline, image, padding_factor, bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None, all_bboxs=None):
         restorer = FaceDetailRestorer(pipeline)
         
         output_images = []
@@ -521,7 +522,7 @@ class FaceRegionCropNode:
             img_np = (image[i].cpu().numpy() * 255).astype(np.uint8)
             img_bgr = cv2.cvtColor(img_np, cv2.COLOR_RGB2BGR)
             
-            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor, bbox_padding_mode=bbox_padding_mode, alignment_reinfine=alignment_reinfine, face_rect_metadata=face_rect_metadata)
+            crop_bgr, crop_info, first_meta = restorer.get_all_faces_crop_region(img_bgr, padding_factor, bbox_padding_mode=bbox_padding_mode, alignment_reinfine=alignment_reinfine, face_rect_metadata=face_rect_metadata, all_bboxs=all_bboxs)
             
             img_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
             img_tensor = torch.from_numpy(img_rgb.astype(np.float32) / 255.0)
@@ -612,8 +613,8 @@ class SelectBBoxNode:
             },
         }
 
-    RETURN_TYPES = ("INT", "INT", "INT", "INT")
-    RETURN_NAMES = ("x", "y", "w", "h")
+    RETURN_TYPES = ("INT", "INT", "INT", "INT", "FACE_BBOXS_XYWH")
+    RETURN_NAMES = ("x", "y", "w", "h", "all_bboxs")
     FUNCTION = "execute"
     CATEGORY = "FaceRestoration/tools"
 
@@ -621,14 +622,14 @@ class SelectBBoxNode:
         b, h, w, c = image.shape
 
         if face_bboxs is None:
-            return (-1, -1, -1, -1)
+            return (-1, -1, -1, -1, [])
         
         if not isinstance(face_bboxs, np.ndarray):
             face_bboxs = np.array(face_bboxs)
             
         if face_bboxs.size == 0:
             print("Warning: Empty bboxes received.")
-            return (-1, -1, -1, -1)
+            return (-1, -1, -1, -1, [])
 
         if random_select:
             seed = seed & 0xffffffff
@@ -671,8 +672,18 @@ class SelectBBoxNode:
             w = x2 - x1
             h = y2 - y1
 
+        # Convert all bboxes to xywh format
+        all_bboxs = []
+        for bbox in face_bboxs:
+            bv1, bv2, bv3, bv4 = bbox[:4]
+            if format_mode == "xywh":
+                all_bboxs.append({"x": int(bv1), "y": int(bv2), "w": int(bv3), "h": int(bv4)})
+            else:
+                all_bboxs.append({"x": int(bv1), "y": int(bv2), "w": int(bv3 - bv1), "h": int(bv4 - bv2)})
+
         print(f"Selected BBox: x={x}, y={y}, w={w}, h={h}")
-        return (x, y, w, h)
+        print(f"All BBoxes ({len(all_bboxs)}): {all_bboxs}")
+        return (x, y, w, h, all_bboxs)
 
 class FaceRectMetadataNode:
     @classmethod

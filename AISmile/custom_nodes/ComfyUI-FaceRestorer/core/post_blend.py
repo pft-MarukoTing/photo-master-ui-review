@@ -1827,7 +1827,8 @@ class FaceDetailRestorer:
             first_metadata = {"success": False}
         return combined_final_mask, first_metadata
     
-    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1024*1024, align_factor=8, bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None):
+    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1024*1024, align_factor=8, \
+                                  bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None, all_bboxs=None):
         """
         bbox_padding_mode: 
             'shift' - Shift to fit. If image is too small, crop might be rectangular.
@@ -1934,10 +1935,56 @@ class FaceDetailRestorer:
             c_x2 = x2_max + pad_x
             c_y2 = y2_max + pad_y
 
+        # --- 3.5. Collision-Aware Constraint ---
+        # Limit final_dim so the enlarged square does not overlap neighboring faces.
+        collision_max_half = None
+        safe_left = safe_right = safe_top = safe_bottom = float('inf')
+        t_x1 = t_y1 = t_x2 = t_y2 = None
+        if all_bboxs and not force_full_image_crop and len(rects) > 0:
+            t_x1 = min(rx for rx, ry, rw, rh in rects)
+            t_y1 = min(ry for rx, ry, rw, rh in rects)
+            t_x2 = max(rx + rw for rx, ry, rw, rh in rects)
+            t_y2 = max(ry + rh for rx, ry, rw, rh in rects)
+            t_area = max(1, (t_x2 - t_x1) * (t_y2 - t_y1))
+
+            cx = (c_x1 + c_x2) / 2
+            cy = (c_y1 + c_y2) / 2
+
+            for bbox in all_bboxs:
+                ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
+                ix1 = max(ox, t_x1)
+                iy1 = max(oy, t_y1)
+                ix2 = min(ox + ow, t_x2)
+                iy2 = min(oy + oh, t_y2)
+                inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                union = ow * oh + t_area - inter
+                if union > 0 and inter / union >= 0.3:
+                    continue  # target face — skip
+
+                d_left   = cx - (ox + ow)
+                d_right  = ox - cx
+                d_top    = cy - (oy + oh)
+                d_bottom = oy - cy
+
+                if d_left   > 0: safe_left   = min(safe_left,   d_left)
+                if d_right  > 0: safe_right  = min(safe_right,  d_right)
+                if d_top    > 0: safe_top    = min(safe_top,    d_top)
+                if d_bottom > 0: safe_bottom = min(safe_bottom, d_bottom)
+
+            desired_half = max(c_x2 - c_x1, c_y2 - c_y1) / 2
+            max_half = min(safe_left, safe_right, safe_top, safe_bottom, desired_half)
+
+            # floor: must at least contain the target face
+            min_half = max(cx - t_x1, t_x2 - cx, cy - t_y1, t_y2 - cy)
+            collision_max_half = max(max_half, min_half)
+
         # --- 4. Auto-Square Logic ---
         cur_w = c_x2 - c_x1
         cur_h = c_y2 - c_y1
         final_dim = int(max(cur_w, cur_h))
+
+        if collision_max_half is not None:
+            final_dim = min(final_dim, int(collision_max_half * 2))
         
         center_x = (c_x1 + c_x2) / 2
         center_y = (c_y1 + c_y2) / 2
@@ -1948,22 +1995,35 @@ class FaceDetailRestorer:
         c_y1 = int(center_y - final_dim / 2)
         c_y2 = int(c_y1 + final_dim)
         
-        # --- 5. Shift to fit inside image ---
-        if c_x1 < 0:
-            c_x2 += abs(c_x1)
-            c_x1 = 0
-        if c_x2 > w_img:
-            c_x1 -= (c_x2 - w_img)
-            c_x2 = w_img
-            if c_x1 < 0: c_x1 = 0 
-            
-        if c_y1 < 0:
-            c_y2 += abs(c_y1)
-            c_y1 = 0
-        if c_y2 > h_img:
-            c_y1 -= (c_y2 - h_img)
-            c_y2 = h_img
-            if c_y1 < 0: c_y1 = 0
+        # --- 5. Collision-Aware Shift to fit inside image ---
+        # Compute allowed center range: intersection of image boundary and face-safe boundary.
+        # When the two conflict, face-safe boundary takes priority (pad mode compensates).
+        half = final_dim / 2
+
+        face_cx_lo = (center_x - safe_left  + half) if safe_left  != float('inf') else -float('inf')
+        face_cx_hi = (center_x + safe_right - half) if safe_right != float('inf') else  float('inf')
+        face_cy_lo = (center_y - safe_top   + half) if safe_top   != float('inf') else -float('inf')
+        face_cy_hi = (center_y + safe_bottom- half) if safe_bottom!= float('inf') else  float('inf')
+
+        cx_lo = max(face_cx_lo, half)
+        cx_hi = min(face_cx_hi, w_img - half)
+        cy_lo = max(face_cy_lo, half)
+        cy_hi = min(face_cy_hi, h_img - half)
+
+        new_cx = max(cx_lo, min(cx_hi, center_x))
+        new_cy = max(cy_lo, min(cy_hi, center_y))
+
+        # Target face containment: non-negotiable — crop must never cut into the target face.
+        if t_x1 is not None:
+            new_cx = max(new_cx, t_x2 - half)
+            new_cx = min(new_cx, t_x1 + half)
+            new_cy = max(new_cy, t_y2 - half)
+            new_cy = min(new_cy, t_y1 + half)
+
+        c_x1 = int(new_cx - half)
+        c_x2 = int(c_x1 + final_dim)
+        c_y1 = int(new_cy - half)
+        c_y2 = int(c_y1 + final_dim)
 
         # --- 6. Clamp & Crop (Get Raw Image) ---
         safe_x1 = max(0, c_x1)
@@ -1987,31 +2047,30 @@ class FaceDetailRestorer:
         
         if should_pad:
             h_crop, w_crop = raw_crop_img.shape[:2]
-            
-            if h_crop != w_crop and h_crop > 0 and w_crop > 0:
-                dim = max(h_crop, w_crop)
-                pad_h = dim - h_crop
-                pad_w = dim - w_crop
-                
-                top = pad_h // 2
-                bottom = pad_h - top
-                left = pad_w // 2
-                right = pad_w - left
-                
-                offset_x = left
-                offset_y = top
-                
-                raw_crop_img = cv2.copyMakeBorder(
-                    raw_crop_img, 
-                    top, bottom, left, right, 
-                    cv2.BORDER_CONSTANT, 
-                    value=(0, 0, 0)
-                )
-                
-                final_crop_x1 = safe_x1 - left
-                final_crop_y1 = safe_y1 - top
-                final_crop_x2 = safe_x2 + right
-                final_crop_y2 = safe_y2 + bottom
+
+            if h_crop > 0 and w_crop > 0:
+                # Asymmetric padding: pad only on the sides that went outside the image
+                # boundary, so no black ever appears on the neighboring-face side.
+                left   = max(0, -c_x1)
+                right  = max(0, c_x2 - w_img)
+                top    = max(0, -c_y1)
+                bottom = max(0, c_y2 - h_img)
+
+                if left > 0 or right > 0 or top > 0 or bottom > 0:
+                    offset_x = left
+                    offset_y = top
+
+                    raw_crop_img = cv2.copyMakeBorder(
+                        raw_crop_img,
+                        top, bottom, left, right,
+                        cv2.BORDER_CONSTANT,
+                        value=(0, 0, 0)
+                    )
+
+                    final_crop_x1 = safe_x1 - left
+                    final_crop_y1 = safe_y1 - top
+                    final_crop_x2 = safe_x2 + right
+                    final_crop_y2 = safe_y2 + bottom
 
         crop_info = (final_crop_x1, final_crop_y1, final_crop_x2, final_crop_y2)
 
@@ -2083,7 +2142,7 @@ class FaceDetailRestorer:
             crop_img_resized = cv2.resize(crop_img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
         else:
             crop_img_resized = crop_img
-
+        
         # add feathering mask
         min_dim = min(target_w, target_h)
         feather_size = int(min_dim * 0.1)
@@ -2111,7 +2170,7 @@ class FaceDetailRestorer:
         if dx2 <= dx1 or dy2 <= dy1:
             return full_img
         
-        sx1 = dx1 - x1  
+        sx1 = dx1 - x1
         sy1 = dy1 - y1
         sx2 = sx1 + (dx2 - dx1)
         sy2 = sy1 + (dy2 - dy1)
