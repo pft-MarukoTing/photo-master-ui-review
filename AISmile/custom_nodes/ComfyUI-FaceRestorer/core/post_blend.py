@@ -1938,6 +1938,7 @@ class FaceDetailRestorer:
         # --- 3.5. Collision-Aware Constraint ---
         # Limit final_dim so the enlarged square does not overlap neighboring faces.
         collision_max_half = None
+        has_neighbor = False
         safe_left = safe_right = safe_top = safe_bottom = float('inf')
         t_x1 = t_y1 = t_x2 = t_y2 = None
         if all_bboxs and not force_full_image_crop and len(rects) > 0:
@@ -1961,6 +1962,7 @@ class FaceDetailRestorer:
                 if union > 0 and inter / union >= 0.3:
                     continue  # target face — skip
 
+                has_neighbor = True
                 d_left   = cx - (ox + ow)
                 d_right  = ox - cx
                 d_top    = cy - (oy + oh)
@@ -1983,7 +1985,7 @@ class FaceDetailRestorer:
         cur_h = c_y2 - c_y1
         final_dim = int(max(cur_w, cur_h))
 
-        if collision_max_half is not None:
+        if collision_max_half is not None and has_neighbor:
             final_dim = min(final_dim, int(collision_max_half * 2))
         
         center_x = (c_x1 + c_x2) / 2
@@ -2049,12 +2051,21 @@ class FaceDetailRestorer:
             h_crop, w_crop = raw_crop_img.shape[:2]
 
             if h_crop > 0 and w_crop > 0:
-                # Asymmetric padding: pad only on the sides that went outside the image
-                # boundary, so no black ever appears on the neighboring-face side.
-                left   = max(0, -c_x1)
-                right  = max(0, c_x2 - w_img)
-                top    = max(0, -c_y1)
-                bottom = max(0, c_y2 - h_img)
+                if has_neighbor:
+                    # Asymmetric: pad only the sides that went outside the image,
+                    # so no black appears on the neighboring-face side.
+                    left   = max(0, -c_x1)
+                    right  = max(0, c_x2 - w_img)
+                    top    = max(0, -c_y1)
+                    bottom = max(0, c_y2 - h_img)
+                else:
+                    # Original symmetric padding
+                    pad_w  = final_dim - w_crop
+                    pad_h  = final_dim - h_crop
+                    top    = pad_h // 2
+                    bottom = pad_h - top
+                    left   = pad_w // 2
+                    right  = pad_w - left
 
                 if left > 0 or right > 0 or top > 0 or bottom > 0:
                     offset_x = left
