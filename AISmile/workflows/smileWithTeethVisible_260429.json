@@ -1,0 +1,434 @@
+{
+  "61": {
+    "inputs": {
+      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn_scaled.safetensors",
+      "weight_dtype": "fp8_e4m3fn"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet Loader"
+    }
+  },
+  "62": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE Loader"
+    }
+  },
+  "63": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP Loader"
+    }
+  },
+  "64": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "81",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "66": {
+    "inputs": {
+      "prompt": [
+        "79",
+        0
+      ],
+      "clip": [
+        "63",
+        0
+      ],
+      "vae": [
+        "62",
+        0
+      ],
+      "image1": [
+        "115",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Qwen (Positive)"
+    }
+  },
+  "67": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "63",
+        0
+      ],
+      "vae": [
+        "62",
+        0
+      ],
+      "image1": [
+        "115",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Qwen (Negative)"
+    }
+  },
+  "68": {
+    "inputs": {
+      "pixels": [
+        "115",
+        0
+      ],
+      "vae": [
+        "62",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "69": {
+    "inputs": {
+      "samples": [
+        "84",
+        0
+      ],
+      "vae": [
+        "62",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "74": {
+    "inputs": {
+      "filename_prefix": "ComfyUI-0428",
+      "images": [
+        "121",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "Save Image"
+    }
+  },
+  "75": {
+    "inputs": {},
+    "class_type": "LoadOnnxFacePipeline",
+    "_meta": {
+      "title": "Load Face Model Pipeline (ONNX)"
+    }
+  },
+  "78": {
+    "inputs": {
+      "sigma": 7,
+      "detail_strength": 1,
+      "mask_shrink_size": 0,
+      "pipeline": [
+        "75",
+        0
+      ],
+      "image_generated": [
+        "101",
+        0
+      ],
+      "face_metadata": [
+        "115",
+        2
+      ]
+    },
+    "class_type": "FaceDetailRestorerwMetadata",
+    "_meta": {
+      "title": "Face Detail Restorer w/ Metadata"
+    }
+  },
+  "79": {
+    "inputs": {
+      "text": "mt-expression"
+    },
+    "class_type": "JWStringMultiline",
+    "_meta": {
+      "title": "Input Prompt"
+    }
+  },
+  "81": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "85",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSampling AuraFlow"
+    }
+  },
+  "82": {
+    "inputs": {
+      "lora_name": "smile_lora/smile_lora_260225.safetensors",
+      "strength_model": 1,
+      "model": [
+        "106",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA Loader"
+    }
+  },
+  "84": {
+    "inputs": {
+      "seed": 632858979797126,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "64",
+        0
+      ],
+      "positive": [
+        "66",
+        0
+      ],
+      "negative": [
+        "67",
+        0
+      ],
+      "latent_image": [
+        "68",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "85": {
+    "inputs": {
+      "lora_name": "lightning_4steps/Qwen-Image-Lightning-4steps-V2.0.safetensors",
+      "strength_model": 1,
+      "model": [
+        "82",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "LoRA Loader"
+    }
+  },
+  "90": {
+    "inputs": {
+      "image": "Picture03.png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Input Image"
+    }
+  },
+  "101": {
+    "inputs": {
+      "image_original": [
+        "90",
+        0
+      ],
+      "image_processed_crop": [
+        "69",
+        0
+      ],
+      "crop_info": [
+        "115",
+        1
+      ]
+    },
+    "class_type": "FaceRegionPasteBack",
+    "_meta": {
+      "title": "Paste Face Region Back to Image"
+    }
+  },
+  "106": {
+    "inputs": {
+      "sage_attention": "auto",
+      "allow_compile": true,
+      "model": [
+        "61",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "Patch Sage Attention KJ"
+    }
+  },
+  "115": {
+    "inputs": {
+      "padding_factor": 0.2,
+      "bbox_padding_mode": "pad",
+      "alignment_reinfine": false,
+      "pipeline": [
+        "75",
+        0
+      ],
+      "image": [
+        "90",
+        0
+      ],
+      "face_rect_metadata": [
+        "125",
+        0
+      ],
+      "all_bboxs": [
+        "128",
+        4
+      ]
+    },
+    "class_type": "FaceRegionCrop",
+    "_meta": {
+      "title": "Crop Face Region from Image"
+    }
+  },
+  "116": {
+    "inputs": {
+      "model_path": "facert_model.onnx"
+    },
+    "class_type": "Facer_FaceDetection_ModelLoader",
+    "_meta": {
+      "title": "tools: FaceDetection Model Loader"
+    }
+  },
+  "117": {
+    "inputs": {
+      "max_image_size": 1024,
+      "model": [
+        "116",
+        0
+      ],
+      "image": [
+        "90",
+        0
+      ]
+    },
+    "class_type": "Facer_FaceDetection_Inference",
+    "_meta": {
+      "title": "tools: FaceDetection Inference"
+    }
+  },
+  "121": {
+    "inputs": {
+      "switch": [
+        "125",
+        1
+      ],
+      "on_false": [
+        "90",
+        0
+      ],
+      "on_true": [
+        "78",
+        0
+      ]
+    },
+    "class_type": "LazySwitchKJ",
+    "_meta": {
+      "title": "Lazy Switch KJ"
+    }
+  },
+  "122": {
+    "inputs": {
+      "enabled": true,
+      "x": [
+        "128",
+        0
+      ],
+      "y": [
+        "128",
+        1
+      ],
+      "w": [
+        "128",
+        2
+      ],
+      "h": [
+        "128",
+        3
+      ]
+    },
+    "class_type": "FaceRectMetadata",
+    "_meta": {
+      "title": "Face Rectangle Metadata (Detected)"
+    }
+  },
+  "123": {
+    "inputs": {
+      "enabled": false,
+      "x": 228,
+      "y": 80,
+      "w": 100,
+      "h": 100
+    },
+    "class_type": "FaceRectMetadata",
+    "_meta": {
+      "title": "Face Rectangle Metadata (Provided)"
+    }
+  },
+  "125": {
+    "inputs": {
+      "face_rect_provided": [
+        "123",
+        0
+      ],
+      "face_rect_detected": [
+        "122",
+        0
+      ]
+    },
+    "class_type": "FaceRectMetadataSwitch",
+    "_meta": {
+      "title": "Face Rectangle Metadata Switch"
+    }
+  },
+  "128": {
+    "inputs": {
+      "random_select": false,
+      "seed": 976035369568426,
+      "format_mode": "xyxy",
+      "image": [
+        "90",
+        0
+      ],
+      "face_bboxs": [
+        "117",
+        0
+      ]
+    },
+    "class_type": "SelectBBox",
+    "_meta": {
+      "title": "Select Bounding Box"
+    }
+  }
+}
