@@ -1984,9 +1984,6 @@ class FaceDetailRestorer:
         cur_w = c_x2 - c_x1
         cur_h = c_y2 - c_y1
         final_dim = int(max(cur_w, cur_h))
-
-        if collision_max_half is not None and has_neighbor:
-            final_dim = min(final_dim, int(collision_max_half * 2))
         
         center_x = (c_x1 + c_x2) / 2
         center_y = (c_y1 + c_y2) / 2
