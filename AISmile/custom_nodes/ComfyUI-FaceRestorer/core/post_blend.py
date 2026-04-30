@@ -1873,6 +1873,28 @@ class FaceDetailRestorer:
         if rects is None:
             rects = []
 
+        # --- 1.5. Replace provided rect with best-matching bbox from all_bboxs ---
+        # all_bboxs entries are typically larger/more accurate; use them when available.
+        if use_provided_rect and all_bboxs and len(rects) > 0:
+            rx, ry, rw, rh = rects[0]
+            r_area = max(1, rw * rh)
+            best_iou, best_bbox = 0, None
+            for bbox in all_bboxs:
+                ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
+                # must fully contain the original rect
+                if ox > rx or oy > ry or (ox + ow) < (rx + rw) or (oy + oh) < (ry + rh):
+                    continue
+                ix1 = max(ox, rx); iy1 = max(oy, ry)
+                ix2 = min(ox + ow, rx + rw); iy2 = min(oy + oh, ry + rh)
+                inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                union = ow * oh + r_area - inter
+                iou = inter / union if union > 0 else 0
+                if iou > best_iou:
+                    best_iou, best_bbox = iou, bbox
+            if best_iou >= 0.3 and best_bbox is not None:
+                rects[0] = [best_bbox["x"], best_bbox["y"],
+                            best_bbox["w"], best_bbox["h"]]
+
         # --- 2. Generate Metadata (Analyze the first face found/provided) ---
         first_metadata = {"success": False}
         if len(rects) > 0:
