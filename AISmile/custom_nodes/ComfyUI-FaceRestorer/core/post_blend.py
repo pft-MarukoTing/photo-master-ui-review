@@ -1881,9 +1881,6 @@ class FaceDetailRestorer:
             best_iou, best_bbox = 0, None
             for bbox in all_bboxs:
                 ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
-                # must fully contain the original rect
-                if ox > rx or oy > ry or (ox + ow) < (rx + rw) or (oy + oh) < (ry + rh):
-                    continue
                 ix1 = max(ox, rx); iy1 = max(oy, ry)
                 ix2 = min(ox + ow, rx + rw); iy2 = min(oy + oh, ry + rh)
                 inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
