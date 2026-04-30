@@ -1936,8 +1936,7 @@ class FaceDetailRestorer:
             c_y2 = y2_max + pad_y
 
         # --- 3.5. Collision-Aware Constraint ---
-        # Limit final_dim so the enlarged square does not overlap neighboring faces.
-        collision_max_half = None
+        # Compute safe distances to neighboring faces for shift clamping (Step 5).
         has_neighbor = False
         safe_left = safe_right = safe_top = safe_bottom = float('inf')
         t_x1 = t_y1 = t_x2 = t_y2 = None
@@ -1972,13 +1971,6 @@ class FaceDetailRestorer:
                 if d_right  > 0: safe_right  = min(safe_right,  d_right)
                 if d_top    > 0: safe_top    = min(safe_top,    d_top)
                 if d_bottom > 0: safe_bottom = min(safe_bottom, d_bottom)
-
-            desired_half = max(c_x2 - c_x1, c_y2 - c_y1) / 2
-            max_half = min(safe_left, safe_right, safe_top, safe_bottom, desired_half)
-
-            # floor: must at least contain the target face
-            min_half = max(cx - t_x1, t_x2 - cx, cy - t_y1, t_y2 - cy)
-            collision_max_half = max(max_half, min_half)
 
         # --- 4. Auto-Square Logic ---
         cur_w = c_x2 - c_x1
