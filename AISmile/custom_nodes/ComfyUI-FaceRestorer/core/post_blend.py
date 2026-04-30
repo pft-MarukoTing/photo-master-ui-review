@@ -1935,11 +1935,14 @@ class FaceDetailRestorer:
             c_x2 = x2_max + pad_x
             c_y2 = y2_max + pad_y
 
+        # Save padded bbox before Step 4 overwrites c_x1~c_y2.
+        # Step 5 uses this to guarantee the shift never cuts into the padding_factor area.
+        padded_x1, padded_y1, padded_x2, padded_y2 = c_x1, c_y1, c_x2, c_y2
+
         # --- 3.5. Collision-Aware Constraint ---
         # Compute safe distances to neighboring faces for shift clamping (Step 5).
         has_neighbor = False
         safe_left = safe_right = safe_top = safe_bottom = float('inf')
-        t_x1 = t_y1 = t_x2 = t_y2 = None
         if all_bboxs and not force_full_image_crop and len(rects) > 0:
             t_x1 = min(rx for rx, ry, rw, rh in rects)
             t_y1 = min(ry for rx, ry, rw, rh in rects)
@@ -2004,12 +2007,11 @@ class FaceDetailRestorer:
         new_cx = max(cx_lo, min(cx_hi, center_x))
         new_cy = max(cy_lo, min(cy_hi, center_y))
 
-        # Target face containment: non-negotiable — crop must never cut into the target face.
-        if t_x1 is not None:
-            new_cx = max(new_cx, t_x2 - half)
-            new_cx = min(new_cx, t_x1 + half)
-            new_cy = max(new_cy, t_y2 - half)
-            new_cy = min(new_cy, t_y1 + half)
+        # Padded bbox containment: shift must never cut into the padding_factor area.
+        new_cx = max(new_cx, padded_x2 - half)
+        new_cx = min(new_cx, padded_x1 + half)
+        new_cy = max(new_cy, padded_y2 - half)
+        new_cy = min(new_cy, padded_y1 + half)
 
         c_x1 = int(new_cx - half)
         c_x2 = int(c_x1 + final_dim)
