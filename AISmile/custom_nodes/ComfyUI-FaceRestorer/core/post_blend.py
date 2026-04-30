@@ -1957,9 +1957,15 @@ class FaceDetailRestorer:
             c_x2 = x2_max + pad_x
             c_y2 = y2_max + pad_y
 
-        # Save padded bbox before Step 4 overwrites c_x1~c_y2.
-        # Step 5 uses this to guarantee the shift never cuts into the padding_factor area.
-        padded_x1, padded_y1, padded_x2, padded_y2 = c_x1, c_y1, c_x2, c_y2
+        # Rect-union bbox (pre-padding) — Step 5 uses this as the must-cover region.
+        # padding_factor area is best-effort and may be sacrificed to dodge a neighbor face.
+        if not force_full_image_crop and len(rects) > 0:
+            must_x1 = min(rx for rx, ry, rw, rh in rects)
+            must_y1 = min(ry for rx, ry, rw, rh in rects)
+            must_x2 = max(rx + rw for rx, ry, rw, rh in rects)
+            must_y2 = max(ry + rh for rx, ry, rw, rh in rects)
+        else:
+            must_x1, must_y1, must_x2, must_y2 = c_x1, c_y1, c_x2, c_y2
 
         # --- 3.5. Collision-Aware Constraint ---
         # Compute safe distances to neighboring faces for shift clamping (Step 5).
@@ -2012,8 +2018,8 @@ class FaceDetailRestorer:
         c_y2 = int(c_y1 + final_dim)
         
         # --- 5. Collision-Aware Shift to fit inside image ---
-        # Compute allowed center range: intersection of image boundary and face-safe boundary.
-        # When the two conflict, face-safe boundary takes priority (pad mode compensates).
+        # Layered clamps; each later layer overrides earlier ones on conflict.
+        # Priority: must-cover > face-safe > image boundary.
         half = final_dim / 2
 
         face_cx_lo = (center_x - safe_left  + half) if safe_left  != float('inf') else -float('inf')
@@ -2021,19 +2027,15 @@ class FaceDetailRestorer:
         face_cy_lo = (center_y - safe_top   + half) if safe_top   != float('inf') else -float('inf')
         face_cy_hi = (center_y + safe_bottom- half) if safe_bottom!= float('inf') else  float('inf')
 
-        cx_lo = max(face_cx_lo, half)
-        cx_hi = min(face_cx_hi, w_img - half)
-        cy_lo = max(face_cy_lo, half)
-        cy_hi = min(face_cy_hi, h_img - half)
-
-        new_cx = max(cx_lo, min(cx_hi, center_x))
-        new_cy = max(cy_lo, min(cy_hi, center_y))
-
-        # Padded bbox containment: shift must never cut into the padding_factor area.
-        new_cx = max(new_cx, padded_x2 - half)
-        new_cx = min(new_cx, padded_x1 + half)
-        new_cy = max(new_cy, padded_y2 - half)
-        new_cy = min(new_cy, padded_y1 + half)
+        # Image boundary (soft): keep crop inside image when nothing else conflicts.
+        new_cx = max(half, min(w_img - half, center_x))
+        new_cy = max(half, min(h_img - half, center_y))
+        # Face-safe (overrides image): going off-image is OK — pad mode fills, shift mode crops.
+        new_cx = max(face_cx_lo, min(face_cx_hi, new_cx))
+        new_cy = max(face_cy_lo, min(face_cy_hi, new_cy))
+        # Must-cover (overrides face-safe): original (pre-padding) rects must stay inside.
+        new_cx = max(must_x2 - half, min(must_x1 + half, new_cx))
+        new_cy = max(must_y2 - half, min(must_y1 + half, new_cy))
 
         c_x1 = int(new_cx - half)
         c_x2 = int(c_x1 + final_dim)
