@@ -24,7 +24,6 @@ def crawl_bing(keyword: str, max_num: int, staging_dir: str) -> list:
     crawler.crawl(
         keyword=keyword,
         max_num=max_num,
-        filters={"size": "large"},
     )
 
     paths = []
