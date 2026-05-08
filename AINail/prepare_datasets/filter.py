@@ -155,8 +155,7 @@ def filter_image(image_path: str, config: dict, detector: HandDetector,
             stats.errors += 1
             return False
         conf = config["hand_detection"].get("min_detection_confidence", 0.5)
-        detector._conf = conf
-        if not detector.detect(img_bgr):
+        if not detector.detect(img_bgr, conf=conf):
             stats.rejected_no_hand += 1
             logger.debug("No hand detected: %s", image_path)
             return False
