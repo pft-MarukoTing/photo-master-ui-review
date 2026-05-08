@@ -100,17 +100,27 @@ class DuplicateFilter:
             json.dump(self.seen, f)
         logger.info("Saved %d hashes to %s", len(self.seen), self.state_file)
 
-    def is_duplicate(self, image_path: str) -> bool:
-        try:
-            h = _phash_hex(image_path)
-        except Exception as e:
-            logger.debug("pHash error for %s: %s", image_path, e)
-            return False
+    def compute_hash(self, image_path: str) -> str:
+        return _phash_hex(image_path)
+
+    def _contains_hash(self, h: str) -> bool:
         for seen_h in self.seen:
             if _hamming(h, seen_h) <= self.threshold:
                 return True
-        self.seen.append(h)
         return False
+
+    def is_duplicate(self, image_path: str) -> bool:
+        try:
+            h = self.compute_hash(image_path)
+        except Exception as e:
+            logger.debug("pHash error for %s: %s", image_path, e)
+            return False
+        return self._contains_hash(h)
+
+    def commit(self, image_path: str):
+        h = self.compute_hash(image_path)
+        if not self._contains_hash(h):
+            self.seen.append(h)
 
 
 def filter_image(image_path: str, config: dict, detector: HandDetector,
