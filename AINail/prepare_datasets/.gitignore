@@ -1,8 +1,15 @@
+# runtime output
 output/
-preview.jpg
 staging/
 logs/
+preview.jpg
+
+# crawl state
 seen_hashes.json
+
+# model weights
 models/
+
+# python
 __pycache__/
 *.pyc
