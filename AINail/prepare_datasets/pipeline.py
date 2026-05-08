@@ -110,9 +110,15 @@ def run_pipeline(config_path: str = "config.yaml",
     detector = HandDetector()
     stats = FilterStats()
 
-    # count existing output files to continue numbering
+    # derive next index from max existing numeric stem to handle gaps
     existing = [f for f in os.listdir(output_dir) if f.endswith(".jpg")]
-    index = len(existing) + 1
+    max_index = 0
+    for f in existing:
+        try:
+            max_index = max(max_index, int(os.path.splitext(f)[0]))
+        except ValueError:
+            pass
+    index = max_index + 1
 
     logger.info("Filtering %d staged images...", len(staged))
     for path in staged:
