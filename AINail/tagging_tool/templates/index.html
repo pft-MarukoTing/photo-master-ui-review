@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Nail Mask Tagging</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- ── Navbar ── -->
+<div id="navbar">
+  <button id="btn-prev">← Prev</button>
+  <button id="btn-next">Next →</button>
+  <span id="img-name">—</span>
+  <span id="img-counter"></span>
+  <span style="display:flex;gap:6px;align-items:center;margin-left:auto;">
+    <button id="btn-save-finger" class="primary">Save Finger</button>
+    <button id="btn-save-all">Save All</button>
+    <span id="save-status"></span>
+  </span>
+</div>
+
+<!-- ── Main ── -->
+<div id="main">
+  <div class="panel">
+    <div class="panel-header">Control — original hand (reference)</div>
+    <div class="panel-body">
+      <img id="control-img" src="" alt="">
+    </div>
+  </div>
+  <div class="panel">
+    <div class="panel-header">Target — nail art (editable mask)</div>
+    <div class="panel-body">
+      <canvas id="editor-canvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toolbar ── -->
+<div id="toolbar">
+  <div class="tgroup">
+    <span class="tlabel">Finger</span>
+    <div id="finger-tabs"></div>
+  </div>
+  <div class="tgroup">
+    <button class="tool-btn active" id="btn-paint">✏ Paint</button>
+    <button class="tool-btn"        id="btn-erase">◯ Erase</button>
+    <button class="tool-btn"        id="btn-clear">✕ Clear</button>
+  </div>
+  <div class="tgroup">
+    <span class="tlabel">Brush</span>
+    <input type="range" id="brush-size" min="4" max="100" value="20">
+    <span class="val" id="brush-val">20</span>
+  </div>
+  <div class="tgroup">
+    <span class="tlabel">Opacity</span>
+    <input type="range" id="opacity" min="10" max="90" value="90">
+    <span class="val" id="opacity-val">90</span><span class="tlabel">%</span>
+  </div>
+  <span class="hint">← → navigate &nbsp;|&nbsp; 1-5 finger &nbsp;|&nbsp; P paint &nbsp;|&nbsp; E erase &nbsp;|&nbsp; Ctrl+Z undo &nbsp;|&nbsp; Ctrl+drag pan &nbsp;|&nbsp; Ctrl+scroll zoom &nbsp;|&nbsp; Ctrl+0 reset</span>
+</div>
+
+<script src="{{ url_for('static', filename='editor.js') }}"></script>
+</body>
+</html>
