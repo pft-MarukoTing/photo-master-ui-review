@@ -64,6 +64,8 @@ def serve_target(stem):
 
 @app.route("/api/mask/<stem>/<int:finger>")
 def get_mask(stem, finger):
+    if not (0 <= finger < 5):
+        abort(404)
     # user-edited mask takes priority over model output
     saved = os.path.join(SAVE_DIR, f"{stem}_mask_{finger}.png")
     if os.path.exists(saved):
@@ -76,6 +78,8 @@ def get_mask(stem, finger):
 
 @app.route("/api/mask/<stem>/<int:finger>", methods=["POST"])
 def save_mask(stem, finger):
+    if not (0 <= finger < 5):
+        return jsonify({"ok": False, "error": "finger index out of range"}), 400
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify({"ok": False, "error": "Invalid or missing JSON payload"}), 400
