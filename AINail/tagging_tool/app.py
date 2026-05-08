@@ -76,7 +76,12 @@ def get_mask(stem, finger):
 
 @app.route("/api/mask/<stem>/<int:finger>", methods=["POST"])
 def save_mask(stem, finger):
-    raw = request.json.get("image", "")
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"ok": False, "error": "Invalid or missing JSON payload"}), 400
+    raw = payload.get("image", "")
+    if not isinstance(raw, str) or not raw:
+        return jsonify({"ok": False, "error": "Missing image in JSON payload"}), 400
     b64 = raw.split(",", 1)[-1]
     img_bytes = base64.b64decode(b64)
     out = os.path.join(SAVE_DIR, f"{stem}_mask_{finger}.png")
