@@ -227,6 +227,7 @@ async function loadPair(stem) {
 }
 
 async function navigate(dir) {
+    if (images.length === 0) return;
     currentIdx = (currentIdx + dir + images.length) % images.length;
     await loadPair(images[currentIdx]);
 }
@@ -380,5 +381,8 @@ new ResizeObserver(resizeCanvas).observe(canvas.parentElement);
         await loadPair(images[0]);
     } else {
         document.getElementById('img-name').textContent = 'No images found';
+        ['btn-prev', 'btn-next', 'btn-save-finger', 'btn-save-all', 'btn-clear'].forEach(id => {
+            document.getElementById(id).disabled = true;
+        });
     }
 })();
