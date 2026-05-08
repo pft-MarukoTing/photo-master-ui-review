@@ -115,7 +115,11 @@ class DuplicateFilter:
 
 def filter_image(image_path: str, config: dict, detector: HandDetector,
                  dedup: DuplicateFilter, stats: FilterStats) -> bool:
-    """Caller must call dedup.commit() after saving if this returns True."""
+    """Return True when the image passes all filters.
+    Duplicate tracking is updated inside ``dedup.is_duplicate()`` for images
+    that are not considered duplicates. Call ``dedup.save()`` separately if
+    the updated duplicate state should be persisted.
+    """
     stats.total_seen += 1
 
     min_mp = config.get("resolution", {}).get("min_megapixels", 1.0)
