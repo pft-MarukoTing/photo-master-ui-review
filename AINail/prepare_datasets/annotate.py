@@ -26,7 +26,7 @@ def ensure_category_dirs():
         os.makedirs(os.path.join(OUTPUT_DIR, name), exist_ok=True)
 
 
-def get_next_filename(category_dir, original_filename):
+def get_next_filename(category_dir):
     """
     Get the next available filename to avoid overwriting existing files
     Format: 000001.jpg (6-digit, starting from max existing index + 1)
@@ -86,7 +86,7 @@ def main():
                 break
             elif choice in CATEGORIES:
                 category_dir = os.path.join(OUTPUT_DIR, CATEGORIES[choice])
-                new_filename = get_next_filename(category_dir, fname)
+                new_filename = get_next_filename(category_dir)
                 dest = os.path.join(category_dir, new_filename)
                 shutil.move(src, dest)
                 print(f"  Saved as {new_filename}")
