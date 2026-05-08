@@ -153,21 +153,21 @@ def main():
     if image is None:
         raise FileNotFoundError(f"Cannot read image: {input_path}")
 
-    detector = HandKeypointDetector(
+    with HandKeypointDetector(
         max_num_hands=args.max_hands,
         min_detection_confidence=args.confidence,
-    )
-    hands_data = detector.detect(image, flip_handedness=args.flip_handedness)
+    ) as detector:
+        hands_data = detector.detect(image, flip_handedness=args.flip_handedness)
 
-    if not hands_data:
-        print("No hands detected.")
-    else:
-        labels = [label for _, label in hands_data]
-        print(f"Detected {len(hands_data)} hand(s): {labels}")
-        if args.fingertip_boxes:
-            detector.draw_fingertip_boxes(image, hands_data, scale=args.scale, color_mode=args.color_mode)
+        if not hands_data:
+            print("No hands detected.")
         else:
-            detector.draw(image, hands_data)
+            labels = [label for _, label in hands_data]
+            print(f"Detected {len(hands_data)} hand(s): {labels}")
+            if args.fingertip_boxes:
+                detector.draw_fingertip_boxes(image, hands_data, scale=args.scale, color_mode=args.color_mode)
+            else:
+                detector.draw(image, hands_data)
 
     cv2.imwrite(str(output_path), image)
     print(f"Saved to {output_path}")
