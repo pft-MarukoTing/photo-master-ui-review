@@ -82,8 +82,13 @@ def save_mask(stem, finger):
     raw = payload.get("image", "")
     if not isinstance(raw, str) or not raw:
         return jsonify({"ok": False, "error": "Missing image in JSON payload"}), 400
+    if not raw.startswith("data:image/png;base64,"):
+        return jsonify({"ok": False, "error": "Invalid data URL prefix"}), 400
     b64 = raw.split(",", 1)[-1]
-    img_bytes = base64.b64decode(b64)
+    try:
+        img_bytes = base64.b64decode(b64, validate=True)
+    except Exception:
+        return jsonify({"ok": False, "error": "Malformed base64 data"}), 400
     out = os.path.join(SAVE_DIR, f"{stem}_mask_{finger}.png")
     with open(out, "wb") as f:
         f.write(img_bytes)
