@@ -29,8 +29,8 @@ def load_rgb(path: Path) -> np.ndarray:
 
 def load_mask(path: Path) -> np.ndarray:
     """Return float32 mask in [0, 1] from grayscale-encoded PNG."""
-    arr = np.array(Image.open(path).convert("RGB"), dtype=np.float32)
-    return arr[:, :, 0] / 255.0  # R=G=B = original brush alpha; take any channel
+    arr = np.array(Image.open(path).convert("L"), dtype=np.float32)
+    return arr / 255.0
 
 
 def composite_one(stem: str, finger: int, ctrl_path: Path, tgt_path: Path,
