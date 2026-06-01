@@ -3,6 +3,7 @@ Copy tagged masks from one stem to a range of stems.
 
 Usage:
   python copy_masks.py --src 00011 --dst 00010-00019
+  python copy_masks.py --src 00011 --dst 00010-00019 --overwrite
 """
 
 import argparse
@@ -25,6 +26,7 @@ def main():
     parser.add_argument("--src",  required=True, help="source stem, e.g. 00011")
     parser.add_argument("--dst",  required=True, help="destination stem or range, e.g. 00010-00019")
     parser.add_argument("--masks-dir", type=Path, default=MASKS_DIR)
+    parser.add_argument("--overwrite", action="store_true", help="overwrite existing mask files")
     args = parser.parse_args()
 
     targets = [t for t in parse_dst(args.dst) if t != args.src]
@@ -36,6 +38,9 @@ def main():
             dst_path = args.masks_dir / f"{stem}_mask_{i}.png"
             if not src_path.exists():
                 print(f"  [warn] {src_path.name} not found")
+                continue
+            if dst_path.exists() and not args.overwrite:
+                print(f"  [skip] {dst_path.name} already exists (use --overwrite to replace)")
                 continue
             shutil.copy2(src_path, dst_path)
             copied += 1
