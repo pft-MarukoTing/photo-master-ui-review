@@ -74,6 +74,11 @@ def main():
     parser.add_argument("--output",  type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
+    for name, path in [("--control", args.control), ("--target", args.target), ("--masks", args.masks)]:
+        if not path.is_dir():
+            print(f"Error: {name} directory not found: {path}")
+            sys.exit(1)
+
     args.output.mkdir(parents=True, exist_ok=True)
 
     # collect all (stem, finger) pairs
