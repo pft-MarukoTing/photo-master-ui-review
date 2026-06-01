@@ -102,14 +102,14 @@ def main():
             continue
 
         ctrl_path = None
-        for ext in (".jpg", ".jpeg", ".png"):
+        for ext in (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"):
             p = args.control / f"{stem}{ext}"
             if p.exists():
                 ctrl_path = p
                 break
 
         tgt_path = None
-        for ext in (".jpg", ".jpeg", ".png"):
+        for ext in (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"):
             p = args.target / f"{stem}{ext}"
             if p.exists():
                 tgt_path = p
