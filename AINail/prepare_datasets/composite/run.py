@@ -97,6 +97,9 @@ def main():
             finger = int(finger_str)
         except ValueError:
             continue
+        if not (0 <= finger <= 4):
+            print(f"  [skip] unexpected finger index {finger} in {mask_path.name}")
+            continue
 
         ctrl_path = None
         for ext in (".jpg", ".jpeg", ".png"):
