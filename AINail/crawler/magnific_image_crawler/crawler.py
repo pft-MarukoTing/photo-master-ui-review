@@ -45,15 +45,37 @@ def build_driver(headless: bool = False) -> uc.Chrome:
     return uc.Chrome(options=options)
 
 
+def _pick_best_srcset_url(srcset: str) -> str | None:
+    """Return the URL with the largest w descriptor from a srcset string."""
+    best_url, best_w = None, 0
+    for part in srcset.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        tokens = part.split()
+        if len(tokens) < 2:
+            continue
+        url, descriptor = tokens[0], tokens[1]
+        if descriptor.endswith("w"):
+            try:
+                w = int(descriptor[:-1])
+                if w > best_w:
+                    best_w, best_url = w, url.split("?")[0] + f"?w={w}"
+            except ValueError:
+                pass
+    return best_url
+
+
 def collect_img_urls(driver: uc.Chrome) -> set[str]:
-    """Extract all img.magnific.com src values currently in the DOM."""
     elements = driver.find_elements(By.TAG_NAME, "img")
     urls: set[str] = set()
     for el in elements:
         src = el.get_attribute("src") or ""
-        if IMG_DOMAIN in src:
-            # Strip signed token query params — base URL is publicly accessible
-            urls.add(src.split("?")[0])
+        if IMG_DOMAIN not in src:
+            continue
+        srcset = el.get_attribute("srcset") or ""
+        best = _pick_best_srcset_url(srcset) if srcset else None
+        urls.add(best or f"{src.split('?')[0]}?w=2000")
     return urls
 
 
@@ -131,7 +153,7 @@ def scroll_and_collect(driver: uc.Chrome, max_images: int, pause: float = 1.5) -
 
 
 def url_to_filename(url: str) -> str:
-    name = url.rstrip("/").split("/")[-1]
+    name = url.split("?")[0].rstrip("/").split("/")[-1]
     name = re.sub(r"[^a-zA-Z0-9_\-\.]", "_", name)
     return name or "image.jpg"
 
