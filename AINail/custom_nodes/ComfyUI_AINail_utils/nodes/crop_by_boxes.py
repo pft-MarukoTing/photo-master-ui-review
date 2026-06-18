@@ -25,7 +25,9 @@ class CropByBoxes:
         # image shape: [B, H, W, C]
         boxes_list = json.loads(boxes)
         if not boxes_list:
-            return ([image], "[]")
+            _, H, W, _ = image.shape
+            info = [{"x1": 0, "y1": 0, "x2": W, "y2": H, "orig_w": W, "orig_h": H}]
+            return ([image], json.dumps(info))
 
         _, H, W, _ = image.shape
         crops = []

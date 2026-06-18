@@ -50,12 +50,13 @@ class ResizeImage:
 
             for frame in image:
                 # frame: [H, W, C] float32 0-1
-                np_frame = (frame.cpu().numpy() * 255).astype(np.uint8)
+                np_frame = (frame.clamp(0, 1).cpu().numpy() * 255).round().astype(np.uint8)
                 pil_img = Image.fromarray(np_frame)
                 pil_img = pil_img.resize((target_w, target_h), resample)
                 frames.append(np.array(pil_img).astype(np.float32) / 255.0)
 
-            resized_list.append(torch.from_numpy(np.stack(frames)))
+            resized_tensor = torch.from_numpy(np.stack(frames)).to(device=image.device, dtype=image.dtype)
+            resized_list.append(resized_tensor)
             info.append({
                 "orig_w": W, "orig_h": H,
                 "target_w": target_w, "target_h": target_h,
