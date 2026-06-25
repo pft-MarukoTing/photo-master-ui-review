@@ -111,19 +111,7 @@ class CropSquareByBoxes:
         # image: [B, H, W, C]
         boxes_list = json.loads(boxes)
         if not boxes_list:
-            _, H, W, C = image.shape
-            size = max(H, W)
-            offset_x = (size - W) // 2
-            offset_y = (size - H) // 2
-            canvas = torch.zeros((image.shape[0], size, size, C),
-                                 dtype=image.dtype, device=image.device)
-            canvas[:, offset_y:offset_y + H, offset_x:offset_x + W, :] = image
-            info = [{
-                "src_x1": 0, "src_y1": 0, "src_x2": W, "src_y2": H,
-                "pad_left": offset_x, "pad_top": offset_y,
-                "size": size, "orig_w": W, "orig_h": H,
-            }]
-            return ([canvas], json.dumps(info))
+            raise ValueError("NO_HAND_DETECTED")
 
         _, H, W, C = image.shape
         crops = []
@@ -208,18 +196,7 @@ class CropSquareByBoxes:
             })
 
         if not crops:
-            size = max(H, W)
-            offset_x = (size - W) // 2
-            offset_y = (size - H) // 2
-            canvas = torch.zeros((image.shape[0], size, size, C),
-                                 dtype=image.dtype, device=image.device)
-            canvas[:, offset_y:offset_y + H, offset_x:offset_x + W, :] = image
-            crops = [canvas]
-            info = [{
-                "src_x1": 0, "src_y1": 0, "src_x2": W, "src_y2": H,
-                "pad_left": offset_x, "pad_top": offset_y,
-                "size": size, "orig_w": W, "orig_h": H,
-            }]
+            raise ValueError("NO_HAND_DETECTED")
 
         return (crops, json.dumps(info))
 
