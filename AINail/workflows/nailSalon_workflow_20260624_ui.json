@@ -1153,7 +1153,9 @@
                     "version": "7.5.2"
                 }
             },
-            "widgets_values": []
+            "widgets_values": [
+                0.05
+            ]
         },
         {
             "id": 74,
