@@ -21,11 +21,11 @@ def _feather_mask(ph, pw, feather_ratio, device):
     ramp_y = torch.ones(ph, device=device)
     ramp_x = torch.ones(pw, device=device)
     if fh > 0:
-        t = torch.linspace(0, 1, fh, device=device)
+        t = torch.linspace(0, 1, fh + 1, device=device)[1:]
         ramp_y[:fh]  = t
         ramp_y[-fh:] = t.flip(0)
     if fw > 0:
-        t = torch.linspace(0, 1, fw, device=device)
+        t = torch.linspace(0, 1, fw + 1, device=device)[1:]
         ramp_x[:fw]  = t
         ramp_x[-fw:] = t.flip(0)
     return torch.minimum(ramp_y.unsqueeze(1), ramp_x.unsqueeze(0))  # [ph, pw]
