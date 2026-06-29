@@ -14,10 +14,10 @@ RESIZE_METHODS = {
 }
 
 
-def _feather_mask(ph, pw, feather_ratio, device):
+def _feather_mask(ph, pw, feather_px, device):
     """Build a [ph, pw] blending mask: 0 at edges, 1 in the interior."""
-    fh = max(1, int(feather_ratio * ph))
-    fw = max(1, int(feather_ratio * pw))
+    fh = max(1, min(feather_px, ph // 2))
+    fw = max(1, min(feather_px, pw // 2))
     ramp_y = torch.ones(ph, device=device)
     ramp_x = torch.ones(pw, device=device)
     if fh > 0:
@@ -79,7 +79,7 @@ class DirectPasteBack:
                 "generated_images": ("IMAGE",),
                 "crop_info": ("STRING", {"forceInput": True}),
                 "resize_info": ("STRING", {"forceInput": True}),
-                "feather_ratio": ("FLOAT", {"default": 0.05, "min": 0.0, "max": 0.5, "step": 0.01}),
+                "feather_px": ("INT", {"default": 3, "min": 0, "max": 256, "step": 1}),
             }
         }
 
@@ -89,19 +89,19 @@ class DirectPasteBack:
     FUNCTION = "paste_back"
     CATEGORY = "AINail/image"
 
-    def paste_back(self, original_image, generated_images, crop_info, resize_info, feather_ratio):
+    def paste_back(self, original_image, generated_images, crop_info, resize_info, feather_px):
         orig = original_image[0].clone().float()   # [B, H, W, C]
         crops_info   = json.loads(crop_info[0])
         resizes_info = json.loads(resize_info[0])
-        feather_ratio = feather_ratio[0]
+        feather_px = feather_px[0]
 
         for j, gen_image in enumerate(generated_images):
             patch, ph, pw, src_x1, src_y1, src_x2, src_y2 = _extract_patch(
                 gen_image, crops_info[j], resizes_info[j]
             )
             patch = patch.to(orig.device)
-            if feather_ratio > 0.0:
-                mask = _feather_mask(ph, pw, feather_ratio, orig.device)  # [ph, pw]
+            if feather_px > 0:
+                mask = _feather_mask(ph, pw, feather_px, orig.device)  # [ph, pw]
                 mask = mask.unsqueeze(0).unsqueeze(-1)                     # [1, ph, pw, 1]
                 orig_region = orig[:, src_y1:src_y2, src_x1:src_x2, :]
                 orig[:, src_y1:src_y2, src_x1:src_x2, :] = mask * patch + (1.0 - mask) * orig_region
@@ -127,7 +127,7 @@ class DirectPasteBackDebug:
                 "generated_images": ("IMAGE",),
                 "crop_info": ("STRING", {"forceInput": True}),
                 "resize_info": ("STRING", {"forceInput": True}),
-                "feather_ratio": ("FLOAT", {"default": 0.05, "min": 0.0, "max": 0.5, "step": 0.01}),
+                "feather_px": ("INT", {"default": 3, "min": 0, "max": 256, "step": 1}),
                 "crop_index": ("INT", {"default": 0, "min": 0, "max": 99, "step": 1}),
             }
         }
@@ -138,17 +138,17 @@ class DirectPasteBackDebug:
     FUNCTION = "debug"
     CATEGORY = "AINail/image"
 
-    def debug(self, generated_images, crop_info, resize_info, feather_ratio, crop_index):
+    def debug(self, generated_images, crop_info, resize_info, feather_px, crop_index):
         crops_info   = json.loads(crop_info[0])
         resizes_info = json.loads(resize_info[0])
-        feather_ratio = feather_ratio[0]
+        feather_px = feather_px[0]
         idx = min(crop_index[0], len(generated_images) - 1)
 
         patch, ph, pw, *_ = _extract_patch(
             generated_images[idx], crops_info[idx], resizes_info[idx]
         )
 
-        mask = _feather_mask(ph, pw, feather_ratio, patch.device)  # [ph, pw]
+        mask = _feather_mask(ph, pw, feather_px, patch.device)  # [ph, pw]
 
         # mask_vis: grayscale → RGB IMAGE [1, ph, pw, 3]
         mask_rgb = mask.unsqueeze(0).unsqueeze(-1).expand(1, ph, pw, 3)
