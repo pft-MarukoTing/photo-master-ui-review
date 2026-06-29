@@ -1,6 +1,6 @@
 job: extension
 config:
-  name: nail_exp_030
+  name: nail_exp_031
   process:
   - type: diffusion_trainer
     training_folder: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/output
@@ -91,6 +91,28 @@ config:
       control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/nailsalon_control_crophand_1
       control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/nailsalon_control_crophand_2
       control_path_3: null
+    - folder_path: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/nailsalon_target_crophand_dup20
+      mask_path: null
+      mask_min_value: 0.1
+      default_caption: "Carry over the nails from Image 2 to Image 1. Match each nail\u2019\
+        s shape, color and art style from Image 2 to the corresponding nail in Image\
+        \ 1."
+      caption_ext: txt
+      caption_dropout_rate: 0.05
+      cache_latents_to_disk: false
+      is_reg: false
+      network_weight: 1
+      resolution:
+      - 1024
+      controls: []
+      shrink_video_to_frames: true
+      num_frames: 1
+      flip_x: false
+      flip_y: false
+      num_repeats: 20
+      control_path_1: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/nailsalon_control_crophand_1
+      control_path_2: /data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/nailsalon_control_crophand_2
+      control_path_3: null
     train:
       batch_size: 1
       bypass_guidance_embedding: false
@@ -175,5 +197,5 @@ config:
       num_frames: 1
       fps: 1
 meta:
-  name: nail_exp_030
+  name: nail_exp_031
   version: '1.0'
