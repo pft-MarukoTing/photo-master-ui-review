@@ -1,0 +1,249 @@
+{
+  "analysis": {
+    "photo_summary": "照片展示了一盤疊放的鬆餅，搭配融化奶油和楓糖漿，整體感覺溫馨且誘人。",
+    "subject_category": "食物",
+    "scene_category": "室內",
+    "main_subject": "一盤堆疊的鬆餅，上面有奶油和楓糖漿",
+    "scene_type": "廚房餐檯上的食物擺盤",
+    "aesthetic_diagnosis": "照片構圖偏向中央但空間配置導致視覺重心不明確，廚房檯面反光稍微分散注意力，且背景及周圍較多空白和雜物，略微影響整體整潔感。",
+    "detected_issues": [
+      "背景右側有雜物影響整體乾淨感",
+      "檯面光線反射明顯，有點過曝光和高光",
+      "拍攝角度稍微偏高，缺少立體感",
+      "楓糖漿從盤子滴下的部分稍微分散注意力",
+      "整體色溫偏冷，缺乏溫暖誘人的感覺"
+    ],
+    "edit_philosophy": "提升食物的色澤鮮明度和溫暖感，維持自然真實的廚房環境，並適度減少干擾元素以強調主體。",
+    "edit_intent": "使鬆餅看起來更誘人，提升整體明暗與色彩平衡，減少背景的視覺干擾，強化主體焦點。",
+    "composition_mood": "溫馨、自然、誘人的早餐氛圍",
+    "composition_intent": "主體展示，用餐前的生活紀實風格，強調食物質感與氛圍。",
+    "framing_intent": "object-complete，完整呈現食物及盤子，並保留部分廚房環境作為場景脈絡。",
+    "layout_method": "center，主體位於畫面中央，有助於聚焦主要食物，背景空白區域避免過於雜亂造成視覺干擾。",
+    "portrait_framing": "不適用",
+    "composition_strategy": "適度裁剪右側雜物，強化中央鬆餅焦點，保持環境真實感。",
+    "visual_balance_strategy": "主體居中，左下方較暗部分做輕微亮度調整以達視覺平衡。",
+    "empty_space_strategy": "背景空白主要作為環境脈絡，過多雜物需減少，避免分散視線。",
+    "alignment_strategy": "畫面水平線穩定，無需旋轉或透視校正，保留原本自然視角。",
+    "distraction_strategy": "減少右側盤子和其它雜物的視覺重點，減輕檯面反射提高乾淨感。",
+    "scene_preservation_strategy": "保留廚房工作檯面、瓦斯爐等場景元素真實性，避免改變材質與光線方向。",
+    "roi_anchor": "鬆餅上方中間，奶油及楓糖漿融化處，為視覺焦點，誘發食慾。",
+    "recommended_aspect_ratio": "4:3",
+    "aspect_ratio_reason": "此比例適合食物擺盤，兼顧主體及部分環境脈絡，並能合理裁剪背景空白與雜物。",
+    "roi_box": {
+      "x": 0.35,
+      "y": 0.35,
+      "w": 0.3,
+      "h": 0.3,
+      "reason": "該區域覆蓋鬆餅主體核心，包含奶油塊與楓糖漿表面細節，是視覺重點區。"
+    },
+    "subject_extent_box": {
+      "x": 0.3,
+      "y": 0.3,
+      "w": 0.4,
+      "h": 0.5,
+      "reason": "包含整個盤子及鬆餅堆疊，充分展現食物完整形態和所處環境的部分檯面。"
+    },
+    "protected_regions": [
+      {
+        "label": "main food detail",
+        "x": 0.43,
+        "y": 0.4,
+        "w": 0.15,
+        "h": 0.12,
+        "reason": "奶油塊與楓糖漿聚焦區，為主要吸睛點，不應裁切。"
+      }
+    ],
+    "perception_scores": {
+      "clarity": 7,
+      "noise": 2,
+      "exposure": 6,
+      "color_temperature": 5,
+      "layout": 5,
+      "lighting": 5,
+      "color_harmony": 5,
+      "aesthetic_finish": 5
+    },
+    "tool_strategy": "本機進行裁切調整曝光和白平衡，減少高光區溢出，局部對比加強。AI用於智能去除小範圍背景干擾與光線柔化。",
+    "lighting_strategy": "調降高光區亮度，適度提升陰影細節，增強立體感與溫暖光感。",
+    "memory_color_strategy": "強調奶油乳白色與鬆餅金黃，調整色溫向暖色調偏移，保持楓糖漿自然棕色。",
+    "restoration_needs": [
+      "局部陰影提亮",
+      "反光區減光",
+      "提高色彩溫暖度",
+      "雜物局部去除",
+      "細節銳化"
+    ],
+    "evaluation_criteria": [
+      "主體清晰可見且誘人",
+      "背景無過度干擾",
+      "色彩自然且和諧",
+      "光線層次豐富",
+      "畫面整體平衡舒適"
+    ],
+    "crop_recommendation": "建議輕微裁切右側遠處盤子及雜物，減少視覺干擾，呈現更集中且乾淨的食物主體。",
+    "crop_box": {
+      "enabled": true,
+      "x": 0.05,
+      "y": 0.05,
+      "w": 0.9,
+      "h": 0.9,
+      "aspect_ratio": "4:3"
+    },
+    "crop_candidates": [
+      {
+        "id": "ai-primary",
+        "label": "主要建議裁切",
+        "cropBox": {
+          "enabled": true,
+          "x": 0.05,
+          "y": 0.05,
+          "w": 0.9,
+          "h": 0.9,
+          "aspect_ratio": "4:3"
+        },
+        "compositionIntent": "減少干擾背景，將視覺重心明確置於鬆餅，保留部分廚房工作台作場景說明。",
+        "tradeoffs": "略微裁去部分右側盤子與空白區，可能損失部分環境資訊及空間感。"
+      },
+      {
+        "id": "original-frame",
+        "label": "保留原始構圖",
+        "cropBox": {
+          "enabled": false,
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1,
+          "aspect_ratio": ""
+        },
+        "compositionIntent": "保留完整原圖與原始場景脈絡",
+        "tradeoffs": "不做構圖裁切，只進行修圖與色彩整理"
+      }
+    ],
+    "crop_intent": {
+      "trim_left": false,
+      "trim_right": true,
+      "trim_top": false,
+      "trim_bottom": false,
+      "subject_anchor": "center",
+      "looking_direction": "unknown",
+      "remove_edge_distractions": [
+        "右側遠端盤子"
+      ]
+    },
+    "crop_risk": {
+      "needs_validation": false,
+      "risk_level": "low",
+      "reasons": []
+    },
+    "retouch_recipe": [
+      "整體色彩和色溫調整偏暖",
+      "局部陰影加強細節",
+      "高光區光線柔化",
+      "雜物局部去除或模糊",
+      "輕微銳化鬆餅細節",
+      "調整曝光平衡，減少過曝反光",
+      "提高鬆餅金黃色澤飽和度"
+    ],
+    "correction_plan": [
+      "白平衡修正向暖色調調整",
+      "曝光和對比調整以提升立體感",
+      "去除右側多餘盤子及雜物",
+      "減弱餐檯反光",
+      "增強食物局部質感和色彩飽和度"
+    ],
+    "preserve_rules": [
+      "保留鬆餅全貌與奶油、楓糖漿細節",
+      "保留廚房檯面與瓦斯爐真實環境元素",
+      "不新增或移除主要食物及其他餐具",
+      "保持場景透視與光線方向自然"
+    ],
+    "user_instruction": {
+      "has_user_direction": false,
+      "user_intent_summary": "",
+      "normalized_user_direction": "",
+      "explicit_priorities": [],
+      "explicit_prohibitions": [],
+      "unspecified_agent_freedom": [
+        "可依照片分析保守改善光線、色彩、清晰度、構圖與干擾。"
+      ],
+      "crop_or_framing_requested": false,
+      "crop_guidance": "使用者未指定裁切，Agent 可依分析保守判斷。",
+      "qa_focus": [],
+      "conflicts": [],
+      "warning": ""
+    },
+    "crop_validation": {
+      "pass": true,
+      "severity": "ok",
+      "selected_candidate_id": "ai-primary",
+      "reason": "候選裁切方案保護了鬆餅及奶油糖漿細節主體，去除右側遠端多餘雜物，畫面更乾淨且視覺集中。比例4:3適合食物擺盤，兼顧主體完整與部分廚房環境，維持生活紀實氛圍，且構圖平衡，無頭部或物體裁切問題。",
+      "problems": [],
+      "candidate_scores": [
+        {
+          "id": "ai-primary",
+          "score": 8,
+          "comment": "成功減少背景干擾，強調主題並保留部分環境說明，但略失部分空間感與場景資訊。視覺中心穩定，整體構圖優於原始。"
+        },
+        {
+          "id": "original-frame",
+          "score": 6,
+          "comment": "完整保留場景，但包含多餘雜物與空白，分散視線，少了裁切後的聚焦效果。"
+        }
+      ],
+      "revised_crop_box": {
+        "enabled": false,
+        "x": 0,
+        "y": 0,
+        "w": 1,
+        "h": 1,
+        "aspect_ratio": "",
+        "reason": "不需修正裁切，候選方案已符合裁切目標。"
+      },
+      "aspect_ratio_judgment": "4:3比例適中，既能包容主體完整與細節，又能保留部分環境與空間呼吸感，強化整體構圖及食物呈現氛圍。",
+      "selected_candidate_label": "主要建議裁切",
+      "risk_level": "high",
+      "risk_reasons": [
+        "user-crop-instruction"
+      ]
+    }
+  },
+  "quality_check": {
+    "pass": true,
+    "overall_status": "可展示",
+    "score": 8,
+    "failure_level": "minor",
+    "score_reason": "主體鬆餅完整且細節清晰，奶油及楓糖漿保護區無裁切及破壞。環境及背景保留原有廚房檯面及瓦斯爐元素，視覺干擾減少且光線自然。裁剪較原圖更集中，且構圖平衡合理。色彩明暗提升，細節自然，未過度修飾或失真。唯一小瑕疵是右側背景相比原圖裁切較大，可能略減少部分場景脈絡，但不影響整體畫面故事和意圖。",
+    "summary": "修圖提升明暗和色彩平衡，減少視覺干擾，保持食物與環境真實自然，適合展示。",
+    "checks": {
+      "subject_preserved": true,
+      "user_intent_followed": true,
+      "crop_safe": true,
+      "protected_regions_safe": true,
+      "framing_intent_respected": true,
+      "aspect_ratio_feels_intentional": true,
+      "composition_method_matches": true,
+      "empty_space_has_function": true,
+      "alignment_stable_or_intentional": true,
+      "distractions_reassessed_after_crop": true,
+      "scene_preserved": true,
+      "frame_breathing_room_ok": true,
+      "not_overedited": true,
+      "light_color_improved": true
+    },
+    "warnings": [],
+    "recommendation": "可直接展示，畫面整體協調且符合原圖目標。"
+  },
+  "usage": {
+    "input_tokens": 2402,
+    "input_tokens_details": {
+      "image_tokens": 352,
+      "text_tokens": 2050
+    },
+    "output_tokens": 1544,
+    "output_tokens_details": {
+      "image_tokens": 1544,
+      "text_tokens": 0
+    },
+    "total_tokens": 3946
+  }
+}
