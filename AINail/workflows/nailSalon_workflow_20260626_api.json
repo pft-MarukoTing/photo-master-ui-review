@@ -323,7 +323,8 @@
       "scale": 1.2,
       "min_area_ratio": 0.005,
       "avoid_bbox_overlap": false,
-      "merge_overlapping_squares": true
+      "merge_overlapping_squares": true,
+      "shift_to_avoid_padding": true
     }
   },
   "38": {
@@ -357,7 +358,7 @@
         "38",
         1
       ],
-      "feather_ratio": 0.05
+      "feather_px": 3
     }
   }
 }

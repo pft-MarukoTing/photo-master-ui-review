@@ -15,8 +15,9 @@ class CropSquareByBoxes:
                 "boxes": ("STRING", {"forceInput": True}),
                 "scale": ("FLOAT", {"default": 1.2, "min": 1.0, "max": 10.0, "step": 0.05}),
                 "min_area_ratio": ("FLOAT", {"default": 0.005, "min": 0.0, "max": 1.0, "step": 0.001}),
-                "avoid_bbox_overlap": ("BOOLEAN", {"default": True}),
+                "avoid_bbox_overlap": ("BOOLEAN", {"default": False}),
                 "merge_overlapping_squares": ("BOOLEAN", {"default": True}),
+                "shift_to_avoid_padding": ("BOOLEAN", {"default": True}),
             }
         }
 
@@ -106,8 +107,23 @@ class CropSquareByBoxes:
             new_boxes.append(acc)
         return new_boxes, changed
 
+    @staticmethod
+    def _shift_to_avoid_padding(rx1, ry1, size, W, H):
+        rx2 = rx1 + size
+        ry2 = ry1 + size
+        if rx1 < 0:
+            rx1 = 0
+        elif rx2 > W:
+            rx1 = max(0, W - size)
+        if ry1 < 0:
+            ry1 = 0
+        elif ry2 > H:
+            ry1 = max(0, H - size)
+        return rx1, ry1
+
     def crop(self, image: torch.Tensor, boxes: str, scale: float, min_area_ratio: float,
-             avoid_bbox_overlap: bool = True, merge_overlapping_squares: bool = True):
+             avoid_bbox_overlap: bool = False, merge_overlapping_squares: bool = True,
+             shift_to_avoid_padding: bool = True):
         # image: [B, H, W, C]
         boxes_list = json.loads(boxes)
         if not boxes_list:
@@ -141,6 +157,8 @@ class CropSquareByBoxes:
                     else:
                         brx1 = int(round(bcx - bsize / 2))
                         bry1 = int(round(bcy - bsize / 2))
+                    if shift_to_avoid_padding:
+                        brx1, bry1 = self._shift_to_avoid_padding(brx1, bry1, bsize, W, H)
                     eff_rects.append((brx1, bry1, brx1 + bsize, bry1 + bsize))
                 # Phase 2: merge pairs whose effective rects still overlap
                 valid_boxes, changed = self._merge_overlapping_boxes(valid_boxes, eff_rects)
@@ -165,6 +183,13 @@ class CropSquareByBoxes:
                 ry1 = int(round(cy - size / 2))
             rx2 = rx1 + size
             ry2 = ry1 + size
+
+            # Shift the square into image bounds to avoid black padding.
+            # If size > image dimension, padding is unavoidable but minimised.
+            if shift_to_avoid_padding:
+                rx1, ry1 = self._shift_to_avoid_padding(rx1, ry1, size, W, H)
+                rx2 = rx1 + size
+                ry2 = ry1 + size
 
             # clamp to image bounds
             sx1 = max(0, rx1)
