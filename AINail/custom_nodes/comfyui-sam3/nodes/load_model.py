@@ -22,21 +22,26 @@ _sam3_models_dir = os.path.join(folder_paths.models_dir, "sam3")
 os.makedirs(_sam3_models_dir, exist_ok=True)
 folder_paths.add_model_folder_path("sam3", _sam3_models_dir)
 
-try:
-    from huggingface_hub import hf_hub_download
-    HF_HUB_AVAILABLE = True
-except ImportError:
-    HF_HUB_AVAILABLE = False
-
-
 class LoadSAM3Model(io.ComfyNode):
     """
     Node to load SAM3 model configuration.
-    Auto-downloads the model from HuggingFace if not found.
+
+    aiNail vendor patch: model file is pre-pulled by pull_models.sh into
+    one of ComfyUI's registered 'sam3' folders (typically
+    /workspace/models/comfy/sam3/ via SRCtrl extra_model_paths.yaml).
+    Upstream HuggingFace auto-download removed -- POC server is offline.
+
+    Prefers sam3.pt (FAIR image-model checkpoint, matches SRCtrl SAM3ImageModel
+    which we verified detects hands at score 0.85+). Falls back to .safetensors
+    if .pt isn't present (kept for compatibility -- but note the original
+    Pozzetti .safetensors is a VIDEO model checkpoint and doesn't work with
+    our image-model build path in _model_cache.py).
     """
 
     MODEL_DIR = "models/sam3"
-    MODEL_FILENAME = "sam3.safetensors"
+    MODEL_FILENAME_CANDIDATES = ["sam3.pt", "sam3.safetensors"]
+    # Kept for backward-compat references; first candidate is the preferred one.
+    MODEL_FILENAME = MODEL_FILENAME_CANDIDATES[0]
 
     @classmethod
     def define_schema(cls):
@@ -63,15 +68,23 @@ class LoadSAM3Model(io.ComfyNode):
 
         load_device = comfy.model_management.get_torch_device()
 
-        # Fixed checkpoint path
-        checkpoint_path = Path(comfy_base_path) / cls.MODEL_DIR / cls.MODEL_FILENAME
-
-        # Auto-download if needed
-        if not checkpoint_path.exists():
-            print(f"[SAM3] Model not found at {checkpoint_path}, downloading from HuggingFace...", flush=True)
-            pbar = comfy.utils.ProgressBar(100)
-            cls._download_from_huggingface(pbar)
-            print("[SAM3] Model downloaded successfully", flush=True)
+        # aiNail vendor patch: resolve via folder_paths so SRCtrl-registered
+        # /workspace/models/comfy/sam3/ (from comfy_reference_data.yml ->
+        # generated extra_model_paths.yaml) is searched as well as the default
+        # ComfyUI dir registered above. Try .pt first (image-model checkpoint),
+        # then .safetensors.
+        checkpoint_path = None
+        for cand in cls.MODEL_FILENAME_CANDIDATES:
+            cp = folder_paths.get_full_path("sam3", cand)
+            if cp is not None and Path(cp).exists():
+                checkpoint_path = cp
+                log.info(f"[SAM3] Using checkpoint: {checkpoint_path}")
+                break
+        if checkpoint_path is None:
+            raise FileNotFoundError(
+                f"[SAM3] None of {cls.MODEL_FILENAME_CANDIDATES} found in any registered "
+                f"'sam3' folder. Ensure pull_models.sh populated $PWD/hub/models/comfy/sam3/."
+            )
 
         # BPE path for tokenizer
         bpe_path = str(Path(__file__).parent / "sam3" / "bpe_simple_vocab_16e6.txt.gz")
@@ -99,47 +112,6 @@ class LoadSAM3Model(io.ComfyNode):
             "compile": compile,
         }
         return io.NodeOutput(config)
-
-    @staticmethod
-    def _download_from_huggingface(pbar=None):
-        if not HF_HUB_AVAILABLE:
-            raise ImportError(
-                "[SAM3] huggingface_hub is required to download models.\n"
-                "Please install it with: pip install huggingface_hub"
-            )
-        import requests
-        from huggingface_hub import hf_hub_url
-
-        model_dir = Path(comfy_base_path) / LoadSAM3Model.MODEL_DIR
-        model_dir.mkdir(parents=True, exist_ok=True)
-
-        url = hf_hub_url("apozz/sam3-safetensors", LoadSAM3Model.MODEL_FILENAME)
-        dest = model_dir / LoadSAM3Model.MODEL_FILENAME
-        tmp = dest.with_suffix(".tmp")
-
-        print(f"[SAM3] Downloading {LoadSAM3Model.MODEL_FILENAME} from apozz/sam3-safetensors...", flush=True)
-        resp = requests.get(url, stream=True, timeout=60)
-        resp.raise_for_status()
-        total = int(resp.headers.get("content-length", 0))
-        downloaded = 0
-        last_pct = 0
-
-        with open(tmp, "wb") as f:
-            for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                f.write(chunk)
-                downloaded += len(chunk)
-                if total > 0:
-                    pct = int(downloaded * 100 / total)
-                    if pbar and pct > last_pct:
-                        pbar.update_absolute(pct, 100)
-                    if pct >= last_pct + 10:
-                        print(f"[SAM3] Download progress: {pct}%", flush=True)
-                        last_pct = pct
-
-        tmp.rename(dest)
-        if pbar:
-            pbar.update_absolute(100, 100)
-        print(f"[SAM3] Downloaded {LoadSAM3Model.MODEL_FILENAME}", flush=True)
 
 
 NODE_CLASS_MAPPINGS = {
