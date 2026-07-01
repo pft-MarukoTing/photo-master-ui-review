@@ -23,14 +23,24 @@ _cache = {"config_hash": None, "model": None}
 
 
 class _ImagePredictorShim:
-    """Adapter: SAM3UnifiedModel.__init__ extracts `.model` from its
-    video_predictor argument. Image model has no predictor wrapper, so we
-    expose it via a thin shim. ModelPatcher delegation in SAM3UnifiedModel
-    falls through __getattr__ to this shim -- but no caller in segmentation.py
-    invokes video-only methods (start_session / close_session / etc), so it
-    never matters."""
+    """Adapter: SAM3UnifiedModel expects a video_predictor with a `.model` attribute.
+    For the image model we provide a shim. Video/session APIs are not supported
+    (but video nodes are still registered), so these methods raise a clear error.
+    """
     def __init__(self, model):
         self.model = model
+    
+    def start_session(self, *args, **kwargs):
+         raise NotImplementedError("[SAM3] start_session is only available with the SAM3 video model checkpoint.")
+    
+    def close_session(self, *args, **kwargs):
+         raise NotImplementedError("[SAM3] close_session is only available with the SAM3 video model checkpoint.")
+    
+    def handle_stream_request(self, request):
+         raise NotImplementedError("[SAM3] handle_stream_request is only available with the SAM3 video model checkpoint.")
+    
+    def handle_request(self, request):
+         raise NotImplementedError("[SAM3] handle_request is only available with the SAM3 video model checkpoint.")
 
 
 def get_or_build_model(config):
