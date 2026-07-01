@@ -203,7 +203,7 @@
   },
   "17": {
     "inputs": {
-      "lora_name": "aiNail/nail_salon_lora_20260626.safetensors",
+      "lora_name": "aiNail/nail_salon_lora_20260629.safetensors",
       "strength_model": 1,
       "model": [
         "23",
