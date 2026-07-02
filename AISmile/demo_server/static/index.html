@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<title>aiSmile Batch Service</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #f5f5f7;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 48px 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0,0,0,.08);
+    padding: 40px;
+    width: 100%;
+    max-width: 520px;
+  }
+  h1 { font-size: 22px; font-weight: 700; color: #1d1d1f; margin-bottom: 4px; }
+  .subtitle { font-size: 13px; color: #6e6e73; margin-bottom: 32px; }
+
+  /* Drop zone */
+  .dropzone {
+    border: 2px dashed #c7c7cc;
+    border-radius: 12px;
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+  }
+  .dropzone:hover, .dropzone.over { border-color: #0071e3; background: #f0f6ff; }
+  .dropzone input { display: none; }
+  .dropzone .icon { font-size: 40px; margin-bottom: 12px; }
+  .dropzone p { font-size: 14px; color: #6e6e73; }
+  .dropzone p strong { color: #1d1d1f; }
+  .file-count {
+    margin-top: 10px;
+    font-size: 13px;
+    color: #0071e3;
+    font-weight: 600;
+    min-height: 18px;
+  }
+
+  /* Button */
+  button {
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px;
+    border: none;
+    border-radius: 10px;
+    background: #0071e3;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .2s;
+  }
+  button:hover:not(:disabled) { background: #0077ed; }
+  button:disabled { background: #b0c4de; cursor: not-allowed; }
+
+  /* Progress */
+  .progress-section { margin-top: 28px; display: none; }
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #6e6e73;
+    margin-bottom: 8px;
+  }
+  .progress-bar-wrap {
+    background: #e5e5ea;
+    border-radius: 99px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    background: #0071e3;
+    border-radius: 99px;
+    width: 0%;
+    transition: width .4s ease;
+  }
+  .errors { margin-top: 12px; font-size: 12px; color: #c00; }
+
+  /* Download */
+  .download-section {
+    margin-top: 24px;
+    text-align: center;
+    display: none;
+  }
+  .download-section p { font-size: 13px; color: #34c759; font-weight: 600; margin-bottom: 12px; }
+  .download-btn {
+    display: inline-block;
+    padding: 12px 32px;
+    background: #34c759;
+    color: #fff;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .2s;
+  }
+  .download-btn:hover { background: #28a745; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>AISmile Batch Service</h1>
+  <p class="subtitle">請選取或拖曳資料夾</p>
+
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" name="files" webkitdirectory multiple accept=".jpg,.jpeg,.png">
+    <div class="icon">📁</div>
+    <p><strong>點擊選取</strong>或<strong>拖曳資料夾</strong>至此</p>
+    <p>支援 .jpg / .jpeg / .png</p>
+    <div class="file-count" id="fileCount"></div>
+  </div>
+
+  <button id="submitBtn" disabled>開始處理</button>
+
+  <div class="progress-section" id="progressSection">
+    <div class="progress-label">
+      <span id="progressText">準備中…</span>
+      <span id="progressNum">0 / 0</span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="errors" id="errorList"></div>
+  </div>
+
+  <div class="download-section" id="downloadSection">
+    <p>✅ 全部完成！</p>
+    <a class="download-btn" id="downloadLink" href="#">下載結果 ZIP</a>
+  </div>
+</div>
+
+<script>
+  const dropzone   = document.getElementById('dropzone');
+  const fileInput  = document.getElementById('fileInput');
+  const fileCount  = document.getElementById('fileCount');
+  const submitBtn  = document.getElementById('submitBtn');
+  const progressSection = document.getElementById('progressSection');
+  const progressText    = document.getElementById('progressText');
+  const progressNum     = document.getElementById('progressNum');
+  const progressBar     = document.getElementById('progressBar');
+  const errorList       = document.getElementById('errorList');
+  const downloadSection = document.getElementById('downloadSection');
+  const downloadLink    = document.getElementById('downloadLink');
+
+  const ALLOWED = new Set(['.jpg', '.jpeg', '.png']);
+  let selectedFiles = [];
+
+  function isAllowed(name) {
+    return ALLOWED.has(name.slice(name.lastIndexOf('.')).toLowerCase());
+  }
+
+  // 遞迴讀取 FileSystemDirectoryEntry 裡的所有允許檔案
+  function readAllEntries(dirReader) {
+    return new Promise(resolve => {
+      const results = [];
+      function readBatch() {
+        dirReader.readEntries(entries => {
+          if (!entries.length) { resolve(results); return; }
+          results.push(...entries);
+          readBatch();
+        });
+      }
+      readBatch();
+    });
+  }
+
+  async function collectFiles(entry) {
+    if (entry.isFile) {
+      if (!isAllowed(entry.name)) return [];
+      return await new Promise(resolve => entry.file(f => resolve([f])));
+    }
+    const entries = await readAllEntries(entry.createReader());
+    const nested = await Promise.all(entries.map(collectFiles));
+    return nested.flat();
+  }
+
+  function onFilesChosen(files) {
+    selectedFiles = files;
+    if (files.length > 0) {
+      fileCount.textContent = `已選取 ${files.length} 張圖片`;
+      submitBtn.disabled = false;
+    } else {
+      fileCount.textContent = '找不到 jpg/jpeg/png 檔案';
+      submitBtn.disabled = true;
+    }
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+
+  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('over'); });
+  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('over'));
+  dropzone.addEventListener('drop', async e => {
+    e.preventDefault();
+    dropzone.classList.remove('over');
+    fileCount.textContent = '讀取中…';
+    submitBtn.disabled = true;
+
+    const items = Array.from(e.dataTransfer.items);
+    const entries = items.map(i => i.webkitGetAsEntry()).filter(Boolean);
+    const nested = await Promise.all(entries.map(collectFiles));
+    onFilesChosen(nested.flat());
+  });
+
+  fileInput.addEventListener('change', () => {
+    const valid = Array.from(fileInput.files).filter(f => isAllowed(f.name));
+    onFilesChosen(valid);
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = '上傳中…';
+
+    const formData = new FormData();
+    selectedFiles.forEach(f => formData.append('files', f, f.name));
+
+    let batchId;
+    try {
+      const res = await fetch('/upload', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('上傳失敗：' + (err.error || res.statusText));
+        submitBtn.disabled = false;
+        submitBtn.textContent = '開始處理';
+        return;
+      }
+      const data = await res.json();
+      batchId = data.batch_id;
+    } catch (e) {
+      alert('上傳失敗：' + e.message);
+      submitBtn.disabled = false;
+      submitBtn.textContent = '開始處理';
+      return;
+    }
+
+    submitBtn.textContent = '處理中…';
+    progressSection.style.display = 'block';
+    pollStatus(batchId);
+  });
+
+  function pollStatus(batchId) {
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/status/${batchId}`);
+        const data = await res.json();
+
+        const { total, finished, zip_ready, errors } = data;
+        const pct = total > 0 ? Math.round((finished / total) * 100) : 0;
+
+        progressBar.style.width = pct + '%';
+        progressNum.textContent = `${finished} / ${total}`;
+        progressText.textContent = zip_ready ? '打包完成' : `處理中… (${pct}%)`;
+
+        if (errors && errors.length > 0) {
+          errorList.innerHTML = '⚠️ 以下圖片失敗：<br>' +
+            errors.map(e => `• ${e}`).join('<br>');
+        }
+
+        if (zip_ready) {
+          clearInterval(timer);
+          downloadSection.style.display = 'block';
+          downloadLink.href = `/download/${batchId}`;
+          submitBtn.textContent = '再次上傳';
+          submitBtn.disabled = false;
+        }
+      } catch (e) {
+        // network error during poll – keep retrying
+      }
+    }, 2000);
+  }
+</script>
+</body>
+</html>
