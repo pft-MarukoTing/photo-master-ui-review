@@ -18,7 +18,7 @@ window.PhotoAgentDom = (() => {
     backToProcessBtn: document.querySelector("#back-to-process-btn"),
     errorMsg: document.querySelector("#error-msg"),
     promptInput: document.querySelector("#prompt"),
-    apiKeyInput: document.querySelector("#api-key"),
+    processingPathSelect: document.querySelector("#processing-path"),
     aiEditToggle: document.querySelector("#ai-edit-toggle"),
     imageQualitySelect: document.querySelector("#image-quality"),
     originalImg: document.querySelector("#original-img"),

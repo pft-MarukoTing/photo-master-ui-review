@@ -247,14 +247,18 @@
               placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
           </div>
 
-          <div class="form-field">
-            <span class="field-label">OpenAI API Key</span>
-            <input id="api-key" type="password" class="field-input"
-              placeholder="sk-proj-..." autocomplete="off">
-            <p class="field-hint">Demo 階段 Key 只在本次流程中使用，不會儲存。</p>
-          </div>
-
           <div class="options-card">
+            <div class="option-row">
+              <div class="option-text">
+                <span class="option-label">處理路徑</span>
+                <span class="option-desc">Local Worker：走本機 Redis 隊列與 docker worker。AIPoC：直接呼叫共用推論閘道。</span>
+              </div>
+              <select id="processing-path" class="quality-select">
+                <option value="local">Local Worker</option>
+                <option value="aipoc" selected>AIPoC</option>
+              </select>
+            </div>
+            <div class="option-divider"></div>
             <label class="option-row">
               <div class="option-text">
                 <span class="option-label">AI 修圖</span>
@@ -551,10 +555,9 @@
 </main>
 
 <script src="config.js"></script>
-<script src="prompts.js"></script>
 <script src="dom.js"></script>
 <script src="image-tools.js"></script>
-<script src="openai-api.js"></script>
+<script src="photo-agent-api.js"></script>
 <script src="results.js"></script>
 <script src="app.js"></script>
 </body>

@@ -1,4 +1,7 @@
 window.PhotoAgentConfig = {
+  // Base URL of the PhotoAgent Flask backend. Empty string = same-origin
+  // (the Flask backend now also serves this frontend, see backend/routes/static.py).
+  apiBaseUrl: "",
   presets: {
     natural: {
       label: "自然高級修圖",
