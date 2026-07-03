@@ -1977,6 +1977,7 @@ class FaceDetailRestorer:
 
             cx = (c_x1 + c_x2) / 2
             cy = (c_y1 + c_y2) / 2
+            half_dim = max(c_x2 - c_x1, c_y2 - c_y1) / 2
 
             for bbox in all_bboxs:
                 ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
@@ -1989,16 +1990,25 @@ class FaceDetailRestorer:
                 if union > 0 and inter / union >= 0.3:
                     continue  # target face — skip
 
-                has_neighbor = True
-                d_left   = cx - (ox + ow)
-                d_right  = ox - cx
-                d_top    = cy - (oy + oh)
-                d_bottom = oy - cy
+                x_overlaps = (ox < cx + half_dim) and (ox + ow > cx - half_dim)
+                y_overlaps = (oy < cy + half_dim) and (oy + oh > cy - half_dim)
 
-                if d_left   > 0: safe_left   = min(safe_left,   d_left)
-                if d_right  > 0: safe_right  = min(safe_right,  d_right)
-                if d_top    > 0: safe_top    = min(safe_top,    d_top)
-                if d_bottom > 0: safe_bottom = min(safe_bottom, d_bottom)
+                if y_overlaps:
+                    # y already overlaps -> an x shift could close the gap.
+                    d_left  = cx - (ox + ow)
+                    d_right = ox - cx
+                    if d_left  > 0: safe_left  = min(safe_left,  d_left)
+                    if d_right > 0: safe_right = min(safe_right, d_right)
+
+                if x_overlaps:
+                    # x already overlaps -> a y shift could close the gap.
+                    d_top    = cy - (oy + oh)
+                    d_bottom = oy - cy
+                    if d_top    > 0: safe_top    = min(safe_top,    d_top)
+                    if d_bottom > 0: safe_bottom = min(safe_bottom, d_bottom)
+
+                if x_overlaps or y_overlaps:
+                    has_neighbor = True
 
         # --- 4. Auto-Square Logic ---
         cur_w = c_x2 - c_x1
