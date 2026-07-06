@@ -19,6 +19,10 @@ Meitu Test Case
     Click Page Element    accessibility_id=Custom
     Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
     Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    30
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]
+    Click Page Element    xpath=//XCUIElementTypeButton[@name="Save"]
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
 
 *** Keywords ***
 Open Meitu Application
