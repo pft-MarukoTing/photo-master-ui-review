@@ -12,12 +12,13 @@ Meitu Test Case
     Open Meitu Application
     Click Page Element    accessibility_id=Beautify
     Scroll To Bottom Of Photo List    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView
-    Click Page Element    xpath=//XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView/XCUIElementTypeCell[last()]/XCUIElementTypeOther/XCUIElementTypeImage
+    Click Photo From Bottom By Grid    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView    0
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Retouch"]
     Scroll To Retouch Feature    Nail Art
     Click Page Element    xpath=//XCUIElementTypeCollectionView/XCUIElementTypeCell[.//XCUIElementTypeStaticText[@name="Nail Art"]]
     Click Page Element    accessibility_id=Custom
     Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
+    Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    30
 
 *** Keywords ***
 Open Meitu Application
@@ -51,6 +52,61 @@ Scroll To Bottom Of Photo List
         Swipe    start_x=207    start_y=750    end_x=207    end_y=250    duration=300ms
         Sleep    1.2s
     END
+
+Click Photo From Bottom By Grid
+    [Arguments]    ${container_xpath}    ${offset}
+    # Assumes a 3-column grid where only the last row may be partially filled.
+    ${rect_last}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()]
+    ${rect_1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-1]
+    ${rect_2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-2]
+    ${same_row_1}=    Evaluate    abs(${rect_last}[y] - ${rect_1}[y]) < 5
+    ${same_row_2}=    Evaluate    abs(${rect_last}[y] - ${rect_2}[y]) < 5
+    IF    ${same_row_2}
+        ${col_last}=    Set Variable    ${2}
+    ELSE IF    ${same_row_1}
+        ${col_last}=    Set Variable    ${1}
+    ELSE
+        ${col_last}=    Set Variable    ${0}
+    END
+
+    # Reference the nearest fully-populated row above the last row to read column x-positions.
+    ${offset_col2}=    Evaluate    ${col_last} + 1
+    ${offset_col1}=    Evaluate    ${col_last} + 2
+    ${offset_col0}=    Evaluate    ${col_last} + 3
+    ${rect_col2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col2}]
+    ${rect_col1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col1}]
+    ${rect_col0}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col0}]
+    ${row_height}=    Evaluate    abs(${rect_last}[y] - ${rect_col2}[y])
+
+    IF    ${offset} <= ${col_last}
+        ${target_row}=    Set Variable    ${0}
+        ${target_col}=    Evaluate    ${col_last} - ${offset}
+    ELSE
+        ${m}=    Evaluate    ${offset} - (${col_last} + 1)
+        ${target_row}=    Evaluate    1 + ${m} // 3
+        ${target_col}=    Evaluate    2 - (${m} % 3)
+    END
+
+    ${col_x}=    Create List    ${rect_col0}[x]    ${rect_col1}[x]    ${rect_col2}[x]
+    ${target_x}=    Evaluate    ${col_x}[${target_col}] + ${rect_last}[width] // 2
+    ${target_y}=    Evaluate    ${rect_last}[y] + ${rect_last}[height] // 2
+
+    # Swiping loses roughly 10% of the requested content-scroll distance to drag friction,
+    # so over-request the scroll distance to compensate, then click by computed coordinates
+    # (avoids xpath last()-offset entirely, since it drifts once cells scroll off and unmount).
+    ${scroll_distance}=    Evaluate    int(${target_row} * ${row_height} * 1.05)
+    ${remaining}=    Set Variable    ${scroll_distance}
+    WHILE    ${remaining} > 0
+        ${step}=    Evaluate    min(${remaining}, 300)
+        ${end_y}=    Evaluate    300 + ${step}
+        Swipe    start_x=207    start_y=300    end_x=207    end_y=${end_y}    duration=800ms
+        Sleep    0.5s
+        ${remaining}=    Evaluate    ${remaining} - ${step}
+    END
+    Sleep    1s
+
+    ${target_point}=    Create List    ${target_x}    ${target_y}
+    Tap    ${target_point}
 
 Scroll To Retouch Feature
     [Arguments]    ${feature_name}
