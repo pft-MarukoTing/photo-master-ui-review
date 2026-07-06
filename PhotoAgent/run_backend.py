@@ -17,6 +17,6 @@ from backend.app import create_app  # noqa: E402  (must import after env is load
 if __name__ == "__main__":
     app = create_app()
     host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "5001"))
+    port = int(os.environ.get("PORT", "8991"))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
     app.run(host=host, port=port, debug=debug)
