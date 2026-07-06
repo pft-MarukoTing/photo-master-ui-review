@@ -1,6 +1,8 @@
 window.PhotoAgentConfig = {
-  // Base URL of the PhotoAgent Flask backend. Empty string = same-origin
-  // (the Flask backend now also serves this frontend, see backend/routes/static.py).
+  // Base URL of the PhotoAgent Flask backend. Empty string = auto-detect from
+  // the page's own directory (works both unprefixed locally and behind the
+  // /mt-testbed-PhotoAgent reverse-proxy prefix in prod). Set explicitly only
+  // to override.
   apiBaseUrl: "",
   presets: {
     natural: {

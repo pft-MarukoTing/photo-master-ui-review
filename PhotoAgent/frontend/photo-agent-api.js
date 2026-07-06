@@ -1,5 +1,9 @@
 window.PhotoAgentApi = (() => {
-  const BASE_URL = window.PhotoAgentConfig.apiBaseUrl;
+  // When deployed behind a reverse-proxy prefix (e.g. /mt-testbed-PhotoAgent),
+  // absolute "/api/..." fetches would bypass the proxy's location match and 404.
+  // Derive the prefix from the page's own directory instead of hardcoding it,
+  // so the same build works unprefixed (local) and prefixed (prod).
+  const BASE_URL = window.PhotoAgentConfig.apiBaseUrl || window.location.pathname.replace(/\/[^/]*$/, "");
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
