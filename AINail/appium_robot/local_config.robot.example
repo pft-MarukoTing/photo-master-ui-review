@@ -1,0 +1,4 @@
+*** Variables ***
+${DEVICE_NAME}         iPhone XS Max
+${PLATFORM_VERSION}    16.4.1
+${UDID}                00000000-0000000000000000
