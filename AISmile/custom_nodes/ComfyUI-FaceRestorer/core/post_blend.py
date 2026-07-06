@@ -1964,85 +1964,97 @@ class FaceDetailRestorer:
         else:
             must_x1, must_y1, must_x2, must_y2 = c_x1, c_y1, c_x2, c_y2
 
-        # --- 3.5. Collision-Aware Constraint ---
-        # Compute safe distances to neighboring faces for shift clamping (Step 5).
-        has_neighbor = False
-        safe_left = safe_right = safe_top = safe_bottom = float('inf')
-        if all_bboxs and not force_full_image_crop and len(rects) > 0:
+        # --- 4. Auto-Square Logic ---
+        cur_w = c_x2 - c_x1
+        cur_h = c_y2 - c_y1
+        final_dim = int(max(cur_w, cur_h))
+        half = final_dim / 2
+
+        center_x = (c_x1 + c_x2) / 2
+        center_y = (c_y1 + c_y2) / 2
+
+        # --- 3.5 + 5. Collision-Aware Placement (direct solver) ---
+        # Pick the crop CENTER by directly minimising how much the fixed-size
+        # square overlaps neighbouring faces, while always covering the target
+        # (must-cover). Overlap area is piecewise-linear in the centre, so its
+        # minimum lies where a crop edge aligns with a neighbour edge (or an image
+        # / must-cover bound); enumerating those candidates finds the global
+        # optimum in a single pass — no iteration, and diagonal neighbours are
+        # handled naturally because we score real 2-D overlap rather than per-axis
+        # projections.
+        run_collision = bool(all_bboxs) and not force_full_image_crop and len(rects) > 0
+
+        # Feasible centre range that keeps the target fully covered (hard floor).
+        mx_lo, mx_hi = must_x2 - half, must_x1 + half
+        my_lo, my_hi = must_y2 - half, must_y1 + half
+        feas_x = lambda v: max(mx_lo, min(mx_hi, v))
+        feas_y = lambda v: max(my_lo, min(my_hi, v))
+
+        # Reference placement ignoring neighbours: image-boundary then must-cover.
+        # Where a lone face would land; used for the no-neighbour result and to
+        # decide whether a neighbour actually shifted the crop (has_neighbor).
+        ref_cx = feas_x(max(half, min(w_img - half, center_x)))
+        ref_cy = feas_y(max(half, min(h_img - half, center_y)))
+
+        neigh = []
+        if run_collision:
             t_x1 = min(rx for rx, ry, rw, rh in rects)
             t_y1 = min(ry for rx, ry, rw, rh in rects)
             t_x2 = max(rx + rw for rx, ry, rw, rh in rects)
             t_y2 = max(ry + rh for rx, ry, rw, rh in rects)
             t_area = max(1, (t_x2 - t_x1) * (t_y2 - t_y1))
-
-            cx = (c_x1 + c_x2) / 2
-            cy = (c_y1 + c_y2) / 2
-            half_dim = max(c_x2 - c_x1, c_y2 - c_y1) / 2
-
             for bbox in all_bboxs:
                 ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
-                ix1 = max(ox, t_x1)
-                iy1 = max(oy, t_y1)
-                ix2 = min(ox + ow, t_x2)
-                iy2 = min(oy + oh, t_y2)
-                inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                ix = max(0, min(ox + ow, t_x2) - max(ox, t_x1))
+                iy = max(0, min(oy + oh, t_y2) - max(oy, t_y1))
+                inter = ix * iy
                 union = ow * oh + t_area - inter
                 if union > 0 and inter / union >= 0.3:
                     continue  # target face — skip
+                neigh.append((ox, oy, ox + ow, oy + oh))  # (left, top, right, bottom)
 
-                x_overlaps = (ox < cx + half_dim) and (ox + ow > cx - half_dim)
-                y_overlaps = (oy < cy + half_dim) and (oy + oh > cy - half_dim)
+        if not neigh:
+            new_cx, new_cy = ref_cx, ref_cy
+            has_neighbor = False
+        else:
+            def _overlap(cx, cy, n):
+                l, t, r, b = cx - half, cy - half, cx + half, cy + half
+                iw = max(0.0, min(r, n[2]) - max(l, n[0]))
+                ih = max(0.0, min(b, n[3]) - max(t, n[1]))
+                return iw * ih
 
-                if y_overlaps:
-                    # y already overlaps -> an x shift could close the gap.
-                    d_left  = cx - (ox + ow)
-                    d_right = ox - cx
-                    if d_left  > 0: safe_left  = min(safe_left,  d_left)
-                    if d_right > 0: safe_right = min(safe_right, d_right)
+            def _img_exit(cx, cy):
+                l, t, r, b = cx - half, cy - half, cx + half, cy + half
+                inside = (max(0.0, min(r, w_img) - max(l, 0.0)) *
+                          max(0.0, min(b, h_img) - max(t, 0.0)))
+                return final_dim * final_dim - inside
 
-                if x_overlaps:
-                    # x already overlaps -> a y shift could close the gap.
-                    d_top    = cy - (oy + oh)
-                    d_bottom = oy - cy
-                    if d_top    > 0: safe_top    = min(safe_top,    d_top)
-                    if d_bottom > 0: safe_bottom = min(safe_bottom, d_bottom)
+            # Candidate centres: ideal / reference / image edges / must-cover bounds,
+            # plus per neighbour the positions that make a crop edge just touch it.
+            xs = {center_x, ref_cx, half, w_img - half, mx_lo, mx_hi}
+            ys = {center_y, ref_cy, half, h_img - half, my_lo, my_hi}
+            for (l, t, r, b) in neigh:
+                xs.add(r + half); xs.add(l - half)
+                ys.add(b + half); ys.add(t - half)
+            xs = {feas_x(v) for v in xs}
+            ys = {feas_y(v) for v in ys}
 
-                if x_overlaps or y_overlaps:
-                    has_neighbor = True
-
-        # --- 4. Auto-Square Logic ---
-        cur_w = c_x2 - c_x1
-        cur_h = c_y2 - c_y1
-        final_dim = int(max(cur_w, cur_h))
-        
-        center_x = (c_x1 + c_x2) / 2
-        center_y = (c_y1 + c_y2) / 2
-        
-        # Calculate ideal square coordinates
-        c_x1 = int(center_x - final_dim / 2)
-        c_x2 = int(c_x1 + final_dim)
-        c_y1 = int(center_y - final_dim / 2)
-        c_y2 = int(c_y1 + final_dim)
-        
-        # --- 5. Collision-Aware Shift to fit inside image ---
-        # Layered clamps; each later layer overrides earlier ones on conflict.
-        # Priority: must-cover > face-safe > image boundary.
-        half = final_dim / 2
-
-        face_cx_lo = (center_x - safe_left  + half) if safe_left  != float('inf') else -float('inf')
-        face_cx_hi = (center_x + safe_right - half) if safe_right != float('inf') else  float('inf')
-        face_cy_lo = (center_y - safe_top   + half) if safe_top   != float('inf') else -float('inf')
-        face_cy_hi = (center_y + safe_bottom- half) if safe_bottom!= float('inf') else  float('inf')
-
-        # Image boundary (soft): keep crop inside image when nothing else conflicts.
-        new_cx = max(half, min(w_img - half, center_x))
-        new_cy = max(half, min(h_img - half, center_y))
-        # Face-safe (overrides image): going off-image is OK — pad mode fills, shift mode crops.
-        new_cx = max(face_cx_lo, min(face_cx_hi, new_cx))
-        new_cy = max(face_cy_lo, min(face_cy_hi, new_cy))
-        # Must-cover (overrides face-safe): original (pre-padding) rects must stay inside.
-        new_cx = max(must_x2 - half, min(must_x1 + half, new_cx))
-        new_cy = max(must_y2 - half, min(must_y1 + half, new_cy))
+            # Lexicographic objective: least neighbour overlap, then least off-image
+            # area, then closest to the ideal (target) centre.
+            best, best_key = None, None
+            for cx in xs:
+                for cy in ys:
+                    ov = 0.0
+                    for n in neigh:
+                        ov += _overlap(cx, cy, n)
+                    key = (round(ov, 3), round(_img_exit(cx, cy), 3),
+                           (cx - center_x) ** 2 + (cy - center_y) ** 2)
+                    if best_key is None or key < best_key:
+                        best_key, best = key, (cx, cy)
+            new_cx, new_cy = best
+            # A neighbour "matters" (-> asymmetric padding in Step 7) iff it pushed
+            # the crop off the lone-face reference placement.
+            has_neighbor = abs(new_cx - ref_cx) >= 0.5 or abs(new_cy - ref_cy) >= 0.5
 
         c_x1 = int(new_cx - half)
         c_x2 = int(c_x1 + final_dim)
