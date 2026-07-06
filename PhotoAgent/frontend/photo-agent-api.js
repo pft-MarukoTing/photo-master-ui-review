@@ -44,20 +44,20 @@ window.PhotoAgentApi = (() => {
       const response = await fetch(url);
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(data.error || `查詢狀態失敗：HTTP ${response.status}`);
+        throw new Error(`${data.error || `查詢狀態失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
       }
       if (data.status === "success") return;
-      if (data.status === "error") throw new Error(data.error || "AI 修圖失敗。");
+      if (data.status === "error") throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
       await sleep(intervalMs);
     }
-    throw new Error("處理逾時，請稍後再試。");
+    throw new Error(`處理逾時，請稍後再試。（Job ID: ${jobId}）`);
   }
 
   async function getJobResult(jobId, { path = "local" } = {}) {
     const response = await fetch(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
-      throw new Error(data.error || `取得結果失敗：HTTP ${response.status}`);
+      throw new Error(`${data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
     }
     return data; // { status, image_url, result: { analysis, quality_check, usage } }
   }
