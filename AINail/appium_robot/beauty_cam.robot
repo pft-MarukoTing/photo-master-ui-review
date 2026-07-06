@@ -11,11 +11,13 @@ ${BUNDLE_ID}           com.meitu.myxj
 Meitu Test Case
     Open Meitu Application
     Click Page Element    accessibility_id=Beautify
-    Scroll To Bottom Of Photo List
+    Scroll To Bottom Of Photo List    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView
     Click Page Element    xpath=//XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView/XCUIElementTypeCell[last()]/XCUIElementTypeOther/XCUIElementTypeImage
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Retouch"]
     Scroll To Retouch Feature    Nail Art
     Click Page Element    xpath=//XCUIElementTypeCollectionView/XCUIElementTypeCell[.//XCUIElementTypeStaticText[@name="Nail Art"]]
+    Click Page Element    accessibility_id=Custom
+    Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
 
 *** Keywords ***
 Open Meitu Application
@@ -36,10 +38,11 @@ Click Page Element
     Click Element    ${element}
 
 Scroll To Bottom Of Photo List
+    [Arguments]    ${container_xpath}
     ${previous_y}=    Set Variable    ${NONE}
     FOR    ${i}    IN RANGE    30
         ${rect}=    Get Element Rect
-        ...    xpath=//XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView/XCUIElementTypeCell[last()]
+        ...    xpath=${container_xpath}/XCUIElementTypeCell[last()]
         ${current_y}=    Set Variable    ${rect}[y]
         IF    $current_y == $previous_y
             BREAK
