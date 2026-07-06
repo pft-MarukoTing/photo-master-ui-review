@@ -10,6 +10,7 @@ ${BUNDLE_ID}           com.meitu.myxj
 *** Test Cases ***
 Meitu Test Case
     Open Meitu Application
+    Click Page Element    accessibility_id=Beautify
 
 *** Keywords ***
 Open Meitu Application
@@ -23,3 +24,8 @@ Open Meitu Application
     ...    bundleId=${BUNDLE_ID}
     ...    showXcodeLog=${True}
     ...    newCommandTimeout=3600
+
+Click Page Element
+    [Arguments]    ${element}
+    Wait Until Element Is Visible    ${element}    timeout=20s
+    Click Element    ${element}
