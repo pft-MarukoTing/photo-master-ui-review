@@ -12,6 +12,11 @@
   const procSub = document.querySelector(".proc-sub");
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
+  const processingPathRow = document.querySelector("#processing-path-row");
+
+  if (processingPathRow && window.location.href.includes("debug")) {
+    processingPathRow.style.display = "";
+  }
 
   function populateTimingSection() {
     const timings = getTimings();
