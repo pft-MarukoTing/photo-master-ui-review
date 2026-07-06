@@ -10,7 +10,7 @@ from backend.routes.static import static_bp
 def create_app(config=None):
     app = Flask(__name__)
     app.config["FRONTEND_DIR"] = os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "js_version"
+        os.path.dirname(os.path.dirname(__file__)), "frontend"
     )
     if config:
         app.config.update(config)
