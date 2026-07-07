@@ -8,6 +8,7 @@ Usage:
 """
 import argparse
 import time
+import urllib.parse
 from pathlib import Path
 
 from crawler import build_driver, accept_cookies
@@ -19,7 +20,8 @@ args = parser.parse_args()
 
 driver = build_driver(headless=False)
 try:
-    driver.get(f"https://www.google.com/search?q={args.query}&tbm=isch")
+    params = urllib.parse.urlencode({"q": args.query, "tbm": "isch"})
+    driver.get(f"https://www.google.com/search?{params}")
     accept_cookies(driver)
     time.sleep(2)
 

@@ -66,8 +66,11 @@ def collect_source_pages(driver: uc.Chrome) -> set[str]:
     """Return the set of source-page URLs from every result card's data-lpage attribute."""
     pages: set[str] = set()
     for el in driver.find_elements(By.CSS_SELECTOR, "[data-lpage]"):
-        href = el.get_attribute("data-lpage") or ""
-        if href:
+        href = (el.get_attribute("data-lpage") or "").strip()
+        if not href:
+            continue
+        parsed = urllib.parse.urlparse(href)
+        if parsed.scheme in ("http", "https") and parsed.netloc:
             pages.add(href)
     return pages
 
@@ -171,8 +174,11 @@ def url_to_filename(url: str) -> str:
     """Return a sanitized filename for url, always with a .jpg extension."""
     parsed = urllib.parse.urlparse(url)
     stem = Path(parsed.path.rstrip("/").split("/")[-1]).stem
-    stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", stem)
-    return f"{stem}.jpg" if stem else "image.jpg"
+    stem = re.sub(r"[^a-zA-Z0-9_\-]", "_", stem) or "image"
+    host = re.sub(r"[^a-zA-Z0-9_\-]", "_", parsed.netloc)
+    q = re.sub(r"[^a-zA-Z0-9_\-]", "_", parsed.query)[:12]
+    name = "_".join(p for p in (host, stem, q) if p)[:180]
+    return f"{name}.jpg"
 
 
 def save_as_jpg(content: bytes, dest: Path):
@@ -232,6 +238,11 @@ def crawl(
         chosen = pick_image_from_page(page.text, imgrefurl)
         if not chosen:
             print(f"  [{i}/{len(items)}] SKIP (no image found on page): {imgrefurl}")
+            continue
+
+        parsed_img = urllib.parse.urlparse(chosen)
+        if parsed_img.scheme not in ("http", "https") or not parsed_img.netloc:
+            print(f"  [{i}/{len(items)}] SKIP (non-http image URL): {chosen}")
             continue
 
         filename = url_to_filename(chosen)
