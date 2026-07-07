@@ -10,7 +10,6 @@ ${BUNDLE_ID}           com.meitu.myxj
 *** Test Cases ***
 Meitu Test Case
     Open Meitu Application
-    Click Page Element    accessibility_id=Beautify
     FOR    ${photo_offset}    IN RANGE    0    11
         ${custom_offset}=    Evaluate    ${photo_offset} + 50
         Beautify Nail Art Photo    ${photo_offset}    ${custom_offset}
@@ -19,6 +18,7 @@ Meitu Test Case
 *** Keywords ***
 Beautify Nail Art Photo
     [Arguments]    ${photo_offset}    ${custom_offset}
+    Click Page Element    accessibility_id=Beautify
     Scroll To Bottom Of Photo List    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView
     Click Photo From Bottom By Grid    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView    ${photo_offset}
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Retouch"]
@@ -31,6 +31,7 @@ Beautify Nail Art Photo
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Save"]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
+    Click Page Element    accessibility_id=CosmesisPhotoBrowerBackButton
 
 Open Meitu Application
     Open Application
