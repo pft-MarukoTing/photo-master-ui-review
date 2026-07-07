@@ -37,21 +37,8 @@ def _quality_check_fallback(error: Exception) -> dict:
     }
 
 
-def run_pipeline(
-    image_bytes: bytes,
-    user_prompt: str,
-    preset_key: str,
-    quality: str,
-    ai_photo_editing: bool = True,
-) -> dict:
-    """
-    Full 5-step pipeline.
-    Returns: {
-        result_image: str,          # base64 PNG (no data-URL prefix)
-        result_image_data_url: str, # data:image/png;base64,...
-        result_text: dict           # analysis + quality_check + usage
-    }
-    """
+def analyze_stage(image_bytes: bytes, user_prompt: str) -> dict:
+    """Steps 1-3: read the photo, analyze it, and review the user's instruction."""
 
     # Step 1 — read
     logger.info("Step 1: image loaded (%d bytes)", len(image_bytes))
@@ -68,6 +55,27 @@ def run_pipeline(
     user_instruction = review_user_instruction(user_prompt, analysis)
     analysis = {**analysis, "user_instruction": user_instruction}
     logger.info("Step 3 done in %.2fs: has_direction=%s", time.time() - t0, user_instruction.get("has_user_direction"))
+
+    return analysis
+
+
+def finish_stage(
+    image_bytes: bytes,
+    analysis: dict,
+    user_prompt: str,
+    preset_key: str,
+    quality: str,
+    ai_photo_editing: bool = True,
+) -> dict:
+    """Steps 4-6: crop validation, then AI edit + QA (or local enhancement).
+
+    Returns: {
+        result_image: str,          # base64 PNG (no data-URL prefix)
+        result_image_data_url: str, # data:image/png;base64,...
+        result_text: dict           # analysis + quality_check + usage
+    }
+    """
+    user_instruction = analysis.get("user_instruction") or {}
 
     # Step 4 — crop validation (conditional)
     t0 = time.time()
@@ -146,3 +154,15 @@ def run_pipeline(
             "usage": usage,
         },
     }
+
+
+def run_pipeline(
+    image_bytes: bytes,
+    user_prompt: str,
+    preset_key: str,
+    quality: str,
+    ai_photo_editing: bool = True,
+) -> dict:
+    """Full pipeline: analyze_stage followed by finish_stage."""
+    analysis = analyze_stage(image_bytes, user_prompt)
+    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing)

@@ -62,6 +62,76 @@ window.PhotoAgentApi = (() => {
     return data; // { status, image_url, result: { analysis, quality_check, usage } }
   }
 
+  // ── Two-stage local flow: analyze now, review, /continue later ─────────
+  // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
+  // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
+
+  async function analyzeJob({ file, preset, imageQuality, aiPhotoEditing, userPrompt }) {
+    const form = new FormData();
+    form.append("image", file, file.name || "photo.jpg");
+    form.append("preset", preset);
+    form.append("image_quality", imageQuality);
+    form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    if (userPrompt) form.append("user_prompt", userPrompt);
+
+    const response = await fetch(`${BASE_URL}/api/photo-agent/analyze`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `送出分析失敗：HTTP ${response.status}`);
+    }
+    return data.job_id;
+  }
+
+  async function getAnalyzeResult(jobId) {
+    const response = await fetch(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.status !== "success") {
+      throw new Error(`${data.error || `取得分析結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+    }
+    return data; // { status, result: { analysis } }
+  }
+
+  async function continueJob(jobId, { analysis, preset, imageQuality, aiPhotoEditing, userPrompt }) {
+    const response = await fetch(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        analysis,
+        preset,
+        image_quality: imageQuality,
+        ai_photo_editing: aiPhotoEditing ? "true" : "false",
+        user_prompt: userPrompt || ""
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`${data.error || `送出後續處理失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+    }
+    return data.job_id;
+  }
+
+  async function analyzeAipoc({ file, preset, imageQuality, aiPhotoEditing, userPrompt }) {
+    const form = new FormData();
+    form.append("image", file, file.name || "photo.jpg");
+    form.append("preset", preset);
+    form.append("image_quality", imageQuality);
+    form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    if (userPrompt) form.append("user_prompt", userPrompt);
+
+    const response = await fetch(`${BASE_URL}/api/photo-agent/aipoc/analyze`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || data.status !== "success") {
+      throw new Error(data.error || `AIPoC 分析失敗：HTTP ${response.status}`);
+    }
+    return data; // { status, analysis }
+  }
+
   // Server-side UI flags (e.g. `--debug-ui` on run_backend.py). Falls back to
   // {} on any failure so a missing/unreachable backend never blocks the page.
   async function getUiConfig() {
@@ -74,5 +144,14 @@ window.PhotoAgentApi = (() => {
     }
   }
 
-  return { submitJob, pollJobStatus, getJobResult, getUiConfig };
+  return {
+    submitJob,
+    pollJobStatus,
+    getJobResult,
+    getUiConfig,
+    analyzeJob,
+    getAnalyzeResult,
+    continueJob,
+    analyzeAipoc
+  };
 })();

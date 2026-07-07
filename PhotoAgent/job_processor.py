@@ -8,7 +8,7 @@ import time
 
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
-from pipeline import run_pipeline
+from pipeline import run_pipeline, analyze_stage, finish_stage
 
 
 def build_job_metadata(task_info):
@@ -33,6 +33,11 @@ def derive_dst_keys(dst_key):
         prefix + '0_res0_thumb_0.png',   # result image
         prefix + '0_res0_thumb_1.json',  # result text (analysis + QA)
     ]
+
+
+def derive_analysis_key(dst_key):
+    prefix = dst_key.rsplit('/', 1)[0] + '/' if '/' in dst_key else ''
+    return prefix + '0_res0_analysis.json'
 
 
 class PhotoAgentJobProcessor:
@@ -76,7 +81,7 @@ class PhotoAgentJobProcessor:
             self.logger.info(task_id, f'[{EFFECT_NAME}] User prompt: {params.get("user_prompt")}')
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
 
-        derived_dst_keys = derive_dst_keys(request["dst_key"])
+        stage = params.get("stage", "full")
 
         try:
             src_paths = self.download_sources(task_id, request["src_keys"], session_dir)
@@ -85,14 +90,43 @@ class PhotoAgentJobProcessor:
             with open(image_path, 'rb') as f:
                 image_bytes = f.read()
 
-            self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes)')
-            result = run_pipeline(
-                image_bytes=image_bytes,
-                user_prompt=params["user_prompt"],
-                preset_key=params["preset"],
-                quality=params["image_quality"],
-                ai_photo_editing=params["ai_photo_editing"],
-            )
+            if stage == "analyze":
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Running analyze_stage ({len(image_bytes)} bytes)')
+                analysis = analyze_stage(image_bytes, params["user_prompt"])
+
+                analysis_path = os.path.join(work_dir, 'analysis.json')
+                with open(analysis_path, 'w', encoding='utf-8') as f:
+                    json.dump(analysis, f, ensure_ascii=False, indent=2)
+
+                analysis_key = derive_analysis_key(request["dst_key"])
+                self.logger.info(task_id, f'[{EFFECT_NAME}] analyze_stage done, uploading artifact')
+                self.upload_artifacts(task_id, [analysis_path], [analysis_key])
+
+                job_results = {f"{request['act_id']}_res0": {"cusKeys": [analysis_key]}}
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Job results: {job_results}')
+                return job_results
+
+            if stage == "finish":
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Running finish_stage ({len(image_bytes)} bytes)')
+                result = finish_stage(
+                    image_bytes=image_bytes,
+                    analysis=params["analysis"],
+                    user_prompt=params["user_prompt"],
+                    preset_key=params["preset"],
+                    quality=params["image_quality"],
+                    ai_photo_editing=params["ai_photo_editing"],
+                )
+            else:
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes)')
+                result = run_pipeline(
+                    image_bytes=image_bytes,
+                    user_prompt=params["user_prompt"],
+                    preset_key=params["preset"],
+                    quality=params["image_quality"],
+                    ai_photo_editing=params["ai_photo_editing"],
+                )
+
+            derived_dst_keys = derive_dst_keys(request["dst_key"])
 
             result_image_path = os.path.join(work_dir, '0_res0_thumb_0.png')
             with open(result_image_path, 'wb') as f:

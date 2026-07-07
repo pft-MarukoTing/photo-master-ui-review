@@ -1,8 +1,17 @@
 (() => {
   const { els, showSection, showError, hideError, addTiming, getTimings } = window.PhotoAgentDom;
   const { presets } = window.PhotoAgentConfig;
-  const { submitJob, pollJobStatus, getJobResult, getUiConfig } = window.PhotoAgentApi;
-  const { renderResult } = window.PhotoAgentResults;
+  const {
+    submitJob,
+    pollJobStatus,
+    getJobResult,
+    getUiConfig,
+    analyzeJob,
+    getAnalyzeResult,
+    continueJob,
+    analyzeAipoc
+  } = window.PhotoAgentApi;
+  const { renderResult, renderAnalysisPreview } = window.PhotoAgentResults;
 
   let selectedFile = null;
   let previewUrl = "";
@@ -57,6 +66,35 @@
     timingDetails.hidden = false;
   }
 
+  // ── Pause-for-review between analyze and finish ────────────────────────
+  let continueHandler = null;
+
+  function clearContinueWait() {
+    if (continueHandler) {
+      els.viewResultsBtn.removeEventListener("click", continueHandler);
+      continueHandler = null;
+    }
+    els.viewResultsWrap.hidden = true;
+  }
+
+  function waitForContinue() {
+    return new Promise((resolve) => {
+      clearContinueWait(); // drop any stale listener from an abandoned prior run
+      continueHandler = () => {
+        clearContinueWait();
+        resolve();
+      };
+      els.viewResultsBtn.addEventListener("click", continueHandler);
+      els.viewResultsWrap.hidden = false;
+    });
+  }
+
+  function showAnalysisPreview(analysis, preset) {
+    renderAnalysisPreview({ analysis, preset });
+    if (els.analysisPreview) els.analysisPreview.hidden = false;
+    if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
+  }
+
   function setSelectedFile(file) {
     hideError();
     if (!file || !file.type.startsWith("image/")) {
@@ -107,30 +145,55 @@
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     if (stepsGrid) stepsGrid.hidden = true;
-    els.viewResultsWrap.hidden = true;
+    clearContinueWait();
+    if (els.analysisPreview) els.analysisPreview.hidden = true;
     procVisual.classList.remove("done");
     procVisual.style.height = "";
-    if (procSub) procSub.textContent = "AI 正在分析並修圖，請稍候…";
+    if (procSub) procSub.textContent = "AI 正在分析照片，請稍候…";
     showSection("processing");
 
     try {
       let stepStart = Date.now();
-      const jobId = await submitJob({
-        file: selectedFile,
-        preset: presetKey,
-        imageQuality,
-        aiPhotoEditing,
-        userPrompt,
-        path: processingPath
-      });
-      addTiming("提交任務", Date.now() - stepStart);
+      let analysis;
+      let analyzeJobId; // only set for the "local" path, needed by continueJob
+
+      if (processingPath === "aipoc") {
+        const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt });
+        analysis = analyzeData.analysis;
+        addTiming("初步分析", Date.now() - stepStart);
+      } else {
+        analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt });
+        addTiming("送出分析任務", Date.now() - stepStart);
+
+        stepStart = Date.now();
+        await pollJobStatus(analyzeJobId, { path: "local" });
+        addTiming("分析中", Date.now() - stepStart);
+
+        stepStart = Date.now();
+        const analyzeResult = await getAnalyzeResult(analyzeJobId);
+        analysis = analyzeResult.result.analysis;
+        addTiming("取得分析結果", Date.now() - stepStart);
+      }
+
+      showAnalysisPreview(analysis, preset);
+      await waitForContinue();
+      if (procSub) procSub.textContent = "AI 正在修圖，請稍候…";
 
       stepStart = Date.now();
-      await pollJobStatus(jobId, { path: processingPath });
-      addTiming("AI 處理中", Date.now() - stepStart);
+      let finalJobId;
+      if (processingPath === "aipoc") {
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt, path: "aipoc" });
+      } else {
+        finalJobId = await continueJob(analyzeJobId, { analysis, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt });
+      }
+      addTiming("提交後續處理", Date.now() - stepStart);
 
       stepStart = Date.now();
-      const { image_url: imageUrl, result } = await getJobResult(jobId, { path: processingPath });
+      await pollJobStatus(finalJobId, { path: processingPath });
+      addTiming("AI 修圖中", Date.now() - stepStart);
+
+      stepStart = Date.now();
+      const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
       addTiming("取得結果", Date.now() - stepStart);
 
       const data = {
@@ -150,6 +213,8 @@
       showError(friendlyError(error));
     } finally {
       els.startButton.disabled = false;
+      clearContinueWait();
+      if (els.analysisPreview) els.analysisPreview.hidden = true;
     }
   }
 
@@ -171,7 +236,12 @@
     els.origDim.textContent = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
-    els.viewResultsWrap.hidden = true;
+    clearContinueWait();
+    if (els.analysisPreview) els.analysisPreview.hidden = true;
+    // startSubmit()'s own `finally` never runs if the user resets instead of
+    // clicking continue (waitForContinue's promise is left pending), so
+    // re-enable Start explicitly here too.
+    els.startButton.disabled = false;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     showSection("upload");

@@ -248,5 +248,36 @@ window.PhotoAgentResults = (() => {
     ]);
   }
 
-  return { renderResult };
+  // Shown mid-processing, right after analyze_stage finishes and before the
+  // user clicks "continue" -- a lightweight subset of renderResult's fields
+  // (no image/QA yet, those only exist after finish_stage runs).
+  function renderAnalysisPreview({ analysis, preset }) {
+    if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
+    if (els.apSubjectTags) {
+      renderTags(els.apSubjectTags, [
+        analysis.subject_category || "未知類型",
+        analysis.scene_category || "未知場景"
+      ]);
+    }
+
+    if (els.apDiagnosis) {
+      els.apDiagnosis.textContent = joinParts([
+        analysis.aesthetic_diagnosis || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。",
+        analysis.main_subject ? `主體：${analysis.main_subject}。` : "",
+        analysis.scene_type ? `場景：${analysis.scene_type}。` : ""
+      ]);
+    }
+
+    if (els.apComposition) {
+      const userInstruction = analysis.user_instruction || {};
+      els.apComposition.textContent = joinParts([
+        userInstruction.has_user_direction
+          ? `使用者目標：${userInstruction.user_intent_summary || userInstruction.normalized_user_direction || ""}。`
+          : (analysis.edit_intent || preset?.intent || ""),
+        analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : ""
+      ]);
+    }
+  }
+
+  return { renderResult, renderAnalysisPreview };
 })();

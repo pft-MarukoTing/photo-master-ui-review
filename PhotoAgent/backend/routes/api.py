@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from photo_agent.param_validation import validate_photo_agent_request
+from pipeline import analyze_stage
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes
 from backend.services.template_params import get_engine_params_template
 
@@ -12,11 +13,17 @@ api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
 
 
 def _parse_and_validate_params(form):
-    """Returns (params, None) or (None, error_message)."""
+    """Returns (params, None) or (None, error_message).
+
+    `form` may be a werkzeug form (multipart routes) or a plain dict (JSON
+    routes like /continue) -- both support .get(key, default), and
+    ai_photo_editing is coerced to str() first since a JSON body may send a
+    real bool instead of the string "true"/"false" multipart forms send.
+    """
     params = {
         "preset": form.get("preset", "natural"),
         "image_quality": form.get("image_quality", "medium"),
-        "ai_photo_editing": form.get("ai_photo_editing", "true").lower() == "true",
+        "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
@@ -84,6 +91,105 @@ def result(job_id):
     image_url = create_presigned_url(image_key, "get_object")
 
     return jsonify({"status": "success", "image_url": image_url, "result": result_text})
+
+
+# ── Two-stage local flow: analyze now, review, /continue later ─────────────
+#
+# /submit + /result above run the full pipeline in one job. These routes let
+# the frontend pause after analysis (steps 1-3) for user review before
+# committing to the slower/costlier edit step (steps 4-6). Stage 2 is a
+# *separate* queued job rather than the same job resumed mid-flight, since
+# the shared queue worker (server.py) has no pause/resume primitive -- it
+# just runs one job to completion per dequeue.
+
+
+@api_bp.post("/analyze")
+def analyze():
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        return jsonify({"error": "image file is required"}), 400
+
+    params, error = _parse_and_validate_params(request.form)
+    if error:
+        return jsonify({"error": error}), 400
+    params["stage"] = "analyze"
+
+    engine_params = get_engine_params_template()
+    engine_params["acts"][0]["params"] = params
+    job_id = enqueue(engine_params, src_content=[image.read()])
+    return jsonify({"job_id": job_id}), 202
+
+
+@api_bp.get("/analyze/result/<job_id>")
+def analyze_result(job_id):
+    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    if info is None:
+        return jsonify({"error": "Job not found"}), 404
+
+    if info.get("status") != "success":
+        return jsonify({"status": info.get("status"), "error": info.get("error")})
+
+    result_keys = (info.get("0_res0") or {}).get("cusKeys") or []
+    if not result_keys:
+        return jsonify({"status": "error", "error": "job succeeded but analysis key is missing"})
+
+    analysis_bytes, download_error = download_bytes(result_keys[0], job_id)
+    if download_error or analysis_bytes is None:
+        return jsonify({"status": "error", "error": f"failed to download analysis: {download_error}"})
+
+    analysis = json.loads(analysis_bytes)
+    return jsonify({"status": "success", "result": {"analysis": analysis}})
+
+
+@api_bp.post("/continue/<job_id>")
+def continue_job(job_id):
+    body = request.get_json(silent=True) or {}
+
+    analysis = body.get("analysis")
+    if not isinstance(analysis, dict) or "user_instruction" not in analysis:
+        return jsonify({"error": "analysis (from /analyze/result) is required"}), 400
+
+    params, error = _parse_and_validate_params(body)
+    if error:
+        return jsonify({"error": error}), 400
+    params["stage"] = "finish"
+    params["analysis"] = analysis
+
+    prior = get_job_info(job_id, keyToGet=["srcKeys"])
+    if not prior or not prior.get("srcKeys"):
+        return jsonify({"error": "Prior job not found"}), 404
+
+    engine_params = get_engine_params_template()
+    engine_params["srcKeys"] = prior["srcKeys"]
+    engine_params["acts"][0]["params"] = params
+    new_job_id = enqueue(engine_params, src_content=None)
+    return jsonify({"job_id": new_job_id}), 202
+
+
+@api_bp.post("/aipoc/analyze")
+def aipoc_analyze():
+    """Local preview analysis for the AIPoC path.
+
+    AIPoC's remote gateway only exposes one opaque "run everything" task --
+    it can't be paused/resumed. This runs the same steps 1-3 locally (a
+    plain OpenAI call, not queue-bound) just to show the user something to
+    confirm; /aipoc/submit below still redoes its own analysis from scratch
+    when "continue" is clicked.
+    """
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        return jsonify({"error": "image file is required"}), 400
+
+    params, error = _parse_and_validate_params(request.form)
+    if error:
+        return jsonify({"error": error}), 400
+
+    try:
+        analysis = analyze_stage(image.read(), params.get("user_prompt"))
+    except Exception as exc:
+        return jsonify({"error": f"分析失敗：{exc}"}), 502
+
+    return jsonify({"status": "success", "analysis": analysis})
 
 
 # ── AIPoC-backed routes (/aipoc/) ───────────────────────────────────────────
