@@ -27,7 +27,7 @@ Beautify Nail Art Photo
     Click Page Element    accessibility_id=Custom
     Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
     Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    ${custom_offset}
-    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]    timeout=90s
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Save"]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
@@ -45,8 +45,8 @@ Open Meitu Application
     ...    newCommandTimeout=3600
 
 Click Page Element
-    [Arguments]    ${element}
-    Wait Until Element Is Visible    ${element}    timeout=20s
+    [Arguments]    ${element}    ${timeout}=20s
+    Wait Until Element Is Visible    ${element}    timeout=${timeout}
     Click Element    ${element}
 
 Scroll To Bottom Of Photo List
