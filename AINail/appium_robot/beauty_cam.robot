@@ -6,12 +6,16 @@ Resource          local_config.robot
 *** Variables ***
 ${REMOTE_URL}          http://127.0.0.1:4723
 ${BUNDLE_ID}           com.meitu.myxj
+${SOURCE_PHOTO_START_OFFSET}         0
+${REFERENCE_PHOTO_START_OFFSET}      50
+${ITERATION_COUNT}                   50
 
 *** Test Cases ***
 Meitu Test Case
     Open Meitu Application
-    FOR    ${photo_offset}    IN RANGE    0    11
-        ${custom_offset}=    Evaluate    ${photo_offset} + 50
+    FOR    ${i}    IN RANGE    ${ITERATION_COUNT}
+        ${photo_offset}=    Evaluate    ${SOURCE_PHOTO_START_OFFSET} + ${i}
+        ${custom_offset}=    Evaluate    ${REFERENCE_PHOTO_START_OFFSET} + ${i}
         Beautify Nail Art Photo    ${photo_offset}    ${custom_offset}
     END
 
