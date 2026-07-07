@@ -1,5 +1,6 @@
 import base64
 import logging
+import time
 
 from image_tools import (
     normalize_crop_box,
@@ -56,17 +57,20 @@ def run_pipeline(
     logger.info("Step 1: image loaded (%d bytes)", len(image_bytes))
 
     # Step 2 — analyze
+    t0 = time.time()
     logger.info("Step 2: analyzing photo")
     analysis = analyze_photo(image_bytes)
-    logger.info("Step 2 done: subject=%s scene=%s", analysis.get("subject_category"), analysis.get("scene_category"))
+    logger.info("Step 2 done in %.2fs: subject=%s scene=%s", time.time() - t0, analysis.get("subject_category"), analysis.get("scene_category"))
 
     # Step 3 — review user instruction
+    t0 = time.time()
     logger.info("Step 3: reviewing user instruction (has_prompt=%s)", bool(user_prompt))
     user_instruction = review_user_instruction(user_prompt, analysis)
     analysis = {**analysis, "user_instruction": user_instruction}
-    logger.info("Step 3 done: has_direction=%s", user_instruction.get("has_user_direction"))
+    logger.info("Step 3 done in %.2fs: has_direction=%s", time.time() - t0, user_instruction.get("has_user_direction"))
 
     # Step 4 — crop validation (conditional)
+    t0 = time.time()
     logger.info("Step 4: evaluating crop")
     planned_crop = normalize_crop_box(analysis.get("crop_box"), analysis)
     has_ai_candidate = any(
@@ -85,33 +89,36 @@ def run_pipeline(
             risk=risk,
             force_validation=has_user_crop,
         )
-        logger.info("Step 4 done: selected=%s", (analysis.get("crop_validation") or {}).get("selected_candidate_label"))
+        logger.info("Step 4 done in %.2fs: selected=%s", time.time() - t0, (analysis.get("crop_validation") or {}).get("selected_candidate_label"))
     else:
-        logger.info("Step 4: crop validation skipped")
+        logger.info("Step 4 done in %.2fs: crop validation skipped", time.time() - t0)
 
     if ai_photo_editing:
         # Step 5 — AI edit
+        t0 = time.time()
         logger.info("Step 5: editing photo (preset=%s quality=%s)", preset_key, quality)
         edit_result = edit_photo(image_bytes, analysis, quality, preset_key)
         image_b64 = edit_result["image_b64"]
-        logger.info("Step 5 done: image returned")
+        logger.info("Step 5 done in %.2fs: image returned", time.time() - t0)
 
         # Step 6 — quality check
+        t0 = time.time()
         logger.info("Step 6: running quality check")
         try:
             qa = quality_check_photo(image_bytes, image_b64, analysis)
-            logger.info("Step 6 done: score=%s pass=%s", qa.get("score"), qa.get("pass"))
+            logger.info("Step 6 done in %.2fs: score=%s pass=%s", time.time() - t0, qa.get("score"), qa.get("pass"))
         except Exception as exc:
-            logger.warning("Step 6 QA failed: %s", exc)
+            logger.warning("Step 6 QA failed in %.2fs: %s", time.time() - t0, exc)
             qa = _quality_check_fallback(exc)
 
         usage = edit_result.get("usage")
     else:
         # Step 5 — local crop + basic enhancement (no AI API call)
+        t0 = time.time()
         logger.info("Step 5: local enhancement only (ai_photo_editing=False)")
         enhanced_bytes = create_local_enhanced_bytes(image_bytes, analysis.get("crop_box"), analysis)
         image_b64 = base64.b64encode(enhanced_bytes).decode()
-        logger.info("Step 5 done: local enhancement applied")
+        logger.info("Step 5 done in %.2fs: local enhancement applied", time.time() - t0)
 
         # Step 6 — skip QA
         qa = {

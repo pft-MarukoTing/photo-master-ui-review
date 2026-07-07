@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import shutil
+import time
 
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
@@ -60,6 +61,7 @@ class PhotoAgentJobProcessor:
             self.artifact_store.upload_file(local_path, dst_keys[i])
 
     def process_for_api(self, task_id, task_info):
+        start_ts = time.time()
         request = validate_photo_agent_request(task_info, task_id=task_id)
 
         safe_id = safe_task_folder(task_id)
@@ -108,6 +110,8 @@ class PhotoAgentJobProcessor:
             return job_results
 
         finally:
+            elapsed = time.time() - start_ts
+            self.logger.info(task_id, f'[{EFFECT_NAME}] process_for_api finished in {elapsed:.2f}s')
             cleanup_dir = os.path.join(self.monitor_dst_dir, session_dir)
             if os.path.exists(cleanup_dir):
                 shutil.rmtree(cleanup_dir)

@@ -18,7 +18,7 @@
   // started with `--debug-ui` / DEBUG_UI=true (testbed deployments).
   if (processingPathRow) {
     if (window.location.href.includes("debug")) {
-    processingPathRow.style.display = "";
+      processingPathRow.style.display = "";
     } else {
       getUiConfig().then((cfg) => {
         if (cfg.debugUi) processingPathRow.style.display = "";
@@ -113,8 +113,8 @@
     if (procSub) procSub.textContent = "AI 正在分析並修圖，請稍候…";
     showSection("processing");
 
-    const start = Date.now();
     try {
+      let stepStart = Date.now();
       const jobId = await submitJob({
         file: selectedFile,
         preset: presetKey,
@@ -123,8 +123,15 @@
         userPrompt,
         path: processingPath
       });
+      addTiming("提交任務", Date.now() - stepStart);
+
+      stepStart = Date.now();
       await pollJobStatus(jobId, { path: processingPath });
+      addTiming("AI 處理中", Date.now() - stepStart);
+
+      stepStart = Date.now();
       const { image_url: imageUrl, result } = await getJobResult(jobId, { path: processingPath });
+      addTiming("取得結果", Date.now() - stepStart);
 
       const data = {
         image: imageUrl,
@@ -135,7 +142,6 @@
         retryCount: 0
       };
 
-      addTiming("AI 修圖", Date.now() - start);
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
       showSection("results");
