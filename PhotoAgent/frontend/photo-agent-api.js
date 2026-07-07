@@ -62,5 +62,17 @@ window.PhotoAgentApi = (() => {
     return data; // { status, image_url, result: { analysis, quality_check, usage } }
   }
 
-  return { submitJob, pollJobStatus, getJobResult };
+  // Server-side UI flags (e.g. `--debug-ui` on run_backend.py). Falls back to
+  // {} on any failure so a missing/unreachable backend never blocks the page.
+  async function getUiConfig() {
+    try {
+      const response = await fetch(`${BASE_URL}/api/config`);
+      if (!response.ok) return {};
+      return await response.json();
+    } catch {
+      return {};
+    }
+  }
+
+  return { submitJob, pollJobStatus, getJobResult, getUiConfig };
 })();

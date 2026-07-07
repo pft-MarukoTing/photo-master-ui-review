@@ -1,7 +1,7 @@
 (() => {
   const { els, showSection, showError, hideError, addTiming, getTimings } = window.PhotoAgentDom;
   const { presets } = window.PhotoAgentConfig;
-  const { submitJob, pollJobStatus, getJobResult } = window.PhotoAgentApi;
+  const { submitJob, pollJobStatus, getJobResult, getUiConfig } = window.PhotoAgentApi;
   const { renderResult } = window.PhotoAgentResults;
 
   let selectedFile = null;
@@ -14,8 +14,16 @@
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
 
-  if (processingPathRow && window.location.href.includes("debug")) {
+  // Shown in the URL-debug case (?debug etc.) or when the backend was
+  // started with `--debug-ui` / DEBUG_UI=true (testbed deployments).
+  if (processingPathRow) {
+    if (window.location.href.includes("debug")) {
     processingPathRow.style.display = "";
+    } else {
+      getUiConfig().then((cfg) => {
+        if (cfg.debugUi) processingPathRow.style.display = "";
+      });
+    }
   }
 
   function populateTimingSection() {
