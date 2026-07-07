@@ -60,8 +60,8 @@ Scroll To Bottom Of Photo List
             BREAK
         END
         ${previous_y}=    Set Variable    ${current_y}
-        Swipe    start_x=207    start_y=750    end_x=207    end_y=250    duration=300ms
-        Sleep    1.2s
+        Swipe    start_x=207    start_y=780    end_x=207    end_y=200    duration=150ms
+        Sleep    0.5s
     END
 
 Click Photo From Bottom By Grid
