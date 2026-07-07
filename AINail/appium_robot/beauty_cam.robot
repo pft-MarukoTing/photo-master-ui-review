@@ -1,0 +1,142 @@
+*** Settings ***
+Library           AppiumLibrary
+Resource          local_config.robot
+# Test Teardown     Close Application
+
+*** Variables ***
+${REMOTE_URL}          http://127.0.0.1:4723
+${BUNDLE_ID}           com.meitu.myxj
+${SOURCE_PHOTO_START_OFFSET}         0
+${REFERENCE_PHOTO_START_OFFSET}      50
+${ITERATION_COUNT}                   50
+
+*** Test Cases ***
+Meitu Test Case
+    Open Meitu Application
+    FOR    ${i}    IN RANGE    ${ITERATION_COUNT}
+        ${photo_offset}=    Evaluate    ${SOURCE_PHOTO_START_OFFSET} + ${i}
+        ${custom_offset}=    Evaluate    ${REFERENCE_PHOTO_START_OFFSET} + ${i}
+        Beautify Nail Art Photo    ${photo_offset}    ${custom_offset}
+    END
+
+*** Keywords ***
+Beautify Nail Art Photo
+    [Arguments]    ${photo_offset}    ${custom_offset}
+    Click Page Element    accessibility_id=Beautify
+    Scroll To Bottom Of Photo List    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView
+    Click Photo From Bottom By Grid    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView    ${photo_offset}
+    Click Page Element    xpath=//XCUIElementTypeButton[@name="Retouch"]
+    Scroll To Retouch Feature    Nail Art
+    Click Page Element    xpath=//XCUIElementTypeCollectionView/XCUIElementTypeCell[.//XCUIElementTypeStaticText[@name="Nail Art"]]
+    Click Page Element    accessibility_id=Custom
+    Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
+    Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    ${custom_offset}
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]    timeout=90s
+    Click Page Element    xpath=//XCUIElementTypeButton[@name="Save"]
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
+    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
+    Click Page Element    accessibility_id=CosmesisPhotoBrowerBackButton
+
+Open Meitu Application
+    Open Application
+    ...    ${REMOTE_URL}
+    ...    platformName=iOS
+    ...    automationName=XCUITest
+    ...    deviceName=${DEVICE_NAME}
+    ...    platformVersion=${PLATFORM_VERSION}
+    ...    udid=${UDID}
+    ...    bundleId=${BUNDLE_ID}
+    ...    showXcodeLog=${True}
+    ...    newCommandTimeout=3600
+
+Click Page Element
+    [Arguments]    ${element}    ${timeout}=20s
+    Wait Until Element Is Visible    ${element}    timeout=${timeout}
+    Click Element    ${element}
+
+Scroll To Bottom Of Photo List
+    [Arguments]    ${container_xpath}
+    ${previous_y}=    Set Variable    ${NONE}
+    FOR    ${i}    IN RANGE    30
+        ${rect}=    Get Element Rect
+        ...    xpath=${container_xpath}/XCUIElementTypeCell[last()]
+        ${current_y}=    Set Variable    ${rect}[y]
+        IF    $current_y == $previous_y
+            BREAK
+        END
+        ${previous_y}=    Set Variable    ${current_y}
+        Swipe    start_x=207    start_y=780    end_x=207    end_y=200    duration=150ms
+        Sleep    0.5s
+    END
+
+Click Photo From Bottom By Grid
+    [Arguments]    ${container_xpath}    ${offset}
+    # Assumes a 3-column grid where only the last row may be partially filled.
+    ${rect_last}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()]
+    ${rect_1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-1]
+    ${rect_2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-2]
+    ${same_row_1}=    Evaluate    abs(${rect_last}[y] - ${rect_1}[y]) < 5
+    ${same_row_2}=    Evaluate    abs(${rect_last}[y] - ${rect_2}[y]) < 5
+    IF    ${same_row_2}
+        ${col_last}=    Set Variable    ${2}
+    ELSE IF    ${same_row_1}
+        ${col_last}=    Set Variable    ${1}
+    ELSE
+        ${col_last}=    Set Variable    ${0}
+    END
+
+    # Reference the nearest fully-populated row above the last row to read column x-positions.
+    ${offset_col2}=    Evaluate    ${col_last} + 1
+    ${offset_col1}=    Evaluate    ${col_last} + 2
+    ${offset_col0}=    Evaluate    ${col_last} + 3
+    ${rect_col2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col2}]
+    ${rect_col1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col1}]
+    ${rect_col0}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col0}]
+    ${row_height}=    Evaluate    abs(${rect_last}[y] - ${rect_col2}[y])
+
+    IF    ${offset} <= ${col_last}
+        ${target_row}=    Set Variable    ${0}
+        ${target_col}=    Evaluate    ${col_last} - ${offset}
+    ELSE
+        ${m}=    Evaluate    ${offset} - (${col_last} + 1)
+        ${target_row}=    Evaluate    1 + ${m} // 3
+        ${target_col}=    Evaluate    2 - (${m} % 3)
+    END
+
+    ${col_x}=    Create List    ${rect_col0}[x]    ${rect_col1}[x]    ${rect_col2}[x]
+    ${target_x}=    Evaluate    ${col_x}[${target_col}] + ${rect_last}[width] // 2
+    ${target_y}=    Evaluate    ${rect_last}[y] + ${rect_last}[height] // 2
+
+    # Swiping loses roughly 10% of the requested content-scroll distance to drag friction,
+    # so over-request the scroll distance to compensate, then click by computed coordinates
+    # (avoids xpath last()-offset entirely, since it drifts once cells scroll off and unmount).
+    ${scroll_distance}=    Evaluate    int(${target_row} * ${row_height} * 1.05)
+    ${remaining}=    Set Variable    ${scroll_distance}
+    WHILE    ${remaining} > 0
+        ${step}=    Evaluate    min(${remaining}, 300)
+        ${end_y}=    Evaluate    300 + ${step}
+        Swipe    start_x=207    start_y=300    end_x=207    end_y=${end_y}    duration=800ms
+        Sleep    0.5s
+        ${remaining}=    Evaluate    ${remaining} - ${step}
+    END
+    Sleep    1s
+
+    ${target_point}=    Create List    ${target_x}    ${target_y}
+    Tap    ${target_point}
+
+Scroll To Retouch Feature
+    [Arguments]    ${feature_name}
+    ${rect}=    Get Element Rect    xpath=//XCUIElementTypeCollectionView
+    ${center_y}=    Evaluate    ${rect}[y] + ${rect}[height] // 2
+    ${start_x}=    Evaluate    ${rect}[x] + ${rect}[width] * 3 // 4
+    ${end_x}=    Evaluate    ${rect}[x] + ${rect}[width] // 4
+    FOR    ${i}    IN RANGE    30
+        ${visible}=    Run Keyword And Return Status
+        ...    Element Should Be Visible
+        ...    xpath=//XCUIElementTypeCollectionView/XCUIElementTypeCell[.//XCUIElementTypeStaticText[@name="${feature_name}"]]
+        IF    ${visible}
+            BREAK
+        END
+        Swipe    start_x=${start_x}    start_y=${center_y}    end_x=${end_x}    end_y=${center_y}    duration=300ms
+        Sleep    0.5s
+    END
