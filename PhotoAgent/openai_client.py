@@ -51,7 +51,9 @@ def _post_json(url: str, body: dict, label: str, timeout: int = 120) -> dict:
     resp = requests.post(
         url,
         headers={**_auth_headers(), "Content-Type": "application/json"},
-        data=json.dumps(body, ensure_ascii=False),
+        # str data must be bytes before hitting http.client, or it tries
+        # (and fails) to encode non-ASCII chars as Latin-1.
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         timeout=timeout,
     )
     data = _safe_json(resp)
