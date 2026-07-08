@@ -181,11 +181,18 @@ def url_to_filename(url: str) -> str:
     return f"{name}.jpg"
 
 
-def save_as_jpg(content: bytes, dest: Path):
-    """Decode arbitrary image bytes and save them as a JPEG at dest."""
+def save_as_jpg(content: bytes, dest: Path, min_pixels: int = 0) -> bool:
+    """
+    Decode arbitrary image bytes and save them as a JPEG at dest.
+    Returns False without saving if the image's total pixel count is below
+    min_pixels.
+    """
     with Image.open(io.BytesIO(content)) as im:
+        if im.width * im.height < min_pixels:
+            return False
         im = im.convert("RGB")
         im.save(dest, "JPEG", quality=90)
+        return True
 
 
 def crawl(
@@ -193,6 +200,7 @@ def crawl(
     max_images: int = 50,
     headless: bool = False,
     output_dir: Path = DEFAULT_OUTPUT,
+    min_pixels: int = 0,
 ):
     output_dir = output_dir / re.sub(r"[^a-zA-Z0-9]+", "_", query).strip("_")
 
@@ -253,7 +261,9 @@ def crawl(
             try:
                 resp = session.get(chosen, headers={"User-Agent": USER_AGENT, "Referer": imgrefurl}, timeout=20)
                 resp.raise_for_status()
-                save_as_jpg(resp.content, dest)
+                if not save_as_jpg(resp.content, dest, min_pixels=min_pixels):
+                    print(f"  [{i}/{len(items)}] SKIP (below {min_pixels} px): {filename}")
+                    continue
                 print(f"  [{i}/{len(items)}] OK  {filename}")
             except Exception as e:
                 print(f"  [{i}/{len(items)}] ERR {filename}: {e}")
@@ -278,6 +288,7 @@ if __name__ == "__main__":
     parser.add_argument("--max", type=int, default=50, help="Max images to download (default: 50)")
     parser.add_argument("--headless", action="store_true", help="Run Chrome in headless mode")
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT, help="Output directory")
+    parser.add_argument("--min-pixels", type=int, default=0, help="Skip images with width*height below this value")
     args = parser.parse_args()
 
-    crawl(args.query, max_images=args.max, headless=args.headless, output_dir=args.output)
+    crawl(args.query, max_images=args.max, headless=args.headless, output_dir=args.output, min_pixels=args.min_pixels)
