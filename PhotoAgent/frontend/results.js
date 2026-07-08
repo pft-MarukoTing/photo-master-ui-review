@@ -2,6 +2,33 @@ window.PhotoAgentResults = (() => {
   const { els } = window.PhotoAgentDom;
   const { resolveCropBoxForDisplay } = window.PhotoAgentImageTools;
 
+  const DEFAULT_OPTION = { value: "default", label: "Default (analyzed)" };
+  const POSE_OPTIONS = [
+    DEFAULT_OPTION,
+    { value: "playful", label: "Playful" },
+    { value: "candid", label: "Candid" },
+    { value: "strong", label: "Strong" }
+  ];
+  const ANGLE_OPTIONS = [
+    DEFAULT_OPTION,
+    { value: "high", label: "High Shot" },
+    { value: "low", label: "Low Shot" },
+    { value: "eye", label: "Eye Level" },
+    { value: "side", label: "Side Shot" }
+  ];
+  const LIGHTING_OPTIONS = [
+    DEFAULT_OPTION,
+    { value: "gold", label: "Gold Tone" },
+    { value: "soft", label: "Soft Glow" }
+  ];
+  const SIZE_OPTIONS = [
+    DEFAULT_OPTION,
+    { value: "wide", label: "Wide" },
+    { value: "wider", label: "Wider" },
+    { value: "close", label: "Close" },
+    { value: "closer", label: "Closer" }
+  ];
+
   function fillList(element, items, fallbackItems) {
     element.innerHTML = "";
     const source = Array.isArray(items) && items.length ? items : fallbackItems;
@@ -34,6 +61,40 @@ window.PhotoAgentResults = (() => {
       const text = document.createElement("span");
       text.className = "step-cb-label";
       text.textContent = item;
+
+      label.appendChild(cb);
+      label.appendChild(text);
+      li.appendChild(label);
+      element.appendChild(li);
+    });
+  }
+
+  // Same checkbox-list look as fillCheckList, but backed by radio inputs
+  // sharing one `name` -- mutually exclusive selection within the group,
+  // enforced natively by the browser rather than custom JS.
+  function fillRadioList(element, options, name, defaultValue) {
+    if (!element) return;
+    element.innerHTML = "";
+    options.forEach((opt, index) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+
+      const cb = document.createElement("span");
+      cb.className = "step-cb";
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = opt.value;
+      input.id = `${name}-${index}`;
+      input.checked = opt.value === defaultValue;
+      const box = document.createElement("span");
+      box.className = "step-cb-box";
+      cb.appendChild(input);
+      cb.appendChild(box);
+
+      const text = document.createElement("span");
+      text.className = "step-cb-label";
+      text.textContent = opt.label;
 
       label.appendChild(cb);
       label.appendChild(text);
@@ -322,6 +383,19 @@ window.PhotoAgentResults = (() => {
     }
 
     fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
+
+    // Rebuild the style-option groups each run (defaults to "Default
+    // (analyzed)"), and re-evaluate which apply. Pose/Angle only make sense
+    // for a person subject. The actual retouch behavior for these
+    // selections is not wired up yet -- this is UI only for now.
+    if (els.apOptionsToggle) els.apOptionsToggle.open = false;
+    fillRadioList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default");
+    fillRadioList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default");
+    fillRadioList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default");
+    fillRadioList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default");
+    const isPerson = analysis.subject_category === "人物";
+    if (els.apGroupPose) els.apGroupPose.hidden = !isPerson;
+    if (els.apGroupAngle) els.apGroupAngle.hidden = !isPerson;
   }
 
   return { renderResult, renderAnalysisPreview };

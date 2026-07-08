@@ -173,6 +173,43 @@
       animation: fadeUp .5s ease both;
     }
     .ap-row p { margin: 6px 0 0; }
+    .ap-sub-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 14px 0 6px;
+    }
+    .ap-sub-label:first-child { margin-top: 0; }
+    .ap-options-toggle > summary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+    }
+    .ap-options-toggle > summary::-webkit-details-marker { display: none; }
+    .ap-options-toggle > summary::before {
+      content: '▸';
+      display: inline-block;
+      font-size: 10px;
+      color: var(--text-2);
+      transition: transform .15s;
+    }
+    .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
+    .ap-options-toggle .ap-option-groups { margin-top: 10px; }
+    .ap-option-groups {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0,1fr));
+      gap: 16px;
+    }
+    @media (max-width: 900px) {
+      .ap-option-groups { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 560px) {
+      .ap-option-groups { grid-template-columns: 1fr; }
+    }
 
     /* ── View Results button ── */
     .view-results-wrap {
@@ -389,6 +426,37 @@
               <ul id="ap-recipe-list" class="step-inline-list"></ul>
             </div>
           </div>
+          <details class="ap-row ap-options-toggle" id="ap-options-toggle">
+            <summary class="sb-label">修圖風格選項</summary>
+
+            <div class="ap-option-groups">
+              <div class="ap-option-group" id="ap-group-pose" hidden>
+                <p class="ap-sub-label">Pose</p>
+                <div class="step-list-frame">
+                  <ul id="ap-pose-list" class="step-inline-list"></ul>
+                </div>
+              </div>
+              <div class="ap-option-group" id="ap-group-angle" hidden>
+                <p class="ap-sub-label">Angle</p>
+                <div class="step-list-frame">
+                  <ul id="ap-angle-list" class="step-inline-list"></ul>
+                </div>
+              </div>
+
+              <div class="ap-option-group">
+                <p class="ap-sub-label">Lighting</p>
+                <div class="step-list-frame">
+                  <ul id="ap-lighting-list" class="step-inline-list"></ul>
+                </div>
+              </div>
+              <div class="ap-option-group">
+                <p class="ap-sub-label">Size</p>
+                <div class="step-list-frame">
+                  <ul id="ap-size-list" class="step-inline-list"></ul>
+                </div>
+              </div>
+            </div>
+          </details>
         </div>
 
         <div id="view-results-wrap" class="view-results-wrap" hidden>
