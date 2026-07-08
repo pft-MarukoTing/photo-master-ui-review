@@ -61,7 +61,7 @@ a { text-decoration: none; color: inherit; }
    LAYOUT — container
 ════════════════════════════════════════ */
 .container {
-  max-width: 1120px;
+  max-width: 1500px;
   margin: 0 auto;
   padding: 0 28px;
 }
@@ -81,7 +81,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .header-inner {
-  max-width: 1120px;
+  max-width: 1500px;
   margin: 0 auto;
   padding: 0 28px;
   height: 100%;
@@ -91,7 +91,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .logo {
-  font-size: 20px;
+  font-size: 25px;
   font-weight: 800;
   letter-spacing: -.3px;
   color: var(--text);
@@ -108,7 +108,7 @@ a { text-decoration: none; color: inherit; }
   background: rgba(168,85,247,.12);
   border: 1px solid rgba(168,85,247,.25);
   border-radius: 20px;
-  font-size: 11px;
+  font-size: 13.75px;
   font-weight: 700;
   color: var(--accent);
   letter-spacing: .06em;
@@ -134,7 +134,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .eyebrow-label {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent);
   text-transform: uppercase;
@@ -143,7 +143,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .upload-headline {
-  font-size: clamp(32px, 5vw, 56px);
+  font-size: clamp(40px, 6.25vw, 70px);
   font-weight: 800;
   color: var(--text);
   line-height: 1.05;
@@ -152,7 +152,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .upload-sub {
-  font-size: 17px;
+  font-size: 21.25px;
   color: var(--text-2);
   line-height: 1.6;
   max-width: 520px;
@@ -208,14 +208,14 @@ a { text-decoration: none; color: inherit; }
 }
 
 .dz-title {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -.16px;
 }
 
 .dz-hint {
-  font-size: 13px;
+  font-size: 16.25px;
   color: var(--text-2);
   letter-spacing: -.13px;
 }
@@ -234,7 +234,7 @@ a { text-decoration: none; color: inherit; }
 }
 .dz-filename {
   margin-top: 10px;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-2);
 }
 
@@ -253,7 +253,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .field-label {
-  font-size: 11px;
+  font-size: 13.75px;
   font-weight: 700;
   color: var(--text);
   text-transform: uppercase;
@@ -267,7 +267,7 @@ a { text-decoration: none; color: inherit; }
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
   padding: 13px 14px;
-  font-size: 14px;
+  font-size: 17.5px;
   font-weight: 500;
   color: var(--text);
   outline: none;
@@ -284,7 +284,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .field-hint {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-2);
   line-height: 1.45;
   letter-spacing: -.12px;
@@ -310,7 +310,7 @@ label.option-row { cursor: pointer; }
 
 .option-label {
   display: block;
-  font-size: 14px;
+  font-size: 17.5px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -.14px;
@@ -318,7 +318,7 @@ label.option-row { cursor: pointer; }
 .option-desc {
   display: block;
   margin-top: 2px;
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-2);
   line-height: 1.4;
   letter-spacing: -.12px;
@@ -369,7 +369,7 @@ label.option-row { cursor: pointer; }
   border-radius: 8px;
   color: var(--text);
   padding: 7px 12px;
-  font-size: 13px;
+  font-size: 16.25px;
   font-weight: 600;
   outline: none;
   cursor: pointer;
@@ -384,7 +384,7 @@ label.option-row { cursor: pointer; }
   padding: 11px 14px;
   background: rgba(255,38,0,.07);
   color: var(--red);
-  font-size: 14px;
+  font-size: 17.5px;
   line-height: 1.5;
 }
 
@@ -460,7 +460,7 @@ label.option-row { cursor: pointer; }
 .proc-text { flex: 1; }
 
 .proc-eyebrow {
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent);
   text-transform: uppercase;
@@ -468,14 +468,14 @@ label.option-row { cursor: pointer; }
   margin-bottom: 10px;
 }
 .proc-title {
-  font-size: clamp(24px, 3vw, 36px);
+  font-size: clamp(30px, 3.75vw, 45px);
   font-weight: 800;
   color: var(--text);
   letter-spacing: -.4px;
   margin-bottom: 10px;
 }
 .proc-sub {
-  font-size: 15px;
+  font-size: 18.75px;
   color: var(--text-2);
   line-height: 1.6;
   max-width: 440px;
@@ -504,7 +504,7 @@ label.option-row { cursor: pointer; }
   border-radius: 50%;
   background: var(--card-2);
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 16.25px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -514,7 +514,7 @@ label.option-row { cursor: pointer; }
 }
 
 .step-name {
-  font-size: 13px;
+  font-size: 16.25px;
   font-weight: 600;
   color: var(--text);
   letter-spacing: -.13px;
@@ -522,7 +522,7 @@ label.option-row { cursor: pointer; }
 }
 
 .step-detail {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-2);
   line-height: 1.4;
   letter-spacing: -.12px;
@@ -565,7 +565,7 @@ label.option-row { cursor: pointer; }
 .results-topbar-text { }
 
 .r-summary {
-  font-size: 14px;
+  font-size: 17.5px;
   color: var(--text-2);
   margin-top: 3px;
   letter-spacing: -.14px;
@@ -599,14 +599,14 @@ label.option-row { cursor: pointer; }
   align-items: center;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
-  font-size: 13px;
+  font-size: 16.25px;
   font-weight: 600;
   color: var(--text-2);
 }
 
 .photo-card-hdr strong {
   color: var(--text);
-  font-size: 12px;
+  font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -655,7 +655,7 @@ label.option-row { cursor: pointer; }
 .verdict-main { flex: 1; }
 
 .card-kicker {
-  font-size: 11px;
+  font-size: 13.75px;
   font-weight: 700;
   color: var(--accent);
   text-transform: uppercase;
@@ -664,7 +664,7 @@ label.option-row { cursor: pointer; }
 }
 
 .verdict-status {
-  font-size: 22px;
+  font-size: 27.5px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -.3px;
@@ -672,7 +672,7 @@ label.option-row { cursor: pointer; }
 }
 
 .verdict-desc {
-  font-size: 14px;
+  font-size: 17.5px;
   color: var(--text-2);
   line-height: 1.55;
   letter-spacing: -.14px;
@@ -690,14 +690,14 @@ label.option-row { cursor: pointer; }
 }
 
 .vs-label {
-  font-size: 10px;
+  font-size: 12.5px;
   font-weight: 700;
   color: var(--text-2);
   text-transform: uppercase;
   letter-spacing: .07em;
 }
 .vs-value {
-  font-size: 32px;
+  font-size: 40px;
   font-weight: 800;
   color: var(--text);
   letter-spacing: -.5px;
@@ -718,12 +718,12 @@ label.option-row { cursor: pointer; }
 .retry-panel[hidden] { display: none; }
 
 .retry-help {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-2);
   line-height: 1.45;
 }
 .retry-error {
-  font-size: 13px;
+  font-size: 16.25px;
   color: var(--red);
   line-height: 1.45;
 }
@@ -749,7 +749,7 @@ label.option-row { cursor: pointer; }
 }
 
 .sb-label {
-  font-size: 11px;
+  font-size: 13.75px;
   font-weight: 700;
   color: var(--text-2);
   text-transform: uppercase;
@@ -757,7 +757,7 @@ label.option-row { cursor: pointer; }
 }
 
 .sb-value {
-  font-size: 14px;
+  font-size: 17.5px;
   font-weight: 600;
   color: var(--text);
   line-height: 1.4;
@@ -778,7 +778,7 @@ label.option-row { cursor: pointer; }
   background: var(--card-2);
   border: 1px solid var(--border-2);
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-3);
   letter-spacing: -.12px;
@@ -794,7 +794,7 @@ label.option-row { cursor: pointer; }
 .workflow-header { margin-bottom: 4px; }
 
 .section-title {
-  font-size: clamp(22px, 3vw, 32px);
+  font-size: clamp(27.5px, 3.75vw, 40px);
   font-weight: 800;
   color: var(--text);
   letter-spacing: -.4px;
@@ -816,7 +816,7 @@ label.option-row { cursor: pointer; }
   border-radius: 50%;
   background: var(--accent);
   color: #fff;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -827,7 +827,7 @@ label.option-row { cursor: pointer; }
 .wf-body { }
 
 .wf-kicker {
-  font-size: 11px;
+  font-size: 13.75px;
   font-weight: 700;
   color: var(--accent);
   text-transform: uppercase;
@@ -836,7 +836,7 @@ label.option-row { cursor: pointer; }
 }
 
 .wf-title {
-  font-size: 17px;
+  font-size: 21.25px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -.2px;
@@ -844,14 +844,14 @@ label.option-row { cursor: pointer; }
 }
 
 .wf-text {
-  font-size: 14px;
+  font-size: 17.5px;
   color: var(--text-2);
   line-height: 1.6;
   letter-spacing: -.14px;
 }
 
 .wf-sub {
-  font-size: 13px;
+  font-size: 16.25px;
   color: var(--text-2);
   line-height: 1.55;
   margin-top: 7px;
@@ -867,7 +867,7 @@ label.option-row { cursor: pointer; }
   margin-top: 12px;
 }
 .compact-list li {
-  font-size: 14px;
+  font-size: 17.5px;
   color: var(--text-2);
   line-height: 1.5;
   padding-left: 14px;
@@ -885,7 +885,7 @@ label.option-row { cursor: pointer; }
 
 .tech-details summary {
   padding: 14px 20px;
-  font-size: 14px;
+  font-size: 17.5px;
   font-weight: 600;
   color: var(--text-2);
   cursor: pointer;
@@ -906,7 +906,7 @@ label.option-row { cursor: pointer; }
 .tech-card { background: var(--card); padding: 18px 20px; }
 
 .tech-title {
-  font-size: 14px;
+  font-size: 17.5px;
   font-weight: 700;
   color: var(--text);
   letter-spacing: -.14px;
@@ -914,13 +914,13 @@ label.option-row { cursor: pointer; }
 }
 
 .tech-text {
-  font-size: 13px;
+  font-size: 16.25px;
   color: var(--text-2);
   line-height: 1.55;
 }
 
 .prompt-text {
-  font-size: 12px;
+  font-size: 15px;
   color: var(--text-2);
   line-height: 1.5;
   white-space: pre-wrap;
@@ -941,7 +941,7 @@ label.option-row { cursor: pointer; }
   gap: 7px;
 }
 .detail-list li {
-  font-size: 13px;
+  font-size: 16.25px;
   color: var(--text-2);
   line-height: 1.5;
   padding-left: 16px;
@@ -975,7 +975,7 @@ label.option-row { cursor: pointer; }
   padding: 0 20px;
   border: none;
   border-radius: var(--radius);
-  font-size: 15px;
+  font-size: 18.75px;
   font-weight: 700;
   letter-spacing: -.15px;
   cursor: pointer;
@@ -1008,14 +1008,14 @@ label.option-row { cursor: pointer; }
 .btn-sm {
   height: 38px;
   padding: 0 16px;
-  font-size: 13px;
+  font-size: 16.25px;
   border-radius: 10px;
 }
 
 .run-btn {
   width: 100%;
   height: 50px;
-  font-size: 16px;
+  font-size: 20px;
   border-radius: 14px;
   margin-top: 4px;
 }
@@ -1053,7 +1053,7 @@ label.option-row { cursor: pointer; }
   .steps-grid { grid-template-columns: 1fr; }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
-  .wf-num { width: 36px; height: 36px; font-size: 14px; }
+  .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
 
   .verdict-card { flex-direction: column; }
   .verdict-score {
