@@ -171,7 +171,7 @@
 
   function friendlyError(error) {
     if (error.message === "Failed to fetch") {
-      return "無法連線到 Photo Agent 伺服器，請確認後端服務是否已啟動。";
+      return "無法連線到 Photo Master 伺服器，請確認後端服務是否已啟動。";
     }
     return error.message || "發生未知錯誤。";
   }
@@ -248,7 +248,7 @@
 
       const data = {
         image: imageUrl,
-        model: processingPath === "aipoc" ? "Photo Agent (AIPoC)" : "Photo Agent (Local Worker)",
+        model: processingPath === "aipoc" ? "Photo Master (AIPoC)" : "Photo Master (Local Worker)",
         usage: result.usage,
         qualityCheck: result.quality_check,
         localOnly: !aiPhotoEditing,
