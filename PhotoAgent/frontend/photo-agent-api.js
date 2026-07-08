@@ -62,6 +62,14 @@ window.PhotoAgentApi = (() => {
     return data; // { status, image_url, result: { analysis, quality_check, usage } }
   }
 
+  // Same-origin URL for the result image (vs. the presigned S3/AIPoC URL
+  // getJobResult returns, which has no CORS headers for fetch()). Used only
+  // when the browser needs to read the image's bytes itself (e.g. bundling
+  // it into a zip) -- for plain <img> display, the presigned URL is fine.
+  function resultImageUrl(jobId, { path = "local" } = {}) {
+    return `${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}/image`;
+  }
+
   // ── Two-stage local flow: analyze now, review, /continue later ─────────
   // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
   // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
@@ -148,6 +156,7 @@ window.PhotoAgentApi = (() => {
     submitJob,
     pollJobStatus,
     getJobResult,
+    resultImageUrl,
     getUiConfig,
     analyzeJob,
     getAnalyzeResult,

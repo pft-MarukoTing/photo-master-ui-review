@@ -5,6 +5,7 @@
     submitJob,
     pollJobStatus,
     getJobResult,
+    resultImageUrl,
     getUiConfig,
     analyzeJob,
     getAnalyzeResult,
@@ -15,6 +16,7 @@
 
   let selectedFile = null;
   let previewUrl = "";
+  let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
 
   const procVisual = document.querySelector(".proc-visual");
   const stepsGrid = document.querySelector(".steps-grid");
@@ -120,6 +122,53 @@
     image.src = previewUrl;
   }
 
+  // ── Download source + result image + result JSON bundled as one zip ────
+  function buildZipFilename(jobId) {
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    // AIPoC task ids contain "/" and "+", which aren't safe in a filename.
+    const safeJobId = String(jobId).replace(/[^a-zA-Z0-9._-]/g, "_");
+    return `photoMuse-${dateStr}-${safeJobId}.zip`;
+  }
+
+  async function buildResultZip() {
+    const { file, resultText, jobId, path } = lastResult;
+    // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
+    // that URL has no CORS headers, so a browser-side fetch() of it is
+    // blocked even though the same URL displays fine in an <img> tag.
+    const [sourceBuf, imageBuf] = await Promise.all([
+      file.arrayBuffer(),
+      fetch(resultImageUrl(jobId, { path })).then((response) => response.arrayBuffer())
+    ]);
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(resultText, null, 2));
+
+    return window.PhotoAgentZip.createZip([
+      { name: file.name || "source.jpg", data: new Uint8Array(sourceBuf) },
+      { name: "result.png", data: new Uint8Array(imageBuf) },
+      { name: "result.json", data: jsonBytes }
+    ]);
+  }
+
+  async function handleDownloadClick(event) {
+    event.preventDefault();
+    if (!lastResult) return;
+
+    try {
+      const zipBlob = await buildResultZip();
+      const url = URL.createObjectURL(zipBlob);
+      const tempLink = document.createElement("a");
+      tempLink.href = url;
+      tempLink.download = buildZipFilename(lastResult.jobId);
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      tempLink.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      showError("打包下載失敗，請稍後再試。");
+    }
+  }
+
   function friendlyError(error) {
     if (error.message === "Failed to fetch") {
       return "無法連線到 Photo Agent 伺服器，請確認後端服務是否已啟動。";
@@ -205,6 +254,7 @@
         retryCount: 0
       };
 
+      lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, path: processingPath };
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
       showSection("results");
@@ -221,6 +271,7 @@
   function resetApp() {
     hideError();
     selectedFile = null;
+    lastResult = null;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
 
@@ -254,6 +305,7 @@
     showSection("processing");
   });
   els.resetButton.addEventListener("click", resetApp);
+  els.downloadLink.addEventListener("click", handleDownloadClick);
 
   for (const eventName of ["dragenter", "dragover"]) {
     els.dropZone.addEventListener(eventName, (event) => {

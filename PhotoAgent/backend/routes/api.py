@@ -1,7 +1,7 @@
 import json
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from photo_agent.param_validation import validate_photo_agent_request
@@ -91,6 +91,33 @@ def result(job_id):
     image_url = create_presigned_url(image_key, "get_object")
 
     return jsonify({"status": "success", "image_url": image_url, "result": result_text})
+
+
+@api_bp.get("/result/<job_id>/image")
+def result_image(job_id):
+    """Same bytes as /result's image_url, but served from our own origin.
+
+    The frontend needs to fetch() the result image client-side (to bundle it
+    into a zip download) -- a presigned S3 URL doesn't have CORS headers for
+    that, so this re-downloads it server-side (where CORS doesn't apply) and
+    relays the bytes. job_id is our own trusted job state, not a
+    client-supplied URL, so this can't be used as an open fetch proxy.
+    """
+    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    if info is None:
+        return jsonify({"error": "Job not found"}), 404
+    if info.get("status") != "success":
+        return jsonify({"error": info.get("error") or "job not successful"}), 400
+
+    result_keys = (info.get("0_res0") or {}).get("cusKeys") or []
+    if not result_keys:
+        return jsonify({"error": "job succeeded but result keys are missing"}), 500
+
+    image_bytes, download_error = download_bytes(result_keys[0], job_id)
+    if download_error or image_bytes is None:
+        return jsonify({"error": f"failed to download result image: {download_error}"}), 502
+
+    return Response(image_bytes, mimetype="image/png")
 
 
 # ── Two-stage local flow: analyze now, review, /continue later ─────────────
@@ -345,3 +372,43 @@ def aipoc_result(task_id):
         return jsonify({"status": "error", "error": f"failed to download result metadata: {exc}"})
 
     return jsonify({"status": "success", "image_url": image_url, "result": result_text})
+
+
+@api_bp.get("/aipoc/result/<path:task_id>/image")
+def aipoc_result_image(task_id):
+    """Same-origin relay of AIPoC's presigned image URL, for the same CORS
+    reason as result_image() above. task_id is only ever a value we minted
+    into _aipoc_task_dict ourselves (from our own /aipoc/submit), so this
+    can't be used to make the server fetch an attacker-supplied URL.
+    """
+    from backend.services import aipoc_client
+
+    entry = _aipoc_task_dict.get(task_id)
+    if entry is None:
+        return jsonify({"error": "Job not found"}), 404
+
+    body = aipoc_client.get_status_by_id(entry["access_token"], task_id, effect=aipoc_client.EFFECT_PHOTO_AGENT)
+    status_value = _status_from_body(body)
+    if status_value != "success":
+        return jsonify({"error": _body_error_message(body) if status_value == "error" else "job not successful"}), 400
+
+    result = body.get("result") or {}
+    flat = []
+    for r in result.get("results") or []:
+        for d in r.get("data") or []:
+            flat.append(d)
+
+    if not flat:
+        return jsonify({"error": "AIPoC returned no result data"}), 500
+
+    cus_urls = flat[0].get("cusUrls") or []
+    if not cus_urls:
+        return jsonify({"error": "AIPoC result missing image URL"}), 500
+
+    try:
+        resp = requests.get(cus_urls[0], timeout=30)
+        resp.raise_for_status()
+    except Exception as exc:
+        return jsonify({"error": f"failed to download result image: {exc}"}), 502
+
+    return Response(resp.content, mimetype=resp.headers.get("Content-Type", "image/png"))
