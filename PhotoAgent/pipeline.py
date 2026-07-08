@@ -54,10 +54,14 @@ def analyze_stage(image_bytes: bytes) -> dict:
     t0 = time.time()
     logger.info("Step 2: analyzing photo")
     analysis = analyze_photo(image_bytes)
-    logger.info("Step 2 done in %.2fs: subject=%s scene=%s", time.time() - t0, analysis.get("subject_category"), analysis.get("scene_category"))
+    step2_duration = time.time() - t0
+    logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
     analysis["prompts"] = {
         "photo_analysis": ANALYSIS_INSTRUCTION,
+    }
+    analysis["timings"] = {
+        "photo_analysis": step2_duration,
     }
     return analysis
 
@@ -79,6 +83,7 @@ def finish_stage(
     }
     """
     prompts = dict(analysis.get("prompts") or {})
+    timings = dict(analysis.get("timings") or {})
 
     # Step 3 — review user instruction (collected on the analyze-preview
     # screen, so it's only available now that this stage has started)
@@ -87,7 +92,8 @@ def finish_stage(
     user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
     analysis = {**analysis, "user_instruction": user_instruction}
     prompts["user_instruction_review"] = review_prompt
-    logger.info("Step 3 done in %.2fs: has_direction=%s", time.time() - t0, user_instruction.get("has_user_direction"))
+    timings["user_instruction_review"] = time.time() - t0
+    logger.info("Step 3 done in %.2fs: has_direction=%s", timings["user_instruction_review"], user_instruction.get("has_user_direction"))
 
     # Step 4 — crop validation (conditional)
     t0 = time.time()
@@ -110,10 +116,12 @@ def finish_stage(
             force_validation=has_user_crop,
         )
         prompts["crop_validation"] = crop_prompt
-        logger.info("Step 4 done in %.2fs: selected=%s", time.time() - t0, (analysis.get("crop_validation") or {}).get("selected_candidate_label"))
+        timings["crop_validation"] = time.time() - t0
+        logger.info("Step 4 done in %.2fs: selected=%s", timings["crop_validation"], (analysis.get("crop_validation") or {}).get("selected_candidate_label"))
     else:
         prompts["crop_validation"] = None
-        logger.info("Step 4 done in %.2fs: crop validation skipped", time.time() - t0)
+        timings["crop_validation"] = time.time() - t0
+        logger.info("Step 4 done in %.2fs: crop validation skipped", timings["crop_validation"])
 
     if ai_photo_editing:
         # Step 5 — AI edit
@@ -121,8 +129,9 @@ def finish_stage(
         logger.info("Step 5: editing photo (preset=%s quality=%s)", preset_key, quality)
         edit_result, edit_prompt = edit_photo(image_bytes, analysis, quality, preset_key)
         prompts["image_edit"] = edit_prompt
+        timings["image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]
-        logger.info("Step 5 done in %.2fs: image returned", time.time() - t0)
+        logger.info("Step 5 done in %.2fs: image returned", timings["image_edit"])
 
         # Step 6 — quality check
         t0 = time.time()
@@ -130,9 +139,11 @@ def finish_stage(
         try:
             qa, qa_prompt = quality_check_photo(image_bytes, image_b64, analysis)
             prompts["quality_check"] = qa_prompt
-            logger.info("Step 6 done in %.2fs: score=%s pass=%s", time.time() - t0, qa.get("score"), qa.get("pass"))
+            timings["quality_check"] = time.time() - t0
+            logger.info("Step 6 done in %.2fs: score=%s pass=%s", timings["quality_check"], qa.get("score"), qa.get("pass"))
         except Exception as exc:
-            logger.warning("Step 6 QA failed in %.2fs: %s", time.time() - t0, exc)
+            timings["quality_check"] = time.time() - t0
+            logger.warning("Step 6 QA failed in %.2fs: %s", timings["quality_check"], exc)
             qa = _quality_check_fallback(exc)
             prompts["quality_check"] = None
 
@@ -143,7 +154,8 @@ def finish_stage(
         logger.info("Step 5: local enhancement only (ai_photo_editing=False)")
         enhanced_bytes = create_local_enhanced_bytes(image_bytes, analysis.get("crop_box"), analysis)
         image_b64 = base64.b64encode(enhanced_bytes).decode()
-        logger.info("Step 5 done in %.2fs: local enhancement applied", time.time() - t0)
+        timings["image_edit"] = time.time() - t0
+        logger.info("Step 5 done in %.2fs: local enhancement applied", timings["image_edit"])
         prompts["image_edit"] = None
 
         # Step 6 — skip QA
@@ -163,8 +175,9 @@ def finish_stage(
         }
         usage = None
         prompts["quality_check"] = None
+        timings["quality_check"] = None
 
-    analysis = {**analysis, "prompts": prompts}
+    analysis = {**analysis, "prompts": prompts, "timings": timings}
 
     return {
         "result_image": image_b64,

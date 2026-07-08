@@ -37,23 +37,36 @@
     }
   }
 
+  // Backend step timings are seconds (float) or null (step skipped);
+  // addTiming/appendTimingRow expect ms or a non-number sentinel.
+  function secToMs(seconds) {
+    return typeof seconds === "number" ? seconds * 1000 : null;
+  }
+
+  function appendTimingRow(container, label, duration, { sub = false } = {}) {
+    const row = document.createElement("div");
+    row.className = sub ? "timing-row timing-sub" : "timing-row";
+    const name = document.createElement("span");
+    name.textContent = sub ? `↳ ${label}` : label;
+    const val = document.createElement("span");
+    val.className = "timing-value";
+    val.textContent = typeof duration === "number" ? `${(duration / 1000).toFixed(1)}s` : "未執行";
+    row.appendChild(name);
+    row.appendChild(val);
+    container.appendChild(row);
+  }
+
   function populateTimingSection() {
     const timings = getTimings();
     if (!timingList || !timingDetails || !timings.length) return;
     timingList.innerHTML = "";
     let total = 0;
-    timings.forEach(({ label, duration }) => {
+    timings.forEach(({ label, duration, children }) => {
       total += duration;
-      const row = document.createElement("div");
-      row.className = "timing-row";
-      const name = document.createElement("span");
-      name.textContent = label;
-      const val = document.createElement("span");
-      val.className = "timing-value";
-      val.textContent = `${(duration / 1000).toFixed(1)}s`;
-      row.appendChild(name);
-      row.appendChild(val);
-      timingList.appendChild(row);
+      appendTimingRow(timingList, label, duration);
+      (children || []).forEach(({ label: childLabel, duration: childDuration }) => {
+        appendTimingRow(timingList, childLabel, childDuration, { sub: true });
+      });
     });
     const totalRow = document.createElement("div");
     totalRow.className = "timing-row timing-total";
@@ -209,18 +222,25 @@
       if (processingPath === "aipoc") {
         const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing });
         analysis = analyzeData.analysis;
-        addTiming("初步分析", Date.now() - stepStart);
+        const t = analysis.timings || {};
+        addTiming("初步分析", Date.now() - stepStart, [
+          { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
+        ]);
       } else {
         analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing });
         addTiming("送出分析任務", Date.now() - stepStart);
 
         stepStart = Date.now();
         await pollJobStatus(analyzeJobId, { path: "local" });
-        addTiming("分析中", Date.now() - stepStart);
+        const analyzeWaitDuration = Date.now() - stepStart;
 
         stepStart = Date.now();
         const analyzeResult = await getAnalyzeResult(analyzeJobId);
         analysis = analyzeResult.result.analysis;
+        const t = analysis.timings || {};
+        addTiming("分析中", analyzeWaitDuration, [
+          { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
+        ]);
         addTiming("取得分析結果", Date.now() - stepStart);
       }
 
@@ -240,10 +260,17 @@
 
       stepStart = Date.now();
       await pollJobStatus(finalJobId, { path: processingPath });
-      addTiming("AI 修圖中", Date.now() - stepStart);
+      const finishWaitDuration = Date.now() - stepStart;
 
       stepStart = Date.now();
       const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
+      const t = result.analysis.timings || {};
+      addTiming("AI 修圖中", finishWaitDuration, [
+        { label: "Step 3：使用者指令審查", duration: secToMs(t.user_instruction_review) },
+        { label: "Step 4：裁切驗證", duration: secToMs(t.crop_validation) },
+        { label: "Step 5：修圖執行", duration: secToMs(t.image_edit) },
+        { label: "Step 6：品質檢查", duration: secToMs(t.quality_check) }
+      ]);
       addTiming("取得結果", Date.now() - stepStart);
 
       const data = {

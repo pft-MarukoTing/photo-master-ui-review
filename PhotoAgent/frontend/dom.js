@@ -136,8 +136,8 @@ window.PhotoAgentDom = (() => {
     }
   }
 
-  function addTiming(label, duration) {
-    completedTimings.push({ label, duration });
+  function addTiming(label, duration, children) {
+    completedTimings.push({ label, duration, children: children || [] });
   }
 
   function getTimings() {
