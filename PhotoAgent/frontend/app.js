@@ -145,6 +145,21 @@
     return `photoMuse-${dateStr}-${safeJobId}.zip`;
   }
 
+  const PROMPT_KEYS = ["photo_analysis", "user_instruction_review", "crop_validation", "image_edit", "quality_check"];
+
+  function buildPromptsJson(prompts) {
+    const ordered = {};
+    PROMPT_KEYS.forEach((key) => {
+      const text = prompts[key];
+      // Split into an array of lines instead of one string -- a JSON string
+      // can't contain a literal newline, so a multi-line prompt would
+      // otherwise render as one line full of escaped "\n"s when opened in a
+      // text editor. An array of lines pretty-prints with real line breaks.
+      ordered[key] = typeof text === "string" ? text.split("\n") : null;
+    });
+    return JSON.stringify(ordered, null, 2);
+  }
+
   async function buildResultZip() {
     const { file, resultText, jobId, path } = lastResult;
     // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
@@ -155,11 +170,13 @@
       fetch(resultImageUrl(jobId, { path })).then((response) => response.arrayBuffer())
     ]);
     const jsonBytes = new TextEncoder().encode(JSON.stringify(resultText, null, 2));
+    const promptsBytes = new TextEncoder().encode(buildPromptsJson(resultText.analysis?.prompts || {}));
 
     return window.PhotoAgentZip.createZip([
       { name: file.name || "source.jpg", data: new Uint8Array(sourceBuf) },
       { name: "result.png", data: new Uint8Array(imageBuf) },
-      { name: "result.json", data: jsonBytes }
+      { name: "result.json", data: jsonBytes },
+      { name: "prompts.json", data: promptsBytes }
     ]);
   }
 
