@@ -12,6 +12,36 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  function fillCheckList(element, items, fallbackItems) {
+    if (!element) return;
+    element.innerHTML = "";
+    const source = Array.isArray(items) && items.length ? items : fallbackItems;
+    source.forEach((item, index) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+
+      const cb = document.createElement("span");
+      cb.className = "step-cb";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = `${element.id}-${index}`;
+      input.checked = true;
+      const box = document.createElement("span");
+      box.className = "step-cb-box";
+      cb.appendChild(input);
+      cb.appendChild(box);
+
+      const text = document.createElement("span");
+      text.className = "step-cb-label";
+      text.textContent = item;
+
+      label.appendChild(cb);
+      label.appendChild(text);
+      li.appendChild(label);
+      element.appendChild(li);
+    });
+  }
+
   function joinParts(parts) {
     return parts.filter(Boolean).join(" ");
   }
@@ -290,6 +320,8 @@ window.PhotoAgentResults = (() => {
         analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : ""
       ]);
     }
+
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
   }
 
   return { renderResult, renderAnalysisPreview };

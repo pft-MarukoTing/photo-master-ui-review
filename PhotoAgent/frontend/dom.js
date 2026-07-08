@@ -21,6 +21,7 @@ window.PhotoAgentDom = (() => {
     apSubject: document.querySelector("#ap-subject"),
     apDiagnosis: document.querySelector("#ap-diagnosis"),
     apComposition: document.querySelector("#ap-composition"),
+    apRecipeList: document.querySelector("#ap-recipe-list"),
     errorMsg: document.querySelector("#error-msg"),
     promptInput: document.querySelector("#prompt"),
     processingPathSelect: document.querySelector("#processing-path"),
