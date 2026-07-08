@@ -49,7 +49,12 @@ window.PhotoAgentDom = (() => {
     issuesList: document.querySelector("#issues-list"),
     recipeList: document.querySelector("#recipe-list"),
     correctionList: document.querySelector("#correction-list"),
-    preserveList: document.querySelector("#preserve-list")
+    preserveList: document.querySelector("#preserve-list"),
+    promptAnalysis: document.querySelector("#prompt-analysis"),
+    promptReview: document.querySelector("#prompt-review"),
+    promptCrop: document.querySelector("#prompt-crop"),
+    promptEdit: document.querySelector("#prompt-edit"),
+    promptQa: document.querySelector("#prompt-qa")
   };
 
   function showSection(name) {

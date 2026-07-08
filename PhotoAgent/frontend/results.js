@@ -246,6 +246,19 @@ window.PhotoAgentResults = (() => {
       "不新增文字、標誌、人物或不相關物件。",
       "避免塑膠感、重濾鏡與不自然改造。"
     ]);
+
+    renderPrompts(analysis.prompts || {});
+  }
+
+  function renderPrompts(prompts) {
+    const setPrompt = (el, text) => {
+      if (el) el.textContent = text || "（此步驟未呼叫 GPT）";
+    };
+    setPrompt(els.promptAnalysis, prompts.photo_analysis);
+    setPrompt(els.promptReview, prompts.user_instruction_review);
+    setPrompt(els.promptCrop, prompts.crop_validation);
+    setPrompt(els.promptEdit, prompts.image_edit);
+    setPrompt(els.promptQa, prompts.quality_check);
   }
 
   // Shown mid-processing, right after analyze_stage finishes and before the

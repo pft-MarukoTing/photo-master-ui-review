@@ -237,18 +237,18 @@ This is a retry. Prioritize fixing the QA failure over defending the previous cr
 
     candidates_str = "\n".join(
         f"{i + 1}. {c['id']}: {c['label']} "
-        f"requested={json.dumps(c.get('cropBox') or c.get('crop_box'))} "
-        f"adjusted={json.dumps((c.get('localGeometry') or {}).get('cropBox'))} "
-        f"adjustments={json.dumps((c.get('localGeometry') or {}).get('adjustmentReasons') or [])} "
+        f"requested={json.dumps(c.get('cropBox') or c.get('crop_box'), ensure_ascii=False)} "
+        f"adjusted={json.dumps((c.get('localGeometry') or {}).get('cropBox'), ensure_ascii=False)} "
+        f"adjustments={json.dumps((c.get('localGeometry') or {}).get('adjustmentReasons') or [], ensure_ascii=False)} "
         f"{('Intent: ' + c['compositionIntent']) if c.get('compositionIntent') else ''} "
         f"{('Tradeoffs: ' + c['tradeoffs']) if c.get('tradeoffs') else ''}"
         for i, c in enumerate(candidates or [])
     )
 
-    crop_intent = json.dumps(analysis.get("crop_intent") or {})
-    roi_box = json.dumps(analysis.get("roi_box") or {})
-    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {})
-    protected_regions = json.dumps(analysis.get("protected_regions") or [])
+    crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
+    roi_box = json.dumps(analysis.get("roi_box") or {}, ensure_ascii=False)
+    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {}, ensure_ascii=False)
+    protected_regions = json.dumps(analysis.get("protected_regions") or [], ensure_ascii=False)
     rec_aspect = (
         analysis.get("recommended_aspect_ratio") or
         (analysis.get("crop_box") or {}).get("aspect_ratio") or
@@ -335,10 +335,10 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_appl
     retouch_recipe = "; ".join(analysis.get("retouch_recipe") or [])
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
-    roi_box = json.dumps(analysis.get("roi_box") or {})
-    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {})
-    protected_regions = json.dumps(analysis.get("protected_regions") or [])
-    crop_intent = json.dumps(analysis.get("crop_intent") or {})
+    roi_box = json.dumps(analysis.get("roi_box") or {}, ensure_ascii=False)
+    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {}, ensure_ascii=False)
+    protected_regions = json.dumps(analysis.get("protected_regions") or [], ensure_ascii=False)
+    crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     rec_aspect = (
         analysis.get("recommended_aspect_ratio") or
         (analysis.get("crop_box") or {}).get("aspect_ratio") or
@@ -446,9 +446,9 @@ def build_quality_check_prompt(analysis):
 Evaluate whether the output satisfies the user's explicit instruction. If the user requested a specific change and it is not achieved, lower the score. If the user prohibited an action and the output does it anyway, treat that as a major failure. For aspects the user did not mention, judge Agent improvements normally but conservatively."""
 
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
-    roi_box = json.dumps(analysis.get("roi_box") or {})
-    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {})
-    protected_regions = json.dumps(analysis.get("protected_regions") or [])
+    roi_box = json.dumps(analysis.get("roi_box") or {}, ensure_ascii=False)
+    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {}, ensure_ascii=False)
+    protected_regions = json.dumps(analysis.get("protected_regions") or [], ensure_ascii=False)
     rec_aspect = (
         analysis.get("recommended_aspect_ratio") or
         (analysis.get("crop_box") or {}).get("aspect_ratio") or

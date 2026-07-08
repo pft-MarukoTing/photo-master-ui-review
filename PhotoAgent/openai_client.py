@@ -51,7 +51,7 @@ def _post_json(url: str, body: dict, label: str, timeout: int = 120) -> dict:
     resp = requests.post(
         url,
         headers={**_auth_headers(), "Content-Type": "application/json"},
-        data=json.dumps(body),
+        data=json.dumps(body, ensure_ascii=False),
         timeout=timeout,
     )
     data = _safe_json(resp)
@@ -109,7 +109,9 @@ def analyze_photo(image_bytes: bytes) -> dict:
 
 # ── Step 3: user instruction review ───────────────────────────────────────────
 
-def review_user_instruction(user_direction: str, analysis: dict) -> dict:
+def review_user_instruction(user_direction: str, analysis: dict):
+    """Returns (result, prompt) -- prompt is None when no GPT call was made
+    (no user direction to review)."""
     trimmed = (user_direction or "").strip()
     if not trimmed:
         return {
@@ -124,14 +126,14 @@ def review_user_instruction(user_direction: str, analysis: dict) -> dict:
             "qa_focus": [],
             "conflicts": [],
             "warning": "",
-        }
+        }, None
 
     prompt = build_user_instruction_review_prompt(trimmed, analysis)
     payload = _responses_payload(ANALYSIS_MODEL, [{"type": "input_text", "text": prompt}])
     data = _post_json(OPENAI_RESPONSES_URL, payload, "User instruction review failed")
     result = _parse_json_from_text(_extract_output_text(data))
     result["has_user_direction"] = True
-    return result
+    return result, prompt
 
 
 # ── Step 4: crop validation ────────────────────────────────────────────────────
@@ -143,14 +145,16 @@ def validate_crop(
     revision_feedback: str = None,
     force_validation: bool = False,
     previous_output_b64: str = None,
-) -> dict:
+):
+    """Returns (analysis, prompt) -- prompt is None when no GPT call was
+    made (validation skipped)."""
     preview_bytes = create_preview_bytes(image_bytes)
     img_w, img_h = get_image_dimensions(preview_bytes)
     candidates = build_crop_candidates(analysis, high_risk=(risk or {}).get("level") == "high")
 
     has_enabled_candidate = any((c.get("cropBox") or {}).get("enabled") is True for c in candidates)
     if not revision_feedback and not force_validation and not has_enabled_candidate:
-        return analysis
+        return analysis, None
 
     original_data_url = image_to_data_url(preview_bytes, "image/jpeg")
 
@@ -168,15 +172,16 @@ def validate_crop(
         candidate_payloads.append({**c, "localGeometry": local_geom, "imageDataUrl": cand_data_url})
 
     if not candidate_payloads:
-        return analysis
+        return analysis, None
 
+    crop_prompt = build_crop_validation_prompt(
+        analysis,
+        candidate_payloads,
+        revision_feedback,
+        bool(previous_output_b64),
+    )
     content = [
-        {"type": "input_text", "text": build_crop_validation_prompt(
-            analysis,
-            candidate_payloads,
-            revision_feedback,
-            bool(previous_output_b64),
-        )},
+        {"type": "input_text", "text": crop_prompt},
         {"type": "input_text", "text": "Original photo"},
         {"type": "input_image", "image_url": original_data_url},
     ]
@@ -195,7 +200,7 @@ def validate_crop(
         local_geom = c.get("localGeometry") or {}
         adj_crop = local_geom.get("cropBox")
         adj_reasons = local_geom.get("adjustmentReasons") or []
-        adjusted_str = f"Adjusted crop: {json.dumps(adj_crop)}" if adj_crop else "Adjusted crop: original frame"
+        adjusted_str = f"Adjusted crop: {json.dumps(adj_crop, ensure_ascii=False)}" if adj_crop else "Adjusted crop: original frame"
         reasons_str = f"Local geometry adjustments: {'; '.join(adj_reasons)}" if adj_reasons else "Local geometry adjustments: none"
         content.append({"type": "input_text", "text": f"Crop candidate {c['id']}: {c['label']}. {adjusted_str}. {reasons_str}"})
         content.append({"type": "input_image", "image_url": c["imageDataUrl"]})
@@ -240,7 +245,7 @@ def validate_crop(
             if use_revised and (revised or {}).get("reason")
             else analysis.get("crop_recommendation")
         ),
-    }
+    }, crop_prompt
 
 
 # ── Step 5: image edit ─────────────────────────────────────────────────────────
@@ -251,7 +256,8 @@ def edit_photo(
     quality: str = "medium",
     preset_key: str = "natural",
     revision_feedback: str = None,
-) -> dict:
+):
+    """Returns (result, prompt)."""
     preset = PRESETS.get(preset_key) or PRESETS["natural"]
     preset_prompt = PRESET_PROMPTS.get(preset_key) or PRESET_PROMPTS["natural"]
 
@@ -278,22 +284,24 @@ def edit_photo(
     if not b64:
         raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
 
-    return {"image_b64": b64, "usage": data.get("usage")}
+    return {"image_b64": b64, "usage": data.get("usage")}, prompt_text
 
 
 # ── Step 6: quality check ──────────────────────────────────────────────────────
 
-def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict) -> dict:
+def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
+    """Returns (result, prompt)."""
     preview = create_preview_bytes(image_bytes)
     original_data_url = image_to_data_url(preview, "image/jpeg")
     output_data_url = f"data:image/png;base64,{output_b64}"
 
+    qa_prompt = build_quality_check_prompt(analysis)
     payload = _responses_payload(ANALYSIS_MODEL, [
-        {"type": "input_text", "text": build_quality_check_prompt(analysis)},
+        {"type": "input_text", "text": qa_prompt},
         {"type": "input_text", "text": "Original photo"},
         {"type": "input_image", "image_url": original_data_url},
         {"type": "input_text", "text": "Edited output"},
         {"type": "input_image", "image_url": output_data_url},
     ])
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
-    return _parse_json_from_text(_extract_output_text(data))
+    return _parse_json_from_text(_extract_output_text(data)), qa_prompt

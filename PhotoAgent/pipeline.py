@@ -16,6 +16,7 @@ from openai_client import (
     edit_photo,
     quality_check_photo,
 )
+from prompts import ANALYSIS_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 
@@ -52,10 +53,14 @@ def analyze_stage(image_bytes: bytes, user_prompt: str) -> dict:
     # Step 3 — review user instruction
     t0 = time.time()
     logger.info("Step 3: reviewing user instruction (has_prompt=%s)", bool(user_prompt))
-    user_instruction = review_user_instruction(user_prompt, analysis)
+    user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
     analysis = {**analysis, "user_instruction": user_instruction}
     logger.info("Step 3 done in %.2fs: has_direction=%s", time.time() - t0, user_instruction.get("has_user_direction"))
 
+    analysis["prompts"] = {
+        "photo_analysis": ANALYSIS_INSTRUCTION,
+        "user_instruction_review": review_prompt,
+    }
     return analysis
 
 
@@ -76,6 +81,7 @@ def finish_stage(
     }
     """
     user_instruction = analysis.get("user_instruction") or {}
+    prompts = dict(analysis.get("prompts") or {})
 
     # Step 4 — crop validation (conditional)
     t0 = time.time()
@@ -91,21 +97,24 @@ def finish_stage(
     if planned_crop or has_ai_candidate or has_user_crop:
         logger.info("Step 4: running crop validation (risk=%s, force=%s)", crop_risk.get("level"), has_user_crop)
         risk = {"level": "high", "reasons": ["user-crop-instruction"]} if has_user_crop else crop_risk
-        analysis = validate_crop(
+        analysis, crop_prompt = validate_crop(
             image_bytes,
             analysis,
             risk=risk,
             force_validation=has_user_crop,
         )
+        prompts["crop_validation"] = crop_prompt
         logger.info("Step 4 done in %.2fs: selected=%s", time.time() - t0, (analysis.get("crop_validation") or {}).get("selected_candidate_label"))
     else:
+        prompts["crop_validation"] = None
         logger.info("Step 4 done in %.2fs: crop validation skipped", time.time() - t0)
 
     if ai_photo_editing:
         # Step 5 — AI edit
         t0 = time.time()
         logger.info("Step 5: editing photo (preset=%s quality=%s)", preset_key, quality)
-        edit_result = edit_photo(image_bytes, analysis, quality, preset_key)
+        edit_result, edit_prompt = edit_photo(image_bytes, analysis, quality, preset_key)
+        prompts["image_edit"] = edit_prompt
         image_b64 = edit_result["image_b64"]
         logger.info("Step 5 done in %.2fs: image returned", time.time() - t0)
 
@@ -113,11 +122,13 @@ def finish_stage(
         t0 = time.time()
         logger.info("Step 6: running quality check")
         try:
-            qa = quality_check_photo(image_bytes, image_b64, analysis)
+            qa, qa_prompt = quality_check_photo(image_bytes, image_b64, analysis)
+            prompts["quality_check"] = qa_prompt
             logger.info("Step 6 done in %.2fs: score=%s pass=%s", time.time() - t0, qa.get("score"), qa.get("pass"))
         except Exception as exc:
             logger.warning("Step 6 QA failed in %.2fs: %s", time.time() - t0, exc)
             qa = _quality_check_fallback(exc)
+            prompts["quality_check"] = None
 
         usage = edit_result.get("usage")
     else:
@@ -127,6 +138,7 @@ def finish_stage(
         enhanced_bytes = create_local_enhanced_bytes(image_bytes, analysis.get("crop_box"), analysis)
         image_b64 = base64.b64encode(enhanced_bytes).decode()
         logger.info("Step 5 done in %.2fs: local enhancement applied", time.time() - t0)
+        prompts["image_edit"] = None
 
         # Step 6 — skip QA
         qa = {
@@ -144,6 +156,9 @@ def finish_stage(
             "recommendation": "若要檢查生成式修圖品質，請開啟 AI 修圖。",
         }
         usage = None
+        prompts["quality_check"] = None
+
+    analysis = {**analysis, "prompts": prompts}
 
     return {
         "result_image": image_b64,
