@@ -38,8 +38,14 @@ def _quality_check_fallback(error: Exception) -> dict:
     }
 
 
-def analyze_stage(image_bytes: bytes, user_prompt: str) -> dict:
-    """Steps 1-3: read the photo, analyze it, and review the user's instruction."""
+def analyze_stage(image_bytes: bytes) -> dict:
+    """Steps 1-2: read the photo and analyze it.
+
+    The user's instruction is reviewed in finish_stage instead of here --
+    it's collected on the analyze-preview screen, shown to the user only
+    after this stage's result comes back, so there's nothing to review yet
+    at this point.
+    """
 
     # Step 1 — read
     logger.info("Step 1: image loaded (%d bytes)", len(image_bytes))
@@ -50,16 +56,8 @@ def analyze_stage(image_bytes: bytes, user_prompt: str) -> dict:
     analysis = analyze_photo(image_bytes)
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", time.time() - t0, analysis.get("subject_category"), analysis.get("scene_category"))
 
-    # Step 3 — review user instruction
-    t0 = time.time()
-    logger.info("Step 3: reviewing user instruction (has_prompt=%s)", bool(user_prompt))
-    user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
-    analysis = {**analysis, "user_instruction": user_instruction}
-    logger.info("Step 3 done in %.2fs: has_direction=%s", time.time() - t0, user_instruction.get("has_user_direction"))
-
     analysis["prompts"] = {
         "photo_analysis": ANALYSIS_INSTRUCTION,
-        "user_instruction_review": review_prompt,
     }
     return analysis
 
@@ -80,8 +78,16 @@ def finish_stage(
         result_text: dict           # analysis + quality_check + usage
     }
     """
-    user_instruction = analysis.get("user_instruction") or {}
     prompts = dict(analysis.get("prompts") or {})
+
+    # Step 3 — review user instruction (collected on the analyze-preview
+    # screen, so it's only available now that this stage has started)
+    t0 = time.time()
+    logger.info("Step 3: reviewing user instruction (has_prompt=%s)", bool(user_prompt))
+    user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
+    analysis = {**analysis, "user_instruction": user_instruction}
+    prompts["user_instruction_review"] = review_prompt
+    logger.info("Step 3 done in %.2fs: has_direction=%s", time.time() - t0, user_instruction.get("has_user_direction"))
 
     # Step 4 — crop validation (conditional)
     t0 = time.time()
@@ -179,5 +185,5 @@ def run_pipeline(
     ai_photo_editing: bool = True,
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
-    analysis = analyze_stage(image_bytes, user_prompt)
+    analysis = analyze_stage(image_bytes)
     return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing)

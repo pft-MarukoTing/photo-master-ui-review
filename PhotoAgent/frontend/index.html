@@ -199,6 +199,7 @@
     }
     .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
     .ap-options-toggle .ap-option-groups { margin-top: 10px; }
+    .ap-options-prompt { margin-top: 16px; }
     .ap-option-groups {
       display: grid;
       grid-template-columns: repeat(4, minmax(0,1fr));
@@ -291,12 +292,6 @@
 
         <!-- Right: Form -->
         <div class="upload-right">
-
-          <div class="form-field">
-            <span class="field-label">補充指令</span>
-            <textarea id="prompt" class="field-ta" rows="4"
-              placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
-          </div>
 
           <div class="options-card">
             <div id="processing-path-row" class="option-row" style="display: none;">
@@ -455,6 +450,12 @@
                   <ul id="ap-size-list" class="step-inline-list"></ul>
                 </div>
               </div>
+            </div>
+
+            <div class="form-field ap-options-prompt">
+              <span class="field-label">補充指令</span>
+              <textarea id="prompt" class="field-ta" rows="4"
+                placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
             </div>
           </details>
         </div>

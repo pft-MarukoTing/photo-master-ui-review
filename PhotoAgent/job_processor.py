@@ -92,7 +92,7 @@ class PhotoAgentJobProcessor:
 
             if stage == "analyze":
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running analyze_stage ({len(image_bytes)} bytes)')
-                analysis = analyze_stage(image_bytes, params["user_prompt"])
+                analysis = analyze_stage(image_bytes)
 
                 analysis_path = os.path.join(work_dir, 'analysis.json')
                 with open(analysis_path, 'w', encoding='utf-8') as f:

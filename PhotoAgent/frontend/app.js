@@ -185,7 +185,6 @@
 
     const presetKey = "natural";
     const preset = presets[presetKey] || presets.natural;
-    const userPrompt = els.promptInput.value.trim();
     const imageQuality = els.imageQualitySelect?.value || "medium";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const processingPath = els.processingPathSelect?.value || "local";
@@ -196,6 +195,7 @@
     if (stepsGrid) stepsGrid.hidden = true;
     clearContinueWait();
     if (els.analysisPreview) els.analysisPreview.hidden = true;
+    if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     if (procSub) procSub.textContent = "AI 正在分析照片，請稍候…";
@@ -207,11 +207,11 @@
       let analyzeJobId; // only set for the "local" path, needed by continueJob
 
       if (processingPath === "aipoc") {
-        const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt });
+        const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing });
         analysis = analyzeData.analysis;
         addTiming("初步分析", Date.now() - stepStart);
       } else {
-        analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt });
+        analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing });
         addTiming("送出分析任務", Date.now() - stepStart);
 
         stepStart = Date.now();
@@ -226,6 +226,7 @@
 
       showAnalysisPreview(analysis, preset);
       await waitForContinue();
+      const userPrompt = els.promptInput.value.trim();
       if (procSub) procSub.textContent = "AI 正在修圖，請稍候…";
 
       stepStart = Date.now();

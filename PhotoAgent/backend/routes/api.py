@@ -173,7 +173,7 @@ def continue_job(job_id):
     body = request.get_json(silent=True) or {}
 
     analysis = body.get("analysis")
-    if not isinstance(analysis, dict) or "user_instruction" not in analysis:
+    if not isinstance(analysis, dict) or "subject_category" not in analysis:
         return jsonify({"error": "analysis (from /analyze/result) is required"}), 400
 
     params, error = _parse_and_validate_params(body)
@@ -198,7 +198,7 @@ def aipoc_analyze():
     """Local preview analysis for the AIPoC path.
 
     AIPoC's remote gateway only exposes one opaque "run everything" task --
-    it can't be paused/resumed. This runs the same steps 1-3 locally (a
+    it can't be paused/resumed. This runs the same steps 1-2 locally (a
     plain OpenAI call, not queue-bound) just to show the user something to
     confirm; /aipoc/submit below still redoes its own analysis from scratch
     when "continue" is clicked.
@@ -212,7 +212,7 @@ def aipoc_analyze():
         return jsonify({"error": error}), 400
 
     try:
-        analysis = analyze_stage(image.read(), params.get("user_prompt"))
+        analysis = analyze_stage(image.read())
     except Exception as exc:
         return jsonify({"error": f"分析失敗：{exc}"}), 502
 
