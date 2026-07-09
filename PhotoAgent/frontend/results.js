@@ -385,9 +385,10 @@ window.PhotoAgentResults = (() => {
     fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
 
     // Rebuild the style-option groups each run (defaults to "Default
-    // (analyzed)"), and re-evaluate which apply. Pose/Angle only make sense
-    // for a person subject. The actual retouch behavior for these
-    // selections is not wired up yet -- this is UI only for now.
+    // (analyzed)"), and re-evaluate which apply. Pose only makes sense for a
+    // person subject; Angle applies to any subject (product/scene shots
+    // benefit from camera-angle framing too). The actual retouch behavior
+    // for these selections is not wired up yet -- this is UI only for now.
     if (els.apOptionsToggle) els.apOptionsToggle.open = false;
     fillRadioList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default");
     fillRadioList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default");
@@ -395,7 +396,7 @@ window.PhotoAgentResults = (() => {
     fillRadioList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default");
     const isPerson = analysis.subject_category === "人物";
     if (els.apGroupPose) els.apGroupPose.hidden = !isPerson;
-    if (els.apGroupAngle) els.apGroupAngle.hidden = !isPerson;
+    if (els.apGroupAngle) els.apGroupAngle.hidden = false;
   }
 
   return { renderResult, renderAnalysisPreview };
