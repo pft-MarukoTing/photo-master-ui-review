@@ -242,6 +242,88 @@
     /* ── Summary band list ── */
     .sb-list { margin: 0; padding-left: 1.2em; }
     .sb-list li { margin-bottom: 2px; }
+
+    /* ── Multi-file upload thumbnail strip ── */
+    .dz-multi {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 16px;
+      align-content: flex-start;
+      overflow: auto;
+      min-height: 360px;
+      max-height: 420px;
+      background: var(--card);
+      border-radius: 18px;
+    }
+    .dz-multi .dz-thumb {
+      width: 72px; height: 72px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--card-2);
+      flex-shrink: 0;
+    }
+    .dz-multi .dz-thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .dz-multi .dz-count { width: 100%; margin-top: 4px; font-size: 13px; color: var(--text-2); }
+
+    /* ── Batch results grid ── */
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 16px;
+      padding: 8px 0 24px;
+    }
+    .result-card {
+      background: var(--card);
+      border: 1px solid var(--border-2);
+      border-radius: 14px;
+      overflow: hidden;
+    }
+    .result-card.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }
+    .result-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+    .rc-media { position: relative; aspect-ratio: 1 / 1; background: var(--card-2); }
+    .rc-media img { width: 100%; height: 100%; object-fit: cover; }
+    .result-card.processing .rc-media img,
+    .result-card.analyzing .rc-media img { opacity: .35; }
+    .rc-badge {
+      position: absolute; top: 8px; left: 8px;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 700;
+      background: rgba(0,0,0,.55); color: #fff;
+    }
+    .result-card.analyzed .rc-badge { background: rgba(168,85,247,.9); }
+    .result-card.done .rc-badge { background: rgba(1,179,123,.9); }
+    .result-card.error .rc-badge { background: rgba(220,60,60,.92); }
+    .rc-spinner {
+      position: absolute; top: 50%; left: 50%;
+      width: 28px; height: 28px; margin: -14px 0 0 -14px;
+      border: 3px solid rgba(255,255,255,.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: rc-spin .8s linear infinite;
+    }
+    @keyframes rc-spin { to { transform: rotate(360deg); } }
+    .rc-name {
+      padding: 8px 10px;
+      font-size: 12px; color: var(--text-2);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    /* ── Detail nav (arrows to switch between finished images) ── */
+    .detail-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .detail-index { font-size: 13px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+    /* ── Batch per-image analysis review controls ── */
+    .batch-review-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 32px;
+    }
+    .batch-review-arrows { display: flex; align-items: center; gap: 12px; }
+    .batch-prompt-row { margin-bottom: 18px; }
   </style>
 </head>
 <body>
@@ -273,7 +355,7 @@
         <!-- Left: Drop zone -->
         <div class="upload-left">
           <label id="drop-zone" class="upload-zone">
-            <input id="file-input" type="file" accept="image/*" hidden>
+            <input id="file-input" type="file" accept="image/*" multiple hidden>
             <div id="dz-empty" class="dz-empty">
               <div class="upload-icon-wrap">
                 <svg width="26" height="26" fill="none" viewBox="0 0 24 24">
@@ -289,11 +371,14 @@
             </div>
           </label>
 
-          <!-- Preview (shown after file selected, replaces drop zone) -->
+          <!-- Preview (shown after a single file is selected, replaces drop zone) -->
           <div id="dz-preview" class="dz-preview" hidden>
             <img id="dz-preview-img" alt="preview">
             <p id="selected-file-name" class="dz-filename"></p>
           </div>
+
+          <!-- Multi-file thumbnail strip (shown when more than one file selected) -->
+          <div id="dz-multi" class="dz-multi" hidden></div>
         </div>
 
         <!-- Right: Form -->
@@ -487,6 +572,24 @@
           </button>
         </div>
 
+        <!-- Batch per-image analysis review controls (shown only when reviewing
+             one image from the batch grid) -->
+        <div id="batch-review-nav" class="batch-review-nav" hidden>
+          <div class="batch-review-arrows">
+            <button id="batch-review-prev" class="btn btn-secondary" type="button">←</button>
+            <span id="batch-review-index" class="detail-index"></span>
+            <button id="batch-review-next" class="btn btn-secondary" type="button">→</button>
+          </div>
+          <button id="batch-review-back" class="btn btn-secondary" type="button">回到列表</button>
+          <button id="batch-review-continue" class="btn btn-grad view-results-btn" type="button">
+            此張繼續處理
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
       </div>
     </div>
   </section>
@@ -503,8 +606,23 @@
           <div class="results-topbar-text">
             <p class="eyebrow-label">Photo Master Report</p>
             <p id="res-summary" class="r-summary">已完成影像分析與輸出。</p>
+            <p id="batch-progress" class="r-summary" hidden></p>
           </div>
           <div style="display:flex;gap:8px;">
+            <button id="batch-continue-all-btn" class="btn btn-grad" type="button" hidden>
+              全部繼續處理
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <button id="back-to-grid-btn" class="btn btn-secondary" type="button" hidden>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <path d="M15 18l-6-6 6-6" stroke="currentColor"
+                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              回到列表
+            </button>
             <button id="back-to-process-btn" class="btn btn-secondary" type="button" style="display: none;">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
                 <path d="M15 18l-6-6 6-6" stroke="currentColor"
@@ -524,7 +642,24 @@
       </div>
     </div>
 
-    <div class="container results-container">
+    <!-- Batch grid: one card per image, shown when more than one image -->
+    <div class="container" id="results-grid-wrap" hidden>
+      <div id="batch-prompt-row" class="form-field batch-prompt-row" hidden>
+        <span class="field-label">整批補充指令</span>
+        <textarea id="batch-prompt" class="field-ta" rows="2"
+          placeholder="套用到未單獨設定補充指令的圖片若某張在分析裡自己填了補充指令，則以該張指令為準。"></textarea>
+      </div>
+      <div id="results-grid" class="results-grid"></div>
+    </div>
+
+    <div class="container results-container" id="results-detail">
+
+      <!-- Detail nav (shown when opened from the batch grid) -->
+      <div id="detail-nav" class="detail-nav" hidden>
+        <button id="detail-prev" class="btn btn-secondary" type="button">←</button>
+        <span id="detail-index" class="detail-index"></span>
+        <button id="detail-next" class="btn btn-secondary" type="button">→</button>
+      </div>
 
       <!-- Before / After -->
       <div class="compare-grid">
