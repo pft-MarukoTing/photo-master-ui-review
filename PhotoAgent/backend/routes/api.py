@@ -23,6 +23,7 @@ def _parse_and_validate_params(form):
     params = {
         "preset": form.get("preset", "natural"),
         "image_quality": form.get("image_quality", "medium"),
+        "image_model": form.get("image_model", "gpt-image-2"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
@@ -303,6 +304,7 @@ def aipoc_submit():
         src_files=[file_id],
         preset=params["preset"],
         image_quality=params["image_quality"],
+        image_model=params["image_model"],
         ai_photo_editing=params["ai_photo_editing"],
         user_prompt=params.get("user_prompt"),
     )

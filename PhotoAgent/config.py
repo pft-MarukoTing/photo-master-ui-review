@@ -9,6 +9,14 @@ MODELS = {
     "analysis": "gpt-4.1-mini",
 }
 
+# UI-selectable image-edit models (Step 5). "gpt-image-2" calls OpenAI's
+# images/edits API (openai_client.edit_photo); "nano-banana-2" calls Gemini's
+# generateContent API (gemini_client.edit_photo) with Google's gemini-3.1-flash-image.
+IMAGE_MODEL_LABELS = {
+    "gpt-image-2": "GPT Image 2",
+    "nano-banana-2": "Nano Banana 2",
+}
+
 PRESETS = {
     "natural": {
         "label": "自然高級修圖",

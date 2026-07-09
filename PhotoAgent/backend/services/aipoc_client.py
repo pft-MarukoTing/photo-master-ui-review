@@ -87,7 +87,7 @@ def upload_to_req_url(request_spec, data):
 
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
-                          ai_photo_editing=True, user_prompt=None, req_id=1):
+                          image_model="gpt-image-2", ai_photo_editing=True, user_prompt=None, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -96,8 +96,8 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         access_token: bearer token
         src_files: list with the single uploaded fileId (photoAgent takes one
             source image, no mask), e.g. [file_id]
-        preset/image_quality/ai_photo_editing/user_prompt: same fields as
-            photo_agent/param_validation.py's local validator
+        preset/image_quality/image_model/ai_photo_editing/user_prompt: same
+            fields as photo_agent/param_validation.py's local validator
 
     Returns the parsed JSON body -- caller reads body["result"]["taskId"].
     """
@@ -105,6 +105,7 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
     params = {
         "preset": preset,
         "image_quality": image_quality,
+        "image_model": image_model,
         "ai_photo_editing": ai_photo_editing,
     }
     if user_prompt:

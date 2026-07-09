@@ -9,6 +9,7 @@ from image_tools import (
     create_local_enhanced_bytes,
     image_to_data_url,
 )
+from gemini_client import edit_photo as edit_photo_gemini
 from openai_client import (
     analyze_photo,
     review_user_instruction,
@@ -17,6 +18,11 @@ from openai_client import (
     quality_check_photo,
 )
 from prompts import ANALYSIS_INSTRUCTION
+
+EDIT_PHOTO_BY_MODEL = {
+    "gpt-image-2": edit_photo,
+    "nano-banana-2": edit_photo_gemini,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +79,7 @@ def finish_stage(
     preset_key: str,
     quality: str,
     ai_photo_editing: bool = True,
+    image_model: str = "gpt-image-2",
 ) -> dict:
     """Steps 4-6: crop validation, then AI edit + QA (or local enhancement).
 
@@ -126,8 +133,9 @@ def finish_stage(
     if ai_photo_editing:
         # Step 5 — AI edit
         t0 = time.time()
-        logger.info("Step 5: editing photo (preset=%s quality=%s)", preset_key, quality)
-        edit_result, edit_prompt = edit_photo(image_bytes, analysis, quality, preset_key)
+        logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, quality, image_model)
+        run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
+        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key)
         prompts["image_edit"] = edit_prompt
         timings["image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]
@@ -186,6 +194,7 @@ def finish_stage(
             "analysis": analysis,
             "quality_check": qa,
             "usage": usage,
+            "image_model": image_model if ai_photo_editing else None,
         },
     }
 
@@ -196,7 +205,8 @@ def run_pipeline(
     preset_key: str,
     quality: str,
     ai_photo_editing: bool = True,
+    image_model: str = "gpt-image-2",
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
     analysis = analyze_stage(image_bytes)
-    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing)
+    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model)

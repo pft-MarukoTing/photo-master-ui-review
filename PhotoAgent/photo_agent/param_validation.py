@@ -12,6 +12,7 @@ from .utils import optional_text
 EFFECT_NAME = "photoAgent"
 VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
+VALID_IMAGE_MODELS = ("gpt-image-2", "nano-banana-2")
 
 
 class PhotoAgentRequest(TypedDict):
@@ -72,6 +73,14 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["image_quality"] = image_quality
+
+    image_model = normalized.get("image_model", "gpt-image-2")
+    if not isinstance(image_model, str) or image_model not in VALID_IMAGE_MODELS:
+        raise RuntimeError(
+            f"{EFFECT_NAME}: image_model must be one of {VALID_IMAGE_MODELS}",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["image_model"] = image_model
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
 

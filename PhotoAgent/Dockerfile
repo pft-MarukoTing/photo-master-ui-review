@@ -51,6 +51,7 @@ COPY config.py           /app/
 COPY prompts.py          /app/
 COPY image_tools.py      /app/
 COPY openai_client.py    /app/
+COPY gemini_client.py   /app/
 COPY pipeline.py         /app/
 COPY job_processor.py    /app/
 COPY server.py           /app/

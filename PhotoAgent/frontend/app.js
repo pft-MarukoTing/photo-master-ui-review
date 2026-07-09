@@ -216,6 +216,7 @@
     const presetKey = "natural";
     const preset = presets[presetKey] || presets.natural;
     const imageQuality = els.imageQualitySelect?.value || "medium";
+    const imageModel = els.imageModelSelect?.value || "gpt-image-2";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const processingPath = els.processingPathSelect?.value || "local";
 
@@ -238,14 +239,14 @@
       let analyzeJobId; // only set for the "local" path, needed by continueJob
 
       if (processingPath === "aipoc") {
-        const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing });
+        const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing });
         analysis = analyzeData.analysis;
         const t = analysis.timings || {};
         addTiming("初步分析", Date.now() - stepStart, [
           { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
         ]);
       } else {
-        analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing });
+        analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing });
         addTiming("送出分析任務", Date.now() - stepStart);
 
         stepStart = Date.now();
@@ -270,9 +271,9 @@
       stepStart = Date.now();
       let finalJobId;
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt, path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, path: "aipoc" });
       } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis, preset: presetKey, imageQuality, aiPhotoEditing, userPrompt });
+        finalJobId = await continueJob(analyzeJobId, { analysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 

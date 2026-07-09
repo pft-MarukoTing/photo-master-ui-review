@@ -15,11 +15,12 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, aiPhotoEditing, userPrompt, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
+    form.append("image_model", imageModel || "gpt-image-2");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
@@ -74,11 +75,12 @@ window.PhotoAgentApi = (() => {
   // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
   // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
 
-  async function analyzeJob({ file, preset, imageQuality, aiPhotoEditing, userPrompt }) {
+  async function analyzeJob({ file, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
+    form.append("image_model", imageModel || "gpt-image-2");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
@@ -102,7 +104,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, aiPhotoEditing, userPrompt }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt }) {
     const response = await fetch(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -110,6 +112,7 @@ window.PhotoAgentApi = (() => {
         analysis,
         preset,
         image_quality: imageQuality,
+        image_model: imageModel || "gpt-image-2",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         user_prompt: userPrompt || ""
       })
@@ -121,11 +124,12 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
-  async function analyzeAipoc({ file, preset, imageQuality, aiPhotoEditing, userPrompt }) {
+  async function analyzeAipoc({ file, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
+    form.append("image_model", imageModel || "gpt-image-2");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 

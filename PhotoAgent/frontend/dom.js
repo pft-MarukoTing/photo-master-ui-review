@@ -34,6 +34,7 @@ window.PhotoAgentDom = (() => {
     processingPathSelect: document.querySelector("#processing-path"),
     aiEditToggle: document.querySelector("#ai-edit-toggle"),
     imageQualitySelect: document.querySelector("#image-quality"),
+    imageModelSelect: document.querySelector("#image-model"),
     originalImg: document.querySelector("#original-img"),
     generatedImg: document.querySelector("#generated-img"),
     downloadLink: document.querySelector("#download-link"),
