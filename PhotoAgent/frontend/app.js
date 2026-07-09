@@ -1,5 +1,5 @@
 (() => {
-  const { els, showSection, showError, hideError, addTiming, getTimings } = window.PhotoAgentDom;
+  const { els, showSection, showError, hideError, resetSteps, addTiming, getTimings } = window.PhotoAgentDom;
   const { presets } = window.PhotoAgentConfig;
   const {
     submitJob,
@@ -222,6 +222,7 @@
     els.startButton.disabled = true;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
+    resetSteps(); // clears completedTimings so each run's total starts fresh
     if (stepsGrid) stepsGrid.hidden = true;
     clearContinueWait();
     if (els.analysisPreview) els.analysisPreview.hidden = true;
@@ -340,6 +341,7 @@
     els.startButton.disabled = false;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
+    resetSteps();
     showSection("upload");
   }
 
