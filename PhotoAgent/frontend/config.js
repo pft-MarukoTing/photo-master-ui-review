@@ -4,6 +4,13 @@ window.PhotoAgentConfig = {
   // /mt-testbed-PhotoAgent reverse-proxy prefix in prod). Set explicitly only
   // to override.
   apiBaseUrl: "",
+  // Mirrors config.py's MODELS["analysis"] / IMAGE_MODEL_LABELS -- shown on
+  // the result page's "輸出結果" card to report which models actually ran.
+  analysisModel: "gpt-4.1-mini",
+  imageModels: {
+    "gpt-image-2": "GPT Image 2",
+    "nano-banana-2": "Nano Banana 2"
+  },
   presets: {
     natural: {
       label: "自然高級修圖",

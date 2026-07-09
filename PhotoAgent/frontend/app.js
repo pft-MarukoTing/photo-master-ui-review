@@ -293,9 +293,14 @@
       ]);
       addTiming("取得結果", Date.now() - stepStart);
 
+      const usedImageModelLabel = extraInfo.image_model
+        ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
+        : "本機處理";
+      const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+
       const data = {
         image: imageUrl,
-        model: processingPath === "aipoc" ? "Photo Master (AIPoC)" : "Photo Master (Local Worker)",
+        model: usedModelLabel,
         usage: result.usage,
         qualityCheck: result.quality_check,
         localOnly: !aiPhotoEditing,
