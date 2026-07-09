@@ -148,6 +148,36 @@ def analyze():
     return jsonify({"job_id": job_id}), 202
 
 
+@api_bp.post("/analyze-batch")
+def analyze_batch():
+    """Batch stage 1 (local): enqueue one analyze-only job per image.
+
+    Looped equivalent of /analyze -- each input file yields one entry in list
+    order with a job_id (poll via /status, fetch via /analyze/result) or a
+    per-file error.
+    """
+    images = [img for img in request.files.getlist("image") if img and img.filename]
+    if not images:
+        return jsonify({"error": "at least one image file is required"}), 400
+
+    params, error = _parse_and_validate_params(request.form)
+    if error:
+        return jsonify({"error": error}), 400
+    params["stage"] = "analyze"
+
+    entries = []
+    for image in images:
+        try:
+            engine_params = get_engine_params_template()
+            engine_params["acts"][0]["params"] = params
+            job_id = enqueue(engine_params, src_content=[image.read()])
+            entries.append({"filename": image.filename, "job_id": job_id})
+        except Exception as exc:
+            entries.append({"filename": image.filename, "error": str(exc)})
+
+    return jsonify({"jobs": entries}), 202
+
+
 @api_bp.get("/analyze/result/<job_id>")
 def analyze_result(job_id):
     info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
@@ -218,6 +248,35 @@ def aipoc_analyze():
         return jsonify({"error": f"分析失敗：{exc}"}), 502
 
     return jsonify({"status": "success", "analysis": analysis})
+
+
+@api_bp.post("/aipoc/analyze-batch")
+def aipoc_analyze_batch():
+    """Batch stage 1 (aipoc): synchronous local analyze for each image.
+
+    Looped equivalent of /aipoc/analyze -- analysis is returned inline (no job
+    to poll). Each input file yields one entry in list order with analysis or a
+    per-file error. Stage 2 is driven per-image by the frontend calling the
+    single-image /aipoc/submit (which, per its design, re-runs its own analysis
+    from scratch).
+    """
+    images = [img for img in request.files.getlist("image") if img and img.filename]
+    if not images:
+        return jsonify({"error": "at least one image file is required"}), 400
+
+    params, error = _parse_and_validate_params(request.form)
+    if error:
+        return jsonify({"error": error}), 400
+
+    entries = []
+    for image in images:
+        try:
+            analysis = analyze_stage(image.read())
+            entries.append({"filename": image.filename, "analysis": analysis})
+        except Exception as exc:
+            entries.append({"filename": image.filename, "error": str(exc)})
+
+    return jsonify({"jobs": entries}), 200
 
 
 # ── AIPoC-backed routes (/aipoc/) ───────────────────────────────────────────
