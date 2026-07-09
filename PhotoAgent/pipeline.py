@@ -185,7 +185,8 @@ def finish_stage(
         prompts["quality_check"] = None
         timings["quality_check"] = None
 
-    analysis = {**analysis, "prompts": prompts, "timings": timings}
+    analysis = {**analysis, "prompts": prompts}
+    analysis.pop("timings", None)
 
     return {
         "result_image": image_b64,
@@ -194,7 +195,11 @@ def finish_stage(
             "analysis": analysis,
             "quality_check": qa,
             "usage": usage,
-            "image_model": image_model if ai_photo_editing else None,
+            "extra-info": {
+                "image_model": image_model if ai_photo_editing else None,
+                "image_quality": quality,
+                "timings": timings,
+            },
         },
     }
 

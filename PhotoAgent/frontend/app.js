@@ -283,7 +283,7 @@
 
       stepStart = Date.now();
       const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
-      const t = result.analysis.timings || {};
+      const t = result.extra-info.timings || {};
       addTiming("AI 修圖中", finishWaitDuration, [
         { label: "Step 3：使用者指令審查", duration: secToMs(t.user_instruction_review) },
         { label: "Step 4：裁切驗證", duration: secToMs(t.crop_validation) },
