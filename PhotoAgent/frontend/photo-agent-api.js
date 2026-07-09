@@ -95,6 +95,27 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
+  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt }) {
+    const form = new FormData();
+    files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
+    form.append("preset", preset);
+    form.append("image_quality", imageQuality);
+    form.append("image_model", imageModel || "gpt-image-2");
+    form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    if (userPrompt) form.append("user_prompt", userPrompt);
+
+    const response = await fetch(`${BASE_URL}/api/photo-agent/analyze-batch`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `送出分析失敗：HTTP ${response.status}`);
+    }
+    // Entries align 1:1 with files by order; each has job_id or an error.
+    return data.jobs || [];
+  }
+
   async function getAnalyzeResult(jobId) {
     const response = await fetch(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
@@ -144,6 +165,27 @@ window.PhotoAgentApi = (() => {
     return data; // { status, analysis }
   }
 
+  async function analyzeAipocBatch({ files, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt }) {
+    const form = new FormData();
+    files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
+    form.append("preset", preset);
+    form.append("image_quality", imageQuality);
+    form.append("image_model", imageModel || "gpt-image-2");
+    form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    if (userPrompt) form.append("user_prompt", userPrompt);
+
+    const response = await fetch(`${BASE_URL}/api/photo-agent/aipoc/analyze-batch`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `AIPoC 分析失敗：HTTP ${response.status}`);
+    }
+    // Entries align 1:1 with files by order; each has analysis (inline) or error.
+    return data.jobs || [];
+  }
+
   // Server-side UI flags (e.g. `--debug-ui` on run_backend.py). Falls back to
   // {} on any failure so a missing/unreachable backend never blocks the page.
   async function getUiConfig() {
@@ -163,8 +205,10 @@ window.PhotoAgentApi = (() => {
     resultImageUrl,
     getUiConfig,
     analyzeJob,
+    analyzeJobBatch,
     getAnalyzeResult,
     continueJob,
-    analyzeAipoc
+    analyzeAipoc,
+    analyzeAipocBatch
   };
 })();
