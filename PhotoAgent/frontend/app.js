@@ -368,7 +368,7 @@
       stepStart = Date.now();
       let finalJobId;
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis, path: "aipoc" });
       } else {
         finalJobId = await continueJob(analyzeJobId, { analysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
       }

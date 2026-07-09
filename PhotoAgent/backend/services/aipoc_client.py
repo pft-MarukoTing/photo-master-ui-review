@@ -87,7 +87,8 @@ def upload_to_req_url(request_spec, data):
 
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
-                          image_model="gpt-image-2", ai_photo_editing=True, user_prompt=None, req_id=1):
+                          image_model="gpt-image-2", ai_photo_editing=True, user_prompt=None,
+                          stage=None, analysis=None, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -98,6 +99,17 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
             source image, no mask), e.g. [file_id]
         preset/image_quality/image_model/ai_photo_editing/user_prompt: same
             fields as photo_agent/param_validation.py's local validator
+        stage/analysis: mirrors the local worker's /continue/<job_id> shape
+            (photo_agent/param_validation.py's "stage"/"analysis" params) --
+            when the caller already has an analysis from /aipoc/analyze, pass
+            stage="finish" + that analysis so the remote worker's
+            job_processor.py (assuming it's running the same pipeline.py --
+            see aipoc_client module docstring) skips re-analyzing from
+            scratch and reuses it for steps 3-6. UNCONFIRMED whether the
+            remote gateway's orchestration layer forwards these through to
+            job_processor.py unmodified -- if it silently drops or rejects
+            them, this falls back to today's from-scratch full-pipeline
+            behavior (or errors out, which is easy to spot).
 
     Returns the parsed JSON body -- caller reads body["result"]["taskId"].
     """
@@ -110,6 +122,10 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
     }
     if user_prompt:
         params["user_prompt"] = user_prompt
+    if stage:
+        params["stage"] = stage
+    if analysis is not None:
+        params["analysis"] = analysis
     payload = {
         "payload": {
             "acts": [{"id": 0, "params": params}],

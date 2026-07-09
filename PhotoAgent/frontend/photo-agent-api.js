@@ -15,7 +15,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -23,6 +23,9 @@ window.PhotoAgentApi = (() => {
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
+    // AIPoC-only: the analysis already shown on the preview screen, so the
+    // remote worker can reuse it (stage="finish") instead of re-analyzing.
+    if (analysis) form.append("analysis", JSON.stringify(analysis));
 
     const response = await fetch(`${BASE_URL}${pathPrefix(path)}/submit`, {
       method: "POST",

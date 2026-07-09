@@ -337,6 +337,21 @@ def aipoc_submit():
     if error:
         return jsonify({"error": error}), 400
 
+    # Optional: the analysis already shown to the user on the preview screen
+    # (from /aipoc/analyze). When present, mirrors /continue/<job_id>'s
+    # stage="finish" shape so the remote worker reuses it for steps 3-6
+    # instead of re-analyzing from scratch -- see run_photo_agent_task's
+    # docstring for what's confirmed vs. assumed about the remote gateway.
+    analysis = None
+    analysis_raw = request.form.get("analysis")
+    if analysis_raw:
+        try:
+            analysis = json.loads(analysis_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "analysis must be valid JSON"}), 400
+        if not isinstance(analysis, dict) or "subject_category" not in analysis:
+            return jsonify({"error": "analysis (from /aipoc/analyze) is invalid"}), 400
+
     from backend.services import aipoc_client
 
     _, refresh_token = aipoc_client.get_default_tokens()
@@ -366,6 +381,8 @@ def aipoc_submit():
         image_model=params["image_model"],
         ai_photo_editing=params["ai_photo_editing"],
         user_prompt=params.get("user_prompt"),
+        stage="finish" if analysis else None,
+        analysis=analysis,
     )
     task_id = body.get("result", {}).get("taskId")
     if not task_id:
