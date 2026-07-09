@@ -58,15 +58,40 @@ Scroll To Bottom Of Photo List
     [Arguments]    ${container_xpath}
     ${previous_y}=    Set Variable    ${NONE}
     FOR    ${i}    IN RANGE    30
-        ${rect}=    Get Element Rect
-        ...    xpath=${container_xpath}/XCUIElementTypeCell[last()]
-        ${current_y}=    Set Variable    ${rect}[y]
+        ${rect_last}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()]
+        ${current_y}=    Set Variable    ${rect_last}[y]
         IF    $current_y == $previous_y
             BREAK
         END
         ${previous_y}=    Set Variable    ${current_y}
-        Swipe    start_x=207    start_y=780    end_x=207    end_y=200    duration=150ms
-        Sleep    0.5s
+
+        # Same margin trick as Scroll Up By Rows: swipe between the real centers of
+        # a bottom-margin cell and a top-margin cell (same column) instead of
+        # hardcoded coordinates, so it adapts to whatever the current device/layout
+        # actually renders. No landing-error tracking here since this only needs to
+        # flick fast towards the end, not stop on an exact row.
+        ${rect_1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-1]
+        ${rect_2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-2]
+        ${same_row_1}=    Evaluate    abs(${rect_last}[y] - ${rect_1}[y]) < 5
+        ${same_row_2}=    Evaluate    abs(${rect_last}[y] - ${rect_2}[y]) < 5
+        IF    ${same_row_2}
+            ${col_last}=    Set Variable    ${2}
+        ELSE IF    ${same_row_1}
+            ${col_last}=    Set Variable    ${1}
+        ELSE
+            ${col_last}=    Set Variable    ${0}
+        END
+
+        ${idx_bottom}=    Evaluate    ${col_last} + 3
+        ${idx_top}=    Evaluate    ${col_last} + 4
+        ${rect_bottom}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${idx_bottom}]
+        ${rect_top}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[${idx_top}]
+        ${swipe_x}=    Evaluate    ${rect_bottom}[x] + ${rect_bottom}[width] // 2
+        ${start_y}=    Evaluate    ${rect_bottom}[y] + ${rect_bottom}[height] // 2
+        ${end_y}=    Evaluate    ${rect_top}[y] + ${rect_top}[height] // 2
+
+        Swipe    start_x=${swipe_x}    start_y=${start_y}    end_x=${swipe_x}    end_y=${end_y}    duration=30ms
+        Sleep    0.3s
     END
 
 Click Photo From Bottom By Grid
