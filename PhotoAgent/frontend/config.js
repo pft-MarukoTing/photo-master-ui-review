@@ -9,6 +9,7 @@ window.PhotoAgentConfig = {
   analysisModel: "gpt-4.1-mini",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
+    "gpt-image-1.5": "GPT Image 1.5",
     "nano-banana-2": "Nano Banana 2"
   },
   presets: {

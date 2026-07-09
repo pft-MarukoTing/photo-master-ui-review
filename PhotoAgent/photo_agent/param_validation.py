@@ -12,7 +12,7 @@ from .utils import optional_text
 EFFECT_NAME = "photoAgent"
 VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
-VALID_IMAGE_MODELS = ("gpt-image-2", "nano-banana-2")
+VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "nano-banana-2")
 
 
 class PhotoAgentRequest(TypedDict):

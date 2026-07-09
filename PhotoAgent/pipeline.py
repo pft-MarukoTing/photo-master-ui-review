@@ -1,6 +1,7 @@
 import base64
 import logging
 import time
+from functools import partial
 
 from image_tools import (
     normalize_crop_box,
@@ -21,6 +22,7 @@ from prompts import ANALYSIS_INSTRUCTION
 
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
+    "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
     "nano-banana-2": edit_photo_gemini,
 }
 

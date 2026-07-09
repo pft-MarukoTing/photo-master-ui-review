@@ -258,6 +258,7 @@ def edit_photo(
     quality: str = "medium",
     preset_key: str = "natural",
     revision_feedback: str = None,
+    model: str = IMAGE_MODEL,
 ):
     """Returns (result, prompt)."""
     preset = PRESETS.get(preset_key) or PRESETS["natural"]
@@ -274,7 +275,7 @@ def edit_photo(
         OPENAI_IMAGES_EDITS_URL,
         headers=_auth_headers(),
         files={"image": ("photo.png", cropped_bytes, "image/png")},
-        data={"model": IMAGE_MODEL, "prompt": prompt_text, "quality": quality, "size": "auto"},
+        data={"model": model, "prompt": prompt_text, "quality": quality, "size": "auto"},
         timeout=300,
     )
     data = _safe_json(resp)
