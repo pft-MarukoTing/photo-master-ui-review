@@ -31,7 +31,7 @@ Beautify Nail Art Photo
     Click Page Element    accessibility_id=Custom
     Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
     Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    ${custom_offset}
-    Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]    timeout=90s
+    Confirm Nail Art Result
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Save"]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
@@ -140,3 +140,20 @@ Scroll To Retouch Feature
         Swipe    start_x=${start_x}    start_y=${center_y}    end_x=${end_x}    end_y=${center_y}    duration=300ms
         Sleep    0.5s
     END
+
+Confirm Nail Art Result
+    ${confirm_locator}=    Set Variable    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]
+    ${error_locator}=    Set Variable    xpath=//XCUIElementTypeStaticText[@name="Change photo"]
+    ${error_shown}=    Set Variable    ${False}
+    FOR    ${i}    IN RANGE    180
+        ${error_shown}=    Run Keyword And Return Status    Element Should Be Visible    ${error_locator}
+        IF    ${error_shown}    BREAK
+        ${confirm_shown}=    Run Keyword And Return Status    Element Should Be Visible    ${confirm_locator}
+        IF    ${confirm_shown}    BREAK
+        Sleep    0.5s
+    END
+    IF    ${error_shown}
+        Click Page Element    ${error_locator}
+        Click Page Element    accessibility_id=MBCAlbumBackButton
+    END
+    Click Page Element    ${confirm_locator}
