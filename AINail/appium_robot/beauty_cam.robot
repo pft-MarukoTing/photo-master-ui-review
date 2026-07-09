@@ -92,7 +92,6 @@ Click Photo From Bottom By Grid
     ${rect_col2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col2}]
     ${rect_col1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col1}]
     ${rect_col0}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${offset_col0}]
-    ${row_height}=    Evaluate    abs(${rect_last}[y] - ${rect_col2}[y])
 
     IF    ${offset} <= ${col_last}
         ${target_row}=    Set Variable    ${0}
@@ -107,22 +106,69 @@ Click Photo From Bottom By Grid
     ${target_x}=    Evaluate    ${col_x}[${target_col}] + ${rect_last}[width] // 2
     ${target_y}=    Evaluate    ${rect_last}[y] + ${rect_last}[height] // 2
 
-    # Swiping loses roughly 10% of the requested content-scroll distance to drag friction,
-    # so over-request the scroll distance to compensate, then click by computed coordinates
-    # (avoids xpath last()-offset entirely, since it drifts once cells scroll off and unmount).
-    ${scroll_distance}=    Evaluate    int(${target_row} * ${row_height} * 1.05)
-    ${remaining}=    Set Variable    ${scroll_distance}
-    WHILE    ${remaining} > 0
-        ${step}=    Evaluate    min(${remaining}, 300)
-        ${end_y}=    Evaluate    300 + ${step}
-        Swipe    start_x=207    start_y=300    end_x=207    end_y=${end_y}    duration=800ms
-        Sleep    0.5s
-        ${remaining}=    Evaluate    ${remaining} - ${step}
-    END
+    ${leftover_error}=    Scroll Up By Rows    ${container_xpath}    ${target_row}
     Sleep    1s
 
+    ${target_y}=    Evaluate    ${target_y} + ${leftover_error}
     ${target_point}=    Create List    ${target_x}    ${target_y}
     Tap    ${target_point}
+
+Scroll Up By Rows
+    [Arguments]    ${container_xpath}    ${row_count}
+    # Scrolls up by exactly ${row_count} rows using the real on-screen centers of
+    # two currently-rendered cells as the swipe endpoints, instead of an estimated
+    # pixel distance. Both endpoints are kept 1 row away from the rendered
+    # top/bottom edge, since an edge cell can be partially clipped and its
+    # reported center may fall outside the actually visible screen area.
+    #
+    # Swiping loses some of the requested distance to drag friction. Rather than
+    # guessing a fixed compensation ratio, this keeps a handle on the dragged
+    # cell itself, measures where it actually landed after each swipe, and folds
+    # that shortfall into the next swipe's target so the error is corrected
+    # instead of silently accumulating. Returns the final leftover pixel error
+    # so the caller can adjust its own tap coordinate.
+    ${remaining}=    Set Variable    ${row_count}
+    ${pending_error}=    Set Variable    ${0}
+    WHILE    ${remaining} > 0
+        ${total_cells}=    Get Matching Xpath Count    ${container_xpath}/XCUIElementTypeCell
+        ${num_rows}=    Evaluate    -(-${total_cells} // 3)
+        ${max_step}=    Evaluate    max(1, ${num_rows} - 3)
+        ${step}=    Evaluate    min(${remaining}, ${max_step})
+
+        ${rect_last}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()]
+        ${rect_1}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-1]
+        ${rect_2}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-2]
+        ${same_row_1}=    Evaluate    abs(${rect_last}[y] - ${rect_1}[y]) < 5
+        ${same_row_2}=    Evaluate    abs(${rect_last}[y] - ${rect_2}[y]) < 5
+        IF    ${same_row_2}
+            ${col_last}=    Set Variable    ${2}
+        ELSE IF    ${same_row_1}
+            ${col_last}=    Set Variable    ${1}
+        ELSE
+            ${col_last}=    Set Variable    ${0}
+        END
+
+        ${idx_low}=    Evaluate    ${col_last} + 3
+        ${idx_high}=    Evaluate    ${col_last} + 3 + 3 * ${step}
+        ${dragged_cell}=    Get Webelement    xpath=${container_xpath}/XCUIElementTypeCell[last()-${idx_high}]
+        ${rect_low}=    Get Element Rect    xpath=${container_xpath}/XCUIElementTypeCell[last()-${idx_low}]
+        ${rect_high}=    Get Element Rect    ${dragged_cell}
+        ${swipe_x}=    Evaluate    ${rect_low}[x] + ${rect_low}[width] // 2
+        ${start_y}=    Evaluate    ${rect_high}[y] + ${rect_high}[height] // 2
+        # Push the target by the outstanding error from the previous swipe, in
+        # the same (downward) direction, to close the gap it left behind.
+        ${target_y}=    Evaluate    ${rect_low}[y] + ${rect_low}[height] // 2 + ${pending_error}
+
+        Swipe    start_x=${swipe_x}    start_y=${start_y}    end_x=${swipe_x}    end_y=${target_y}    duration=2000ms
+        Sleep    0.5s
+
+        ${rect_high_after}=    Get Element Rect    ${dragged_cell}
+        ${actual_y}=    Evaluate    ${rect_high_after}[y] + ${rect_high_after}[height] // 2
+        ${pending_error}=    Evaluate    ${target_y} - ${actual_y}
+
+        ${remaining}=    Evaluate    ${remaining} - ${step}
+    END
+    RETURN    ${pending_error}
 
 Scroll To Retouch Feature
     [Arguments]    ${feature_name}
