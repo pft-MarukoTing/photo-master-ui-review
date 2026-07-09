@@ -9,11 +9,12 @@ ${BUNDLE_ID}           com.meitu.myxj
 ${SOURCE_PHOTO_START_OFFSET}         0
 ${REFERENCE_PHOTO_START_OFFSET}      50
 ${ITERATION_COUNT}                   50
+${START_ITERATION}                   0
 
 *** Test Cases ***
 Meitu Test Case
     Open Meitu Application
-    FOR    ${i}    IN RANGE    ${ITERATION_COUNT}
+    FOR    ${i}    IN RANGE    ${START_ITERATION}    ${ITERATION_COUNT}
         ${photo_offset}=    Evaluate    ${SOURCE_PHOTO_START_OFFSET} + ${i}
         ${custom_offset}=    Evaluate    ${REFERENCE_PHOTO_START_OFFSET} + ${i}
         ${iteration_display}=    Evaluate    ${i} + 1
