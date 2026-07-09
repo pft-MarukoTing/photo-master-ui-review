@@ -8,15 +8,25 @@
     resultImageUrl,
     getUiConfig,
     analyzeJob,
+    analyzeJobBatch,
     getAnalyzeResult,
     continueJob,
-    analyzeAipoc
+    analyzeAipoc,
+    analyzeAipocBatch
   } = window.PhotoAgentApi;
   const { renderResult, renderAnalysisPreview } = window.PhotoAgentResults;
 
   let selectedFile = null;
   let previewUrl = "";
   let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
+
+  // Batch mode: populated only when more than one file is selected. While
+  // batchRecords is empty the app behaves exactly as the single-image flow.
+  const POLL_CONCURRENCY = 4;
+  let batchRecords = [];   // see setSelectedFileBatch for record shape
+  let batchSettings = null;
+  let detailPos = 0;       // index into the done-records list for the results detail view
+  let reviewPos = 0;       // index into the analyzed-records list for the step-2 review view
 
   const procVisual = document.querySelector(".proc-visual");
   const stepsGrid = document.querySelector(".steps-grid");
@@ -56,8 +66,7 @@
     container.appendChild(row);
   }
 
-  function populateTimingSection() {
-    const timings = getTimings();
+  function populateTimingSection(timings = getTimings()) {
     if (!timingList || !timingDetails || !timings.length) return;
     timingList.innerHTML = "";
     let total = 0;
@@ -199,6 +208,79 @@
     }
   }
 
+  // Batch counterpart of setSelectedFile: filter to images (same rule/message),
+  // build one record per file, and render the multi-thumbnail strip.
+  function setSelectedFileBatch(files) {
+    hideError();
+    resetBatchState();
+    const images = files.filter((file) => file && file.type.startsWith("image/"));
+    if (!images.length) {
+      showError("請選擇 JPG、PNG 或 WebP 圖片。");
+      return;
+    }
+    if (images.length !== files.length) {
+      showError("已略過非圖片檔案。");
+    }
+
+    selectedFile = null;
+    batchRecords = images.map((file, i) => ({
+      localId: `f${i}`,
+      file,
+      previewUrl: URL.createObjectURL(file),
+      // pending -> analyzing -> analyzed -> processing -> done / error
+      status: "pending",
+      analysis: null,       // step-1 result (shown in the step-2 review panel)
+      analyzeJobId: null,   // local path only: the analyze job, reused by continue
+      options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
+      recipeChecked: null,  // per-image recipe checklist state (UI-only)
+      userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
+      analyzeTimings: [],   // step-1 timing rows, merged into the detail view
+      jobId: null,          // step-2 edit job/task id
+      result: null,
+      imageUrl: null,
+      error: null,
+      timings: []
+    }));
+
+    els.dropZone.hidden = true;
+    els.dzPreview.hidden = true;
+    els.dzMulti.hidden = false;
+    els.dzMulti.innerHTML = "";
+    batchRecords.forEach((r) => {
+      const thumb = document.createElement("div");
+      thumb.className = "dz-thumb";
+      const im = document.createElement("img");
+      im.src = r.previewUrl;
+      thumb.appendChild(im);
+      els.dzMulti.appendChild(thumb);
+    });
+    const count = document.createElement("p");
+    count.className = "dz-count";
+    count.textContent = `已選擇 ${batchRecords.length} 張`;
+    els.dzMulti.appendChild(count);
+  }
+
+  // Drop batch state and restore the results view to its single-image default,
+  // so the untouched single flow always starts from a known layout.
+  function resetBatchState() {
+    batchRecords.forEach((r) => { if (r.previewUrl) URL.revokeObjectURL(r.previewUrl); });
+    batchRecords = [];
+    batchSettings = null;
+    detailPos = 0;
+    reviewPos = 0;
+    if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
+    if (els.resultsGrid) els.resultsGrid.innerHTML = "";
+    if (els.resultsGridWrap) els.resultsGridWrap.hidden = true;
+    if (els.resultsDetail) els.resultsDetail.hidden = false;
+    if (els.detailNav) els.detailNav.hidden = true;
+    if (els.backToGridBtn) els.backToGridBtn.hidden = true;
+    if (els.batchProgress) els.batchProgress.hidden = true;
+    if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
+    if (els.batchPromptRow) els.batchPromptRow.hidden = true;
+    if (els.batchPromptInput) els.batchPromptInput.value = "";
+    if (els.batchReviewNav) els.batchReviewNav.hidden = true;
+  }
+
   function friendlyError(error) {
     if (error.message === "Failed to fetch") {
       return "無法連線到 Photo Master 伺服器，請確認後端服務是否已啟動。";
@@ -208,6 +290,10 @@
 
   async function startSubmit() {
     hideError();
+    if (batchRecords.length > 1) {
+      await startSubmitBatch();
+      return;
+    }
     if (!selectedFile) {
       showError("請先上傳一張照片。");
       return;
@@ -325,12 +411,503 @@
     }
   }
 
+  // ── Batch step 1: analyze every image, then show the review grid ─────────
+  async function startSubmitBatch() {
+    const presetKey = "natural";
+    batchSettings = {
+      presetKey,
+      preset: presets[presetKey] || presets.natural,
+      // Prompt is entered per-image (or batch-level) at step 2, not at upload.
+      imageQuality: els.imageQualitySelect?.value || "medium",
+      imageModel: els.imageModelSelect?.value || "gpt-image-2",
+      aiPhotoEditing: els.aiEditToggle.checked,
+      path: els.processingPathSelect?.value || "local"
+    };
+
+    els.startButton.disabled = true;
+    resetSteps(); // clears completedTimings so each run's total starts fresh
+    batchRecords.forEach((r) => {
+      r.status = "analyzing";
+      r.analysis = null;
+      r.analyzeJobId = null;
+      r.analyzeTimings = [];
+      r.jobId = null;
+      r.result = null;
+      r.imageUrl = null;
+      r.error = null;
+      r.timings = [];
+    });
+
+    els.resultsDetail.hidden = true;
+    els.detailNav.hidden = true;
+    els.backToGridBtn.hidden = true;
+    els.batchContinueAllBtn.hidden = true;
+    els.resultsGridWrap.hidden = false;
+    els.batchProgress.hidden = false;
+    els.resultSummary.textContent = "批次分析中，先完成的會先顯示。";
+    renderBatchGrid();
+    updateBatchProgress();
+    showSection("results");
+
+    const analyzeArgs = {
+      files: batchRecords.map((r) => r.file),
+      preset: presetKey,
+      imageQuality: batchSettings.imageQuality,
+      imageModel: batchSettings.imageModel,
+      aiPhotoEditing: batchSettings.aiPhotoEditing
+    };
+
+    try {
+      if (batchSettings.path === "aipoc") {
+        // AIPoC analyze is synchronous local -- one call returns all analyses.
+        let entries;
+        try {
+          entries = await analyzeAipocBatch(analyzeArgs);
+        } catch (error) {
+          batchRecords.forEach((r) => { r.status = "error"; r.error = friendlyError(error); });
+          renderBatchGrid();
+          updateBatchProgress();
+          showError(friendlyError(error));
+          return;
+        }
+        batchRecords.forEach((r, i) => {
+          const entry = entries[i];
+          if (entry && entry.analysis) {
+            r.analysis = entry.analysis;
+            const t = entry.analysis.timings || {};
+            r.analyzeTimings = [{ label: "初步分析", duration: secToMs(t.photo_analysis) }];
+            r.status = "analyzed";
+          } else {
+            r.status = "error";
+            r.error = (entry && entry.error) || "分析失敗";
+          }
+          updateBatchCard(r);
+        });
+      } else {
+        // Local analyze is queued -- fan out job ids, then poll each.
+        let entries;
+        try {
+          entries = await analyzeJobBatch(analyzeArgs);
+        } catch (error) {
+          batchRecords.forEach((r) => { r.status = "error"; r.error = friendlyError(error); });
+          renderBatchGrid();
+          updateBatchProgress();
+          showError(friendlyError(error));
+          return;
+        }
+        batchRecords.forEach((r, i) => {
+          const entry = entries[i];
+          if (entry && entry.job_id) {
+            r.analyzeJobId = entry.job_id;
+          } else {
+            r.status = "error";
+            r.error = (entry && entry.error) || "送出分析失敗";
+          }
+          updateBatchCard(r);
+        });
+        const analyzing = batchRecords.filter((r) => r.status === "analyzing" && r.analyzeJobId);
+        await runBatchPool(analyzing, analyzeBatchItem, POLL_CONCURRENCY);
+      }
+
+      updateBatchProgress();
+      enterBatchReview();
+    } finally {
+      els.startButton.disabled = false;
+    }
+  }
+
+  // Poll one local analyze job and fetch its analysis (step 1).
+  async function analyzeBatchItem(record) {
+    try {
+      const stepStart = Date.now();
+      await pollJobStatus(record.analyzeJobId, { path: "local" });
+      const analyzeResult = await getAnalyzeResult(record.analyzeJobId);
+      record.analysis = analyzeResult.result.analysis;
+      const t = (record.analysis && record.analysis.timings) || {};
+      record.analyzeTimings = [{ label: "分析中", duration: Date.now() - stepStart, children: [
+        { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
+      ] }];
+      record.status = "analyzed";
+    } catch (error) {
+      record.status = "error";
+      record.error = friendlyError(error);
+    }
+    updateBatchCard(record);
+    updateBatchProgress();
+  }
+
+  // ── Batch step 2 gate: analyzed grid + the advance-all default button ────
+  function enterBatchReview() {
+    els.resultsDetail.hidden = true;
+    els.detailNav.hidden = true;
+    els.backToGridBtn.hidden = true;
+    els.batchReviewNav.hidden = true;
+    els.resultsGridWrap.hidden = false;
+    const ready = analyzedBatchRecords().length > 0;
+    els.batchContinueAllBtn.hidden = !ready;
+    els.batchPromptRow.hidden = !ready;
+    els.resultSummary.textContent = ready
+      ? "分析完成。可點單張分析給各自補充指令，或在下方填寫整批補充指令後「全部繼續處理」。"
+      : "分析未成功，請重試。";
+    showSection("results");
+  }
+
+  // Effective per-image prompt: the image's own (from its review) wins; else the
+  // batch-level shared prompt applies.
+  function effectivePrompt(record) {
+    const own = (record.userPrompt || "").trim();
+    if (own) return own;
+    return (els.batchPromptInput && els.batchPromptInput.value.trim()) || "";
+  }
+
+  // Run step 2 (edit) for the given analyzed records via the same single-image
+  // endpoints, so each image carries its own prompt -- flow identical to single.
+  async function continueBatchRecords(records) {
+    const targets = records.filter((r) => r.status === "analyzed");
+    if (!targets.length) return;
+
+    els.batchContinueAllBtn.hidden = true;
+    els.batchPromptRow.hidden = true;
+    els.batchReviewNav.hidden = true;
+    if (els.analysisPreview) els.analysisPreview.hidden = true;
+    els.resultsDetail.hidden = true;
+    els.resultsGridWrap.hidden = false;
+    showSection("results");
+
+    targets.forEach((r) => { r.status = "processing"; updateBatchCard(r); });
+    updateBatchProgress();
+    els.resultSummary.textContent = batchSettings.aiPhotoEditing
+      ? `批次使用 ${window.PhotoAgentConfig.imageModels[batchSettings.imageModel] || batchSettings.imageModel} 修圖中，先完成的會先顯示。`
+      : "批次本機影像處理中，先完成的會先顯示。";
+
+    await runBatchPool(targets, editBatchItem, POLL_CONCURRENCY);
+
+    const done = batchRecords.filter((r) => r.status === "done").length;
+    els.resultSummary.textContent = `批次完成：${done}/${batchRecords.length} 張成功。`;
+    // Keep the advance-all controls if images are still awaiting review.
+    const remaining = analyzedBatchRecords().length > 0;
+    els.batchContinueAllBtn.hidden = !remaining;
+    els.batchPromptRow.hidden = !remaining;
+  }
+
+  function batchContinueAll() {
+    continueBatchRecords(analyzedBatchRecords());
+  }
+
+  // Step 2 for one record: submit via the single-image endpoint (so it carries
+  // the image's own effective prompt) -> poll -> fetch. Records analyze + edit
+  // sub-timings, matching the single flow's nested timing display.
+  async function editBatchItem(record) {
+    try {
+      const userPrompt = effectivePrompt(record);
+      let stepStart = Date.now();
+      if (batchSettings.path === "aipoc") {
+        record.jobId = await submitJob({
+          file: record.file,
+          preset: batchSettings.presetKey,
+          imageQuality: batchSettings.imageQuality,
+          imageModel: batchSettings.imageModel,
+          aiPhotoEditing: batchSettings.aiPhotoEditing,
+          userPrompt,
+          path: "aipoc"
+        });
+      } else {
+        record.jobId = await continueJob(record.analyzeJobId, {
+          analysis: record.analysis,
+          preset: batchSettings.presetKey,
+          imageQuality: batchSettings.imageQuality,
+          imageModel: batchSettings.imageModel,
+          aiPhotoEditing: batchSettings.aiPhotoEditing,
+          userPrompt
+        });
+      }
+      const submitMs = Date.now() - stepStart;
+
+      stepStart = Date.now();
+      await pollJobStatus(record.jobId, { path: batchSettings.path });
+      const pollMs = Date.now() - stepStart;
+
+      stepStart = Date.now();
+      const { image_url: imageUrl, result } = await getJobResult(record.jobId, { path: batchSettings.path });
+      const fetchMs = Date.now() - stepStart;
+
+      record.status = "done";
+      record.imageUrl = imageUrl;
+      record.result = result;
+      // Finish-stage timings moved into result["extra-info"] (matches single).
+      const t = (result["extra-info"] || {}).timings || {};
+      record.timings = [
+        ...(record.analyzeTimings || []),
+        { label: "提交後續處理", duration: submitMs },
+        { label: "AI 修圖中", duration: pollMs, children: [
+          { label: "Step 3：使用者指令審查", duration: secToMs(t.user_instruction_review) },
+          { label: "Step 4：裁切驗證", duration: secToMs(t.crop_validation) },
+          { label: "Step 5：修圖執行", duration: secToMs(t.image_edit) },
+          { label: "Step 6：品質檢查", duration: secToMs(t.quality_check) }
+        ] },
+        { label: "取得結果", duration: fetchMs }
+      ];
+    } catch (error) {
+      record.status = "error";
+      record.error = friendlyError(error);
+    }
+    updateBatchCard(record);
+    updateBatchProgress();
+  }
+
+  // Run `worker` over `items` with at most `concurrency` in flight.
+  async function runBatchPool(items, worker, concurrency) {
+    let idx = 0;
+    const runners = [];
+    const n = Math.min(concurrency, items.length);
+    for (let c = 0; c < n; c += 1) {
+      runners.push((async () => {
+        while (idx < items.length) {
+          const i = idx;
+          idx += 1;
+          await worker(items[i]);
+        }
+      })());
+    }
+    await Promise.all(runners);
+  }
+
+  function updateBatchProgress() {
+    const total = batchRecords.length;
+    const failed = batchRecords.filter((r) => r.status === "error").length;
+    const failText = failed ? `，失敗 ${failed}` : "";
+    // Once any image has entered/finished editing, report edit progress;
+    // otherwise report analysis progress.
+    const inEdit = batchRecords.some((r) => r.status === "processing" || r.status === "done");
+    if (inEdit) {
+      const done = batchRecords.filter((r) => r.status === "done").length;
+      els.batchProgress.textContent = `完成 ${done}/${total}${failText}`;
+    } else {
+      const analyzed = batchRecords.filter((r) => r.status === "analyzed").length;
+      els.batchProgress.textContent = `已分析 ${analyzed}/${total}${failText}`;
+    }
+  }
+
+  function renderBatchGrid() {
+    els.resultsGrid.innerHTML = "";
+    batchRecords.forEach((record) => els.resultsGrid.appendChild(buildBatchCard(record)));
+  }
+
+  function buildBatchCard(record) {
+    const card = document.createElement("div");
+    card.className = `result-card ${record.status}`;
+    card.dataset.id = record.localId;
+
+    const media = document.createElement("div");
+    media.className = "rc-media";
+    const img = document.createElement("img");
+    img.src = record.imageUrl || record.previewUrl;
+    media.appendChild(img);
+    if (record.status === "analyzing" || record.status === "processing") {
+      const spinner = document.createElement("div");
+      spinner.className = "rc-spinner";
+      media.appendChild(spinner);
+    }
+    const badge = document.createElement("span");
+    badge.className = "rc-badge";
+    badge.textContent = {
+      analyzing: "分析中",
+      analyzed: "已分析",
+      processing: "處理中",
+      done: "完成",
+      error: "失敗"
+    }[record.status] || "";
+    media.appendChild(badge);
+
+    const name = document.createElement("p");
+    name.className = "rc-name";
+    name.textContent = record.file.name;
+
+    card.appendChild(media);
+    card.appendChild(name);
+
+    if (record.status === "done") {
+      card.classList.add("clickable");
+      card.addEventListener("click", () => openBatchDetail(record));
+    } else if (record.status === "analyzed") {
+      card.classList.add("clickable");
+      card.addEventListener("click", () => openBatchAnalysisReview(record));
+    } else if (record.status === "error") {
+      card.title = record.error || "處理失敗";
+    }
+    return card;
+  }
+
+  function updateBatchCard(record) {
+    const existing = els.resultsGrid.querySelector(`[data-id="${record.localId}"]`);
+    if (existing) existing.replaceWith(buildBatchCard(record));
+  }
+
+  function doneBatchRecords() {
+    return batchRecords.filter((r) => r.status === "done");
+  }
+
+  function openBatchDetail(record) {
+    const done = doneBatchRecords();
+    detailPos = Math.max(0, done.indexOf(record));
+    showBatchDetail();
+  }
+
+  // Reuse the single-image report DOM (renderResult) for the opened record.
+  // Set the original image first so resolveCropBoxForDisplay sees its dims.
+  function showBatchDetail() {
+    const done = doneBatchRecords();
+    if (!done.length) return;
+    detailPos = Math.min(Math.max(detailPos, 0), done.length - 1);
+    const record = done[detailPos];
+
+    els.resultsGridWrap.hidden = true;
+    els.resultsDetail.hidden = false;
+    els.detailNav.hidden = false;
+    els.backToGridBtn.hidden = false;
+    els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
+    els.detailPrev.disabled = detailPos === 0;
+    els.detailNext.disabled = detailPos === done.length - 1;
+
+    const applyRender = () => {
+      els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
+      // Report the models that actually ran, same label logic as single.
+      const extraInfo = record.result["extra-info"] || {};
+      const usedImageModelLabel = extraInfo.image_model
+        ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
+        : "本機處理";
+      const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+      const data = {
+        image: record.imageUrl,
+        model: usedModelLabel,
+        usage: record.result.usage,
+        qualityCheck: record.result.quality_check,
+        localOnly: !batchSettings.aiPhotoEditing,
+        retryCount: 0
+      };
+      // Point the zip download at the currently-viewed image, same shape the
+      // single flow sets so handleDownloadClick works here too.
+      lastResult = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path };
+      renderResult({
+        data,
+        analysis: record.result.analysis,
+        preset: batchSettings.preset,
+        imageModel: data.model
+      });
+      populateTimingSection(record.timings);
+    };
+    if (els.originalImg.src === record.previewUrl && els.originalImg.complete) {
+      applyRender();
+    } else {
+      els.originalImg.onload = () => {
+        els.originalImg.onload = null;
+        applyRender();
+      };
+      els.originalImg.src = record.previewUrl;
+    }
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function backToBatchGrid() {
+    els.resultsDetail.hidden = true;
+    els.detailNav.hidden = true;
+    els.backToGridBtn.hidden = true;
+    els.resultsGridWrap.hidden = false;
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  // ── Batch step-2 per-image review (reuses the single analysis panel) ─────
+  function analyzedBatchRecords() {
+    return batchRecords.filter((r) => r.status === "analyzed");
+  }
+
+  function currentReviewRecord() {
+    const list = analyzedBatchRecords();
+    if (!list.length) return null;
+    return list[Math.min(Math.max(reviewPos, 0), list.length - 1)];
+  }
+
+  function openBatchAnalysisReview(record) {
+    reviewPos = Math.max(0, analyzedBatchRecords().indexOf(record));
+    showBatchReview();
+  }
+
+  function showBatchReview() {
+    const list = analyzedBatchRecords();
+    if (!list.length) { enterBatchReview(); return; }
+    reviewPos = Math.min(Math.max(reviewPos, 0), list.length - 1);
+    const record = list[reviewPos];
+
+    // Reuse the processing screen's analysis-preview panel verbatim.
+    if (stepsGrid) stepsGrid.hidden = true;
+    clearContinueWait();
+    els.viewResultsWrap.hidden = true;
+    procVisual.classList.remove("done");
+    procVisual.style.height = "";
+    els.procThumb.src = record.previewUrl;
+    if (procSub) procSub.textContent = "審核初步分析，可調整後繼續。";
+
+    renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
+    if (els.analysisPreview) els.analysisPreview.hidden = false;
+    applyBatchReviewSelections(record);
+    // The 補充指令 textarea lives inside #analysis-preview; restore this image's.
+    if (els.promptInput) els.promptInput.value = record.userPrompt || "";
+
+    els.batchReviewNav.hidden = false;
+    els.batchReviewIndex.textContent = `${reviewPos + 1} / ${list.length}`;
+    els.batchReviewPrev.disabled = reviewPos === 0;
+    els.batchReviewNext.disabled = reviewPos === list.length - 1;
+
+    showSection("processing");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  // Read the radio/checkbox selections back onto the record so per-image choices
+  // persist across nav/return (UI-only, not sent to the backend).
+  function captureBatchReviewSelections(record) {
+    if (!record) return;
+    if (els.promptInput) record.userPrompt = els.promptInput.value.trim();
+    const checked = (name) => document.querySelector(`input[name="${name}"]:checked`);
+    record.options = {
+      pose: checked("ap-pose")?.value || "default",
+      angle: checked("ap-angle")?.value || "default",
+      lighting: checked("ap-lighting")?.value || "default",
+      size: checked("ap-size")?.value || "default"
+    };
+    if (els.apRecipeList) {
+      record.recipeChecked = Array.from(els.apRecipeList.querySelectorAll("input[type=checkbox]"))
+        .map((c) => c.checked);
+    }
+  }
+
+  function applyBatchReviewSelections(record) {
+    if (record.options) {
+      const map = { "ap-pose": "pose", "ap-angle": "angle", "ap-lighting": "lighting", "ap-size": "size" };
+      Object.entries(map).forEach(([name, key]) => {
+        const input = document.querySelector(`input[name="${name}"][value="${record.options[key]}"]`);
+        if (input) input.checked = true;
+      });
+    }
+    if (Array.isArray(record.recipeChecked) && els.apRecipeList) {
+      const boxes = els.apRecipeList.querySelectorAll("input[type=checkbox]");
+      record.recipeChecked.forEach((isChecked, i) => { if (boxes[i]) boxes[i].checked = isChecked; });
+    }
+  }
+
+  function batchReviewBack() {
+    captureBatchReviewSelections(currentReviewRecord());
+    if (els.analysisPreview) els.analysisPreview.hidden = true;
+    els.batchReviewNav.hidden = true;
+    enterBatchReview();
+  }
+
   function resetApp() {
     hideError();
     selectedFile = null;
     lastResult = null;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
+    resetBatchState();
 
     els.fileInput.value = "";
     els.dzPreviewImg.removeAttribute("src");
@@ -357,13 +934,66 @@
   }
 
   // ── Event listeners ────────────────────────────────────────────
-  els.fileInput.addEventListener("change", () => setSelectedFile(els.fileInput.files?.[0]));
+  // One file -> single flow (setSelectedFile); more than one -> batch flow.
+  function routeSelectedFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (files.length > 1) {
+      setSelectedFileBatch(files);
+    } else {
+      resetBatchState();
+      setSelectedFile(files[0]);
+    }
+  }
+
+  els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
   els.startButton.addEventListener("click", startSubmit);
   els.backToProcessBtn.addEventListener("click", () => {
     showSection("processing");
   });
   els.resetButton.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
+  if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
+  if (els.detailPrev) {
+    els.detailPrev.addEventListener("click", () => {
+      if (detailPos > 0) { detailPos -= 1; showBatchDetail(); }
+    });
+  }
+  if (els.detailNext) {
+    els.detailNext.addEventListener("click", () => {
+      detailPos += 1;
+      showBatchDetail();
+    });
+  }
+  if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
+  if (els.batchReviewBack) els.batchReviewBack.addEventListener("click", batchReviewBack);
+  if (els.batchReviewPrev) {
+    els.batchReviewPrev.addEventListener("click", () => {
+      if (reviewPos > 0) {
+        captureBatchReviewSelections(currentReviewRecord());
+        reviewPos -= 1;
+        showBatchReview();
+      }
+    });
+  }
+  if (els.batchReviewNext) {
+    els.batchReviewNext.addEventListener("click", () => {
+      if (reviewPos < analyzedBatchRecords().length - 1) {
+        captureBatchReviewSelections(currentReviewRecord());
+        reviewPos += 1;
+        showBatchReview();
+      }
+    });
+  }
+  if (els.batchReviewContinue) {
+    els.batchReviewContinue.addEventListener("click", () => {
+      const record = currentReviewRecord();
+      if (!record) return;
+      captureBatchReviewSelections(record);
+      if (els.analysisPreview) els.analysisPreview.hidden = true;
+      els.batchReviewNav.hidden = true;
+      continueBatchRecords([record]);
+    });
+  }
 
   for (const eventName of ["dragenter", "dragover"]) {
     els.dropZone.addEventListener(eventName, (event) => {
@@ -378,6 +1008,6 @@
     });
   }
   els.dropZone.addEventListener("drop", (event) => {
-    setSelectedFile(event.dataTransfer.files?.[0]);
+    routeSelectedFiles(event.dataTransfer.files);
   });
 })();
