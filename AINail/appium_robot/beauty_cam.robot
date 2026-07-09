@@ -16,6 +16,8 @@ Meitu Test Case
     FOR    ${i}    IN RANGE    ${ITERATION_COUNT}
         ${photo_offset}=    Evaluate    ${SOURCE_PHOTO_START_OFFSET} + ${i}
         ${custom_offset}=    Evaluate    ${REFERENCE_PHOTO_START_OFFSET} + ${i}
+        ${iteration_display}=    Evaluate    ${i} + 1
+        Log To Console    \n[${iteration_display}/${ITERATION_COUNT}] photo_offset=${photo_offset} custom_offset=${custom_offset}
         Beautify Nail Art Photo    ${photo_offset}    ${custom_offset}
     END
 
