@@ -266,7 +266,11 @@
       showAnalysisPreview(analysis, preset);
       await waitForContinue();
       const userPrompt = els.promptInput.value.trim();
-      if (procSub) procSub.textContent = "AI 正在修圖，請稍候…";
+      if (procSub) {
+        procSub.textContent = aiPhotoEditing
+          ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
+          : "正在進行本機影像處理，請稍候…";
+      }
 
       stepStart = Date.now();
       let finalJobId;
