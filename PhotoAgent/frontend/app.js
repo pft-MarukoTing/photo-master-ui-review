@@ -37,12 +37,19 @@
 
   // Shown in the URL-debug case (?debug etc.) or when the backend was
   // started with `--debug-ui` / DEBUG_UI=true (testbed deployments).
+  // Default to "local" in both debug cases -- AIPoC stays the default for
+  // everyone else, but debug sessions are almost always testing the local
+  // worker path.
   if (processingPathRow) {
     if (window.location.href.includes("debug")) {
       processingPathRow.style.display = "";
+      if (els.processingPathSelect) els.processingPathSelect.value = "local";
     } else {
       getUiConfig().then((cfg) => {
-        if (cfg.debugUi) processingPathRow.style.display = "";
+        if (cfg.debugUi) {
+          processingPathRow.style.display = "";
+          if (els.processingPathSelect) els.processingPathSelect.value = "local";
+        }
       });
     }
   }
