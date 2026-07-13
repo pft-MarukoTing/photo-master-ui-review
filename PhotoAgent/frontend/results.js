@@ -69,6 +69,41 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  // Read-only variant of fillCheckList -- checked state reflects whether the
+  // QA step judged that recipe item as followed, not a user-toggleable choice.
+  function fillRecipeAdherenceList(element, adherenceItems, fallbackRecipe) {
+    if (!element) return;
+    element.innerHTML = "";
+    const entries = Array.isArray(adherenceItems) && adherenceItems.length
+      ? adherenceItems.map((it) => ({ label: it.item, checked: it.followed === true, note: it.note }))
+      : (fallbackRecipe || []).map((label) => ({ label, checked: true, note: "" }));
+
+    if (!entries.length) {
+      const li = document.createElement("li");
+      li.textContent = "尚未取得修圖建議項目。";
+      element.appendChild(li);
+      return;
+    }
+
+    entries.forEach((entry) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+
+      const icon = document.createElement("span");
+      icon.className = `adherence-icon ${entry.checked ? "is-done" : "is-pending"}`;
+      icon.textContent = entry.checked ? "✓" : "✕";
+
+      const text = document.createElement("span");
+      text.className = "step-cb-label";
+      text.textContent = entry.note ? `${entry.label}（${entry.note}）` : entry.label;
+
+      label.appendChild(icon);
+      label.appendChild(text);
+      li.appendChild(label);
+      element.appendChild(li);
+    });
+  }
+
   // Same checkbox-list look as fillCheckList, but backed by radio inputs
   // sharing one `name` -- mutually exclusive selection within the group,
   // enforced natively by the browser rather than custom JS.
@@ -333,14 +368,7 @@ window.PhotoAgentResults = (() => {
         ? joinParts([`修圖建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
         : "尚未取得修圖建議達成度。";
     }
-    if (els.recipeScoreList) {
-      const unfollowed = (recipeAdherence?.items || []).filter((it) => it.followed === false);
-      fillList(
-        els.recipeScoreList,
-        unfollowed.map((it) => joinParts([`未達成：${it.item}`, it.note || ""])),
-        ["尚無未達成的修圖建議項目。"]
-      );
-    }
+    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, analysis.retouch_recipe);
 
     fillList(els.qaList, [
       ...checksToList(qa),
