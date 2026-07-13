@@ -153,13 +153,25 @@
   }
 
   // ── Download source + result image + result JSON bundled as one zip ────
-  function buildZipFilename(jobId) {
+  function buildResultBaseName(jobId) {
     const pad = (n) => String(n).padStart(2, "0");
     const now = new Date();
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     // AIPoC task ids contain "/" and "+", which aren't safe in a filename.
     const safeJobId = String(jobId).replace(/[^a-zA-Z0-9._-]/g, "_");
-    return `photoMuse-${dateStr}-${safeJobId}.zip`;
+    return `photoMuse-${dateStr}-${safeJobId}`;
+  }
+
+  function buildZipFilename(jobId) {
+    return `${buildResultBaseName(jobId)}.zip`;
+  }
+
+  function buildBatchZipFilename() {
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `photoMuse-${dateStr}-${timeStr}.zip`;
   }
 
   const PROMPT_KEYS = ["photo_analysis", "user_instruction_review", "crop_validation", "image_edit", "quality_check"];
@@ -177,8 +189,8 @@
     return JSON.stringify(ordered, null, 2);
   }
 
-  async function buildResultZip() {
-    const { file, resultText, jobId, path } = lastResult;
+  async function buildResultFiles(results, prefix = "") {
+    const { file, resultText, jobId, path } = results;
     // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
     // that URL has no CORS headers, so a browser-side fetch() of it is
     // blocked even though the same URL displays fine in an <img> tag.
@@ -189,12 +201,16 @@
     const jsonBytes = new TextEncoder().encode(JSON.stringify(resultText, null, 2));
     const promptsBytes = new TextEncoder().encode(buildPromptsJson(resultText.analysis?.prompts || {}));
 
-    return window.PhotoAgentZip.createZip([
-      { name: file.name || "source.jpg", data: new Uint8Array(sourceBuf) },
-      { name: "result.png", data: new Uint8Array(imageBuf) },
-      { name: "result.json", data: jsonBytes },
-      { name: "prompts.json", data: promptsBytes }
-    ]);
+    return [
+      { name: prefix + (file.name || "source.jpg"), data: new Uint8Array(sourceBuf) },
+      { name: prefix + "result.png", data: new Uint8Array(imageBuf) },
+      { name: prefix + "result.json", data: jsonBytes },
+      { name: prefix + "prompts.json", data: promptsBytes }
+    ];
+  }
+
+  async function buildResultZip() {
+    return window.PhotoAgentZip.createZip(await buildResultFiles(lastResult));
   }
 
   async function handleDownloadClick(event) {
@@ -213,6 +229,34 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (error) {
       showError("打包下載失敗，請稍後再試。");
+    }
+  }
+
+  async function handleDownloadAllClick() {
+    const done = doneBatchRecords();
+    if (!done.length) return;
+
+    els.downloadAllBtn.disabled = true;
+    try {
+      const groups = await Promise.all(done.map((record) => {
+        // Name each image's folder like its own single-download zip would be.
+        const prefix = `${buildResultBaseName(record.jobId)}/`;
+        const results = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path };
+        return buildResultFiles(results, prefix);
+      }));
+      const zipBlob = window.PhotoAgentZip.createZip(groups.flat());
+      const url = URL.createObjectURL(zipBlob);
+      const tempLink = document.createElement("a");
+      tempLink.href = url;
+      tempLink.download = buildBatchZipFilename();
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      tempLink.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      showError("打包下載失敗，請稍後再試。");
+    } finally {
+      els.downloadAllBtn.disabled = false;
     }
   }
 
@@ -282,6 +326,7 @@
     if (els.resultsDetail) els.resultsDetail.hidden = false;
     if (els.detailNav) els.detailNav.hidden = true;
     if (els.backToGridBtn) els.backToGridBtn.hidden = true;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     if (els.batchProgress) els.batchProgress.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
     if (els.batchPromptRow) els.batchPromptRow.hidden = true;
@@ -575,6 +620,7 @@
     if (!targets.length) return;
 
     els.batchContinueAllBtn.hidden = true;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     els.batchPromptRow.hidden = true;
     els.batchReviewNav.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
@@ -596,6 +642,7 @@
     const remaining = analyzedBatchRecords().length > 0;
     els.batchContinueAllBtn.hidden = !remaining;
     els.batchPromptRow.hidden = !remaining;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !doneBatchRecords().length;
   }
 
   function batchContinueAll() {
@@ -788,6 +835,7 @@
     els.resultsDetail.hidden = false;
     els.detailNav.hidden = false;
     els.backToGridBtn.hidden = false;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
     els.detailPrev.disabled = detailPos === 0;
     els.detailNext.disabled = detailPos === done.length - 1;
@@ -835,6 +883,7 @@
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
     els.backToGridBtn.hidden = true;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !doneBatchRecords().length;
     els.resultsGridWrap.hidden = false;
     if (gridSummary) els.resultSummary.textContent = gridSummary;
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -977,6 +1026,7 @@
   els.resetButton.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
+  if (els.downloadAllBtn) els.downloadAllBtn.addEventListener("click", handleDownloadAllClick);
   if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
   if (els.errorModal) {
     els.errorModal.addEventListener("click", (e) => {
