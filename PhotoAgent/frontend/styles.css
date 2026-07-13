@@ -678,6 +678,21 @@ label.option-row { cursor: pointer; }
   letter-spacing: -.14px;
 }
 
+.verdict-subsection {
+  border-top: 1px solid var(--border);
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.verdict-subsection-kicker {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: 4px;
+}
+
 .verdict-score {
   display: flex;
   flex-direction: column;

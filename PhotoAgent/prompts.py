@@ -454,6 +454,8 @@ Evaluate whether the output satisfies the user's explicit instruction. If the us
         (analysis.get("crop_box") or {}).get("aspect_ratio") or
         "original"
     )
+    retouch_recipe = analysis.get("retouch_recipe") or []
+    recipe_list_text = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(retouch_recipe)) or "（無修圖建議項目）"
 
     head = f"""You are the QA agent for a photo retouching demo.
 Compare the original photo and the edited output. Judge whether the output is safe to show to the user as a faithful enhancement.
@@ -496,6 +498,12 @@ Score caps:
 - If output is not safe to show as a demo result, pass must be false and overall_status must be "需人工複查" or "失敗".
 - Preservation failures dominate the score. Do not give a generous middle score just because color or background improved.
 - The numeric score, pass value, overall_status, summary, warnings, and recommendation must be internally consistent.
+
+Recipe adherence scoring (separate from the main score above, does not affect pass/overall_status/score):
+Retouch recipe (the user-facing suggestions the edit was meant to follow):
+{recipe_list_text}
+These items describe the *direction* of an intended adjustment, not an exact required outcome -- the output does not need to literally match the wording, but each item's underlying direction should be visibly reflected in the output to count as followed.
+Judge each item independently and put the result in recipe_adherence.items, with "followed": true/false (use null only if the item does not apply to this photo). Then set recipe_adherence.score from 0 to 10 in proportion to how many items were followed (10 = all followed, 0 = none followed), and give a one-line recipe_adherence.reason.
 
 Original analysis:
 - Main subject: {analysis.get("main_subject") or ""}
@@ -542,6 +550,13 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
     "light_color_improved": true
   },
   "warnings": [],
-  "recommendation": "可直接展示，或說明需要人工複查的原因。"
+  "recommendation": "可直接展示，或說明需要人工複查的原因。",
+  "recipe_adherence": {
+    "score": 8,
+    "reason": "說明修圖建議項目的達成情況。",
+    "items": [
+      {"item": "讓照片更明亮", "followed": true, "note": "已提升整體亮度。"}
+    ]
+  }
 }"""
     return head + schema

@@ -203,6 +203,10 @@ window.PhotoAgentResults = (() => {
     els.modelName.textContent = data.model || imageModel;
     els.resultSummary.textContent = analysis.photo_summary || "已完成影像分析與輸出。";
     els.qaScore.textContent = Number.isFinite(Number(qa?.score)) ? `${qa.score}/10` : "-";
+    if (els.recipeVerdictScore) {
+      const recipeScore = qa?.recipe_adherence?.score;
+      els.recipeVerdictScore.textContent = Number.isFinite(Number(recipeScore)) ? `${recipeScore}/10` : "-";
+    }
 
     els.subjectText.textContent = buildPhotoContentSummary(analysis);
     renderTags(els.subjectTags, [
@@ -322,6 +326,22 @@ window.PhotoAgentResults = (() => {
       "調整局部對比與主體清晰度。",
       "控制背景干擾並保留自然質感。"
     ]);
+
+    const recipeAdherence = qa?.recipe_adherence || null;
+    if (els.recipeScoreText) {
+      els.recipeScoreText.textContent = recipeAdherence && Number.isFinite(Number(recipeAdherence.score))
+        ? joinParts([`修圖建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
+        : "尚未取得修圖建議達成度。";
+    }
+    if (els.recipeScoreList) {
+      const unfollowed = (recipeAdherence?.items || []).filter((it) => it.followed === false);
+      fillList(
+        els.recipeScoreList,
+        unfollowed.map((it) => joinParts([`未達成：${it.item}`, it.note || ""])),
+        ["尚無未達成的修圖建議項目。"]
+      );
+    }
+
     fillList(els.qaList, [
       ...checksToList(qa),
       ...(Array.isArray(qa?.warnings) ? qa.warnings.map((w) => `提醒：${w}`) : [])

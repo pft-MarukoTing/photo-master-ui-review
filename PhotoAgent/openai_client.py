@@ -91,8 +91,11 @@ def _parse_json_from_text(text: str) -> dict:
         return json.loads(m.group(0))
 
 
-def _responses_payload(model: str, content: list) -> dict:
-    return {"model": model, "input": [{"role": "user", "content": content}]}
+def _responses_payload(model: str, content: list, text_format: dict = None) -> dict:
+    payload = {"model": model, "input": [{"role": "user", "content": content}]}
+    if text_format:
+        payload["text"] = {"format": text_format}
+    return payload
 
 
 # ── Step 2: photo analysis ─────────────────────────────────────────────────────
@@ -292,6 +295,76 @@ def edit_photo(
 
 # ── Step 6: quality check ──────────────────────────────────────────────────────
 
+_QA_CHECK_KEYS = [
+    "subject_preserved",
+    "user_intent_followed",
+    "crop_safe",
+    "protected_regions_safe",
+    "framing_intent_respected",
+    "aspect_ratio_feels_intentional",
+    "composition_method_matches",
+    "empty_space_has_function",
+    "alignment_stable_or_intentional",
+    "distractions_reassessed_after_crop",
+    "scene_preserved",
+    "frame_breathing_room_ok",
+    "not_overedited",
+    "light_color_improved",
+]
+
+QUALITY_CHECK_SCHEMA = {
+    "type": "json_schema",
+    "name": "quality_check_result",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "properties": {
+            "pass": {"type": "boolean"},
+            "overall_status": {"type": "string"},
+            "score": {"type": ["number", "null"]},
+            "failure_level": {"type": "string", "enum": ["none", "minor", "borderline", "major", "severe"]},
+            "score_reason": {"type": "string"},
+            "summary": {"type": "string"},
+            "checks": {
+                "type": "object",
+                "properties": {key: {"type": ["boolean", "null"]} for key in _QA_CHECK_KEYS},
+                "required": _QA_CHECK_KEYS,
+                "additionalProperties": False,
+            },
+            "warnings": {"type": "array", "items": {"type": "string"}},
+            "recommendation": {"type": "string"},
+            "recipe_adherence": {
+                "type": "object",
+                "properties": {
+                    "score": {"type": ["number", "null"]},
+                    "reason": {"type": "string"},
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "item": {"type": "string"},
+                                "followed": {"type": ["boolean", "null"]},
+                                "note": {"type": "string"},
+                            },
+                            "required": ["item", "followed", "note"],
+                            "additionalProperties": False,
+                        },
+                    },
+                },
+                "required": ["score", "reason", "items"],
+                "additionalProperties": False,
+            },
+        },
+        "required": [
+            "pass", "overall_status", "score", "failure_level", "score_reason",
+            "summary", "checks", "warnings", "recommendation", "recipe_adherence",
+        ],
+        "additionalProperties": False,
+    },
+}
+
+
 def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
     """Returns (result, prompt)."""
     preview = create_preview_bytes(image_bytes)
@@ -305,6 +378,6 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
         {"type": "input_image", "image_url": original_data_url},
         {"type": "input_text", "text": "Edited output"},
         {"type": "input_image", "image_url": output_data_url},
-    ])
+    ], text_format=QUALITY_CHECK_SCHEMA)
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
     return _parse_json_from_text(_extract_output_text(data)), qa_prompt
