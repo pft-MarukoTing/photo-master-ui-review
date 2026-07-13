@@ -740,7 +740,9 @@
       card.classList.add("clickable");
       card.addEventListener("click", () => openBatchAnalysisReview(record));
     } else if (record.status === "error") {
+      card.classList.add("clickable");
       card.title = record.error || "處理失敗";
+      card.addEventListener("click", () => openBatchError(record));
     }
     return card;
   }
@@ -748,6 +750,17 @@
   function updateBatchCard(record) {
     const existing = els.resultsGrid.querySelector(`[data-id="${record.localId}"]`);
     if (existing) existing.replaceWith(buildBatchCard(record));
+  }
+
+  function openBatchError(record) {
+    if (!els.errorModal) return;
+    els.errorModalFile.textContent = record.file.name;
+    els.errorModalMsg.textContent = record.error || "處理失敗，請稍後再試。";
+    els.errorModal.hidden = false;
+  }
+
+  function closeErrorModal() {
+    if (els.errorModal) els.errorModal.hidden = true;
   }
 
   function doneBatchRecords() {
@@ -960,6 +973,15 @@
   els.resetButton.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
+  if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
+  if (els.errorModal) {
+    els.errorModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeErrorModal();
+    });
+  }
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && els.errorModal && !els.errorModal.hidden) closeErrorModal();
+  });
   if (els.detailPrev) {
     els.detailPrev.addEventListener("click", () => {
       if (detailPos > 0) { detailPos -= 1; showBatchDetail(); }

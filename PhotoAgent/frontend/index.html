@@ -303,6 +303,23 @@
       animation: rc-spin .8s linear infinite;
     }
     @keyframes rc-spin { to { transform: rotate(360deg); } }
+    .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .error-modal[hidden] { display: none; }
+    .error-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
+    .error-modal-box {
+      position: relative; width: min(440px, calc(100vw - 40px));
+      background: var(--card); border: 1px solid var(--border-2);
+      border-radius: 14px; padding: 20px 22px; box-shadow: 0 16px 48px rgba(0,0,0,.4);
+    }
+    .error-modal-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    #error-modal-title { font-size: 17px; font-weight: 700; color: var(--red); }
+    .error-modal-close {
+      background: none; border: none; color: var(--text-2);
+      font-size: 24px; line-height: 1; cursor: pointer; padding: 0 4px;
+    }
+    .error-modal-close:hover { color: var(--text); }
+    .error-modal-file { font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
+    .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; }
     .rc-name {
       padding: 8px 10px;
       font-size: 12px; color: var(--text-2);
@@ -834,6 +851,19 @@
   </section>
 
 </main>
+
+<!-- Error detail popup: opened when a failed batch card is clicked -->
+<div id="error-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="error-modal-title">
+    <div class="error-modal-hdr">
+      <span id="error-modal-title">處理失敗</span>
+      <button id="error-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <p id="error-modal-file" class="error-modal-file"></p>
+    <p id="error-modal-msg" class="error-modal-msg"></p>
+  </div>
+</div>
 
 <script src="config.js"></script>
 <script src="dom.js"></script>
