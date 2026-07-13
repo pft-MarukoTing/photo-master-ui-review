@@ -27,6 +27,7 @@
   let batchSettings = null;
   let detailPos = 0;       // index into the done-records list for the results detail view
   let reviewPos = 0;       // index into the analyzed-records list for the step-2 review view
+  let gridSummary = "";    // grid-view summary text, saved so backToBatchGrid can restore it
 
   const procVisual = document.querySelector(".proc-visual");
   const stepsGrid = document.querySelector(".steps-grid");
@@ -768,6 +769,7 @@
   }
 
   function openBatchDetail(record) {
+    gridSummary = els.resultSummary.textContent;
     const done = doneBatchRecords();
     detailPos = Math.max(0, done.indexOf(record));
     showBatchDetail();
@@ -833,6 +835,7 @@
     els.detailNav.hidden = true;
     els.backToGridBtn.hidden = true;
     els.resultsGridWrap.hidden = false;
+    if (gridSummary) els.resultSummary.textContent = gridSummary;
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
