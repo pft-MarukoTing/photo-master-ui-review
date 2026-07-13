@@ -617,6 +617,7 @@
           imageModel: batchSettings.imageModel,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           userPrompt,
+          analysis: record.analysis,
           path: "aipoc"
         });
       } else {
