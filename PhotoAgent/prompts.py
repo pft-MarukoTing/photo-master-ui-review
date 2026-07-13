@@ -123,10 +123,12 @@ Return exactly this JSON shape:
     "risk_level": "low",
     "reasons": []
   },
-  "retouch_recipe": ["3 到 7 個修圖步驟。"],
-  "correction_plan": ["實際會做的調整。"],
+  "correction_plan": ["3 到 7 項，實際會做的具體技術調整，供編修模型執行；例如「提升整體曝光 0.3 EV 並拉回高光」。"],
+  "retouch_recipe": ["與 correction_plan 一一對應、順序相同、項數相同，但改寫成給使用者看的簡潔白話版本；例如對應上例可寫「讓照片更明亮」。"],
   "preserve_rules": ["必須保留的內容。"]
 }
+
+correction_plan and retouch_recipe must describe the exact same set of adjustments, in the same order, one-to-one. Write correction_plan first as the precise technical plan the editing model will follow; then write retouch_recipe as a simplified, user-facing paraphrase of each corresponding correction_plan item -- not a separate or reworded set of steps.
 
 Analysis responsibilities:
 - Observe the image, identify semantic roles, and describe why the photo can improve.
@@ -332,7 +334,6 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_appl
     )
 
     detected_issues = "; ".join(analysis.get("detected_issues") or [])
-    retouch_recipe = "; ".join(analysis.get("retouch_recipe") or [])
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     roi_box = json.dumps(analysis.get("roi_box") or {}, ensure_ascii=False)
@@ -402,7 +403,6 @@ Photo analysis:
 - Crop/reframe recommendation: {analysis.get("crop_recommendation") or ""}
 - Crop intent: {crop_intent}
 - Applied crop before editing: {"Yes. Continue from this cropped composition and do not expand back to the wider frame." if crop_applied else "No."}
-- Retouch recipe: {retouch_recipe}
 - Correction plan: {correction_plan}
 - Must preserve: {preserve_rules}
 

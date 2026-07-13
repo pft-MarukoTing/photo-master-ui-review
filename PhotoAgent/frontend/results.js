@@ -317,7 +317,7 @@ window.PhotoAgentResults = (() => {
       [validationText || cropApplied]
     );
 
-    fillList(els.recipeList, (analysis.retouch_recipe || []).slice(0, 4), [
+    fillList(els.recipeList, analysis.retouch_recipe || [], [
       "先校正曝光與白平衡。",
       "調整局部對比與主體清晰度。",
       "控制背景干擾並保留自然質感。"
