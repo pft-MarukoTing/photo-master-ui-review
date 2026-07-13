@@ -12,8 +12,9 @@ from prompts import build_edit_prompt
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
-# "Nano Banana 2" is Google's public nickname for this model.
+# "Nano Banana 2"/"Nano Banana Lite" are Google's public nicknames for these models.
 NANO_BANANA_2_MODEL = "gemini-3.1-flash-image"
+NANO_BANANA_LITE_MODEL = "gemini-3.1-flash-lite-image"
 
 _QUALITY_TO_IMAGE_SIZE = {"low": "1K", "medium": "1K", "high": "2K"}
 

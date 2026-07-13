@@ -10,7 +10,8 @@ window.PhotoAgentConfig = {
   imageModels: {
     "gpt-image-2": "GPT Image 2",
     "gpt-image-1.5": "GPT Image 1.5",
-    "nano-banana-2": "Nano Banana 2"
+    "nano-banana-2": "Nano Banana 2",
+    "nano-banana-lite": "Nano Banana Lite"
   },
   presets: {
     natural: {

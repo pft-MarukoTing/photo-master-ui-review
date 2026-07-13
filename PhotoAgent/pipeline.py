@@ -10,7 +10,7 @@ from image_tools import (
     create_local_enhanced_bytes,
     image_to_data_url,
 )
-from gemini_client import edit_photo as edit_photo_gemini
+from gemini_client import edit_photo as edit_photo_gemini, NANO_BANANA_LITE_MODEL
 from openai_client import (
     analyze_photo,
     review_user_instruction,
@@ -24,6 +24,7 @@ EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
     "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
     "nano-banana-2": edit_photo_gemini,
+    "nano-banana-lite": partial(edit_photo_gemini, model=NANO_BANANA_LITE_MODEL),
 }
 
 logger = logging.getLogger(__name__)
