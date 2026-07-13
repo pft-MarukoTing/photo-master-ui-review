@@ -186,7 +186,6 @@ window.PhotoAgentResults = (() => {
       distractions_reassessed_after_crop: "裁切後重新評估干擾",
       scene_preserved: "場景真實保留",
       frame_breathing_room_ok: "邊緣呼吸感合理",
-      top_breathing_room_ok: "邊緣呼吸感合理",
       not_overedited: "未過度修圖",
       light_color_improved: "光色改善"
     };
