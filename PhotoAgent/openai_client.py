@@ -351,8 +351,21 @@ QUALITY_CHECK_SCHEMA = {
                             "additionalProperties": False,
                         },
                     },
+                    "rejected_items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "item": {"type": "string"},
+                                "violated": {"type": ["boolean", "null"]},
+                                "note": {"type": "string"},
+                            },
+                            "required": ["item", "violated", "note"],
+                            "additionalProperties": False,
+                        },
+                    },
                 },
-                "required": ["score", "reason", "items"],
+                "required": ["score", "reason", "items", "rejected_items"],
                 "additionalProperties": False,
             },
         },

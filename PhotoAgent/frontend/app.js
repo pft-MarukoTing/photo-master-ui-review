@@ -405,6 +405,7 @@
       showAnalysisPreview(analysis, preset);
       await waitForContinue();
       const userPrompt = els.promptInput.value.trim();
+      const effectiveAnalysis = buildEffectiveAnalysis(analysis, readStyleSelectionsFromDom());
       if (procSub) {
         procSub.textContent = aiPhotoEditing
           ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
@@ -414,9 +415,9 @@
       stepStart = Date.now();
       let finalJobId;
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis, path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
       } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -646,6 +647,7 @@
   }
 
   function batchContinueAll() {
+    captureBatchReviewSelections(currentReviewRecord());
     continueBatchRecords(analyzedBatchRecords());
   }
 
@@ -655,6 +657,10 @@
   async function editBatchItem(record) {
     try {
       const userPrompt = effectivePrompt(record);
+      const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
+        options: record.options,
+        recipeChecked: record.recipeChecked
+      });
       let stepStart = Date.now();
       if (batchSettings.path === "aipoc") {
         record.jobId = await submitJob({
@@ -664,12 +670,12 @@
           imageModel: batchSettings.imageModel,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           userPrompt,
-          analysis: record.analysis,
+          analysis: effectiveAnalysis,
           path: "aipoc"
         });
       } else {
         record.jobId = await continueJob(record.analyzeJobId, {
-          analysis: record.analysis,
+          analysis: effectiveAnalysis,
           preset: batchSettings.presetKey,
           imageQuality: batchSettings.imageQuality,
           imageModel: batchSettings.imageModel,
@@ -935,22 +941,63 @@
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
-  // Read the radio/checkbox selections back onto the record so per-image choices
-  // persist across nav/return (UI-only, not sent to the backend).
-  function captureBatchReviewSelections(record) {
-    if (!record) return;
-    if (els.promptInput) record.userPrompt = els.promptInput.value.trim();
+  // Reads the current recipe checkboxes + pose/angle/lighting/size radios
+  // straight from the DOM (shared by the single-image flow and batch review).
+  function readStyleSelectionsFromDom() {
     const checked = (name) => document.querySelector(`input[name="${name}"]:checked`);
-    record.options = {
+    const options = {
       pose: checked("ap-pose")?.value || "default",
       angle: checked("ap-angle")?.value || "default",
       lighting: checked("ap-lighting")?.value || "default",
       size: checked("ap-size")?.value || "default"
     };
-    if (els.apRecipeList) {
-      record.recipeChecked = Array.from(els.apRecipeList.querySelectorAll("input[type=checkbox]"))
-        .map((c) => c.checked);
+    const recipeChecked = els.apRecipeList
+      ? Array.from(els.apRecipeList.querySelectorAll("input[type=checkbox]")).map((c) => c.checked)
+      : null;
+    return { options, recipeChecked };
+  }
+
+  // Applies the user's recipe checkbox edits and style-option overrides onto a
+  // copy of `analysis` before it's sent to the backend. This is what makes the
+  // user's revisions the highest-priority version of the recipe: unchecked
+  // items are dropped from correction_plan/retouch_recipe (correction_plan is
+  // what the edit model actually reads) AND recorded as rejected_corrections,
+  // which the edit prompt turns into an explicit "do not do this" instruction
+  // -- simply omitting them isn't enough, since other analysis fields (e.g.
+  // aesthetic_diagnosis, lighting_strategy) could still lead the model to make
+  // the same change anyway. Any non-default pose/angle/lighting/size pick is
+  // attached as style_options for the edit prompt.
+  function buildEffectiveAnalysis(analysis, { options, recipeChecked } = {}) {
+    const effective = { ...analysis };
+
+    if (Array.isArray(recipeChecked) && recipeChecked.length) {
+      const keepChecked = (arr) =>
+        Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] !== false) : arr;
+      effective.correction_plan = keepChecked(analysis.correction_plan);
+      effective.retouch_recipe = keepChecked(analysis.retouch_recipe);
+      effective.rejected_corrections = Array.isArray(analysis.correction_plan)
+        ? analysis.correction_plan.filter((_, i) => recipeChecked[i] === false)
+        : [];
     }
+
+    const styleOptions = {};
+    Object.entries(options || {}).forEach(([key, value]) => {
+      if (value && value !== "default") styleOptions[key] = value;
+    });
+    if (Object.keys(styleOptions).length) effective.style_options = styleOptions;
+
+    return effective;
+  }
+
+  // Read the radio/checkbox selections back onto the record so per-image choices
+  // persist across nav/return, and so editBatchItem can build each record's
+  // effective analysis before submission.
+  function captureBatchReviewSelections(record) {
+    if (!record) return;
+    if (els.promptInput) record.userPrompt = els.promptInput.value.trim();
+    const { options, recipeChecked } = readStyleSelectionsFromDom();
+    record.options = options;
+    if (recipeChecked) record.recipeChecked = recipeChecked;
   }
 
   function applyBatchReviewSelections(record) {

@@ -71,21 +71,31 @@ window.PhotoAgentResults = (() => {
 
   // Read-only variant of fillCheckList -- checked state reflects whether the
   // QA step judged that recipe item as followed, not a user-toggleable choice.
-  function fillRecipeAdherenceList(element, adherenceItems, fallbackRecipe) {
+  // rejectedItems are the recipe items the user unchecked before submission --
+  // "checked" here means the QA step confirmed the output correctly avoided
+  // them, so a violated rejection shows up as an unchecked/failed row.
+  function fillRecipeAdherenceList(element, adherenceItems, rejectedItems, fallbackRecipe) {
     if (!element) return;
     element.innerHTML = "";
-    const entries = Array.isArray(adherenceItems) && adherenceItems.length
+    const followedEntries = Array.isArray(adherenceItems) && adherenceItems.length
       ? adherenceItems.map((it) => ({ label: it.item, checked: it.followed === true, note: it.note }))
       : (fallbackRecipe || []).map((label) => ({ label, checked: true, note: "" }));
+    const rejectedEntries = Array.isArray(rejectedItems)
+      ? rejectedItems.map((it) => ({
+          label: `不應出現：${it.item}`,
+          checked: it.violated !== true,
+          note: it.note
+        }))
+      : [];
 
-    if (!entries.length) {
+    if (!followedEntries.length && !rejectedEntries.length) {
       const li = document.createElement("li");
       li.textContent = "尚未取得修圖建議項目。";
       element.appendChild(li);
       return;
     }
 
-    entries.forEach((entry) => {
+    const renderEntry = (entry) => {
       const li = document.createElement("li");
       const label = document.createElement("label");
 
@@ -101,7 +111,17 @@ window.PhotoAgentResults = (() => {
       label.appendChild(text);
       li.appendChild(label);
       element.appendChild(li);
-    });
+    };
+
+    followedEntries.forEach(renderEntry);
+    // Separate "items to adjust" from "items that must not be touched" so the
+    // two lists read as distinct groups, not one undifferentiated checklist.
+    if (followedEntries.length && rejectedEntries.length) {
+      const divider = document.createElement("li");
+      divider.className = "adherence-divider";
+      element.appendChild(divider);
+    }
+    rejectedEntries.forEach(renderEntry);
   }
 
   // Same checkbox-list look as fillCheckList, but backed by radio inputs
@@ -368,7 +388,7 @@ window.PhotoAgentResults = (() => {
         ? joinParts([`修圖建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
         : "尚未取得修圖建議達成度。";
     }
-    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, analysis.retouch_recipe);
+    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.rejected_items, analysis.retouch_recipe);
 
     fillList(els.qaList, [
       ...checksToList(qa),

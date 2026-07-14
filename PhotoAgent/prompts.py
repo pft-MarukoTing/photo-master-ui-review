@@ -362,6 +362,18 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_appl
 
 The user's explicit instruction is the top editing goal. Agent aesthetic improvements are allowed only when they support or do not conflict with the user's request."""
 
+    correction_plan_block = ""
+    if analysis.get("correction_plan"):
+        correction_plan_block = f"""User-approved correction plan (highest priority -- this list has already been reviewed and confirmed by the user; apply every item below and do not add corrective or stylistic changes beyond this list, the style overrides above, and the user's extra direction, even if other analysis notes above suggest more):
+{correction_plan}"""
+
+    rejected_corrections = analysis.get("rejected_corrections") or []
+    negative_block = ""
+    if rejected_corrections:
+        rejected_lines = "\n".join(f"- {item}" for item in rejected_corrections)
+        negative_block = f"""User-rejected corrections (highest priority, negative instruction -- the user explicitly unchecked these from the suggested recipe; do NOT perform them, even partially, even if the photo analysis, aesthetic diagnosis, or other strategy notes above suggest them):
+{rejected_lines}"""
+
     revision_block = ""
     if revision_feedback:
         revision_block = f"""Revision feedback from the previous QA:
@@ -414,6 +426,10 @@ User extra direction:
 
 {user_block}
 
+{correction_plan_block}
+
+{negative_block}
+
 {revision_block}
 
 Retouch priorities:
@@ -425,6 +441,7 @@ Retouch priorities:
 6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
 7. If credible horizontal/vertical references are unintentionally unstable, correct them subtly. Preserve intentional slant only when it clearly supports motion, intimacy, tension, or expression.
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
+9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. Treat the user-rejected corrections above as forbidden, not merely unnecessary.
 """
 
 
@@ -456,6 +473,16 @@ Evaluate whether the output satisfies the user's explicit instruction. If the us
     )
     retouch_recipe = analysis.get("retouch_recipe") or []
     recipe_list_text = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(retouch_recipe)) or "（無修圖建議項目）"
+
+    rejected_corrections = analysis.get("rejected_corrections") or []
+    if rejected_corrections:
+        rejected_lines = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(rejected_corrections))
+        rejected_block = f"""
+User-rejected corrections (the user explicitly unchecked these from the suggested recipe -- the output must NOT show these changes):
+{rejected_lines}
+Judge each rejected item independently and put the result in recipe_adherence.rejected_items, with "violated": true/false (true = the forbidden change is visible in the output anyway, false = correctly avoided; use null only if the item does not apply to this photo)."""
+    else:
+        rejected_block = "\nThe user did not reject any corrections for this photo. Return recipe_adherence.rejected_items as an empty array -- do not invent rejected items."
 
     head = f"""You are the QA agent for a photo retouching demo.
 Compare the original photo and the edited output. Judge whether the output is safe to show to the user as a faithful enhancement.
@@ -503,7 +530,9 @@ Recipe adherence scoring (separate from the main score above, does not affect pa
 Retouch recipe (the user-facing suggestions the edit was meant to follow):
 {recipe_list_text}
 These items describe the *direction* of an intended adjustment, not an exact required outcome -- the output does not need to literally match the wording, but each item's underlying direction should be visibly reflected in the output to count as followed.
-Judge each item independently and put the result in recipe_adherence.items, with "followed": true/false (use null only if the item does not apply to this photo). Then set recipe_adherence.score from 0 to 10 in proportion to how many items were followed (10 = all followed, 0 = none followed), and give a one-line recipe_adherence.reason.
+Judge each item independently and put the result in recipe_adherence.items, with "followed": true/false (use null only if the item does not apply to this photo).
+{rejected_block}
+Then set recipe_adherence.score from 0 to 10 weighing both how many items above were followed and whether any rejected item below was violated -- a violated rejection is a severe adherence failure, so cap recipe_adherence.score at 3 or lower if any rejected item was clearly performed anyway. Give a one-line recipe_adherence.reason covering both.
 
 Original analysis:
 - Main subject: {analysis.get("main_subject") or ""}
@@ -553,9 +582,12 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
   "recommendation": "可直接展示，或說明需要人工複查的原因。",
   "recipe_adherence": {
     "score": 8,
-    "reason": "說明修圖建議項目的達成情況。",
+    "reason": "說明修圖建議項目的達成情況，以及使用者不要的項目是否有被誤觸。",
     "items": [
       {"item": "讓照片更明亮", "followed": true, "note": "已提升整體亮度。"}
+    ],
+    "rejected_items": [
+      {"item": "移除背景雜物", "violated": false, "note": "背景雜物仍保留，未被誤刪。"}
     ]
   }
 }"""
