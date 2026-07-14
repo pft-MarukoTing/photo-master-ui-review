@@ -390,10 +390,23 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
     style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
 
+    has_style_overrides = bool(style_lines)
+
     style_block = ""
-    if style_lines:
-        style_block = "User-selected style overrides (highest priority -- apply every item below, overriding the default preservation of pose/camera angle/lighting/framing size where it conflicts):\n" + "\n".join(style_lines) + (
-            "\n\nThe result must still read as a reshoot of the same original scene: same subject, same identity, same location, environment, and props -- only the selected pose/angle/lighting/framing aspects change."
+    if has_style_overrides:
+        style_block = (
+            "User-selected style overrides are mandatory same-scene reshoot requirements, not optional retouch suggestions.\n"
+            "Apply every selected item visibly and deliberately. When an override conflicts with default preservation of pose, "
+            "camera angle, lighting, or framing size, the override wins for that selected aspect.\n"
+            "For selected angle overrides, the output should look like a new photograph taken from the selected camera angle, "
+            "not like a minor perspective correction. For selected pose, lighting, or framing-size overrides, make the change "
+            "clearly visible while keeping it photographically believable.\n"
+            + "\n".join(style_lines)
+            + (
+                "\n\nKeep the result faithful as a reshoot of the same original scene: same subject identity, same location, "
+                "same environment, same clothing, and same props. Do not change unselected aspects, add new people, invent new props, "
+                "or replace the scene."
+            )
         )
 
     correction_plan_block = ""
@@ -415,12 +428,57 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
 This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit behavior. Preserve the subject, required framing, scene context, and protected details more conservatively than the previous output."""
 
+    if has_style_overrides:
+        opening_preservation_rule = (
+            "Preserve the subject identity, recognizable person/object, clothing, location, environment, props, "
+            "and photographic realism. This is a same-scene reshoot: selected pose, angle, lighting, or framing-size "
+            "overrides are allowed and expected to visibly change those selected aspects."
+        )
+        edit_mode_block = """Edit mode:
+STYLE OVERRIDE MODE. The user selected one or more pose/angle/lighting/framing options, so treat this as a controlled same-scene reshoot rather than a conservative retouch only.
+
+Priority order:
+1. Preserve safety, identity, same subject, same location, same environment, same clothing, same props, and photographic realism.
+2. Apply user-selected style overrides visibly and deliberately for the selected aspects.
+3. Apply the user-approved correction plan and user's extra direction.
+4. Use the preset style as a supporting finish.
+5. Apply default preservation rules only to aspects not selected by the user."""
+        retouch_priorities = """Retouch priorities:
+1. Treat the supplied image boundaries as final unless a selected framing-size override explicitly asks for wider or closer framing. Never add blank borders, transparent/checkerboard padding, or artificial empty side bands.
+2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
+3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides should change posture/expression noticeably; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale or environmental context.
+4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
+5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
+6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
+7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if lighting is not selected, preserve the original lighting logic; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
+8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, do not preserve the original camera viewpoint; change it clearly according to the selected angle while maintaining a believable same-scene reshoot.
+9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. Treat the user-rejected corrections above as forbidden, not merely unnecessary."""
+    else:
+        opening_preservation_rule = (
+            "Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, "
+            "facial structure, body shape, and important details."
+        )
+        edit_mode_block = """Edit mode:
+FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction."""
+        retouch_priorities = """Retouch priorities:
+1. Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands.
+2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
+3. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup.
+4. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
+5. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
+6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
+7. If credible horizontal/vertical references are unintentionally unstable, correct them subtly. Preserve intentional slant only when it clearly supports motion, intimacy, tension, or expression.
+8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
+9. The user-approved correction plan is the definitive specification of what to change -- apply it in full and do not perform additional corrections beyond it, the user's extra direction, and the preset finish. Treat the user-rejected corrections above as forbidden, not merely unnecessary."""
+
     return f"""You are editing the supplied image, not creating a new image.
 Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic.
 
-Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, facial structure, body shape, and important details, except where a user-selected style override below explicitly changes pose, angle, lighting, or framing size.
+{opening_preservation_rule}
 Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
 Do not make the result look synthetic, plastic, or heavily filtered.
+
+{edit_mode_block}
 
 Photo analysis:
 - Summary: {analysis.get("photo_summary") or ""}
@@ -468,16 +526,7 @@ User extra direction:
 
 {revision_block}
 
-Retouch priorities:
-1. Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands.
-2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
-3. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup.
-4. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
-5. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
-6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
-7. If credible horizontal/vertical references are unintentionally unstable, correct them subtly. Preserve intentional slant only when it clearly supports motion, intimacy, tension, or expression.
-8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
-9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. Treat the user-rejected corrections above as forbidden, not merely unnecessary.
+{retouch_priorities}
 """
 
 
