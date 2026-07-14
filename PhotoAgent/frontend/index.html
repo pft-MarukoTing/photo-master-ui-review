@@ -29,6 +29,10 @@
       border-radius: 18px;
       overflow: hidden;
     }
+    #change-photo-btn {
+      margin-top: 12px;
+      align-self: center;
+    }
 
     /* ── Processing: single-column steps ── */
     .steps-grid {
@@ -258,6 +262,7 @@
       border-radius: 18px;
     }
     .dz-multi .dz-thumb {
+      position: relative;
       width: 72px; height: 72px;
       border-radius: 10px;
       overflow: hidden;
@@ -266,6 +271,25 @@
     }
     .dz-multi .dz-thumb img { width: 100%; height: 100%; object-fit: cover; }
     .dz-multi .dz-count { width: 100%; margin-top: 4px; font-size: 13px; color: var(--text-2); }
+    .dz-thumb-remove {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 18px;
+      height: 18px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.6);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .dz-thumb-remove:hover { background: rgba(0,0,0,.8); }
 
     /* ── Batch results grid ── */
     .results-grid {
@@ -397,6 +421,9 @@
 
           <!-- Multi-file thumbnail strip (shown when more than one file selected) -->
           <div id="dz-multi" class="dz-multi" hidden></div>
+
+          <!-- Re-opens the file picker so a selected photo (or batch) can be swapped -->
+          <button id="change-photo-btn" class="btn btn-outline btn-sm" type="button" hidden>更換照片</button>
         </div>
 
         <!-- Right: Form -->

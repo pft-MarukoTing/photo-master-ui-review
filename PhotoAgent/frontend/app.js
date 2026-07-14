@@ -144,6 +144,7 @@
     els.selectedFileName.textContent = file.name;
     els.dropZone.hidden = true;
     els.dzPreview.hidden = false;
+    if (els.changePhotoBtn) els.changePhotoBtn.hidden = false;
 
     const image = new Image();
     image.onload = () => {
@@ -297,6 +298,14 @@
     els.dropZone.hidden = true;
     els.dzPreview.hidden = true;
     els.dzMulti.hidden = false;
+    if (els.changePhotoBtn) els.changePhotoBtn.hidden = false;
+    renderDzMultiThumbs();
+  }
+
+  // Rebuilds the multi-file thumbnail strip (with a per-thumb remove button)
+  // from the current batchRecords. Called on initial selection and again
+  // whenever a thumbnail is removed.
+  function renderDzMultiThumbs() {
     els.dzMulti.innerHTML = "";
     batchRecords.forEach((r) => {
       const thumb = document.createElement("div");
@@ -304,12 +313,47 @@
       const im = document.createElement("img");
       im.src = r.previewUrl;
       thumb.appendChild(im);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "dz-thumb-remove";
+      removeBtn.setAttribute("aria-label", "移除照片");
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", (event) => {
+        event.preventDefault();
+        removeBatchFile(r);
+      });
+      thumb.appendChild(removeBtn);
+
       els.dzMulti.appendChild(thumb);
     });
     const count = document.createElement("p");
     count.className = "dz-count";
     count.textContent = `已選擇 ${batchRecords.length} 張`;
     els.dzMulti.appendChild(count);
+  }
+
+  // Removes one photo from the pending batch selection (only reachable
+  // before Start is pressed, while dz-multi is showing). Falls back to the
+  // single-photo preview if exactly one image remains, or to the empty drop
+  // zone if none remain.
+  function removeBatchFile(record) {
+    const index = batchRecords.indexOf(record);
+    if (index === -1) return;
+    batchRecords.splice(index, 1);
+    if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
+
+    if (!batchRecords.length) {
+      resetApp();
+      return;
+    }
+    if (batchRecords.length === 1) {
+      const soleFile = batchRecords[0].file;
+      resetBatchState();
+      setSelectedFile(soleFile);
+      return;
+    }
+    renderDzMultiThumbs();
   }
 
   // Drop batch state and restore the results view to its single-image default,
@@ -1037,6 +1081,7 @@
     els.downloadLink.removeAttribute("href");
     els.dropZone.hidden = false;
     els.dzPreview.hidden = true;
+    if (els.changePhotoBtn) els.changePhotoBtn.hidden = true;
     els.selectedFileName.textContent = "";
     els.origDim.textContent = "";
     procVisual.classList.remove("done");
@@ -1057,6 +1102,11 @@
   // One file -> single flow (setSelectedFile); more than one -> batch flow.
   function routeSelectedFiles(fileList) {
     const files = Array.from(fileList || []);
+    // Some browsers fire "change" with an empty FileList when the user
+    // cancels a re-opened file picker (e.g. via #change-photo-btn) -- treat
+    // that as a no-op so whatever was already selected (single photo, batch,
+    // or the empty drop zone) stays exactly as it was.
+    if (!files.length) return;
     if (files.length > 1) {
       setSelectedFileBatch(files);
     } else {
@@ -1066,6 +1116,7 @@
   }
 
   els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
+  if (els.changePhotoBtn) els.changePhotoBtn.addEventListener("click", () => els.fileInput.click());
   els.startButton.addEventListener("click", startSubmit);
   els.backToProcessBtn.addEventListener("click", () => {
     showSection("processing");
