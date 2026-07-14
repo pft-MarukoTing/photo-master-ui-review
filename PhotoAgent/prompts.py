@@ -1,5 +1,31 @@
 import json
 
+from config import STYLE_OPTION_INSTRUCTIONS, STYLE_OPTION_LABELS, STYLE_OPTION_VALUE_LABELS
+
+
+def style_option_entries(analysis):
+    """Non-default style_options as (short_label, description) pairs, in order.
+
+    short_label is what should ever be shown to a user (e.g. "Pose: Strong");
+    description is the long instruction text used only to drive/judge the
+    edit -- callers must not surface description directly in any UI-facing
+    field, since an LLM asked to echo back short_label verbatim can't be
+    trusted to do so reliably (that's also why quality_check_photo overwrites
+    style_items[].item with this list after the fact instead of trusting the
+    QA model's own "item" text).
+    """
+    style_options = analysis.get("style_options") or {}
+    entries = []
+    for category, value in style_options.items():
+        if not value or value == "default":
+            continue
+        description = (STYLE_OPTION_INSTRUCTIONS.get(category) or {}).get(value)
+        if not description:
+            continue
+        short_label = f"{STYLE_OPTION_LABELS.get(category, category)}: {(STYLE_OPTION_VALUE_LABELS.get(category) or {}).get(value, value)}"
+        entries.append((short_label, description))
+    return entries
+
 
 ANALYSIS_INSTRUCTION = """
 You are a senior photography director, colorist, and high-end retoucher.
@@ -362,6 +388,14 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_appl
 
 The user's explicit instruction is the top editing goal. Agent aesthetic improvements are allowed only when they support or do not conflict with the user's request."""
 
+    style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
+
+    style_block = ""
+    if style_lines:
+        style_block = "User-selected style overrides (highest priority -- apply every item below, overriding the default preservation of pose/camera angle/lighting/framing size where it conflicts):\n" + "\n".join(style_lines) + (
+            "\n\nThe result must still read as a reshoot of the same original scene: same subject, same identity, same location, environment, and props -- only the selected pose/angle/lighting/framing aspects change."
+        )
+
     correction_plan_block = ""
     if analysis.get("correction_plan"):
         correction_plan_block = f"""User-approved correction plan (highest priority -- this list has already been reviewed and confirmed by the user; apply every item below and do not add corrective or stylistic changes beyond this list, the style overrides above, and the user's extra direction, even if other analysis notes above suggest more):
@@ -384,7 +418,7 @@ This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit
     return f"""You are editing the supplied image, not creating a new image.
 Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic.
 
-Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, facial structure, body shape, and important details.
+Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, facial structure, body shape, and important details, except where a user-selected style override below explicitly changes pose, angle, lighting, or framing size.
 Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
 Do not make the result look synthetic, plastic, or heavily filtered.
 
@@ -425,6 +459,8 @@ User extra direction:
 {effective_user_direction or "沒有額外指令。"}
 
 {user_block}
+
+{style_block}
 
 {correction_plan_block}
 
@@ -473,6 +509,18 @@ Evaluate whether the output satisfies the user's explicit instruction. If the us
     )
     retouch_recipe = analysis.get("retouch_recipe") or []
     recipe_list_text = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(retouch_recipe)) or "（無修圖建議項目）"
+
+    style_qa_lines = [
+        f'- item text to use: "{short_label}" | what to check: {description}'
+        for short_label, description in style_option_entries(analysis)
+    ]
+
+    if style_qa_lines:
+        style_qa_block = "\nUser-selected style overrides (the user explicitly chose these on the review screen -- the output should reflect them):\n" + "\n".join(style_qa_lines) + (
+            '\nJudge each style override independently against its "what to check" description, and put the result in recipe_adherence.style_items with "followed": true/false (use null only if it could not be judged). Set each entry\'s "item" field to exactly the given "item text to use" -- do not restate the full description there.'
+        )
+    else:
+        style_qa_block = "\nThe user did not select any style overrides for this photo. Return recipe_adherence.style_items as an empty array -- do not invent style overrides."
 
     rejected_corrections = analysis.get("rejected_corrections") or []
     if rejected_corrections:
@@ -531,8 +579,9 @@ Retouch recipe (the user-facing suggestions the edit was meant to follow):
 {recipe_list_text}
 These items describe the *direction* of an intended adjustment, not an exact required outcome -- the output does not need to literally match the wording, but each item's underlying direction should be visibly reflected in the output to count as followed.
 Judge each item independently and put the result in recipe_adherence.items, with "followed": true/false (use null only if the item does not apply to this photo).
+{style_qa_block}
 {rejected_block}
-Then set recipe_adherence.score from 0 to 10 weighing both how many items above were followed and whether any rejected item below was violated -- a violated rejection is a severe adherence failure, so cap recipe_adherence.score at 3 or lower if any rejected item was clearly performed anyway. Give a one-line recipe_adherence.reason covering both.
+Then set recipe_adherence.score from 0 to 10 weighing how many recipe items and style overrides above were followed and whether any rejected item below was violated -- a violated rejection is a severe adherence failure, so cap recipe_adherence.score at 3 or lower if any rejected item was clearly performed anyway. Give a one-line recipe_adherence.reason covering all three.
 
 Original analysis:
 - Main subject: {analysis.get("main_subject") or ""}
@@ -582,9 +631,12 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
   "recommendation": "可直接展示，或說明需要人工複查的原因。",
   "recipe_adherence": {
     "score": 8,
-    "reason": "說明修圖建議項目的達成情況，以及使用者不要的項目是否有被誤觸。",
+    "reason": "說明修圖建議項目、風格設定的達成情況，以及使用者不要的項目是否有被誤觸。",
     "items": [
       {"item": "讓照片更明亮", "followed": true, "note": "已提升整體亮度。"}
+    ],
+    "style_items": [
+      {"item": "Pose: Playful", "followed": true, "note": "姿勢已呈現輕鬆自然感。"}
     ],
     "rejected_items": [
       {"item": "移除背景雜物", "violated": false, "note": "背景雜物仍保留，未被誤刪。"}

@@ -29,6 +29,29 @@ window.PhotoAgentResults = (() => {
     { value: "closer", label: "Closer" }
   ];
 
+  // category -> {options list, display label}, used to turn analysis.style_options
+  // (the raw {pose, angle, lighting, size} values the user picked on the review
+  // screen) back into human-readable text on the results page.
+  const STYLE_OPTION_GROUPS = {
+    pose: { options: POSE_OPTIONS, label: "Pose" },
+    angle: { options: ANGLE_OPTIONS, label: "Angle" },
+    lighting: { options: LIGHTING_OPTIONS, label: "Lighting" },
+    size: { options: SIZE_OPTIONS, label: "Framing size" }
+  };
+
+  function buildStyleOptionsText(styleOptions) {
+    if (!styleOptions) return "";
+    return Object.entries(styleOptions)
+      .map(([key, value]) => {
+        const group = STYLE_OPTION_GROUPS[key];
+        if (!group || !value || value === "default") return "";
+        const opt = group.options.find((o) => o.value === value);
+        return opt ? `${group.label}: ${opt.label}` : "";
+      })
+      .filter(Boolean)
+      .join("、");
+  }
+
   function fillList(element, items, fallbackItems) {
     element.innerHTML = "";
     const source = Array.isArray(items) && items.length ? items : fallbackItems;
@@ -71,15 +94,21 @@ window.PhotoAgentResults = (() => {
 
   // Read-only variant of fillCheckList -- checked state reflects whether the
   // QA step judged that recipe item as followed, not a user-toggleable choice.
-  // rejectedItems are the recipe items the user unchecked before submission --
-  // "checked" here means the QA step confirmed the output correctly avoided
-  // them, so a violated rejection shows up as an unchecked/failed row.
-  function fillRecipeAdherenceList(element, adherenceItems, rejectedItems, fallbackRecipe) {
+  // styleItems are the Pose/Angle/Lighting/Size overrides the user picked on
+  // the review screen -- grouped with followedEntries since both describe
+  // what the output *should* show. rejectedItems are the recipe items the
+  // user unchecked before submission -- "checked" here means the QA step
+  // confirmed the output correctly avoided them, so a violated rejection
+  // shows up as an unchecked/failed row.
+  function fillRecipeAdherenceList(element, adherenceItems, styleItems, rejectedItems, fallbackRecipe) {
     if (!element) return;
     element.innerHTML = "";
     const followedEntries = Array.isArray(adherenceItems) && adherenceItems.length
       ? adherenceItems.map((it) => ({ label: it.item, checked: it.followed === true, note: it.note }))
       : (fallbackRecipe || []).map((label) => ({ label, checked: true, note: "" }));
+    const styleEntries = Array.isArray(styleItems)
+      ? styleItems.map((it) => ({ label: it.item, checked: it.followed === true, note: it.note }))
+      : [];
     const rejectedEntries = Array.isArray(rejectedItems)
       ? rejectedItems.map((it) => ({
           label: `不應出現：${it.item}`,
@@ -88,7 +117,7 @@ window.PhotoAgentResults = (() => {
         }))
       : [];
 
-    if (!followedEntries.length && !rejectedEntries.length) {
+    if (!followedEntries.length && !styleEntries.length && !rejectedEntries.length) {
       const li = document.createElement("li");
       li.textContent = "尚未取得修圖建議項目。";
       element.appendChild(li);
@@ -114,9 +143,11 @@ window.PhotoAgentResults = (() => {
     };
 
     followedEntries.forEach(renderEntry);
-    // Separate "items to adjust" from "items that must not be touched" so the
-    // two lists read as distinct groups, not one undifferentiated checklist.
-    if (followedEntries.length && rejectedEntries.length) {
+    styleEntries.forEach(renderEntry);
+    // Separate "items to adjust" (recipe + style overrides) from "items that
+    // must not be touched" so the two groups read as distinct, not one
+    // undifferentiated checklist.
+    if ((followedEntries.length || styleEntries.length) && rejectedEntries.length) {
       const divider = document.createElement("li");
       divider.className = "adherence-divider";
       element.appendChild(divider);
@@ -333,6 +364,12 @@ window.PhotoAgentResults = (() => {
       analysis.memory_color_strategy || "維持膚色、天空、綠色、食物與材質的可信記憶色。"
     ]);
 
+    if (els.styleOptionsText) {
+      const styleOptionsText = buildStyleOptionsText(analysis.style_options);
+      els.styleOptionsText.hidden = !styleOptionsText;
+      els.styleOptionsText.textContent = styleOptionsText ? `使用者風格設定：${styleOptionsText}` : "";
+    }
+
     const cropBox = resolveCropBoxForDisplay(
       analysis.crop_box,
       analysis,
@@ -388,7 +425,7 @@ window.PhotoAgentResults = (() => {
         ? joinParts([`修圖建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
         : "尚未取得修圖建議達成度。";
     }
-    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.rejected_items, analysis.retouch_recipe);
+    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.style_items, recipeAdherence?.rejected_items, analysis.retouch_recipe);
 
     fillList(els.qaList, [
       ...checksToList(qa),

@@ -75,6 +75,7 @@ window.PhotoAgentDom = (() => {
     roiText: document.querySelector("#roi-text"),
     toolText: document.querySelector("#tool-text"),
     lightColorText: document.querySelector("#light-color-text"),
+    styleOptionsText: document.querySelector("#style-options-text"),
     cropText: document.querySelector("#crop-text"),
     qualityText: document.querySelector("#quality-text"),
     qaScore: document.querySelector("#qa-score"),

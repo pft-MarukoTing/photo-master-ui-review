@@ -25,6 +25,7 @@ from prompts import (
     build_crop_validation_prompt,
     build_edit_prompt,
     build_quality_check_prompt,
+    style_option_entries,
 )
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -351,6 +352,19 @@ QUALITY_CHECK_SCHEMA = {
                             "additionalProperties": False,
                         },
                     },
+                    "style_items": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "item": {"type": "string"},
+                                "followed": {"type": ["boolean", "null"]},
+                                "note": {"type": "string"},
+                            },
+                            "required": ["item", "followed", "note"],
+                            "additionalProperties": False,
+                        },
+                    },
                     "rejected_items": {
                         "type": "array",
                         "items": {
@@ -365,7 +379,7 @@ QUALITY_CHECK_SCHEMA = {
                         },
                     },
                 },
-                "required": ["score", "reason", "items", "rejected_items"],
+                "required": ["score", "reason", "items", "style_items", "rejected_items"],
                 "additionalProperties": False,
             },
         },
@@ -376,6 +390,17 @@ QUALITY_CHECK_SCHEMA = {
         "additionalProperties": False,
     },
 }
+
+
+def _relabel_style_items(result: dict, analysis: dict) -> None:
+    """Overwrites recipe_adherence.style_items[].item with the known short
+    label (e.g. "Pose: Strong") instead of trusting the QA model to echo it
+    back verbatim -- asking an LLM to reproduce a given string exactly isn't
+    reliable, and it sometimes restates the long instruction text instead."""
+    style_items = ((result.get("recipe_adherence") or {}).get("style_items")) or []
+    entries = style_option_entries(analysis)
+    for item, (short_label, _description) in zip(style_items, entries):
+        item["item"] = short_label
 
 
 def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
@@ -393,4 +418,6 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
         {"type": "input_image", "image_url": output_data_url},
     ], text_format=QUALITY_CHECK_SCHEMA)
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
-    return _parse_json_from_text(_extract_output_text(data)), qa_prompt
+    result = _parse_json_from_text(_extract_output_text(data))
+    _relabel_style_items(result, analysis)
+    return result, qa_prompt
