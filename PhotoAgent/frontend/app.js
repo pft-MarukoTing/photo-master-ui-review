@@ -382,7 +382,7 @@
         analysis = analyzeData.analysis;
         const t = analysis.timings || {};
         addTiming("初步分析", Date.now() - stepStart, [
-          { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
+          { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
         ]);
       } else {
         analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing });
@@ -397,7 +397,7 @@
         analysis = analyzeResult.result.analysis;
         const t = analysis.timings || {};
         addTiming("分析中", analyzeWaitDuration, [
-          { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
+          { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
         ]);
         addTiming("取得分析結果", Date.now() - stepStart);
       }
@@ -430,10 +430,10 @@
       const extraInfo = result["extra-info"] || {};
       const t = extraInfo.timings || {};
       addTiming("AI 修圖中", finishWaitDuration, [
-        { label: "Step 3：使用者指令審查", duration: secToMs(t.user_instruction_review) },
-        { label: "Step 4：裁切驗證", duration: secToMs(t.crop_validation) },
-        { label: "Step 5：修圖執行", duration: secToMs(t.image_edit) },
-        { label: "Step 6：品質檢查", duration: secToMs(t.quality_check) }
+        { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+        { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+        { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+        { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
       ]);
       addTiming("取得結果", Date.now() - stepStart);
 
@@ -529,7 +529,7 @@
           if (entry && entry.analysis) {
             r.analysis = entry.analysis;
             const t = entry.analysis.timings || {};
-            r.analyzeTimings = [{ label: "初步分析", duration: secToMs(t.photo_analysis) }];
+            r.analyzeTimings = [{ label: "初步分析", duration: secToMs(t["Step 2 - photo_analysis"]) }];
             r.status = "analyzed";
           } else {
             r.status = "error";
@@ -579,7 +579,7 @@
       record.analysis = analyzeResult.result.analysis;
       const t = (record.analysis && record.analysis.timings) || {};
       record.analyzeTimings = [{ label: "分析中", duration: Date.now() - stepStart, children: [
-        { label: "Step 2：照片分析", duration: secToMs(t.photo_analysis) }
+        { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
       ] }];
       record.status = "analyzed";
     } catch (error) {
@@ -702,10 +702,10 @@
         ...(record.analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
         { label: "AI 修圖中", duration: pollMs, children: [
-          { label: "Step 3：使用者指令審查", duration: secToMs(t.user_instruction_review) },
-          { label: "Step 4：裁切驗證", duration: secToMs(t.crop_validation) },
-          { label: "Step 5：修圖執行", duration: secToMs(t.image_edit) },
-          { label: "Step 6：品質檢查", duration: secToMs(t.quality_check) }
+          { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+          { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
         { label: "取得結果", duration: fetchMs }
       ];
