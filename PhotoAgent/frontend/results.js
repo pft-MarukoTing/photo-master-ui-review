@@ -503,5 +503,16 @@ window.PhotoAgentResults = (() => {
     if (els.apGroupAngle) els.apGroupAngle.hidden = false;
   }
 
-  return { renderResult, renderAnalysisPreview };
+  // Fills the batch-level Pose/Angle/Lighting/Size radio groups with the same
+  // option lists as the single-image review screen. Called once at startup --
+  // unlike renderAnalysisPreview, this isn't re-run per image, since it holds
+  // one shared default for the whole batch rather than a per-image choice.
+  function renderBatchStyleOptions() {
+    fillRadioList(els.batchPoseList, POSE_OPTIONS, "batch-pose", "default");
+    fillRadioList(els.batchAngleList, ANGLE_OPTIONS, "batch-angle", "default");
+    fillRadioList(els.batchLightingList, LIGHTING_OPTIONS, "batch-lighting", "default");
+    fillRadioList(els.batchSizeList, SIZE_OPTIONS, "batch-size", "default");
+  }
+
+  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions };
 })();

@@ -395,6 +395,13 @@
     }
     .batch-review-arrows { display: flex; align-items: center; gap: 12px; }
     .batch-prompt-row { margin-bottom: 18px; }
+    .batch-options-row { margin-bottom: 18px; }
+    .ap-sub-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .ap-sub-label-row .ap-sub-label { margin: 14px 0 6px; }
+    .ap-sub-label-row:first-child .ap-sub-label { margin-top: 0; }
+    .batch-lock-toggle { display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 400; color: var(--text-3); cursor: pointer; user-select: none; }
+    .batch-lock-toggle input { margin: 0; }
+    .ap-option-group.is-locked .step-list-frame { opacity: .45; pointer-events: none; }
   </style>
 </head>
 <body>
@@ -784,6 +791,60 @@
           <span class="run-count-hint">每張圖依同一份分析獨立執行 N 個 RUN</span>
         </div>
       </div>
+      <details class="form-field batch-options-row" id="batch-options-row" hidden>
+        <summary class="field-label">整批修圖風格選項（可選）</summary>
+        <div class="ap-option-groups">
+          <div class="ap-option-group" id="batch-group-pose">
+            <div class="ap-sub-label-row">
+              <p class="ap-sub-label">Pose</p>
+              <label class="batch-lock-toggle" id="batch-pose-lock-row" hidden>
+                <input type="checkbox" id="batch-pose-lock">
+                <span>已有單張調整，仍要修改整批預設</span>
+              </label>
+            </div>
+            <div class="step-list-frame">
+              <ul id="batch-pose-list" class="step-inline-list"></ul>
+            </div>
+          </div>
+          <div class="ap-option-group" id="batch-group-angle">
+            <div class="ap-sub-label-row">
+              <p class="ap-sub-label">Angle</p>
+              <label class="batch-lock-toggle" id="batch-angle-lock-row" hidden>
+                <input type="checkbox" id="batch-angle-lock">
+                <span>已有單張調整，仍要修改整批預設</span>
+              </label>
+            </div>
+            <div class="step-list-frame">
+              <ul id="batch-angle-list" class="step-inline-list"></ul>
+            </div>
+          </div>
+          <div class="ap-option-group" id="batch-group-lighting">
+            <div class="ap-sub-label-row">
+              <p class="ap-sub-label">Lighting</p>
+              <label class="batch-lock-toggle" id="batch-lighting-lock-row" hidden>
+                <input type="checkbox" id="batch-lighting-lock">
+                <span>已有單張調整，仍要修改整批預設</span>
+              </label>
+            </div>
+            <div class="step-list-frame">
+              <ul id="batch-lighting-list" class="step-inline-list"></ul>
+            </div>
+          </div>
+          <div class="ap-option-group" id="batch-group-size">
+            <div class="ap-sub-label-row">
+              <p class="ap-sub-label">Size</p>
+              <label class="batch-lock-toggle" id="batch-size-lock-row" hidden>
+                <input type="checkbox" id="batch-size-lock">
+                <span>已有單張調整，仍要修改整批預設</span>
+              </label>
+            </div>
+            <div class="step-list-frame">
+              <ul id="batch-size-list" class="step-inline-list"></ul>
+            </div>
+          </div>
+        </div>
+        <p class="run-count-hint">套用到未單獨設定風格選項的圖片；若某張在分析裡自己選了 Pose/Angle/Lighting/Size，則以該張選擇為準。有單張調整過的類別，整批選項會鎖定，需勾選上方開關才能繼續修改。</p>
+      </details>
       <div id="results-grid" class="results-grid"></div>
     </div>
 

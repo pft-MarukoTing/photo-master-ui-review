@@ -14,7 +14,8 @@
     analyzeAipoc,
     analyzeAipocBatch
   } = window.PhotoAgentApi;
-  const { renderResult, renderAnalysisPreview } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions } = window.PhotoAgentResults;
+  renderBatchStyleOptions();
 
   let selectedFile = null;
   let previewUrl = "";
@@ -30,6 +31,15 @@
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
   const POLL_CONCURRENCY = 4;
+  // Batch-level Pose/Angle/Lighting/Size controls, and the per-category lock
+  // toggle each shows once any image in the batch has been individually
+  // adjusted for that category (see updateBatchOptionsLocks).
+  const BATCH_OPTION_CATEGORIES = [
+    { key: "pose", group: "batchGroupPose", list: "batchPoseList", lockRow: "batchPoseLockRow", lock: "batchPoseLock" },
+    { key: "angle", group: "batchGroupAngle", list: "batchAngleList", lockRow: "batchAngleLockRow", lock: "batchAngleLock" },
+    { key: "lighting", group: "batchGroupLighting", list: "batchLightingList", lockRow: "batchLightingLockRow", lock: "batchLightingLock" },
+    { key: "size", group: "batchGroupSize", list: "batchSizeList", lockRow: "batchSizeLockRow", lock: "batchSizeLock" }
+  ];
   let batchRecords = [];   // see setSelectedFileBatch for record shape
   let batchSettings = null;
   let detailPos = 0;       // index into the done-records list for the results detail view
@@ -357,6 +367,7 @@
       analysis: null,       // step-1 result (shown in the step-2 review panel)
       analyzeJobId: null,   // local path only: the analyze job, reused by continue
       options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
+      optionsTouched: {},   // per-category: did the user actually change this image's own radio (vs. just viewing the batch-inherited default)
       recipeChecked: null,  // per-image recipe checklist state (UI-only)
       userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
       analyzeTimings: [],   // step-1 timing rows, merged into the detail view
@@ -453,6 +464,9 @@
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
     if (els.batchPromptRow) els.batchPromptRow.hidden = true;
     if (els.batchPromptInput) els.batchPromptInput.value = "";
+    if (els.batchOptionsRow) { els.batchOptionsRow.hidden = true; els.batchOptionsRow.open = false; }
+    renderBatchStyleOptions();
+    updateBatchOptionsLocks(); // batchRecords is now empty, so this clears every category's lock/toggle
     if (els.batchReviewNav) els.batchReviewNav.hidden = true;
   }
 
@@ -772,6 +786,7 @@
     const ready = analyzedBatchRecords().length > 0;
     els.batchContinueAllBtn.hidden = !ready;
     els.batchPromptRow.hidden = !ready;
+    if (els.batchOptionsRow) els.batchOptionsRow.hidden = !ready;
     els.resultSummary.textContent = ready
       ? "分析完成。可點單張分析給各自補充指令，或在下方填寫整批補充指令後「全部繼續處理」。"
       : "分析未成功，請重試。";
@@ -786,6 +801,71 @@
     return (els.batchPromptInput && els.batchPromptInput.value.trim()) || "";
   }
 
+  // Effective per-image style options: same override rule as effectivePrompt,
+  // but merged key-by-key (pose/angle/lighting/size) since each is an
+  // independent pick rather than one all-or-nothing string. Whether "own"
+  // wins is decided by optionsTouched (did the user actually change this
+  // image's radio), not by own's value -- merely displaying the batch's
+  // inherited pick (applyBatchReviewSelections) writes that same value into
+  // record.options on nav-away, and if we compared values instead, a later
+  // change to the batch-level pick would silently stop reaching any image
+  // that had simply been viewed once.
+  function effectiveOptions(record) {
+    const own = record.options || {};
+    const touched = record.optionsTouched || {};
+    const batchOptions = readBatchStyleOptionsFromDom();
+    const merged = {};
+    ["pose", "angle", "lighting", "size"].forEach((key) => {
+      merged[key] = touched[key] ? (own[key] || "default") : (batchOptions[key] || "default");
+    });
+    return merged;
+  }
+
+  // Reads the batch-level Pose/Angle/Lighting/Size radios straight from the DOM.
+  function readBatchStyleOptionsFromDom() {
+    const checked = (name) => document.querySelector(`input[name="${name}"]:checked`);
+    return {
+      pose: checked("batch-pose")?.value || "default",
+      angle: checked("batch-angle")?.value || "default",
+      lighting: checked("batch-lighting")?.value || "default",
+      size: checked("batch-size")?.value || "default"
+    };
+  }
+
+  // Fires only on a genuine user click on one of the per-image ap-*-list
+  // radios (programmatic .checked writes from renderAnalysisPreview /
+  // applyStyleSelections don't dispatch "change"). Marks that category as
+  // individually adjusted for the currently-open batch record, then re-locks
+  // the matching batch-level control.
+  function markOptionTouched(key) {
+    const record = currentReviewRecord();
+    if (!record) return;
+    if (!record.optionsTouched) record.optionsTouched = {};
+    record.optionsTouched[key] = true;
+    updateBatchOptionsLocks();
+  }
+
+  // Disables a batch-level category's radios (and shows its unlock toggle)
+  // once any image in the batch has its own adjustment for that category --
+  // otherwise changing the batch default there would silently do nothing for
+  // the already-adjusted images while still being presented as "applies to
+  // all". The unlock checkbox lets the user override that guard deliberately.
+  function updateBatchOptionsLocks() {
+    BATCH_OPTION_CATEGORIES.forEach(({ key, group, list, lockRow, lock }) => {
+      const hasConflict = batchRecords.some((r) => r.optionsTouched && r.optionsTouched[key]);
+      const lockRowEl = els[lockRow];
+      const lockEl = els[lock];
+      if (lockRowEl) lockRowEl.hidden = !hasConflict;
+      if (!hasConflict && lockEl) lockEl.checked = false;
+      const locked = hasConflict && !(lockEl && lockEl.checked);
+      if (els[group]) els[group].classList.toggle("is-locked", locked);
+      const listEl = els[list];
+      if (listEl) {
+        listEl.querySelectorAll("input[type=radio]").forEach((input) => { input.disabled = locked; });
+      }
+    });
+  }
+
   // Run step 2 (edit) for the given analyzed records via the same single-image
   // endpoints, so each image carries its own prompt -- flow identical to single.
   async function continueBatchRecords(records) {
@@ -795,6 +875,7 @@
     els.batchContinueAllBtn.hidden = true;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     els.batchPromptRow.hidden = true;
+    if (els.batchOptionsRow) els.batchOptionsRow.hidden = true;
     els.batchReviewNav.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     els.resultsDetail.hidden = true;
@@ -827,6 +908,7 @@
     const remaining = analyzedBatchRecords().length > 0;
     els.batchContinueAllBtn.hidden = !remaining;
     els.batchPromptRow.hidden = !remaining;
+    if (els.batchOptionsRow) els.batchOptionsRow.hidden = !remaining;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = !doneBatchRecords().length;
   }
 
@@ -845,7 +927,7 @@
     try {
       const userPrompt = effectivePrompt(record);
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
-        options: record.options,
+        options: effectiveOptions(record),
         recipeChecked: record.recipeChecked
       });
       let stepStart = Date.now();
@@ -1292,8 +1374,11 @@
     }
   }
 
+  // Pre-fills this record's own pick if it has one, else the batch-level
+  // shared pick -- so the per-image Pose/Angle/Lighting/Size radios always
+  // show what will actually be submitted, same merge rule as effectiveOptions.
   function applyBatchReviewSelections(record) {
-    applyStyleSelections({ options: record.options, recipeChecked: record.recipeChecked });
+    applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
   }
 
   function batchReviewBack() {
@@ -1411,6 +1496,19 @@
       continueBatchRecords([record]);
     });
   }
+
+  // Per-image ap-*-list radios: their <ul> elements are stable across
+  // renderAnalysisPreview's re-fills (only the <li> children get replaced),
+  // so a delegated listener attached once here keeps working for every
+  // future render.
+  [["apPoseList", "pose"], ["apAngleList", "angle"], ["apLightingList", "lighting"], ["apSizeList", "size"]]
+    .forEach(([elKey, key]) => {
+      if (els[elKey]) els[elKey].addEventListener("change", () => markOptionTouched(key));
+    });
+
+  BATCH_OPTION_CATEGORIES.forEach(({ lock }) => {
+    if (els[lock]) els[lock].addEventListener("change", updateBatchOptionsLocks);
+  });
 
   for (const eventName of ["dragenter", "dragover"]) {
     els.dropZone.addEventListener(eventName, (event) => {
