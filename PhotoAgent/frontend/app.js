@@ -180,6 +180,7 @@
   function showAnalysisPreview(analysis, preset) {
     renderAnalysisPreview({ analysis, preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
+    if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
   }
 
@@ -502,6 +503,7 @@
     if (stepsGrid) stepsGrid.hidden = true;
     clearContinueWait();
     if (els.analysisPreview) els.analysisPreview.hidden = true;
+    if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
@@ -1283,6 +1285,7 @@
 
     renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
+    if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
     applyBatchReviewSelections(record);
     // The 補充指令 textarea lives inside #analysis-preview; restore this image's.
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
@@ -1411,6 +1414,7 @@
     procVisual.style.height = "";
     clearContinueWait();
     if (els.analysisPreview) els.analysisPreview.hidden = true;
+    if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of
     // clicking continue (waitForContinue's promise is left pending), so
     // re-enable Start explicitly here too.
@@ -1443,6 +1447,7 @@
   els.startButton.addEventListener("click", startSubmit);
   els.backToProcessBtn.addEventListener("click", backToProcessFromResults);
   els.resetButton.addEventListener("click", resetApp);
+  if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
   if (els.downloadAllBtn) els.downloadAllBtn.addEventListener("click", handleDownloadAllClick);

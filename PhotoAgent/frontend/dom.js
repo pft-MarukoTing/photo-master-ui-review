@@ -15,6 +15,7 @@ window.PhotoAgentDom = (() => {
     procThumb: document.querySelector("#proc-thumb"),
     startButton: document.querySelector("#start-btn"),
     resetButton: document.querySelector("#reset-btn"),
+    backToUploadBtn: document.querySelector("#back-to-upload-btn"),
     viewResultsWrap: document.querySelector("#view-results-wrap"),
     viewResultsBtn: document.querySelector("#view-results-btn"),
     backToProcessBtn: document.querySelector("#back-to-process-btn"),
