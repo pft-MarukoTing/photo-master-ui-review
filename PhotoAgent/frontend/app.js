@@ -20,6 +20,13 @@
   let previewUrl = "";
   let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
 
+  // Single-image flow: kept after analyze so "回到流程" (from the results page)
+  // can re-show the analysis preview and resubmit steps 3-6 without re-running
+  // step 2. lastSingleSelections holds the last submitted prompt/options/recipe
+  // checkboxes so re-opening the preview restores them instead of resetting.
+  let singleFlowState = null; // { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath }
+  let lastSingleSelections = null; // { userPrompt, options, recipeChecked }
+
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
   const POLL_CONCURRENCY = 4;
@@ -53,6 +60,45 @@
         }
       });
     }
+  }
+
+  // Quality/model selects appear on both the upload screen (#image-quality,
+  // #image-model) and the analysis-preview screen (#ap-image-quality,
+  // #ap-image-model, shown mid-flow so the choice can be revised right
+  // before the AI edit fires). Keep both pairs mirrored, and push the live
+  // value into whichever flow state is active so finishSingleFlow/
+  // editBatchItem (which read singleFlowState/batchSettings) pick up a
+  // change made on the preview screen without any other wiring.
+  function applyQualityModelChange({ quality, model }) {
+    if (quality !== undefined) {
+      if (els.imageQualitySelect) els.imageQualitySelect.value = quality;
+      if (els.apImageQualitySelect) els.apImageQualitySelect.value = quality;
+      if (singleFlowState) singleFlowState.imageQuality = quality;
+      if (batchSettings) batchSettings.imageQuality = quality;
+    }
+    if (model !== undefined) {
+      if (els.imageModelSelect) els.imageModelSelect.value = model;
+      if (els.apImageModelSelect) els.apImageModelSelect.value = model;
+      if (singleFlowState) singleFlowState.imageModel = model;
+      if (batchSettings) batchSettings.imageModel = model;
+    }
+  }
+
+  if (els.imageQualitySelect) {
+    els.imageQualitySelect.addEventListener("change", () =>
+      applyQualityModelChange({ quality: els.imageQualitySelect.value }));
+  }
+  if (els.apImageQualitySelect) {
+    els.apImageQualitySelect.addEventListener("change", () =>
+      applyQualityModelChange({ quality: els.apImageQualitySelect.value }));
+  }
+  if (els.imageModelSelect) {
+    els.imageModelSelect.addEventListener("change", () =>
+      applyQualityModelChange({ model: els.imageModelSelect.value }));
+  }
+  if (els.apImageModelSelect) {
+    els.apImageModelSelect.addEventListener("change", () =>
+      applyQualityModelChange({ model: els.apImageModelSelect.value }));
   }
 
   // Backend step timings are seconds (float) or null (step skipped);
@@ -390,6 +436,11 @@
     batchSettings = null;
     detailPos = 0;
     reviewPos = 0;
+    // Any prior single-image run's "回到流程" state refers to a different
+    // photo (or no longer applies once batch mode starts) -- drop it.
+    singleFlowState = null;
+    lastSingleSelections = null;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
     if (els.resultsGrid) els.resultsGrid.innerHTML = "";
     if (els.resultsGridWrap) els.resultsGridWrap.hidden = true;
@@ -473,64 +524,112 @@
         addTiming("取得分析結果", Date.now() - stepStart);
       }
 
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath };
+
       showAnalysisPreview(analysis, preset);
       await waitForContinue();
-      const userPrompt = els.promptInput.value.trim();
-      const effectiveAnalysis = buildEffectiveAnalysis(analysis, readStyleSelectionsFromDom());
-      if (procSub) {
-        procSub.textContent = aiPhotoEditing
-          ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-          : "正在進行本機影像處理，請稍候…";
-      }
-
-      stepStart = Date.now();
-      let finalJobId;
-      if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
-      } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
-      }
-      addTiming("提交後續處理", Date.now() - stepStart);
-
-      stepStart = Date.now();
-      await pollJobStatus(finalJobId, { path: processingPath });
-      const finishWaitDuration = Date.now() - stepStart;
-
-      stepStart = Date.now();
-      const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
-      const extraInfo = result["extra-info"] || {};
-      const t = extraInfo.timings || {};
-      addTiming("AI 修圖中", finishWaitDuration, [
-        { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-        { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-        { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
-        { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
-      ]);
-      addTiming("取得結果", Date.now() - stepStart);
-
-      const usedImageModelLabel = extraInfo.image_model
-        ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
-        : "本機處理";
-      const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
-
-      const data = {
-        image: imageUrl,
-        model: usedModelLabel,
-        usage: result.usage,
-        qualityCheck: result.quality_check,
-        localOnly: !aiPhotoEditing,
-        retryCount: 0
-      };
-
-      lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, path: processingPath };
-      renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
-      populateTimingSection();
-      showSection("results");
+      await finishSingleFlow();
     } catch (error) {
       showSection("upload");
       showError(friendlyError(error));
     } finally {
       els.startButton.disabled = false;
+      clearContinueWait();
+      if (els.analysisPreview) els.analysisPreview.hidden = true;
+    }
+  }
+
+  // Steps 3-6 for the single-image flow, reusable both for the first run
+  // (right after analyze, called from startSubmit) and for a later
+  // re-adjustment run (called from backToProcessFromResults) -- reads
+  // singleFlowState (set once by analyze) plus whatever the user currently
+  // has checked/typed in the analysis-preview DOM.
+  async function finishSingleFlow() {
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath } = singleFlowState;
+    const selections = readStyleSelectionsFromDom();
+    const userPrompt = els.promptInput.value.trim();
+    lastSingleSelections = { userPrompt, ...selections };
+    const effectiveAnalysis = buildEffectiveAnalysis(analysis, selections);
+
+    if (procSub) {
+      procSub.textContent = aiPhotoEditing
+        ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
+        : "正在進行本機影像處理，請稍候…";
+    }
+
+    let stepStart = Date.now();
+    let finalJobId;
+    if (processingPath === "aipoc") {
+      finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+    } else {
+      finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+    }
+    addTiming("提交後續處理", Date.now() - stepStart);
+
+    stepStart = Date.now();
+    await pollJobStatus(finalJobId, { path: processingPath });
+    const finishWaitDuration = Date.now() - stepStart;
+
+    stepStart = Date.now();
+    const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
+    const extraInfo = result["extra-info"] || {};
+    const t = extraInfo.timings || {};
+    addTiming("AI 修圖中", finishWaitDuration, [
+      { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+      { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+      { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+      { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+    ]);
+    addTiming("取得結果", Date.now() - stepStart);
+
+    const usedImageModelLabel = extraInfo.image_model
+      ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
+      : "本機處理";
+    const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+
+    const data = {
+      image: imageUrl,
+      model: usedModelLabel,
+      usage: result.usage,
+      qualityCheck: result.quality_check,
+      localOnly: !aiPhotoEditing,
+      retryCount: 0
+    };
+
+    lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, path: processingPath };
+    renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
+    populateTimingSection();
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
+    showSection("results");
+  }
+
+  // "回到流程": lets the user come back from the results page to the
+  // analysis-preview screen, re-adjust the recipe checklist/style
+  // options/prompt (restored from their last submission), and regenerate.
+  async function backToProcessFromResults() {
+    if (!singleFlowState) return;
+    hideError();
+    clearContinueWait();
+    if (timingDetails) timingDetails.hidden = true;
+    resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
+    if (stepsGrid) stepsGrid.hidden = true;
+    procVisual.classList.remove("done");
+    procVisual.style.height = "";
+
+    showAnalysisPreview(singleFlowState.analysis, singleFlowState.preset);
+    if (lastSingleSelections) {
+      if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
+      applyStyleSelections(lastSingleSelections);
+    }
+    showSection("processing");
+
+    try {
+      await waitForContinue();
+      await finishSingleFlow();
+    } catch (error) {
+      showSection("upload");
+      showError(friendlyError(error));
+    } finally {
       clearContinueWait();
       if (els.analysisPreview) els.analysisPreview.hidden = true;
     }
@@ -1174,18 +1273,27 @@
     if (recipeChecked) record.recipeChecked = recipeChecked;
   }
 
-  function applyBatchReviewSelections(record) {
-    if (record.options) {
+  // Restores previously-captured pose/angle/lighting/size radios + recipe
+  // checkboxes onto the just-rendered analysis-preview DOM. Shared by the
+  // batch review screen (applyBatchReviewSelections) and the single-image
+  // "回到流程" flow (backToProcessFromResults), since both reuse the same
+  // #ap-* markup.
+  function applyStyleSelections({ options, recipeChecked } = {}) {
+    if (options) {
       const map = { "ap-pose": "pose", "ap-angle": "angle", "ap-lighting": "lighting", "ap-size": "size" };
       Object.entries(map).forEach(([name, key]) => {
-        const input = document.querySelector(`input[name="${name}"][value="${record.options[key]}"]`);
+        const input = document.querySelector(`input[name="${name}"][value="${options[key]}"]`);
         if (input) input.checked = true;
       });
     }
-    if (Array.isArray(record.recipeChecked) && els.apRecipeList) {
+    if (Array.isArray(recipeChecked) && els.apRecipeList) {
       const boxes = els.apRecipeList.querySelectorAll("input[type=checkbox]");
-      record.recipeChecked.forEach((isChecked, i) => { if (boxes[i]) boxes[i].checked = isChecked; });
+      recipeChecked.forEach((isChecked, i) => { if (boxes[i]) boxes[i].checked = isChecked; });
     }
+  }
+
+  function applyBatchReviewSelections(record) {
+    applyStyleSelections({ options: record.options, recipeChecked: record.recipeChecked });
   }
 
   function batchReviewBack() {
@@ -1248,9 +1356,7 @@
   els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
   if (els.changePhotoBtn) els.changePhotoBtn.addEventListener("click", () => els.fileInput.click());
   els.startButton.addEventListener("click", startSubmit);
-  els.backToProcessBtn.addEventListener("click", () => {
-    showSection("processing");
-  });
+  els.backToProcessBtn.addEventListener("click", backToProcessFromResults);
   els.resetButton.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
