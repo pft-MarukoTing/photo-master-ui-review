@@ -72,31 +72,31 @@ STYLE_OPTION_INSTRUCTIONS = {
     },
     "angle": {
         "high": (
-            "Transform the photo into a clearly high-angle shot, as if the camera has moved above the subject "
-            "and is looking downward. The subject should visually look up toward the camera when appropriate, "
-            "with more top-facing facial, hair, shoulder, tabletop, floor, or surrounding environment cues visible. "
-            "Make the viewpoint change noticeable rather than merely correcting perspective, while preserving the same "
-            "identity, outfit, location, props, and believable body proportions. Avoid unnatural tiny-body distortion, "
-            "warped heads, stretched limbs, or fake newly invented background."
+            "Transform the photo into a clearly high-angle shot, as if the camera has moved above the main subject "
+            "and is looking downward. Reveal more top-facing surfaces, upper contours, or surrounding context when appropriate. "
+            "Make the viewpoint change noticeable rather than just slightly correcting perspective. Preserve the same main subject, "
+            "same scene, same location, and same props, while keeping shapes, proportions, and perspective believable. "
+            "Avoid unnatural distortion, warped geometry, or invented background content."
         ),
         "low": (
-            "Transform the photo into a clearly low-angle shot, as if the camera has moved below the subject's normal eye line "
-            "and is looking upward. The subject should feel taller, more present, and more visually assertive, with stronger "
-            "upward perspective cues such as visible ceiling, upper background structures, or upward-leading vertical lines when the scene allows. "
-            "Make the viewpoint change visible, not just a small tilt. Preserve the same subject identity, outfit, location, and props. "
-            "Avoid extreme wide-angle distortion, enlarged legs or chin, warped architecture, or a superhero-like exaggeration unless the original scene supports it."
+            "Transform the photo into a clearly low-angle shot, as if the camera has moved below the subject and is looking upward. "
+            "Make the subject feel more prominent, elevated, or visually powerful, with stronger upward perspective cues when the scene allows. "
+            "The viewpoint change should be clearly visible, not just a subtle tilt. Preserve the same main subject, same scene, "
+            "same location, and same props, while keeping proportions and structural geometry believable. "
+            "Avoid extreme distortion, warped architecture, or unrealistic enlargement of foreground elements."
         ),
         "eye": (
-            "Transform the photo toward a natural eye-level shot, as if the camera is held around the subject's face or normal viewing height. "
-            "Keep the vertical perspective balanced and direct: faces should feel more level with the camera, body proportions should look natural, "
-            "and the scene should feel like a straightforward everyday portrait rather than a dramatic high or low shot. "
-            "This can re-center the viewer-subject relationship, but must preserve the same identity, expression style, location, props, and realistic spatial layout."
+            "Transform the photo toward a natural eye-level shot, as if the camera is positioned at the subject's normal viewing height. "
+            "Keep the perspective balanced, direct, and realistic, so the result feels more neutral and straightforward rather than dramatically high or low. "
+            "Preserve the same main subject, same scene, same location, and same props, while maintaining believable proportions, depth, and spatial layout."
         ),
         "side": (
-            "Transform the photo into a clear side or three-quarter side shot. Rotate the camera viewpoint and subject orientation enough that the body, "
-            "face contour, shoulder line, and silhouette read more from the side, similar to a portrait taken from an oblique angle rather than straight-on. "
-            "The side angle should reveal more profile, body depth, and dimensional contour while keeping the subject recognizable and still located in the same scene. "
-            "Avoid turning the person into a different pose, changing clothing, flipping identity features, or inventing a new background."
+            "Transform the photo into a clear side-angle or three-quarter side-angle shot, targeting an oblique viewpoint around 45 to 90 degrees from a straight-on front view. "
+            "If the original photo is already somewhat side-facing, increase the side-angle readability rather than leaving it unchanged: make the subject's lateral contour, depth, side plane, silhouette, or profile structure more visually dominant. "
+            "For people or animals, this may reveal more profile, shoulder line, body depth, or side-facing gaze; for products, food, objects, architecture, or scenes, this may reveal more side surfaces, object depth, edge thickness, receding lines, or side-plane geometry. "
+            "The output should clearly read as a side or three-quarter-side photograph, not merely a front view with a tiny rotation. "
+            "Preserve the same main subject, same scene, same location, same props, and recognizable subject form. "
+            "Avoid turning it into a different subject, inventing a new background, breaking structural geometry, or over-rotating until important front-facing details disappear unless a true profile view is natural for the subject."
         ),
     },
     "lighting": {
