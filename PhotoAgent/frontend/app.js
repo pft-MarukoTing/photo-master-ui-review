@@ -210,7 +210,29 @@
     ];
   }
 
+  // All-runs bundle for one image: source.jpg at the image level, each
+  // finished run under run_N/ (result.png/result.json/prompts.json).
+  // Reuses buildResultFiles per run and drops its per-call source entry
+  // (always the first item) in favor of a single shared one.
+  async function buildRunFiles(base, runs, prefix = "") {
+    const groups = await Promise.all(runs.map((run) =>
+      buildResultFiles(
+        { file: base.file, resultText: run.result, jobId: run.jobId, path: base.path },
+        `${prefix}run_${run.run}/`
+      ).then((files) => files.slice(1))
+    ));
+    const sourceBuf = await base.file.arrayBuffer();
+    return [
+      { name: prefix + (base.file.name || "source.jpg"), data: new Uint8Array(sourceBuf) },
+      ...groups.flat()
+    ];
+  }
+
   async function buildResultZip() {
+    const doneRuns = (lastResult.runs || []).filter((run) => run.status === "done");
+    if (doneRuns.length > 1) {
+      return window.PhotoAgentZip.createZip(await buildRunFiles(lastResult, doneRuns));
+    }
     return window.PhotoAgentZip.createZip(await buildResultFiles(lastResult));
   }
 
@@ -242,6 +264,10 @@
       const groups = await Promise.all(done.map((record) => {
         // Name each image's folder like its own single-download zip would be.
         const prefix = `${buildResultBaseName(record.jobId)}/`;
+        const doneRuns = (record.runs || []).filter((run) => run.status === "done");
+        if (doneRuns.length > 1) {
+          return buildRunFiles({ file: record.file, path: batchSettings.path }, doneRuns, prefix);
+        }
         const results = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path };
         return buildResultFiles(results, prefix);
       }));
@@ -369,6 +395,7 @@
     if (els.resultsGridWrap) els.resultsGridWrap.hidden = true;
     if (els.resultsDetail) els.resultsDetail.hidden = false;
     if (els.detailNav) els.detailNav.hidden = true;
+    if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
     if (els.backToGridBtn) els.backToGridBtn.hidden = true;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     if (els.batchProgress) els.batchProgress.hidden = true;
@@ -534,6 +561,8 @@
       r.imageUrl = null;
       r.error = null;
       r.timings = [];
+      r.runs = null;
+      r.mirrorIndex = null;
     });
 
     els.resultsDetail.hidden = true;
@@ -673,13 +702,25 @@
     els.resultsGridWrap.hidden = false;
     showSection("results");
 
+    // N independent edit runs per image from the same analysis. Each run is
+    // its own job; the pool works through (record, run) pairs.
+    const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
+    targets.forEach((r) => {
+      r.runs = Array.from({ length: runCount }, (_, k) => ({
+        run: k + 1, jobId: null, status: "processing",
+        imageUrl: null, result: null, timings: [], error: null
+      }));
+      r.mirrorIndex = null; // auto: mirror follows the first finished run
+    });
+
     targets.forEach((r) => { r.status = "processing"; updateBatchCard(r); });
     updateBatchProgress();
     els.resultSummary.textContent = batchSettings.aiPhotoEditing
       ? `批次使用 ${window.PhotoAgentConfig.imageModels[batchSettings.imageModel] || batchSettings.imageModel} 修圖中，先完成的會先顯示。`
       : "批次本機影像處理中，先完成的會先顯示。";
 
-    await runBatchPool(targets, editBatchItem, POLL_CONCURRENCY);
+    const workItems = targets.flatMap((r) => r.runs.map((run) => ({ record: r, run })));
+    await runBatchPool(workItems, editBatchItem, POLL_CONCURRENCY);
 
     const done = batchRecords.filter((r) => r.status === "done").length;
     els.resultSummary.textContent = `批次完成：${done}/${batchRecords.length} 張成功。`;
@@ -695,10 +736,13 @@
     continueBatchRecords(analyzedBatchRecords());
   }
 
-  // Step 2 for one record: submit via the single-image endpoint (so it carries
-  // the image's own effective prompt) -> poll -> fetch. Records analyze + edit
-  // sub-timings, matching the single flow's nested timing display.
-  async function editBatchItem(record) {
+  // Step 2 for one (record, run) pair: submit via the single-image
+  // endpoint (so it carries the image's own effective prompt) -> poll ->
+  // fetch. Records analyze + edit sub-timings, matching the single flow's
+  // nested timing display. Results land on the run entry `run`;
+  // syncRecordMirror keeps the record's legacy fields pointing at the
+  // selected/first-done run so all existing readers stay unchanged.
+  async function editBatchItem({ record, run }) {
     try {
       const userPrompt = effectivePrompt(record);
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
@@ -707,7 +751,7 @@
       });
       let stepStart = Date.now();
       if (batchSettings.path === "aipoc") {
-        record.jobId = await submitJob({
+        run.jobId = await submitJob({
           file: record.file,
           preset: batchSettings.presetKey,
           imageQuality: batchSettings.imageQuality,
@@ -718,7 +762,7 @@
           path: "aipoc"
         });
       } else {
-        record.jobId = await continueJob(record.analyzeJobId, {
+        run.jobId = await continueJob(record.analyzeJobId, {
           analysis: effectiveAnalysis,
           preset: batchSettings.presetKey,
           imageQuality: batchSettings.imageQuality,
@@ -730,19 +774,19 @@
       const submitMs = Date.now() - stepStart;
 
       stepStart = Date.now();
-      await pollJobStatus(record.jobId, { path: batchSettings.path });
+      await pollJobStatus(run.jobId, { path: batchSettings.path });
       const pollMs = Date.now() - stepStart;
 
       stepStart = Date.now();
-      const { image_url: imageUrl, result } = await getJobResult(record.jobId, { path: batchSettings.path });
+      const { image_url: imageUrl, result } = await getJobResult(run.jobId, { path: batchSettings.path });
       const fetchMs = Date.now() - stepStart;
 
-      record.status = "done";
-      record.imageUrl = imageUrl;
-      record.result = result;
+      run.status = "done";
+      run.imageUrl = imageUrl;
+      run.result = result;
       // Finish-stage timings moved into result["extra-info"] (matches single).
       const t = (result["extra-info"] || {}).timings || {};
-      record.timings = [
+      run.timings = [
         ...(record.analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
         { label: "AI 修圖中", duration: pollMs, children: [
@@ -754,11 +798,31 @@
         { label: "取得結果", duration: fetchMs }
       ];
     } catch (error) {
-      record.status = "error";
-      record.error = friendlyError(error);
+      run.status = "error";
+      run.error = friendlyError(error);
     }
+    syncRecordMirror(record);
     updateBatchCard(record);
     updateBatchProgress();
+    if (els.detailNav && !els.detailNav.hidden && doneBatchRecords()[detailPos] === record) {
+      renderRunTabs(record);
+    }
+  }
+
+  function syncRecordMirror(record) {
+    const runs = record.runs || [];
+    if (!runs.length) return;
+    const pick = (record.mirrorIndex != null && runs[record.mirrorIndex])
+      ? runs[record.mirrorIndex]
+      : (runs.find((x) => x.status === "done") || runs[0]);
+    record.jobId = pick.jobId;
+    record.imageUrl = pick.imageUrl;
+    record.result = pick.result;
+    record.timings = pick.timings;
+    const anyDone = runs.some((x) => x.status === "done");
+    const anyRunning = runs.some((x) => x.status === "processing");
+    record.status = anyDone ? "done" : (anyRunning ? "processing" : "error");
+    record.error = record.status === "error" ? (runs.find((x) => x.error) || {}).error : null;
   }
 
   // Run `worker` over `items` with at most `concurrency` in flight.
@@ -787,7 +851,11 @@
     const inEdit = batchRecords.some((r) => r.status === "processing" || r.status === "done");
     if (inEdit) {
       const done = batchRecords.filter((r) => r.status === "done").length;
-      els.batchProgress.textContent = `完成 ${done}/${total}${failText}`;
+      const runs = batchRecords.flatMap((r) => r.runs || []);
+      const runText = batchRecords.some((r) => (r.runs || []).length > 1)
+        ? `（共 ${runs.filter((x) => x.status === "done").length}/${runs.length} RUN）`
+        : "";
+      els.batchProgress.textContent = `完成 ${done}/${total}${runText}${failText}`;
     } else {
       const analyzed = batchRecords.filter((r) => r.status === "analyzed").length;
       els.batchProgress.textContent = `已分析 ${analyzed}/${total}${failText}`;
@@ -809,7 +877,9 @@
     const img = document.createElement("img");
     img.src = record.imageUrl || record.previewUrl;
     media.appendChild(img);
-    if (record.status === "analyzing" || record.status === "processing") {
+    const runs = record.runs || [];
+    const runsRunning = runs.filter((x) => x.status === "processing").length;
+    if (record.status === "analyzing" || record.status === "processing" || runsRunning) {
       const spinner = document.createElement("div");
       spinner.className = "rc-spinner";
       media.appendChild(spinner);
@@ -823,6 +893,12 @@
       done: "完成",
       error: "失敗"
     }[record.status] || "";
+    if (runs.length > 1) {
+      const runsDone = runs.filter((x) => x.status === "done").length;
+      if (runsRunning) badge.textContent = `處理中 RUN ${runsDone}/${runs.length}`;
+      else if (runsDone === runs.length) badge.textContent = `完成 ${runs.length} RUN`;
+      else if (runsDone) badge.textContent = `完成 ${runsDone}/${runs.length} RUN`;
+    }
     media.appendChild(badge);
 
     const name = document.createElement("p");
@@ -873,6 +949,56 @@
     showBatchDetail();
   }
 
+  // Tab strip for one image's N edit results. Hidden unless the record was
+  // edited more than once. Clicking a finished tab re-points the record's
+  // mirror fields at that run and re-renders the whole report.
+  function renderRunTabs(record) {
+    if (!els.runTabs) return;
+    const runs = record.runs || [];
+    if (runs.length <= 1) {
+      els.runTabs.hidden = true;
+      els.runTabs.innerHTML = "";
+      return;
+    }
+
+    const doneIdx = runs.findIndex((x) => x.status === "done");
+    const current = (record.mirrorIndex != null && runs[record.mirrorIndex]) ? record.mirrorIndex : doneIdx;
+
+    els.runTabs.hidden = false;
+    els.runTabs.innerHTML = "";
+    runs.forEach((run, idx) => {
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = `run-tab ${run.status}${idx === current ? " active" : ""}`;
+
+      if (run.status === "done") {
+        const im = document.createElement("img");
+        im.src = run.imageUrl;
+        tab.appendChild(im);
+      } else if (run.status === "processing") {
+        const spin = document.createElement("span");
+        spin.className = "run-tab-spin";
+        tab.appendChild(spin);
+      }
+
+      const label = document.createElement("span");
+      label.textContent = run.status === "error" ? `RUN ${run.run} ✕` : `RUN ${run.run}`;
+      tab.appendChild(label);
+
+      if (run.status === "done") {
+        tab.addEventListener("click", () => {
+          record.mirrorIndex = idx;
+          syncRecordMirror(record);
+          showBatchDetail();
+        });
+      } else {
+        tab.disabled = true;
+        if (run.status === "error") tab.title = run.error || "此 RUN 修圖失敗";
+      }
+      els.runTabs.appendChild(tab);
+    });
+  }
+
   // Reuse the single-image report DOM (renderResult) for the opened record.
   // Set the original image first so resolveCropBoxForDisplay sees its dims.
   function showBatchDetail() {
@@ -889,6 +1015,7 @@
     els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
     els.detailPrev.disabled = detailPos === 0;
     els.detailNext.disabled = detailPos === done.length - 1;
+    renderRunTabs(record);
 
     const applyRender = () => {
       els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
@@ -907,8 +1034,10 @@
         retryCount: 0
       };
       // Point the zip download at the currently-viewed image, same shape the
-      // single flow sets so handleDownloadClick works here too.
-      lastResult = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path };
+      // single flow sets so handleDownloadClick works here too. The extra
+      // runs field switches the download to an all-runs bundle
+      // when this image was edited more than once (single flow never sets it).
+      lastResult = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path, runs: record.runs };
       renderResult({
         data,
         analysis: record.result.analysis,
@@ -932,6 +1061,7 @@
   function backToBatchGrid() {
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
+    if (els.runTabs) els.runTabs.hidden = true;
     els.backToGridBtn.hidden = true;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = !doneBatchRecords().length;
     els.resultsGridWrap.hidden = false;

@@ -51,6 +51,8 @@ window.PhotoAgentDom = (() => {
     detailPrev: document.querySelector("#detail-prev"),
     detailNext: document.querySelector("#detail-next"),
     detailIndex: document.querySelector("#detail-index"),
+    runTabs: document.querySelector("#run-tabs"),
+    runCountSelect: document.querySelector("#run-count"),
     backToGridBtn: document.querySelector("#back-to-grid-btn"),
     downloadAllBtn: document.querySelector("#download-all-btn"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),

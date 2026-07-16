@@ -355,6 +355,35 @@
     .detail-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .detail-index { font-size: 13px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
 
+    /* ── Run tabs (switch between one image's N edit results) ── */
+    .run-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+    .run-tab {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 6px 8px;
+      background: var(--card);
+      border: 1.5px solid var(--border-2);
+      border-radius: 10px;
+      color: var(--text-2);
+      font-size: 12.5px; font-weight: 600;
+      cursor: pointer;
+    }
+    .run-tab img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
+    .run-tab.active { border-color: var(--accent); color: var(--text); }
+    .run-tab:disabled { cursor: default; opacity: .6; }
+    .run-tab.error { border-color: rgba(220,60,60,.6); }
+    .run-tab-spin {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.25);
+      border-top-color: var(--text-2);
+      border-radius: 50%;
+      animation: rc-spin .8s linear infinite;
+    }
+
+    /* ── Run count row (inside the batch prompt row) ── */
+    .run-count-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .run-count-row .field-label { margin: 0; }
+    .run-count-hint { font-size: 12.5px; color: var(--text-3); }
+
     /* ── Batch per-image analysis review controls ── */
     .batch-review-nav {
       display: flex;
@@ -701,6 +730,32 @@
         <span class="field-label">整批補充指令</span>
         <textarea id="batch-prompt" class="field-ta" rows="2"
           placeholder="套用到未單獨設定補充指令的圖片若某張在分析裡自己填了補充指令，則以該張指令為準。"></textarea>
+        <div class="run-count-row">
+          <span class="field-label">RUN 次數</span>
+          <select id="run-count" class="quality-select">
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20">20</option>
+          </select>
+          <span class="run-count-hint">每張圖依同一份分析獨立執行 N 個 RUN</span>
+        </div>
       </div>
       <div id="results-grid" class="results-grid"></div>
     </div>
@@ -713,6 +768,9 @@
         <span id="detail-index" class="detail-index"></span>
         <button id="detail-next" class="btn btn-secondary" type="button">→</button>
       </div>
+
+      <!-- Run tabs: switch between this image's N edit results -->
+      <div id="run-tabs" class="run-tabs" hidden></div>
 
       <!-- Before / After -->
       <div class="compare-grid">
