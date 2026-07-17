@@ -8,21 +8,13 @@ from config import MODELS, PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import (
     create_preview_bytes,
-    create_cropped_bytes,
-    create_candidate_preview_bytes,
     image_to_data_url,
     get_image_dimensions,
-    normalize_crop_box,
-    build_crop_candidates,
     resolve_crop_box_with_report,
-    clamp_raw_crop_box,
-    crop_validation_risk,
-    user_direction_affects_crop,
 )
 from prompts import (
     ANALYSIS_INSTRUCTION,
     build_user_instruction_review_prompt,
-    build_crop_validation_prompt,
     build_edit_prompt,
     build_quality_check_prompt,
     style_option_entries,
@@ -142,118 +134,6 @@ def review_user_instruction(user_direction: str, analysis: dict):
     return result, prompt
 
 
-# ── Step 4: crop validation ────────────────────────────────────────────────────
-
-def validate_crop(
-    image_bytes: bytes,
-    analysis: dict,
-    risk: dict = None,
-    revision_feedback: str = None,
-    force_validation: bool = False,
-    previous_output_b64: str = None,
-):
-    """Returns (analysis, prompt) -- prompt is None when no GPT call was
-    made (validation skipped)."""
-    preview_bytes = create_preview_bytes(image_bytes)
-    img_w, img_h = get_image_dimensions(preview_bytes)
-    candidates = build_crop_candidates(analysis, high_risk=(risk or {}).get("level") == "high")
-
-    has_enabled_candidate = any((c.get("cropBox") or {}).get("enabled") is True for c in candidates)
-    if not revision_feedback and not force_validation and not has_enabled_candidate:
-        return analysis, None
-
-    original_data_url = image_to_data_url(preview_bytes, "image/jpeg")
-
-    candidate_payloads = []
-    for c in candidates:
-        crop_box = c.get("cropBox") or {}
-        if crop_box.get("enabled"):
-            cand_preview = create_candidate_preview_bytes(preview_bytes, crop_box, analysis)
-            cand_data_url = image_to_data_url(cand_preview, "image/jpeg")
-            local_geom = resolve_crop_box_with_report(crop_box, analysis, img_w, img_h)
-        else:
-            cand_data_url = original_data_url
-            local_geom = {"cropBox": None, "adjustmentReasons": []}
-
-        candidate_payloads.append({**c, "localGeometry": local_geom, "imageDataUrl": cand_data_url})
-
-    if not candidate_payloads:
-        return analysis, None
-
-    crop_prompt = build_crop_validation_prompt(
-        analysis,
-        candidate_payloads,
-        revision_feedback,
-        bool(previous_output_b64),
-    )
-    content = [
-        {"type": "input_text", "text": crop_prompt},
-        {"type": "input_text", "text": "Original photo"},
-        {"type": "input_image", "image_url": original_data_url},
-    ]
-
-    if previous_output_b64:
-        content.append({
-            "type": "input_text",
-            "text": (
-                "Previous failed output from the last run. Use this only as negative reference "
-                "for understanding the QA feedback; do not treat it as the source image."
-            ),
-        })
-        content.append({"type": "input_image", "image_url": f"data:image/png;base64,{previous_output_b64}"})
-
-    for c in candidate_payloads:
-        local_geom = c.get("localGeometry") or {}
-        adj_crop = local_geom.get("cropBox")
-        adj_reasons = local_geom.get("adjustmentReasons") or []
-        adjusted_str = f"Adjusted crop: {json.dumps(adj_crop, ensure_ascii=False)}" if adj_crop else "Adjusted crop: original frame"
-        reasons_str = f"Local geometry adjustments: {'; '.join(adj_reasons)}" if adj_reasons else "Local geometry adjustments: none"
-        content.append({"type": "input_text", "text": f"Crop candidate {c['id']}: {c['label']}. {adjusted_str}. {reasons_str}"})
-        content.append({"type": "input_image", "image_url": c["imageDataUrl"]})
-
-    payload = _responses_payload(ANALYSIS_MODEL, content)
-    data = _post_json(OPENAI_RESPONSES_URL, payload, "Crop validation failed", timeout=120)
-    validation = _parse_json_from_text(_extract_output_text(data))
-
-    revised = validation.get("revised_crop_box")
-    selected_id = validation.get("selected_candidate_id")
-    selected_candidate = next((c for c in candidates if c["id"] == selected_id), None)
-    use_revised = validation.get("pass") is False and revised and isinstance(revised, dict)
-
-    selected_crop_box = revised if use_revised else (
-        (selected_candidate or {}).get("cropBox") or analysis.get("crop_box")
-    )
-    selected_label = "AI 修正裁切" if use_revised else (
-        (selected_candidate or {}).get("label") or "原始裁切建議"
-    )
-
-    return {
-        **analysis,
-        "crop_validation": {
-            **validation,
-            "selected_candidate_label": selected_label,
-            "risk_level": (risk or {}).get("level") or "unknown",
-            "risk_reasons": (risk or {}).get("reasons") or [],
-        },
-        "crop_candidates": [
-            {
-                "id": c["id"],
-                "label": c["label"],
-                "cropBox": c.get("cropBox"),
-                "compositionIntent": c.get("compositionIntent") or "",
-                "tradeoffs": c.get("tradeoffs") or "",
-            }
-            for c in candidates
-        ],
-        "crop_box": selected_crop_box,
-        "crop_recommendation": (
-            f"{analysis.get('crop_recommendation') or ''} 裁切評選修正：{revised.get('reason', '')}".strip()
-            if use_revised and (revised or {}).get("reason")
-            else analysis.get("crop_recommendation")
-        ),
-    }, crop_prompt
-
-
 # ── Step 5: image edit ─────────────────────────────────────────────────────────
 
 def edit_photo(
@@ -270,15 +150,15 @@ def edit_photo(
 
     user_instruction = analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
-    crop_applied = bool(normalize_crop_box(analysis.get("crop_box"), analysis))
+    img_w, img_h = get_image_dimensions(image_bytes)
+    crop_plan = resolve_crop_box_with_report(analysis.get("crop_box"), analysis, img_w, img_h)["cropBox"]
 
-    cropped_bytes = create_cropped_bytes(image_bytes, analysis.get("crop_box"), analysis)
-    prompt_text = build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_applied, revision_feedback)
+    prompt_text = build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
 
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
         headers=_auth_headers(),
-        files={"image": ("photo.png", cropped_bytes, "image/png")},
+        files={"image": ("photo.png", image_bytes, "image/png")},
         data={"model": model, "prompt": prompt_text, "quality": quality, "size": "auto"},
         timeout=300,
     )

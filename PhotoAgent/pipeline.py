@@ -4,9 +4,6 @@ import time
 from functools import partial
 
 from image_tools import (
-    normalize_crop_box,
-    crop_validation_risk,
-    user_direction_affects_crop,
     create_local_enhanced_bytes,
     image_to_data_url,
 )
@@ -14,7 +11,6 @@ from gemini_client import edit_photo as edit_photo_gemini, NANO_BANANA_LITE_MODE
 from openai_client import (
     analyze_photo,
     review_user_instruction,
-    validate_crop,
     edit_photo,
     quality_check_photo,
 )
@@ -84,7 +80,12 @@ def finish_stage(
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
 ) -> dict:
-    """Steps 4-6: crop validation, then AI edit + QA (or local enhancement).
+    """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
+
+    There is no separate crop-validation step: the crop guidance from
+    analyze_stage (crop_box, roi_box, protected_regions, ...) is passed
+    straight to the edit model, which is instructed to perform that crop
+    itself as part of the edit.
 
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
@@ -105,33 +106,8 @@ def finish_stage(
     timings["Step 3 - user_instruction_review"] = time.time() - t0
     logger.info("Step 3 done in %.2fs: has_direction=%s", timings["Step 3 - user_instruction_review"], user_instruction.get("has_user_direction"))
 
-    # Step 4 — crop validation (conditional)
-    t0 = time.time()
-    logger.info("Step 4: evaluating crop")
-    planned_crop = normalize_crop_box(analysis.get("crop_box"), analysis)
-    has_ai_candidate = any(
-        (c.get("crop_box") or c.get("cropBox") or {}).get("enabled") is True
-        for c in (analysis.get("crop_candidates") or [])
-    )
-    has_user_crop = user_direction_affects_crop(user_instruction, user_prompt)
-    crop_risk = crop_validation_risk(analysis)
-
-    if planned_crop or has_ai_candidate or has_user_crop:
-        logger.info("Step 4: running crop validation (risk=%s, force=%s)", crop_risk.get("level"), has_user_crop)
-        risk = {"level": "high", "reasons": ["user-crop-instruction"]} if has_user_crop else crop_risk
-        analysis, crop_prompt = validate_crop(
-            image_bytes,
-            analysis,
-            risk=risk,
-            force_validation=has_user_crop,
-        )
-        prompts["crop_validation"] = crop_prompt
-        timings["Step 4 - crop_validation"] = time.time() - t0
-        logger.info("Step 4 done in %.2fs: selected=%s", timings["Step 4 - crop_validation"], (analysis.get("crop_validation") or {}).get("selected_candidate_label"))
-    else:
-        prompts["crop_validation"] = None
-        timings["Step 4 - crop_validation"] = time.time() - t0
-        logger.info("Step 4 done in %.2fs: crop validation skipped", timings["Step 4 - crop_validation"])
+    prompts["crop_validation"] = None
+    timings["Step 4 - crop_validation"] = 0.0
 
     if ai_photo_editing:
         # Step 5 — AI edit

@@ -230,130 +230,25 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
     return head + schema
 
 
-def build_crop_validation_prompt(analysis, candidates, revision_feedback=None, previous_output_available=False):
-    user_instruction = analysis.get("user_instruction") or {}
-
-    user_block = ""
-    if user_instruction.get("has_user_direction"):
-        conflicts = "; ".join(user_instruction.get("conflicts") or [])
-        warning = user_instruction.get("warning") or ""
-        explicit_priorities = "; ".join(user_instruction.get("explicit_priorities") or [])
-        explicit_prohibitions = "; ".join(user_instruction.get("explicit_prohibitions") or [])
-        user_block = f"""User instruction priority:
-- User intent summary: {user_instruction.get("user_intent_summary") or ""}
-- Normalized user direction: {user_instruction.get("normalized_user_direction") or ""}
-- Explicit priorities: {explicit_priorities}
-- Explicit prohibitions: {explicit_prohibitions}
-- Crop guidance: {user_instruction.get("crop_guidance") or ""}
-- Warning/conflicts: {conflicts} {warning}
-
-Respect explicit user crop/framing requirements first. If the user did not mention crop/framing, you may still choose a conservative Agent crop when it clearly improves the photo and does not conflict with the user goal. Do not let an automatic crop weaken the user's requested edit."""
-
-    revision_block = ""
-    if revision_feedback:
-        prev_note = (
-            "The previous failed output image is attached after the original photo. "
-            "Use it as negative evidence: identify what failed visually, but choose the new framing "
-            "from the original photo and the current candidates."
-            if previous_output_available else ""
+def _build_crop_instruction_block(crop_plan):
+    if not crop_plan:
+        return (
+            "No crop. Treat the supplied image boundaries as final. Do not crop, "
+            "reframe, expand canvas, add borders, or invent empty side bands."
         )
-        revision_block = f"""Revision feedback from the previous QA:
-{revision_feedback}
 
-This is a retry. Prioritize fixing the QA failure over defending the previous crop. If the previous result failed because of crop damage, cramped framing, missing context, or scene-preservation loss, choose a safer or revised crop that protects the required subject, action, props, and scene context.
-{prev_note}"""
+    x, y, w, h = crop_plan["x"], crop_plan["y"], crop_plan["w"], crop_plan["h"]
+    aspect = crop_plan.get("aspectRatio") or crop_plan.get("aspect_ratio") or "keep the resulting region's natural ratio"
+    left_pct, top_pct = x * 100, y * 100
+    right_pct, bottom_pct = (1 - (x + w)) * 100, (1 - (y + h)) * 100
 
-    candidates_str = "\n".join(
-        f"{i + 1}. {c['id']}: {c['label']} "
-        f"requested={json.dumps(c.get('cropBox') or c.get('crop_box'), ensure_ascii=False)} "
-        f"adjusted={json.dumps((c.get('localGeometry') or {}).get('cropBox'), ensure_ascii=False)} "
-        f"adjustments={json.dumps((c.get('localGeometry') or {}).get('adjustmentReasons') or [], ensure_ascii=False)} "
-        f"{('Intent: ' + c['compositionIntent']) if c.get('compositionIntent') else ''} "
-        f"{('Tradeoffs: ' + c['tradeoffs']) if c.get('tradeoffs') else ''}"
-        for i, c in enumerate(candidates or [])
-    )
-
-    crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
-    roi_box = json.dumps(analysis.get("roi_box") or {}, ensure_ascii=False)
-    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {}, ensure_ascii=False)
-    protected_regions = json.dumps(analysis.get("protected_regions") or [], ensure_ascii=False)
-    rec_aspect = (
-        analysis.get("recommended_aspect_ratio") or
-        (analysis.get("crop_box") or {}).get("aspect_ratio") or
-        "original"
-    )
-
-    head = f"""You are validating a crop decision for a photo editing agent.
-Choose the final framing. The candidates are AI-authored composition options rendered by local geometry.
-Local geometry may clamp, normalize, or slightly expand boxes only for bounds, aspect fitting, and hard safety. Treat its adjustment report as evidence, not as an aesthetic decision.
-You may select a candidate, select original-frame, or provide a revised_crop_box if every candidate is flawed.
-
-{user_block}
-
-Judge each candidate through these layers:
-1. Subject safety: main subject, ROI, required subject_extent_box, protected_regions, role cues, important props, and interaction points remain complete for the intended framing.
-2. Framing intent: the crop matches close-up, upper-body, full-body, object-complete, environmental, detail, action, or context-preserving intent. Do not require content that the framing intent does not need.
-3. Composition and aspect: centering, thirds, symmetry, leading lines, negative space, or another layout actually improves balance. The aspect ratio should serve the subject and scene, not habit.
-4. Empty space and context: blank/background areas should have a clear role; meaningful breathing room and scene context should be preserved when they improve mood, scale, story, dignity, rhythm, or environmental truth.
-5. Distraction handling: reassess distractions after the crop. Preserve contextual or neutral elements; remove or crop only elements that still strongly compete.
-6. Edge and alignment integrity: avoid cramped tops, awkward cuts, accidental head/face/hand/object clipping, unstable horizon/verticals, and transparent/checkerboard/artificial borders.
-7. Local adjustment impact: if local geometry had to expand, clamp, or relax aspect ratio to protect content, prefer the adjusted-safe crop or a revised crop over the unsafe original request.
-
-Downgrade candidates that trade away subject completeness, scene truth, breathing room, alignment stability, or visual balance without a clear compositional gain.
-Upgrade original-frame when the proposed crop no longer improves the image after post-crop distraction and context are reassessed.
-
-{revision_block}
-
-Original analysis:
-- Main subject: {analysis.get("main_subject") or ""}
-- Scene type: {analysis.get("scene_type") or ""}
-- Composition intent: {analysis.get("composition_intent") or ""}
-- Framing intent: {analysis.get("framing_intent") or analysis.get("portrait_framing") or ""}
-- ROI box: {roi_box}
-- Subject extent box: {subject_extent_box}
-- Protected regions: {protected_regions}
-- Portrait framing: {analysis.get("portrait_framing") or ""}
-- Layout method: {analysis.get("layout_method") or ""}
-- Composition strategy: {analysis.get("composition_strategy") or ""}
-- Visual balance strategy: {analysis.get("visual_balance_strategy") or ""}
-- Empty space strategy: {analysis.get("empty_space_strategy") or ""}
-- Alignment strategy: {analysis.get("alignment_strategy") or ""}
-- Distraction strategy: {analysis.get("distraction_strategy") or ""}
-- Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
-- Crop recommendation: {analysis.get("crop_recommendation") or ""}
-- Recommended aspect ratio: {rec_aspect}
-- Aspect ratio reason: {analysis.get("aspect_ratio_reason") or ""}
-- Crop intent: {crop_intent}
-
-Candidates:
-{candidates_str}
-
-Return only valid JSON. User-visible values must be Traditional Chinese.
-"""
-    schema = """{
-  "pass": true,
-  "severity": "ok",
-  "selected_candidate_id": "ai-plan",
-  "reason": "選擇原因。",
-  "problems": [],
-  "candidate_scores": [
-    { "id": "ai-plan", "score": 8, "comment": "評語。" }
-  ],
-  "revised_crop_box": {
-    "enabled": false,
-    "x": 0,
-    "y": 0,
-    "w": 1,
-    "h": 1,
-    "aspect_ratio": "",
-    "reason": "若不需要修正裁切，保持 disabled。"
-  },
-  "aspect_ratio_judgment": "說明所選比例是否符合主體、陪襯元素、留白與畫面意圖。"
-}"""
-    return head + schema
+    return f"""Mandatory crop region, decided by the crop-validation step and not up for reinterpretation. Coordinates are normalized (0-1) against the full original image, origin at the top-left:
+- x={x:.3f}, y={y:.3f}, w={w:.3f}, h={h:.3f} -- i.e. trim approximately {left_pct:.0f}% off the left edge, {top_pct:.0f}% off the top edge, {right_pct:.0f}% off the right edge, and {bottom_pct:.0f}% off the bottom edge of the original image.
+- Target output aspect ratio: {aspect}.
+Perform exactly this crop/reframe as part of your edit. This is a hard constraint, not a stylistic suggestion: do not pick a different crop, do not soften or ignore it, and do not fall back to the full original frame. Do not include any content from outside this region in the final output. Within the kept region, still honor the ROI, subject extent, and protected regions below."""
 
 
-def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_applied, revision_feedback=None):
+def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None):
     user_instruction = analysis.get("user_instruction") or {}
     effective_user_direction = (
         user_instruction.get("normalized_user_direction") or user_direction or ""
@@ -437,6 +332,26 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
 This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit behavior. Preserve the subject, required framing, scene context, and protected details more conservatively than the previous output."""
 
+    crop_instruction_block = _build_crop_instruction_block(crop_plan)
+    crop_priority_line_style = (
+        "Perform the mandatory crop specified in the Crop instruction above as part of this edit. "
+        "Beyond that exact region, do not add blank borders, transparent/checkerboard padding, or "
+        "artificial empty side bands, unless a selected framing-size override explicitly asks for wider "
+        "or closer framing within the cropped region."
+        if crop_plan else
+        "Treat the supplied image boundaries as final unless a selected framing-size override explicitly "
+        "asks for wider or closer framing. Never add blank borders, transparent/checkerboard padding, or "
+        "artificial empty side bands."
+    )
+    crop_priority_line_faithful = (
+        "Perform the mandatory crop specified in the Crop instruction above as part of this edit. Beyond "
+        "that exact region, do not additionally expand canvas, add borders, create transparent/checkerboard "
+        "padding, or invent empty side bands."
+        if crop_plan else
+        "Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create "
+        "transparent/checkerboard padding, or invent empty side bands."
+    )
+
     if has_style_overrides:
         opening_preservation_rule = (
             "Preserve the subject identity, recognizable person/object, clothing, location, environment, props, "
@@ -452,8 +367,8 @@ Priority order:
 3. Apply the user-approved correction plan and user's extra direction.
 4. Use the preset style as a supporting finish.
 5. Apply default preservation rules only to aspects not selected by the user."""
-        retouch_priorities = """Retouch priorities:
-1. Treat the supplied image boundaries as final unless a selected framing-size override explicitly asks for wider or closer framing. Never add blank borders, transparent/checkerboard padding, or artificial empty side bands.
+        retouch_priorities = f"""Retouch priorities:
+1. {crop_priority_line_style}
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
 3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale or environmental context.
 4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
@@ -469,8 +384,8 @@ Priority order:
         )
         edit_mode_block = """Edit mode:
 FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction."""
-        retouch_priorities = """Retouch priorities:
-1. Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands.
+        retouch_priorities = f"""Retouch priorities:
+1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
 3. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup.
 4. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
@@ -495,6 +410,9 @@ Do not add text, logos, watermarks, extra people, new props, fantasy elements, o
 Do not make the result look synthetic, plastic, or heavily filtered.
 
 {edit_mode_block}
+
+Crop instruction:
+{crop_instruction_block}
 
 Photo analysis:
 - Summary: {analysis.get("photo_summary") or ""}
@@ -522,7 +440,6 @@ Photo analysis:
 - Memory color strategy: {analysis.get("memory_color_strategy") or ""}
 - Crop/reframe recommendation: {analysis.get("crop_recommendation") or ""}
 - Crop intent: {crop_intent}
-- Applied crop before editing: {"Yes. Continue from this cropped composition and do not expand back to the wider frame." if crop_applied else "No."}
 - Correction plan: {correction_plan}
 - Must preserve: {preserve_rules}
 

@@ -7,7 +7,7 @@ import requests
 from aiserver_utils.aescipher import AESCipher
 from config import PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
-from image_tools import create_cropped_bytes, normalize_crop_box
+from image_tools import get_image_dimensions, resolve_crop_box_with_report
 from prompts import build_edit_prompt
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -64,16 +64,16 @@ def edit_photo(
 
     user_instruction = analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
-    crop_applied = bool(normalize_crop_box(analysis.get("crop_box"), analysis))
+    img_w, img_h = get_image_dimensions(image_bytes)
+    crop_plan = resolve_crop_box_with_report(analysis.get("crop_box"), analysis, img_w, img_h)["cropBox"]
 
-    cropped_bytes = create_cropped_bytes(image_bytes, analysis.get("crop_box"), analysis)
-    prompt_text = build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_applied, revision_feedback)
+    prompt_text = build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
 
     payload = {
         "contents": [{
             "parts": [
                 {"text": prompt_text},
-                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(cropped_bytes).decode()}},
+                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(image_bytes).decode()}},
             ],
         }],
         "generationConfig": {
