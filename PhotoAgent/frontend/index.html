@@ -998,65 +998,68 @@
       </div>
 
       <!-- Workflow Report -->
-      <div class="workflow-section">
-        <div class="workflow-header">
-          <p class="eyebrow-label">Agent Workflow</p>
-          <h2 class="section-title">實務步驟</h2>
-        </div>
+      <details class="tech-details workflow-section">
+        <summary>
+          <div class="workflow-header">
+            <p class="eyebrow-label">Agent Workflow</p>
+            <h2 class="section-title">實務步驟</h2>
+          </div>
+        </summary>
 
-        <div class="wf-step">
-          <div class="wf-num">1</div>
-          <div class="wf-body">
-            <p class="wf-kicker">Photo Understanding</p>
-            <h3 class="wf-title">理解照片</h3>
-            <div id="diagnosis-text" class="wf-text">等待分析結果</div>
-            <ul id="issues-list" class="compact-list"></ul>
+        <div class="workflow-body">
+          <div class="wf-step">
+            <div class="wf-num">1</div>
+            <div class="wf-body">
+              <p class="wf-kicker">Photo Understanding</p>
+              <h3 class="wf-title">理解照片</h3>
+              <div id="diagnosis-text" class="wf-text">等待分析結果</div>
+              <ul id="issues-list" class="compact-list"></ul>
+            </div>
+          </div>
+
+          <div class="wf-step">
+            <div class="wf-num">2</div>
+            <div class="wf-body">
+              <p class="wf-kicker">Composition Diagnosis</p>
+              <h3 class="wf-title">構圖分析與建議</h3>
+              <div id="composition-text" class="wf-text">等待分析結果</div>
+              <div id="roi-text" class="wf-sub">等待分析結果</div>
+            </div>
+          </div>
+
+          <div class="wf-step">
+            <div class="wf-num">3</div>
+            <div class="wf-body">
+              <p class="wf-kicker">Crop Decision</p>
+              <h3 class="wf-title">裁切評選</h3>
+              <div id="crop-text" class="wf-text">等待分析結果</div>
+              <ul id="crop-candidates-list" class="compact-list"></ul>
+            </div>
+          </div>
+
+          <div class="wf-step">
+            <div class="wf-num">4</div>
+            <div class="wf-body">
+              <p class="wf-kicker">Edit Execution</p>
+              <h3 class="wf-title">修圖執行</h3>
+              <div id="philosophy-text" class="wf-text">等待分析結果</div>
+              <div id="light-color-text" class="wf-sub">等待分析結果</div>
+              <div id="style-options-text" class="wf-sub" hidden></div>
+              <ul id="recipe-list" class="compact-list"></ul>
+            </div>
+          </div>
+
+          <div class="wf-step">
+            <div class="wf-num">5</div>
+            <div class="wf-body">
+              <p class="wf-kicker">Quality Check</p>
+              <h3 class="wf-title">品質檢查</h3>
+              <div id="mood-text" class="wf-text">等待分析結果</div>
+              <ul id="qa-list" class="compact-list"></ul>
+            </div>
           </div>
         </div>
-
-        <div class="wf-step">
-          <div class="wf-num">2</div>
-          <div class="wf-body">
-            <p class="wf-kicker">Composition Diagnosis</p>
-            <h3 class="wf-title">構圖分析與建議</h3>
-            <div id="composition-text" class="wf-text">等待分析結果</div>
-            <div id="roi-text" class="wf-sub">等待分析結果</div>
-          </div>
-        </div>
-
-        <div class="wf-step">
-          <div class="wf-num">3</div>
-          <div class="wf-body">
-            <p class="wf-kicker">Crop Decision</p>
-            <h3 class="wf-title">裁切評選</h3>
-            <div id="crop-text" class="wf-text">等待分析結果</div>
-            <ul id="crop-candidates-list" class="compact-list"></ul>
-          </div>
-        </div>
-
-        <div class="wf-step">
-          <div class="wf-num">4</div>
-          <div class="wf-body">
-            <p class="wf-kicker">Edit Execution</p>
-            <h3 class="wf-title">修圖執行</h3>
-            <div id="philosophy-text" class="wf-text">等待分析結果</div>
-            <div id="light-color-text" class="wf-sub">等待分析結果</div>
-            <div id="style-options-text" class="wf-sub" hidden></div>
-            <ul id="recipe-list" class="compact-list"></ul>
-          </div>
-        </div>
-
-        <div class="wf-step">
-          <div class="wf-num">5</div>
-          <div class="wf-body">
-            <p class="wf-kicker">Quality Check</p>
-            <h3 class="wf-title">品質檢查</h3>
-            <div id="mood-text" class="wf-text">等待分析結果</div>
-            <ul id="qa-list" class="compact-list"></ul>
-          </div>
-        </div>
-
-      </div>
+      </details>
 
       <!-- Processing Time -->
       <details class="tech-details" id="timing-details" hidden>

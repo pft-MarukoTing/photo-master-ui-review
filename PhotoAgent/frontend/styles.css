@@ -822,11 +822,12 @@ label.option-row { cursor: pointer; }
   letter-spacing: -.12px;
 }
 
-/* Workflow */
-.workflow-section {
+/* Workflow (collapsible, .tech-details supplies the card/summary chrome) */
+.workflow-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  padding: 4px 20px 20px;
 }
 
 .workflow-header { margin-bottom: 4px; }
