@@ -55,19 +55,40 @@ PRESETS = {
 STYLE_OPTION_INSTRUCTIONS = {
     "pose": {
         "playful": (
-            "Adjust the subject's pose and expression to feel more lively, relaxed, and playful. "
-            "Add a natural sense of movement or lighthearted energy while preserving the same person, "
-            "identity, body shape, clothing, and scene context. Avoid exaggerated cartoon-like gestures."
+            "Transform the subject into a clearly playful pose, not just a slightly nicer version of the original. "
+            "The result should feel lively, friendly, lighthearted, and approachable, with a visible change in gesture or body language. "
+            "For people or animals, introduce a natural playful cue such as a brighter expression, head tilt, leaning-in posture, relaxed shoulders, "
+            "hands brought together, arms opened slightly, or a small energetic weight shift. "
+            "For products, objects, food, or scenes, create a more playful presentation through a livelier arrangement, more expressive orientation, "
+            "or a lighter visual rhythm while keeping the same main subject and scene. "
+            "If the original already feels playful, push it to a different clearly playful moment instead of leaving it unchanged. "
+            "Preserve the same identity or object form, same outfit/materials, same location, same props, and believable anatomy/geometry. "
+            "Avoid cartoonish gestures, childish exaggeration, or changes that make the subject look like a different person/object."
         ),
         "candid": (
-            "Make the pose feel candid and unposed, as if captured in a natural in-between moment. "
-            "Soften overly stiff posture, gaze, hands, or shoulders while keeping the subject recognizable "
-            "and the moment believable within the same scene."
+            "Transform the subject into a clearly candid, unposed moment, as if captured naturally between posed shots. "
+            "The result should feel spontaneous, relaxed, and documentary-like rather than deliberately arranged. "
+            "For people or animals, use a visible natural shift such as an in-between gaze, slight lean, softened shoulders, casual hand placement, "
+            "subtle motion, natural smile, or imperfect but charming posture. "
+            "For products, objects, food, or scenes, make the composition feel casually observed in real use rather than formally staged, "
+            "while preserving the same subject, scene, props, and material truth. "
+            "If the original already looks candid, change it to a different natural in-between moment instead of keeping the pose essentially the same. "
+            "Preserve recognizability, identity or object form, realistic proportions, and scene continuity. "
+            "Avoid making the image messy, blurry, awkward, or accidentally distorted."
         ),
         "strong": (
-            "Adjust the subject's pose to feel more confident, composed, and visually strong. "
-            "Improve posture, shoulder line, stance, and facial presence while preserving identity, "
-            "body proportions, clothing, and the original environment. Avoid overly dramatic fashion-pose changes."
+            "Transform the subject into a clearly strong, confident, and composed pose. "
+            "The result should have a more assertive visual presence, not merely a subtle posture cleanup. "
+            "Create strength through the overall body language: upright posture, grounded stance, stable balance, cleaner body direction, "
+            "stronger shoulder line, controlled head angle, focused gaze, and deliberate use of arms and hands. "
+            "Prefer a varied confident pose that suits the input image, such as hands relaxed by the side, hands in pockets, arms loosely crossed, "
+            "one arm resting on a nearby surface, a subtle forward lean, a wider stance, a cleaner side-facing stance, or a composed neutral arm position. "
+            "For products, objects, architecture, or scenes, strengthen the presentation through a more deliberate orientation, clearer silhouette, "
+            "more stable structure, and stronger visual hierarchy while preserving the same subject and scene. "
+            "If the original already looks strong, move it into a different strong pose with a visibly changed stance, gesture, torso direction, "
+            "head direction, arm position, or weight distribution rather than leaving it unchanged. "
+            "Preserve identity or object form, body/object proportions, clothing/materials, location, props, and photographic realism. "
+            "Avoid exaggerated fashion posing, aggressive body distortion, unrealistic anatomy, or changing the subject into a different person/object."
         ),
     },
     "angle": {
