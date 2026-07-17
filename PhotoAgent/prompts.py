@@ -391,6 +391,8 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
 
     has_style_overrides = bool(style_lines)
+    style_options = analysis.get("style_options") or {}
+    has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
 
     style_block = ""
     if has_style_overrides:
@@ -408,6 +410,13 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
                 "or replace the scene."
             )
         )
+        if has_pose_override:
+            style_block += (
+                "\n\nPose override requirement: Do not preserve the original pose. "
+                "Replace the original body language with a visibly different pose matching the selected pose style. "
+                "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
+                "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
+            )
 
     correction_plan_block = ""
     if analysis.get("correction_plan"):
@@ -446,7 +455,7 @@ Priority order:
         retouch_priorities = """Retouch priorities:
 1. Treat the supplied image boundaries as final unless a selected framing-size override explicitly asks for wider or closer framing. Never add blank borders, transparent/checkerboard padding, or artificial empty side bands.
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
-3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides should change posture/expression noticeably; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale or environmental context.
+3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale or environmental context.
 4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
 5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
@@ -471,8 +480,15 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
 9. The user-approved correction plan is the definitive specification of what to change -- apply it in full and do not perform additional corrections beyond it, the user's extra direction, and the preset finish. Treat the user-rejected corrections above as forbidden, not merely unnecessary."""
 
-    return f"""You are editing the supplied image, not creating a new image.
-Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic.
+    task_intro = (
+        "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
+        "Keep the same subject identity, scene, clothing, props, and photographic realism, but visibly change the subject's pose according to the selected pose override."
+        if has_pose_override else
+        "You are editing the supplied image, not creating a new image.\n"
+        "Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic."
+    )
+
+    return f"""{task_intro}
 
 {opening_preservation_rule}
 Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
