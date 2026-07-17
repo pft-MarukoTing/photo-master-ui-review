@@ -28,6 +28,14 @@
   let singleFlowState = null; // { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath }
   let lastSingleSelections = null; // { userPrompt, options, recipeChecked }
 
+  // Single-image RUN N times (mirrors batch's per-image runs): populated only
+  // when the RUN count on the analysis-preview screen is > 1. singleRuns holds
+  // each run's {run, jobId, status, imageUrl, result, timings, error};
+  // singleMirrorIndex is which one is currently shown in the results view (the
+  // single-image counterpart of a batch record's mirrorIndex).
+  let singleRuns = null;
+  let singleMirrorIndex = null;
+
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
   const POLL_CONCURRENCY = 4;
@@ -181,6 +189,10 @@
     renderAnalysisPreview({ analysis, preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
+    // RUN count only applies to the single-image flow -- batch has its own
+    // batch-wide control (#run-count), and showBatchReview hides this again
+    // since it reuses this same #analysis-preview panel per image.
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
   }
 
@@ -568,6 +580,7 @@
     const userPrompt = els.promptInput.value.trim();
     lastSingleSelections = { userPrompt, ...selections };
     const effectiveAnalysis = buildEffectiveAnalysis(analysis, selections);
+    const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
 
     if (procSub) {
       procSub.textContent = aiPhotoEditing
@@ -575,38 +588,153 @@
         : "正在進行本機影像處理，請稍候…";
     }
 
-    let stepStart = Date.now();
-    let finalJobId;
-    if (processingPath === "aipoc") {
-      finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+    if (runCount === 1) {
+      // Single RUN: unchanged from before RUN-count support existed, so the
+      // common case keeps its exact step timeline.
+      singleRuns = null;
+      singleMirrorIndex = null;
+
+      let stepStart = Date.now();
+      let finalJobId;
+      if (processingPath === "aipoc") {
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+      } else {
+        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+      }
+      addTiming("提交後續處理", Date.now() - stepStart);
+
+      stepStart = Date.now();
+      await pollJobStatus(finalJobId, { path: processingPath });
+      const finishWaitDuration = Date.now() - stepStart;
+
+      stepStart = Date.now();
+      const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
+      const extraInfo = result["extra-info"] || {};
+      const t = extraInfo.timings || {};
+      addTiming("AI 修圖中", finishWaitDuration, [
+        { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+        { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+        { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+        { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+      ]);
+      addTiming("取得結果", Date.now() - stepStart);
+
+      const usedImageModelLabel = extraInfo.image_model
+        ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
+        : "本機處理";
+      const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+
+      const data = {
+        image: imageUrl,
+        model: usedModelLabel,
+        usage: result.usage,
+        qualityCheck: result.quality_check,
+        localOnly: !aiPhotoEditing,
+        retryCount: 0
+      };
+
+      lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, path: processingPath };
+      renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
+      populateTimingSection();
+      if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
     } else {
-      finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+      // N independent RUNs from the same analysis, same pattern as batch's
+      // continueBatchRecords/editBatchItem -- each RUN is its own job, run
+      // concurrently, and the finished report mirrors the first one done
+      // (switchable via the RUN tabs, same UI batch uses).
+      singleRuns = Array.from({ length: runCount }, (_, k) => ({
+        run: k + 1, jobId: null, status: "processing",
+        imageUrl: null, result: null, timings: [], error: null
+      }));
+      singleMirrorIndex = null;
+
+      let doneCount = 0;
+      const updateRunProgress = () => {
+        if (procSub) {
+          procSub.textContent = aiPhotoEditing
+            ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖中（已完成 ${doneCount}/${runCount} RUN）…`
+            : `本機影像處理中（已完成 ${doneCount}/${runCount} RUN）…`;
+        }
+      };
+      updateRunProgress();
+
+      await runBatchPool(singleRuns, async (run) => {
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aiPhotoEditing, processingPath });
+        doneCount += 1;
+        updateRunProgress();
+      }, POLL_CONCURRENCY);
+
+      if (!singleRuns.some((r) => r.status === "done")) {
+        throw new Error(singleRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
+      }
+      showSingleResult();
     }
-    addTiming("提交後續處理", Date.now() - stepStart);
 
-    stepStart = Date.now();
-    await pollJobStatus(finalJobId, { path: processingPath });
-    const finishWaitDuration = Date.now() - stepStart;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
+    showSection("results");
+  }
 
-    stepStart = Date.now();
-    const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
+  // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --
+  // mirrors editBatchItem, but against selectedFile/singleFlowState instead
+  // of a batch record.
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aiPhotoEditing, processingPath }) {
+    try {
+      let stepStart = Date.now();
+      if (processingPath === "aipoc") {
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+      } else {
+        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+      }
+      const submitMs = Date.now() - stepStart;
+
+      stepStart = Date.now();
+      await pollJobStatus(run.jobId, { path: processingPath });
+      const pollMs = Date.now() - stepStart;
+
+      stepStart = Date.now();
+      const { image_url: imageUrl, result } = await getJobResult(run.jobId, { path: processingPath });
+      const fetchMs = Date.now() - stepStart;
+
+      run.status = "done";
+      run.imageUrl = imageUrl;
+      run.result = result;
+      const t = (result["extra-info"] || {}).timings || {};
+      run.timings = [
+        { label: "提交後續處理", duration: submitMs },
+        { label: "AI 修圖中", duration: pollMs, children: [
+          { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+          { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+        ] },
+        { label: "取得結果", duration: fetchMs }
+      ];
+    } catch (error) {
+      run.status = "error";
+      run.error = friendlyError(error);
+    }
+  }
+
+  // Renders whichever singleRuns entry is mirrored (first done, or the
+  // user's chosen tab) into the shared results DOM -- the RUN-count > 1
+  // counterpart of finishSingleFlow's single-RUN render tail.
+  function showSingleResult() {
+    const runs = singleRuns || [];
+    const pick = (singleMirrorIndex != null && runs[singleMirrorIndex])
+      ? runs[singleMirrorIndex]
+      : (runs.find((x) => x.status === "done") || runs[0]);
+    if (!pick || pick.status !== "done") return;
+
+    const { preset, aiPhotoEditing } = singleFlowState;
+    const result = pick.result;
     const extraInfo = result["extra-info"] || {};
-    const t = extraInfo.timings || {};
-    addTiming("AI 修圖中", finishWaitDuration, [
-      { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-      { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-      { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
-      { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
-    ]);
-    addTiming("取得結果", Date.now() - stepStart);
-
     const usedImageModelLabel = extraInfo.image_model
       ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
       : "本機處理";
     const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
 
     const data = {
-      image: imageUrl,
+      image: pick.imageUrl,
       model: usedModelLabel,
       usage: result.usage,
       qualityCheck: result.quality_check,
@@ -614,11 +742,10 @@
       retryCount: 0
     };
 
-    lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, path: processingPath };
+    lastResult = { file: selectedFile, resultText: result, jobId: pick.jobId, path: singleFlowState.processingPath, runs };
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
-    populateTimingSection();
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
-    showSection("results");
+    populateTimingSection(pick.timings);
+    renderSingleRunTabs();
   }
 
   // "回到流程": lets the user come back from the results page to the
@@ -1167,27 +1294,18 @@
     startSubmitBatch();
   }
 
-  // Tab strip for one image's N edit results. Hidden unless the record was
-  // edited more than once. Clicking a finished tab re-points the record's
-  // mirror fields at that run and re-renders the whole report.
-  function renderRunTabs(record) {
-    if (!els.runTabs) return;
-    const runs = record.runs || [];
-    if (runs.length <= 1) {
-      els.runTabs.hidden = true;
-      els.runTabs.innerHTML = "";
-      return;
-    }
-
-    const doneIdx = runs.findIndex((x) => x.status === "done");
-    const current = (record.mirrorIndex != null && runs[record.mirrorIndex]) ? record.mirrorIndex : doneIdx;
-
+  // Tab strip for one image's N edit results. Hidden unless there's more than
+  // one run. Shared by the batch detail view and the single-image results
+  // view; `onSelectDone(idx)` decides what re-pointing to that run means for
+  // the caller (batch re-renders via syncRecordMirror+showBatchDetail, single
+  // via showSingleResult).
+  function buildRunTabs(runs, currentIdx, onSelectDone) {
     els.runTabs.hidden = false;
     els.runTabs.innerHTML = "";
     runs.forEach((run, idx) => {
       const tab = document.createElement("button");
       tab.type = "button";
-      tab.className = `run-tab ${run.status}${idx === current ? " active" : ""}`;
+      tab.className = `run-tab ${run.status}${idx === currentIdx ? " active" : ""}`;
 
       if (run.status === "done") {
         const im = document.createElement("img");
@@ -1204,16 +1322,51 @@
       tab.appendChild(label);
 
       if (run.status === "done") {
-        tab.addEventListener("click", () => {
-          record.mirrorIndex = idx;
-          syncRecordMirror(record);
-          showBatchDetail();
-        });
+        tab.addEventListener("click", () => onSelectDone(idx));
       } else {
         tab.disabled = true;
         if (run.status === "error") tab.title = run.error || "此 RUN 修圖失敗";
       }
       els.runTabs.appendChild(tab);
+    });
+  }
+
+  // Clicking a finished tab re-points the record's mirror fields at that run
+  // and re-renders the whole report.
+  function renderRunTabs(record) {
+    if (!els.runTabs) return;
+    const runs = record.runs || [];
+    if (runs.length <= 1) {
+      els.runTabs.hidden = true;
+      els.runTabs.innerHTML = "";
+      return;
+    }
+
+    const doneIdx = runs.findIndex((x) => x.status === "done");
+    const current = (record.mirrorIndex != null && runs[record.mirrorIndex]) ? record.mirrorIndex : doneIdx;
+    buildRunTabs(runs, current, (idx) => {
+      record.mirrorIndex = idx;
+      syncRecordMirror(record);
+      showBatchDetail();
+    });
+  }
+
+  // Single-image counterpart of renderRunTabs: reads/writes the module-level
+  // singleRuns/singleMirrorIndex instead of a batch record.
+  function renderSingleRunTabs() {
+    if (!els.runTabs) return;
+    const runs = singleRuns || [];
+    if (runs.length <= 1) {
+      els.runTabs.hidden = true;
+      els.runTabs.innerHTML = "";
+      return;
+    }
+
+    const doneIdx = runs.findIndex((x) => x.status === "done");
+    const current = (singleMirrorIndex != null && runs[singleMirrorIndex]) ? singleMirrorIndex : doneIdx;
+    buildRunTabs(runs, current, (idx) => {
+      singleMirrorIndex = idx;
+      showSingleResult();
     });
   }
 
@@ -1326,6 +1479,7 @@
     renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = true;
     applyBatchReviewSelections(record);
     // The 補充指令 textarea lives inside #analysis-preview; restore this image's.
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
@@ -1435,6 +1589,8 @@
     hideError();
     selectedFile = null;
     lastResult = null;
+    singleRuns = null;
+    singleMirrorIndex = null;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
     resetBatchState();

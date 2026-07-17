@@ -40,6 +40,8 @@ window.PhotoAgentDom = (() => {
     imageModelSelect: document.querySelector("#image-model"),
     apImageQualitySelect: document.querySelector("#ap-image-quality"),
     apImageModelSelect: document.querySelector("#ap-image-model"),
+    apRunCountWrap: document.querySelector("#ap-run-count-wrap"),
+    apRunCountSelect: document.querySelector("#ap-run-count"),
     originalImg: document.querySelector("#original-img"),
     generatedImg: document.querySelector("#generated-img"),
     downloadLink: document.querySelector("#download-link"),
