@@ -461,6 +461,8 @@
     if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
     if (els.backToGridBtn) els.backToGridBtn.hidden = true;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchProgress) els.batchProgress.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
     if (els.batchPromptRow) els.batchPromptRow.hidden = true;
@@ -683,6 +685,9 @@
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
     els.backToGridBtn.hidden = true;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.batchContinueAllBtn.hidden = true;
     els.resultsGridWrap.hidden = false;
     els.batchProgress.hidden = false;
@@ -783,6 +788,13 @@
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
     els.backToGridBtn.hidden = true;
+    // Entering/re-entering review means no image is "done" yet (either the
+    // very first analyze, or a reload that reset every record) -- the
+    // done-only actions don't apply until continueBatchRecords produces
+    // fresh results.
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.batchReviewNav.hidden = true;
     els.resultsGridWrap.hidden = false;
     const ready = analyzedBatchRecords().length > 0;
@@ -876,6 +888,8 @@
 
     els.batchContinueAllBtn.hidden = true;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.batchPromptRow.hidden = true;
     if (els.batchOptionsRow) els.batchOptionsRow.hidden = true;
     els.batchReviewNav.hidden = true;
@@ -911,7 +925,10 @@
     els.batchContinueAllBtn.hidden = !remaining;
     els.batchPromptRow.hidden = !remaining;
     if (els.batchOptionsRow) els.batchOptionsRow.hidden = !remaining;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !doneBatchRecords().length;
+    const anyDone = doneBatchRecords().length > 0;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !anyDone;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = !anyDone;
   }
 
   function batchContinueAll() {
@@ -1132,6 +1149,24 @@
     showBatchDetail();
   }
 
+  // "回到分析結果": from the finished batch list, send every record that has
+  // an analysis back to "analyzed" (without re-calling the analyze API) and
+  // reopen the customize/review grid -- lets the user revise the recipe/
+  // style options/prompt and re-run continueBatchRecords instead of being
+  // stuck with the first edit.
+  function backToAnalyzedBatch() {
+    batchRecords.forEach((r) => { if (r.analysis) r.status = "analyzed"; });
+    renderBatchGrid();
+    enterBatchReview();
+  }
+
+  // "重新分析": wipe every record's analysis/edit state and re-run step 1
+  // from scratch, same as the initial submit -- for when the recipe needs a
+  // clean re-analyze rather than a manual revise.
+  function reloadBatch() {
+    startSubmitBatch();
+  }
+
   // Tab strip for one image's N edit results. Hidden unless the record was
   // edited more than once. Clicking a finished tab re-points the record's
   // mirror fields at that run and re-renders the whole report.
@@ -1195,6 +1230,8 @@
     els.detailNav.hidden = false;
     els.backToGridBtn.hidden = false;
     if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
     els.detailPrev.disabled = detailPos === 0;
     els.detailNext.disabled = detailPos === done.length - 1;
@@ -1246,7 +1283,10 @@
     els.detailNav.hidden = true;
     if (els.runTabs) els.runTabs.hidden = true;
     els.backToGridBtn.hidden = true;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !doneBatchRecords().length;
+    const anyDone = doneBatchRecords().length > 0;
+    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !anyDone;
+    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
+    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = !anyDone;
     els.resultsGridWrap.hidden = false;
     if (gridSummary) els.resultSummary.textContent = gridSummary;
     window.scrollTo({ top: 0, behavior: "instant" });
@@ -1450,6 +1490,8 @@
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
+  if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.addEventListener("click", backToAnalyzedBatch);
+  if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);
   if (els.downloadAllBtn) els.downloadAllBtn.addEventListener("click", handleDownloadAllClick);
   if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
   if (els.errorModal) {

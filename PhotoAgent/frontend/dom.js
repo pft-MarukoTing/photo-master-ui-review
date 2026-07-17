@@ -58,6 +58,8 @@ window.PhotoAgentDom = (() => {
     runCountSelect: document.querySelector("#run-count"),
     backToGridBtn: document.querySelector("#back-to-grid-btn"),
     downloadAllBtn: document.querySelector("#download-all-btn"),
+    backToAnalyzedBtn: document.querySelector("#back-to-analyzed-btn"),
+    reloadBatchBtn: document.querySelector("#reload-batch-btn"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),
     batchPromptRow: document.querySelector("#batch-prompt-row"),
     batchPromptInput: document.querySelector("#batch-prompt"),
