@@ -92,6 +92,14 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["ai_photo_editing"] = ai_photo_editing
 
+    run_qa = normalized.get("run_qa", True)
+    if not isinstance(run_qa, bool):
+        raise RuntimeError(
+            f"{EFFECT_NAME}: run_qa must be a boolean",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["run_qa"] = run_qa
+
     return normalized
 
 

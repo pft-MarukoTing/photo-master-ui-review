@@ -76,7 +76,7 @@ class PhotoAgentJobProcessor:
 
         params = request["params"]
         self.logger.info(task_id, f'[{EFFECT_NAME}] Start job: src={len(request["src_keys"])}, dst_key={request["dst_key"]}')
-        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} ai_photo_editing={params["ai_photo_editing"]} has_prompt={bool(params.get("user_prompt"))}')
+        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} has_prompt={bool(params.get("user_prompt"))}')
         if (bool(params.get("user_prompt"))):
             self.logger.info(task_id, f'[{EFFECT_NAME}] User prompt: {params.get("user_prompt")}')
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
@@ -116,6 +116,7 @@ class PhotoAgentJobProcessor:
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],
                     image_model=params["image_model"],
+                    run_qa=params.get("run_qa", True),
                 )
             else:
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes)')
@@ -126,6 +127,7 @@ class PhotoAgentJobProcessor:
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],
                     image_model=params["image_model"],
+                    run_qa=params.get("run_qa", True),
                 )
 
             derived_dst_keys = derive_dst_keys(request["dst_key"])

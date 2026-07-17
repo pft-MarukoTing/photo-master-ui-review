@@ -15,13 +15,14 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aiPhotoEditing, runQa, userPrompt, analysis, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    form.append("run_qa", runQa === false ? "false" : "true");
     if (userPrompt) form.append("user_prompt", userPrompt);
     // AIPoC-only: the analysis already shown on the preview screen, so the
     // remote worker can reuse it (stage="finish") instead of re-analyzing.
@@ -128,7 +129,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aiPhotoEditing, userPrompt }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aiPhotoEditing, runQa, userPrompt }) {
     const response = await fetch(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -138,6 +139,7 @@ window.PhotoAgentApi = (() => {
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
+        run_qa: runQa === false ? "false" : "true",
         user_prompt: userPrompt || ""
       })
     });

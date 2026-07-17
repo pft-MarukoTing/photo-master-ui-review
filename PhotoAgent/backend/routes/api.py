@@ -25,6 +25,7 @@ def _parse_and_validate_params(form):
         "image_quality": form.get("image_quality", "medium"),
         "image_model": form.get("image_model", "gpt-image-2"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
+        "run_qa": str(form.get("run_qa", "true")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
@@ -380,6 +381,7 @@ def aipoc_submit():
         image_quality=params["image_quality"],
         image_model=params["image_model"],
         ai_photo_editing=params["ai_photo_editing"],
+        run_qa=params["run_qa"],
         user_prompt=params.get("user_prompt"),
         stage="finish" if analysis else None,
         analysis=analysis,

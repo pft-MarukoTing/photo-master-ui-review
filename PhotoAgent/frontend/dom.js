@@ -36,6 +36,8 @@ window.PhotoAgentDom = (() => {
     promptInput: document.querySelector("#prompt"),
     processingPathSelect: document.querySelector("#processing-path"),
     aiEditToggle: document.querySelector("#ai-edit-toggle"),
+    runQaRow: document.querySelector("#run-qa-row"),
+    runQaToggle: document.querySelector("#run-qa-toggle"),
     imageQualitySelect: document.querySelector("#image-quality"),
     imageModelSelect: document.querySelector("#image-model"),
     apImageQualitySelect: document.querySelector("#ap-image-quality"),

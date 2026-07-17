@@ -87,7 +87,7 @@ def upload_to_req_url(request_spec, data):
 
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
-                          image_model="gpt-image-2", ai_photo_editing=True, user_prompt=None,
+                          image_model="gpt-image-2", ai_photo_editing=True, run_qa=True, user_prompt=None,
                           stage=None, analysis=None, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
@@ -97,8 +97,11 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         access_token: bearer token
         src_files: list with the single uploaded fileId (photoAgent takes one
             source image, no mask), e.g. [file_id]
-        preset/image_quality/image_model/ai_photo_editing/user_prompt: same
-            fields as photo_agent/param_validation.py's local validator
+        preset/image_quality/image_model/ai_photo_editing/run_qa/user_prompt: same
+            fields as photo_agent/param_validation.py's local validator. run_qa
+            is UNVERIFIED against the remote gateway (same caveat as stage/
+            analysis below) -- if the remote build hasn't picked up the
+            run_qa param yet, it's silently ignored and QA still runs there.
         stage/analysis: mirrors the local worker's /continue/<job_id> shape
             (photo_agent/param_validation.py's "stage"/"analysis" params) --
             when the caller already has an analysis from /aipoc/analyze, pass
@@ -119,6 +122,7 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         "image_quality": image_quality,
         "image_model": image_model,
         "ai_photo_editing": ai_photo_editing,
+        "run_qa": run_qa,
     }
     if user_prompt:
         params["user_prompt"] = user_prompt

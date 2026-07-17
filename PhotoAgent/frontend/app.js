@@ -70,11 +70,13 @@
     if (window.location.href.includes("debug")) {
       processingPathRow.style.display = "";
       if (els.processingPathSelect) els.processingPathSelect.value = "local";
+      if (els.runQaRow) els.runQaRow.style.display = "";
     } else {
       getUiConfig().then((cfg) => {
         if (cfg.debugUi) {
           processingPathRow.style.display = "";
           if (els.processingPathSelect) els.processingPathSelect.value = "local";
+          if (els.runQaRow) els.runQaRow.style.display = "";
         }
       });
     }
@@ -508,6 +510,7 @@
     const imageQuality = els.imageQualitySelect?.value || "medium";
     const imageModel = els.imageModelSelect?.value || "gpt-image-2";
     const aiPhotoEditing = els.aiEditToggle.checked;
+    const runQa = els.runQaToggle ? els.runQaToggle.checked : true;
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
@@ -529,16 +532,26 @@
       let analysis;
       let analyzeJobId; // only set for the "local" path, needed by continueJob
 
+      // Also collected into analyzeTimings (not just pushed via addTiming) so
+      // the RUN-count > 1 path can prepend Step 2's time onto each RUN's own
+      // timings -- that path renders a run's timings array directly instead
+      // of the global getTimings() timeline addTiming feeds.
+      const analyzeTimings = [];
+      const recordAnalyzeTiming = (label, duration, children) => {
+        analyzeTimings.push({ label, duration, children });
+        addTiming(label, duration, children);
+      };
+
       if (processingPath === "aipoc") {
         const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing });
         analysis = analyzeData.analysis;
         const t = analysis.timings || {};
-        addTiming("初步分析", Date.now() - stepStart, [
+        recordAnalyzeTiming("初步分析", Date.now() - stepStart, [
           { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
         ]);
       } else {
         analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing });
-        addTiming("送出分析任務", Date.now() - stepStart);
+        recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
 
         stepStart = Date.now();
         await pollJobStatus(analyzeJobId, { path: "local" });
@@ -548,13 +561,13 @@
         const analyzeResult = await getAnalyzeResult(analyzeJobId);
         analysis = analyzeResult.result.analysis;
         const t = analysis.timings || {};
-        addTiming("分析中", analyzeWaitDuration, [
+        recordAnalyzeTiming("分析中", analyzeWaitDuration, [
           { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
         ]);
-        addTiming("取得分析結果", Date.now() - stepStart);
+        recordAnalyzeTiming("取得分析結果", Date.now() - stepStart);
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, runQa, processingPath, analyzeTimings };
 
       showAnalysisPreview(analysis, preset);
       await waitForContinue();
@@ -575,7 +588,7 @@
   // singleFlowState (set once by analyze) plus whatever the user currently
   // has checked/typed in the analysis-preview DOM.
   async function finishSingleFlow() {
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, runQa, processingPath, analyzeTimings } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
     lastSingleSelections = { userPrompt, ...selections };
@@ -597,9 +610,9 @@
       let stepStart = Date.now();
       let finalJobId;
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
       } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, runQa, userPrompt });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -659,7 +672,7 @@
       updateRunProgress();
 
       await runBatchPool(singleRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aiPhotoEditing, processingPath });
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aiPhotoEditing, runQa, processingPath, analyzeTimings });
         doneCount += 1;
         updateRunProgress();
       }, POLL_CONCURRENCY);
@@ -677,13 +690,13 @@
   // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --
   // mirrors editBatchItem, but against selectedFile/singleFlowState instead
   // of a batch record.
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aiPhotoEditing, processingPath }) {
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aiPhotoEditing, runQa, processingPath, analyzeTimings }) {
     try {
       let stepStart = Date.now();
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
       } else {
-        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, userPrompt });
+        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aiPhotoEditing, runQa, userPrompt });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -700,6 +713,7 @@
       run.result = result;
       const t = (result["extra-info"] || {}).timings || {};
       run.timings = [
+        ...(analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
         { label: "AI 修圖中", duration: pollMs, children: [
           { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
@@ -790,6 +804,7 @@
       imageQuality: els.imageQualitySelect?.value || "medium",
       imageModel: els.imageModelSelect?.value || "gpt-image-2",
       aiPhotoEditing: els.aiEditToggle.checked,
+      runQa: els.runQaToggle ? els.runQaToggle.checked : true,
       path: els.processingPathSelect?.value || "local"
     };
 
@@ -1084,6 +1099,7 @@
           imageQuality: batchSettings.imageQuality,
           imageModel: batchSettings.imageModel,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
+          runQa: batchSettings.runQa,
           userPrompt,
           analysis: effectiveAnalysis,
           path: "aipoc"
@@ -1095,6 +1111,7 @@
           imageQuality: batchSettings.imageQuality,
           imageModel: batchSettings.imageModel,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
+          runQa: batchSettings.runQa,
           userPrompt
         });
       }

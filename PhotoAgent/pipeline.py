@@ -79,6 +79,7 @@ def finish_stage(
     quality: str,
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
+    run_qa: bool = True,
 ) -> dict:
     """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
 
@@ -120,19 +121,35 @@ def finish_stage(
         image_b64 = edit_result["image_b64"]
         logger.info("Step 5 done in %.2fs: image returned", timings["Step 5 - image_edit"])
 
-        # Step 6 — quality check
+        # Step 6 — quality check (debug-ui escape hatch: skip the QA call
+        # entirely when run_qa=False, e.g. to save time/cost while iterating
+        # on the edit step alone)
         t0 = time.time()
-        logger.info("Step 6: running quality check")
-        try:
-            qa, qa_prompt = quality_check_photo(image_bytes, image_b64, analysis)
-            prompts["quality_check"] = qa_prompt
-            timings["Step 6 - quality_check"] = time.time() - t0
-            logger.info("Step 6 done in %.2fs: score=%s pass=%s", timings["Step 6 - quality_check"], qa.get("score"), qa.get("pass"))
-        except Exception as exc:
-            timings["Step 6 - quality_check"] = time.time() - t0
-            logger.warning("Step 6 QA failed in %.2fs: %s", timings["Step 6 - quality_check"], exc)
-            qa = _quality_check_fallback(exc)
+        if run_qa:
+            logger.info("Step 6: running quality check")
+            try:
+                qa, qa_prompt = quality_check_photo(image_bytes, image_b64, analysis)
+                prompts["quality_check"] = qa_prompt
+                timings["Step 6 - quality_check"] = time.time() - t0
+                logger.info("Step 6 done in %.2fs: score=%s pass=%s", timings["Step 6 - quality_check"], qa.get("score"), qa.get("pass"))
+            except Exception as exc:
+                timings["Step 6 - quality_check"] = time.time() - t0
+                logger.warning("Step 6 QA failed in %.2fs: %s", timings["Step 6 - quality_check"], exc)
+                qa = _quality_check_fallback(exc)
+                prompts["quality_check"] = None
+        else:
+            logger.info("Step 6: skipping quality check (run_qa=False)")
+            qa = {
+                "pass": True,
+                "overall_status": "已略過 QA",
+                "score": None,
+                "summary": "已依設定略過 AI 輸出 QA 檢查。",
+                "checks": {},
+                "warnings": [],
+                "recommendation": "",
+            }
             prompts["quality_check"] = None
+            timings["Step 6 - quality_check"] = None
 
         usage = edit_result.get("usage")
     else:
@@ -190,7 +207,8 @@ def run_pipeline(
     quality: str,
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
+    run_qa: bool = True,
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
     analysis = analyze_stage(image_bytes)
-    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model)
+    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model, run_qa)
