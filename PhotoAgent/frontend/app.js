@@ -89,7 +89,20 @@
   // value into whichever flow state is active so finishSingleFlow/
   // editBatchItem (which read singleFlowState/batchSettings) pick up a
   // change made on the preview screen without any other wiring.
+  // GPT Image models are noticeably slower/costlier at higher quality, so
+  // "low" is the sensible default; Nano Banana's cost/latency profile doesn't
+  // scale the same way, so "medium" is a better default there.
+  function defaultQualityForModel(model) {
+    return model === "nano-banana-2" || model === "nano-banana-lite" ? "medium" : "low";
+  }
+
   function applyQualityModelChange({ quality, model }) {
+    // A model change with no explicit quality (i.e. the user just picked a
+    // different model, not the quality dropdown) resets quality to that
+    // model's sensible default.
+    if (model !== undefined && quality === undefined) {
+      quality = defaultQualityForModel(model);
+    }
     if (quality !== undefined) {
       if (els.imageQualitySelect) els.imageQualitySelect.value = quality;
       if (els.apImageQualitySelect) els.apImageQualitySelect.value = quality;
