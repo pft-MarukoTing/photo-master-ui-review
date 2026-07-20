@@ -143,14 +143,20 @@ STYLE_OPTION_INSTRUCTIONS = {
     },
     "size": {
         "wide": (
-            "Use a wider framing where the subject appears slightly smaller and more of the original environment is visible. "
-            "Preserve the same location and real scene context. Do not invent new background areas, artificial borders, "
-            "or expanded canvas details."
+            "Transform the image into a wider framing where the main subject appears slightly smaller and more of the surrounding environment is visible. "
+            "This should feel like the camera pulled back, zoomed out, or slightly widened the field of view while keeping the same subject, location, perspective logic, and scene identity. "
+            "If the original frame does not contain enough surrounding context, extend the canvas by plausibly continuing the same real scene beyond the original edges. "
+            "Any newly visible area must look like a natural continuation of the existing background, lighting, depth, materials, and spatial layout, not a blank border or unrelated invented scenery. "
+            "Keep the subject clearly readable and preserve important identity, object shape, clothing/materials, props, and role cues. "
+            "Avoid tiny crops that do not visibly change subject scale, artificial side bands, stretched backgrounds, duplicated patterns, warped perspective, or unrelated new objects."
         ),
         "wider": (
-            "Use an even wider environmental framing where background and spatial context have a stronger role. "
-            "Keep the subject clearly readable and preserve the same location, props, and perspective. "
-            "Do not fabricate new scenery, side areas, or empty canvas just to make the frame wider."
+            "Transform the image into a much wider environmental framing where the subject becomes noticeably smaller and the surrounding scene plays a stronger compositional role. "
+            "This should read like a same-scene pull-back shot or wider lens view, with more environmental context around the subject on multiple sides when compositionally appropriate. "
+            "If needed, extend the canvas and outpaint plausible same-scene background beyond the original frame, continuing existing perspective lines, lighting direction, bokeh, surfaces, architecture, landscape, or interior context. "
+            "The expanded scene should support scale, breathing room, story, and environmental atmosphere while preserving the same location and photographic realism. "
+            "Keep the subject recognizable and avoid changing identity, product/object form, outfit/materials, props, or the core scene. "
+            "Avoid merely applying a tiny zoom-out, adding blank margins, stretching or cloning edges, creating artificial empty bands, or inventing a different location."
         ),
         "close": (
             "Use a closer framing where the subject appears larger and more visually prominent. "

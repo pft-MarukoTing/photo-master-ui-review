@@ -287,7 +287,11 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
     has_style_overrides = bool(style_lines)
     style_options = analysis.get("style_options") or {}
+    size_override_value = style_options.get("size")
     has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
+    has_size_override = bool(size_override_value and size_override_value != "default")
+    has_wider_size_override = size_override_value in {"wide", "wider"}
+    has_closer_size_override = size_override_value in {"close", "closer"}
 
     style_block = ""
     if has_style_overrides:
@@ -312,6 +316,18 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
                 "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
                 "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
             )
+        if has_wider_size_override:
+            style_block += (
+                "\n\nFraming-size override requirement: This is a true wider-framing transformation. "
+                "Do not preserve the original image boundaries. Make the subject visibly smaller in the frame and show more surrounding same-scene environment. "
+                "If the original image lacks enough context, extend/outpaint the canvas with plausible continuation of the same location, lighting, perspective, depth, and materials. "
+                "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery."
+            )
+        elif has_closer_size_override:
+            style_block += (
+                "\n\nFraming-size override requirement: This is a true closer-framing transformation. "
+                "Make the subject visibly larger in the frame while preserving essential identity, object form, role cues, and clean breathing room."
+            )
 
     correction_plan_block = ""
     if analysis.get("correction_plan"):
@@ -332,16 +348,29 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
 This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit behavior. Preserve the subject, required framing, scene context, and protected details more conservatively than the previous output."""
 
-    crop_instruction_block = _build_crop_instruction_block(crop_plan)
+    if has_wider_size_override:
+        crop_instruction_block = (
+            "Wider framing requested. Do not treat the original image boundaries as final. "
+            "Create a wider same-scene composition where the subject appears smaller and more surrounding environment is visible. "
+            "If a crop plan exists, use it only as a subject-safety reference, not as a hard crop that prevents widening. "
+            "Canvas expansion/outpainting is allowed only to continue the same real scene with matching perspective, lighting, depth, materials, and background logic. "
+            "Do not add blank borders, transparent/checkerboard padding, artificial empty bands, stretched edges, or unrelated scenery."
+        )
+    else:
+        crop_instruction_block = _build_crop_instruction_block(crop_plan)
+
     crop_priority_line_style = (
-        "Perform the mandatory crop specified in the Crop instruction above as part of this edit. "
-        "Beyond that exact region, do not add blank borders, transparent/checkerboard padding, or "
-        "artificial empty side bands, unless a selected framing-size override explicitly asks for wider "
-        "or closer framing within the cropped region."
-        if crop_plan else
-        "Treat the supplied image boundaries as final unless a selected framing-size override explicitly "
-        "asks for wider or closer framing. Never add blank borders, transparent/checkerboard padding, or "
-        "artificial empty side bands."
+        "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
+        "Never add blank borders, transparent/checkerboard padding, artificial empty side bands, stretched edges, or unrelated scenery."
+        if has_wider_size_override else
+        (
+            "Perform the mandatory crop specified in the Crop instruction above as part of this edit. "
+            "Beyond that exact region, do not add blank borders, transparent/checkerboard padding, or "
+            "artificial empty side bands, unless a selected closer framing-size override explicitly asks for closer framing within the cropped region."
+            if crop_plan else
+            "Treat the supplied image boundaries as final unless a selected closer framing-size override explicitly asks for closer framing. "
+            "Never add blank borders, transparent/checkerboard padding, or artificial empty side bands."
+        )
     )
     crop_priority_line_faithful = (
         "Perform the mandatory crop specified in the Crop instruction above as part of this edit. Beyond "
@@ -370,7 +399,7 @@ Priority order:
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_style}
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
-3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale or environmental context.
+3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, the subject must become visibly smaller and the scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
 4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
 5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
