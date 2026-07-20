@@ -122,14 +122,23 @@ STYLE_OPTION_INSTRUCTIONS = {
     },
     "lighting": {
         "gold": (
-            "Apply warm golden-hour style lighting with a tasteful yellow-gold glow, richer highlights, and warmer atmosphere. "
-            "Keep skin tones, whites, product colors, and material colors believable. "
-            "Avoid heavy orange casts, fake sunset backgrounds, or changing the original location."
+            "Transform the image with a clearly visible warm gold-tone lighting style, not just a slight white-balance shift. "
+            "Create a warmer golden atmosphere with amber highlights, richer warm midtones, gentle contrast, and a sunlit or warm practical-light feeling that suits the original scene. "
+            "For outdoor scenes, this can feel like late-afternoon or golden-hour sunlight with softly glowing highlights and warm background bokeh. "
+            "For indoor or night scenes, this can feel like warm lamp, candle, restaurant, or practical-light ambience with richer skin/object warmth and deeper surrounding shadows. "
+            "Keep the same subject, location, props, and scene structure, and preserve believable material colors and skin tones. "
+            "Avoid fake sunset backgrounds, heavy orange casts, overexposed yellow haze, or changing the original location."
         ),
         "soft": (
-            "Apply soft diffused lighting with gentle shadows, smoother highlight transitions, and more even illumination. "
-            "Improve facial, product, or scene readability while preserving natural texture and the original lighting logic. "
-            "Avoid plastic skin, flat lighting, or a studio-like rebuild unless already present in the original photo."
+            "Transform the image with a natural soft-glow lighting style inspired by softly lit street portraits and gentle ambient backlight. "
+            "The result should feel luminous, flattering, and cohesive across the whole image, not like a subject pasted onto a glowing outline. "
+            "Soften the overall light with smoother shadow transitions, slightly cleaner highlights, gentle catchlights, and a mild ambient glow that also affects the background. "
+            "Adjust the background together with the subject: make surrounding lights, foliage, street details, bokeh, or distant highlights feel softly diffused and tonally balanced so the subject and environment share the same lighting atmosphere. "
+            "Use subject-background separation through natural depth, soft contrast, background diffusion, and very subtle edge light only where it fits the scene. "
+            "The edge separation should be delicate and integrated into the ambient light, never a visible halo ring, cutout glow, or bright outline around the subject. "
+            "For people or animals, keep skin, hair, and fur texture natural while adding soft dimensionality around hair and shoulders; for products, food, objects, or scenes, emphasize shape and depth with soft highlights and balanced surrounding ambience. "
+            "Make the lighting change noticeable through the whole image's softness, depth, and glow, not by drawing a bright rim around the subject. "
+            "Preserve the same subject, location, props, and scene truth. Avoid plastic skin, flat studio lighting, artificial fog, excessive bloom, blown highlights, rebuilt background, or obvious halo/cutout effects."
         ),
     },
     "size": {
