@@ -238,6 +238,10 @@
     return `${buildResultBaseName(jobId)}.zip`;
   }
 
+  function buildAllRunsZipFilename(jobId) {
+    return `${buildResultBaseName(jobId)}-all-runs.zip`;
+  }
+
   function buildBatchZipFilename() {
     const pad = (n) => String(n).padStart(2, "0");
     const now = new Date();
@@ -299,24 +303,37 @@
     ];
   }
 
+  // Always just the currently-previewed RUN, regardless of how many RUNs the
+  // image has -- the separate "全部下載" link below covers the multi-RUN case.
   async function buildResultZip() {
+    return window.PhotoAgentZip.createZip(await buildResultFiles(lastResult));
+  }
+
+  async function buildAllRunsZip() {
     const doneRuns = (lastResult.runs || []).filter((run) => run.status === "done");
     if (doneRuns.length > 1) {
       return window.PhotoAgentZip.createZip(await buildRunFiles(lastResult, doneRuns));
     }
-    return window.PhotoAgentZip.createZip(await buildResultFiles(lastResult));
+    return buildResultZip();
   }
 
-  async function handleDownloadClick(event) {
-    event.preventDefault();
-    if (!lastResult) return;
+  // The all-RUNs download link only makes sense once there's more than one
+  // finished RUN to bundle -- hidden otherwise so it doesn't duplicate the
+  // single-preview download link for the common single-RUN case.
+  function updateDownloadLinks(runs) {
+    if (!els.downloadAllRunsLink) return;
+    const doneCount = (runs || []).filter((run) => run.status === "done").length;
+    els.downloadAllRunsLink.hidden = doneCount <= 1;
+    if (doneCount > 1) els.downloadAllRunsLink.textContent = `全部下載（${doneCount} 個 RUN）`;
+  }
 
+  async function downloadZip(buildZip, filename) {
     try {
-      const zipBlob = await buildResultZip();
+      const zipBlob = await buildZip();
       const url = URL.createObjectURL(zipBlob);
       const tempLink = document.createElement("a");
       tempLink.href = url;
-      tempLink.download = buildZipFilename(lastResult.jobId);
+      tempLink.download = filename;
       document.body.appendChild(tempLink);
       tempLink.click();
       tempLink.remove();
@@ -324,6 +341,18 @@
     } catch (error) {
       showError("打包下載失敗，請稍後再試。");
     }
+  }
+
+  function handleDownloadClick(event) {
+    event.preventDefault();
+    if (!lastResult) return;
+    downloadZip(buildResultZip, buildZipFilename(lastResult.jobId));
+  }
+
+  function handleDownloadAllRunsClick(event) {
+    event.preventDefault();
+    if (!lastResult) return;
+    downloadZip(buildAllRunsZip, buildAllRunsZipFilename(lastResult.jobId));
   }
 
   async function handleDownloadAllClick() {
@@ -647,6 +676,7 @@
       };
 
       lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, path: processingPath };
+      updateDownloadLinks();
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
       if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
@@ -757,6 +787,7 @@
     };
 
     lastResult = { file: selectedFile, resultText: result, jobId: pick.jobId, path: singleFlowState.processingPath, runs };
+    updateDownloadLinks(runs);
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
     renderSingleRunTabs();
@@ -1425,9 +1456,10 @@
       };
       // Point the zip download at the currently-viewed image, same shape the
       // single flow sets so handleDownloadClick works here too. The extra
-      // runs field switches the download to an all-runs bundle
-      // when this image was edited more than once (single flow never sets it).
+      // runs field switches the download to an all-runs bundle when this
+      // image was edited more than once.
       lastResult = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path, runs: record.runs };
+      updateDownloadLinks(record.runs);
       renderResult({
         data,
         analysis: record.result.analysis,
@@ -1618,6 +1650,7 @@
     els.originalImg.removeAttribute("src");
     els.generatedImg.removeAttribute("src");
     els.downloadLink.removeAttribute("href");
+    updateDownloadLinks();
     els.dropZone.hidden = false;
     els.dzPreview.hidden = true;
     if (els.changePhotoBtn) els.changePhotoBtn.hidden = true;
@@ -1662,6 +1695,7 @@
   els.resetButton.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
   els.downloadLink.addEventListener("click", handleDownloadClick);
+  if (els.downloadAllRunsLink) els.downloadAllRunsLink.addEventListener("click", handleDownloadAllRunsClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
   if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.addEventListener("click", backToAnalyzedBatch);
   if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);

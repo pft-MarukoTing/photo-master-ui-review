@@ -47,6 +47,7 @@ window.PhotoAgentDom = (() => {
     originalImg: document.querySelector("#original-img"),
     generatedImg: document.querySelector("#generated-img"),
     downloadLink: document.querySelector("#download-link"),
+    downloadAllRunsLink: document.querySelector("#download-all-runs-link"),
     modelName: document.querySelector("#model-name"),
     origDim: document.querySelector("#orig-dim"),
     resultSummary: document.querySelector("#res-summary"),
