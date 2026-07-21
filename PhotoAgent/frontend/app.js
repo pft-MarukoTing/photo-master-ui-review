@@ -265,15 +265,7 @@
     return `photoMuse-${dateStr}-${safeJobId}`;
   }
 
-  function buildZipFilename(jobId) {
-    return `${buildResultBaseName(jobId)}.zip`;
-  }
-
-  function buildAllRunsZipFilename(jobId) {
-    return `${buildResultBaseName(jobId)}-all-runs.zip`;
-  }
-
-  function buildBatchZipFilename() {
+  function buildDownloadZipFilename() {
     const pad = (n) => String(n).padStart(2, "0");
     const now = new Date();
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
@@ -316,8 +308,10 @@
     ];
   }
 
-  // All-runs bundle for one image: source.jpg at the image level, each
-  // finished run under run_N/ (result.png/result.json/prompts.json).
+  // The shared per-image bundle used by every download: source.jpg at the
+  // image level, each finished run under run_N/ (result.png/result.json/
+  // prompts.json) -- a lone run lands in run_1/, so the layout is identical
+  // whether there's one run or many.
   // Reuses buildResultFiles per run and drops its per-call source entry
   // (always the first item) in favor of a single shared one.
   async function buildRunFiles(base, runs, prefix = "") {
@@ -334,18 +328,29 @@
     ];
   }
 
-  // Always just the currently-previewed RUN, regardless of how many RUNs the
-  // image has -- the separate "全部下載" link below covers the multi-RUN case.
+  function lastResultRuns() {
+    if (Array.isArray(lastResult.runs) && lastResult.runs.length) return lastResult.runs;
+    return [{ run: 1, result: lastResult.resultText, jobId: lastResult.jobId, status: "done" }];
+  }
+
+  // Every download shares the same per-image folder name.
+  function imageFolderPrefix(jobId) {
+    return `${buildResultBaseName(jobId)}/`;
+  }
+
   async function buildResultZip() {
-    return window.PhotoAgentZip.createZip(await buildResultFiles(lastResult));
+    const runs = lastResultRuns();
+    const current = runs.find((run) => run.jobId === lastResult.jobId) || runs[0];
+    return window.PhotoAgentZip.createZip(
+      await buildRunFiles(lastResult, [current], imageFolderPrefix(lastResult.jobId))
+    );
   }
 
   async function buildAllRunsZip() {
-    const doneRuns = (lastResult.runs || []).filter((run) => run.status === "done");
-    if (doneRuns.length > 1) {
-      return window.PhotoAgentZip.createZip(await buildRunFiles(lastResult, doneRuns));
-    }
-    return buildResultZip();
+    const doneRuns = lastResultRuns().filter((run) => run.status === "done");
+    return window.PhotoAgentZip.createZip(
+      await buildRunFiles(lastResult, doneRuns, imageFolderPrefix(lastResult.jobId))
+    );
   }
 
   // The all-RUNs download link only makes sense once there's more than one
@@ -377,13 +382,13 @@
   function handleDownloadClick(event) {
     event.preventDefault();
     if (!lastResult) return;
-    downloadZip(buildResultZip, buildZipFilename(lastResult.jobId));
+    downloadZip(buildResultZip, buildDownloadZipFilename());
   }
 
   function handleDownloadAllRunsClick(event) {
     event.preventDefault();
     if (!lastResult) return;
-    downloadZip(buildAllRunsZip, buildAllRunsZipFilename(lastResult.jobId));
+    downloadZip(buildAllRunsZip, buildDownloadZipFilename());
   }
 
   async function handleDownloadAllClick() {
@@ -393,20 +398,16 @@
     els.downloadAllBtn.disabled = true;
     try {
       const groups = await Promise.all(done.map((record) => {
-        // Name each image's folder like its own single-download zip would be.
-        const prefix = `${buildResultBaseName(record.jobId)}/`;
+        // Same per-image layout as the single-image downloads: a
+        // photoMuse-{date}-{jobId}/ folder with source.jpg + run_N/ subfolders.
         const doneRuns = (record.runs || []).filter((run) => run.status === "done");
-        if (doneRuns.length > 1) {
-          return buildRunFiles({ file: record.file, path: batchSettings.path }, doneRuns, prefix);
-        }
-        const results = { file: record.file, resultText: record.result, jobId: record.jobId, path: batchSettings.path };
-        return buildResultFiles(results, prefix);
+        return buildRunFiles({ file: record.file, path: batchSettings.path }, doneRuns, imageFolderPrefix(record.jobId));
       }));
       const zipBlob = window.PhotoAgentZip.createZip(groups.flat());
       const url = URL.createObjectURL(zipBlob);
       const tempLink = document.createElement("a");
       tempLink.href = url;
-      tempLink.download = buildBatchZipFilename();
+      tempLink.download = buildDownloadZipFilename();
       document.body.appendChild(tempLink);
       tempLink.click();
       tempLink.remove();
