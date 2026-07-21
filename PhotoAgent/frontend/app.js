@@ -61,11 +61,11 @@
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
 
-  // Shown in the URL-debug case (?debug etc.) or when the backend was
-  // started with `--debug-ui` / DEBUG_UI=true (testbed deployments).
-  // Default to "local" in both debug cases -- AIPoC stays the default for
-  // everyone else, but debug sessions are almost always testing the local
-  // worker path.
+  // The processing-path row is shown in the URL-debug case (?debug etc.) or
+  // when the backend was started with `--debug-ui` / DEBUG_UI=true (testbed
+  // deployments). Default to "local" in both debug cases -- debug sessions
+  // are almost always testing the local worker path, regardless of the
+  // backend's own AIPoC default below.
   if (processingPathRow) {
     if (window.location.href.includes("debug")) {
       processingPathRow.style.display = "";
@@ -77,6 +77,10 @@
           processingPathRow.style.display = "";
           if (els.processingPathSelect) els.processingPathSelect.value = "local";
           if (els.runQaRow) els.runQaRow.style.display = "";
+        } else if (cfg.aipocDefault && els.processingPathSelect) {
+          // Non-debug deployment started with `--aipoc`: the selector stays
+          // hidden, but its value still drives the default processing path.
+          els.processingPathSelect.value = "aipoc";
         }
       });
     }
