@@ -44,7 +44,17 @@
     .proc-back-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 16px;
+    }
+
+    /* ── Processing: back/continue buttons stacked beside proc-top ── */
+    .proc-top-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-left: auto;
+    }
+    @media (max-width: 900px) {
+      .proc-top-actions { margin-left: 0; }
     }
 
     /* ── proc-visual done state ── */
@@ -232,7 +242,6 @@
     .view-results-wrap {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 40px;
       animation: fadeUp .5s ease both;
     }
     .view-results-btn { height: 52px; padding: 0 36px; font-size: 20px; border-radius: 14px; gap: 10px; }
@@ -564,6 +573,28 @@
             <h2 class="proc-title">正在分析並修正照片</h2>
             <p class="proc-sub">Agent 正在逐步診斷原圖、評選構圖。</p>
           </div>
+
+          <div class="proc-top-actions">
+            <div class="proc-back-row">
+              <button id="back-to-upload-btn" class="btn btn-secondary" type="button" hidden>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                重新選擇照片
+              </button>
+            </div>
+
+            <div id="view-results-wrap" class="view-results-wrap" hidden>
+              <button id="view-results-btn" class="btn btn-grad view-results-btn">
+                繼續處理
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Steps grid -->
@@ -600,26 +631,6 @@
             </div>
             <span class="step-time" id="t4"></span>
           </div>
-        </div>
-
-        <div class="proc-back-row">
-          <button id="back-to-upload-btn" class="btn btn-secondary" type="button" hidden>
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-              <path d="M15 18l-6-6 6-6" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            重新選擇照片
-          </button>
-        </div>
-
-        <div id="view-results-wrap" class="view-results-wrap" hidden>
-          <button id="view-results-btn" class="btn btn-grad view-results-btn">
-            繼續處理
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
         </div>
 
         <!-- Batch per-image analysis review controls (shown only when reviewing
