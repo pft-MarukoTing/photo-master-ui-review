@@ -55,6 +55,7 @@
   let gridSummary = "";    // grid-view summary text, saved so backToBatchGrid can restore it
 
   const procVisual = document.querySelector(".proc-visual");
+  const procTitle = document.querySelector(".proc-title");
   const procSub = document.querySelector(".proc-sub");
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
@@ -207,6 +208,7 @@
     // batch-wide control (#run-count), and showBatchReview hides this again
     // since it reuses this same #analysis-preview panel per image.
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    if (procTitle) procTitle.textContent = "初步分析已完成";
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
   }
 
@@ -564,6 +566,7 @@
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
+    if (procTitle) procTitle.textContent = "正在分析照片";
     if (procSub) procSub.textContent = "AI 正在分析照片，請稍候…";
     showSection("processing");
 
@@ -635,6 +638,7 @@
     const effectiveAnalysis = buildEffectiveAnalysis(analysis, selections);
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
 
+    if (procTitle) procTitle.textContent = aiPhotoEditing ? "AI 正在修圖" : "正在處理照片";
     if (procSub) {
       procSub.textContent = aiPhotoEditing
         ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
@@ -1532,6 +1536,7 @@
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     els.procThumb.src = record.previewUrl;
+    if (procTitle) procTitle.textContent = "初步分析已完成";
     if (procSub) procSub.textContent = "審核初步分析，可調整後繼續。";
 
     renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
