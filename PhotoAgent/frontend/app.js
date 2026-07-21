@@ -542,10 +542,10 @@
     return error.message || "發生未知錯誤。";
   }
 
-  async function startSubmit() {
+  async function startSubmit({ skipReview = false } = {}) {
     hideError();
     if (batchRecords.length > 1) {
-      await startSubmitBatch();
+      await startSubmitBatch(skipReview);
       return;
     }
     if (!selectedFile) {
@@ -562,6 +562,7 @@
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
+    if (els.startDirectBtn) els.startDirectBtn.disabled = true;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
@@ -617,14 +618,23 @@
 
       singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, runQa, processingPath, analyzeTimings };
 
-      showAnalysisPreview(analysis, preset);
-      await waitForContinue();
-      await finishSingleFlow();
+      if (skipReview) {
+        // Straight through, no stop: still populate the analysis-preview DOM
+        // (finishSingleFlow reads its recipe checkboxes/style picks/prompt
+        // straight from there) but never show the panel or wait for a click.
+        renderAnalysisPreview({ analysis, preset });
+        await finishSingleFlow();
+      } else {
+        showAnalysisPreview(analysis, preset);
+        await waitForContinue();
+        await finishSingleFlow();
+      }
     } catch (error) {
       showSection("upload");
       showError(friendlyError(error));
     } finally {
       els.startButton.disabled = false;
+      if (els.startDirectBtn) els.startDirectBtn.disabled = false;
       clearContinueWait();
       if (els.analysisPreview) els.analysisPreview.hidden = true;
     }
@@ -847,7 +857,7 @@
   }
 
   // ── Batch step 1: analyze every image, then show the review grid ─────────
-  async function startSubmitBatch() {
+  async function startSubmitBatch(skipReview = false) {
     const presetKey = "natural";
     batchSettings = {
       presetKey,
@@ -861,6 +871,7 @@
     };
 
     els.startButton.disabled = true;
+    if (els.startDirectBtn) els.startDirectBtn.disabled = true;
     resetSteps(); // clears completedTimings so each run's total starts fresh
     batchRecords.forEach((r) => {
       r.status = "analyzing";
@@ -951,9 +962,19 @@
       }
 
       updateBatchProgress();
-      enterBatchReview();
+      if (skipReview) {
+        // Straight through, no stop: same as clicking "全部繼續處理" myself,
+        // so every analyzed image goes straight to editing with its default
+        // recipe/style options (no per-image review ever happened to set
+        // overrides). Records that failed to analyze are simply excluded --
+        // continueBatchRecords already filters to status === "analyzed".
+        await continueBatchRecords(analyzedBatchRecords());
+      } else {
+        enterBatchReview();
+      }
     } finally {
       els.startButton.disabled = false;
+      if (els.startDirectBtn) els.startDirectBtn.disabled = false;
     }
   }
 
@@ -1684,6 +1705,7 @@
     // clicking continue (waitForContinue's promise is left pending), so
     // re-enable Start explicitly here too.
     els.startButton.disabled = false;
+    if (els.startDirectBtn) els.startDirectBtn.disabled = false;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps();
@@ -1710,6 +1732,7 @@
   els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
   if (els.changePhotoBtn) els.changePhotoBtn.addEventListener("click", () => els.fileInput.click());
   els.startButton.addEventListener("click", startSubmit);
+  if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.backToProcessBtn.addEventListener("click", backToProcessFromResults);
   els.resetButton.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
