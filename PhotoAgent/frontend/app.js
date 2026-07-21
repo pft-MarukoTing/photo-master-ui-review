@@ -14,7 +14,7 @@
     analyzeAipoc,
     analyzeAipocBatch
   } = window.PhotoAgentApi;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   let selectedFile = null;
@@ -1647,6 +1647,7 @@
         const input = document.querySelector(`input[name="${name}"][value="${options[key]}"]`);
         if (input) input.checked = true;
       });
+      [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
     }
     if (Array.isArray(recipeChecked) && els.apRecipeList) {
       const boxes = els.apRecipeList.querySelectorAll("input[type=checkbox]");
@@ -1791,7 +1792,14 @@
   // future render.
   [["apPoseList", "pose"], ["apAngleList", "angle"], ["apLightingList", "lighting"], ["apSizeList", "size"]]
     .forEach(([elKey, key]) => {
-      if (els[elKey]) els[elKey].addEventListener("change", () => markOptionTouched(key));
+      if (els[elKey]) {
+        els[elKey].addEventListener("change", () => {
+          markOptionTouched(key);
+          syncStyleTrigger(els[elKey]);
+          const details = els[elKey].closest(".ap-style-item");
+          if (details) details.open = false;
+        });
+      }
     });
 
   BATCH_OPTION_CATEGORIES.forEach(({ lock }) => {

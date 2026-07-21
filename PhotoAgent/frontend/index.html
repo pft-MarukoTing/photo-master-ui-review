@@ -254,7 +254,71 @@
     .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
     .ap-options-toggle > summary:hover { color: var(--accent); }
     .ap-options-toggle > summary:hover::before { color: var(--accent); }
-    .ap-options-toggle .ap-option-groups { margin-top: 10px; }
+
+    /* ── Style-option pickers (Pose/Angle/Lighting/Size): a row of pill
+       buttons, each a <details> whose panel pops over the content below
+       instead of expanding it -- picking an option closes the panel and
+       shows the pick on the pill itself, e.g. "Pose · Playful". ── */
+    .ap-style-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .ap-style-item { position: relative; }
+    .ap-style-trigger {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      border-radius: 20px;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      font-size: 15px;
+      white-space: nowrap;
+      transition: border-color .15s, background .15s;
+    }
+    .ap-style-trigger::-webkit-details-marker { display: none; }
+    .ap-style-trigger:hover { border-color: rgba(168,85,247,.4); }
+    .ap-style-trigger::after {
+      content: '▾';
+      font-size: 10px;
+      color: var(--text-2);
+      transition: transform .15s;
+    }
+    .ap-style-item[open] > .ap-style-trigger {
+      border-color: var(--accent);
+      background: rgba(168,85,247,.12);
+    }
+    .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
+    .ap-style-name {
+      font-weight: 700;
+      color: var(--text-2);
+    }
+    .ap-style-value {
+      font-weight: 600;
+      color: var(--text);
+    }
+    .ap-style-item .ap-style-panel {
+      position: absolute;
+      top: calc(100% + 8px);
+      left: 0;
+      z-index: 20;
+      margin-top: 0;
+      min-width: 200px;
+      /* Override .step-list-frame's translucent purple tint -- this now
+         floats over unrelated content (e.g. the prompt textarea) below it,
+         so it needs a solid, opaque surface (a shade lighter than the
+         surrounding card so it visibly lifts off the page) instead of a
+         see-through overlay that barely reads as its own layer. */
+      background: var(--card-3);
+      border-color: var(--border-2);
+      box-shadow: 0 16px 40px rgba(0,0,0,.55);
+      animation: fadeUp .2s ease both;
+    }
     .ap-analysis-body {
       display: flex;
       flex-direction: column;
@@ -736,32 +800,43 @@
           <details class="ap-row ap-options-toggle" id="ap-options-toggle">
             <summary class="ap-label">修圖風格選項</summary>
 
-            <div class="ap-option-groups">
-              <div class="ap-option-group" id="ap-group-pose" hidden>
-                <p class="ap-sub-label">Pose</p>
-                <div class="step-list-frame">
+            <div class="ap-style-row">
+              <details class="ap-style-item" name="ap-style-group" id="ap-group-pose" hidden>
+                <summary class="ap-style-trigger">
+                  <span class="ap-style-name">Pose</span>
+                  <span class="ap-style-value">Default</span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
                   <ul id="ap-pose-list" class="step-inline-list"></ul>
                 </div>
-              </div>
-              <div class="ap-option-group" id="ap-group-angle" hidden>
-                <p class="ap-sub-label">Angle</p>
-                <div class="step-list-frame">
+              </details>
+              <details class="ap-style-item" name="ap-style-group" id="ap-group-angle" hidden>
+                <summary class="ap-style-trigger">
+                  <span class="ap-style-name">Angle</span>
+                  <span class="ap-style-value">Default</span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
                   <ul id="ap-angle-list" class="step-inline-list"></ul>
                 </div>
-              </div>
-
-              <div class="ap-option-group">
-                <p class="ap-sub-label">Lighting</p>
-                <div class="step-list-frame">
+              </details>
+              <details class="ap-style-item" name="ap-style-group">
+                <summary class="ap-style-trigger">
+                  <span class="ap-style-name">Lighting</span>
+                  <span class="ap-style-value">Default</span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
                   <ul id="ap-lighting-list" class="step-inline-list"></ul>
                 </div>
-              </div>
-              <div class="ap-option-group">
-                <p class="ap-sub-label">Size</p>
-                <div class="step-list-frame">
+              </details>
+              <details class="ap-style-item" name="ap-style-group">
+                <summary class="ap-style-trigger">
+                  <span class="ap-style-name">Size</span>
+                  <span class="ap-style-value">Default</span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
                   <ul id="ap-size-list" class="step-inline-list"></ul>
                 </div>
-              </div>
+              </details>
             </div>
 
             <div class="form-field ap-options-prompt">

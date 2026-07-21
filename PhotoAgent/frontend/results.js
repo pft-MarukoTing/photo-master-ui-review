@@ -189,6 +189,21 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  // Updates a style-option pill's displayed value (e.g. "Playful") to match
+  // whichever radio in its list is currently checked -- shared by the initial
+  // fillRadioList render and by app.js after it restores a saved pick or the
+  // user selects a new one. No-ops quietly if the list isn't wrapped in the
+  // .ap-style-item/.ap-style-value pill structure (e.g. the batch options
+  // row, which still uses the always-visible list layout).
+  function syncStyleTrigger(listElement) {
+    if (!listElement) return;
+    const valueEl = listElement.closest(".ap-style-item")?.querySelector(".ap-style-value");
+    if (!valueEl) return;
+    const checked = listElement.querySelector("input:checked");
+    const label = checked?.closest("label")?.querySelector(".step-cb-label")?.textContent;
+    valueEl.textContent = label || "Default";
+  }
+
   function joinParts(parts) {
     return parts.filter(Boolean).join(" ");
   }
@@ -498,6 +513,7 @@ window.PhotoAgentResults = (() => {
     fillRadioList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default");
     fillRadioList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default");
     fillRadioList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default");
+    [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
     const isPerson = analysis.subject_category === "人物";
     if (els.apGroupPose) els.apGroupPose.hidden = !isPerson;
     if (els.apGroupAngle) els.apGroupAngle.hidden = false;
@@ -514,5 +530,5 @@ window.PhotoAgentResults = (() => {
     fillRadioList(els.batchSizeList, SIZE_OPTIONS, "batch-size", "default");
   }
 
-  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions };
+  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger };
 })();
