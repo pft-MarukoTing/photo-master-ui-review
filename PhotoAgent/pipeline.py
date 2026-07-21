@@ -108,7 +108,7 @@ def finish_stage(
     logger.info("Step 3 done in %.2fs: has_direction=%s", timings["Step 3 - user_instruction_review"], user_instruction.get("has_user_direction"))
 
     prompts["crop_validation"] = None
-    timings["Step 4 - crop_validation"] = 0.0
+    timings["Step 4 - crop_validation"] = None
 
     if ai_photo_editing:
         # Step 5 — AI edit
