@@ -188,6 +188,21 @@
     els.viewResultsWrap.hidden = true;
   }
 
+  // Disables the analysis-preview panel's controls (recipe checklist, style
+  // option checkboxes, quality/model/RUN-count selects, prompt textarea) plus
+  // the back button, while finishSingleFlow's edit/QA job is in flight --
+  // none of it applies to the already-submitted job, so leaving it live just
+  // invites confusing edits. Re-enabled by showAnalysisPreview each time the
+  // panel is (re)shown for a fresh round.
+  function setAnalysisPreviewDisabled(disabled) {
+    if (els.backToUploadBtn) els.backToUploadBtn.disabled = disabled;
+    if (els.analysisPreview) {
+      els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
+        el.disabled = disabled;
+      });
+    }
+  }
+
   function waitForContinue() {
     return new Promise((resolve) => {
       clearContinueWait(); // drop any stale listener from an abandoned prior run
@@ -208,6 +223,8 @@
     // batch-wide control (#run-count), and showBatchReview hides this again
     // since it reuses this same #analysis-preview panel per image.
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    setAnalysisPreviewDisabled(false);
+    procVisual.classList.add("done");
     if (procTitle) procTitle.textContent = "初步分析已完成";
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
   }
@@ -638,6 +655,8 @@
     const effectiveAnalysis = buildEffectiveAnalysis(analysis, selections);
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
 
+    setAnalysisPreviewDisabled(true);
+    procVisual.classList.remove("done");
     if (procTitle) procTitle.textContent = aiPhotoEditing ? "AI 正在修圖" : "正在處理照片";
     if (procSub) {
       procSub.textContent = aiPhotoEditing
@@ -1533,9 +1552,9 @@
     // Reuse the processing screen's analysis-preview panel verbatim.
     clearContinueWait();
     els.viewResultsWrap.hidden = true;
-    procVisual.classList.remove("done");
     procVisual.style.height = "";
     els.procThumb.src = record.previewUrl;
+    procVisual.classList.add("done");
     if (procTitle) procTitle.textContent = "初步分析已完成";
     if (procSub) procSub.textContent = "審核初步分析，可調整後繼續。";
 

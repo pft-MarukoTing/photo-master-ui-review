@@ -60,6 +60,7 @@
     .proc-visual.done .think-ring {
       opacity: 0;
       pointer-events: none;
+      animation-play-state: paused;
       transition: opacity .4s ease;
     }
     .proc-visual.done .think-center {
@@ -70,6 +71,10 @@
     }
     .proc-visual.done .proc-thumb {
       border-radius: 14px;
+      /* Base .proc-thumb uses object-fit:cover to fill the circular
+         thinking-state thumb -- once done, show the whole photo instead of
+         cropping it to the box, so it keeps its own aspect ratio. */
+      object-fit: contain;
       transition: border-radius .5s ease;
     }
 
@@ -83,6 +88,7 @@
     }
     .step-inline-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
     .step-inline-list li label { display: flex; align-items: flex-start; gap: 10px; cursor: pointer; }
+    .step-inline-list li label:has(input:disabled) { opacity: .5; cursor: not-allowed; }
     .step-cb { position: relative; width: 20px; height: 20px; flex-shrink: 0; margin-top: 1px; }
     .step-cb input { position: absolute; opacity: 0; width: 0; height: 0; }
     .step-cb-box {

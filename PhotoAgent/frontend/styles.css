@@ -277,6 +277,8 @@ a { text-decoration: none; color: inherit; }
 .field-ta::placeholder { color: rgba(255,255,255,.28); }
 .field-input:focus,
 .field-ta:focus { border-color: rgba(168,85,247,.5); }
+.field-input:disabled,
+.field-ta:disabled { opacity: .5; cursor: not-allowed; }
 
 .field-ta {
   resize: none;
@@ -376,6 +378,7 @@ label.option-row { cursor: pointer; }
   -webkit-appearance: none;
   appearance: none;
 }
+.quality-select:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Error banner */
 .error-banner {
