@@ -143,7 +143,9 @@ STYLE_OPTION_INSTRUCTIONS = {
     },
     "size": {
         "wide": (
-            "Transform the image into a wider framing where the main subject appears slightly smaller and more of the surrounding environment is visible. "
+            "Transform the image into a wider framing where the main subject appears clearly but moderately smaller and more of the surrounding environment is visible. "
+            "Target subject scale: the subject's visible frame ratio should decrease by about 20% compared with the original image. "
+            "In practical terms, the subject's bounding-box height or dominant dimension should become roughly 80% of its original frame-relative size, and its approximate area share may become about 65% of the original. "
             "This should feel like the camera pulled back, zoomed out, or slightly widened the field of view while keeping the same subject, location, perspective logic, and scene identity. "
             "If the original frame does not contain enough surrounding context, extend the canvas by plausibly continuing the same real scene beyond the original edges. "
             "Any newly visible area must look like a natural continuation of the existing background, lighting, depth, materials, and spatial layout, not a blank border or unrelated invented scenery. "
@@ -151,7 +153,9 @@ STYLE_OPTION_INSTRUCTIONS = {
             "Avoid tiny crops that do not visibly change subject scale, artificial side bands, stretched backgrounds, duplicated patterns, warped perspective, or unrelated new objects."
         ),
         "wider": (
-            "Transform the image into a much wider environmental framing where the subject becomes noticeably smaller and the surrounding scene plays a stronger compositional role. "
+            "Transform the image into a much wider environmental framing where the main subject becomes substantially smaller and the surrounding scene plays a stronger compositional role. "
+            "Target subject scale: the subject's visible frame ratio should decrease by about 40% compared with the original image. "
+            "In practical terms, the subject's bounding-box height or dominant dimension should become roughly 60% of its original frame-relative size, and its approximate area share may become about 35% to 40% of the original. "
             "This should read like a same-scene pull-back shot or wider lens view, with more environmental context around the subject on multiple sides when compositionally appropriate. "
             "If needed, extend the canvas and outpaint plausible same-scene background beyond the original frame, continuing existing perspective lines, lighting direction, bokeh, surfaces, architecture, landscape, or interior context. "
             "The expanded scene should support scale, breathing room, story, and environmental atmosphere while preserving the same location and photographic realism. "

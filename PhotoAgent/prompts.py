@@ -293,6 +293,34 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     has_wider_size_override = size_override_value in {"wide", "wider"}
     has_closer_size_override = size_override_value in {"close", "closer"}
 
+    subject_box_for_size = analysis.get("subject_extent_box") or analysis.get("roi_box") or {}
+    try:
+        subject_w = float(subject_box_for_size.get("w") or 0)
+        subject_h = float(subject_box_for_size.get("h") or 0)
+        subject_area = subject_w * subject_h if subject_w and subject_h else 0
+    except (TypeError, ValueError):
+        subject_w = subject_h = subject_area = 0
+
+    size_ratio_block = ""
+    if size_override_value == "wide":
+        size_ratio_block = (
+            "Quantified wide-framing target: make the main subject's visible frame ratio about 20% smaller than in the original image. "
+            "Aim for the subject's bounding-box height or dominant dimension to be roughly 80% of its original frame-relative size; "
+            "its area share may become roughly 65% of the original. "
+        )
+    elif size_override_value == "wider":
+        size_ratio_block = (
+            "Quantified wider-framing target: make the main subject's visible frame ratio about 40% smaller than in the original image. "
+            "Aim for the subject's bounding-box height or dominant dimension to be roughly 60% of its original frame-relative size; "
+            "its area share may become roughly 35% to 40% of the original. "
+        )
+
+    if size_ratio_block and subject_w and subject_h:
+        size_ratio_block += (
+            f"Original subject extent estimate: width={subject_w:.2f}, height={subject_h:.2f}, area={subject_area:.2f} of the frame. "
+            "Use these values as a visual guide, not a pixel-perfect measurement. "
+        )
+
     style_block = ""
     if has_style_overrides:
         style_block = (
@@ -319,9 +347,11 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
         if has_wider_size_override:
             style_block += (
                 "\n\nFraming-size override requirement: This is a true wider-framing transformation. "
+                + size_ratio_block +
                 "Do not preserve the original image boundaries. Make the subject visibly smaller in the frame and show more surrounding same-scene environment. "
                 "If the original image lacks enough context, extend/outpaint the canvas with plausible continuation of the same location, lighting, perspective, depth, and materials. "
-                "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery."
+                "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery. "
+                "Wide and wider must be visibly different: wide is a moderate pull-back, wider is a much stronger environmental pull-back."
             )
         elif has_closer_size_override:
             style_block += (
@@ -351,6 +381,7 @@ This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit
     if has_wider_size_override:
         crop_instruction_block = (
             "Wider framing requested. Do not treat the original image boundaries as final. "
+            + size_ratio_block +
             "Create a wider same-scene composition where the subject appears smaller and more surrounding environment is visible. "
             "If a crop plan exists, use it only as a subject-safety reference, not as a hard crop that prevents widening. "
             "Canvas expansion/outpainting is allowed only to continue the same real scene with matching perspective, lighting, depth, materials, and background logic. "
@@ -361,6 +392,8 @@ This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit
 
     crop_priority_line_style = (
         "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
+        + size_ratio_block +
+        "Wide should be a moderate pull-back; wider should be a much stronger pull-back with a clearly smaller subject and more environmental context. "
         "Never add blank borders, transparent/checkerboard padding, artificial empty side bands, stretched edges, or unrelated scenery."
         if has_wider_size_override else
         (
@@ -399,7 +432,7 @@ Priority order:
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_style}
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
-3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, the subject must become visibly smaller and the scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
+3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, follow the quantified subject-size target: wide should reduce the subject's visible frame ratio by about 20%, while wider should reduce it by about 40%. The scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
 4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
 5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
