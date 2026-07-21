@@ -2,7 +2,7 @@ window.PhotoAgentResults = (() => {
   const { els } = window.PhotoAgentDom;
   const { resolveCropBoxForDisplay } = window.PhotoAgentImageTools;
 
-  const DEFAULT_OPTION = { value: "default", label: "Default (analyzed)" };
+  const DEFAULT_OPTION = { value: "default", label: "Auto" };
   const POSE_OPTIONS = [
     DEFAULT_OPTION,
     { value: "playful", label: "Playful" },
