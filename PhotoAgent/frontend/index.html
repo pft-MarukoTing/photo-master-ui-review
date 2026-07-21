@@ -163,6 +163,13 @@
       gap: 16px;
       animation: fadeUp .5s ease both;
     }
+    /* Panel title: must outrank .ap-label (17.5px) below it, so it's clearly
+       the top of the hierarchy rather than reading as a same-tier kicker. */
+    .analysis-preview > .eyebrow-label {
+      font-size: 19px;
+      font-weight: 800;
+      margin-bottom: 0;
+    }
     .ap-row p { margin: 6px 0 0; }
 
     /* ── Analysis-preview label hierarchy ──
@@ -691,7 +698,7 @@
                   <div class="option-divider"></div>
                   <div class="option-row">
                     <div class="option-text">
-                      <span class="option-label">RUN 次數</span>
+                      <span class="option-label">生成張數</span>
                     </div>
                     <select id="ap-run-count" class="quality-select">
                       <option value="1" selected>1</option>
@@ -856,7 +863,7 @@
         <textarea id="batch-prompt" class="field-ta" rows="2"
           placeholder="套用到未單獨設定補充指令的圖片若某張在分析裡自己填了補充指令，則以該張指令為準。"></textarea>
         <div class="run-count-row">
-          <span class="field-label">RUN 次數</span>
+          <span class="field-label">生成張數</span>
           <select id="run-count" class="quality-select">
             <option value="1" selected>1</option>
             <option value="2">2</option>
