@@ -525,12 +525,31 @@
     .batch-review-arrows { display: flex; align-items: center; gap: 12px; }
     .batch-prompt-row { margin-bottom: 18px; }
     .batch-options-row { margin-bottom: 18px; }
-    .ap-sub-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-    .ap-sub-label-row .ap-sub-label { margin: 14px 0 6px; }
-    .ap-sub-label-row:first-child .ap-sub-label { margin-top: 0; }
-    .batch-lock-toggle { display: flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 400; color: var(--text-3); cursor: pointer; user-select: none; }
+    .batch-lock-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-bottom: 10px;
+      font-size: 11.5px;
+      font-weight: 400;
+      color: var(--text-3);
+      cursor: pointer;
+      user-select: none;
+    }
     .batch-lock-toggle input { margin: 0; }
-    .ap-option-group.is-locked .step-list-frame { opacity: .45; pointer-events: none; }
+    /* Dim/disable just the option list when locked -- the lock-toggle above
+       it must stay clickable so the user can actually unlock it. */
+    .ap-style-item.is-locked .step-inline-list { opacity: .45; pointer-events: none; }
+    .ap-style-item.is-locked > .ap-style-trigger { opacity: .7; }
+    .ap-style-lock-badge {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-2);
+      background: var(--card);
+      border: 1px solid var(--border-2);
+      border-radius: 8px;
+      padding: 1px 6px;
+    }
   </style>
 </head>
 <body>
@@ -971,55 +990,63 @@
       </div>
       <details class="form-field batch-options-row" id="batch-options-row" hidden>
         <summary class="field-label">整批修圖風格選項（可選）</summary>
-        <div class="ap-option-groups">
-          <div class="ap-option-group" id="batch-group-pose">
-            <div class="ap-sub-label-row">
-              <p class="ap-sub-label">Pose</p>
+        <div class="ap-style-row">
+          <details class="ap-style-item" name="batch-style-group" id="batch-group-pose">
+            <summary class="ap-style-trigger">
+              <span class="ap-style-name">Pose</span>
+              <span class="ap-style-value">Auto</span>
+              <span class="ap-style-lock-badge" id="batch-pose-lock-badge" hidden>已鎖定</span>
+            </summary>
+            <div class="step-list-frame ap-style-panel">
               <label class="batch-lock-toggle" id="batch-pose-lock-row" hidden>
                 <input type="checkbox" id="batch-pose-lock">
                 <span>已有單張調整，仍要修改整批預設</span>
               </label>
-            </div>
-            <div class="step-list-frame">
               <ul id="batch-pose-list" class="step-inline-list"></ul>
             </div>
-          </div>
-          <div class="ap-option-group" id="batch-group-angle">
-            <div class="ap-sub-label-row">
-              <p class="ap-sub-label">Angle</p>
+          </details>
+          <details class="ap-style-item" name="batch-style-group" id="batch-group-angle">
+            <summary class="ap-style-trigger">
+              <span class="ap-style-name">Angle</span>
+              <span class="ap-style-value">Auto</span>
+              <span class="ap-style-lock-badge" id="batch-angle-lock-badge" hidden>已鎖定</span>
+            </summary>
+            <div class="step-list-frame ap-style-panel">
               <label class="batch-lock-toggle" id="batch-angle-lock-row" hidden>
                 <input type="checkbox" id="batch-angle-lock">
                 <span>已有單張調整，仍要修改整批預設</span>
               </label>
-            </div>
-            <div class="step-list-frame">
               <ul id="batch-angle-list" class="step-inline-list"></ul>
             </div>
-          </div>
-          <div class="ap-option-group" id="batch-group-lighting">
-            <div class="ap-sub-label-row">
-              <p class="ap-sub-label">Lighting</p>
+          </details>
+          <details class="ap-style-item" name="batch-style-group" id="batch-group-lighting">
+            <summary class="ap-style-trigger">
+              <span class="ap-style-name">Lighting</span>
+              <span class="ap-style-value">Auto</span>
+              <span class="ap-style-lock-badge" id="batch-lighting-lock-badge" hidden>已鎖定</span>
+            </summary>
+            <div class="step-list-frame ap-style-panel">
               <label class="batch-lock-toggle" id="batch-lighting-lock-row" hidden>
                 <input type="checkbox" id="batch-lighting-lock">
                 <span>已有單張調整，仍要修改整批預設</span>
               </label>
-            </div>
-            <div class="step-list-frame">
               <ul id="batch-lighting-list" class="step-inline-list"></ul>
             </div>
-          </div>
-          <div class="ap-option-group" id="batch-group-size">
-            <div class="ap-sub-label-row">
-              <p class="ap-sub-label">Size</p>
+          </details>
+          <details class="ap-style-item" name="batch-style-group" id="batch-group-size">
+            <summary class="ap-style-trigger">
+              <span class="ap-style-name">Size</span>
+              <span class="ap-style-value">Auto</span>
+              <span class="ap-style-lock-badge" id="batch-size-lock-badge" hidden>已鎖定</span>
+            </summary>
+            <div class="step-list-frame ap-style-panel">
               <label class="batch-lock-toggle" id="batch-size-lock-row" hidden>
                 <input type="checkbox" id="batch-size-lock">
                 <span>已有單張調整，仍要修改整批預設</span>
               </label>
-            </div>
-            <div class="step-list-frame">
               <ul id="batch-size-list" class="step-inline-list"></ul>
             </div>
-          </div>
+          </details>
         </div>
         <p class="run-count-hint">套用到未單獨設定風格選項的圖片；若某張在分析裡自己選了 Pose/Angle/Lighting/Size，則以該張選擇為準。有單張調整過的類別，整批選項會鎖定，需勾選上方開關才能繼續修改。</p>
       </details>

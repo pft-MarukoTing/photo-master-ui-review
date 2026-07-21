@@ -43,10 +43,10 @@
   // toggle each shows once any image in the batch has been individually
   // adjusted for that category (see updateBatchOptionsLocks).
   const BATCH_OPTION_CATEGORIES = [
-    { key: "pose", group: "batchGroupPose", list: "batchPoseList", lockRow: "batchPoseLockRow", lock: "batchPoseLock" },
-    { key: "angle", group: "batchGroupAngle", list: "batchAngleList", lockRow: "batchAngleLockRow", lock: "batchAngleLock" },
-    { key: "lighting", group: "batchGroupLighting", list: "batchLightingList", lockRow: "batchLightingLockRow", lock: "batchLightingLock" },
-    { key: "size", group: "batchGroupSize", list: "batchSizeList", lockRow: "batchSizeLockRow", lock: "batchSizeLock" }
+    { key: "pose", group: "batchGroupPose", list: "batchPoseList", lockRow: "batchPoseLockRow", lock: "batchPoseLock", lockBadge: "batchPoseLockBadge" },
+    { key: "angle", group: "batchGroupAngle", list: "batchAngleList", lockRow: "batchAngleLockRow", lock: "batchAngleLock", lockBadge: "batchAngleLockBadge" },
+    { key: "lighting", group: "batchGroupLighting", list: "batchLightingList", lockRow: "batchLightingLockRow", lock: "batchLightingLock", lockBadge: "batchLightingLockBadge" },
+    { key: "size", group: "batchGroupSize", list: "batchSizeList", lockRow: "batchSizeLockRow", lock: "batchSizeLock", lockBadge: "batchSizeLockBadge" }
   ];
   let batchRecords = [];   // see setSelectedFileBatch for record shape
   let batchSettings = null;
@@ -1076,7 +1076,7 @@
   // the already-adjusted images while still being presented as "applies to
   // all". The unlock checkbox lets the user override that guard deliberately.
   function updateBatchOptionsLocks() {
-    BATCH_OPTION_CATEGORIES.forEach(({ key, group, list, lockRow, lock }) => {
+    BATCH_OPTION_CATEGORIES.forEach(({ key, group, list, lockRow, lock, lockBadge }) => {
       const hasConflict = batchRecords.some((r) => r.optionsTouched && r.optionsTouched[key]);
       const lockRowEl = els[lockRow];
       const lockEl = els[lock];
@@ -1084,6 +1084,7 @@
       if (!hasConflict && lockEl) lockEl.checked = false;
       const locked = hasConflict && !(lockEl && lockEl.checked);
       if (els[group]) els[group].classList.toggle("is-locked", locked);
+      if (els[lockBadge]) els[lockBadge].hidden = !locked;
       const listEl = els[list];
       if (listEl) {
         listEl.querySelectorAll("input[type=radio]").forEach((input) => { input.disabled = locked; });
@@ -1809,6 +1810,20 @@
   BATCH_OPTION_CATEGORIES.forEach(({ lock }) => {
     if (els[lock]) els[lock].addEventListener("change", updateBatchOptionsLocks);
   });
+
+  // Batch-level default pills: same close-on-pick + label-sync behavior as
+  // the per-image ones, minus markOptionTouched (that only applies to a
+  // per-image record, not the batch-wide default itself).
+  [["batchPoseList"], ["batchAngleList"], ["batchLightingList"], ["batchSizeList"]]
+    .forEach(([elKey]) => {
+      if (els[elKey]) {
+        els[elKey].addEventListener("change", () => {
+          syncStyleTrigger(els[elKey]);
+          const details = els[elKey].closest(".ap-style-item");
+          if (details) details.open = false;
+        });
+      }
+    });
 
   for (const eventName of ["dragenter", "dragover"]) {
     els.dropZone.addEventListener(eventName, (event) => {

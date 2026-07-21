@@ -547,6 +547,7 @@ window.PhotoAgentResults = (() => {
     fillRadioList(els.batchAngleList, ANGLE_OPTIONS, "batch-angle", "default");
     fillRadioList(els.batchLightingList, LIGHTING_OPTIONS, "batch-lighting", "default");
     fillRadioList(els.batchSizeList, SIZE_OPTIONS, "batch-size", "default");
+    [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
   }
 
   return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger };
