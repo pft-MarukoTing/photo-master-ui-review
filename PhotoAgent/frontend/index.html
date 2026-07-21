@@ -190,6 +190,12 @@
     }
     .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
     .ap-options-toggle .ap-option-groups { margin-top: 10px; }
+    .ap-analysis-body {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-top: 10px;
+    }
     .ap-options-prompt { margin-top: 16px; }
     .ap-option-groups {
       display: grid;
@@ -582,16 +588,7 @@
 
         <div id="analysis-preview" class="analysis-preview" hidden>
           <p class="eyebrow-label">初步分析結果</p>
-          <div class="ap-row">
-            <label class="sb-label">照片內容</label>
-            <div id="ap-subject-tags" class="tag-row"></div>
-            <p id="ap-subject" class="sb-value"></p>
-          </div>
-          <div class="ap-row">
-            <label class="sb-label">診斷與建議</label>
-            <p id="ap-diagnosis" class="wf-text"></p>
-            <p id="ap-composition" class="wf-sub"></p>
-          </div>
+          <div id="ap-subject-tags" class="tag-row"></div>
           <div class="ap-row">
             <label class="sb-label">修圖步驟建議</label>
             <div class="step-list-frame">
@@ -692,6 +689,21 @@
               </div>
             </div>
           </div>
+
+          <details class="ap-row ap-options-toggle" id="ap-analysis-toggle">
+            <summary class="sb-label">分析結果</summary>
+            <div class="ap-analysis-body">
+              <div class="ap-option-group">
+                <p class="ap-sub-label">照片內容</p>
+                <p id="ap-subject" class="sb-value"></p>
+              </div>
+              <div class="ap-option-group">
+                <p class="ap-sub-label">診斷與建議</p>
+                <p id="ap-diagnosis" class="wf-text"></p>
+                <p id="ap-composition" class="wf-sub"></p>
+              </div>
+            </div>
+          </details>
         </div>
 
       </div>

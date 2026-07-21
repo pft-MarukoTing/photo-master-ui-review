@@ -493,7 +493,7 @@ window.PhotoAgentResults = (() => {
     // person subject; Angle applies to any subject (product/scene shots
     // benefit from camera-angle framing too). The actual retouch behavior
     // for these selections is not wired up yet -- this is UI only for now.
-    if (els.apOptionsToggle) els.apOptionsToggle.open = false;
+    if (els.apOptionsToggle) els.apOptionsToggle.open = true;
     fillRadioList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default");
     fillRadioList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default");
     fillRadioList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default");
