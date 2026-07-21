@@ -575,7 +575,7 @@
     const imageQuality = els.imageQualitySelect?.value || "medium";
     const imageModel = els.imageModelSelect?.value || "gpt-image-2";
     const aiPhotoEditing = els.aiEditToggle.checked;
-    const runQa = els.runQaToggle ? els.runQaToggle.checked : true;
+    const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
@@ -873,7 +873,7 @@
       imageQuality: els.imageQualitySelect?.value || "medium",
       imageModel: els.imageModelSelect?.value || "gpt-image-2",
       aiPhotoEditing: els.aiEditToggle.checked,
-      runQa: els.runQaToggle ? els.runQaToggle.checked : true,
+      runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       path: els.processingPathSelect?.value || "local"
     };
 
