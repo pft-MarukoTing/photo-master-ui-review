@@ -1,7 +1,7 @@
 import json
 
 import requests
-from flask import Blueprint, Response, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from photo_agent.param_validation import validate_photo_agent_request
@@ -25,7 +25,7 @@ def _parse_and_validate_params(form):
         "image_quality": form.get("image_quality", "medium"),
         "image_model": form.get("image_model", "gpt-image-2"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
-        "run_qa": str(form.get("run_qa", "true")).lower() == "true",
+        "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
