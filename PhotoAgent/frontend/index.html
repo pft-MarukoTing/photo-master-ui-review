@@ -204,6 +204,26 @@
       padding-top: 16px;
     }
 
+    /* 修圖步驟建議 + image quality/model/RUN options side by side */
+    .ap-row-split {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+    .ap-row-main { flex: 1; min-width: 0; }
+    .ap-row-side {
+      width: 300px;
+      flex-shrink: 0;
+      /* .ap-row-main starts with a label (.ap-label) before its box;
+         this side has no label, so nudge it down to align box tops. */
+      margin-top: 35px;
+    }
+    .ap-row-side .options-card { height: 100%; }
+    @media (max-width: 700px) {
+      .ap-row-split { flex-direction: column; }
+      .ap-row-side { width: 100%; margin-top: 0; }
+    }
+
     .ap-options-toggle > summary {
       cursor: pointer;
       user-select: none;
@@ -636,10 +656,68 @@
         <div id="analysis-preview" class="analysis-preview" hidden>
           <p class="eyebrow-label">初步分析結果</p>
           <div id="ap-subject-tags" class="tag-row"></div>
-          <div class="ap-row">
-            <label class="ap-label">修圖步驟建議</label>
-            <div class="step-list-frame">
-              <ul id="ap-recipe-list" class="step-inline-list"></ul>
+          <div class="ap-row ap-row-split">
+            <div class="ap-row-main">
+              <label class="ap-label">修圖步驟建議</label>
+              <div class="step-list-frame">
+                <ul id="ap-recipe-list" class="step-inline-list"></ul>
+              </div>
+            </div>
+            <div class="ap-row-side">
+              <div class="options-card">
+                <div class="option-row">
+                  <div class="option-text">
+                    <span class="option-label">影像品質</span>
+                  </div>
+                  <select id="ap-image-quality" class="quality-select">
+                    <option value="low" selected>Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+                <div class="option-divider"></div>
+                <div class="option-row">
+                  <div class="option-text">
+                    <span class="option-label">修圖模型</span>
+                  </div>
+                  <select id="ap-image-model" class="quality-select">
+                    <option value="gpt-image-2" selected>GPT Image 2</option>
+                    <option value="gpt-image-1.5">GPT Image 1.5</option>
+                    <option value="nano-banana-2">Nano Banana 2</option>
+                    <option value="nano-banana-lite">Nano Banana 2 Lite</option>
+                  </select>
+                </div>
+                <div id="ap-run-count-wrap" hidden>
+                  <div class="option-divider"></div>
+                  <div class="option-row">
+                    <div class="option-text">
+                      <span class="option-label">RUN 次數</span>
+                    </div>
+                    <select id="ap-run-count" class="quality-select">
+                      <option value="1" selected>1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                      <option value="6">6</option>
+                      <option value="7">7</option>
+                      <option value="8">8</option>
+                      <option value="9">9</option>
+                      <option value="10">10</option>
+                      <option value="11">11</option>
+                      <option value="12">12</option>
+                      <option value="13">13</option>
+                      <option value="14">14</option>
+                      <option value="15">15</option>
+                      <option value="16">16</option>
+                      <option value="17">17</option>
+                      <option value="18">18</option>
+                      <option value="19">19</option>
+                      <option value="20">20</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           <details class="ap-row ap-options-toggle" id="ap-options-toggle">
@@ -679,63 +757,6 @@
                 placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
             </div>
           </details>
-
-          <div class="ap-row">
-            <div class="options-card">
-              <div class="option-row">
-                <div class="option-text">
-                  <span class="option-label">影像品質</span>
-                </div>
-                <select id="ap-image-quality" class="quality-select">
-                  <option value="low" selected>Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div class="option-divider"></div>
-              <div class="option-row">
-                <div class="option-text">
-                  <span class="option-label">修圖模型</span>
-                </div>
-                <select id="ap-image-model" class="quality-select">
-                  <option value="gpt-image-2" selected>GPT Image 2</option>
-                  <option value="gpt-image-1.5">GPT Image 1.5</option>
-                  <option value="nano-banana-2">Nano Banana 2</option>
-                  <option value="nano-banana-lite">Nano Banana 2 Lite</option>
-                </select>
-              </div>
-              <div id="ap-run-count-wrap" hidden>
-                <div class="option-divider"></div>
-                <div class="option-row">
-                  <div class="option-text">
-                    <span class="option-label">RUN 次數</span>
-                  </div>
-                  <select id="ap-run-count" class="quality-select">
-                    <option value="1" selected>1</option>
-                    <option value="2">2</option>
-                    <option value="3">3</option>
-                    <option value="4">4</option>
-                    <option value="5">5</option>
-                    <option value="6">6</option>
-                    <option value="7">7</option>
-                    <option value="8">8</option>
-                    <option value="9">9</option>
-                    <option value="10">10</option>
-                    <option value="11">11</option>
-                    <option value="12">12</option>
-                    <option value="13">13</option>
-                    <option value="14">14</option>
-                    <option value="15">15</option>
-                    <option value="16">16</option>
-                    <option value="17">17</option>
-                    <option value="18">18</option>
-                    <option value="19">19</option>
-                    <option value="20">20</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
 
           <details class="ap-row ap-options-toggle" id="ap-analysis-toggle">
             <summary class="ap-label">分析結果</summary>
