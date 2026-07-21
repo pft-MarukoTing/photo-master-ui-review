@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PhotoMaster Quality</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="logo" href="./">Photo<em>Master</em> Quality</a>
+      <span class="mvp-badge">BATCH SCORING</span>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- ═══ Upload ═══ -->
+    <section id="upload-section" class="section visible">
+      <div class="hero">
+        <h1>修圖品質批次評分</h1>
+        <p>上傳整份 result ZIP，以原圖對照修圖結果，逐張評估十個品質面向並計算最終 0–100 分數。</p>
+      </div>
+
+      <label id="drop-zone" class="drop-zone" for="file-input">
+        <div class="dz-icon">🗂️</div>
+        <p class="dz-title">拖拉或點選上傳 result ZIP（可多選）</p>
+        <p class="dz-hint">ZIP 需包含 task_id/run_x/result.png（photoMuse 匯出格式）</p>
+        <input type="file" id="file-input" accept=".zip,application/zip,application/x-zip-compressed" multiple hidden />
+      </label>
+      <p id="selected-file" class="selected-file" hidden></p>
+
+      <div class="options-row">
+        <div class="options-card">
+          <div class="option-row">
+            <div class="option-text">
+              <span class="option-label">評分模型</span>
+            </div>
+            <select id="eval-model" class="quality-select">
+              <option value="gpt-4.1-mini" selected>gpt-4.1-mini</option>
+              <option value="gpt-5-mini">gpt-5-mini</option>
+            </select>
+          </div>
+        </div>
+        <button id="start-btn" class="btn btn-grad run-btn" disabled>開始評分</button>
+      </div>
+      <p id="upload-error" class="error-text" hidden></p>
+    </section>
+
+    <!-- ═══ Progress ═══ -->
+    <section id="progress-section" class="section">
+      <div class="progress-card">
+        <div class="rc-spinner big"></div>
+        <p id="progress-label">上傳中…</p>
+        <div class="progress-bar"><div id="progress-fill"></div></div>
+        <p id="progress-counts" class="progress-counts"></p>
+        <p id="progress-error" class="error-text" hidden></p>
+        <button id="progress-back" class="btn btn-outline btn-sm" hidden>返回重新上傳</button>
+      </div>
+    </section>
+
+    <!-- ═══ Results ═══ -->
+    <section id="results-section" class="section">
+      <div class="results-toolbar">
+        <div id="results-summary" class="results-summary"></div>
+        <div class="toolbar-controls">
+          <select id="filter-zip" title="依 ZIP 篩選">
+            <option value="">全部</option>
+          </select>
+          <select id="filter-defect" title="依瑕疵類型篩選">
+            <option value="">全部瑕疵類型</option>
+          </select>
+          <select id="sort-by" title="排序">
+            <option value="score-desc">分數：高 → 低</option>
+            <option value="score-asc">分數：低 → 高</option>
+            <option value="run">依 Task / Run</option>
+          </select>
+        </div>
+        <div class="toolbar-actions">
+          <button id="summary-btn" class="btn btn-secondary btn-sm" aria-haspopup="dialog">Summary</button>
+          <button id="dl-zip" class="btn btn-grad btn-sm">下載結果</button>
+          <button id="new-upload" class="btn btn-outline btn-sm">重新上傳</button>
+        </div>
+      </div>
+      <div id="results-grid" class="results-grid"></div>
+      <p id="results-empty" class="results-empty" hidden>沒有符合篩選條件的結果。</p>
+    </section>
+
+  </main>
+
+  <!-- ═══ Summary modal ═══ -->
+  <div id="summary-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel summary-modal-panel" role="dialog" aria-modal="true" aria-labelledby="summary-title">
+      <button id="summary-close" class="modal-close" title="關閉">✕</button>
+      <div class="detail-report-head">
+        <p class="detail-eyebrow">Analyze Summary</p>
+        <p id="summary-title" class="detail-title">整批結果摘要</p>
+      </div>
+
+      <div class="summary-stats">
+        <article class="summary-stat">
+          <span>平均總分</span>
+          <strong id="summary-average">–</strong>
+          <small>Analyze Score</small>
+        </article>
+        <article class="summary-stat">
+          <span>最高分</span>
+          <strong id="summary-highest">–</strong>
+          <small>Analyze Score</small>
+        </article>
+        <article class="summary-stat">
+          <span>最低分</span>
+          <strong id="summary-lowest">–</strong>
+          <small>Analyze Score</small>
+        </article>
+        <article class="summary-stat">
+          <span>已評分</span>
+          <strong id="summary-scored">0 / 0</strong>
+          <small>成功評分／總筆數</small>
+        </article>
+      </div>
+
+      <p id="summary-counts" class="summary-counts"></p>
+      <h3 class="detail-sub">分項平均</h3>
+      <div id="summary-dimensions" class="detail-dimensions"></div>
+      <p id="summary-empty" class="empty-note summary-empty" hidden>沒有可計算平均值的已評分結果。</p>
+    </div>
+  </div>
+
+  <!-- ═══ Detail modal ═══ -->
+  <div id="detail-modal" class="modal" hidden>
+    <div class="modal-backdrop"></div>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+      <button id="detail-close" class="modal-close" title="關閉">✕</button>
+      <div class="detail-report-head">
+        <p class="detail-eyebrow">PhotoMaster QA Report</p>
+        <p id="detail-title" class="detail-title"></p>
+      </div>
+
+      <div class="detail-compare-grid">
+        <article class="detail-photo-card">
+          <div class="detail-photo-card-hdr">
+            <span>原圖</span>
+            <strong id="detail-original-meta"></strong>
+          </div>
+          <div class="detail-photo-frame">
+            <img id="detail-original-image" alt="原始照片" />
+            <p id="detail-original-empty" class="detail-image-empty" hidden>無法顯示原圖</p>
+          </div>
+        </article>
+
+        <article class="detail-photo-card">
+          <div class="detail-photo-card-hdr">
+            <span>修圖結果</span>
+            <strong id="detail-result-meta"></strong>
+          </div>
+          <div class="detail-photo-frame">
+            <img id="detail-result-image" alt="修改後的照片" />
+            <p id="detail-result-empty" class="detail-image-empty" hidden>無法顯示修圖結果</p>
+          </div>
+        </article>
+      </div>
+
+      <div class="detail-overview">
+        <div class="detail-score-box">
+          <span>Analyze Score</span>
+          <strong id="detail-score" class="detail-score"></strong>
+        </div>
+        <div class="detail-overview-copy">
+          <p id="detail-summary" class="detail-summary"></p>
+          <p id="detail-error" class="error-text" hidden></p>
+        </div>
+      </div>
+
+      <h3 class="detail-sub">各項分數</h3>
+      <div id="detail-dimensions" class="detail-dimensions"></div>
+
+      <h3 class="detail-sub">重大瑕疵</h3>
+      <ul id="detail-defects" class="detail-defects"></ul>
+
+      <h3 class="detail-sub">改善建議</h3>
+      <ul id="detail-suggestions" class="detail-suggestions"></ul>
+
+      <p id="detail-meta" class="detail-meta"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="config.js"></script>
+  <script src="summary.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
