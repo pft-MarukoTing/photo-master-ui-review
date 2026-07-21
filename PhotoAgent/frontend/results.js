@@ -52,6 +52,25 @@ window.PhotoAgentResults = (() => {
       .join("、");
   }
 
+  // fillRecipeAdherenceList's fallback for styleEntries when QA didn't run
+  // (or didn't report recipe_adherence.style_items) -- the user's Pose/Angle/
+  // Lighting/Size picks (analysis.style_options) were still sent to the edit
+  // step and applied, so they should still show up here, same as how
+  // fallbackRecipe keeps the retouch_recipe items visible without QA. checked
+  // defaults to true for the same reason fallbackRecipe's entries do: there's
+  // no QA judgment to say otherwise, so this just reflects "was requested."
+  function buildFallbackStyleEntries(styleOptions) {
+    if (!styleOptions) return [];
+    return Object.entries(styleOptions)
+      .map(([key, value]) => {
+        const group = STYLE_OPTION_GROUPS[key];
+        if (!group || !value || value === "default") return null;
+        const opt = group.options.find((o) => o.value === value);
+        return opt ? { label: `${group.label}: ${opt.label}`, checked: true, note: "" } : null;
+      })
+      .filter(Boolean);
+  }
+
   function fillList(element, items, fallbackItems) {
     element.innerHTML = "";
     const source = Array.isArray(items) && items.length ? items : fallbackItems;
@@ -100,15 +119,15 @@ window.PhotoAgentResults = (() => {
   // user unchecked before submission -- "checked" here means the QA step
   // confirmed the output correctly avoided them, so a violated rejection
   // shows up as an unchecked/failed row.
-  function fillRecipeAdherenceList(element, adherenceItems, styleItems, rejectedItems, fallbackRecipe) {
+  function fillRecipeAdherenceList(element, adherenceItems, styleItems, rejectedItems, fallbackRecipe, fallbackStyleOptions) {
     if (!element) return;
     element.innerHTML = "";
     const followedEntries = Array.isArray(adherenceItems) && adherenceItems.length
       ? adherenceItems.map((it) => ({ label: it.item, checked: it.followed === true, note: it.note }))
       : (fallbackRecipe || []).map((label) => ({ label, checked: true, note: "" }));
-    const styleEntries = Array.isArray(styleItems)
+    const styleEntries = Array.isArray(styleItems) && styleItems.length
       ? styleItems.map((it) => ({ label: it.item, checked: it.followed === true, note: it.note }))
-      : [];
+      : buildFallbackStyleEntries(fallbackStyleOptions);
     const rejectedEntries = Array.isArray(rejectedItems)
       ? rejectedItems.map((it) => ({
           label: `不應出現：${it.item}`,
@@ -440,7 +459,7 @@ window.PhotoAgentResults = (() => {
         ? joinParts([`修圖建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
         : "尚未取得修圖建議達成度。";
     }
-    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.style_items, recipeAdherence?.rejected_items, analysis.retouch_recipe);
+    fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.style_items, recipeAdherence?.rejected_items, analysis.retouch_recipe, analysis.style_options);
 
     fillList(els.qaList, [
       ...checksToList(qa),
