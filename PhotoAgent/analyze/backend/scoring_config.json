@@ -1,0 +1,15 @@
+{
+  "schema_version": "2.0.0",
+  "weights": {
+    "subject_identity_preservation": 15,
+    "scene_content_preservation": 15,
+    "crop_boundary_safety": 10,
+    "composition_balance_improvement": 8,
+    "geometry_perspective_integrity": 12,
+    "lighting_exposure_improvement": 10,
+    "color_tone_improvement": 8,
+    "detail_texture_preservation": 8,
+    "retouch_naturalness": 7,
+    "output_artifact_integrity": 7
+  }
+}
