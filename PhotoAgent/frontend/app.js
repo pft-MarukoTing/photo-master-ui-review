@@ -55,7 +55,6 @@
   let gridSummary = "";    // grid-view summary text, saved so backToBatchGrid can restore it
 
   const procVisual = document.querySelector(".proc-visual");
-  const stepsGrid = document.querySelector(".steps-grid");
   const procSub = document.querySelector(".proc-sub");
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
@@ -559,7 +558,6 @@
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
-    if (stepsGrid) stepsGrid.hidden = true;
     clearContinueWait();
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
@@ -815,7 +813,6 @@
     clearContinueWait();
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
-    if (stepsGrid) stepsGrid.hidden = true;
     procVisual.classList.remove("done");
     procVisual.style.height = "";
 
@@ -1530,7 +1527,6 @@
     const record = list[reviewPos];
 
     // Reuse the processing screen's analysis-preview panel verbatim.
-    if (stepsGrid) stepsGrid.hidden = true;
     clearContinueWait();
     els.viewResultsWrap.hidden = true;
     procVisual.classList.remove("done");

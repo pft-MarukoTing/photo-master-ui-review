@@ -34,10 +34,6 @@
       align-self: center;
     }
 
-    /* ── Processing: single-column steps ── */
-    .steps-grid {
-      grid-template-columns: 1fr;
-    }
     .proc-container {
       max-width: 1425px;
     }
@@ -154,37 +150,6 @@
       color: var(--text);
     }
     .timing-total .timing-value { color: var(--accent); }
-
-    /* ── Step issues list ── */
-    .step-issues-list {
-      list-style: none;
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-      margin-top: 8px;
-    }
-    .step-issues-list li {
-      font-size: 15px;
-      color: var(--text-2);
-      line-height: 1.45;
-      padding-left: 12px;
-      border-left: 2px solid rgba(168,85,247,.4);
-    }
-
-    /* ── Step elapsed time ── */
-    .step-time {
-      font-size: 13.75px;
-      font-weight: 600;
-      color: var(--text-2);
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-      align-self: center;
-      margin-left: auto;
-      padding-left: 12px;
-      opacity: 0;
-      transition: opacity .3s;
-    }
-    .step-item.done .step-time { opacity: 1; }
 
     /* ── Analysis preview (shown mid-processing, before "continue") ── */
     .analysis-preview {
@@ -594,42 +559,6 @@
                 </svg>
               </button>
             </div>
-          </div>
-        </div>
-
-        <!-- Steps grid -->
-        <div class="steps-grid">
-          <div class="step-item" id="step-1">
-            <div class="step-num">1</div>
-            <div class="step-body">
-              <p class="step-name">讀取原圖</p>
-              <div class="step-detail" id="d1">等待中</div>
-            </div>
-            <span class="step-time" id="t1"></span>
-          </div>
-          <div class="step-item" id="step-2">
-            <div class="step-num">2</div>
-            <div class="step-body">
-              <p class="step-name">照片類型與主體分析</p>
-              <div class="step-detail" id="d2">等待中</div>
-            </div>
-            <span class="step-time" id="t2"></span>
-          </div>
-          <div class="step-item" id="step-3">
-            <div class="step-num">3</div>
-            <div class="step-body">
-              <p class="step-name">美學診斷與構圖策略</p>
-              <div class="step-detail" id="d3">等待中</div>
-            </div>
-            <span class="step-time" id="t3"></span>
-          </div>
-          <div class="step-item" id="step-4">
-            <div class="step-num">4</div>
-            <div class="step-body">
-              <p class="step-name">裁切候選與 AI 評選</p>
-              <div class="step-detail" id="d4">等待中</div>
-            </div>
-            <span class="step-time" id="t4"></span>
           </div>
         </div>
 

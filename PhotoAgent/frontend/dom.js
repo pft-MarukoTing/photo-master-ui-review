@@ -141,59 +141,10 @@ window.PhotoAgentDom = (() => {
     els.errorMsg.hidden = true;
   }
 
-  const stepStartTimes = {};
   const completedTimings = []; // {label, duration (ms)}
-
-  function setStep(index, state, detail) {
-    const step = document.querySelector(`#step-${index}`);
-    const detailEl = document.querySelector(`#d${index}`);
-    if (!step || !detailEl) return;
-
-    const timeEl = document.querySelector(`#t${index}`);
-    if (state === "active") {
-      stepStartTimes[index] = Date.now();
-      if (timeEl) timeEl.textContent = "";
-    } else if (state === "done" && stepStartTimes[index] != null) {
-      const duration = Date.now() - stepStartTimes[index];
-      if (timeEl) timeEl.textContent = `${(duration / 1000).toFixed(1)}s`;
-      const label = document.querySelector(`#step-${index} .step-name`)?.textContent || `步驟 ${index}`;
-      completedTimings.push({ label, duration });
-      delete stepStartTimes[index];
-    } else if (!state) {
-      if (timeEl) timeEl.textContent = "";
-      delete stepStartTimes[index];
-    }
-
-    step.classList.remove("active", "done");
-    if (state) step.classList.add(state);
-
-    if (detail && typeof detail === "object" && detail.list) {
-      detailEl.innerHTML = "";
-      if (detail.summary) {
-        const p = document.createElement("p");
-        p.textContent = detail.summary;
-        detailEl.appendChild(p);
-      }
-      if (detail.list.length) {
-        const ul = document.createElement("ul");
-        ul.className = "step-issues-list";
-        detail.list.forEach((item) => {
-          const li = document.createElement("li");
-          li.textContent = item;
-          ul.appendChild(li);
-        });
-        detailEl.appendChild(ul);
-      }
-    } else {
-      detailEl.textContent = typeof detail === "string" ? detail : "";
-    }
-  }
 
   function resetSteps() {
     completedTimings.length = 0;
-    for (let i = 1; i <= 4; i += 1) {
-      setStep(i, "", "等待中");
-    }
   }
 
   function addTiming(label, duration, children) {
@@ -204,5 +155,5 @@ window.PhotoAgentDom = (() => {
     return [...completedTimings];
   }
 
-  return { els, showSection, showError, hideError, setStep, resetSteps, addTiming, getTimings };
+  return { els, showSection, showError, hideError, resetSteps, addTiming, getTimings };
 })();
