@@ -60,30 +60,38 @@
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
+  const uploadOptionsCard = document.querySelector("#upload-options-card");
+  const apAnalysisToggle = document.querySelector("#ap-analysis-toggle");
+  const resultsDetailExtra = document.querySelector("#results-detail-extra");
 
-  // The processing-path row is shown in the URL-debug case (?debug etc.) or
-  // when the backend was started with `--debug-ui` / DEBUG_UI=true (testbed
-  // deployments). Default to "local" in both debug cases -- debug sessions
-  // are almost always testing the local worker path, regardless of the
-  // backend's own AIPoC default below.
-  if (processingPathRow) {
-    if (window.location.href.includes("debug")) {
-      processingPathRow.style.display = "";
-      if (els.processingPathSelect) els.processingPathSelect.value = "local";
-      if (els.runQaRow) els.runQaRow.style.display = "";
-    } else {
-      getUiConfig().then((cfg) => {
-        if (cfg.debugUi) {
-          processingPathRow.style.display = "";
-          if (els.processingPathSelect) els.processingPathSelect.value = "local";
-          if (els.runQaRow) els.runQaRow.style.display = "";
-        } else if (cfg.aipocDefault && els.processingPathSelect) {
-          // Non-debug deployment started with `--aipoc`: the selector stays
-          // hidden, but its value still drives the default processing path.
-          els.processingPathSelect.value = "aipoc";
-        }
-      });
-    }
+  // Testbed-only UI: some rows/panels are hidden unless the backend was
+  // started with `--debug-ui` (or the page URL contains "debug", for quick
+  // local checks without a real backend). isDebug=false is the shape a
+  // normal user sees -- quality/model knobs and every deep-dive section
+  // (analysis breakdown, workflow steps, timing, prompts) disappear, leaving
+  // just upload -> result. Elements this hides always keep their own
+  // independent show/hide logic underneath; this only ever adds an extra
+  // "and also not debug" gate on top; it never replaces that logic.
+  function applyDebugUiVisibility(isDebug) {
+    if (processingPathRow) processingPathRow.style.display = isDebug ? "" : "none";
+    if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
+    if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
+    if (uploadOptionsCard) uploadOptionsCard.hidden = !isDebug;
+    if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
+    if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
+  }
+
+  if (window.location.href.includes("debug")) {
+    applyDebugUiVisibility(true);
+  } else {
+    getUiConfig().then((cfg) => {
+      applyDebugUiVisibility(!!cfg.debugUi);
+      if (!cfg.debugUi && cfg.aipocDefault && els.processingPathSelect) {
+        // Non-debug deployment started with `--aipoc`: the selector stays
+        // hidden, but its value still drives the default processing path.
+        els.processingPathSelect.value = "aipoc";
+      }
+    });
   }
 
   // Quality/model selects appear on both the upload screen (#image-quality,
@@ -361,6 +369,10 @@
   // finished RUN to bundle -- hidden otherwise so it doesn't duplicate the
   // single-preview download link for the common single-RUN case.
   function updateDownloadLinks(runs) {
+    // download-link only makes sense once a real edited result exists to zip
+    // up -- lastResult is set right before every call to this function (and
+    // cleared in reset()), so its presence is the single source of truth.
+    els.downloadLink.hidden = !lastResult;
     if (!els.downloadAllRunsLink) return;
     const doneCount = (runs || []).filter((run) => run.status === "done").length;
     els.downloadAllRunsLink.hidden = doneCount <= 1;
@@ -393,34 +405,6 @@
     event.preventDefault();
     if (!lastResult) return;
     downloadZip(buildAllRunsZip, buildDownloadZipFilename());
-  }
-
-  async function handleDownloadAllClick() {
-    const done = doneBatchRecords();
-    if (!done.length) return;
-
-    els.downloadAllBtn.disabled = true;
-    try {
-      const groups = await Promise.all(done.map((record) => {
-        // Same per-image layout as the single-image downloads: a
-        // photoMuse-{date}-{jobId}/ folder with source.jpg + run_N/ subfolders.
-        const doneRuns = (record.runs || []).filter((run) => run.status === "done");
-        return buildRunFiles({ file: record.file, path: batchSettings.path }, doneRuns, imageFolderPrefix(record.jobId));
-      }));
-      const zipBlob = window.PhotoAgentZip.createZip(groups.flat());
-      const url = URL.createObjectURL(zipBlob);
-      const tempLink = document.createElement("a");
-      tempLink.href = url;
-      tempLink.download = buildDownloadZipFilename();
-      document.body.appendChild(tempLink);
-      tempLink.click();
-      tempLink.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (error) {
-      showError("打包下載失敗，請稍後再試。");
-    } finally {
-      els.downloadAllBtn.disabled = false;
-    }
   }
 
   // Batch counterpart of setSelectedFile: filter to images (same rule/message),
@@ -539,7 +523,6 @@
     if (els.detailNav) els.detailNav.hidden = true;
     if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
     if (els.backToGridBtn) els.backToGridBtn.hidden = true;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchProgress) els.batchProgress.hidden = true;
@@ -896,7 +879,7 @@
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
     els.backToGridBtn.hidden = true;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
+    els.downloadLink.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.batchContinueAllBtn.hidden = true;
@@ -1003,7 +986,6 @@
     // very first analyze, or a reload that reset every record) -- the
     // done-only actions don't apply until continueBatchRecords produces
     // fresh results.
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.batchReviewNav.hidden = true;
@@ -1099,7 +1081,6 @@
     if (!targets.length) return;
 
     els.batchContinueAllBtn.hidden = true;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.batchPromptRow.hidden = true;
@@ -1138,7 +1119,6 @@
     els.batchPromptRow.hidden = !remaining;
     if (els.batchOptionsRow) els.batchOptionsRow.hidden = !remaining;
     const anyDone = doneBatchRecords().length > 0;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !anyDone;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = !anyDone;
   }
@@ -1469,7 +1449,6 @@
     els.resultsDetail.hidden = false;
     els.detailNav.hidden = false;
     els.backToGridBtn.hidden = false;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
@@ -1524,8 +1503,8 @@
     els.detailNav.hidden = true;
     if (els.runTabs) els.runTabs.hidden = true;
     els.backToGridBtn.hidden = true;
+    els.downloadLink.hidden = true;
     const anyDone = doneBatchRecords().length > 0;
-    if (els.downloadAllBtn) els.downloadAllBtn.hidden = !anyDone;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = !anyDone;
     els.resultsGridWrap.hidden = false;
@@ -1739,7 +1718,6 @@
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
   if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.addEventListener("click", backToAnalyzedBatch);
   if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);
-  if (els.downloadAllBtn) els.downloadAllBtn.addEventListener("click", handleDownloadAllClick);
   if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
   if (els.errorModal) {
     els.errorModal.addEventListener("click", (e) => {

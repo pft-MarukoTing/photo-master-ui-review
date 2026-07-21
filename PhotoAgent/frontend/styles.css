@@ -159,12 +159,29 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -.17px;
 }
 
+/* Run button row: sits top-right above the upload grid, separated by a divider */
+.upload-actions-row {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* Upload grid */
 .upload-grid {
   display: grid;
   grid-template-columns: 1fr 420px;
   gap: 24px;
   align-items: start;
+}
+
+/* Non-debug mode hides #upload-options-card entirely, leaving the right
+   column empty and the dropzone stuck off-center in the left 1fr track --
+   collapse to a single centered track instead so it reads as balanced. */
+.upload-grid:has(#upload-options-card[hidden]) {
+  grid-template-columns: minmax(0, 640px);
+  justify-content: center;
 }
 
 /* Drop zone */
@@ -939,13 +956,6 @@ label.option-row { cursor: pointer; }
   background: var(--accent);
 }
 
-/* Download */
-.download-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
 /* ════════════════════════════════════════
    BUTTONS
 ════════════════════════════════════════ */
@@ -995,14 +1005,6 @@ label.option-row { cursor: pointer; }
   border-radius: 10px;
 }
 
-.run-btn {
-  width: 100%;
-  height: 50px;
-  font-size: 20px;
-  border-radius: 14px;
-  margin-top: 4px;
-}
-
 /* ════════════════════════════════════════
    RESPONSIVE
 ════════════════════════════════════════ */
@@ -1045,6 +1047,4 @@ label.option-row { cursor: pointer; }
     min-width: 0;
   }
 
-  .download-row { justify-content: stretch; }
-  .download-row .btn { width: 100%; }
 }

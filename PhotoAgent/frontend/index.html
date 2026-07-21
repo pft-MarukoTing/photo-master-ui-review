@@ -575,6 +575,15 @@
         <p class="upload-sub">上傳照片，AI 診斷光線、色彩、構圖，輸出專屬修圖師等級版本。<br>點擊 Run 查看完整流程展示。</p>
       </div>
 
+      <div class="upload-actions-row">
+        <button id="start-btn" class="btn btn-grad" type="button">
+          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          Run Photo Master
+        </button>
+      </div>
+
       <div class="upload-grid">
 
         <!-- Left: Drop zone -->
@@ -612,7 +621,7 @@
         <!-- Right: Form -->
         <div class="upload-right">
 
-          <div class="options-card">
+          <div class="options-card" id="upload-options-card">
             <div id="processing-path-row" class="option-row" style="display: none;">
               <div class="option-text">
                 <span class="option-label">處理路徑</span>
@@ -669,13 +678,6 @@
           </div>
 
           <p id="error-msg" class="error-banner" hidden></p>
-
-          <button id="start-btn" class="btn btn-grad run-btn" type="button">
-            <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z"/>
-            </svg>
-            Run Photo Master
-          </button>
 
         </div>
       </div>
@@ -899,17 +901,12 @@
             <p id="batch-progress" class="r-summary" hidden></p>
           </div>
           <div style="display:flex;gap:8px;">
+            <a id="download-link" class="btn btn-grad" download="photo-muse-output.zip" hidden>下載結果</a>
+            <a id="download-all-runs-link" class="btn btn-secondary" download="photo-muse-output-all-runs.zip" hidden>全部下載</a>
             <button id="batch-continue-all-btn" class="btn btn-grad" type="button" hidden>
               全部繼續處理
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
                 <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button id="download-all-btn" class="btn btn-grad" type="button" hidden>
-              全部下載
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M12 3v12m0 0l-4-4m4 4l4-4M5 21h14" stroke="currentColor"
                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
@@ -1089,6 +1086,13 @@
         </div>
       </div>
 
+      <!-- Everything below the before/after images: hidden entirely unless
+           debug-ui is on (see applyDebugUiVisibility in app.js). Each item
+           inside keeps its own independent show/hide logic untouched --
+           this wrapper's hidden state only ever adds an extra "and also
+           not debug" gate on top of that, never replaces it. -->
+      <div id="results-detail-extra">
+
       <!-- Verdict + Summary band -->
       <div class="verdict-summary-row">
 
@@ -1247,9 +1251,6 @@
         </div>
       </details>
 
-      <div class="download-row">
-        <a id="download-link" class="btn btn-grad" download="photo-muse-output.zip">下載結果</a>
-        <a id="download-all-runs-link" class="btn btn-secondary" download="photo-muse-output-all-runs.zip" hidden>全部下載</a>
       </div>
 
     </div>
