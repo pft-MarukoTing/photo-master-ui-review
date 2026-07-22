@@ -161,8 +161,12 @@ a { text-decoration: none; color: inherit; }
 
 /* Run button row: sits top-right above the upload grid, separated by a divider */
 .upload-actions-row {
-  display: flex;
-  justify-content: flex-end;
+  /* A single grid column auto-sizes to the widest child's content, then
+     stretches every item (default justify-items) to match that width --
+     a fixed min-width guess would need updating whenever either label
+     changes length, this doesn't. */
+  display: grid;
+  justify-content: end;
   gap: 12px;
   padding-bottom: 20px;
   margin-bottom: 28px;
