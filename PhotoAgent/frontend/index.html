@@ -658,16 +658,18 @@
                 <span class="ios-track"><span class="ios-thumb"></span></span>
               </label>
             </label>
-            <div class="option-divider"></div>
-            <div class="option-row">
-              <div class="option-text">
-                <span class="option-label">影像品質</span>
+            <div id="image-quality-wrap">
+              <div class="option-divider"></div>
+              <div class="option-row">
+                <div class="option-text">
+                  <span class="option-label">影像品質</span>
+                </div>
+                <select id="image-quality" class="quality-select">
+                  <option value="low" selected>Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
               </div>
-              <select id="image-quality" class="quality-select">
-                <option value="low" selected>Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
             </div>
             <div class="option-divider"></div>
             <div class="option-row">
@@ -766,17 +768,19 @@
             </div>
             <div class="ap-row-side">
               <div class="options-card">
-                <div class="option-row">
-                  <div class="option-text">
-                    <span class="option-label">影像品質</span>
+                <div id="ap-image-quality-wrap">
+                  <div class="option-row">
+                    <div class="option-text">
+                      <span class="option-label">影像品質</span>
+                    </div>
+                    <select id="ap-image-quality" class="quality-select">
+                      <option value="low" selected>Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
                   </div>
-                  <select id="ap-image-quality" class="quality-select">
-                    <option value="low" selected>Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
+                  <div class="option-divider"></div>
                 </div>
-                <div class="option-divider"></div>
                 <div class="option-row">
                   <div class="option-text">
                     <span class="option-label">修圖模型</span>

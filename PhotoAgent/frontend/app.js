@@ -108,6 +108,15 @@
     return model === "nano-banana-2" ? "medium" : "low";
   }
 
+  // The Gemini API (Nano Banana 2) has no quality parameter -- showing the
+  // 影像品質 selector for it would let the user "pick" a setting that quietly
+  // does nothing, so hide it entirely for that model instead.
+  function updateQualityVisibility(model) {
+    const hide = model === "nano-banana-2";
+    if (els.imageQualityWrap) els.imageQualityWrap.hidden = hide;
+    if (els.apImageQualityWrap) els.apImageQualityWrap.hidden = hide;
+  }
+
   function applyQualityModelChange({ quality, model }) {
     // A model change with no explicit quality (i.e. the user just picked a
     // different model, not the quality dropdown) resets quality to that
@@ -126,6 +135,7 @@
       if (els.apImageModelSelect) els.apImageModelSelect.value = model;
       if (singleFlowState) singleFlowState.imageModel = model;
       if (batchSettings) batchSettings.imageModel = model;
+      updateQualityVisibility(model);
     }
   }
 
