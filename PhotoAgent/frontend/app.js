@@ -105,7 +105,7 @@
   // "low" is the sensible default; Nano Banana's cost/latency profile doesn't
   // scale the same way, so "medium" is a better default there.
   function defaultQualityForModel(model) {
-    return model === "nano-banana-2" || model === "nano-banana-lite" ? "medium" : "low";
+    return model === "nano-banana-2" ? "medium" : "low";
   }
 
   function applyQualityModelChange({ quality, model }) {
