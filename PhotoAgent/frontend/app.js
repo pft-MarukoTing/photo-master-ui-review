@@ -20,6 +20,10 @@
   let selectedFile = null;
   let previewUrl = "";
   let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
+  // Set once at startup by applyDebugUiVisibility -- gates whether the
+  // result card shows the raw model string (e.g. "gpt-4.1-mini + gpt-image-2")
+  // or a plain-language stand-in a regular user actually cares about.
+  let isDebugUiActive = false;
 
   // Single-image flow: kept after analyze so "回到流程" (from the results page)
   // can re-show the analysis preview and resubmit steps 3-6 without re-running
@@ -73,6 +77,7 @@
   // independent show/hide logic underneath; this only ever adds an extra
   // "and also not debug" gate on top; it never replaces that logic.
   function applyDebugUiVisibility(isDebug) {
+    isDebugUiActive = isDebug;
     if (processingPathRow) processingPathRow.style.display = isDebug ? "" : "none";
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
@@ -265,7 +270,6 @@
     els.dzPreviewImg.src = previewUrl;
     els.procThumb.src = previewUrl;
     els.originalImg.src = previewUrl;
-    els.selectedFileName.textContent = file.name;
     els.dropZone.hidden = true;
     els.dzPreview.hidden = false;
     if (els.changePhotoBtn) els.changePhotoBtn.hidden = false;
@@ -706,7 +710,9 @@
       const usedImageModelLabel = extraInfo.image_model
         ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
         : "本機處理";
-      const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+      const usedModelLabel = isDebugUiActive
+      ? `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`
+      : "AI 智能修圖";
 
       const data = {
         image: imageUrl,
@@ -817,7 +823,9 @@
     const usedImageModelLabel = extraInfo.image_model
       ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
       : "本機處理";
-    const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+    const usedModelLabel = isDebugUiActive
+      ? `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`
+      : "AI 智能修圖";
 
     const data = {
       image: pick.imageUrl,
@@ -1494,7 +1502,9 @@
       const usedImageModelLabel = extraInfo.image_model
         ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
         : "本機處理";
-      const usedModelLabel = `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`;
+      const usedModelLabel = isDebugUiActive
+      ? `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`
+      : "AI 智能修圖";
       const data = {
         image: record.imageUrl,
         model: usedModelLabel,
@@ -1704,7 +1714,6 @@
     els.dropZone.hidden = false;
     els.dzPreview.hidden = true;
     if (els.changePhotoBtn) els.changePhotoBtn.hidden = true;
-    els.selectedFileName.textContent = "";
     els.origDim.textContent = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";

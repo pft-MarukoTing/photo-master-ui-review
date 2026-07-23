@@ -568,26 +568,26 @@
   ══════════════════════════════════ -->
   <section id="upload-section" class="section visible">
     <div class="container upload-container">
-
       <div class="upload-hero">
-        <p class="eyebrow-label">AI Photo Master</p>
         <h1 class="upload-headline">讓每張照片<br>都有專屬修圖師</h1>
-        <p class="upload-sub">上傳照片，AI 診斷光線、色彩、構圖，輸出專屬修圖師等級版本。<br>點擊下方按鈕查看完整流程展示。</p>
-      </div>
+        <div class="upload-sub-row">
+          <p class="upload-sub">上傳照片，AI 診斷光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
 
-      <div class="upload-actions-row">
-        <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後不停下確認，直接接續修圖並顯示結果">
-          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-          Run Photo Master (Auto)
-        </button>
-        <button id="start-btn" class="btn btn-secondary" type="button">
-          <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-          Run Photo Master (Manual)
-        </button>
+          <div class="upload-actions-row">
+            <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後不停下確認，直接接續修圖並顯示結果">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              Run Photo Master (Auto)
+            </button>
+            <button id="start-btn" class="btn btn-secondary" type="button">
+              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+              Run Photo Master (Manual)
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="upload-grid">
@@ -614,7 +614,6 @@
           <!-- Preview (shown after a single file is selected, replaces drop zone) -->
           <div id="dz-preview" class="dz-preview" hidden>
             <img id="dz-preview-img" alt="preview">
-            <p id="selected-file-name" class="dz-filename"></p>
           </div>
 
           <!-- Multi-file thumbnail strip (shown when more than one file selected) -->
@@ -627,7 +626,7 @@
         <!-- Right: Form -->
         <div class="upload-right">
 
-          <div class="options-card" id="upload-options-card">
+          <div class="options-card" id="upload-options-card" hidden>
             <div id="processing-path-row" class="option-row" style="display: none;">
               <div class="option-text">
                 <span class="option-label">處理路徑</span>
@@ -872,7 +871,7 @@
             </div>
           </details>
 
-          <details class="ap-row ap-options-toggle" id="ap-analysis-toggle">
+          <details class="ap-row ap-options-toggle" id="ap-analysis-toggle" hidden>
             <summary class="ap-label">分析結果</summary>
             <div class="ap-analysis-body">
               <div class="ap-option-group">
@@ -902,7 +901,13 @@
       <div class="container">
         <div class="results-topbar-inner">
           <div class="results-topbar-text">
-            <p class="eyebrow-label">Photo Master Report</p>
+            <p class="eyebrow-label results-done-badge">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="3"
+                  stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              修圖完成
+            </p>
             <p id="res-summary" class="r-summary">已完成影像分析與輸出。</p>
             <p id="batch-progress" class="r-summary" hidden></p>
           </div>
@@ -1082,7 +1087,7 @@
         <div class="photo-card">
           <div class="photo-card-hdr">
             <span>輸出結果</span>
-            <strong id="model-name">gpt-4.1-mini + gpt-image-2</strong>
+            <strong id="model-name">AI 智能修圖</strong>
           </div>
           <div class="photo-frame-wrap">
             <div class="photo-frame">
@@ -1097,7 +1102,7 @@
            inside keeps its own independent show/hide logic untouched --
            this wrapper's hidden state only ever adds an extra "and also
            not debug" gate on top of that, never replaces it. -->
-      <div id="results-detail-extra">
+      <div id="results-detail-extra" hidden>
 
       <!-- Verdict + Summary band -->
       <div class="verdict-summary-row">

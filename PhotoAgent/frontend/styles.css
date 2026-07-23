@@ -32,7 +32,7 @@
   --mv-grad: linear-gradient(135deg, #FF6BCE 0%, #A855F7 50%, #4338CA 100%);
 
   --header-h: 64px;
-  --radius:   12px;
+  --radius:   16px;
 }
 
 /* ════════════════════════════════════════
@@ -91,7 +91,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .logo {
-  font-size: 25px;
+  font-size: 40px;
   font-weight: 800;
   letter-spacing: -.3px;
   color: var(--text);
@@ -124,12 +124,11 @@ a { text-decoration: none; color: inherit; }
    SCREEN 1 — UPLOAD
 ════════════════════════════════════════ */
 .upload-container {
-  padding-top: 64px;
-  padding-bottom: 80px;
+  padding-top: 32px;
+  padding-bottom: 48px;
 }
 
 .upload-hero {
-  max-width: 600px;
   margin-bottom: 48px;
 }
 
@@ -143,23 +142,34 @@ a { text-decoration: none; color: inherit; }
 }
 
 .upload-headline {
-  font-size: clamp(40px, 6.25vw, 70px);
+  max-width: 600px;
+  font-size: clamp(30px, 4.5vw, 40px);
   font-weight: 800;
   color: var(--text);
-  line-height: 1.05;
+  line-height: 1.1;
   letter-spacing: -.5px;
   margin-bottom: 16px;
+}
+
+/* Sub-copy + run buttons share one row, divider sits below the pair */
+.upload-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  padding-bottom: 20px;
+  margin-bottom: 28px;
+  border-bottom: 1px solid var(--border);
 }
 
 .upload-sub {
   font-size: 21.25px;
   color: var(--text-2);
   line-height: 1.6;
-  max-width: 520px;
+  max-width: 640px;
   letter-spacing: -.17px;
 }
 
-/* Run button row: sits top-right above the upload grid, separated by a divider */
 .upload-actions-row {
   /* A single grid column auto-sizes to the widest child's content, then
      stretches every item (default justify-items) to match that width --
@@ -168,9 +178,7 @@ a { text-decoration: none; color: inherit; }
   display: grid;
   justify-content: end;
   gap: 12px;
-  padding-bottom: 20px;
-  margin-bottom: 28px;
-  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 /* Upload grid */
@@ -185,7 +193,7 @@ a { text-decoration: none; color: inherit; }
    column empty and the dropzone stuck off-center in the left 1fr track --
    collapse to a single centered track instead so it reads as balanced. */
 .upload-grid:has(#upload-options-card[hidden]) {
-  grid-template-columns: minmax(0, 640px);
+  grid-template-columns: minmax(0, 1040px);
   justify-content: center;
 }
 
@@ -194,14 +202,15 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 360px;
+  min-height: 440px;
   border: 1.5px dashed rgba(255,255,255,.2);
-  border-radius: 18px;
+  border-radius: 22px;
   background: var(--card);
   cursor: pointer;
   overflow: hidden;
-  transition: border-color .2s, background .2s;
+  transition: border-color .2s, background .2s, box-shadow .2s;
 }
+.upload-zone:hover { box-shadow: 0 8px 28px rgba(168,85,247,.12); }
 .upload-zone:hover,
 .upload-zone.dragging {
   border-color: rgba(168,85,247,.5);
@@ -218,8 +227,8 @@ a { text-decoration: none; color: inherit; }
 }
 
 .upload-icon-wrap {
-  width: 56px; height: 56px;
-  border-radius: 16px;
+  width: 64px; height: 64px;
+  border-radius: 18px;
   background: var(--card-2);
   border: 1px solid var(--border-2);
   display: flex;
@@ -254,12 +263,6 @@ a { text-decoration: none; color: inherit; }
   object-fit: contain;
   border-radius: 10px;
 }
-.dz-filename {
-  margin-top: 10px;
-  font-size: 15px;
-  color: var(--text-2);
-}
-
 /* Right form column */
 .upload-right {
   display: flex;
@@ -529,6 +532,16 @@ label.option-row { cursor: pointer; }
 
 .results-topbar-text { }
 
+/* Small celebratory cue: the eyebrow becomes a green checkmark badge instead
+   of the usual purple "section kicker" tone, so completion reads as a
+   distinct, positive moment rather than just another label. */
+.results-done-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+}
+
 .r-summary {
   font-size: 17.5px;
   color: var(--text-2);
@@ -537,25 +550,26 @@ label.option-row { cursor: pointer; }
 }
 
 .results-container {
-  padding-top: 32px;
+  padding-top: 44px;
   padding-bottom: 80px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 /* Compare grid */
 .compare-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
-  gap: 20px;
+  gap: 24px;
 }
 
 .photo-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: hidden;
+  box-shadow: 0 12px 32px rgba(0,0,0,.28);
 }
 
 .photo-card-hdr {
@@ -579,7 +593,7 @@ label.option-row { cursor: pointer; }
 }
 
 .photo-frame {
-  min-height: 300px;
+  min-height: 420px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -594,7 +608,7 @@ label.option-row { cursor: pointer; }
 
 .photo-frame img {
   width: 100%;
-  max-height: 480px;
+  max-height: 600px;
   object-fit: contain;
 }
 
@@ -1023,6 +1037,9 @@ label.option-row { cursor: pointer; }
   .proc-text { text-align: center; }
   .proc-sub { max-width: 100%; }
 
+  .upload-sub-row { flex-direction: column; align-items: stretch; }
+  .upload-actions-row { justify-content: stretch; }
+
   .verdict-summary-row { grid-template-columns: 1fr; }
   .summary-band { grid-template-rows: auto; }
 
@@ -1037,6 +1054,20 @@ label.option-row { cursor: pointer; }
 
   .upload-container { padding-top: 40px; padding-bottom: 60px; }
   .upload-hero { margin-bottom: 32px; }
+
+  .upload-actions-row {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .upload-actions-row .btn {
+    width: 100%;
+    height: auto;
+    min-height: 44px;
+    white-space: normal;
+    text-align: center;
+    padding: 10px 16px;
+  }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
   .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
