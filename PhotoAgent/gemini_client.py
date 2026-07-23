@@ -7,7 +7,7 @@ import requests
 from aiserver_utils.aescipher import AESCipher
 from config import PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
-from image_tools import get_image_dimensions, resolve_crop_box_with_report
+from image_tools import get_image_dimensions, resolve_crop_box_with_report, apply_framing_size
 from prompts import build_edit_prompt
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -65,9 +65,14 @@ def edit_photo(
     user_instruction = analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
     img_w, img_h = get_image_dimensions(image_bytes)
-    crop_plan = resolve_crop_box_with_report(analysis.get("crop_box"), analysis, img_w, img_h)["cropBox"]
 
-    prompt_text = build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
+    # See openai_client.edit_photo: framing size (close/closer) drives the crop
+    # geometry, not just the style-hint text.
+    size = (analysis.get("style_options") or {}).get("size")
+    framed_analysis = apply_framing_size(analysis, size)
+    crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
+
+    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
 
     payload = {
         "contents": [{

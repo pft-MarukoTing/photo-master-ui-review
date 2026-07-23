@@ -389,6 +389,13 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
 This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit behavior. Preserve the subject, required framing, scene context, and protected details more conservatively than the previous output."""
 
+    framing_focus = analysis.get("_framing_focus") or {}
+    focus_block = ""
+    if framing_focus.get("size") == "closer":
+        focus_label = framing_focus.get("label") or "the single most prominent subject"
+        focus_block = f"""Single-subject close-up override (highest framing priority):
+Feature one subject: {focus_label}. The photo summary and scene description above may mention several people or elements -- for this close-up, every other person, object, or element outside the mandatory crop region is intentionally and correctly cropped out. Do NOT reintroduce them. Fill the frame with the chosen subject; preserve that subject's identity, expression, and key details."""
+
     if has_wider_size_override:
         crop_instruction_block = (
             "Wider framing requested. Do not treat the original image boundaries as final. "
@@ -400,7 +407,6 @@ This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit
         )
     else:
         crop_instruction_block = _build_crop_instruction_block(crop_plan)
-
     crop_priority_line_style = (
         "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
         + size_ratio_block +
@@ -486,6 +492,8 @@ Do not make the result look synthetic, plastic, or heavily filtered.
 
 Crop instruction:
 {crop_instruction_block}
+
+{focus_block}
 
 Photo analysis:
 - Summary: {analysis.get("photo_summary") or ""}
@@ -587,9 +595,18 @@ Judge each rejected item independently and put the result in recipe_adherence.re
     else:
         rejected_block = "\nThe user did not reject any corrections for this photo. Return recipe_adherence.rejected_items as an empty array -- do not invent rejected items."
 
+    framing_focus = analysis.get("_framing_focus") or {}
+    closer_block = ""
+    if framing_focus.get("size") == "closer":
+        focus_label = framing_focus.get("label") or "the single most prominent subject"
+        closer_block = f"""
+Framing intent -- CLOSER single-subject close-up:
+The user requested an extreme close-up that features one subject only: {focus_label}. Cropping every other person, object, or element entirely out of frame is intended and correct here. Do NOT penalize the output for missing the other people/elements, for a tight or partial-person crop, or for lost background context -- those are the point. Only judge whether the one chosen subject is preserved cleanly (identity, expression, key details), the crop is not awkward (no ugly cuts through eyes, mouth, or joints), and the retouch quality is good."""
+
     head = f"""You are the QA agent for a photo retouching demo.
 Compare the original photo and the edited output. Judge whether the output is safe to show to the user as a faithful enhancement.
 Be strict. Your score must reflect the worst preservation or composition failure, not the average of good and bad qualities.
+{closer_block}
 
 {user_block}
 

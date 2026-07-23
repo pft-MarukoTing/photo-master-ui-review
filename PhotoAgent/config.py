@@ -168,8 +168,10 @@ STYLE_OPTION_INSTRUCTIONS = {
             "Avoid cramped edges, awkward cuts, or excessive background blur."
         ),
         "closer": (
-            "Use a much closer close-up style framing focused on the most important subject area. "
-            "Preserve identity, expression, key details, and any essential interaction cues. "
+            "Use an extreme close-up that features a single subject. The mandatory crop region already isolates "
+            "that one subject; fill the frame with it. Exclude out-of-frame elements by cropping, not by erasing "
+            "what remains in frame; keep the subject's own context and remove only genuine distractions. "
+            "Preserve the chosen subject's identity, expression, and key details. "
             "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
         ),
     },

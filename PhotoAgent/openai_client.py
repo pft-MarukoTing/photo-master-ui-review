@@ -11,6 +11,7 @@ from image_tools import (
     image_to_data_url,
     get_image_dimensions,
     resolve_crop_box_with_report,
+    apply_framing_size,
 )
 from prompts import (
     ANALYSIS_INSTRUCTION,
@@ -151,9 +152,16 @@ def edit_photo(
     user_instruction = analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
     img_w, img_h = get_image_dimensions(image_bytes)
-    crop_plan = resolve_crop_box_with_report(analysis.get("crop_box"), analysis, img_w, img_h)["cropBox"]
 
-    prompt_text = build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
+    # Let the selected framing size (close/closer) drive the crop geometry, not
+    # just the style-hint text. For closer this rewrites crop_box onto a single
+    # subject and clears the other protected regions so the resolver does not
+    # re-expand the frame back over everyone. wide/wider/unset pass through.
+    size = (analysis.get("style_options") or {}).get("size")
+    framed_analysis = apply_framing_size(analysis, size)
+    crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
+
+    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
 
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
@@ -289,7 +297,11 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
     original_data_url = image_to_data_url(preview, "image/jpeg")
     output_data_url = f"data:image/png;base64,{output_b64}"
 
-    qa_prompt = build_quality_check_prompt(analysis)
+    # Judge framing against the same single-subject geometry the edit was told
+    # to produce, so an intentional closer crop that drops other people is not
+    # penalized as missing content.
+    size = (analysis.get("style_options") or {}).get("size")
+    qa_prompt = build_quality_check_prompt(apply_framing_size(analysis, size))
     payload = _responses_payload(ANALYSIS_MODEL, [
         {"type": "input_text", "text": qa_prompt},
         {"type": "input_text", "text": "Original photo"},
