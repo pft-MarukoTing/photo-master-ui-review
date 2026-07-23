@@ -190,6 +190,7 @@
     const value = String(Math.max(1, parseInt(runCount, 10) || 1));
     if (els.imageRunCountSelect) els.imageRunCountSelect.value = value;
     if (els.apRunCountSelect) els.apRunCountSelect.value = value;
+    if (els.runCountSelect) els.runCountSelect.value = value;
   }
 
   if (els.imageRunCountSelect) {
@@ -199,6 +200,10 @@
   if (els.apRunCountSelect) {
     els.apRunCountSelect.addEventListener("change", () =>
       applyRunCountChange(els.apRunCountSelect.value));
+  }
+  if (els.runCountSelect) {
+    els.runCountSelect.addEventListener("change", () =>
+      applyRunCountChange(els.runCountSelect.value));
   }
 
   // Backend step timings are seconds (float) or null (step skipped);
