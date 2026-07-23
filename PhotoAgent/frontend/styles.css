@@ -211,14 +211,6 @@ a { text-decoration: none; color: inherit; }
   align-items: start;
 }
 
-/* Non-debug mode hides #upload-options-card entirely, leaving the right
-   column empty and the dropzone stuck off-center in the left 1fr track --
-   collapse to a single centered track instead so it reads as balanced. */
-.upload-grid:has(#upload-options-card[hidden]) {
-  grid-template-columns: minmax(0, 1040px);
-  justify-content: center;
-}
-
 /* Drop zone */
 .upload-zone {
   display: flex;

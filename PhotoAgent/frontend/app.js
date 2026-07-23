@@ -64,24 +64,24 @@
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
-  const uploadOptionsCard = document.querySelector("#upload-options-card");
   const apAnalysisToggle = document.querySelector("#ap-analysis-toggle");
   const resultsDetailExtra = document.querySelector("#results-detail-extra");
 
   // Testbed-only UI: some rows/panels are hidden unless the backend was
   // started with `--debug-ui` (or the page URL contains "debug", for quick
   // local checks without a real backend). isDebug=false is the shape a
-  // normal user sees -- quality/model knobs and every deep-dive section
-  // (analysis breakdown, workflow steps, timing, prompts) disappear, leaving
-  // just upload -> result. Elements this hides always keep their own
-  // independent show/hide logic underneath; this only ever adds an extra
-  // "and also not debug" gate on top; it never replaces that logic.
+  // normal user sees -- the processing-path and QA-verification rows (true
+  // internal/testing knobs) and every deep-dive section (analysis breakdown,
+  // workflow steps, timing, prompts) disappear. Image quality/model stay
+  // visible in both modes -- they're choices a regular user cares about, not
+  // debug-only. Elements this hides always keep their own independent
+  // show/hide logic underneath; this only ever adds an extra "and also not
+  // debug" gate on top; it never replaces that logic.
   function applyDebugUiVisibility(isDebug) {
     isDebugUiActive = isDebug;
     if (processingPathRow) processingPathRow.style.display = isDebug ? "" : "none";
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
-    if (uploadOptionsCard) uploadOptionsCard.hidden = !isDebug;
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
   }
