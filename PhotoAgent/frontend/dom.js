@@ -40,6 +40,7 @@ window.PhotoAgentDom = (() => {
     imageQualitySelect: document.querySelector("#image-quality"),
     imageQualityWrap: document.querySelector("#image-quality-wrap"),
     imageModelSelect: document.querySelector("#image-model"),
+    imageRunCountSelect: document.querySelector("#image-run-count"),
     apImageQualitySelect: document.querySelector("#ap-image-quality"),
     apImageQualityWrap: document.querySelector("#ap-image-quality-wrap"),
     apImageModelSelect: document.querySelector("#ap-image-model"),

@@ -172,12 +172,8 @@ a { text-decoration: none; color: inherit; }
   margin-bottom: 18px;
 }
 
-/* Sub-copy + run buttons share one row, divider sits below the pair */
+/* Sub-copy row, divider sits below it */
 .upload-sub-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 32px;
   padding-bottom: 24px;
   margin-bottom: 32px;
   border-bottom: 1px solid transparent;
@@ -192,23 +188,22 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -.17px;
 }
 
+/* Run buttons: stacked full-width under the upload-options-card, in the
+   same 420px right column. */
 .upload-actions-row {
-  /* A single grid column auto-sizes to the widest child's content, then
-     stretches every item (default justify-items) to match that width --
-     a fixed min-width guess would need updating whenever either label
-     changes length, this doesn't. */
-  display: grid;
-  justify-content: end;
-  gap: 12px;
-  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.upload-actions-row .btn {
+  width: 100%;
 }
 
 /* Upload grid */
 .upload-grid {
   display: grid;
-  grid-template-columns: 1fr 420px;
+  grid-template-columns: 1fr 340px;
   gap: 24px;
-  align-items: start;
 }
 
 /* Drop zone */
@@ -280,10 +275,12 @@ a { text-decoration: none; color: inherit; }
   object-fit: contain;
   border-radius: 10px;
 }
-/* Right form column */
+/* Right form column: centered vertically against the (taller) drop zone
+   instead of trailing off after its own, shorter content. */
 .upload-right {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 14px;
 }
 
@@ -1079,9 +1076,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .proc-text { text-align: center; }
   .proc-sub { max-width: 100%; }
 
-  .upload-sub-row { flex-direction: column; align-items: stretch; }
-  .upload-actions-row { justify-content: stretch; }
-
   .verdict-summary-row { grid-template-columns: 1fr; }
   .summary-band { grid-template-rows: auto; }
 
@@ -1097,13 +1091,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .upload-container { padding-top: 40px; padding-bottom: 60px; }
   .upload-hero { margin-bottom: 32px; }
 
-  .upload-actions-row {
-    display: flex;
-    flex-direction: column;
-  }
-
   .upload-actions-row .btn {
-    width: 100%;
     height: auto;
     min-height: 44px;
     white-space: normal;

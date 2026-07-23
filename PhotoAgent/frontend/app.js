@@ -67,6 +67,24 @@
   const apAnalysisToggle = document.querySelector("#ap-analysis-toggle");
   const resultsDetailExtra = document.querySelector("#results-detail-extra");
 
+  // 生成張數 (RUN count) selects offer 1-20 in the markup, but letting a
+  // regular user fire off up to 20 paid generations per photo is a debug/
+  // testing convenience, not something to expose by default -- cap the
+  // visible options at GENERAL_MAX_RUN_COUNT for everyone else.
+  const GENERAL_MAX_RUN_COUNT = 4;
+
+  function applyRunCountOptionLimit(select, isDebug) {
+    if (!select) return;
+    Array.from(select.options).forEach((opt) => {
+      const value = parseInt(opt.value, 10);
+      if (Number.isNaN(value)) return;
+      opt.hidden = !isDebug && value > GENERAL_MAX_RUN_COUNT;
+    });
+    if (!isDebug && parseInt(select.value, 10) > GENERAL_MAX_RUN_COUNT) {
+      select.value = String(GENERAL_MAX_RUN_COUNT);
+    }
+  }
+
   // Testbed-only UI: some rows/panels are hidden unless the backend was
   // started with `--debug-ui` (or the page URL contains "debug", for quick
   // local checks without a real backend). isDebug=false is the shape a
@@ -84,6 +102,9 @@
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
+    applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
+    applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
+    applyRunCountOptionLimit(els.runCountSelect, isDebug);
   }
 
   if (window.location.href.includes("debug")) {
@@ -159,6 +180,25 @@
   if (els.apImageModelSelect) {
     els.apImageModelSelect.addEventListener("change", () =>
       applyQualityModelChange({ model: els.apImageModelSelect.value }));
+  }
+
+  // 生成張數 (single-image RUN count) can now be preset on the upload screen,
+  // ahead of analysis -- keep it and the analysis-preview's own #ap-run-count
+  // mirrored the same way quality/model already are, so whichever one the
+  // user touches (before or after analyzing) carries over to the other.
+  function applyRunCountChange(runCount) {
+    const value = String(Math.max(1, parseInt(runCount, 10) || 1));
+    if (els.imageRunCountSelect) els.imageRunCountSelect.value = value;
+    if (els.apRunCountSelect) els.apRunCountSelect.value = value;
+  }
+
+  if (els.imageRunCountSelect) {
+    els.imageRunCountSelect.addEventListener("change", () =>
+      applyRunCountChange(els.imageRunCountSelect.value));
+  }
+  if (els.apRunCountSelect) {
+    els.apRunCountSelect.addEventListener("change", () =>
+      applyRunCountChange(els.apRunCountSelect.value));
   }
 
   // Backend step timings are seconds (float) or null (step skipped);
