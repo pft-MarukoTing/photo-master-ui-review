@@ -14,7 +14,7 @@
     analyzeAipoc,
     analyzeAipocBatch
   } = window.PhotoAgentApi;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   let selectedFile = null;
@@ -1810,6 +1810,10 @@
   els.backToProcessBtn.addEventListener("click", backToProcessFromResults);
   els.resetButton.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
+  if (els.compareToggleBtn) {
+    els.compareToggleBtn.addEventListener("click", () =>
+      setCompareView(!els.compareCard?.classList.contains("showing-generated")));
+  }
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadAllRunsLink) els.downloadAllRunsLink.addEventListener("click", handleDownloadAllRunsClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);

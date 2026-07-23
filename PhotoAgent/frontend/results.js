@@ -314,10 +314,21 @@ window.PhotoAgentResults = (() => {
       .map(([key, value]) => `${value === true ? "通過" : value === false ? "注意" : "未定"}：${labels[key] || key}`);
   }
 
+  // Before/After now share one canvas, switched via #compare-toggle-btn --
+  // reset to showing the result each time a (re)render brings in a fresh
+  // image, so switching photos/runs doesn't leave a stale "original" view up.
+  function setCompareView(showGenerated) {
+    if (els.compareCard) els.compareCard.classList.toggle("showing-generated", showGenerated);
+    if (els.compareToggleLabel) {
+      els.compareToggleLabel.textContent = showGenerated ? "查看原始照片" : "查看輸出結果";
+    }
+  }
+
   function renderResult({ data, analysis, preset, imageModel }) {
     const qa = data.qualityCheck || null;
     const validation = analysis.crop_validation || null;
 
+    setCompareView(true);
     els.generatedImg.src = data.image;
     els.downloadLink.href = data.image;
     els.modelName.textContent = data.model || imageModel;
@@ -550,5 +561,5 @@ window.PhotoAgentResults = (() => {
     [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
   }
 
-  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger };
+  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView };
 })();

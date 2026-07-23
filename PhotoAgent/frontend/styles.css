@@ -589,63 +589,88 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   gap: 24px;
 }
 
-/* Compare grid */
-.compare-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0,1fr));
-  gap: 24px;
-}
-
-.photo-card {
-  background: var(--card);
-  border: 1px solid var(--border);
+/* Before/After canvas: one full-bleed frame, hover-lifted like a photograph
+   rather than a boxed app panel. The toggle button floats on top of the
+   image instead of sitting in a separate header bar. */
+.compare-card {
+  position: relative;
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
   border-radius: var(--radius-lg);
   overflow: hidden;
-  box-shadow: var(--shadow-md);
-  transition: box-shadow .25s, transform .25s;
+  box-shadow: var(--shadow-lg);
+  transition: box-shadow .3s, transform .3s;
 }
-.photo-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+.compare-card:hover { box-shadow: 0 32px 72px rgba(0,0,0,.5); transform: translateY(-2px); }
 
-.photo-card-hdr {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px;
-  background: var(--card-sheen);
-  border-bottom: 1px solid var(--border);
-  font-size: 16.25px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
-.photo-card-hdr strong {
-  color: var(--text);
-  font-size: 15px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 55%;
-}
-
+/* Hugs whatever the currently-shown image's own size is (shrink-wrapped by
+   .compare-card above) instead of stretching to the column's full width --
+   that stretch is what used to letterbox narrower/taller photos with visible
+   checkerboard on the sides. min-height is just a placeholder floor before
+   the image has loaded and reported its natural size. */
 .photo-frame {
-  min-height: 420px;
+  position: relative;
+  min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
   background:
+    radial-gradient(ellipse 900px 500px at 50% 0%, rgba(168,85,247,.08) 0%, transparent 60%),
     linear-gradient(45deg, rgba(255,255,255,.025) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(255,255,255,.025) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, rgba(255,255,255,.025) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.025) 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.025) 75%),
+    var(--card);
+  background-size: auto, 20px 20px, 20px 20px, 20px 20px, 20px 20px, auto;
+  background-position: 0 0, 0 0, 0 10px, 10px -10px, -10px 0, 0 0;
 }
 
 .photo-frame img {
-  width: 100%;
-  max-height: 600px;
-  object-fit: contain;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 680px;
 }
+
+/* Only one of the two images is ever shown at a time, switched by
+   #compare-toggle-btn. */
+.compare-img-generated { display: none; }
+.compare-card.showing-generated .compare-img-original { display: none; }
+.compare-card.showing-generated .compare-img-generated { display: block; }
+
+/* Floating glass pill, not a boxed header -- sits directly over the canvas. */
+.compare-toggle-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 999px;
+  background: rgba(9,9,11,.55);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.1px;
+  cursor: pointer;
+  transition: background .2s, border-color .2s, transform .2s, box-shadow .2s;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.compare-toggle-btn:hover {
+  background: rgba(168,85,247,.4);
+  border-color: rgba(168,85,247,.55);
+  transform: translateY(-1px);
+}
+.compare-toggle-btn:active { transform: scale(.96); }
+.compare-toggle-btn svg { flex-shrink: 0; }
 
 /* Verdict + Summary row */
 .verdict-summary-row {
@@ -1078,8 +1103,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
   .verdict-summary-row { grid-template-columns: 1fr; }
   .summary-band { grid-template-rows: auto; }
-
-  .compare-grid { grid-template-columns: 1fr; }
 
   .tech-grid { grid-template-columns: 1fr; }
 }
