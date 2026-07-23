@@ -161,6 +161,210 @@ def _protect_roi(crop: dict, context: dict) -> dict:
     return crop
 
 
+# ── Framing size (close / closer) geometry ─────────────────────────────────────
+
+# How much breathing room close/closer keep around the chosen subject,
+# expressed as a fraction of the subject box's own size added on each side.
+FRAMING_CLOSE_PADDING = 0.15    # moderate: subject plus some surrounding context
+FRAMING_CLOSER_PADDING = 0.08   # tight single-subject close-up (non-person)
+# For a person, expand the face-ish ROI into a face+shoulders crop.
+FRAMING_PERSON_WIDTH_SCALE = 1.6
+FRAMING_PERSON_DOWN_SCALE = 1.8   # extend downward toward shoulders/chest
+FRAMING_PERSON_HEADROOM = 0.12    # fraction of face height kept above the head
+# Minimum fraction of the ROI a subject must cover to count as "inside" the
+# focal region when picking which single subject a closer close-up features.
+ROI_OVERLAP_MIN = 0.15
+
+
+def _pad_box(box: dict, pad: float) -> dict:
+    """Grow a normalized box outward by pad * its own size on each side."""
+    x, y, w, h = box["x"], box["y"], box["w"], box["h"]
+    px, py = w * pad, h * pad
+    nx = max(0.0, x - px)
+    ny = max(0.0, y - py)
+    nr = min(1.0, x + w + px)
+    nb = min(1.0, y + h + py)
+    return {"x": nx, "y": ny, "w": nr - nx, "h": nb - ny}
+
+
+def _clamp_within(inner: dict, outer: dict) -> dict:
+    """Clamp inner so it stays inside outer."""
+    ox, oy = outer["x"], outer["y"]
+    orr, ob = outer["x"] + outer["w"], outer["y"] + outer["h"]
+    x = min(max(inner["x"], ox), orr)
+    y = min(max(inner["y"], oy), ob)
+    r = min(max(inner["x"] + inner["w"], ox), orr)
+    b = min(max(inner["y"] + inner["h"], oy), ob)
+    return {"x": x, "y": y, "w": max(0.02, r - x), "h": max(0.02, b - y)}
+
+
+def _box_center_inside(inner: dict, outer: dict) -> bool:
+    cx = inner["x"] + inner["w"] / 2
+    cy = inner["y"] + inner["h"] / 2
+    return (outer["x"] <= cx <= outer["x"] + outer["w"]
+            and outer["y"] <= cy <= outer["y"] + outer["h"])
+
+
+def _shrink_toward_center(box: dict, max_w: float, max_h: float) -> dict:
+    """Cap a box's size while keeping its center, clamped to [0, 1]."""
+    cx = box["x"] + box["w"] / 2
+    cy = box["y"] + box["h"] / 2
+    w = min(box["w"], max_w)
+    h = min(box["h"], max_h)
+    x = max(0.0, min(1 - w, cx - w / 2))
+    y = max(0.0, min(1 - h, cy - h / 2))
+    return {"x": x, "y": y, "w": w, "h": h}
+
+
+def _person_head_shoulders(roi: dict, primary: dict) -> dict:
+    """Expand a face-ish ROI into a face+shoulders box, kept inside primary."""
+    x, y, w, h = roi["x"], roi["y"], roi["w"], roi["h"]
+    cx = x + w / 2
+    new_w = w * FRAMING_PERSON_WIDTH_SCALE
+    new_x = cx - new_w / 2
+    new_y = max(0.0, y - h * FRAMING_PERSON_HEADROOM)
+    new_h = (y + h - new_y) + h * FRAMING_PERSON_DOWN_SCALE
+    return _clamp_within({"x": new_x, "y": new_y, "w": new_w, "h": new_h}, primary)
+
+
+def _intersection_area(a: dict, b: dict) -> float:
+    x1, y1 = max(a["x"], b["x"]), max(a["y"], b["y"])
+    x2 = min(a["x"] + a["w"], b["x"] + b["w"])
+    y2 = min(a["y"] + a["h"], b["y"] + b["h"])
+    if x2 <= x1 or y2 <= y1:
+        return 0.0
+    return (x2 - x1) * (y2 - y1)
+
+
+def _select_primary_subject(context: dict):
+    """Return (box, is_person, label) for the single subject a close-up should
+    feature, or None.
+
+    subjects[] is ordered by the analysis so higher `prominence` means greater
+    semantic importance as the subject -- NOT which element is merely brightest
+    or most saturated (see the analysis prompt). prominence is therefore the
+    primary arbiter of which subject to feature.
+
+    The ROI (roi_box) is the analysis's focal region. In a group it usually
+    spans several people, so it is used to *filter out* subjects that sit off
+    the focal area rather than to rank the ones inside it: among subjects that
+    meaningfully overlap the ROI we feature the most prominent one (ties broken
+    by ROI coverage). This stops an off-to-the-side or background person being
+    chosen while still letting prominence decide between the central candidates.
+    If no subject overlaps the ROI we fall back to the most prominent subject
+    overall, then to the ROI box itself."""
+    subjects = context.get("subjects") or []
+    roi = normalize_roi_box(context.get("roi_box"))
+
+    def _prom(s):
+        # Higher == more prominent; missing prominence ranks last.
+        return (s or {}).get("prominence", -1)
+
+    if subjects:
+        # Most prominent first (was previously sorted ascending, which selected
+        # the LEAST prominent subject in the fallback path).
+        ranked = sorted(subjects, key=_prom, reverse=True)
+        if roi:
+            roi_area = (roi["w"] * roi["h"]) or 1e-9
+
+            def _roi_cover(s):
+                b = normalize_roi_box((s or {}).get("box"))
+                return (_intersection_area(b, roi) / roi_area) if b else 0.0
+
+            in_roi = [s for s in ranked if _roi_cover(s) >= ROI_OVERLAP_MIN]
+            if in_roi:
+                best = max(in_roi, key=lambda s: (_prom(s), _roi_cover(s)))
+                box = normalize_roi_box(best.get("box"))
+                if box:
+                    return box, bool(best.get("is_person")), (best.get("label") or "")
+        top = ranked[0] or {}
+        box = normalize_roi_box(top.get("box"))
+        if box:
+            return box, bool(top.get("is_person")), (top.get("label") or "")
+
+    if roi:
+        return roi, None, ""
+    return None
+
+
+def apply_framing_size(context: dict, size: str) -> dict:
+    """Return a context whose crop geometry reflects the selected framing size.
+
+    wide/wider (and unset) are returned unchanged -- those remain text-only
+    style hints. close/closer rewrite crop_box; closer additionally collapses
+    the protected geometry (roi_box / subject_extent_box / protected_regions)
+    onto a single subject so resolve_crop_box_with_report's ROI protection does
+    not re-expand the frame back over the other subjects."""
+    if size not in ("close", "closer"):
+        return context
+
+    if size == "close":
+        base = normalize_roi_box(context.get("subject_extent_box")) or normalize_roi_box(context.get("roi_box"))
+        if not base:
+            return context
+        target = _pad_box(base, FRAMING_CLOSE_PADDING)
+        ctx = dict(context)
+        ctx["crop_box"] = {
+            "enabled": True,
+            "x": target["x"], "y": target["y"], "w": target["w"], "h": target["h"],
+            "aspect_ratio": "",
+            "reason": "framing size: close -- tighten toward the subject.",
+        }
+        return ctx
+
+    # closer -- isolate a single subject
+    selected = _select_primary_subject(context)
+    if not selected:
+        return context
+    primary, is_person, label = selected
+
+    if is_person:
+        roi = normalize_roi_box(context.get("roi_box"))
+        if roi and _box_center_inside(roi, primary):
+            subject_box = _person_head_shoulders(roi, primary)
+        else:
+            subject_box = _pad_box(primary, FRAMING_CLOSER_PADDING)
+    else:
+        subject_box = _pad_box(primary, FRAMING_CLOSER_PADDING)
+
+    # Guard: if the scene has several subjects but the chosen box still spans
+    # most of the frame, analysis probably returned the whole group rather than
+    # one subject. Shrink it toward its center to a plausible single-subject
+    # size so closer still isolates one subject instead of the group.
+    multi = len(context.get("subjects") or []) > 1 or len(context.get("protected_regions") or []) > 1
+    if multi and (subject_box["w"] * subject_box["h"] > 0.5 or subject_box["w"] > 0.72):
+        subject_box = _shrink_toward_center(subject_box, max_w=0.5, max_h=0.85)
+
+    ctx = dict(context)
+    ctx["crop_box"] = {
+        "enabled": True,
+        "x": subject_box["x"], "y": subject_box["y"], "w": subject_box["w"], "h": subject_box["h"],
+        "aspect_ratio": "",
+        "reason": "framing size: closer -- isolate a single subject.",
+    }
+    # Collapse protected geometry onto the chosen subject so _protect_roi does
+    # not pull the crop back out over the other subjects. Only roi_box is kept
+    # as the single protection anchor -- setting subject_extent_box too would
+    # stack a second safety margin and inflate the closer crop.
+    ctx["roi_box"] = {**subject_box, "reason": "closer single-subject focus"}
+    ctx["subject_extent_box"] = None
+    ctx["protected_regions"] = []
+    # Overwrite the scene description's group-level subject fields so the edit
+    # model does not reassert "the four women" as the subject to keep. The image
+    # itself still carries identity/lighting context; these strings only steer
+    # what to feature.
+    focus_label = label or "單一最突出的主體"
+    ctx["main_subject"] = f"{focus_label}(單一主體特寫,其餘人物/元素刻意裁切出畫面)"
+    ctx["photo_summary"] = (
+        f"單一主體特寫,以{focus_label}為主角並填滿畫面。原始場景可能包含多個人物或元素,"
+        f"但此特寫刻意只聚焦於此主體。"
+    )
+    # Marker consumed by build_edit_prompt / QA so the scene description's other
+    # people/elements don't get reasserted as content to preserve.
+    ctx["_framing_focus"] = {"size": "closer", "label": label}
+    return ctx
+
+
 # ── Crop box normalization ─────────────────────────────────────────────────────
 
 def normalize_crop_box(crop_box: dict, context: dict):
