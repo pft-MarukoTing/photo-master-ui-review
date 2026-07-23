@@ -26,12 +26,15 @@
       justify-content: center;
       min-height: 360px;
       background: var(--card);
-      border-radius: 18px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
       overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow .25s, transform .25s;
     }
-    #change-photo-btn {
-      margin-top: 12px;
-      align-self: center;
+    #dz-preview:hover {
+      box-shadow: var(--shadow-accent);
+      transform: translateY(-2px);
     }
 
     .proc-container {
@@ -81,9 +84,9 @@
     /* ── Step rich detail ── */
     .step-list-frame {
       margin-top: 14px;
-      background: rgba(168,85,247,.07);
-      border: 1px solid rgba(168,85,247,.22);
-      border-radius: 12px;
+      background: rgba(168,85,247,.06);
+      border: 1px solid rgba(168,85,247,.18);
+      border-radius: var(--radius);
       padding: 16px 18px;
     }
     .step-inline-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
@@ -160,21 +163,34 @@
     /* ── Analysis preview (shown mid-processing, before "continue") ── */
     .analysis-preview {
       margin-top: 32px;
-      padding: 20px 22px;
-      background: var(--card);
+      padding: 26px 28px;
+      background:
+        var(--card-sheen),
+        var(--card);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
       animation: fadeUp .5s ease both;
     }
     /* Panel title: must outrank .ap-label (17.5px) below it, so it's clearly
        the top of the hierarchy rather than reading as a same-tier kicker. */
     .analysis-preview > .eyebrow-label {
-      font-size: 19px;
+      font-size: 20px;
       font-weight: 800;
+      color: var(--text);
       margin-bottom: 0;
+    }
+    .analysis-preview > .eyebrow-label::before {
+      content: '';
+      display: inline-block;
+      width: 7px; height: 7px;
+      margin-right: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px rgba(168,85,247,.16);
     }
     .ap-row p { margin: 6px 0 0; }
 
@@ -270,7 +286,7 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 8px 14px;
+      padding: 9px 16px;
       background: var(--card-2);
       border: 1px solid var(--border-2);
       border-radius: 20px;
@@ -279,10 +295,10 @@
       list-style: none;
       font-size: 15px;
       white-space: nowrap;
-      transition: border-color .15s, background .15s;
+      transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
     }
     .ap-style-trigger::-webkit-details-marker { display: none; }
-    .ap-style-trigger:hover { border-color: rgba(168,85,247,.4); }
+    .ap-style-trigger:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
     .ap-style-trigger::after {
       content: '▾';
       font-size: 10px;
@@ -291,7 +307,8 @@
     }
     .ap-style-item[open] > .ap-style-trigger {
       border-color: var(--accent);
-      background: rgba(168,85,247,.12);
+      background: rgba(168,85,247,.14);
+      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
     }
     .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
     .ap-style-name {
@@ -379,46 +396,87 @@
 
     /* ── Multi-file upload thumbnail strip ── */
     .dz-multi {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
       align-content: flex-start;
+      gap: 12px;
+      padding: 20px;
       overflow: auto;
       min-height: 360px;
       max-height: 420px;
       background: var(--card);
-      border-radius: 18px;
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-sm);
+      cursor: pointer;
+      transition: box-shadow .25s, transform .25s;
+    }
+    .dz-multi:hover {
+      box-shadow: var(--shadow-accent);
+      transform: translateY(-2px);
     }
     .dz-multi .dz-thumb {
       position: relative;
-      width: 72px; height: 72px;
-      border-radius: 10px;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: var(--radius-sm);
       overflow: hidden;
       background: var(--card-2);
-      flex-shrink: 0;
+      box-shadow: var(--shadow-sm);
     }
-    .dz-multi .dz-thumb img { width: 100%; height: 100%; object-fit: cover; }
-    .dz-multi .dz-count { width: 100%; margin-top: 4px; font-size: 13px; color: var(--text-2); }
+    .dz-multi .dz-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .dz-multi .dz-count {
+      grid-column: 1 / -1;
+      margin-top: 4px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    /* Filename caption: fades in over the bottom of the thumb so the image
+       itself stays the focus, rather than a permanent label under it. */
+    .dz-thumb-name {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      padding: 16px 8px 6px;
+      background: linear-gradient(to top, rgba(0,0,0,.72) 0%, transparent 100%);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
     .dz-thumb-remove {
       position: absolute;
-      top: 3px;
-      right: 3px;
-      width: 18px;
-      height: 18px;
+      top: 5px;
+      right: 5px;
+      width: 22px;
+      height: 22px;
       border: none;
       border-radius: 50%;
-      background: rgba(0,0,0,.6);
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       color: #fff;
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
       padding: 0;
+      transition: background .15s, transform .15s;
     }
-    .dz-thumb-remove:hover { background: rgba(0,0,0,.8); }
+    .dz-thumb-remove:hover { background: rgba(220,60,60,.85); transform: scale(1.08); }
+    /* Keep the remove button unobtrusive until the thumb is actually being
+       looked at -- but only on pointers that can hover; touch devices have
+       no hover state to reveal it, so it must stay visible there. */
+    @media (hover: hover) {
+      .dz-thumb-remove { opacity: 0; transition: opacity .15s, background .15s, transform .15s; }
+      .dz-thumb:hover .dz-thumb-remove,
+      .dz-thumb-remove:focus-visible { opacity: 1; }
+    }
 
     /* ── Batch results grid ── */
     .results-grid {
@@ -430,11 +488,12 @@
     .result-card {
       background: var(--card);
       border: 1px solid var(--border-2);
-      border-radius: 14px;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
       overflow: hidden;
     }
-    .result-card.clickable { cursor: pointer; transition: transform .15s, box-shadow .15s; }
-    .result-card.clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.18); }
+    .result-card.clickable { cursor: pointer; transition: transform .2s, box-shadow .2s; }
+    .result-card.clickable:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
     .rc-media { position: relative; aspect-ratio: 1 / 1; background: var(--card-2); }
     .rc-media img { width: 100%; height: 100%; object-fit: cover; }
     .result-card.processing .rc-media img,
@@ -463,7 +522,7 @@
     .error-modal-box {
       position: relative; width: min(440px, calc(100vw - 40px));
       background: var(--card); border: 1px solid var(--border-2);
-      border-radius: 14px; padding: 20px 22px; box-shadow: 0 16px 48px rgba(0,0,0,.4);
+      border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
     }
     .error-modal-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
     #error-modal-title { font-size: 17px; font-weight: 700; color: var(--red); }
@@ -491,13 +550,15 @@
       padding: 6px 8px;
       background: var(--card);
       border: 1.5px solid var(--border-2);
-      border-radius: 10px;
+      border-radius: var(--radius-sm);
       color: var(--text-2);
       font-size: 12.5px; font-weight: 600;
       cursor: pointer;
+      transition: border-color .15s, box-shadow .15s, transform .15s;
     }
+    .run-tab:hover { transform: translateY(-1px); }
     .run-tab img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
-    .run-tab.active { border-color: var(--accent); color: var(--text); }
+    .run-tab.active { border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 3px rgba(168,85,247,.14); }
     .run-tab:disabled { cursor: default; opacity: .6; }
     .run-tab.error { border-color: rgba(220,60,60,.6); }
     .run-tab-spin {
@@ -611,16 +672,16 @@
             </div>
           </label>
 
-          <!-- Preview (shown after a single file is selected, replaces drop zone) -->
+          <!-- Preview (shown after a single file is selected, replaces drop zone).
+               Clicking it re-opens the file picker so the photo can be swapped. -->
           <div id="dz-preview" class="dz-preview" hidden>
             <img id="dz-preview-img" alt="preview">
           </div>
 
-          <!-- Multi-file thumbnail strip (shown when more than one file selected) -->
+          <!-- Multi-file thumbnail strip (shown when more than one file selected).
+               Clicking it re-opens the file picker; per-thumb remove buttons
+               stop that click from bubbling up. -->
           <div id="dz-multi" class="dz-multi" hidden></div>
-
-          <!-- Re-opens the file picker so a selected photo (or batch) can be swapped -->
-          <button id="change-photo-btn" class="btn btn-outline btn-sm" type="button" hidden>更換照片</button>
         </div>
 
         <!-- Right: Form -->

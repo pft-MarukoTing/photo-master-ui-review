@@ -272,7 +272,6 @@
     els.originalImg.src = previewUrl;
     els.dropZone.hidden = true;
     els.dzPreview.hidden = false;
-    if (els.changePhotoBtn) els.changePhotoBtn.hidden = false;
 
     const image = new Image();
     image.onload = () => {
@@ -459,7 +458,6 @@
     els.dropZone.hidden = true;
     els.dzPreview.hidden = true;
     els.dzMulti.hidden = false;
-    if (els.changePhotoBtn) els.changePhotoBtn.hidden = false;
     renderDzMultiThumbs();
   }
 
@@ -473,7 +471,13 @@
       thumb.className = "dz-thumb";
       const im = document.createElement("img");
       im.src = r.previewUrl;
+      im.alt = r.file.name;
       thumb.appendChild(im);
+
+      const name = document.createElement("span");
+      name.className = "dz-thumb-name";
+      name.textContent = r.file.name;
+      thumb.appendChild(name);
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -482,6 +486,7 @@
       removeBtn.textContent = "×";
       removeBtn.addEventListener("click", (event) => {
         event.preventDefault();
+        event.stopPropagation();
         removeBatchFile(r);
       });
       thumb.appendChild(removeBtn);
@@ -1713,7 +1718,6 @@
     updateDownloadLinks();
     els.dropZone.hidden = false;
     els.dzPreview.hidden = true;
-    if (els.changePhotoBtn) els.changePhotoBtn.hidden = true;
     els.origDim.textContent = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
@@ -1736,9 +1740,9 @@
   function routeSelectedFiles(fileList) {
     const files = Array.from(fileList || []);
     // Some browsers fire "change" with an empty FileList when the user
-    // cancels a re-opened file picker (e.g. via #change-photo-btn) -- treat
-    // that as a no-op so whatever was already selected (single photo, batch,
-    // or the empty drop zone) stays exactly as it was.
+    // cancels a re-opened file picker (e.g. by clicking the photo zone again)
+    // -- treat that as a no-op so whatever was already selected (single
+    // photo, batch, or the empty drop zone) stays exactly as it was.
     if (!files.length) return;
     if (files.length > 1) {
       setSelectedFileBatch(files);
@@ -1749,7 +1753,13 @@
   }
 
   els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
-  if (els.changePhotoBtn) els.changePhotoBtn.addEventListener("click", () => els.fileInput.click());
+  // Once a photo (or batch) is selected it replaces the drop-zone label, so
+  // clicking the preview/thumbnail-strip re-opens the file picker instead.
+  els.dzPreview.addEventListener("click", () => els.fileInput.click());
+  els.dzMulti.addEventListener("click", (e) => {
+    if (e.target.closest(".dz-thumb-remove")) return;
+    els.fileInput.click();
+  });
   els.startButton.addEventListener("click", startSubmit);
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.backToProcessBtn.addEventListener("click", backToProcessFromResults);

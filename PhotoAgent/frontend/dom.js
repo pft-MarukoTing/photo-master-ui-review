@@ -10,7 +10,6 @@ window.PhotoAgentDom = (() => {
     dzPreview: document.querySelector("#dz-preview"),
     dzPreviewImg: document.querySelector("#dz-preview-img"),
     dzMulti: document.querySelector("#dz-multi"),
-    changePhotoBtn: document.querySelector("#change-photo-btn"),
     procThumb: document.querySelector("#proc-thumb"),
     startButton: document.querySelector("#start-btn"),
     startDirectBtn: document.querySelector("#start-direct-btn"),
