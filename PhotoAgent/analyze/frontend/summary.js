@@ -21,6 +21,11 @@
       (result) => result?.status === "scored" && finiteNumber(result.final_score) !== null,
     );
     const finalScores = scored.map((result) => finiteNumber(result.final_score));
+    // The original photo's overall averages, so the Summary can show
+    // original-average vs edited-average side by side (like the detail view).
+    const originalScores = scored
+      .map((result) => finiteNumber(result.original?.final_score))
+      .filter((value) => value !== null);
 
     const dimensions = {};
     keys.forEach((key) => {
@@ -29,8 +34,13 @@
         .filter((dimension) => dimension?.status === "scored" && finiteNumber(dimension.score) !== null);
       const scores = samples.map((dimension) => finiteNumber(dimension.score));
       const weighted = samples.find((dimension) => finiteNumber(dimension.weight) !== null);
+      const originalDimScores = scored
+        .map((result) => result.original?.dimensions?.[key])
+        .filter((dimension) => dimension?.status === "scored" && finiteNumber(dimension.score) !== null)
+        .map((dimension) => finiteNumber(dimension.score));
       dimensions[key] = {
         average: mean(scores),
+        originalAverage: mean(originalDimScores),
         count: scores.length,
         weight: weighted ? finiteNumber(weighted.weight) : null,
       };
@@ -42,12 +52,9 @@
       failed: rows.filter((result) => result?.status === "error").length,
       invalid: rows.filter((result) => result?.status === "invalid").length,
       average: mean(finalScores),
+      originalAverage: mean(originalScores),
       highest: finalScores.length ? Math.max(...finalScores) : null,
       lowest: finalScores.length ? Math.min(...finalScores) : null,
-      criticalDefects: scored.reduce(
-        (count, result) => count + (Array.isArray(result.critical_defects) ? result.critical_defects.length : 0),
-        0,
-      ),
       dimensions,
     };
   }
