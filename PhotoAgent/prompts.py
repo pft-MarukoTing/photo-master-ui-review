@@ -70,6 +70,15 @@ Return exactly this JSON shape:
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original / 1:1 / 4:5 / 3:4 / 5:4 / 4:3 / 3:2 / 16:9",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
+  "subjects": [
+    {
+      "label": "主體描述,例如 左二女性 / 中間男性 / 蛋糕。",
+      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
+      "prominence": 1,
+      "is_person": true,
+      "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。"
+    }
+  ],
   "roi_box": {
     "x": 0.25,
     "y": 0.20,
@@ -166,6 +175,8 @@ Analysis responsibilities:
 Coordinate rules:
 - crop_box, roi_box, subject_extent_box, and protected_regions use normalized original-image coordinates. x/y are top-left, w/h are width/height.
 - roi_box is the focal area. subject_extent_box is the semantic subject area required by the intended framing; it is not automatically every visible body part, foreground object, furniture piece, or background element.
+- subjects lists the candidate main subjects (people, animals, products, food, objects) ordered so index 0 is the photo's true main subject -- what the photo is actually about, consistent with main_subject, roi_box, and the composition intent. prominence means semantic importance as the subject, NOT which element is merely brightest, most colorful, or most saturated. Incidental background or decor -- flowers, plants, props, tableware, posters, scenery -- must rank lower than the real subject even when it is visually eye-catching; e.g. in a food photo the dish is the subject, not a bright vase of flowers behind it. Always output at least one entry, even for a single-subject photo.
+- Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
 - protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
 - If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
 - The output does not need to preserve the original aspect ratio. Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
