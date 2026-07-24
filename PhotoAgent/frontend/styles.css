@@ -606,6 +606,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .results-canvas-col {
   flex: 1 1 0%;
   min-width: 0;
+  align-self: center;
 }
 /* 1:2 flex-grow ratio (both basis pinned at 0%) instead of a fixed px
    width -- the panel always fills exactly 2/3 of the row and the canvas
@@ -671,11 +672,11 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 /* Hugs whatever the currently-shown image's own size is (shrink-wrapped by
    .compare-card above) instead of stretching to the column's full width --
    that stretch is what used to letterbox narrower/taller photos with visible
-   checkerboard on the sides. min-height is just a placeholder floor before
-   the image has loaded and reported its natural size. */
+   checkerboard on the sides. No min-height either -- that used to impose the
+   same kind of letterboxing (a floor of empty checkerboard) whenever the
+   original/generated image being switched to was shorter than the floor. */
 .photo-frame {
   position: relative;
-  min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;

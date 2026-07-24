@@ -605,10 +605,18 @@
        active thumbnail, and the RUN label overlays the photo itself as a
        bottom caption instead of sitting in its own row below it. ── */
     .run-tabs-row {
-      /* max-width is set inline by syncRunTabsWidth() in app.js -- CSS has
-         no way to size against a sibling's (the canvas's) rendered width. */
+      /* max-width is set inline by app.js (ResizeObserver) -- CSS has no
+         way to size against a sibling's rendered width. */
       width: 100%;
       margin: 0 auto;
+    }
+    /* Moved here (see openInlineAnalysisPanel in app.js) while the inline
+       analysis panel is open -- the results-container flex column's own
+       gap provides this spacing in the row's normal (unnested) position,
+       but #results-canvas-col is a plain block container with no gap of
+       its own between the photo and this. */
+    #results-canvas-col > .run-tabs-row {
+      margin-top: 20px;
     }
     /* Floats over the strip's own top-right corner instead of sitting in a
        separate row that pushes it down -- same "icon overlaid on its own
@@ -685,6 +693,14 @@
       scrollbar-width: none;
     }
     .run-tabs::-webkit-scrollbar { display: none; }
+    .run-tabs-index {
+      margin-top: -4px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+    }
     .run-tab {
       position: relative;
       flex-shrink: 0;
@@ -1341,7 +1357,7 @@
            moves #analysis-preview into it and adds .showing-analysis here,
            which is what actually drives the slide-in animation (styles.css). -->
       <div class="results-canvas-row" id="results-canvas-row">
-        <div class="results-canvas-col">
+        <div class="results-canvas-col" id="results-canvas-col">
           <!-- Before / After: one full-bleed canvas, toggled between the two
                images with floating icon buttons instead of a boxed header. -->
           <div class="compare-card" id="compare-card">
@@ -1397,12 +1413,20 @@
         <div class="results-analysis-slot" id="results-analysis-slot"></div>
       </div>
 
+      <!-- Stable anchor: #run-tabs-row is moved back here whenever the
+           inline analysis panel is closed -- see moveRunTabsRowTo/
+           restoreRunTabsRowHome in app.js. -->
+      <div id="run-tabs-row-home"></div>
+
       <!-- Run preview strip: switch between this image's N edit results.
-           Width-capped at 1/3 of #results-canvas-row's own rendered width
-           (JS, see the ResizeObserver in app.js -- no pure-CSS way to size
-           against a sibling), and centered; once the thumbnails overflow
-           that cap, .run-tabs' own overflow-x:auto (plus the arrows) makes
-           it scrollable. -->
+           Normally a full-width row below the canvas+panel row (width-capped
+           at 1/3 of #results-canvas-row's own rendered width -- no pure-CSS
+           way to size against a sibling); while the inline analysis panel is
+           open, moved to sit directly under the canvas instead, so the photo
+           and its RUNs read as one aligned vertical column next to the
+           panel rather than a stray full-width row beneath both. Once the
+           thumbnails overflow whatever width applies, .run-tabs' own
+           overflow-x:auto (plus the arrows) makes it scrollable. -->
       <div class="run-tabs-row" id="run-tabs-row">
         <div class="run-tabs-scroll-wrap" id="run-tabs-scroll-wrap">
           <!-- Floats over the strip's own top-right corner (like the
@@ -1429,6 +1453,7 @@
             </svg>
           </button>
         </div>
+        <div id="run-tabs-index" class="run-tabs-index" hidden></div>
       </div>
 
       <!-- Everything below the before/after images: hidden entirely unless

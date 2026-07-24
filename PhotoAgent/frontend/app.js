@@ -24,11 +24,16 @@
   // with the image's natural size, the analysis panel opening/closing,
   // window resizes, etc.) and mirrors 1/3 of it onto #run-tabs-row. Beyond
   // that width, .run-tabs' own overflow-x:auto (plus the scroll arrows)
-  // makes it scrollable.
+  // makes it scrollable. That 1/3 cap only applies in #run-tabs-row's normal
+  // (unnested) position -- while the analysis panel is open it's moved
+  // under the photo instead (openInlineAnalysisPanel), where CSS's plain
+  // width:100% against its new parent already fits it to the photo's own
+  // column, so the inline cap is cleared rather than fighting that.
   if (els.resultsCanvasRow && els.runTabsRow && typeof ResizeObserver !== "undefined") {
     const runTabsWidthObserver = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect?.width;
-      if (width) els.runTabsRow.style.maxWidth = `${Math.round(width / 3)}px`;
+      const nested = els.resultsCanvasCol && els.runTabsRow.parentElement === els.resultsCanvasCol;
+      els.runTabsRow.style.maxWidth = (width && !nested) ? `${Math.round(width / 3)}px` : "";
       updateRunTabsArrows();
     });
     runTabsWidthObserver.observe(els.resultsCanvasRow);
@@ -44,20 +49,41 @@
     els.runTabsPrev.hidden = !canScroll;
     els.runTabsNext.hidden = !canScroll;
     if (!canScroll) return;
-    els.runTabsPrev.disabled = els.runTabs.scrollLeft <= 0;
-    els.runTabsNext.disabled = els.runTabs.scrollLeft + els.runTabs.clientWidth >= els.runTabs.scrollWidth - 1;
+    // Disabled state tracks whether there's a selectable ("done") RUN on
+    // that side of the current one, not raw scroll position -- since the
+    // arrows now switch RUNs (selectAdjacentRunTab), not just scroll the
+    // strip, and the current RUN can already be fully in view (nothing left
+    // to physically scroll) while still having an earlier/later RUN to
+    // switch to.
+    const tabs = Array.from(els.runTabs.children);
+    const idx = currentRunTabsIndex;
+    const hasPrevRun = idx != null && tabs.slice(0, idx).some((t) => !t.disabled);
+    const hasNextRun = idx != null && tabs.slice(idx + 1).some((t) => !t.disabled);
+    els.runTabsPrev.disabled = !hasPrevRun;
+    els.runTabsNext.disabled = !hasNextRun;
+  }
+
+  // Steps to the next/previous *selectable* (status "done") RUN, skipping
+  // over any still-processing/errored tabs, and brings it into view -- so
+  // the arrows switch the displayed image itself, not just the strip's
+  // scroll position (which used to be all they did).
+  function selectAdjacentRunTab(delta) {
+    if (!els.runTabs || currentRunTabsOnSelect == null || currentRunTabsIndex == null) return;
+    const tabs = Array.from(els.runTabs.children);
+    let idx = currentRunTabsIndex + delta;
+    while (idx >= 0 && idx < tabs.length && tabs[idx].disabled) idx += delta;
+    if (idx < 0 || idx >= tabs.length) return;
+    currentRunTabsOnSelect(idx);
+    const newTab = els.runTabs.children[idx];
+    if (newTab) newTab.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
   }
 
   if (els.runTabs) els.runTabs.addEventListener("scroll", updateRunTabsArrows);
   if (els.runTabsPrev) {
-    els.runTabsPrev.addEventListener("click", () => {
-      els.runTabs.scrollBy({ left: -Math.round(els.runTabs.clientWidth * 0.8), behavior: "smooth" });
-    });
+    els.runTabsPrev.addEventListener("click", () => selectAdjacentRunTab(-1));
   }
   if (els.runTabsNext) {
-    els.runTabsNext.addEventListener("click", () => {
-      els.runTabs.scrollBy({ left: Math.round(els.runTabs.clientWidth * 0.8), behavior: "smooth" });
-    });
+    els.runTabsNext.addEventListener("click", () => selectAdjacentRunTab(1));
   }
 
   let selectedFile = null;
@@ -82,6 +108,20 @@
   // single-image counterpart of a batch record's mirrorIndex).
   let singleRuns = null;
   let singleMirrorIndex = null;
+
+  // Which `runs` array buildRunTabs last drew from -- lets it tell "still
+  // browsing the same photo's runs" (keep the strip's scroll position) apart
+  // from "switched to a different photo" (scroll back to the start), since
+  // both cases fully rebuild the tab buttons from scratch.
+  let lastRunTabsRuns = null;
+
+  // The currently-active tab index and its select callback, refreshed by
+  // every buildRunTabs call -- lets the prev/next arrows (defined once, up
+  // top, before any runs exist) step to the adjacent RUN via whichever
+  // handler is current (batch vs single-image) instead of just scrolling
+  // the strip without changing what's shown.
+  let currentRunTabsIndex = null;
+  let currentRunTabsOnSelect = null;
 
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
@@ -349,8 +389,28 @@
     }
   }
 
+  // #run-tabs-row moves under the photo (inside #results-canvas-col) while
+  // the panel is open, so the image and its RUN previews read as one
+  // aligned column next to the panel, instead of staying a full-width row
+  // that now spans underneath both the (narrowed) photo and the panel.
+  function moveRunTabsRowTo(container) {
+    if (!els.runTabsRow || !container) return;
+    if (els.runTabsRow.parentElement !== container) {
+      container.appendChild(els.runTabsRow);
+      updateRunTabsArrows();
+    }
+  }
+
+  function restoreRunTabsRowHome() {
+    if (els.runTabsRowHome && els.runTabsRow.previousElementSibling !== els.runTabsRowHome) {
+      els.runTabsRowHome.after(els.runTabsRow);
+      updateRunTabsArrows();
+    }
+  }
+
   function openInlineAnalysisPanel() {
     moveAnalysisPreviewTo(els.resultsAnalysisSlot);
+    moveRunTabsRowTo(els.resultsCanvasCol);
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
     els.analysisPreview.hidden = false;
     setAnalysisPreviewDisabled(false);
@@ -361,6 +421,7 @@
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     els.analysisPreview.hidden = true;
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
+    restoreRunTabsRowHome();
   }
 
   let inlineAnalysisContinueHandler = null;
@@ -696,6 +757,9 @@
     if (els.resultsDetail) els.resultsDetail.hidden = false;
     if (els.detailNav) els.detailNav.hidden = true;
     if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
+    if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+    currentRunTabsIndex = null;
+    currentRunTabsOnSelect = null;
     if (els.backToGridBtn) els.backToGridBtn.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
@@ -888,6 +952,9 @@
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
       if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
+      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+      currentRunTabsIndex = null;
+      currentRunTabsOnSelect = null;
     } else {
       // N independent RUNs from the same analysis, same pattern as batch's
       // continueBatchRecords/editBatchItem -- each RUN is its own job, run
@@ -1571,6 +1638,8 @@
   // the caller (batch re-renders via syncRecordMirror+showBatchDetail, single
   // via showSingleResult).
   function buildRunTabs(runs, currentIdx, onSelectDone) {
+    const samePhoto = runs === lastRunTabsRuns;
+    const prevScrollLeft = els.runTabs.scrollLeft;
     els.runTabs.hidden = false;
     els.runTabs.innerHTML = "";
     runs.forEach((run, idx) => {
@@ -1600,7 +1669,14 @@
       }
       els.runTabs.appendChild(tab);
     });
-    els.runTabs.scrollLeft = 0;
+    els.runTabs.scrollLeft = samePhoto ? prevScrollLeft : 0;
+    lastRunTabsRuns = runs;
+    currentRunTabsIndex = currentIdx;
+    currentRunTabsOnSelect = onSelectDone;
+    if (els.runTabsIndex) {
+      els.runTabsIndex.hidden = false;
+      els.runTabsIndex.textContent = `${currentIdx + 1} / ${runs.length}`;
+    }
     updateRunTabsArrows();
   }
 
@@ -1612,6 +1688,9 @@
     if (runs.length <= 1) {
       els.runTabs.hidden = true;
       els.runTabs.innerHTML = "";
+      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+      currentRunTabsIndex = null;
+      currentRunTabsOnSelect = null;
       return;
     }
 
@@ -1632,6 +1711,9 @@
     if (runs.length <= 1) {
       els.runTabs.hidden = true;
       els.runTabs.innerHTML = "";
+      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+      currentRunTabsIndex = null;
+      currentRunTabsOnSelect = null;
       return;
     }
 
@@ -1711,6 +1793,9 @@
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
     if (els.runTabs) els.runTabs.hidden = true;
+    if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+    currentRunTabsIndex = null;
+    currentRunTabsOnSelect = null;
     els.backToGridBtn.hidden = true;
     if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
     els.downloadLink.hidden = true;
@@ -1959,6 +2044,16 @@
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     clearContinueWait();
+    // If the last thing the user did was an inline analysis review (single or
+    // batch), #analysis-preview and #run-tabs-row are currently on loan inside
+    // the results section (#results-analysis-slot / #results-canvas-col) --
+    // move them back to the processing section before the next photo's
+    // analyze tries to show #analysis-preview there, or it renders invisibly
+    // inside the now-hidden results section instead.
+    restoreAnalysisPreviewHome();
+    restoreRunTabsRowHome();
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of
