@@ -694,7 +694,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   width: auto;
   height: auto;
   max-width: 100%;
-  max-height: 680px;
+  /* Capped low enough that the run-tabs strip below the canvas usually
+     lands within the viewport instead of requiring a scroll to reach it. */
+  max-height: 480px;
 }
 
 /* Only one of the two images is ever shown at a time, switched by

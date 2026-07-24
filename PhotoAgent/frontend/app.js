@@ -17,6 +17,49 @@
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
+  // Keeps the run-tabs preview strip capped at 1/3 of #results-canvas-row's
+  // own rendered width (the canvas + analysis-panel row, not just the
+  // canvas) -- CSS alone can't size one element against an unrelated
+  // sibling's width, so this tracks that row's actual box (which changes
+  // with the image's natural size, the analysis panel opening/closing,
+  // window resizes, etc.) and mirrors 1/3 of it onto #run-tabs-row. Beyond
+  // that width, .run-tabs' own overflow-x:auto (plus the scroll arrows)
+  // makes it scrollable.
+  if (els.resultsCanvasRow && els.runTabsRow && typeof ResizeObserver !== "undefined") {
+    const runTabsWidthObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect?.width;
+      if (width) els.runTabsRow.style.maxWidth = `${Math.round(width / 3)}px`;
+      updateRunTabsArrows();
+    });
+    runTabsWidthObserver.observe(els.resultsCanvasRow);
+  }
+
+  // Shows/hides the run-tabs scroll arrows (hidden entirely when the strip
+  // doesn't overflow its 2/3-width cap) and disables whichever end is
+  // already fully scrolled to. Called after (re)building the tabs, on
+  // scroll, and whenever the cap above changes what fits.
+  function updateRunTabsArrows() {
+    if (!els.runTabs || !els.runTabsPrev || !els.runTabsNext) return;
+    const canScroll = els.runTabs.scrollWidth > els.runTabs.clientWidth + 1;
+    els.runTabsPrev.hidden = !canScroll;
+    els.runTabsNext.hidden = !canScroll;
+    if (!canScroll) return;
+    els.runTabsPrev.disabled = els.runTabs.scrollLeft <= 0;
+    els.runTabsNext.disabled = els.runTabs.scrollLeft + els.runTabs.clientWidth >= els.runTabs.scrollWidth - 1;
+  }
+
+  if (els.runTabs) els.runTabs.addEventListener("scroll", updateRunTabsArrows);
+  if (els.runTabsPrev) {
+    els.runTabsPrev.addEventListener("click", () => {
+      els.runTabs.scrollBy({ left: -Math.round(els.runTabs.clientWidth * 0.8), behavior: "smooth" });
+    });
+  }
+  if (els.runTabsNext) {
+    els.runTabsNext.addEventListener("click", () => {
+      els.runTabs.scrollBy({ left: Math.round(els.runTabs.clientWidth * 0.8), behavior: "smooth" });
+    });
+  }
+
   let selectedFile = null;
   let previewUrl = "";
   let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
@@ -495,7 +538,13 @@
     if (!els.downloadAllRunsLink) return;
     const doneCount = (runs || []).filter((run) => run.status === "done").length;
     els.downloadAllRunsLink.hidden = doneCount <= 1;
-    if (doneCount > 1) els.downloadAllRunsLink.textContent = `全部下載（${doneCount} 個 RUN）`;
+    // Icon-only button -- the RUN count lives in the hover hint (title/
+    // aria-label) instead of a permanently visible label.
+    if (doneCount > 1) {
+      const hint = `全部下載（${doneCount} 個 RUN）`;
+      els.downloadAllRunsLink.title = hint;
+      els.downloadAllRunsLink.setAttribute("aria-label", hint);
+    }
   }
 
   async function downloadZip(buildZip, filename) {
@@ -1528,20 +1577,20 @@
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = `run-tab ${run.status}${idx === currentIdx ? " active" : ""}`;
+      tab.setAttribute("aria-label", `RUN ${run.run}`);
 
+      const media = document.createElement("span");
+      media.className = "run-tab-media";
       if (run.status === "done") {
         const im = document.createElement("img");
         im.src = run.imageUrl;
-        tab.appendChild(im);
+        media.appendChild(im);
       } else if (run.status === "processing") {
         const spin = document.createElement("span");
         spin.className = "run-tab-spin";
-        tab.appendChild(spin);
+        media.appendChild(spin);
       }
-
-      const label = document.createElement("span");
-      label.textContent = run.status === "error" ? `RUN ${run.run} ✕` : `RUN ${run.run}`;
-      tab.appendChild(label);
+      tab.appendChild(media);
 
       if (run.status === "done") {
         tab.addEventListener("click", () => onSelectDone(idx));
@@ -1551,6 +1600,8 @@
       }
       els.runTabs.appendChild(tab);
     });
+    els.runTabs.scrollLeft = 0;
+    updateRunTabsArrows();
   }
 
   // Clicking a finished tab re-points the record's mirror fields at that run
