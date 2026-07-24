@@ -9,33 +9,15 @@ window.Analyze = (() => {
   const POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
   const DIMENSION_LABELS = {
-    subject_identity_preservation: "主體／身分保留",
-    scene_content_preservation: "場景／內容保留",
-    crop_boundary_safety: "裁切／邊界安全",
-    composition_balance_improvement: "構圖／視覺平衡改善",
-    geometry_perspective_integrity: "幾何／透視完整性",
-    lighting_exposure_improvement: "光線／曝光改善",
-    color_tone_improvement: "色彩／白平衡／色調改善",
-    detail_texture_preservation: "細節／材質保留",
-    retouch_naturalness: "修圖自然度",
-    output_artifact_integrity: "修圖技術瑕疵／輸出完整性",
-  };
-
-  const DEFECT_LABELS = {
-    subject_identity_damage: "主體／身分破壞",
-    scene_rebuild_or_replacement: "場景重建／替換",
-    unintended_content_change: "內容遭不當增刪",
-    required_content_loss: "必要內容遺失",
-    crop_boundary_damage: "裁切／邊界破壞",
-    anatomy_shape_material_damage: "解剖／形狀／材質破壞",
-    geometry_perspective_damage: "幾何／透視破壞",
-    artificial_border_or_padding: "人工邊框／Padding",
-    lighting_shadow_regression: "光線／陰影退步",
-    color_tone_regression: "色彩／色調退步",
-    detail_texture_damage: "細節／材質損失",
-    overprocessing_synthetic_look: "過度處理／合成感",
-    new_generation_artifact: "新增生成瑕疵",
-    other: "其他",
+    composition_visual_hierarchy: "構圖與視覺層次",
+    lighting_exposure: "光線與曝光",
+    subject_rendering_appeal: "主體呈現與吸引力",
+    color_tone: "色彩與色調",
+    clarity_detail: "清晰度與細節",
+    mood_emotional_impact: "氛圍與情感感染力",
+    depth_focus_control: "景深與對焦控制",
+    naturalness_authenticity: "自然度與真實性",
+    technical_execution: "技術執行與無瑕疵",
   };
 
   const STATUS_LABELS = { scored: "已評分", invalid: "無效", error: "失敗" };
@@ -67,7 +49,6 @@ window.Analyze = (() => {
 
     resultsSummary: document.querySelector("#results-summary"),
     filterZip: document.querySelector("#filter-zip"),
-    filterDefect: document.querySelector("#filter-defect"),
     sortBy: document.querySelector("#sort-by"),
     summaryBtn: document.querySelector("#summary-btn"),
     dlZip: document.querySelector("#dl-zip"),
@@ -80,9 +61,8 @@ window.Analyze = (() => {
     summaryBackdrop: document.querySelector("#summary-modal .modal-backdrop"),
     summaryClose: document.querySelector("#summary-close"),
     summaryAverage: document.querySelector("#summary-average"),
-    summaryHighest: document.querySelector("#summary-highest"),
-    summaryLowest: document.querySelector("#summary-lowest"),
-    summaryScored: document.querySelector("#summary-scored"),
+    summaryAverageOriginal: document.querySelector("#summary-average-original"),
+    summaryAverageDelta: document.querySelector("#summary-average-delta"),
     summaryCounts: document.querySelector("#summary-counts"),
     summaryDimensions: document.querySelector("#summary-dimensions"),
     summaryEmpty: document.querySelector("#summary-empty"),
@@ -99,10 +79,12 @@ window.Analyze = (() => {
     detailResultMeta: document.querySelector("#detail-result-meta"),
     detailTitle: document.querySelector("#detail-title"),
     detailScore: document.querySelector("#detail-score"),
+    detailScoreOriginal: document.querySelector("#detail-score-original"),
+    detailScoreDelta: document.querySelector("#detail-score-delta"),
     detailSummary: document.querySelector("#detail-summary"),
+    detailSummaryOriginal: document.querySelector("#detail-summary-original"),
     detailError: document.querySelector("#detail-error"),
     detailDimensions: document.querySelector("#detail-dimensions"),
-    detailDefects: document.querySelector("#detail-defects"),
     detailSuggestions: document.querySelector("#detail-suggestions"),
     detailMeta: document.querySelector("#detail-meta"),
   };
@@ -135,6 +117,28 @@ window.Analyze = (() => {
 
   function fmtScore(score) {
     return isNumeric(score) ? Number(score).toFixed(1) : "–";
+  }
+
+  function fmtDelta(delta, digits = 0) {
+    if (!isNumeric(delta)) return "–";
+    const value = Number(delta);
+    const rounded = digits ? Number(value.toFixed(digits)) : Math.round(value);
+    if (rounded > 0) return `+${digits ? rounded.toFixed(digits) : rounded}`;
+    if (rounded < 0) return digits ? rounded.toFixed(digits) : String(rounded);
+    return "±0";
+  }
+
+  function deltaClass(delta) {
+    if (!isNumeric(delta)) return "delta zero";
+    const value = Number(delta);
+    if (value > 0) return "delta pos";
+    if (value < 0) return "delta neg";
+    return "delta zero";
+  }
+
+  function resultDelta(result) {
+    if (!isNumeric(result.final_score) || !isNumeric(result.original?.final_score)) return null;
+    return Number(result.final_score) - Number(result.original.final_score);
   }
 
   function clearOriginalPreviewState() {
@@ -282,17 +286,6 @@ window.Analyze = (() => {
 
   // ── Filters / sorting ────────────────────────────────────────────────────
 
-  function rebuildSelect(select, values, labeler) {
-    while (select.options.length > 1) select.remove(1);
-    values.forEach((value) => {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = labeler ? labeler(value) : value;
-      select.appendChild(option);
-    });
-    select.value = "";
-  }
-
   function buildFilters() {
     // Value is the job id (unique per upload); label is the ZIP filename, so
     // two uploads sharing a filename stay distinguishable.
@@ -306,23 +299,24 @@ window.Analyze = (() => {
     els.filterZip.value = "";
     // The ZIP filter is only useful when more than one upload is present.
     els.filterZip.hidden = jobs.length <= 1;
-
-    const codes = [...new Set(allResults.flatMap((r) => (r.critical_defects || []).map((d) => d.code)))];
-    rebuildSelect(els.filterDefect, codes, (v) => DEFECT_LABELS[v] || v);
   }
 
   function filteredResults() {
     const zip = els.filterZip.value;
-    const defect = els.filterDefect.value;
     let rows = allResults.slice();
 
     if (zip) rows = rows.filter((r) => r._jobId === zip);
-    if (defect) rows = rows.filter((r) => (r.critical_defects || []).some((d) => d.code === defect));
 
     const sort = els.sortBy.value;
     const score = (r) => (isNumeric(r.final_score) ? Number(r.final_score) : -1);
+    const delta = (r, fallback) => {
+      const d = resultDelta(r);
+      return isNumeric(d) ? Number(d) : fallback;
+    };
     if (sort === "score-desc") rows.sort((a, b) => score(b) - score(a));
     else if (sort === "score-asc") rows.sort((a, b) => score(a) - score(b));
+    else if (sort === "delta-desc") rows.sort((a, b) => delta(b, -Infinity) - delta(a, -Infinity));
+    else if (sort === "delta-asc") rows.sort((a, b) => delta(a, Infinity) - delta(b, Infinity));
     else rows.sort((a, b) => (a.task_id + a.run_id).localeCompare(b.task_id + b.run_id));
     return rows;
   }
@@ -379,6 +373,13 @@ window.Analyze = (() => {
       num.className = "score-num";
       num.textContent = `${fmtScore(result.final_score)}/100`;
       scoreWrap.appendChild(num);
+      const delta = resultDelta(result);
+      if (isNumeric(delta)) {
+        const badge = document.createElement("span");
+        badge.className = `rc-delta ${deltaClass(delta)}`;
+        badge.textContent = fmtDelta(delta, 1);
+        scoreWrap.appendChild(badge);
+      }
       media.appendChild(scoreWrap);
     }
 
@@ -403,25 +404,6 @@ window.Analyze = (() => {
     zip.title = result._zip || "";
     body.appendChild(zip);
 
-    const defects = result.critical_defects || [];
-    if (defects.length) {
-      const flags = document.createElement("div");
-      flags.className = "rc-flags";
-      defects.slice(0, 3).forEach((defect) => {
-        const chip = document.createElement("span");
-        chip.className = `defect-chip sev-${defect.severity}`;
-        chip.textContent = DEFECT_LABELS[defect.code] || defect.code;
-        flags.appendChild(chip);
-      });
-      if (defects.length > 3) {
-        const more = document.createElement("span");
-        more.className = "defect-chip";
-        more.textContent = `+${defects.length - 3}`;
-        flags.appendChild(more);
-      }
-      body.appendChild(flags);
-    }
-
     card.appendChild(media);
     card.appendChild(body);
     card.addEventListener("click", () => openDetail(result));
@@ -432,6 +414,32 @@ window.Analyze = (() => {
 
   function fmtSummaryScore(score) {
     return isNumeric(score) ? `${fmtScore(score)}/100` : "–";
+  }
+
+  function appendSummarySide(container, label, average) {
+    const side = document.createElement("div");
+    side.className = "dim-side";
+    const head = document.createElement("div");
+    head.className = "dim-side-head";
+    const tag = document.createElement("span");
+    tag.className = "dim-side-tag";
+    tag.textContent = label;
+    const score = document.createElement("span");
+    score.className = "dim-score" + (isNumeric(average) ? "" : " na");
+    score.textContent = isNumeric(average) ? `${fmtScore(average)}/100` : "N/A";
+    head.appendChild(tag);
+    head.appendChild(score);
+    side.appendChild(head);
+    if (isNumeric(average)) {
+      const bar = document.createElement("div");
+      bar.className = "dim-bar";
+      const fill = document.createElement("div");
+      fill.className = "dim-bar-fill";
+      fill.style.width = `${Math.max(0, Math.min(100, Number(average)))}%`;
+      bar.appendChild(fill);
+      side.appendChild(bar);
+    }
+    container.appendChild(side);
   }
 
   function renderSummaryDimensions(summary) {
@@ -456,23 +464,24 @@ window.Analyze = (() => {
       if (isNumeric(dimension?.weight)) details.push(`權重 ${dimension.weight}%`);
       details.push(`${dimension?.count || 0} 筆`);
       meta.textContent = details.join(" · ");
-      const score = document.createElement("span");
-      score.className = "dim-score" + (isNumeric(dimension?.average) ? "" : " na");
-      score.textContent = fmtSummaryScore(dimension?.average);
       head.appendChild(name);
       head.appendChild(meta);
-      head.appendChild(score);
+
+      if (isNumeric(dimension?.average) && isNumeric(dimension?.originalAverage)) {
+        const d = Number(dimension.average) - Number(dimension.originalAverage);
+        const badge = document.createElement("span");
+        badge.className = deltaClass(d);
+        badge.textContent = fmtDelta(d, 1);
+        head.appendChild(badge);
+      }
       row.appendChild(head);
 
-      if (isNumeric(dimension?.average)) {
-        const bar = document.createElement("div");
-        bar.className = "dim-bar";
-        const fill = document.createElement("div");
-        fill.className = "dim-bar-fill";
-        fill.style.width = `${Math.max(0, Math.min(100, Number(dimension.average)))}%`;
-        bar.appendChild(fill);
-        row.appendChild(bar);
-      }
+      const sides = document.createElement("div");
+      sides.className = "dim-sides";
+      appendSummarySide(sides, "原圖", dimension?.originalAverage);
+      appendSummarySide(sides, "修圖後", dimension?.average);
+      row.appendChild(sides);
+
       els.summaryDimensions.appendChild(row);
     });
   }
@@ -483,12 +492,16 @@ window.Analyze = (() => {
       Object.keys(DIMENSION_LABELS),
     );
     els.summaryAverage.textContent = fmtSummaryScore(summary.average);
-    els.summaryHighest.textContent = fmtSummaryScore(summary.highest);
-    els.summaryLowest.textContent = fmtSummaryScore(summary.lowest);
-    els.summaryScored.textContent = `${summary.scored} / ${summary.total}`;
+    els.summaryAverageOriginal.textContent = fmtSummaryScore(summary.originalAverage);
+    const avgDelta =
+      isNumeric(summary.average) && isNumeric(summary.originalAverage)
+        ? Number(summary.average) - Number(summary.originalAverage)
+        : null;
+    els.summaryAverageDelta.className = deltaClass(avgDelta);
+    els.summaryAverageDelta.textContent = isNumeric(avgDelta) ? fmtDelta(avgDelta, 1) : "–";
     els.summaryCounts.textContent =
-      `共 ${summary.total} 筆：已評分 ${summary.scored}、失敗 ${summary.failed}、` +
-      `無效 ${summary.invalid}；重大瑕疵 ${summary.criticalDefects} 項`;
+      `共 ${summary.total} 筆：已評分 ${summary.scored}、失敗 ${summary.failed}、無效 ${summary.invalid}` +
+      (isNumeric(summary.highest) ? `；修圖後最高 ${fmtScore(summary.highest)}、最低 ${fmtScore(summary.lowest)}` : "");
     renderSummaryDimensions(summary);
     els.summaryModal.hidden = false;
     els.summaryPanel.scrollTop = 0;
@@ -656,14 +669,20 @@ window.Analyze = (() => {
     const resultModel = result.source_metadata?.image_model || result.model || "";
     els.detailResultMeta.textContent = resultModel ? `${result.run_id} · ${resultModel}` : result.run_id;
     els.detailTitle.textContent = `${result.task_id} / ${result.run_id}`;
-    els.detailScore.textContent = result.status === "scored" ? `${fmtScore(result.final_score)}/100` : "–";
+    const scored = result.status === "scored";
+    els.detailScore.textContent = scored ? `${fmtScore(result.final_score)}/100` : "–";
+    els.detailScoreOriginal.textContent =
+      scored && isNumeric(result.original?.final_score) ? `${fmtScore(result.original.final_score)}/100` : "–";
+    const overallDelta = resultDelta(result);
+    els.detailScoreDelta.className = deltaClass(overallDelta);
+    els.detailScoreDelta.textContent = scored && isNumeric(overallDelta) ? fmtDelta(overallDelta, 1) : "–";
     els.detailSummary.textContent = result.summary || "";
+    els.detailSummaryOriginal.textContent = result.original?.summary || "";
 
     els.detailError.hidden = !result.error;
     els.detailError.textContent = result.error || "";
 
     renderDimensions(result);
-    renderDefects(result);
     renderSuggestions(result);
 
     const meta = [];
@@ -683,10 +702,58 @@ window.Analyze = (() => {
     if (result.original_image) void showOriginalPreview(result, requestToken);
   }
 
+  // Renders one "原圖 → 修圖後" side within a dimension row: score, bar, reason,
+  // issues. `dim` may be undefined when that side has no dimension data.
+  function appendDimSide(container, label, dim) {
+    const side = document.createElement("div");
+    side.className = "dim-side";
+
+    const head = document.createElement("div");
+    head.className = "dim-side-head";
+    const tag = document.createElement("span");
+    tag.className = "dim-side-tag";
+    tag.textContent = label;
+    const score = document.createElement("span");
+    const isScored = dim && dim.status === "scored" && isNumeric(dim.score);
+    score.className = "dim-score" + (isScored ? "" : " na");
+    score.textContent = isScored ? `${dim.score}/100` : "N/A";
+    head.appendChild(tag);
+    head.appendChild(score);
+    side.appendChild(head);
+
+    if (isScored) {
+      const bar = document.createElement("div");
+      bar.className = "dim-bar";
+      const fill = document.createElement("div");
+      fill.className = "dim-bar-fill";
+      fill.style.width = `${Math.max(0, Math.min(100, Number(dim.score)))}%`;
+      bar.appendChild(fill);
+      side.appendChild(bar);
+    }
+    if (dim?.reason) {
+      const reason = document.createElement("p");
+      reason.className = "dim-reason";
+      reason.textContent = dim.reason;
+      side.appendChild(reason);
+    }
+    if (dim?.issues?.length) {
+      const list = document.createElement("ul");
+      list.className = "dim-issues";
+      dim.issues.forEach((issue) => {
+        const li = document.createElement("li");
+        li.textContent = issue;
+        list.appendChild(li);
+      });
+      side.appendChild(list);
+    }
+    container.appendChild(side);
+  }
+
   function renderDimensions(result) {
     els.detailDimensions.innerHTML = "";
-    const dims = result.dimensions;
-    if (!dims) {
+    const editedDims = result.dimensions;
+    const originalDims = result.original?.dimensions;
+    if (!editedDims) {
       const note = document.createElement("p");
       note.className = "empty-note";
       note.textContent = "此筆沒有分項分數。";
@@ -694,8 +761,9 @@ window.Analyze = (() => {
       return;
     }
     Object.keys(DIMENSION_LABELS).forEach((key) => {
-      const dim = dims[key];
-      if (!dim) return;
+      const edited = editedDims[key];
+      const original = originalDims?.[key];
+      if (!edited && !original) return;
       const row = document.createElement("div");
       row.className = "dim-row";
 
@@ -706,65 +774,27 @@ window.Analyze = (() => {
       name.textContent = DIMENSION_LABELS[key];
       const weight = document.createElement("span");
       weight.className = "dim-weight";
-      weight.textContent = `權重 ${dim.weight}%`;
-      const score = document.createElement("span");
-      score.className = "dim-score" + (dim.status !== "scored" ? " na" : "");
-      score.textContent = dim.status === "scored" ? `${dim.score}/100` : "N/A";
+      const weightValue = edited?.weight ?? original?.weight;
+      if (isNumeric(weightValue)) weight.textContent = `權重 ${weightValue}%`;
       head.appendChild(name);
       head.appendChild(weight);
-      head.appendChild(score);
+
+      if (isNumeric(edited?.score) && isNumeric(original?.score)) {
+        const d = Number(edited.score) - Number(original.score);
+        const badge = document.createElement("span");
+        badge.className = deltaClass(d);
+        badge.textContent = fmtDelta(d);
+        head.appendChild(badge);
+      }
       row.appendChild(head);
 
-      if (dim.status === "scored") {
-        const bar = document.createElement("div");
-        bar.className = "dim-bar";
-        const fill = document.createElement("div");
-        fill.className = "dim-bar-fill";
-        fill.style.width = `${dim.score}%`;
-        bar.appendChild(fill);
-        row.appendChild(bar);
-      }
+      const sides = document.createElement("div");
+      sides.className = "dim-sides";
+      appendDimSide(sides, "原圖", original);
+      appendDimSide(sides, "修圖後", edited);
+      row.appendChild(sides);
 
-      if (dim.reason) {
-        const reason = document.createElement("p");
-        reason.className = "dim-reason";
-        reason.textContent = dim.reason;
-        row.appendChild(reason);
-      }
-      if (dim.issues?.length) {
-        const list = document.createElement("ul");
-        list.className = "dim-issues";
-        dim.issues.forEach((issue) => {
-          const li = document.createElement("li");
-          li.textContent = issue;
-          list.appendChild(li);
-        });
-        row.appendChild(list);
-      }
       els.detailDimensions.appendChild(row);
-    });
-  }
-
-  function renderDefects(result) {
-    els.detailDefects.innerHTML = "";
-    const defects = result.critical_defects || [];
-    if (!defects.length) {
-      const li = document.createElement("li");
-      li.className = "empty-note";
-      li.textContent = "未偵測到重大瑕疵。";
-      els.detailDefects.appendChild(li);
-      return;
-    }
-    defects.forEach((defect) => {
-      const li = document.createElement("li");
-      const chip = document.createElement("span");
-      chip.className = `defect-chip sev-${defect.severity}`;
-      chip.textContent = `${defect.severity} · ${DEFECT_LABELS[defect.code] || defect.code}`;
-      const text = document.createElement("span");
-      text.textContent = defect.description || "";
-      li.appendChild(chip);
-      li.appendChild(text);
-      els.detailDefects.appendChild(li);
     });
   }
 
@@ -903,7 +933,7 @@ window.Analyze = (() => {
   els.progressBack.addEventListener("click", resetToUpload);
   els.newUpload.addEventListener("click", resetToUpload);
 
-  [els.filterZip, els.filterDefect, els.sortBy].forEach((select) => {
+  [els.filterZip, els.sortBy].forEach((select) => {
     select.addEventListener("change", renderResults);
   });
 

@@ -14,8 +14,77 @@
     analyzeAipoc,
     analyzeAipocBatch
   } = window.PhotoAgentApi;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView } = window.PhotoAgentResults;
   renderBatchStyleOptions();
+
+  // Keeps the run-tabs preview strip capped at 1/3 of #results-canvas-row's
+  // own rendered width (the canvas + analysis-panel row, not just the
+  // canvas) -- CSS alone can't size one element against an unrelated
+  // sibling's width, so this tracks that row's actual box (which changes
+  // with the image's natural size, the analysis panel opening/closing,
+  // window resizes, etc.) and mirrors 1/3 of it onto #run-tabs-row. Beyond
+  // that width, .run-tabs' own overflow-x:auto (plus the scroll arrows)
+  // makes it scrollable. That 1/3 cap only applies in #run-tabs-row's normal
+  // (unnested) position -- while the analysis panel is open it's moved
+  // under the photo instead (openInlineAnalysisPanel), where CSS's plain
+  // width:100% against its new parent already fits it to the photo's own
+  // column, so the inline cap is cleared rather than fighting that.
+  if (els.resultsCanvasRow && els.runTabsRow && typeof ResizeObserver !== "undefined") {
+    const runTabsWidthObserver = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect?.width;
+      const nested = els.resultsCanvasCol && els.runTabsRow.parentElement === els.resultsCanvasCol;
+      els.runTabsRow.style.maxWidth = (width && !nested) ? `${Math.round(width / 3)}px` : "";
+      updateRunTabsArrows();
+    });
+    runTabsWidthObserver.observe(els.resultsCanvasRow);
+  }
+
+  // Shows/hides the run-tabs scroll arrows (hidden entirely when the strip
+  // doesn't overflow its 2/3-width cap) and disables whichever end is
+  // already fully scrolled to. Called after (re)building the tabs, on
+  // scroll, and whenever the cap above changes what fits.
+  function updateRunTabsArrows() {
+    if (!els.runTabs || !els.runTabsPrev || !els.runTabsNext) return;
+    const canScroll = els.runTabs.scrollWidth > els.runTabs.clientWidth + 1;
+    els.runTabsPrev.hidden = !canScroll;
+    els.runTabsNext.hidden = !canScroll;
+    if (!canScroll) return;
+    // Disabled state tracks whether there's a selectable ("done") RUN on
+    // that side of the current one, not raw scroll position -- since the
+    // arrows now switch RUNs (selectAdjacentRunTab), not just scroll the
+    // strip, and the current RUN can already be fully in view (nothing left
+    // to physically scroll) while still having an earlier/later RUN to
+    // switch to.
+    const tabs = Array.from(els.runTabs.children);
+    const idx = currentRunTabsIndex;
+    const hasPrevRun = idx != null && tabs.slice(0, idx).some((t) => !t.disabled);
+    const hasNextRun = idx != null && tabs.slice(idx + 1).some((t) => !t.disabled);
+    els.runTabsPrev.disabled = !hasPrevRun;
+    els.runTabsNext.disabled = !hasNextRun;
+  }
+
+  // Steps to the next/previous *selectable* (status "done") RUN, skipping
+  // over any still-processing/errored tabs, and brings it into view -- so
+  // the arrows switch the displayed image itself, not just the strip's
+  // scroll position (which used to be all they did).
+  function selectAdjacentRunTab(delta) {
+    if (!els.runTabs || currentRunTabsOnSelect == null || currentRunTabsIndex == null) return;
+    const tabs = Array.from(els.runTabs.children);
+    let idx = currentRunTabsIndex + delta;
+    while (idx >= 0 && idx < tabs.length && tabs[idx].disabled) idx += delta;
+    if (idx < 0 || idx >= tabs.length) return;
+    currentRunTabsOnSelect(idx);
+    const newTab = els.runTabs.children[idx];
+    if (newTab) newTab.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+  }
+
+  if (els.runTabs) els.runTabs.addEventListener("scroll", updateRunTabsArrows);
+  if (els.runTabsPrev) {
+    els.runTabsPrev.addEventListener("click", () => selectAdjacentRunTab(-1));
+  }
+  if (els.runTabsNext) {
+    els.runTabsNext.addEventListener("click", () => selectAdjacentRunTab(1));
+  }
 
   let selectedFile = null;
   let previewUrl = "";
@@ -39,6 +108,20 @@
   // single-image counterpart of a batch record's mirrorIndex).
   let singleRuns = null;
   let singleMirrorIndex = null;
+
+  // Which `runs` array buildRunTabs last drew from -- lets it tell "still
+  // browsing the same photo's runs" (keep the strip's scroll position) apart
+  // from "switched to a different photo" (scroll back to the start), since
+  // both cases fully rebuild the tab buttons from scratch.
+  let lastRunTabsRuns = null;
+
+  // The currently-active tab index and its select callback, refreshed by
+  // every buildRunTabs call -- lets the prev/next arrows (defined once, up
+  // top, before any runs exist) step to the adjacent RUN via whichever
+  // handler is current (batch vs single-image) instead of just scrolling
+  // the strip without changing what's shown.
+  let currentRunTabsIndex = null;
+  let currentRunTabsOnSelect = null;
 
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
@@ -190,6 +273,7 @@
     const value = String(Math.max(1, parseInt(runCount, 10) || 1));
     if (els.imageRunCountSelect) els.imageRunCountSelect.value = value;
     if (els.apRunCountSelect) els.apRunCountSelect.value = value;
+    if (els.runCountSelect) els.runCountSelect.value = value;
   }
 
   if (els.imageRunCountSelect) {
@@ -199,6 +283,10 @@
   if (els.apRunCountSelect) {
     els.apRunCountSelect.addEventListener("change", () =>
       applyRunCountChange(els.apRunCountSelect.value));
+  }
+  if (els.runCountSelect) {
+    els.runCountSelect.addEventListener("change", () =>
+      applyRunCountChange(els.runCountSelect.value));
   }
 
   // Backend step timings are seconds (float) or null (step skipped);
@@ -282,7 +370,89 @@
     });
   }
 
+  // ── Inline analysis-review panel (results page) ─────────────────────────
+  // Lets the user revise an existing result's recipe/style/prompt and re-run
+  // without leaving the results page: #analysis-preview is physically moved
+  // between its normal home (processing section, first-time flow) and
+  // #results-analysis-slot (this flow), since both reuse the very same
+  // #ap-* markup/IDs and can't have two live copies in the DOM at once.
+  function moveAnalysisPreviewTo(container) {
+    if (!els.analysisPreview || !container) return;
+    if (els.analysisPreview.parentElement !== container) {
+      container.appendChild(els.analysisPreview);
+    }
+  }
+
+  function restoreAnalysisPreviewHome() {
+    if (els.analysisPreviewHome && els.analysisPreview.previousElementSibling !== els.analysisPreviewHome) {
+      els.analysisPreviewHome.after(els.analysisPreview);
+    }
+  }
+
+  // #run-tabs-row moves under the photo (inside #results-canvas-col) while
+  // the panel is open, so the image and its RUN previews read as one
+  // aligned column next to the panel, instead of staying a full-width row
+  // that now spans underneath both the (narrowed) photo and the panel.
+  function moveRunTabsRowTo(container) {
+    if (!els.runTabsRow || !container) return;
+    if (els.runTabsRow.parentElement !== container) {
+      container.appendChild(els.runTabsRow);
+      updateRunTabsArrows();
+    }
+  }
+
+  function restoreRunTabsRowHome() {
+    if (els.runTabsRowHome && els.runTabsRow.previousElementSibling !== els.runTabsRowHome) {
+      els.runTabsRowHome.after(els.runTabsRow);
+      updateRunTabsArrows();
+    }
+  }
+
+  function openInlineAnalysisPanel() {
+    moveAnalysisPreviewTo(els.resultsAnalysisSlot);
+    moveRunTabsRowTo(els.resultsCanvasCol);
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
+    els.analysisPreview.hidden = false;
+    setAnalysisPreviewDisabled(false);
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
+  }
+
+  function closeInlineAnalysisPanel() {
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    els.analysisPreview.hidden = true;
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
+    restoreRunTabsRowHome();
+  }
+
+  let inlineAnalysisContinueHandler = null;
+  let inlineAnalysisCancelHandler = null;
+
+  function clearInlineAnalysisWait() {
+    if (inlineAnalysisContinueHandler) {
+      els.inlineAnalysisContinueBtn.removeEventListener("click", inlineAnalysisContinueHandler);
+      inlineAnalysisContinueHandler = null;
+    }
+    if (inlineAnalysisCancelHandler) {
+      els.inlineAnalysisCancelBtn.removeEventListener("click", inlineAnalysisCancelHandler);
+      inlineAnalysisCancelHandler = null;
+    }
+  }
+
+  // Resolves "continue" or "cancel" depending on which inline button the user
+  // clicks -- same one-shot-listener shape as waitForContinue, just with two
+  // possible outcomes instead of one.
+  function waitForInlineAnalysisAction() {
+    return new Promise((resolve) => {
+      clearInlineAnalysisWait();
+      inlineAnalysisContinueHandler = () => { clearInlineAnalysisWait(); resolve("continue"); };
+      inlineAnalysisCancelHandler = () => { clearInlineAnalysisWait(); resolve("cancel"); };
+      els.inlineAnalysisContinueBtn.addEventListener("click", inlineAnalysisContinueHandler);
+      els.inlineAnalysisCancelBtn.addEventListener("click", inlineAnalysisCancelHandler);
+    });
+  }
+
   function showAnalysisPreview(analysis, preset) {
+    restoreAnalysisPreviewHome();
     renderAnalysisPreview({ analysis, preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
@@ -429,7 +599,13 @@
     if (!els.downloadAllRunsLink) return;
     const doneCount = (runs || []).filter((run) => run.status === "done").length;
     els.downloadAllRunsLink.hidden = doneCount <= 1;
-    if (doneCount > 1) els.downloadAllRunsLink.textContent = `全部下載（${doneCount} 個 RUN）`;
+    // Icon-only button -- the RUN count lives in the hover hint (title/
+    // aria-label) instead of a permanently visible label.
+    if (doneCount > 1) {
+      const hint = `全部下載（${doneCount} 個 RUN）`;
+      els.downloadAllRunsLink.title = hint;
+      els.downloadAllRunsLink.setAttribute("aria-label", hint);
+    }
   }
 
   async function downloadZip(buildZip, filename) {
@@ -581,6 +757,9 @@
     if (els.resultsDetail) els.resultsDetail.hidden = false;
     if (els.detailNav) els.detailNav.hidden = true;
     if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
+    if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+    currentRunTabsIndex = null;
+    currentRunTabsOnSelect = null;
     if (els.backToGridBtn) els.backToGridBtn.hidden = true;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
@@ -773,6 +952,9 @@
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
       if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
+      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+      currentRunTabsIndex = null;
+      currentRunTabsOnSelect = null;
     } else {
       // N independent RUNs from the same analysis, same pattern as batch's
       // continueBatchRecords/editBatchItem -- each RUN is its own job, run
@@ -888,34 +1070,39 @@
     renderSingleRunTabs();
   }
 
-  // "回到流程": lets the user come back from the results page to the
-  // analysis-preview screen, re-adjust the recipe checklist/style
-  // options/prompt (restored from their last submission), and regenerate.
+  // "檢視分析結果": lets the user come back to the recipe checklist/style
+  // options/prompt (restored from their last submission) and regenerate,
+  // without leaving the results page -- the panel slides in beside the
+  // photo canvas instead of navigating to the processing section.
   async function backToProcessFromResults() {
     if (!singleFlowState) return;
     hideError();
-    clearContinueWait();
+    clearInlineAnalysisWait();
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
-    procVisual.classList.remove("done");
-    procVisual.style.height = "";
 
-    showAnalysisPreview(singleFlowState.analysis, singleFlowState.preset);
+    renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset });
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       applyStyleSelections(lastSingleSelections);
     }
-    showSection("processing");
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    openInlineAnalysisPanel();
 
+    const action = await waitForInlineAnalysisAction();
+    closeInlineAnalysisPanel();
+    if (action === "cancel") return;
+
+    setAnalysisPreviewDisabled(true);
+    if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
+    if (els.canvasLoading) els.canvasLoading.hidden = false;
     try {
-      await waitForContinue();
       await finishSingleFlow();
     } catch (error) {
-      showSection("upload");
       showError(friendlyError(error));
     } finally {
-      clearContinueWait();
-      if (els.analysisPreview) els.analysisPreview.hidden = true;
+      if (els.canvasLoading) els.canvasLoading.hidden = true;
+      if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
     }
   }
 
@@ -1451,26 +1638,28 @@
   // the caller (batch re-renders via syncRecordMirror+showBatchDetail, single
   // via showSingleResult).
   function buildRunTabs(runs, currentIdx, onSelectDone) {
+    const samePhoto = runs === lastRunTabsRuns;
+    const prevScrollLeft = els.runTabs.scrollLeft;
     els.runTabs.hidden = false;
     els.runTabs.innerHTML = "";
     runs.forEach((run, idx) => {
       const tab = document.createElement("button");
       tab.type = "button";
       tab.className = `run-tab ${run.status}${idx === currentIdx ? " active" : ""}`;
+      tab.setAttribute("aria-label", `RUN ${run.run}`);
 
+      const media = document.createElement("span");
+      media.className = "run-tab-media";
       if (run.status === "done") {
         const im = document.createElement("img");
         im.src = run.imageUrl;
-        tab.appendChild(im);
+        media.appendChild(im);
       } else if (run.status === "processing") {
         const spin = document.createElement("span");
         spin.className = "run-tab-spin";
-        tab.appendChild(spin);
+        media.appendChild(spin);
       }
-
-      const label = document.createElement("span");
-      label.textContent = run.status === "error" ? `RUN ${run.run} ✕` : `RUN ${run.run}`;
-      tab.appendChild(label);
+      tab.appendChild(media);
 
       if (run.status === "done") {
         tab.addEventListener("click", () => onSelectDone(idx));
@@ -1480,6 +1669,15 @@
       }
       els.runTabs.appendChild(tab);
     });
+    els.runTabs.scrollLeft = samePhoto ? prevScrollLeft : 0;
+    lastRunTabsRuns = runs;
+    currentRunTabsIndex = currentIdx;
+    currentRunTabsOnSelect = onSelectDone;
+    if (els.runTabsIndex) {
+      els.runTabsIndex.hidden = false;
+      els.runTabsIndex.textContent = `${currentIdx + 1} / ${runs.length}`;
+    }
+    updateRunTabsArrows();
   }
 
   // Clicking a finished tab re-points the record's mirror fields at that run
@@ -1490,6 +1688,9 @@
     if (runs.length <= 1) {
       els.runTabs.hidden = true;
       els.runTabs.innerHTML = "";
+      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+      currentRunTabsIndex = null;
+      currentRunTabsOnSelect = null;
       return;
     }
 
@@ -1510,6 +1711,9 @@
     if (runs.length <= 1) {
       els.runTabs.hidden = true;
       els.runTabs.innerHTML = "";
+      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+      currentRunTabsIndex = null;
+      currentRunTabsOnSelect = null;
       return;
     }
 
@@ -1533,6 +1737,7 @@
     els.resultsDetail.hidden = false;
     els.detailNav.hidden = false;
     els.backToGridBtn.hidden = false;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
@@ -1588,7 +1793,11 @@
     els.resultsDetail.hidden = true;
     els.detailNav.hidden = true;
     if (els.runTabs) els.runTabs.hidden = true;
+    if (els.runTabsIndex) els.runTabsIndex.hidden = true;
+    currentRunTabsIndex = null;
+    currentRunTabsOnSelect = null;
     els.backToGridBtn.hidden = true;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
     els.downloadLink.hidden = true;
     const anyDone = doneBatchRecords().length > 0;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
@@ -1596,6 +1805,78 @@
     els.resultsGridWrap.hidden = false;
     if (gridSummary) els.resultSummary.textContent = gridSummary;
     window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  // Is a single already-finished batch record currently open in detail view?
+  // Returns null for the single-image flow or the batch grid, so callers can
+  // branch between the whole-record batch path and the single-image path
+  // with one check.
+  function currentDetailBatchRecord() {
+    if (!batchRecords.length || els.resultsDetail.hidden) return null;
+    const done = doneBatchRecords();
+    return done[detailPos] || null;
+  }
+
+  // "檢視分析結果" for one already-finished batch photo: reuses the same
+  // inline slide-in panel as the single-image flow (backToProcessFromResults),
+  // but re-runs just this one record via editBatchItem instead of
+  // finishSingleFlow -- editBatchItem never touches showSection, so this
+  // stays fully inline with no processing-section detour at all.
+  async function startInlineBatchReview(record) {
+    hideError();
+    clearInlineAnalysisWait();
+
+    renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
+    applyBatchReviewSelections(record);
+    if (els.promptInput) els.promptInput.value = record.userPrompt || "";
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = true; // batch's own run-count lives on the grid, not per-item
+    openInlineAnalysisPanel();
+
+    const action = await waitForInlineAnalysisAction();
+    closeInlineAnalysisPanel();
+    if (action === "cancel") return;
+
+    captureBatchReviewSelections(record);
+    setAnalysisPreviewDisabled(true);
+    if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
+    if (els.canvasLoading) els.canvasLoading.hidden = false;
+
+    const run = { run: (record.runs || []).length + 1, jobId: null, status: "processing", imageUrl: null, result: null, timings: [], error: null };
+    record.runs = [...(record.runs || []), run];
+    record.mirrorIndex = record.runs.length - 1;
+    record.status = "processing";
+    updateBatchCard(record);
+
+    await editBatchItem({ record, run });
+
+    if (els.canvasLoading) els.canvasLoading.hidden = true;
+    if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
+    if (run.status === "error") showError(run.error || "重新處理失敗，請稍後再試。");
+    if (doneBatchRecords().includes(record)) {
+      showBatchDetail();
+    } else {
+      backToBatchGrid();
+    }
+  }
+
+  // Dispatches "檢視分析結果" to whichever flow is actually active: a single
+  // finished batch photo (per-item revise) or the single-image flow.
+  function handleViewAnalysisClick() {
+    // Toggle: if the panel is already open, pressing the same button again
+    // closes it -- simulate the cancel button's click instead of duplicating
+    // its logic, since backToProcessFromResults/startInlineBatchReview are
+    // both mid-`await waitForInlineAnalysisAction()` at that point, and only
+    // that click actually resolves their pending promise.
+    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+      if (els.inlineAnalysisCancelBtn) els.inlineAnalysisCancelBtn.click();
+      return;
+    }
+    const record = currentDetailBatchRecord();
+    if (record) {
+      startInlineBatchReview(record);
+    } else {
+      backToProcessFromResults();
+    }
   }
 
   // ── Batch step-2 per-image review (reuses the single analysis panel) ─────
@@ -1621,6 +1902,7 @@
     const record = list[reviewPos];
 
     // Reuse the processing screen's analysis-preview panel verbatim.
+    restoreAnalysisPreviewHome();
     clearContinueWait();
     els.viewResultsWrap.hidden = true;
     procVisual.style.height = "";
@@ -1762,6 +2044,16 @@
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     clearContinueWait();
+    // If the last thing the user did was an inline analysis review (single or
+    // batch), #analysis-preview and #run-tabs-row are currently on loan inside
+    // the results section (#results-analysis-slot / #results-canvas-col) --
+    // move them back to the processing section before the next photo's
+    // analyze tries to show #analysis-preview there, or it renders invisibly
+    // inside the now-hidden results section instead.
+    restoreAnalysisPreviewHome();
+    restoreRunTabsRowHome();
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of
@@ -1802,9 +2094,13 @@
   });
   els.startButton.addEventListener("click", startSubmit);
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
-  els.backToProcessBtn.addEventListener("click", backToProcessFromResults);
+  els.backToProcessBtn.addEventListener("click", handleViewAnalysisClick);
   els.resetButton.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
+  if (els.compareToggleBtn) {
+    els.compareToggleBtn.addEventListener("click", () =>
+      setCompareView(!els.compareCard?.classList.contains("showing-generated")));
+  }
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadAllRunsLink) els.downloadAllRunsLink.addEventListener("click", handleDownloadAllRunsClick);
   if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);

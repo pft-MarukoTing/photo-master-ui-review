@@ -1,12 +1,13 @@
-"""Analysis-specific OpenAI client for comparison-only retouching QA.
+"""Analysis-specific OpenAI client for single-image absolute-quality scoring.
 
 Self-contained rewrite that keeps the exact calling convention, API-key
 handling, and response-reading format of the main PhotoAgent openai_client
 (Responses API via requests, strict json_schema structured output,
 output_text extraction), plus the retry/latency/usage bookkeeping the
-evaluation pipeline needs.  Each evaluation sends exactly three content
-blocks: one QA prompt, the original image, and the edited result.  The API key only ever lives in this backend
-process and is never logged or returned.
+evaluation pipeline needs.  Each evaluation sends exactly two content
+blocks: one QA prompt and one image; the same prompt is used to score the
+original photo and the edited result separately.  The API key only ever lives
+in this backend process and is never logged or returned.
 """
 
 import base64
@@ -152,25 +153,6 @@ def _open_rgb(image_bytes: bytes) -> Image.Image:
 
 # ── Structured-output schema ───────────────────────────────────────────────────
 
-DEFECT_CODES = [
-    "subject_identity_damage",
-    "scene_rebuild_or_replacement",
-    "unintended_content_change",
-    "required_content_loss",
-    "crop_boundary_damage",
-    "anatomy_shape_material_damage",
-    "geometry_perspective_damage",
-    "artificial_border_or_padding",
-    "lighting_shadow_regression",
-    "color_tone_regression",
-    "detail_texture_damage",
-    "overprocessing_synthetic_look",
-    "new_generation_artifact",
-    "other",
-]
-
-DEFECT_SEVERITIES = ["minor", "major", "critical"]
-
 # enum keeps the direct 0-100 integer score enforced by the constrained
 # decoder (strict mode does not reliably honour minimum/maximum).
 _SCORE_0_100 = {"type": "integer", "enum": list(range(101))}
@@ -199,24 +181,10 @@ EVALUATION_SCHEMA = {
                 "required": config.DIMENSION_KEYS,
                 "additionalProperties": False,
             },
-            "critical_defects": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "code": {"type": "string", "enum": DEFECT_CODES},
-                        "severity": {"type": "string", "enum": DEFECT_SEVERITIES},
-                        "dimension": {"type": "string", "enum": config.DIMENSION_KEYS},
-                        "description": {"type": "string"},
-                    },
-                    "required": ["code", "severity", "dimension", "description"],
-                    "additionalProperties": False,
-                },
-            },
             "summary": {"type": "string"},
             "suggestions": {"type": "array", "items": {"type": "string"}},
         },
-        "required": ["dimensions", "critical_defects", "summary", "suggestions"],
+        "required": ["dimensions", "summary", "suggestions"],
         "additionalProperties": False,
     },
 }
@@ -239,35 +207,29 @@ def _is_retryable(exc) -> bool:
     return bool(re.search(r"rate limit|overloaded|timeout", message, re.IGNORECASE))
 
 
-def build_evaluation_content(original_bytes: bytes, result_bytes: bytes) -> list:
-    """Returns exactly: QA prompt, original image, edited-result image."""
+def build_single_image_content(image_bytes: bytes) -> list:
+    """Returns exactly: QA prompt, one image."""
     return [
         {"type": "input_text", "text": build_evaluation_prompt()},
         {
             "type": "input_image",
-            "image_url": image_to_data_url(create_preview_bytes(original_bytes), "image/jpeg"),
-        },
-        {
-            "type": "input_image",
-            "image_url": image_to_data_url(create_preview_bytes(result_bytes), "image/jpeg"),
+            "image_url": image_to_data_url(create_preview_bytes(image_bytes), "image/jpeg"),
         },
     ]
 
 
-def evaluate_image(
-    original_bytes: bytes,
-    result_bytes: bytes,
+def evaluate_single_image(
+    image_bytes: bytes,
     model: str = None,
     timeout: int = None,
     max_retries: int = None,
 ):
-    """Scores one edited result; returns raw output and call telemetry.
+    """Scores one image on its absolute merit; returns raw output and telemetry.
 
-    The model only returns direct per-dimension 0-100 integer scores, reasons, issues,
-    critical_defects, summary, and suggestions -- the weighted overall score
-    is computed by the backend
-    (evaluator.compute_scores). Transient failures are retried up to
-    max_retries with exponential backoff; fatal errors raise immediately.
+    The model only returns direct per-dimension 0-100 integer scores, reasons,
+    issues, summary, and suggestions -- the weighted overall score is computed
+    by the backend (evaluator.compute_scores). Transient failures are retried
+    up to max_retries with exponential backoff; fatal errors raise immediately.
     """
     model = model or config.EVAL_MODEL
     timeout = timeout or config.EVAL_TIMEOUT
@@ -275,7 +237,7 @@ def evaluate_image(
 
     payload = _responses_payload(
         model,
-        build_evaluation_content(original_bytes, result_bytes),
+        build_single_image_content(image_bytes),
         text_format=EVALUATION_SCHEMA,
     )
 

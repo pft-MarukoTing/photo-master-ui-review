@@ -191,7 +191,7 @@ def _load_source_metadata(result_json_path):
 # ── Score math (backend-owned; the model never computes any of this) ──────────
 
 def normalize_model_output(raw: dict) -> dict:
-    """Validates model JSON into {dimensions, critical_defects, summary, suggestions}.
+    """Validates model JSON into {dimensions, summary, suggestions}.
 
     Iterates the canonical dimension list from config (never the model's own
     keys) and requires every direct model score to be an integer from 0 to 100.
@@ -215,26 +215,8 @@ def normalize_model_output(raw: dict) -> dict:
             "issues": [str(i) for i in (block.get("issues") or []) if i],
         }
 
-    defects = []
-    for defect in (raw or {}).get("critical_defects") or []:
-        if not isinstance(defect, dict):
-            continue
-        severity = defect.get("severity")
-        if severity not in openai_client.DEFECT_SEVERITIES:
-            severity = "minor"
-        code = defect.get("code")
-        if code not in openai_client.DEFECT_CODES:
-            code = "other"
-        defects.append({
-            "code": code,
-            "severity": severity,
-            "dimension": defect.get("dimension") if defect.get("dimension") in config.DIMENSION_KEYS else None,
-            "description": str(defect.get("description") or ""),
-        })
-
     return {
         "dimensions": dimensions,
-        "critical_defects": defects,
         "summary": str((raw or {}).get("summary") or ""),
         "suggestions": [str(s) for s in (raw or {}).get("suggestions") or [] if s],
     }
@@ -273,12 +255,56 @@ def compute_scores(normalized: dict) -> dict:
 def _empty_score_fields():
     return {
         "dimensions": None,
-        "critical_defects": [],
         "raw_weighted_score": None,
         "final_score": None,
         "summary": "",
         "suggestions": [],
+        "original": None,
     }
+
+
+def _merge_usage(usage_a, usage_b):
+    """Sums the numeric token fields of the two per-image OpenAI usage dicts."""
+    if not usage_a and not usage_b:
+        return None
+    merged = {}
+    for usage in (usage_a or {}), (usage_b or {}):
+        for key, value in usage.items():
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            merged[key] = merged.get(key, 0) + value
+    return merged or None
+
+
+def _score_image(image_bytes, model, overrides):
+    """Runs one single-image evaluation and returns (block, telemetry).
+
+    block matches the shape stored under both the top-level (edited) result and
+    the nested ``original`` object: dimensions/final_score/summary/suggestions.
+    telemetry carries the per-call usage/latency/retry so the caller can sum
+    both calls into the run-level totals.
+    """
+    call = openai_client.evaluate_single_image(
+        image_bytes,
+        model=model,
+        timeout=overrides.get("timeout"),
+        max_retries=overrides.get("max_retries"),
+    )
+    normalized = normalize_model_output(call["raw"])
+    scores = compute_scores(normalized)
+    block = {
+        "dimensions": scores["dimensions"],
+        "raw_weighted_score": scores["raw_weighted_score"],
+        "final_score": scores["final_score"],
+        "summary": normalized["summary"],
+        "suggestions": normalized["suggestions"],
+    }
+    telemetry = {
+        "usage": call["usage"],
+        "latency_ms": call["latency_ms"],
+        "retry_count": call["retry_count"],
+    }
+    return block, telemetry
 
 
 def _make_thumbnail(image_bytes):
@@ -363,27 +389,23 @@ def evaluate_run(unit: dict, overrides: dict = None) -> dict:
     base["thumbnail"] = _make_thumbnail(result_bytes)
 
     try:
-        call = openai_client.evaluate_image(
-            original_bytes,
-            result_bytes,
-            model=model,
-            timeout=overrides.get("timeout"),
-            max_retries=overrides.get("max_retries"),
-        )
-        raw = call["raw"]
-        base.update(usage=call["usage"], latency_ms=call["latency_ms"], retry_count=call["retry_count"])
+        original_block, original_tele = _score_image(original_bytes, model, overrides)
+        edited_block, edited_tele = _score_image(result_bytes, model, overrides)
 
-        normalized = normalize_model_output(raw)
-        scores = compute_scores(normalized)
+        base.update(
+            usage=_merge_usage(original_tele["usage"], edited_tele["usage"]),
+            latency_ms=round((original_tele["latency_ms"] or 0) + (edited_tele["latency_ms"] or 0), 1),
+            retry_count=(original_tele["retry_count"] or 0) + (edited_tele["retry_count"] or 0),
+        )
         return {
             **base,
             "status": "scored",
-            "dimensions": scores["dimensions"],
-            "critical_defects": normalized["critical_defects"],
-            "raw_weighted_score": scores["raw_weighted_score"],
-            "final_score": scores["final_score"],
-            "summary": normalized["summary"],
-            "suggestions": normalized["suggestions"],
+            "dimensions": edited_block["dimensions"],
+            "raw_weighted_score": edited_block["raw_weighted_score"],
+            "final_score": edited_block["final_score"],
+            "summary": edited_block["summary"],
+            "suggestions": edited_block["suggestions"],
+            "original": original_block,
         }
     except Exception as exc:
         logger.error("run evaluation failed", extra={

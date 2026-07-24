@@ -314,10 +314,33 @@ window.PhotoAgentResults = (() => {
       .map(([key, value]) => `${value === true ? "通過" : value === false ? "注意" : "未定"}：${labels[key] || key}`);
   }
 
+  // Before/After now share one canvas, switched via #compare-toggle-btn --
+  // reset to showing the result each time a (re)render brings in a fresh
+  // image, so switching photos/runs doesn't leave a stale "original" view up.
+  function setCompareView(showGenerated) {
+    if (els.compareCard) els.compareCard.classList.toggle("showing-generated", showGenerated);
+    const label = showGenerated ? "查看原始照片" : "查看輸出結果";
+    if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
+    if (els.compareHint) {
+      if (showGenerated) {
+        els.compareHint.classList.remove("is-visible");
+      } else {
+        // Restart the fade in/out even if it's already mid-animation (e.g.
+        // the user toggles back and forth quickly) -- removing the class,
+        // forcing a reflow, then re-adding it replays the animation from
+        // the start instead of a no-op re-add on an already-applied class.
+        els.compareHint.classList.remove("is-visible");
+        void els.compareHint.offsetWidth;
+        els.compareHint.classList.add("is-visible");
+      }
+    }
+  }
+
   function renderResult({ data, analysis, preset, imageModel }) {
     const qa = data.qualityCheck || null;
     const validation = analysis.crop_validation || null;
 
+    setCompareView(true);
     els.generatedImg.src = data.image;
     els.downloadLink.href = data.image;
     els.modelName.textContent = data.model || imageModel;
@@ -550,5 +573,5 @@ window.PhotoAgentResults = (() => {
     [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
   }
 
-  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger };
+  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView };
 })();

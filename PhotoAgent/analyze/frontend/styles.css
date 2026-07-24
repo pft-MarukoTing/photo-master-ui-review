@@ -340,19 +340,20 @@ a { text-decoration: none; color: inherit; }
 .rc-name { font-size: 13.5px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-run { font-size: 12.5px; font-weight: 600; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rc-zip { font-size: 11.5px; color: var(--text-4); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rc-flags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
-.defect-chip {
-  padding: 2px 7px;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  background: var(--card-2);
-  color: var(--text-3);
-  border: 1px solid var(--border);
+.rc-score .rc-delta {
+  padding: 3px 7px;
+  border-radius: 7px;
+  background: rgba(9,9,11,.72);
+  backdrop-filter: blur(6px);
+  font-size: 12.5px;
+  font-weight: 800;
 }
-.defect-chip.sev-critical { color: #fff; background: rgba(255,38,0,.8); border-color: transparent; }
-.defect-chip.sev-major { color: #1a1a1a; background: var(--orange); border-color: transparent; }
-.defect-chip.sev-minor { color: var(--text-4); }
+
+/* Signed original→edited delta: green for improvement, red for regression. */
+.delta { font-weight: 800; }
+.delta.pos { color: var(--green); }
+.delta.neg { color: var(--red); }
+.delta.zero { color: var(--text-2); }
 
 /* ════════════════════════════════════════
    SUMMARY MODAL
@@ -508,31 +509,64 @@ a { text-decoration: none; color: inherit; }
 }
 
 .detail-overview {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  gap: 20px;
   margin-top: 20px;
   padding: 18px 20px;
   background: var(--card-2);
   border: 1px solid var(--border);
   border-radius: 14px;
 }
-.detail-score-box {
+.detail-scoreline {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
+}
+.score-col {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding-right: 20px;
-  border-right: 1px solid var(--border);
+  align-items: center;
+  gap: 4px;
   color: var(--text-2);
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: .07em;
   text-transform: uppercase;
 }
-.detail-score { margin-top: 4px; color: var(--text); font-size: 34px; font-weight: 800; letter-spacing: normal; text-transform: none; }
-.detail-overview-copy { min-width: 0; align-self: center; }
+.score-col:first-child { color: var(--text-3); }
+.detail-score { color: var(--text); font-size: 34px; font-weight: 800; letter-spacing: normal; text-transform: none; }
+.score-col:first-child .detail-score { color: var(--text-3); }
+.score-delta-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+}
+.score-delta-col small { color: var(--text-2); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.score-delta-col .delta { font-size: 22px; }
+.detail-overview .error-text { margin-top: 10px; text-align: left; }
+
+.detail-summaries {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.summary-col {
+  padding: 12px 14px;
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.summary-col-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
 .detail-summary { color: var(--text-3); font-size: 15px; line-height: 1.55; }
-.detail-overview .error-text { margin-top: 8px; text-align: left; }
 
 .detail-sub { margin: 26px 0 12px; font-size: 16.5px; font-weight: 700; color: var(--text-4); }
 
@@ -546,26 +580,29 @@ a { text-decoration: none; color: inherit; }
 .dim-head { display: flex; align-items: center; gap: 10px; }
 .dim-name { flex: 1; font-size: 15px; font-weight: 600; color: var(--text-4); }
 .dim-weight { font-size: 13px; color: var(--text-2); }
-.dim-score { font-size: 15.5px; font-weight: 800; min-width: 52px; text-align: right; }
+.dim-head .delta { font-size: 15px; min-width: 44px; text-align: right; }
+.dim-sides {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.dim-side { min-width: 0; }
+.dim-side-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dim-side-tag { font-size: 12px; font-weight: 700; color: var(--text-2); letter-spacing: .05em; }
+.dim-score { font-size: 15.5px; font-weight: 800; text-align: right; }
 .dim-score.na { color: var(--text-2); font-weight: 600; }
+.dim-side:first-child .dim-score { color: var(--text-3); }
 .dim-bar { margin-top: 8px; height: 5px; background: var(--card-3); border-radius: 3px; overflow: hidden; }
 .dim-bar-fill { height: 100%; border-radius: 3px; background: var(--mv-grad); }
+/* Original photo uses a distinct cool bar so it reads clearly against the
+   pink/purple edited bar. */
+.dim-side:first-child .dim-bar-fill { background: linear-gradient(135deg, #22D3EE 0%, #3B82F6 100%); }
 .dim-reason { margin-top: 8px; font-size: 14px; color: var(--text-3); line-height: 1.5; }
 .dim-issues { margin: 6px 0 0 18px; font-size: 13.5px; color: var(--text-2); }
 .dim-issues li { margin-top: 2px; }
 
-.detail-defects, .detail-suggestions { margin-left: 2px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
-.detail-defects li {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 12px;
-  background: var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  font-size: 14.5px;
-  color: var(--text-3);
-}
+.detail-suggestions { margin-left: 2px; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .detail-suggestions li {
   padding: 9px 12px;
   background: var(--card-2);
@@ -585,8 +622,9 @@ a { text-decoration: none; color: inherit; }
   .results-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
   .summary-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detail-compare-grid { grid-template-columns: minmax(0, 1fr); }
-  .detail-overview { grid-template-columns: 1fr; gap: 12px; }
-  .detail-score-box { padding: 0 0 12px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .detail-summaries { grid-template-columns: minmax(0, 1fr); }
+  .dim-sides { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .dim-side:first-child { padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 }
 @media (max-width: 560px) {
   .container { padding: 0 16px 48px; }

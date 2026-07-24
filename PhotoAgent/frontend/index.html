@@ -82,11 +82,15 @@
       transition: border-radius .5s ease;
     }
 
-    /* ── Step rich detail ── */
+    /* ── Step rich detail ──
+       Neutral (not accent-tinted) so it doesn't fight with the green
+       checked state below or whatever accent-colored controls sit inside
+       it (style-option pills, etc.) -- just a faint highlight + hairline
+       border to read as a grouped sub-panel, nothing more. */
     .step-list-frame {
       margin-top: 14px;
-      background: rgba(168,85,247,.06);
-      border: 1px solid rgba(168,85,247,.18);
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px 18px;
     }
@@ -176,23 +180,49 @@
       gap: 18px;
       animation: fadeUp .5s ease both;
     }
-    /* Panel title: must outrank .ap-label (17.5px) below it, so it's clearly
-       the top of the hierarchy rather than reading as a same-tier kicker. */
-    .analysis-preview > .eyebrow-label {
-      font-size: 20px;
-      font-weight: 800;
-      color: var(--text);
-      margin-bottom: 0;
+    /* Cancel (left) / continue (right) -- only unhidden for the inline
+       results-page flow (see openInlineAnalysisPanel in app.js). Normal
+       flow, not absolutely positioned, so it pushes the title down instead
+       of risking an overlap with it. */
+    .inline-analysis-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    .analysis-preview > .eyebrow-label::before {
-      content: '';
-      display: inline-block;
-      width: 7px; height: 7px;
-      margin-right: 9px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 0 4px rgba(168,85,247,.16);
+    .analysis-preview-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 34px;
+      padding: 0 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -.1px;
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s, transform .15s, box-shadow .15s;
     }
+    .analysis-preview-action-left {
+      border: 1px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text-2);
+    }
+    .analysis-preview-action-left:hover {
+      background: rgba(255,38,0,.12);
+      border-color: rgba(255,38,0,.35);
+      color: var(--red);
+    }
+    .analysis-preview-action-right {
+      border: none;
+      background: var(--mv-grad);
+      color: #fff;
+      box-shadow: var(--shadow-accent);
+    }
+    .analysis-preview-action-right:hover {
+      box-shadow: 0 14px 36px rgba(168,85,247,.34);
+      transform: translateY(-1px);
+    }
+    .analysis-preview-action:active { transform: scale(.96); }
     .ap-row p { margin: 6px 0 0; }
 
     /* ── Analysis-preview label hierarchy ──
@@ -234,24 +264,49 @@
       padding-top: 16px;
     }
 
-    /* 修圖建議 + image quality/model/RUN options side by side */
-    .ap-row-split {
+    /* 修圖風格選項 + 補充指令 (left) alongside image quality/model/RUN +
+       the inline continue button (right). align-items:stretch (rather than
+       flex-start) makes both columns span the row's full height -- ap-col-left
+       is normally the taller one (style toggle + a multi-line textarea), so
+       ap-col-right's own content is bottom-aligned within its stretched box
+       via justify-content:flex-end, and the border-left divider between them
+       (like the row-1/row-2 divider above, but vertical) runs the row's full
+       height instead of stopping wherever ap-col-right's own content ends. */
+    .ap-row-columns {
       display: flex;
-      gap: 24px;
-      align-items: flex-start;
+      align-items: stretch;
     }
-    .ap-row-main { flex: 1; min-width: 0; }
-    .ap-row-side {
-      width: 300px;
+    .ap-col-left {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      padding-right: 24px;
+    }
+    .ap-col-right {
+      /* +24px over the intended 300px content width, since padding-left
+         (border-box) eats into it -- keeps the options-card as wide as it
+         was before the divider padding was added, so labels like "修圖模型"
+         don't wrap. */
+      width: 324px;
       flex-shrink: 0;
-      /* .ap-row-main starts with a label (.ap-label) before its box;
-         this side has no label, so nudge it down to align box tops. */
-      margin-top: 35px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      gap: 16px;
+      padding-left: 24px;
+      border-left: 1px solid var(--border);
     }
-    .ap-row-side .options-card { height: 100%; }
     @media (max-width: 700px) {
-      .ap-row-split { flex-direction: column; }
-      .ap-row-side { width: 100%; margin-top: 0; }
+      .ap-row-columns { flex-direction: column; }
+      .ap-col-right {
+        width: 100%;
+        padding-left: 0;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        padding-top: 16px;
+      }
     }
 
     .ap-options-toggle > summary {
@@ -327,11 +382,12 @@
       z-index: 20;
       margin-top: 0;
       min-width: 200px;
-      /* Override .step-list-frame's translucent purple tint -- this now
-         floats over unrelated content (e.g. the prompt textarea) below it,
-         so it needs a solid, opaque surface (a shade lighter than the
-         surrounding card so it visibly lifts off the page) instead of a
-         see-through overlay that barely reads as its own layer. */
+      /* Override .step-list-frame's faint inline tint -- this now floats
+         over unrelated content (e.g. the prompt textarea) below it, so it
+         needs a solid, opaque surface (a shade lighter than the surrounding
+         card so it visibly lifts off the page) instead of a barely-there
+         background that wouldn't read as its own layer at all once
+         detached and overlapping other content. */
       background: var(--card-3);
       border-color: var(--border-2);
       box-shadow: 0 16px 40px rgba(0,0,0,.55);
@@ -358,7 +414,6 @@
       line-height: 1.5;
       letter-spacing: -.12px;
     }
-    .ap-options-prompt { margin-top: 16px; }
     .ap-option-groups {
       display: grid;
       grid-template-columns: repeat(4, minmax(0,1fr));
@@ -545,28 +600,142 @@
     .detail-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
     .detail-index { font-size: 13px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
 
-    /* ── Run tabs (switch between one image's N edit results) ── */
-    .run-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
-    .run-tab {
-      display: flex; flex-direction: column; align-items: center; gap: 4px;
-      padding: 6px 8px;
-      background: var(--card);
-      border: 1.5px solid var(--border-2);
-      border-radius: var(--radius-sm);
-      color: var(--text-2);
-      font-size: 12.5px; font-weight: 600;
-      cursor: pointer;
-      transition: border-color .15s, box-shadow .15s, transform .15s;
+    /* ── Run preview strip (scrolls horizontally, switches between one
+       image's N edit results) -- a padding-revealed gradient ring marks the
+       active thumbnail, and the RUN label overlays the photo itself as a
+       bottom caption instead of sitting in its own row below it. ── */
+    .run-tabs-row {
+      /* max-width is set inline by app.js (ResizeObserver) -- CSS has no
+         way to size against a sibling's rendered width. */
+      width: 100%;
+      margin: 0 auto;
     }
-    .run-tab:hover { transform: translateY(-1px); }
-    .run-tab img { width: 64px; height: 64px; object-fit: cover; border-radius: 6px; }
-    .run-tab.active { border-color: var(--accent); color: var(--text); box-shadow: 0 0 0 3px rgba(168,85,247,.14); }
-    .run-tab:disabled { cursor: default; opacity: .6; }
-    .run-tab.error { border-color: rgba(220,60,60,.6); }
+    /* Moved here (see openInlineAnalysisPanel in app.js) while the inline
+       analysis panel is open -- the results-container flex column's own
+       gap provides this spacing in the row's normal (unnested) position,
+       but #results-canvas-col is a plain block container with no gap of
+       its own between the photo and this. */
+    #results-canvas-col > .run-tabs-row {
+      margin-top: 20px;
+    }
+    /* Floats over the strip's own top-right corner instead of sitting in a
+       separate row that pushes it down -- same "icon overlaid on its own
+       content" language as .canvas-actions on the photo canvas. */
+    .run-tabs-download {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 4;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      border: 1px solid var(--border-2);
+      background: rgba(9,9,11,.8);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: var(--text-2);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background .15s, border-color .15s, color .15s, transform .15s;
+    }
+    .run-tabs-download:hover {
+      background: rgba(168,85,247,.4);
+      border-color: rgba(168,85,247,.55);
+      color: var(--text);
+      transform: translateY(-1px);
+    }
+    /* ── Run-tabs scroll arrows (reference: circular arrow overlaying the
+       edge of the carousel) -- hidden entirely when the strip doesn't
+       overflow, disabled at whichever end is already fully scrolled to
+       (see updateRunTabsArrows in app.js). ── */
+    .run-tabs-scroll-wrap { position: relative; }
+    .run-tabs-arrow {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      border: 1px solid var(--border-2);
+      border-radius: 50%;
+      background: rgba(9,9,11,.8);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: var(--text);
+      cursor: pointer;
+      box-shadow: var(--shadow-sm);
+      transition: background .15s, border-color .15s, transform .15s, opacity .15s;
+    }
+    .run-tabs-arrow:hover { background: rgba(168,85,247,.4); border-color: rgba(168,85,247,.55); }
+    .run-tabs-arrow:active { transform: translateY(-50%) scale(.92); }
+    .run-tabs-arrow:disabled { opacity: .3; cursor: not-allowed; pointer-events: none; }
+    .run-tabs-arrow-left { left: -6px; }
+    .run-tabs-arrow-right { right: -6px; }
+    .run-tabs {
+      display: flex;
+      gap: 14px;
+      overflow-x: auto;
+      padding: 4px 2px 10px;
+      /* Centered when the row is narrower than the container; "safe"
+         falls back to start-aligned (scrollable) instead of clipping the
+         first thumbnails off-screen once there are enough RUNs to overflow. */
+      justify-content: safe center;
+      /* Drag/trackpad/arrow-button scrolling all still work -- just hides
+         the scrollbar track so it doesn't visually compete with the arrow
+         buttons now doing that job. */
+      scrollbar-width: none;
+    }
+    .run-tabs::-webkit-scrollbar { display: none; }
+    .run-tabs-index {
+      margin-top: -4px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-2);
+      font-variant-numeric: tabular-nums;
+    }
+    .run-tab {
+      position: relative;
+      flex-shrink: 0;
+      width: 100px;
+      height: 100px;
+      padding: 2px;
+      border: none;
+      border-radius: 16px;
+      background: var(--border-2);
+      cursor: pointer;
+      transition: background .15s, box-shadow .15s, transform .15s;
+    }
+    .run-tab:hover { transform: translateY(-2px); }
+    .run-tab-media {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--card-2);
+    }
+    .run-tab-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .run-tab.active {
+      background: var(--mv-grad);
+      box-shadow: var(--shadow-accent);
+    }
+    .run-tab:disabled { cursor: default; }
+    .run-tab.error .run-tab-media { background: rgba(220,60,60,.18); }
     .run-tab-spin {
-      width: 16px; height: 16px;
-      border: 2px solid rgba(255,255,255,.25);
-      border-top-color: var(--text-2);
+      width: 20px; height: 20px;
+      border: 2.5px solid rgba(255,255,255,.25);
+      border-top-color: #fff;
       border-radius: 50%;
       animation: rc-spin .8s linear infinite;
     }
@@ -843,72 +1012,41 @@
           </button>
         </div>
 
+        <!-- Stable anchor #analysis-preview is moved back to whenever the
+             normal first-time flow (this section) needs to show it again --
+             see moveAnalysisPreviewTo/restoreAnalysisPreviewHome in app.js. -->
+        <div id="analysis-preview-home"></div>
         <div id="analysis-preview" class="analysis-preview" hidden>
-          <p class="eyebrow-label">初步分析結果</p>
-          <div id="ap-subject-tags" class="tag-row"></div>
-          <div class="ap-row ap-row-split">
-            <div class="ap-row-main">
-              <label class="ap-label">修圖建議</label>
-              <div class="step-list-frame">
-                <ul id="ap-recipe-list" class="step-inline-list"></ul>
-              </div>
-            </div>
-            <div class="ap-row-side">
-              <div class="options-card">
-                <div id="ap-image-quality-wrap">
-                  <div class="option-row">
-                    <div class="option-text">
-                      <span class="option-label">影像品質</span>
-                    </div>
-                    <select id="ap-image-quality" class="quality-select">
-                      <option value="low" selected>Low</option>
-                      <option value="medium">Medium</option>
-                    </select>
-                  </div>
-                  <div class="option-divider"></div>
-                </div>
-                <div class="option-row">
-                  <div class="option-text">
-                    <span class="option-label">修圖模型</span>
-                  </div>
-                  <select id="ap-image-model" class="quality-select">
-                    <option value="gpt-image-2" selected>GPT Image 2</option>
-                    <option value="nano-banana-2">Nano Banana 2</option>
-                  </select>
-                </div>
-                <div id="ap-run-count-wrap" hidden>
-                  <div class="option-divider"></div>
-                  <div class="option-row">
-                    <div class="option-text">
-                      <span class="option-label">生成張數</span>
-                    </div>
-                    <select id="ap-run-count" class="quality-select">
-                      <option value="1" selected>1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                      <option value="6">6</option>
-                      <option value="7">7</option>
-                      <option value="8">8</option>
-                      <option value="9">9</option>
-                      <option value="10">10</option>
-                      <option value="11">11</option>
-                      <option value="12">12</option>
-                      <option value="13">13</option>
-                      <option value="14">14</option>
-                      <option value="15">15</option>
-                      <option value="16">16</option>
-                      <option value="17">17</option>
-                      <option value="18">18</option>
-                      <option value="19">19</option>
-                      <option value="20">20</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
+          <!-- Only shown when #analysis-preview is on loan to the results
+               page (see openInlineAnalysisPanel in app.js) -- the normal
+               first-time flow has its own continue button
+               (#view-results-btn / #batch-review-continue) elsewhere and no
+               "cancel this review" concept at all. Normal flow (not
+               absolutely positioned) so it pushes the title down instead of
+               overlapping it. -->
+          <div id="inline-analysis-actions" class="inline-analysis-actions" hidden>
+            <button id="inline-analysis-cancel-btn" class="analysis-preview-action analysis-preview-action-left" type="button">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span>取消</span>
+            </button>
+            <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button">
+              <span>重新處理</span>
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="ap-row">
+            <label class="ap-label">修圖建議</label>
+            <div class="step-list-frame">
+              <ul id="ap-recipe-list" class="step-inline-list"></ul>
             </div>
           </div>
+
           <details class="ap-row ap-options-toggle" id="ap-options-toggle">
             <summary class="ap-label">修圖風格選項</summary>
 
@@ -950,13 +1088,73 @@
                 </div>
               </details>
             </div>
-
-            <div class="form-field ap-options-prompt">
-              <span class="field-label">補充指令</span>
-              <textarea id="prompt" class="field-ta" rows="4"
-                placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
-            </div>
           </details>
+
+          <div class="ap-row ap-row-columns">
+            <div class="ap-col-left">
+              <div class="form-field ap-options-prompt">
+                <label class="ap-label" for="prompt">補充指令</label>
+                <textarea id="prompt" class="field-ta" rows="4"
+                  placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
+              </div>
+            </div>
+
+            <div class="ap-col-right">
+              <div class="options-card">
+                <div class="option-row">
+                  <div class="option-text">
+                    <span class="option-label">修圖模型</span>
+                  </div>
+                  <select id="ap-image-model" class="quality-select">
+                    <option value="gpt-image-2" selected>GPT Image 2</option>
+                    <option value="nano-banana-2">Nano Banana 2</option>
+                  </select>
+                </div>
+                <div id="ap-image-quality-wrap">
+                  <div class="option-divider"></div>
+                  <div class="option-row">
+                    <div class="option-text">
+                      <span class="option-label">影像品質</span>
+                    </div>
+                    <select id="ap-image-quality" class="quality-select">
+                      <option value="low" selected>Low</option>
+                      <option value="medium">Medium</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="ap-run-count-wrap" hidden>
+                  <div class="option-divider"></div>
+                  <div class="option-row">
+                    <div class="option-text">
+                      <span class="option-label">生成張數</span>
+                    </div>
+                    <select id="ap-run-count" class="quality-select">
+                      <option value="1" selected>1</option>
+                      <option value="2">2</option>
+                      <option value="3">3</option>
+                      <option value="4">4</option>
+                      <option value="5">5</option>
+                      <option value="6">6</option>
+                      <option value="7">7</option>
+                      <option value="8">8</option>
+                      <option value="9">9</option>
+                      <option value="10">10</option>
+                      <option value="11">11</option>
+                      <option value="12">12</option>
+                      <option value="13">13</option>
+                      <option value="14">14</option>
+                      <option value="15">15</option>
+                      <option value="16">16</option>
+                      <option value="17">17</option>
+                      <option value="18">18</option>
+                      <option value="19">19</option>
+                      <option value="20">20</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <details class="ap-row ap-options-toggle" id="ap-analysis-toggle" hidden>
             <summary class="ap-label">分析結果</summary>
@@ -995,12 +1193,14 @@
               </svg>
               修圖完成
             </p>
-            <p id="res-summary" class="r-summary">已完成影像分析與輸出。</p>
+            <!-- Kept in the DOM (not shown) so existing code that sets its
+                 text can stay untouched -- #ap-subject-tags now occupies
+                 this position instead. -->
+            <p id="res-summary" class="r-summary" hidden>已完成影像分析與輸出。</p>
+            <div id="ap-subject-tags" class="tag-row"></div>
             <p id="batch-progress" class="r-summary" hidden></p>
           </div>
           <div style="display:flex;gap:8px;">
-            <a id="download-link" class="btn btn-grad" download="photo-muse-output.zip" hidden>下載結果</a>
-            <a id="download-all-runs-link" class="btn btn-secondary" download="photo-muse-output-all-runs.zip" hidden>全部下載</a>
             <button id="batch-continue-all-btn" class="btn btn-grad" type="button" hidden>
               全部繼續處理
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -1031,19 +1231,14 @@
               </svg>
               回到列表
             </button>
-            <button id="back-to-process-btn" class="btn btn-secondary" type="button" hidden>
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M15 18l-6-6 6-6" stroke="currentColor"
-                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              檢視分析結果
-            </button>
             <button id="reset-btn" class="btn btn-secondary" type="button">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M15 18l-6-6 6-6" stroke="currentColor"
+                <path d="M12 15V3M12 3L7 8M12 3l5 5" stroke="currentColor"
                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3 19h18" stroke="currentColor"
+                  stroke-width="2" stroke-linecap="round"/>
               </svg>
-              重新上傳
+              上傳照片
             </button>
           </div>
         </div>
@@ -1157,31 +1352,108 @@
         <button id="detail-next" class="btn btn-secondary" type="button">→</button>
       </div>
 
-      <!-- Run tabs: switch between this image's N edit results -->
-      <div id="run-tabs" class="run-tabs" hidden></div>
-
-      <!-- Before / After -->
-      <div class="compare-grid">
-        <div class="photo-card">
-          <div class="photo-card-hdr">
-            <span>原始照片</span>
-            <strong id="orig-dim"></strong>
-          </div>
-          <div class="photo-frame">
-            <img id="original-img" alt="original">
-          </div>
-        </div>
-        <div class="photo-card">
-          <div class="photo-card-hdr">
-            <span>輸出結果</span>
-            <strong id="model-name">AI 智能修圖</strong>
-          </div>
-          <div class="photo-frame-wrap">
-            <div class="photo-frame">
-              <img id="generated-img" alt="generated result">
+      <!-- Canvas + inline analysis-review panel side by side. The panel slot
+           is empty/collapsed by default; openInlineAnalysisPanel (app.js)
+           moves #analysis-preview into it and adds .showing-analysis here,
+           which is what actually drives the slide-in animation (styles.css). -->
+      <div class="results-canvas-row" id="results-canvas-row">
+        <div class="results-canvas-col" id="results-canvas-col">
+          <!-- Before / After: one full-bleed canvas, toggled between the two
+               images with floating icon buttons instead of a boxed header. -->
+          <div class="compare-card" id="compare-card">
+            <div class="photo-frame-wrap">
+              <div class="photo-frame">
+                <img id="original-img" alt="original" class="compare-img compare-img-original">
+                <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
+              </div>
+              <div class="canvas-actions">
+                <button id="compare-toggle-btn" class="canvas-btn" type="button" aria-label="查看原始照片">
+                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                    <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
+                    <path d="M12 4v16" stroke="currentColor" stroke-width="2"/>
+                    <path d="M3 7h9V4" fill="currentColor" opacity=".9" stroke="none"/>
+                  </svg>
+                </button>
+                <button id="back-to-process-btn" class="canvas-btn" type="button" aria-label="檢視分析結果" hidden>
+                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                    <path d="M3 7h6M15 7h6M3 12h10M17 12h4M3 17h13M20 17h1"
+                      stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                    <circle cx="10" cy="7" r="2.2" fill="currentColor"/>
+                    <circle cx="14" cy="12" r="2.2" fill="currentColor"/>
+                    <circle cx="17" cy="17" r="2.2" fill="currentColor"/>
+                  </svg>
+                </button>
+                <a id="download-link" class="canvas-btn" download="photo-muse-output.zip" title="下載結果" aria-label="下載結果" hidden>
+                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                    <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </a>
+              </div>
+              <!-- Momentary badge: flashes top-center of the photo itself
+                   (y=0, not tied to either icon button) whenever the view
+                   switches to the original, then fades back out on its own. -->
+              <div id="compare-hint" class="compare-hint">Original</div>
+              <!-- Shown while re-processing (either flow) runs in the
+                   background, since staying on this page means the
+                   thinking-rings screen never appears for that wait. -->
+              <div id="canvas-loading" class="canvas-loading" hidden>
+                <div class="canvas-spinner"></div>
+              </div>
             </div>
+            <!-- Kept in the DOM (not shown) so existing code that sets these can
+                 stay untouched -- the boxed header they used to sit in is gone. -->
+            <strong id="orig-dim" hidden></strong>
+            <strong id="model-name" hidden>AI 智能修圖</strong>
           </div>
         </div>
+
+        <!-- #analysis-preview (from the processing section) is moved in here
+             on demand -- see openInlineAnalysisPanel in app.js. -->
+        <div class="results-analysis-slot" id="results-analysis-slot"></div>
+      </div>
+
+      <!-- Stable anchor: #run-tabs-row is moved back here whenever the
+           inline analysis panel is closed -- see moveRunTabsRowTo/
+           restoreRunTabsRowHome in app.js. -->
+      <div id="run-tabs-row-home"></div>
+
+      <!-- Run preview strip: switch between this image's N edit results.
+           Normally a full-width row below the canvas+panel row (width-capped
+           at 1/3 of #results-canvas-row's own rendered width -- no pure-CSS
+           way to size against a sibling); while the inline analysis panel is
+           open, moved to sit directly under the canvas instead, so the photo
+           and its RUNs read as one aligned vertical column next to the
+           panel rather than a stray full-width row beneath both. Once the
+           thumbnails overflow whatever width applies, .run-tabs' own
+           overflow-x:auto (plus the arrows) makes it scrollable. -->
+      <div class="run-tabs-row" id="run-tabs-row">
+        <div class="run-tabs-scroll-wrap" id="run-tabs-scroll-wrap">
+          <!-- Floats over the strip's own top-right corner (like the
+               canvas-actions icons over the photo) instead of sitting in a
+               separate row that pushes the strip down. Icon-only --
+               title/aria-label (kept in sync with the RUN count in
+               updateDownloadLinks, app.js) carry the meaning as a native
+               hover tooltip instead of a permanently visible label. -->
+          <a id="download-all-runs-link" class="run-tabs-download" download="photo-muse-output-all-runs.zip" title="全部下載" aria-label="全部下載" hidden>
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+              <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </a>
+          <button id="run-tabs-prev" class="run-tabs-arrow run-tabs-arrow-left" type="button" aria-label="向左捲動" hidden>
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+              <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <div id="run-tabs" class="run-tabs" hidden></div>
+          <button id="run-tabs-next" class="run-tabs-arrow run-tabs-arrow-right" type="button" aria-label="向右捲動" hidden>
+            <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+              <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
+        <div id="run-tabs-index" class="run-tabs-index" hidden></div>
       </div>
 
       <!-- Everything below the before/after images: hidden entirely unless
