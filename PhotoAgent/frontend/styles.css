@@ -561,20 +561,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
 .results-topbar-text { }
 
-/* Small celebratory cue: the eyebrow becomes a green checkmark badge instead
-   of the usual purple "section kicker" tone, so completion reads as a
-   distinct, positive moment rather than just another label. */
-.results-done-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--green);
-  padding: 4px 12px 4px 10px;
-  background: rgba(1,179,123,.12);
-  border: 1px solid rgba(1,179,123,.25);
-  border-radius: 20px;
-}
-
 .r-summary {
   font-size: 17.5px;
   color: var(--text-2);

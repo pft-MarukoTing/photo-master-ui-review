@@ -14,7 +14,7 @@
     analyzeAipoc,
     analyzeAipocBatch
   } = window.PhotoAgentApi;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView, renderTags } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   // Keeps the run-tabs preview strip capped at 1/3 of #results-canvas-row's
@@ -137,9 +137,11 @@
   ];
   let batchRecords = [];   // see setSelectedFileBatch for record shape
   let batchSettings = null;
-  let detailPos = 0;       // index into the done-records list for the results detail view
-  let reviewPos = 0;       // index into the analyzed-records list for the step-2 review view
-  let gridSummary = "";    // grid-view summary text, saved so backToBatchGrid can restore it
+  // Direct reference to whichever record the sidebar currently has selected --
+  // not a status-filtered position (unlike doneBatchRecords()/analyzedBatchRecords()
+  // in the old grid+detail-pagination design), since the sidebar shows every
+  // record regardless of status and any of them can be clicked at any time.
+  let currentBatchRecord = null;
 
   const procVisual = document.querySelector(".proc-visual");
   const procTitle = document.querySelector(".proc-title");
@@ -456,9 +458,9 @@
     renderAnalysisPreview({ analysis, preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
-    // RUN count only applies to the single-image flow -- batch has its own
-    // batch-wide control (#run-count), and showBatchReview hides this again
-    // since it reuses this same #analysis-preview panel per image.
+    // RUN count only applies to the single-image flow -- batch mode never
+    // shows this panel for its own "analyzed" state at all anymore (only for
+    // startInlineBatchReview's per-image revise, which sets this itself).
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     setAnalysisPreviewDisabled(false);
     procVisual.classList.add("done");
@@ -744,24 +746,27 @@
     batchRecords.forEach((r) => { if (r.previewUrl) URL.revokeObjectURL(r.previewUrl); });
     batchRecords = [];
     batchSettings = null;
-    detailPos = 0;
-    reviewPos = 0;
+    currentBatchRecord = null;
     // Any prior single-image run's "回到流程" state refers to a different
     // photo (or no longer applies once batch mode starts) -- drop it.
     singleFlowState = null;
     lastSingleSelections = null;
     if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
-    if (els.resultsGrid) els.resultsGrid.innerHTML = "";
-    if (els.resultsGridWrap) els.resultsGridWrap.hidden = true;
-    if (els.resultsDetail) els.resultsDetail.hidden = false;
-    if (els.detailNav) els.detailNav.hidden = true;
+    if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
+    if (els.batchSidebar) els.batchSidebar.hidden = true;
+    // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
+    // single-image run (which never touches these) isn't left with the
+    // canvas/run-tabs hidden from a prior batch session.
+    if (els.batchMainLoading) { els.batchMainLoading.hidden = true; els.batchMainLoading.classList.remove("is-error", "is-analyzed"); }
+    if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
+    restoreAnalysisPreviewHome();
+    if (els.resultsCanvasRow) { els.resultsCanvasRow.hidden = false; els.resultsCanvasRow.classList.remove("showing-analysis"); }
+    if (els.runTabsRow) els.runTabsRow.hidden = false;
     if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
     if (els.runTabsIndex) els.runTabsIndex.hidden = true;
     currentRunTabsIndex = null;
     currentRunTabsOnSelect = null;
-    if (els.backToGridBtn) els.backToGridBtn.hidden = true;
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchProgress) els.batchProgress.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
@@ -770,7 +775,6 @@
     if (els.batchOptionsRow) { els.batchOptionsRow.hidden = true; els.batchOptionsRow.open = false; }
     renderBatchStyleOptions();
     updateBatchOptionsLocks(); // batchRecords is now empty, so this clears every category's lock/toggle
-    if (els.batchReviewNav) els.batchReviewNav.hidden = true;
   }
 
   function friendlyError(error) {
@@ -1108,6 +1112,15 @@
 
   // ── Batch step 1: analyze every image, then show the review grid ─────────
   async function startSubmitBatch(skipReview = false) {
+    // The batch-wide 生成張數 control (#run-count, shown later in the sidebar)
+    // starts out matching whatever the user picked on the upload page
+    // (#image-run-count) -- otherwise it's left at its own independent
+    // default (1) and batch-auto mode (which never pauses at the sidebar for
+    // the user to notice/adjust it) would silently run everyone once instead
+    // of the count actually configured before clicking Run.
+    if (els.runCountSelect && els.imageRunCountSelect) {
+      els.runCountSelect.value = els.imageRunCountSelect.value;
+    }
     const presetKey = "natural";
     batchSettings = {
       presetKey,
@@ -1137,19 +1150,16 @@
       r.mirrorIndex = null;
     });
 
-    els.resultsDetail.hidden = true;
-    els.detailNav.hidden = true;
-    els.backToGridBtn.hidden = true;
-    els.downloadLink.hidden = true;
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
-    els.batchContinueAllBtn.hidden = true;
-    els.resultsGridWrap.hidden = false;
     els.batchProgress.hidden = false;
-    els.resultSummary.textContent = "批次分析中，先完成的會先顯示。";
-    renderBatchGrid();
-    updateBatchProgress();
+    els.batchSidebar.hidden = false;
+    currentBatchRecord = batchRecords[0] || null;
+    // Before rendering: renderBatchMain measures the sidebar's real on-page
+    // position (updateBatchSidebarMaxHeight) to cap its height, which reads
+    // as all-zero while the section is still display:none.
     showSection("results");
+    renderBatchSidebarList();
+    renderBatchMain(currentBatchRecord); // shows record 1's "analyzing" placeholder immediately
+    updateBatchProgress();
 
     const analyzeArgs = {
       files: batchRecords.map((r) => r.file),
@@ -1167,7 +1177,8 @@
           entries = await analyzeAipocBatch(analyzeArgs);
         } catch (error) {
           batchRecords.forEach((r) => { r.status = "error"; r.error = friendlyError(error); });
-          renderBatchGrid();
+          renderBatchSidebarList();
+          renderBatchMain(currentBatchRecord);
           updateBatchProgress();
           showError(friendlyError(error));
           return;
@@ -1183,7 +1194,8 @@
             r.status = "error";
             r.error = (entry && entry.error) || "分析失敗";
           }
-          updateBatchCard(r);
+          updateBatchSidebarItem(r);
+          refreshIfSelected(r);
         });
       } else {
         // Local analyze is queued -- fan out job ids, then poll each.
@@ -1192,7 +1204,8 @@
           entries = await analyzeJobBatch(analyzeArgs);
         } catch (error) {
           batchRecords.forEach((r) => { r.status = "error"; r.error = friendlyError(error); });
-          renderBatchGrid();
+          renderBatchSidebarList();
+          renderBatchMain(currentBatchRecord);
           updateBatchProgress();
           showError(friendlyError(error));
           return;
@@ -1205,7 +1218,8 @@
             r.status = "error";
             r.error = (entry && entry.error) || "送出分析失敗";
           }
-          updateBatchCard(r);
+          updateBatchSidebarItem(r);
+          refreshIfSelected(r);
         });
         const analyzing = batchRecords.filter((r) => r.status === "analyzing" && r.analyzeJobId);
         await runBatchPool(analyzing, analyzeBatchItem, POLL_CONCURRENCY);
@@ -1220,7 +1234,7 @@
         // continueBatchRecords already filters to status === "analyzed".
         await continueBatchRecords(analyzedBatchRecords());
       } else {
-        enterBatchReview();
+        updateBatchHeaderControls();
       }
     } finally {
       els.startButton.disabled = false;
@@ -1244,31 +1258,20 @@
       record.status = "error";
       record.error = friendlyError(error);
     }
-    updateBatchCard(record);
+    updateBatchSidebarItem(record);
+    refreshIfSelected(record);
     updateBatchProgress();
   }
 
-  // ── Batch step 2 gate: analyzed grid + the advance-all default button ────
-  function enterBatchReview() {
-    els.resultsDetail.hidden = true;
-    els.detailNav.hidden = true;
-    els.backToGridBtn.hidden = true;
-    // Entering/re-entering review means no image is "done" yet (either the
-    // very first analyze, or a reload that reset every record) -- the
-    // done-only actions don't apply until continueBatchRecords produces
-    // fresh results.
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
-    els.batchReviewNav.hidden = true;
-    els.resultsGridWrap.hidden = false;
+  // Shows/hides the bulk "全部繼續處理" button + batch-wide prompt/options rows
+  // in the sidebar, based on whether there's at least one record still
+  // awaiting its first edit -- live-updated as analyses/edits complete, not
+  // just once at the end of a whole-batch phase.
+  function updateBatchHeaderControls() {
     const ready = analyzedBatchRecords().length > 0;
     els.batchContinueAllBtn.hidden = !ready;
     els.batchPromptRow.hidden = !ready;
     if (els.batchOptionsRow) els.batchOptionsRow.hidden = !ready;
-    els.resultSummary.textContent = ready
-      ? "分析完成。可點單張分析給各自補充指令，或在下方填寫整批補充指令後「全部繼續處理」。"
-      : "分析未成功，請重試。";
-    showSection("results");
   }
 
   // Effective per-image prompt: the image's own (from its review) wins; else the
@@ -1316,7 +1319,7 @@
   // individually adjusted for the currently-open batch record, then re-locks
   // the matching batch-level control.
   function markOptionTouched(key) {
-    const record = currentReviewRecord();
+    const record = currentBatchRecord;
     if (!record) return;
     if (!record.optionsTouched) record.optionsTouched = {};
     record.optionsTouched[key] = true;
@@ -1351,17 +1354,6 @@
     const targets = records.filter((r) => r.status === "analyzed");
     if (!targets.length) return;
 
-    els.batchContinueAllBtn.hidden = true;
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
-    els.batchPromptRow.hidden = true;
-    if (els.batchOptionsRow) els.batchOptionsRow.hidden = true;
-    els.batchReviewNav.hidden = true;
-    if (els.analysisPreview) els.analysisPreview.hidden = true;
-    els.resultsDetail.hidden = true;
-    els.resultsGridWrap.hidden = false;
-    showSection("results");
-
     // N independent edit runs per image from the same analysis. Each run is
     // its own job; the pool works through (record, run) pairs.
     const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
@@ -1373,29 +1365,24 @@
       r.mirrorIndex = null; // auto: mirror follows the first finished run
     });
 
-    targets.forEach((r) => { r.status = "processing"; updateBatchCard(r); });
+    targets.forEach((r) => {
+      r.status = "processing";
+      updateBatchSidebarItem(r);
+      refreshIfSelected(r); // no canvas yet for a first-time edit -- shows the loading placeholder
+    });
     updateBatchProgress();
-    els.resultSummary.textContent = batchSettings.aiPhotoEditing
-      ? `批次使用 ${window.PhotoAgentConfig.imageModels[batchSettings.imageModel] || batchSettings.imageModel} 修圖中，先完成的會先顯示。`
-      : "批次本機影像處理中，先完成的會先顯示。";
+    // Only after every target has actually left "analyzed" -- otherwise this
+    // still sees them and leaves the bulk prompt/options/continue-all button
+    // visible for the whole editing run instead of hiding immediately.
+    updateBatchHeaderControls();
 
     const workItems = targets.flatMap((r) => r.runs.map((run) => ({ record: r, run })));
     await runBatchPool(workItems, editBatchItem, POLL_CONCURRENCY);
 
-    const done = batchRecords.filter((r) => r.status === "done").length;
-    els.resultSummary.textContent = `批次完成：${done}/${batchRecords.length} 張成功。`;
-    // Keep the advance-all controls if images are still awaiting review.
-    const remaining = analyzedBatchRecords().length > 0;
-    els.batchContinueAllBtn.hidden = !remaining;
-    els.batchPromptRow.hidden = !remaining;
-    if (els.batchOptionsRow) els.batchOptionsRow.hidden = !remaining;
-    const anyDone = doneBatchRecords().length > 0;
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = !anyDone;
+    updateBatchHeaderControls(); // some records may still be "analyzed" if only a subset was continued
   }
 
   function batchContinueAll() {
-    captureBatchReviewSelections(currentReviewRecord());
     continueBatchRecords(analyzedBatchRecords());
   }
 
@@ -1467,11 +1454,9 @@
       run.error = friendlyError(error);
     }
     syncRecordMirror(record);
-    updateBatchCard(record);
+    updateBatchSidebarItem(record);
     updateBatchProgress();
-    if (els.detailNav && !els.detailNav.hidden && doneBatchRecords()[detailPos] === record) {
-      renderRunTabs(record);
-    }
+    refreshIfSelected(record);
   }
 
   function syncRecordMirror(record) {
@@ -1527,15 +1512,19 @@
     }
   }
 
-  function renderBatchGrid() {
-    els.resultsGrid.innerHTML = "";
-    batchRecords.forEach((record) => els.resultsGrid.appendChild(buildBatchCard(record)));
+  function renderBatchSidebarList() {
+    if (els.batchSidebarTitle) els.batchSidebarTitle.textContent = `批次圖片（${batchRecords.length}）`;
+    els.batchSidebarList.innerHTML = "";
+    batchRecords.forEach((record) => els.batchSidebarList.appendChild(buildBatchSidebarItem(record)));
   }
 
-  function buildBatchCard(record) {
-    const card = document.createElement("div");
-    card.className = `result-card ${record.status}`;
-    card.dataset.id = record.localId;
+  // Every status is clickable now (unlike the old grid, which only let you
+  // click done/analyzed/error cards) -- selectBatchRecord dispatches to
+  // whatever main-area view matches that record's current status.
+  function buildBatchSidebarItem(record) {
+    const item = document.createElement("div");
+    item.className = `batch-sidebar-item ${record.status}${record === currentBatchRecord ? " selected" : ""}`;
+    item.dataset.id = record.localId;
 
     const media = document.createElement("div");
     media.className = "rc-media";
@@ -1564,32 +1553,28 @@
       else if (runsDone === runs.length) badge.textContent = `完成 ${runs.length} RUN`;
       else if (runsDone) badge.textContent = `完成 ${runsDone}/${runs.length} RUN`;
     }
-    media.appendChild(badge);
 
+    // Unlike the old grid (badge overlaid on a large square thumbnail), the
+    // sidebar's thumbnail is small -- the badge sits beside the filename
+    // instead of inside it, where there's enough width for the text.
+    const textCol = document.createElement("div");
+    textCol.className = "batch-sidebar-text";
     const name = document.createElement("p");
     name.className = "rc-name";
     name.textContent = record.file.name;
+    textCol.appendChild(name);
+    textCol.appendChild(badge);
 
-    card.appendChild(media);
-    card.appendChild(name);
-
-    if (record.status === "done") {
-      card.classList.add("clickable");
-      card.addEventListener("click", () => openBatchDetail(record));
-    } else if (record.status === "analyzed") {
-      card.classList.add("clickable");
-      card.addEventListener("click", () => openBatchAnalysisReview(record));
-    } else if (record.status === "error") {
-      card.classList.add("clickable");
-      card.title = record.error || "處理失敗";
-      card.addEventListener("click", () => openBatchError(record));
-    }
-    return card;
+    item.appendChild(media);
+    item.appendChild(textCol);
+    if (record.status === "error") item.title = record.error || "處理失敗";
+    item.addEventListener("click", () => selectBatchRecord(record));
+    return item;
   }
 
-  function updateBatchCard(record) {
-    const existing = els.resultsGrid.querySelector(`[data-id="${record.localId}"]`);
-    if (existing) existing.replaceWith(buildBatchCard(record));
+  function updateBatchSidebarItem(record) {
+    const existing = els.batchSidebarList.querySelector(`[data-id="${record.localId}"]`);
+    if (existing) existing.replaceWith(buildBatchSidebarItem(record));
   }
 
   function openBatchError(record) {
@@ -1603,28 +1588,6 @@
     if (els.errorModal) els.errorModal.hidden = true;
   }
 
-  function doneBatchRecords() {
-    return batchRecords.filter((r) => r.status === "done");
-  }
-
-  function openBatchDetail(record) {
-    gridSummary = els.resultSummary.textContent;
-    const done = doneBatchRecords();
-    detailPos = Math.max(0, done.indexOf(record));
-    showBatchDetail();
-  }
-
-  // "回到分析結果": from the finished batch list, send every record that has
-  // an analysis back to "analyzed" (without re-calling the analyze API) and
-  // reopen the customize/review grid -- lets the user revise the recipe/
-  // style options/prompt and re-run continueBatchRecords instead of being
-  // stuck with the first edit.
-  function backToAnalyzedBatch() {
-    batchRecords.forEach((r) => { if (r.analysis) r.status = "analyzed"; });
-    renderBatchGrid();
-    enterBatchReview();
-  }
-
   // "重新分析": wipe every record's analysis/edit state and re-run step 1
   // from scratch, same as the initial submit -- for when the recipe needs a
   // clean re-analyze rather than a manual revise.
@@ -1632,10 +1595,156 @@
     startSubmitBatch();
   }
 
+  // ── Core dispatcher: sidebar click -> whatever main-area view matches the
+  // selected record's current status. Replaces the old grid/detail-pagination/
+  // separate-review-screen split entirely -- one page, one selection model. ──
+  function selectBatchRecord(record) {
+    if (!record) return;
+    // If a done record's inline revise-panel is open, close it directly
+    // rather than simulating a click on its cancel button -- that click's
+    // continuation runs as a microtask (via waitForInlineAnalysisAction's
+    // promise), which would race against the render we're about to do for
+    // the newly selected record.
+    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+      clearInlineAnalysisWait();
+      closeInlineAnalysisPanel();
+    }
+    const previous = currentBatchRecord;
+    currentBatchRecord = record;
+    if (previous && previous !== record) updateBatchSidebarItem(previous);
+    updateBatchSidebarItem(record);
+    renderBatchMain(record);
+    if (record.status === "error") openBatchError(record); // only on explicit click, never from a background refresh
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  // Re-renders the main area only if `record` is still the selected one --
+  // called from every place a record's status changes in the background
+  // (analyze/edit completing), so the visible view stays live without
+  // requiring the user to re-click the sidebar.
+  function refreshIfSelected(record) {
+    if (record === currentBatchRecord) renderBatchMain(record);
+  }
+
+  // The topbar's subject/scene tags (#ap-subject-tags) are shared with the
+  // single-image flow, so switching which batch image is selected has to
+  // refresh them too -- otherwise they're left showing whichever record was
+  // selected before, regardless of which sub-view (loading/review/done/error)
+  // ends up rendering. "analyzed" already refreshes them via
+  // renderAnalysisPreview; this covers every other status too.
+  function updateApSubjectTags(record) {
+    if (!els.apSubjectTags) return;
+    const analysis = record && record.analysis;
+    renderTags(els.apSubjectTags, analysis ? [
+      analysis.subject_category || "未知類型",
+      analysis.scene_category || "未知場景"
+    ] : []);
+  }
+
+  // Caps .batch-sidebar so align-items:stretch never grows it past the
+  // viewport (per this app's "avoid making the user scroll the window"
+  // policy), even when the main content column is naturally very tall.
+  // Measured from the sidebar's own actual (pre-scroll) rendered top --
+  // a static CSS calc() can't know the results-topbar's real height, which
+  // is what actually pushes that starting position down, not just the fixed
+  // header. Deliberately NOT re-measured on scroll: this uses the sidebar's
+  // worst-case (unstuck, further down the page) position, which is the
+  // binding constraint -- once scrolled enough to actually stick higher up,
+  // capping to the same height just leaves a little unused room at the
+  // bottom rather than growing (which would require re-measuring mid-scroll).
+  function updateBatchSidebarMaxHeight() {
+    if (!els.batchSidebar || els.batchSidebar.hidden) return;
+    const top = els.batchSidebar.getBoundingClientRect().top;
+    const maxHeight = Math.max(200, window.innerHeight - top - 24);
+    els.batchSidebar.style.maxHeight = `${maxHeight}px`;
+  }
+  window.addEventListener("resize", updateBatchSidebarMaxHeight);
+
+  function renderBatchMain(record) {
+    if (!record) return;
+    updateApSubjectTags(record);
+    updateBatchSidebarMaxHeight();
+    if (record.status === "analyzed") showBatchAnalyzedMain(record);
+    // Guard against the brief window (mid-revise, with N new runs in flight
+    // alongside older already-done ones) where syncRecordMirror's aggregate
+    // "any run done" check flips record.status to "done" before the specific
+    // mirrored run has actually resolved -- record.result would still be
+    // null then, so fall through to the loading view instead of crashing.
+    else if (record.status === "done" && record.result) showBatchDoneMain(record);
+    else if (record.status === "error") showBatchMainError(record);
+    else showBatchMainLoading(record); // "analyzing" / "processing"
+  }
+
+  function hideAllBatchMainViews() {
+    if (els.batchMainLoading) {
+      els.batchMainLoading.hidden = true;
+      els.batchMainLoading.classList.remove("is-error", "is-analyzed");
+    }
+    if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
+    restoreAnalysisPreviewHome(); // vacates #results-analysis-slot if a done record's revise panel is open
+    if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = true;
+    if (els.runTabsRow) els.runTabsRow.hidden = true;
+  }
+
+  function showBatchMainLoading(record) {
+    hideAllBatchMainViews();
+    if (!els.batchMainLoading) return;
+    els.batchMainLoading.hidden = false;
+    if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.previewUrl;
+    if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is working";
+    const analyzing = record.status === "analyzing";
+    if (els.batchMainLoadingTitle) {
+      els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在修圖";
+    }
+    if (els.batchMainLoadingText) {
+      els.batchMainLoadingText.textContent = analyzing
+        ? "AI 正在分析照片，請稍候…"
+        : "AI 正在修圖，請稍候…";
+    }
+  }
+
+  function showBatchMainError(record) {
+    hideAllBatchMainViews();
+    if (!els.batchMainLoading) return;
+    els.batchMainLoading.hidden = false;
+    els.batchMainLoading.classList.add("is-error");
+    if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.previewUrl;
+    if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master hit a snag";
+    if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = "處理失敗";
+    if (els.batchMainLoadingText) {
+      els.batchMainLoadingText.textContent = record.error || "處理失敗，請稍後再試。";
+    }
+  }
+
+  // Pre-first-edit review: the recipe/style-options/prompt panel, shown full
+  // width in the main area (no canvas yet -- nothing has been edited for this
+  // image). Reuses the same #analysis-preview DOM the beside-canvas revise
+  // panel does, just relocated to a different destination.
+  // "Analyzed, not yet edited" -- no per-image recipe/options/prompt review
+  // anymore (that's only decided via the bulk batch-prompt-row/batch-options-
+  // row in the sidebar now); just a static preview of the source photo plus a
+  // way to continue this one image specifically, same info-block language as
+  // showBatchMainLoading/showBatchMainError but without the spinning rings
+  // (nothing is actually in progress for this record yet).
+  function showBatchAnalyzedMain(record) {
+    hideAllBatchMainViews();
+    if (els.batchMainLoading) {
+      els.batchMainLoading.hidden = false;
+      els.batchMainLoading.classList.add("is-analyzed");
+      if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.previewUrl;
+      if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is ready";
+      if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = "已完成分析";
+      if (els.batchMainLoadingText) {
+        els.batchMainLoadingText.textContent = "可調整左側的整批補充指令或風格選項，或針對這張圖片單獨繼續處理。";
+      }
+    }
+    if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = false;
+  }
+
   // Tab strip for one image's N edit results. Hidden unless there's more than
   // one run. Shared by the batch detail view and the single-image results
   // view; `onSelectDone(idx)` decides what re-pointing to that run means for
-  // the caller (batch re-renders via syncRecordMirror+showBatchDetail, single
+  // the caller (batch re-renders via syncRecordMirror+showBatchDoneMain, single
   // via showSingleResult).
   function buildRunTabs(runs, currentIdx, onSelectDone) {
     const samePhoto = runs === lastRunTabsRuns;
@@ -1699,7 +1808,7 @@
     buildRunTabs(runs, current, (idx) => {
       record.mirrorIndex = idx;
       syncRecordMirror(record);
-      showBatchDetail();
+      showBatchDoneMain(record);
     });
   }
 
@@ -1725,24 +1834,20 @@
     });
   }
 
-  // Reuse the single-image report DOM (renderResult) for the opened record.
+  // Reuse the single-image report DOM (renderResult) for the selected record.
   // Set the original image first so resolveCropBoxForDisplay sees its dims.
-  function showBatchDetail() {
-    const done = doneBatchRecords();
-    if (!done.length) return;
-    detailPos = Math.min(Math.max(detailPos, 0), done.length - 1);
-    const record = done[detailPos];
-
-    els.resultsGridWrap.hidden = true;
-    els.resultsDetail.hidden = false;
-    els.detailNav.hidden = false;
-    els.backToGridBtn.hidden = false;
+  function showBatchDoneMain(record) {
+    // Skip the teardown when the canvas is already showing -- this runs
+    // again every time a RUN tab is clicked (same record, just a different
+    // run), and hideAllBatchMainViews' restoreAnalysisPreviewHome() would
+    // otherwise yank the inline revise panel out from beside the canvas
+    // (if the user has it open) even though nothing about which record/view
+    // is displayed actually changed.
+    const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+    if (!alreadyShowing) hideAllBatchMainViews();
+    els.resultsCanvasRow.hidden = false;
+    els.runTabsRow.hidden = false;
     if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
-    els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
-    els.detailPrev.disabled = detailPos === 0;
-    els.detailNext.disabled = detailPos === done.length - 1;
     renderRunTabs(record);
 
     const applyRender = () => {
@@ -1786,35 +1891,14 @@
       };
       els.originalImg.src = record.previewUrl;
     }
-    window.scrollTo({ top: 0, behavior: "instant" });
   }
 
-  function backToBatchGrid() {
-    els.resultsDetail.hidden = true;
-    els.detailNav.hidden = true;
-    if (els.runTabs) els.runTabs.hidden = true;
-    if (els.runTabsIndex) els.runTabsIndex.hidden = true;
-    currentRunTabsIndex = null;
-    currentRunTabsOnSelect = null;
-    els.backToGridBtn.hidden = true;
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
-    els.downloadLink.hidden = true;
-    const anyDone = doneBatchRecords().length > 0;
-    if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = !anyDone;
-    els.resultsGridWrap.hidden = false;
-    if (gridSummary) els.resultSummary.textContent = gridSummary;
-    window.scrollTo({ top: 0, behavior: "instant" });
-  }
-
-  // Is a single already-finished batch record currently open in detail view?
-  // Returns null for the single-image flow or the batch grid, so callers can
-  // branch between the whole-record batch path and the single-image path
-  // with one check.
+  // Is a single already-finished batch record currently open in the main
+  // area? Returns null for the single-image flow (or a batch record that
+  // isn't done yet), so callers can branch between the whole-record batch
+  // path and the single-image path with one check.
   function currentDetailBatchRecord() {
-    if (!batchRecords.length || els.resultsDetail.hidden) return null;
-    const done = doneBatchRecords();
-    return done[detailPos] || null;
+    return (currentBatchRecord && currentBatchRecord.status === "done") ? currentBatchRecord : null;
   }
 
   // "檢視分析結果" for one already-finished batch photo: reuses the same
@@ -1829,7 +1913,12 @@
     renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
     applyBatchReviewSelections(record);
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
-    if (els.apRunCountWrap) els.apRunCountWrap.hidden = true; // batch's own run-count lives on the grid, not per-item
+    // Pre-fill with this image's own current RUN count (matching whatever was
+    // configured when it last ran) instead of hiding the control -- the
+    // bulk #run-count in the sidebar only ever applies to a *first* continue,
+    // so a revise needs its own visible/adjustable count, same as single-image.
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    if (els.apRunCountSelect) els.apRunCountSelect.value = String((record.runs || []).length || 1);
     openInlineAnalysisPanel();
 
     const action = await waitForInlineAnalysisAction();
@@ -1838,25 +1927,40 @@
 
     captureBatchReviewSelections(record);
     setAnalysisPreviewDisabled(true);
-    if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
-    if (els.canvasLoading) els.canvasLoading.hidden = false;
 
-    const run = { run: (record.runs || []).length + 1, jobId: null, status: "processing", imageUrl: null, result: null, timings: [], error: null };
-    record.runs = [...(record.runs || []), run];
-    record.mirrorIndex = record.runs.length - 1;
+    // N fresh runs (N = the count just confirmed above) -- drop the previous
+    // result(s) entirely and regenerate from scratch, same as re-running the
+    // single-image flow (finishSingleFlow always replaces singleRuns rather
+    // than appending to it), instead of piling new runs up alongside old ones.
+    const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
+    const newRuns = Array.from({ length: runCount }, (_, k) => ({
+      run: k + 1, jobId: null, status: "processing",
+      imageUrl: null, result: null, timings: [], error: null
+    }));
+    record.runs = newRuns;
+    record.mirrorIndex = newRuns.length - 1;
     record.status = "processing";
-    updateBatchCard(record);
+    updateBatchSidebarItem(record);
+    // Replaces the canvas/run-tabs with the same processing view a first-time
+    // edit shows (renderBatchMain routes "processing" there) -- rather than
+    // leaving the old (now-stale) canvas up with a spinner overlaid on it.
+    refreshIfSelected(record);
 
-    await editBatchItem({ record, run });
-
-    if (els.canvasLoading) els.canvasLoading.hidden = true;
-    if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
-    if (run.status === "error") showError(run.error || "重新處理失敗，請稍後再試。");
-    if (doneBatchRecords().includes(record)) {
-      showBatchDetail();
-    } else {
-      backToBatchGrid();
+    await runBatchPool(newRuns.map((run) => ({ record, run })), editBatchItem, POLL_CONCURRENCY);
+    // Re-point the mirror at the newest run that actually succeeded, in case
+    // it wasn't the last one (a slower earlier run finished first) -- other-
+    // wise record.status could read "done" while the mirrored pick is a
+    // still-processing/failed run, leaving record.result null (see
+    // renderBatchMain's guard, which falls back to the processing view then).
+    for (let i = record.runs.length - 1; i >= 0; i -= 1) {
+      if (record.runs[i].status === "done") { record.mirrorIndex = i; break; }
     }
+    syncRecordMirror(record);
+    updateBatchSidebarItem(record);
+    refreshIfSelected(record);
+
+    const failed = newRuns.filter((run) => run.status === "error");
+    if (failed.length) showError(failed[0].error || "重新處理失敗，請稍後再試。");
   }
 
   // Dispatches "檢視分析結果" to whichever flow is actually active: a single
@@ -1879,53 +1983,8 @@
     }
   }
 
-  // ── Batch step-2 per-image review (reuses the single analysis panel) ─────
   function analyzedBatchRecords() {
     return batchRecords.filter((r) => r.status === "analyzed");
-  }
-
-  function currentReviewRecord() {
-    const list = analyzedBatchRecords();
-    if (!list.length) return null;
-    return list[Math.min(Math.max(reviewPos, 0), list.length - 1)];
-  }
-
-  function openBatchAnalysisReview(record) {
-    reviewPos = Math.max(0, analyzedBatchRecords().indexOf(record));
-    showBatchReview();
-  }
-
-  function showBatchReview() {
-    const list = analyzedBatchRecords();
-    if (!list.length) { enterBatchReview(); return; }
-    reviewPos = Math.min(Math.max(reviewPos, 0), list.length - 1);
-    const record = list[reviewPos];
-
-    // Reuse the processing screen's analysis-preview panel verbatim.
-    restoreAnalysisPreviewHome();
-    clearContinueWait();
-    els.viewResultsWrap.hidden = true;
-    procVisual.style.height = "";
-    els.procThumb.src = record.previewUrl;
-    procVisual.classList.add("done");
-    if (procTitle) procTitle.textContent = "初步分析已完成";
-    if (procSub) procSub.textContent = "審核初步分析，可調整後繼續。";
-
-    renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
-    if (els.analysisPreview) els.analysisPreview.hidden = false;
-    if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
-    if (els.apRunCountWrap) els.apRunCountWrap.hidden = true;
-    applyBatchReviewSelections(record);
-    // The 補充指令 textarea lives inside #analysis-preview; restore this image's.
-    if (els.promptInput) els.promptInput.value = record.userPrompt || "";
-
-    els.batchReviewNav.hidden = false;
-    els.batchReviewIndex.textContent = `${reviewPos + 1} / ${list.length}`;
-    els.batchReviewPrev.disabled = reviewPos === 0;
-    els.batchReviewNext.disabled = reviewPos === list.length - 1;
-
-    showSection("processing");
-    window.scrollTo({ top: 0, behavior: "instant" });
   }
 
   // Reads the current recipe checkboxes + pose/angle/lighting/size radios
@@ -2014,13 +2073,6 @@
     applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
   }
 
-  function batchReviewBack() {
-    captureBatchReviewSelections(currentReviewRecord());
-    if (els.analysisPreview) els.analysisPreview.hidden = true;
-    els.batchReviewNav.hidden = true;
-    enterBatchReview();
-  }
-
   function resetApp() {
     hideError();
     selectedFile = null;
@@ -2103,8 +2155,6 @@
   }
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadAllRunsLink) els.downloadAllRunsLink.addEventListener("click", handleDownloadAllRunsClick);
-  if (els.backToGridBtn) els.backToGridBtn.addEventListener("click", backToBatchGrid);
-  if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.addEventListener("click", backToAnalyzedBatch);
   if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);
   if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
   if (els.errorModal) {
@@ -2115,45 +2165,11 @@
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && els.errorModal && !els.errorModal.hidden) closeErrorModal();
   });
-  if (els.detailPrev) {
-    els.detailPrev.addEventListener("click", () => {
-      if (detailPos > 0) { detailPos -= 1; showBatchDetail(); }
-    });
-  }
-  if (els.detailNext) {
-    els.detailNext.addEventListener("click", () => {
-      detailPos += 1;
-      showBatchDetail();
-    });
-  }
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
-  if (els.batchReviewBack) els.batchReviewBack.addEventListener("click", batchReviewBack);
-  if (els.batchReviewPrev) {
-    els.batchReviewPrev.addEventListener("click", () => {
-      if (reviewPos > 0) {
-        captureBatchReviewSelections(currentReviewRecord());
-        reviewPos -= 1;
-        showBatchReview();
-      }
-    });
-  }
-  if (els.batchReviewNext) {
-    els.batchReviewNext.addEventListener("click", () => {
-      if (reviewPos < analyzedBatchRecords().length - 1) {
-        captureBatchReviewSelections(currentReviewRecord());
-        reviewPos += 1;
-        showBatchReview();
-      }
-    });
-  }
-  if (els.batchReviewContinue) {
-    els.batchReviewContinue.addEventListener("click", () => {
-      const record = currentReviewRecord();
-      if (!record) return;
-      captureBatchReviewSelections(record);
-      if (els.analysisPreview) els.analysisPreview.hidden = true;
-      els.batchReviewNav.hidden = true;
-      continueBatchRecords([record]);
+  if (els.batchReviewContinueBtn) {
+    els.batchReviewContinueBtn.addEventListener("click", () => {
+      if (!currentBatchRecord) return;
+      continueBatchRecords([currentBatchRecord]);
     });
   }
 

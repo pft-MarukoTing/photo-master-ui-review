@@ -535,35 +535,80 @@
       .dz-thumb-remove:focus-visible { opacity: 1; }
     }
 
-    /* ── Batch results grid ── */
-    .results-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 16px;
-      padding: 8px 0 24px;
-    }
-    .result-card {
+    /* ── Batch sidebar: one row per image, shown beside the same
+       single-image-mode main content used below (#results-detail) --
+       see selectBatchRecord/renderBatchMain in app.js. ── */
+    /* align-items: stretch (not flex-start) so the sidebar card's own height
+       always matches whichever is taller -- itself or the main content,
+       which swings a lot between the compact "analyzing" placeholder and the
+       full compare-card+run-tabs "done" view -- instead of looking like a
+       short floating card next to a much taller (or shorter) column. */
+    .results-body { display: flex; align-items: stretch; gap: 28px; }
+    .batch-sidebar {
+      flex: 0 0 280px; width: 280px;
+      position: sticky; top: calc(var(--header-h) + 24px);
+      margin-top: 44px;
+      padding: 20px;
+      /* A self-contained card, same language as .options-card/.verdict-card
+         elsewhere -- previously just a border-right hairline, which still
+         read as sharing the page's own background/region with the results
+         column instead of looking like its own distinct block. */
       background: var(--card);
-      border: 1px solid var(--border-2);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow-sm);
-      overflow: hidden;
+      /* Stretching to match a taller main content (below) is only for visual
+         balance -- it must never itself grow past the viewport and force the
+         whole window to scroll just because a batch has a lot of images (or
+         the main content is simply tall). max-height is set from JS
+         (updateBatchSidebarMaxHeight, app.js) instead of a static calc() here
+         -- a fixed formula can't account for the results-topbar's own actual
+         rendered height, which pushes the sidebar's real starting position
+         well below what "header height + a fixed offset" alone assumes.
+         Only the image list (not the title/bulk controls above it) scrolls
+         internally once content exceeds that cap. */
+      display: flex;
+      flex-direction: column;
     }
-    .result-card.clickable { cursor: pointer; transition: transform .2s, box-shadow .2s; }
-    .result-card.clickable:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
-    .rc-media { position: relative; aspect-ratio: 1 / 1; background: var(--card-2); }
+    #results-detail { flex: 1 1 0%; min-width: 0; }
+    .batch-sidebar-title {
+      font-size: 13px; font-weight: 700; color: var(--text-2);
+      text-transform: uppercase; letter-spacing: .06em;
+      margin: 0 0 16px;
+    }
+    .batch-sidebar-list {
+      display: flex; flex-direction: column; gap: 8px;
+      flex: 1 1 auto; min-height: 0; overflow-y: auto;
+      /* Breathing room so the last item isn't flush against the card's edge
+         and so its own scrollbar doesn't overlap the item content. */
+      margin-right: -8px; padding-right: 8px; margin-bottom: -4px;
+    }
+    .batch-sidebar-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px; border-radius: var(--radius);
+      cursor: pointer; transition: background .15s;
+    }
+    .batch-sidebar-item:hover { background: var(--card-2); }
+    .batch-sidebar-item.selected { background: var(--card-2); box-shadow: 0 0 0 2px var(--accent) inset; }
+    .batch-sidebar-item .rc-media { width: 52px; height: 52px; flex: 0 0 52px; border-radius: 8px; }
+    .batch-sidebar-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+    .batch-sidebar-item .rc-name { margin: 0; padding: 0; }
+    .rc-media { position: relative; aspect-ratio: 1 / 1; background: var(--card-2); overflow: hidden; }
     .rc-media img { width: 100%; height: 100%; object-fit: cover; }
-    .result-card.processing .rc-media img,
-    .result-card.analyzing .rc-media img { opacity: .35; }
+    .batch-sidebar-item.processing .rc-media img,
+    .batch-sidebar-item.analyzing .rc-media img { opacity: .35; }
+    /* Static pill beside the filename (not overlaid on the thumbnail like the
+       old grid card's badge -- the sidebar's thumbnail is too small for that
+       text to fit without wrapping). */
     .rc-badge {
-      position: absolute; top: 8px; left: 8px;
-      padding: 3px 10px; border-radius: 20px;
-      font-size: 11px; font-weight: 700;
-      background: rgba(0,0,0,.55); color: #fff;
+      display: inline-flex; align-self: flex-start;
+      padding: 2px 9px; border-radius: 20px;
+      font-size: 10.5px; font-weight: 700; white-space: nowrap;
+      background: rgba(255,255,255,.12); color: var(--text-2);
     }
-    .result-card.analyzed .rc-badge { background: rgba(168,85,247,.9); }
-    .result-card.done .rc-badge { background: rgba(1,179,123,.9); }
-    .result-card.error .rc-badge { background: rgba(220,60,60,.92); }
+    .batch-sidebar-item.analyzed .rc-badge { background: rgba(168,85,247,.25); color: #d8b4fe; }
+    .batch-sidebar-item.done .rc-badge { background: rgba(1,179,123,.22); color: #6ee7b7; }
+    .batch-sidebar-item.error .rc-badge { background: rgba(220,60,60,.25); color: #fca5a5; }
     .rc-spinner {
       position: absolute; top: 50%; left: 50%;
       width: 28px; height: 28px; margin: -14px 0 0 -14px;
@@ -596,9 +641,40 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
-    /* ── Detail nav (arrows to switch between finished images) ── */
-    .detail-nav { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-    .detail-index { font-size: 13px; font-weight: 700; color: var(--text-2); font-variant-numeric: tabular-nums; }
+    /* ── Batch main-area loading/error placeholder and pre-edit review slot
+       (analyzing/processing/error and "analyzed, awaiting review" states) ──
+       Same .proc-visual/.think-ring/.proc-text markup+classes as the
+       single-image processing screen (styles.css) -- only this wrapper and
+       the error variant are batch-specific. */
+    .batch-main-loading {
+      display: flex; align-items: center; gap: 56px;
+      min-height: 320px; padding: 40px 0;
+    }
+    #batch-main-loading-title { font-size: clamp(24px, 2.6vw, 32px); }
+    /* Error: freeze the rings instead of spinning them (nothing is actually
+       "thinking"), and let the thumb show plainly, same treatment
+       .proc-visual.done uses for "analysis complete, ready" in the single-image
+       flow -- just red-tinted since this is a failure, not a pause. */
+    .batch-main-loading.is-error .think-ring { opacity: 0; animation-play-state: paused; }
+    .batch-main-loading.is-error .think-center { inset: 0; border-radius: 14px; background: none; }
+    .batch-main-loading.is-error .proc-thumb { border-radius: 14px; object-fit: contain; opacity: .5; }
+    .batch-main-loading.is-error .proc-eyebrow { color: var(--red); }
+    .batch-main-loading.is-error #batch-main-loading-title { color: var(--red); }
+    /* Analyzed, not yet edited: same "static square photo" treatment as the
+       error state (nothing is actively in progress) but with the default
+       (non-red) text colors. */
+    .batch-main-loading.is-analyzed .think-ring { opacity: 0; animation-play-state: paused; }
+    .batch-main-loading.is-analyzed .think-center { inset: 0; border-radius: 14px; background: none; }
+    .batch-main-loading.is-analyzed .proc-thumb { border-radius: 14px; object-fit: contain; }
+    @media (max-width: 900px) {
+      .batch-main-loading { flex-direction: column; text-align: center; gap: 32px; }
+    }
+    .batch-review-continue-btn { margin-top: 12px; }
+
+    @media (max-width: 900px) {
+      .results-body { flex-direction: column; }
+      .batch-sidebar { width: 100%; flex-basis: auto; position: static; }
+    }
 
     /* ── Run preview strip (scrolls horizontally, switches between one
        image's N edit results) -- a padding-revealed gradient ring marks the
@@ -745,16 +821,7 @@
     .run-count-row .field-label { margin: 0; }
     .run-count-hint { font-size: 12.5px; color: var(--text-3); }
 
-    /* ── Batch per-image analysis review controls ── */
-    .batch-review-nav {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 32px;
-    }
-    .batch-review-arrows { display: flex; align-items: center; gap: 12px; }
+    .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 18px; }
     .batch-prompt-row { margin-bottom: 18px; }
     .batch-options-row { margin-bottom: 18px; }
     .batch-lock-toggle {
@@ -994,24 +1061,6 @@
           </div>
         </div>
 
-        <!-- Batch per-image analysis review controls (shown only when reviewing
-             one image from the batch grid) -->
-        <div id="batch-review-nav" class="batch-review-nav" hidden>
-          <div class="batch-review-arrows">
-            <button id="batch-review-prev" class="btn btn-secondary" type="button">←</button>
-            <span id="batch-review-index" class="detail-index"></span>
-            <button id="batch-review-next" class="btn btn-secondary" type="button">→</button>
-          </div>
-          <button id="batch-review-back" class="btn btn-secondary" type="button">回到列表</button>
-          <button id="batch-review-continue" class="btn btn-grad view-results-btn" type="button">
-            此張繼續處理
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </div>
-
         <!-- Stable anchor #analysis-preview is moved back to whenever the
              normal first-time flow (this section) needs to show it again --
              see moveAnalysisPreviewTo/restoreAnalysisPreviewHome in app.js. -->
@@ -1186,13 +1235,6 @@
       <div class="container">
         <div class="results-topbar-inner">
           <div class="results-topbar-text">
-            <p class="eyebrow-label results-done-badge">
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="3"
-                  stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              修圖完成
-            </p>
             <!-- Kept in the DOM (not shown) so existing code that sets its
                  text can stay untouched -- #ap-subject-tags now occupies
                  this position instead. -->
@@ -1201,20 +1243,6 @@
             <p id="batch-progress" class="r-summary" hidden></p>
           </div>
           <div style="display:flex;gap:8px;">
-            <button id="batch-continue-all-btn" class="btn btn-grad" type="button" hidden>
-              全部繼續處理
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <button id="back-to-analyzed-btn" class="btn btn-secondary" type="button" hidden>
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M15 18l-6-6 6-6" stroke="currentColor"
-                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              檢視分析結果
-            </button>
             <button id="reload-batch-btn" class="btn btn-secondary" type="button" hidden>
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
                 <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor"
@@ -1223,13 +1251,6 @@
                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
               重新分析
-            </button>
-            <button id="back-to-grid-btn" class="btn btn-secondary" type="button" hidden>
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M15 18l-6-6 6-6" stroke="currentColor"
-                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              回到列表
             </button>
             <button id="reset-btn" class="btn btn-secondary" type="button">
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -1245,8 +1266,14 @@
       </div>
     </div>
 
-    <!-- Batch grid: one card per image, shown when more than one image -->
-    <div class="container" id="results-grid-wrap" hidden>
+    <!-- Batch mode: a left sidebar listing every image (live status badges,
+         clickable regardless of status) beside the same single-image-mode
+         main content area used below -- see selectBatchRecord/renderBatchMain
+         in app.js. Hidden entirely for the single-image (1 file) flow, which
+         renders #results-detail exactly as it always has. -->
+    <div class="container results-body" id="results-body">
+    <aside class="batch-sidebar" id="batch-sidebar" hidden>
+      <h2 id="batch-sidebar-title" class="batch-sidebar-title">批次圖片</h2>
       <div id="batch-prompt-row" class="form-field batch-prompt-row" hidden>
         <span class="field-label">整批補充指令</span>
         <textarea id="batch-prompt" class="field-ta" rows="2"
@@ -1340,16 +1367,49 @@
         </div>
         <p class="run-count-hint">套用到未單獨設定風格選項的圖片；若某張在分析裡自己選了 Pose/Angle/Lighting/Size，則以該張選擇為準。有單張調整過的類別，整批選項會鎖定，需勾選上方開關才能繼續修改。</p>
       </details>
-      <div id="results-grid" class="results-grid"></div>
-    </div>
+      <button id="batch-continue-all-btn" class="btn btn-grad batch-continue-all-btn" type="button" hidden>
+        全部繼續處理
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+      <div id="batch-sidebar-list" class="batch-sidebar-list"></div>
+    </aside>
 
-    <div class="container results-container" id="results-detail">
+    <div class="results-container" id="results-detail">
 
-      <!-- Detail nav (shown when opened from the batch grid) -->
-      <div id="detail-nav" class="detail-nav" hidden>
-        <button id="detail-prev" class="btn btn-secondary" type="button">←</button>
-        <span id="detail-index" class="detail-index"></span>
-        <button id="detail-next" class="btn btn-secondary" type="button">→</button>
+      <!-- Loading placeholder: shown for a selected image that's still
+           analyzing or (first-time, no prior done run) processing -- no result
+           image exists yet, so the canvas stays hidden entirely and this shows
+           instead, reusing the exact same thinking-rings treatment as the
+           single-image flow's processing screen (#processing-section's
+           .proc-visual) instead of a generic spinner, just inline in the
+           results page rather than a separate section. See
+           showBatchMainLoading/showBatchMainError in app.js. -->
+      <div id="batch-main-loading" class="batch-main-loading" hidden>
+        <div class="proc-visual" id="batch-main-loading-visual">
+          <div class="think-ring"></div>
+          <div class="think-ring"></div>
+          <div class="think-ring"></div>
+          <div class="think-center">
+            <img id="batch-main-loading-thumb" class="proc-thumb" alt="">
+          </div>
+        </div>
+        <div class="proc-text">
+          <p id="batch-main-loading-eyebrow" class="proc-eyebrow">Photo Master is working</p>
+          <h2 id="batch-main-loading-title" class="proc-title"></h2>
+          <p id="batch-main-loading-text" class="proc-sub"></p>
+          <!-- Only relevant (and only ever unhidden) for the "analyzed, not
+               yet edited" state -- see showBatchAnalyzedMain in app.js. -->
+          <button id="batch-review-continue-btn" class="btn btn-grad batch-review-continue-btn" type="button" hidden>
+            此張繼續處理
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
 
       <!-- Canvas + inline analysis-review panel side by side. The panel slot
@@ -1623,6 +1683,7 @@
 
       </div>
 
+    </div>
     </div>
   </section>
 
