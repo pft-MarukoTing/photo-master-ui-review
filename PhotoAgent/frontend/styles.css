@@ -361,6 +361,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   font-weight: 600;
   color: var(--text);
   letter-spacing: -.14px;
+  white-space: nowrap;
 }
 .option-desc {
   display: block;
@@ -589,9 +590,73 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   gap: 24px;
 }
 
-/* Before/After canvas: one full-bleed frame, hover-lifted like a photograph
-   rather than a boxed app panel. The toggle button floats on top of the
-   image instead of sitting in a separate header bar. */
+/* Canvas + inline analysis-review panel, side by side. The slot has no
+   width/gap until .showing-analysis is toggled on (openInlineAnalysisPanel
+   in app.js), so the canvas quietly occupies the full row until then --
+   opening the panel is what visually pushes the canvas to the left. */
+.results-canvas-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  transition: gap .4s cubic-bezier(.4,0,.2,1);
+}
+.results-canvas-row.showing-analysis {
+  gap: 24px;
+}
+.results-canvas-col {
+  flex: 1 1 0%;
+  min-width: 0;
+}
+/* 1:2 flex-grow ratio (both basis pinned at 0%) instead of a fixed px
+   width -- the panel always fills exactly 2/3 of the row and the canvas
+   1/3, so neither side is ever left with unclaimed blank space regardless
+   of viewport width, and the panel stays wide enough that the recipe list
+   doesn't wrap onto several lines. Only flex-grow (a plain number) is
+   transitioned -- flex-basis never changes, and animating `width` between
+   0 and auto (as an earlier version of this did) doesn't have a
+   well-defined midpoint, since "auto" isn't an interpolatable length, so
+   it was snapping instead of easing. */
+.results-analysis-slot {
+  flex: 0 1 0%;
+  opacity: 0;
+  overflow: hidden;
+  transition: flex-grow .4s cubic-bezier(.4,0,.2,1), opacity .3s ease;
+}
+.results-canvas-row.showing-analysis .results-analysis-slot {
+  flex: 2 1 0%;
+  opacity: 1;
+}
+@media (max-width: 900px) {
+  .results-canvas-row { flex-direction: column; }
+  .results-canvas-row.showing-analysis .results-analysis-slot { flex-basis: auto; width: 100%; }
+}
+/* The panel keeps its processing-screen spacing (margin-top:32px) when it's
+   shown there; strip that once it's on loan to this narrower side slot. */
+.results-analysis-slot .analysis-preview {
+  margin-top: 0;
+}
+
+.canvas-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9,9,11,.55);
+  backdrop-filter: blur(2px);
+}
+.canvas-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,.25);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: rc-spin .8s linear infinite;
+}
+
+/* Before/After canvas: one full-bleed frame. The toggle button floats on
+   top of the image instead of sitting in a separate header bar. */
 .compare-card {
   position: relative;
   display: block;
@@ -601,9 +666,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
-  transition: box-shadow .3s, transform .3s;
 }
-.compare-card:hover { box-shadow: 0 32px 72px rgba(0,0,0,.5); transform: translateY(-2px); }
 
 /* Hugs whatever the currently-shown image's own size is (shrink-wrapped by
    .compare-card above) instead of stretching to the column's full width --
@@ -640,37 +703,77 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .compare-card.showing-generated .compare-img-original { display: none; }
 .compare-card.showing-generated .compare-img-generated { display: block; }
 
-/* Floating glass pill, not a boxed header -- sits directly over the canvas. */
-.compare-toggle-btn {
+/* Floating glass icon buttons, not a boxed header -- sit directly over the
+   canvas. Icon-only, so title/aria-label (kept in sync in setCompareView)
+   carry the "switch to X" / "download" meaning instead of visible text. */
+.canvas-actions {
   position: absolute;
   top: 18px;
   right: 18px;
   z-index: 5;
+  display: flex;
+  gap: 10px;
+}
+
+.canvas-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 18px;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
   border: 1px solid rgba(255,255,255,.16);
-  border-radius: 999px;
+  border-radius: 50%;
   background: rgba(9,9,11,.55);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -.1px;
   cursor: pointer;
   transition: background .2s, border-color .2s, transform .2s, box-shadow .2s;
   box-shadow: 0 8px 24px rgba(0,0,0,.35);
 }
-.compare-toggle-btn:hover {
+.canvas-btn:hover {
   background: rgba(168,85,247,.4);
   border-color: rgba(168,85,247,.55);
   transform: translateY(-1px);
 }
-.compare-toggle-btn:active { transform: scale(.96); }
-.compare-toggle-btn svg { flex-shrink: 0; }
+.canvas-btn:active { transform: scale(.9); }
+
+/* Momentary "Original" badge: y=0, flush against the very top of the photo
+   (not attached to either icon button), triggered from JS (setCompareView)
+   whenever the view switches to the original -- plays a fade in/hold/fade
+   out once via the .is-visible animation, then stays hidden until retriggered. */
+.compare-hint {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%) translateY(-6px);
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: rgba(20,20,24,.85);
+  border: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: -.1px;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+  z-index: 4;
+}
+.compare-hint.is-visible {
+  animation: compare-hint-fade 1.8s ease forwards;
+}
+@keyframes compare-hint-fade {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+  12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
+}
 
 /* Verdict + Summary row */
 .verdict-summary-row {

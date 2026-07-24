@@ -287,7 +287,68 @@
     });
   }
 
+  // ── Inline analysis-review panel (results page) ─────────────────────────
+  // Lets the user revise an existing result's recipe/style/prompt and re-run
+  // without leaving the results page: #analysis-preview is physically moved
+  // between its normal home (processing section, first-time flow) and
+  // #results-analysis-slot (this flow), since both reuse the very same
+  // #ap-* markup/IDs and can't have two live copies in the DOM at once.
+  function moveAnalysisPreviewTo(container) {
+    if (!els.analysisPreview || !container) return;
+    if (els.analysisPreview.parentElement !== container) {
+      container.appendChild(els.analysisPreview);
+    }
+  }
+
+  function restoreAnalysisPreviewHome() {
+    if (els.analysisPreviewHome && els.analysisPreview.previousElementSibling !== els.analysisPreviewHome) {
+      els.analysisPreviewHome.after(els.analysisPreview);
+    }
+  }
+
+  function openInlineAnalysisPanel() {
+    moveAnalysisPreviewTo(els.resultsAnalysisSlot);
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
+    els.analysisPreview.hidden = false;
+    setAnalysisPreviewDisabled(false);
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
+  }
+
+  function closeInlineAnalysisPanel() {
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    els.analysisPreview.hidden = true;
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
+  }
+
+  let inlineAnalysisContinueHandler = null;
+  let inlineAnalysisCancelHandler = null;
+
+  function clearInlineAnalysisWait() {
+    if (inlineAnalysisContinueHandler) {
+      els.inlineAnalysisContinueBtn.removeEventListener("click", inlineAnalysisContinueHandler);
+      inlineAnalysisContinueHandler = null;
+    }
+    if (inlineAnalysisCancelHandler) {
+      els.inlineAnalysisCancelBtn.removeEventListener("click", inlineAnalysisCancelHandler);
+      inlineAnalysisCancelHandler = null;
+    }
+  }
+
+  // Resolves "continue" or "cancel" depending on which inline button the user
+  // clicks -- same one-shot-listener shape as waitForContinue, just with two
+  // possible outcomes instead of one.
+  function waitForInlineAnalysisAction() {
+    return new Promise((resolve) => {
+      clearInlineAnalysisWait();
+      inlineAnalysisContinueHandler = () => { clearInlineAnalysisWait(); resolve("continue"); };
+      inlineAnalysisCancelHandler = () => { clearInlineAnalysisWait(); resolve("cancel"); };
+      els.inlineAnalysisContinueBtn.addEventListener("click", inlineAnalysisContinueHandler);
+      els.inlineAnalysisCancelBtn.addEventListener("click", inlineAnalysisCancelHandler);
+    });
+  }
+
   function showAnalysisPreview(analysis, preset) {
+    restoreAnalysisPreviewHome();
     renderAnalysisPreview({ analysis, preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
@@ -893,34 +954,40 @@
     renderSingleRunTabs();
   }
 
-  // "回到流程": lets the user come back from the results page to the
-  // analysis-preview screen, re-adjust the recipe checklist/style
-  // options/prompt (restored from their last submission), and regenerate.
+  // "檢視分析結果": lets the user come back to the recipe checklist/style
+  // options/prompt (restored from their last submission) and regenerate,
+  // without leaving the results page -- the panel slides in beside the
+  // photo canvas instead of navigating to the processing section.
   async function backToProcessFromResults() {
     if (!singleFlowState) return;
     hideError();
-    clearContinueWait();
+    clearInlineAnalysisWait();
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
-    procVisual.classList.remove("done");
-    procVisual.style.height = "";
 
-    showAnalysisPreview(singleFlowState.analysis, singleFlowState.preset);
+    renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset });
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       applyStyleSelections(lastSingleSelections);
     }
-    showSection("processing");
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    openInlineAnalysisPanel();
 
+    const action = await waitForInlineAnalysisAction();
+    if (action === "cancel") {
+      closeInlineAnalysisPanel();
+      return;
+    }
+
+    setAnalysisPreviewDisabled(true);
+    if (els.canvasLoading) els.canvasLoading.hidden = false;
     try {
-      await waitForContinue();
       await finishSingleFlow();
     } catch (error) {
-      showSection("upload");
       showError(friendlyError(error));
     } finally {
-      clearContinueWait();
-      if (els.analysisPreview) els.analysisPreview.hidden = true;
+      if (els.canvasLoading) els.canvasLoading.hidden = true;
+      closeInlineAnalysisPanel();
     }
   }
 
@@ -1538,6 +1605,7 @@
     els.resultsDetail.hidden = false;
     els.detailNav.hidden = false;
     els.backToGridBtn.hidden = false;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = true;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     els.detailIndex.textContent = `${detailPos + 1} / ${done.length}`;
@@ -1594,6 +1662,7 @@
     els.detailNav.hidden = true;
     if (els.runTabs) els.runTabs.hidden = true;
     els.backToGridBtn.hidden = true;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
     els.downloadLink.hidden = true;
     const anyDone = doneBatchRecords().length > 0;
     if (els.backToAnalyzedBtn) els.backToAnalyzedBtn.hidden = !anyDone;
@@ -1601,6 +1670,79 @@
     els.resultsGridWrap.hidden = false;
     if (gridSummary) els.resultSummary.textContent = gridSummary;
     window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  // Is a single already-finished batch record currently open in detail view?
+  // Returns null for the single-image flow or the batch grid, so callers can
+  // branch between the whole-record batch path and the single-image path
+  // with one check.
+  function currentDetailBatchRecord() {
+    if (!batchRecords.length || els.resultsDetail.hidden) return null;
+    const done = doneBatchRecords();
+    return done[detailPos] || null;
+  }
+
+  // "檢視分析結果" for one already-finished batch photo: reuses the same
+  // inline slide-in panel as the single-image flow (backToProcessFromResults),
+  // but re-runs just this one record via editBatchItem instead of
+  // finishSingleFlow -- editBatchItem never touches showSection, so this
+  // stays fully inline with no processing-section detour at all.
+  async function startInlineBatchReview(record) {
+    hideError();
+    clearInlineAnalysisWait();
+
+    renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
+    applyBatchReviewSelections(record);
+    if (els.promptInput) els.promptInput.value = record.userPrompt || "";
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = true; // batch's own run-count lives on the grid, not per-item
+    openInlineAnalysisPanel();
+
+    const action = await waitForInlineAnalysisAction();
+    if (action === "cancel") {
+      closeInlineAnalysisPanel();
+      return;
+    }
+
+    captureBatchReviewSelections(record);
+    setAnalysisPreviewDisabled(true);
+    if (els.canvasLoading) els.canvasLoading.hidden = false;
+
+    const run = { run: (record.runs || []).length + 1, jobId: null, status: "processing", imageUrl: null, result: null, timings: [], error: null };
+    record.runs = [...(record.runs || []), run];
+    record.mirrorIndex = record.runs.length - 1;
+    record.status = "processing";
+    updateBatchCard(record);
+
+    await editBatchItem({ record, run });
+
+    if (els.canvasLoading) els.canvasLoading.hidden = true;
+    closeInlineAnalysisPanel();
+    if (run.status === "error") showError(run.error || "重新處理失敗，請稍後再試。");
+    if (doneBatchRecords().includes(record)) {
+      showBatchDetail();
+    } else {
+      backToBatchGrid();
+    }
+  }
+
+  // Dispatches "檢視分析結果" to whichever flow is actually active: a single
+  // finished batch photo (per-item revise) or the single-image flow.
+  function handleViewAnalysisClick() {
+    // Toggle: if the panel is already open, pressing the same button again
+    // closes it -- simulate the cancel button's click instead of duplicating
+    // its logic, since backToProcessFromResults/startInlineBatchReview are
+    // both mid-`await waitForInlineAnalysisAction()` at that point, and only
+    // that click actually resolves their pending promise.
+    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+      if (els.inlineAnalysisCancelBtn) els.inlineAnalysisCancelBtn.click();
+      return;
+    }
+    const record = currentDetailBatchRecord();
+    if (record) {
+      startInlineBatchReview(record);
+    } else {
+      backToProcessFromResults();
+    }
   }
 
   // ── Batch step-2 per-image review (reuses the single analysis panel) ─────
@@ -1626,6 +1768,7 @@
     const record = list[reviewPos];
 
     // Reuse the processing screen's analysis-preview panel verbatim.
+    restoreAnalysisPreviewHome();
     clearContinueWait();
     els.viewResultsWrap.hidden = true;
     procVisual.style.height = "";
@@ -1807,7 +1950,7 @@
   });
   els.startButton.addEventListener("click", startSubmit);
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
-  els.backToProcessBtn.addEventListener("click", backToProcessFromResults);
+  els.backToProcessBtn.addEventListener("click", handleViewAnalysisClick);
   els.resetButton.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
   if (els.compareToggleBtn) {
