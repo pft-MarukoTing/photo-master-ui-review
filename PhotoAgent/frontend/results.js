@@ -13,8 +13,7 @@ window.PhotoAgentResults = (() => {
     DEFAULT_OPTION,
     { value: "high", label: "High Shot" },
     { value: "low", label: "Low Shot" },
-    { value: "eye", label: "Eye Level" },
-    { value: "side", label: "Side Shot" }
+    { value: "eye", label: "Eye Level" }
   ];
   const LIGHTING_OPTIONS = [
     DEFAULT_OPTION,
@@ -573,5 +572,5 @@ window.PhotoAgentResults = (() => {
     [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
   }
 
-  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView };
+  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView, renderTags };
 })();
