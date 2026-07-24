@@ -93,23 +93,21 @@ STYLE_OPTION_INSTRUCTIONS = {
     },
     "angle": {
         "high": (
-            "Transform the photo into a clearly high-angle shot, as if the camera has moved above the main subject "
-            "and is looking downward. Reveal more top-facing surfaces, upper contours, or surrounding context when appropriate. "
-            "Make the viewpoint change noticeable rather than just slightly correcting perspective. Preserve the same main subject, "
-            "same scene, same location, and same props, while keeping shapes, proportions, and perspective believable. "
-            "Avoid unnatural distortion, warped geometry, or invented background content."
+            "Take this exact photograph and tip the view downward so it reads as looking down on the subject from a higher camera, revealing more top-facing surfaces and upper contours. "
+            "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, just seen from above, while the subject remains in roughly the same part of the frame. "
+            "Keep shapes, proportions, and perspective believable. "
+            "Avoid warped geometry or invented background content."
         ),
         "low": (
-            "Transform the photo into a clearly low-angle shot, as if the camera has moved below the subject and is looking upward. "
-            "Make the subject feel more prominent, elevated, or visually powerful, with stronger upward perspective cues when the scene allows. "
-            "The viewpoint change should be clearly visible, not just a subtle tilt. Preserve the same main subject, same scene, "
-            "same location, and same props, while keeping proportions and structural geometry believable. "
-            "Avoid extreme distortion, warped architecture, or unrealistic enlargement of foreground elements."
+            "Take this exact photograph and tip the view upward so it reads as looking up at the subject from a lower camera, making them feel more prominent and elevated. "
+            "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, just seen from below, while the subject remains in roughly the same part of the frame. "
+            "Keep proportions and structural geometry believable. "
+            "Avoid warped architecture or unrealistic enlargement of foreground elements."
         ),
         "eye": (
-            "Transform the photo toward a natural eye-level shot, as if the camera is positioned at the subject's normal viewing height. "
-            "Keep the perspective balanced, direct, and realistic, so the result feels more neutral and straightforward rather than dramatically high or low. "
-            "Preserve the same main subject, same scene, same location, and same props, while maintaining believable proportions, depth, and spatial layout."
+            "Take this exact photograph and bring the view toward the subject's eye level, so the perspective feels balanced, direct, and neutral rather than dramatically high or low. "
+            "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, while the subject remains in roughly the same part of the frame. "
+            "Maintain believable proportions, depth, and spatial layout."
         ),
         "side": (
             "Transform the photo into a clear side-angle or three-quarter side-angle shot, targeting an oblique viewpoint around 45 to 90 degrees from a straight-on front view. "

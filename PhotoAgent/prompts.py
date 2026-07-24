@@ -300,6 +300,8 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     style_options = analysis.get("style_options") or {}
     size_override_value = style_options.get("size")
     has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
+    angle_override_value = style_options.get("angle")
+    has_vertical_angle_override = angle_override_value in {"high", "low", "eye"}
     has_size_override = bool(size_override_value and size_override_value != "default")
     has_wider_size_override = size_override_value in {"wide", "wider"}
     has_closer_size_override = size_override_value in {"close", "closer"}
@@ -334,12 +336,19 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
     style_block = ""
     if has_style_overrides:
+        angle_reshoot_line = (
+            "For a selected high, low, or eye-level angle, keep this same photograph and its composition and change only "
+            "the height it is seen from, so it reads as the very same shot viewed from higher or lower, not a minor perspective tweak. "
+            if has_vertical_angle_override else
+            "For a selected angle override, the output should look like a new photograph taken from the selected camera angle, "
+            "not like a minor perspective correction. "
+        )
         style_block = (
             "User-selected style overrides are mandatory same-scene reshoot requirements, not optional retouch suggestions.\n"
             "Apply every selected item visibly and deliberately. When an override conflicts with default preservation of pose, "
             "camera angle, lighting, or framing size, the override wins for that selected aspect.\n"
-            "For selected angle overrides, the output should look like a new photograph taken from the selected camera angle, "
-            "not like a minor perspective correction. For selected pose, lighting, or framing-size overrides, make the change "
+            + angle_reshoot_line
+            + "For selected pose, lighting, or framing-size overrides, make the change "
             "clearly visible while keeping it photographically believable.\n"
             + "\n".join(style_lines)
             + (
@@ -354,6 +363,14 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
                 "Replace the original body language with a visibly different pose matching the selected pose style. "
                 "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
                 "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
+            )
+        if has_vertical_angle_override:
+            style_block += (
+                "\n\nAngle override requirement (vertical only): Change only the height the shot is seen from, keeping the same horizontal camera direction. "
+                "Every background and scene element stays in its original place, on the same side of the frame as before, just seen from higher or lower, "
+                "and the subject stays in roughly the same part of the frame (any selected pose change still applies to the subject's own body language). "
+                "The result should stay recognizable as the very same framing, only tilted up or down. "
+                "A result where background elements move to the opposite side, or that looks taken from a different horizontal direction, fails this requirement."
             )
         if has_wider_size_override:
             style_block += (
@@ -449,12 +466,12 @@ Priority order:
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_style}
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
-3. Apply every user-selected style override in full. Angle overrides should read as a new same-scene photograph from that angle; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, follow the quantified subject-size target: wide should reduce the subject's visible frame ratio by about 20%, while wider should reduce it by about 40%. The scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
+3. Apply every user-selected style override in full. Angle overrides should clearly move the camera to the selected viewpoint by following that angle's own instruction above; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, follow the quantified subject-size target: wide should reduce the subject's visible frame ratio by about 20%, while wider should reduce it by about 40%. The scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
 4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
 5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if lighting is not selected, preserve the original lighting logic; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
-8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, do not preserve the original camera viewpoint; change it clearly according to the selected angle while maintaining a believable same-scene reshoot.
+8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, change the camera viewpoint clearly as described in that angle's own instruction above, while keeping a believable same-scene result.
 9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. Treat the user-rejected corrections above as forbidden, not merely unnecessary."""
     else:
         opening_preservation_rule = (
