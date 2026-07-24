@@ -739,6 +739,11 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   transform: translateY(-1px);
 }
 .canvas-btn:active { transform: scale(.9); }
+.canvas-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
 
 /* Momentary "Original" badge: y=0, flush against the very top of the photo
    (not attached to either icon button), triggered from JS (setCompareView)

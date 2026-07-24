@@ -974,12 +974,11 @@
     openInlineAnalysisPanel();
 
     const action = await waitForInlineAnalysisAction();
-    if (action === "cancel") {
-      closeInlineAnalysisPanel();
-      return;
-    }
+    closeInlineAnalysisPanel();
+    if (action === "cancel") return;
 
     setAnalysisPreviewDisabled(true);
+    if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
     try {
       await finishSingleFlow();
@@ -987,7 +986,7 @@
       showError(friendlyError(error));
     } finally {
       if (els.canvasLoading) els.canvasLoading.hidden = true;
-      closeInlineAnalysisPanel();
+      if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
     }
   }
 
@@ -1698,13 +1697,12 @@
     openInlineAnalysisPanel();
 
     const action = await waitForInlineAnalysisAction();
-    if (action === "cancel") {
-      closeInlineAnalysisPanel();
-      return;
-    }
+    closeInlineAnalysisPanel();
+    if (action === "cancel") return;
 
     captureBatchReviewSelections(record);
     setAnalysisPreviewDisabled(true);
+    if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
 
     const run = { run: (record.runs || []).length + 1, jobId: null, status: "processing", imageUrl: null, result: null, timings: [], error: null };
@@ -1716,7 +1714,7 @@
     await editBatchItem({ record, run });
 
     if (els.canvasLoading) els.canvasLoading.hidden = true;
-    closeInlineAnalysisPanel();
+    if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
     if (run.status === "error") showError(run.error || "重新處理失敗，請稍後再試。");
     if (doneBatchRecords().includes(record)) {
       showBatchDetail();
