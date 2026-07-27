@@ -76,7 +76,7 @@ class PhotoAgentJobProcessor:
 
         params = request["params"]
         self.logger.info(task_id, f'[{EFFECT_NAME}] Start job: src={len(request["src_keys"])}, dst_key={request["dst_key"]}')
-        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} has_prompt={bool(params.get("user_prompt"))}')
+        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} has_prompt={bool(params.get("user_prompt"))}')
         if (bool(params.get("user_prompt"))):
             self.logger.info(task_id, f'[{EFFECT_NAME}] User prompt: {params.get("user_prompt")}')
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
@@ -92,7 +92,7 @@ class PhotoAgentJobProcessor:
 
             if stage == "analyze":
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running analyze_stage ({len(image_bytes)} bytes)')
-                analysis = analyze_stage(image_bytes)
+                analysis = analyze_stage(image_bytes, aspect_ratio=params.get("aspect_ratio", "auto"))
 
                 analysis_path = os.path.join(work_dir, 'analysis.json')
                 with open(analysis_path, 'w', encoding='utf-8') as f:
@@ -117,6 +117,7 @@ class PhotoAgentJobProcessor:
                     ai_photo_editing=params["ai_photo_editing"],
                     image_model=params["image_model"],
                     run_qa=params.get("run_qa", True),
+                    aspect_ratio=params.get("aspect_ratio", "auto"),
                 )
             else:
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes)')
@@ -128,6 +129,7 @@ class PhotoAgentJobProcessor:
                     ai_photo_editing=params["ai_photo_editing"],
                     image_model=params["image_model"],
                     run_qa=params.get("run_qa", True),
+                    aspect_ratio=params.get("aspect_ratio", "auto"),
                 )
 
             derived_dst_keys = derive_dst_keys(request["dst_key"])

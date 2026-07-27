@@ -12,9 +12,12 @@ from image_tools import (
     get_image_dimensions,
     resolve_crop_box_with_report,
     apply_framing_size,
+    apply_aspect_ratio_preference,
+    nearest_openai_edit_size,
 )
 from prompts import (
     ANALYSIS_INSTRUCTION,
+    build_analysis_instruction,
     build_user_instruction_review_prompt,
     build_edit_prompt,
     build_quality_check_prompt,
@@ -94,12 +97,12 @@ def _responses_payload(model: str, content: list, text_format: dict = None) -> d
 
 # ── Step 2: photo analysis ─────────────────────────────────────────────────────
 
-def analyze_photo(image_bytes: bytes) -> dict:
+def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
 
     payload = _responses_payload(ANALYSIS_MODEL, [
-        {"type": "input_text", "text": ANALYSIS_INSTRUCTION},
+        {"type": "input_text", "text": build_analysis_instruction(aspect_ratio)},
         {"type": "input_image", "image_url": data_url},
     ])
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
@@ -144,6 +147,7 @@ def edit_photo(
     preset_key: str = "natural",
     revision_feedback: str = None,
     model: str = IMAGE_MODEL,
+    aspect_ratio: str = "auto",
 ):
     """Returns (result, prompt)."""
     preset = PRESETS.get(preset_key) or PRESETS["natural"]
@@ -159,15 +163,23 @@ def edit_photo(
     # re-expand the frame back over everyone. wide/wider/unset pass through.
     size = (analysis.get("style_options") or {}).get("size")
     framed_analysis = apply_framing_size(analysis, size)
+    # User's explicit aspect-ratio choice overrides the analysis's own
+    # recommendation ("original" only -- "auto" passes through unchanged).
+    framed_analysis = apply_aspect_ratio_preference(framed_analysis, aspect_ratio)
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
 
     prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
+
+    # Only "original" forces a concrete size derived from the source photo's
+    # own ratio -- "auto" stays the literal "auto" value so the edit model
+    # keeps its usual freedom to size the output (see nearest_openai_edit_size).
+    size_param = nearest_openai_edit_size(img_w, img_h) if aspect_ratio == "original" else "auto"
 
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
         headers=_auth_headers(),
         files={"image": ("photo.png", image_bytes, "image/png")},
-        data={"model": model, "prompt": prompt_text, "quality": quality, "size": "auto"},
+        data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
         timeout=300,
     )
     data = _safe_json(resp)

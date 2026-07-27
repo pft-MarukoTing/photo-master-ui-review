@@ -86,6 +86,62 @@ def _recommended_aspect_ratio(context: dict, fallback: str = "") -> str:
     )
 
 
+def apply_aspect_ratio_preference(context: dict, aspect_ratio_pref: str) -> dict:
+    """When the user explicitly asked to keep the original photo's aspect
+    ratio, force recommended_aspect_ratio/crop_box(.candidates) aspect_ratio
+    to "original" so prompt text and fit_crop_to_aspect's local crop geometry
+    don't fight that choice. Any other value ("auto") leaves the analysis's
+    own recommendation untouched -- same "unset/other -> passthrough"
+    contract as apply_framing_size."""
+    if aspect_ratio_pref != "original":
+        return context
+
+    ctx = dict(context)
+    ctx["recommended_aspect_ratio"] = "original"
+
+    crop_box = context.get("crop_box")
+    if crop_box:
+        ctx["crop_box"] = {**crop_box, "aspect_ratio": "original"}
+
+    candidates = context.get("crop_candidates")
+    if candidates:
+        ctx["crop_candidates"] = [
+            {**c, "crop_box": {**c["crop_box"], "aspect_ratio": "original"}} if c.get("crop_box") else c
+            for c in candidates
+        ]
+    return ctx
+
+
+# Fixed size/aspect enums each edit-model API actually accepts -- both are
+# closed sets (OpenAI images/edits `size`, Gemini imageConfig.aspectRatio), so
+# a continuous target ratio has to snap to the nearest one.
+_OPENAI_EDIT_SIZE_CHOICES = [("1024x1024", 1.0), ("1536x1024", 1536 / 1024), ("1024x1536", 1024 / 1536)]
+_GEMINI_ASPECT_RATIO_CHOICES = [("1:1", 1.0), ("4:3", 4 / 3), ("3:4", 3 / 4), ("16:9", 16 / 9), ("9:16", 9 / 16)]
+
+
+def _nearest_by_ratio(ratio: float, choices: list) -> str:
+    return min(choices, key=lambda choice: abs(math.log(ratio / choice[1])))[0]
+
+
+def nearest_openai_edit_size(image_width: int, image_height: int) -> str:
+    """Snap the source photo's own ratio onto OpenAI's fixed images/edits
+    `size` enum -- only meant to be called for the "original" aspect-ratio
+    preference. "auto" is intentionally left alone (passed through as the
+    literal "auto" value) so the edit model keeps the same freedom it always
+    had to size the output however it judges best; forcing "auto" through
+    this same snap made it degenerate into "original" in practice, since the
+    analysis usually recommends recommended_aspect_ratio="original" itself."""
+    ratio = (image_width / image_height) if image_width and image_height else 1.0
+    return _nearest_by_ratio(ratio, _OPENAI_EDIT_SIZE_CHOICES)
+
+
+def nearest_gemini_aspect_ratio(image_width: int, image_height: int) -> str:
+    """Same contract as nearest_openai_edit_size, for Gemini's
+    imageConfig.aspectRatio -- only called for the "original" preference."""
+    ratio = (image_width / image_height) if image_width and image_height else 1.0
+    return _nearest_by_ratio(ratio, _GEMINI_ASPECT_RATIO_CHOICES)
+
+
 # ── ROI / protected box helpers ────────────────────────────────────────────────
 
 def normalize_roi_box(roi_box: dict):

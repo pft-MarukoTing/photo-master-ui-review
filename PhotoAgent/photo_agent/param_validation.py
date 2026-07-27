@@ -13,6 +13,7 @@ EFFECT_NAME = "photoAgent"
 VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
 VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "nano-banana-2", "nano-banana-lite")
+VALID_ASPECT_RATIOS = ("auto", "original")
 
 
 class PhotoAgentRequest(TypedDict):
@@ -81,6 +82,14 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["image_model"] = image_model
+
+    aspect_ratio = normalized.get("aspect_ratio", "auto")
+    if not isinstance(aspect_ratio, str) or aspect_ratio not in VALID_ASPECT_RATIOS:
+        raise RuntimeError(
+            f"{EFFECT_NAME}: aspect_ratio must be one of {VALID_ASPECT_RATIOS}",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["aspect_ratio"] = aspect_ratio
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
 

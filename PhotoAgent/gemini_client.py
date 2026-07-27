@@ -7,7 +7,13 @@ import requests
 from aiserver_utils.aescipher import AESCipher
 from config import PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
-from image_tools import get_image_dimensions, resolve_crop_box_with_report, apply_framing_size
+from image_tools import (
+    get_image_dimensions,
+    resolve_crop_box_with_report,
+    apply_framing_size,
+    apply_aspect_ratio_preference,
+    nearest_gemini_aspect_ratio,
+)
 from prompts import build_edit_prompt
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -57,6 +63,7 @@ def edit_photo(
     preset_key: str = "natural",
     revision_feedback: str = None,
     model: str = NANO_BANANA_2_MODEL,
+    aspect_ratio: str = "auto",
 ):
     """Returns (result, prompt) -- same contract as openai_client.edit_photo."""
     preset = PRESETS.get(preset_key) or PRESETS["natural"]
@@ -70,9 +77,20 @@ def edit_photo(
     # geometry, not just the style-hint text.
     size = (analysis.get("style_options") or {}).get("size")
     framed_analysis = apply_framing_size(analysis, size)
+    # User's explicit aspect-ratio choice overrides the analysis's own
+    # recommendation ("original" only -- "auto" passes through unchanged).
+    framed_analysis = apply_aspect_ratio_preference(framed_analysis, aspect_ratio)
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
 
     prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
+
+    # Only "original" forces a concrete aspectRatio derived from the source
+    # photo's own ratio -- "auto" leaves imageConfig without an aspectRatio
+    # field, same as before this feature existed, so the edit model keeps its
+    # usual freedom to size the output.
+    image_config = {"imageSize": _QUALITY_TO_IMAGE_SIZE.get(quality, "1K")}
+    if aspect_ratio == "original":
+        image_config["aspectRatio"] = nearest_gemini_aspect_ratio(img_w, img_h)
 
     payload = {
         "contents": [{
@@ -83,7 +101,7 @@ def edit_photo(
         }],
         "generationConfig": {
             "responseModalities": ["IMAGE"],
-            "imageConfig": {"imageSize": _QUALITY_TO_IMAGE_SIZE.get(quality, "1K")},
+            "imageConfig": image_config,
         },
     }
 

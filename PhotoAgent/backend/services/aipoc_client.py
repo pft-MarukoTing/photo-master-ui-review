@@ -87,8 +87,8 @@ def upload_to_req_url(request_spec, data):
 
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
-                          image_model="gpt-image-2", ai_photo_editing=True, run_qa=True, user_prompt=None,
-                          stage=None, analysis=None, req_id=1):
+                          image_model="gpt-image-2", aspect_ratio="auto", ai_photo_editing=True, run_qa=True,
+                          user_prompt=None, stage=None, analysis=None, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -121,6 +121,7 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         "preset": preset,
         "image_quality": image_quality,
         "image_model": image_model,
+        "aspect_ratio": aspect_ratio,
         "ai_photo_editing": ai_photo_editing,
         "run_qa": run_qa,
     }

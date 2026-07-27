@@ -952,6 +952,16 @@
               <select id="image-model-quality" class="quality-select model-quality-select"></select>
             </div>
             <div class="option-divider"></div>
+            <!-- Options populated from window.PhotoAgentConfig.aspectRatioOptions
+                 (populateAspectRatioSelect, app.js) -- shared with
+                 #ap-image-aspect-ratio the same way the model-quality select is. -->
+            <div class="option-row">
+              <div class="option-text">
+                <span class="option-label">長寬比</span>
+              </div>
+              <select id="image-aspect-ratio" class="quality-select aspect-ratio-select"></select>
+            </div>
+            <div class="option-divider"></div>
             <div class="option-row">
               <div class="option-text">
                 <span class="option-label">生成張數</span>
@@ -1145,6 +1155,13 @@
                     <span class="option-label">修圖模型</span>
                   </div>
                   <select id="ap-image-model-quality" class="quality-select model-quality-select"></select>
+                </div>
+                <div class="option-divider"></div>
+                <div class="option-row">
+                  <div class="option-text">
+                    <span class="option-label">長寬比</span>
+                  </div>
+                  <select id="ap-image-aspect-ratio" class="quality-select aspect-ratio-select"></select>
                 </div>
                 <div id="ap-run-count-wrap" hidden>
                   <div class="option-divider"></div>

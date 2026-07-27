@@ -196,6 +196,18 @@ Composition decision framework:
 """
 
 
+def build_analysis_instruction(aspect_ratio_pref="auto"):
+    """ANALYSIS_INSTRUCTION, plus a hard aspect-ratio directive when the user
+    explicitly asked to keep the original photo's proportions -- the schema's
+    own free-choice recommended_aspect_ratio only applies to "auto"."""
+    if aspect_ratio_pref != "original":
+        return ANALYSIS_INSTRUCTION
+    return ANALYSIS_INSTRUCTION + """
+User aspect ratio requirement:
+- The user explicitly requested that the final output keep exactly the same aspect ratio as the original photo. Set recommended_aspect_ratio to "original". If crop_box.enabled is true, crop_box.aspect_ratio must also be "original" (or left blank) -- do not choose a crop_box or crop_candidates aspect_ratio that changes the original proportions. Any cropping must stay within the original image's aspect ratio.
+"""
+
+
 def build_user_instruction_review_prompt(user_direction, analysis):
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     head = f"""

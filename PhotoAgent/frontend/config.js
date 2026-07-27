@@ -24,6 +24,16 @@ window.PhotoAgentConfig = {
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" }
   ],
   defaultImageModelQuality: "gpt-image-2:low",
+  // Two user-facing aspect-ratio choices (upload page + analyze-preview,
+  // above 生成張數) -- "auto" leaves recommended_aspect_ratio entirely up to
+  // the analysis step (today's default behavior); "original" tells the
+  // analysis model (at analyze time) and the edit-model API's own
+  // size/aspectRatio parameter to keep the source photo's own proportions.
+  aspectRatioOptions: [
+    { value: "auto", label: "Auto" },
+    { value: "original", label: "維持原圖比例" }
+  ],
+  defaultAspectRatio: "auto",
   presets: {
     natural: {
       label: "自然高級修圖",

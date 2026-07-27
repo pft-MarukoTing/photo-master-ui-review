@@ -24,6 +24,7 @@ def _parse_and_validate_params(form):
         "preset": form.get("preset", "natural"),
         "image_quality": form.get("image_quality", "medium"),
         "image_model": form.get("image_model", "gpt-image-2"),
+        "aspect_ratio": form.get("aspect_ratio", "auto"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
     }
@@ -244,7 +245,7 @@ def aipoc_analyze():
         return jsonify({"error": error}), 400
 
     try:
-        analysis = analyze_stage(image.read())
+        analysis = analyze_stage(image.read(), aspect_ratio=params.get("aspect_ratio", "auto"))
     except Exception as exc:
         return jsonify({"error": f"分析失敗：{exc}"}), 502
 
@@ -272,7 +273,7 @@ def aipoc_analyze_batch():
     entries = []
     for image in images:
         try:
-            analysis = analyze_stage(image.read())
+            analysis = analyze_stage(image.read(), aspect_ratio=params.get("aspect_ratio", "auto"))
             entries.append({"filename": image.filename, "analysis": analysis})
         except Exception as exc:
             entries.append({"filename": image.filename, "error": str(exc)})
@@ -380,6 +381,7 @@ def aipoc_submit():
         preset=params["preset"],
         image_quality=params["image_quality"],
         image_model=params["image_model"],
+        aspect_ratio=params.get("aspect_ratio", "auto"),
         ai_photo_editing=params["ai_photo_editing"],
         run_qa=params["run_qa"],
         user_prompt=params.get("user_prompt"),

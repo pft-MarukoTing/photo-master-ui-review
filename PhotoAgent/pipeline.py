@@ -14,7 +14,7 @@ from openai_client import (
     edit_photo,
     quality_check_photo,
 )
-from prompts import ANALYSIS_INSTRUCTION
+from prompts import build_analysis_instruction
 
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
@@ -43,7 +43,7 @@ def _quality_check_fallback(error: Exception) -> dict:
     }
 
 
-def analyze_stage(image_bytes: bytes) -> dict:
+def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
     """Steps 1-2: read the photo and analyze it.
 
     The user's instruction is reviewed in finish_stage instead of here --
@@ -57,13 +57,13 @@ def analyze_stage(image_bytes: bytes) -> dict:
 
     # Step 2 — analyze
     t0 = time.time()
-    logger.info("Step 2: analyzing photo")
-    analysis = analyze_photo(image_bytes)
+    logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
+    analysis = analyze_photo(image_bytes, aspect_ratio)
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
     analysis["prompts"] = {
-        "photo_analysis": ANALYSIS_INSTRUCTION,
+        "photo_analysis": build_analysis_instruction(aspect_ratio),
     }
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
@@ -80,6 +80,7 @@ def finish_stage(
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
     run_qa: bool = True,
+    aspect_ratio: str = "auto",
 ) -> dict:
     """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
 
@@ -115,7 +116,7 @@ def finish_stage(
         t0 = time.time()
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
-        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key)
+        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key, aspect_ratio=aspect_ratio)
         prompts["image_edit"] = edit_prompt
         timings["Step 5 - image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]
@@ -208,7 +209,8 @@ def run_pipeline(
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
     run_qa: bool = True,
+    aspect_ratio: str = "auto",
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
-    analysis = analyze_stage(image_bytes)
-    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model, run_qa)
+    analysis = analyze_stage(image_bytes, aspect_ratio)
+    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model, run_qa, aspect_ratio)

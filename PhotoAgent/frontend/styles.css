@@ -439,6 +439,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    and model-quality-select claims the rest instead. */
 .option-text-auto { flex: 0 0 auto; }
 .model-quality-select { flex: 1 1 auto; min-width: 0; }
+.aspect-ratio-select { flex: 1 1 auto; min-width: 0; }
 .quality-select:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Error banner */
