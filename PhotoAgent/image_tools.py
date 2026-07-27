@@ -4,6 +4,13 @@ import base64
 import re
 
 from PIL import Image, ImageEnhance
+import pillow_heif
+
+# Pillow has no built-in HEIC/HEIF decoder (patent-encumbered codec, not
+# bundled by default) -- this registers a PIL-compatible plugin so every
+# Image.open() below transparently accepts .heic/.heif photos (e.g. straight
+# off an iPhone) the same as JPEG/PNG/WebP, with no call-site changes needed.
+pillow_heif.register_heif_opener()
 
 
 VISION_PREVIEW_MAX_SIDE = 1024
@@ -19,6 +26,21 @@ def create_preview_bytes(image_bytes: bytes, max_side: int = VISION_PREVIEW_MAX_
     scale = max_side / longest
     img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
     return _to_jpeg_bytes(img)
+
+
+def ensure_png_bytes(image_bytes: bytes) -> bytes:
+    """Re-encode arbitrary input bytes (HEIC/JPEG/WebP/PNG/...) as a real PNG.
+
+    The edit-model APIs (OpenAI images/edits, Gemini inlineData) are told the
+    upload is "image/png" regardless of what the user actually uploaded -- if
+    the source bytes aren't genuinely PNG-encoded (most importantly a
+    HEIC/HEIF photo straight off an iPhone, which neither API can decode
+    under any label), the edit call fails outright with an "invalid image
+    file" error. Pillow can already open every format this app accepts (see
+    pillow_heif.register_heif_opener above), so normalize once here instead
+    of trusting the original bytes to already be what we claim they are.
+    """
+    return _to_png_bytes(_open_rgb(image_bytes))
 
 
 def image_to_data_url(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:

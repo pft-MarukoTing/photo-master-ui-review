@@ -88,6 +88,10 @@
 
   let selectedFile = null;
   let previewUrl = "";
+  // Bumped by every setSelectedFile/setSelectedFileBatch call so a stale,
+  // still-converting HEIC preview can't clobber a newer selection's UI once
+  // its async conversion finally resolves.
+  let fileSelectionToken = 0;
   let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
   // Set once at startup by applyDebugUiVisibility -- gates whether the
   // result card shows the raw model string (e.g. "gpt-4.1-mini + gpt-image-2")
@@ -476,16 +480,111 @@
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
   }
 
-  function setSelectedFile(file) {
+  // Some browsers/OSes don't map .heic/.heif to an image/* MIME type (file.type
+  // often comes back empty for these), even though the backend (Pillow +
+  // pillow-heif) decodes them fine -- fall back to the extension so a real
+  // HEIC photo isn't rejected just because the browser didn't recognize it.
+  function isSupportedImageFile(file) {
+    if (!file) return false;
+    if (file.type.startsWith("image/")) return true;
+    return /\.(heic|heif)$/i.test(file.name || "");
+  }
+
+  function isHeicFile(file) {
+    if (!file) return false;
+    if (/^image\/hei[cf]/i.test(file.type || "")) return true;
+    return /\.(heic|heif)$/i.test(file.name || "");
+  }
+
+  // libheif-js (vendored, LGPL-3.0) -- ~1.4MB, so it's loaded on demand the
+  // first time a HEIC/HEIF file is actually selected rather than paying that
+  // cost on every page load. Decodes on the main thread (no Web Worker), which
+  // matters here: an earlier attempt with heic2any (MIT), which runs libheif
+  // inside a Worker, silently hung forever on pages that aren't cross-origin
+  // isolated (no SharedArrayBuffer) -- true of this app's plain Flask
+  // responses, so it would have hung for real users too, not just in testing.
+  let libheifLoadPromise = null;
+  function loadLibheifFactory() {
+    if (window.libheif) return Promise.resolve(window.libheif);
+    if (!libheifLoadPromise) {
+      libheifLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "libheif-bundle.js";
+        script.onload = () => resolve(window.libheif);
+        script.onerror = () => {
+          libheifLoadPromise = null; // allow retrying on a later selection
+          reject(new Error("HEIC 預覽元件載入失敗"));
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return libheifLoadPromise;
+  }
+
+  // The libheif() factory call does synchronous WASM instantiation (the
+  // binary is embedded in the bundle, no extra fetch) -- cache the resulting
+  // instance so converting several HEIC files in one batch selection doesn't
+  // re-instantiate the WASM module per file.
+  let libheifInstancePromise = null;
+  function getLibheifInstance() {
+    if (!libheifInstancePromise) {
+      libheifInstancePromise = loadLibheifFactory().then((factory) => factory());
+    }
+    return libheifInstancePromise;
+  }
+
+  // Most desktop browsers (Chrome/Firefox/Edge) can't render HEIC/HEIF in an
+  // <img> tag at all, even though the backend decodes it fine -- decode to a
+  // canvas and re-encode as a JPEG blob purely for on-page preview/thumbnail
+  // purposes. The original file (never this converted copy) is still what
+  // gets uploaded/processed.
+  async function previewableBlob(file) {
+    if (!isHeicFile(file)) return file;
+    try {
+      const instance = await getLibheifInstance();
+      const buffer = await file.arrayBuffer();
+      const decoder = new instance.HeifDecoder();
+      const images = decoder.decode(new Uint8Array(buffer));
+      if (!images.length) throw new Error("HEIC 檔案沒有可解碼的影像");
+      const image = images[0];
+      const width = image.get_width();
+      const height = image.get_height();
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      const imageData = context.createImageData(width, height);
+
+      await new Promise((resolve, reject) => {
+        image.display(imageData, (displayData) => {
+          if (!displayData) reject(new Error("HEIC 解碼失敗"));
+          else resolve();
+        });
+      });
+      context.putImageData(imageData, 0, 0);
+
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+      return blob || file;
+    } catch (error) {
+      return file; // preview may not render, but selection still succeeds
+    }
+  }
+
+  async function setSelectedFile(file) {
     hideError();
-    if (!file || !file.type.startsWith("image/")) {
-      showError("請選擇 JPG、PNG 或 WebP 圖片。");
+    if (!isSupportedImageFile(file)) {
+      showError("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。");
       return;
     }
 
+    const token = ++fileSelectionToken;
     selectedFile = file;
+    const blobForPreview = await previewableBlob(file);
+    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
+
     if (previewUrl) URL.revokeObjectURL(previewUrl);
-    previewUrl = URL.createObjectURL(file);
+    previewUrl = URL.createObjectURL(blobForPreview);
 
     els.dzPreviewImg.src = previewUrl;
     els.procThumb.src = previewUrl;
@@ -648,23 +747,27 @@
 
   // Batch counterpart of setSelectedFile: filter to images (same rule/message),
   // build one record per file, and render the multi-thumbnail strip.
-  function setSelectedFileBatch(files) {
+  async function setSelectedFileBatch(files) {
     hideError();
     resetBatchState();
-    const images = files.filter((file) => file && file.type.startsWith("image/"));
+    const images = files.filter((file) => isSupportedImageFile(file));
     if (!images.length) {
-      showError("請選擇 JPG、PNG 或 WebP 圖片。");
+      showError("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。");
       return;
     }
     if (images.length !== files.length) {
       showError("已略過非圖片檔案。");
     }
 
+    const token = ++fileSelectionToken;
     selectedFile = null;
+    const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
+    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
+
     batchRecords = images.map((file, i) => ({
       localId: `f${i}`,
       file,
-      previewUrl: URL.createObjectURL(file),
+      previewUrl: URL.createObjectURL(previewBlobs[i]),
       // pending -> analyzing -> analyzed -> processing -> done / error
       status: "pending",
       analysis: null,       // step-1 result (shown in the step-2 review panel)

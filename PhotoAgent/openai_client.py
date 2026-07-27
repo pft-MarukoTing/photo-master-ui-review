@@ -14,6 +14,7 @@ from image_tools import (
     apply_framing_size,
     apply_aspect_ratio_preference,
     nearest_openai_edit_size,
+    ensure_png_bytes,
 )
 from prompts import (
     ANALYSIS_INSTRUCTION,
@@ -178,7 +179,7 @@ def edit_photo(
     resp = requests.post(
         OPENAI_IMAGES_EDITS_URL,
         headers=_auth_headers(),
-        files={"image": ("photo.png", image_bytes, "image/png")},
+        files={"image": ("photo.png", ensure_png_bytes(image_bytes), "image/png")},
         data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
         timeout=300,
     )

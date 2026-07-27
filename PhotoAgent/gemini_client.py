@@ -13,6 +13,7 @@ from image_tools import (
     apply_framing_size,
     apply_aspect_ratio_preference,
     nearest_gemini_aspect_ratio,
+    ensure_png_bytes,
 )
 from prompts import build_edit_prompt
 
@@ -96,7 +97,7 @@ def edit_photo(
         "contents": [{
             "parts": [
                 {"text": prompt_text},
-                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(image_bytes).decode()}},
+                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(ensure_png_bytes(image_bytes)).decode()}},
             ],
         }],
         "generationConfig": {
