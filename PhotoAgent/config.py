@@ -93,21 +93,27 @@ STYLE_OPTION_INSTRUCTIONS = {
     },
     "angle": {
         "high": (
-            "Take this exact photograph and tip the view downward so it reads as looking down on the subject from a higher camera, revealing more top-facing surfaces and upper contours. "
-            "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, just seen from above, while the subject remains in roughly the same part of the frame. "
-            "Keep shapes, proportions, and perspective believable. "
-            "Avoid warped geometry or invented background content."
+            "Take this exact photograph and re-angle it into a clearly high-angle shot looking down on the subject, as if the camera were raised up and tilted down toward it, revealing more of the top-facing surfaces and upper contours. "
+            "Make the high angle distinct and obvious — it should clearly read as looking down, not just a tiny downward nudge. "
+            "Crucially, this is a high angle shot from the SAME distance as the original, not a distant overhead: the camera is raised and tilted down while keeping the exact same shooting distance. Only the downward viewing angle changes — the distance does not change in either direction, neither farther nor closer. "
+            "The subject spans the same fraction of the frame and stays the same size and crop as in the original, as if only the camera's tilt changed. "
+            "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, just viewed from the higher angle, while the subject remains in roughly the same part of the frame. "
+            "Keep shapes, proportions, and perspective believable, and avoid warped geometry or invented background content. "
+            "Do not zoom or move the camera closer or farther to achieve the high angle — keep the subject at exactly the same size as in the original."
         ),
         "low": (
-            "Take this exact photograph and tip the view upward so it reads as looking up at the subject from a lower camera, making them feel more prominent and elevated. "
+            "Take this exact photograph and tilt the camera's vertical angle upward, pivoting in place, so it reads as looking up at the subject from a lower camera, making them feel more prominent and elevated. "
+            "The framing scale is unchanged: the subject spans the same fraction of the frame and sits at the same size and crop as in the original, as if only the camera's tilt changed. "
             "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, just seen from below, while the subject remains in roughly the same part of the frame. "
-            "Keep proportions and structural geometry believable. "
-            "Avoid warped architecture or unrealistic enlargement of foreground elements."
+            "Keep proportions and structural geometry believable, and avoid warped architecture or unrealistic enlargement of foreground elements. "
+            "Do not zoom out or pull the camera back."
         ),
         "eye": (
-            "Take this exact photograph and bring the view toward the subject's eye level, so the perspective feels balanced, direct, and neutral rather than dramatically high or low. "
+            "Take this exact photograph and adjust the camera's vertical angle toward the subject's eye level, pivoting in place, so the perspective feels balanced, direct, and neutral rather than dramatically high or low. "
+            "The framing scale is unchanged: the subject spans the same fraction of the frame and sits at the same size and crop as in the original, as if only the camera's tilt changed. "
             "Keep the surrounding scene in place: the background stays in the same position and on the same side of the frame as it already is, while the subject remains in roughly the same part of the frame. "
-            "Maintain believable proportions, depth, and spatial layout."
+            "Maintain believable proportions, depth, and spatial layout. "
+            "Do not zoom out or pull the camera back."
         ),
         "side": (
             "Transform the photo into a clear side-angle or three-quarter side-angle shot, targeting an oblique viewpoint around 45 to 90 degrees from a straight-on front view. "
