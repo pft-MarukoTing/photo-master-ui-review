@@ -11,6 +11,19 @@ window.PhotoAgentConfig = {
     "gpt-image-2": "GPT Image 2",
     "nano-banana-2": "Nano Banana 2"
   },
+  // Single source of truth for the merged 修圖模型/影像品質 selector (upload
+  // page + analyze-preview) -- one option per valid model+quality
+  // combination, instead of two independent selects the user could
+  // previously pair up in invalid ways (and whose option lists had to be
+  // hand-duplicated across both screens). Nano Banana 2 (Gemini) has no
+  // quality parameter at all, so it gets a single option with quality fixed
+  // to a sensible default rather than a user-facing quality choice.
+  imageModelQualityOptions: [
+    { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Low" },
+    { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Medium" },
+    { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" }
+  ],
+  defaultImageModelQuality: "gpt-image-2:low",
   presets: {
     natural: {
       label: "自然高級修圖",

@@ -285,11 +285,12 @@
       padding-right: 24px;
     }
     .ap-col-right {
-      /* +24px over the intended 300px content width, since padding-left
-         (border-box) eats into it -- keeps the options-card as wide as it
-         was before the divider padding was added, so labels like "修圖模型"
-         don't wrap. */
-      width: 324px;
+      /* Wide enough that the merged 修圖模型 select (now including quality,
+         e.g. "GPT Image 2 · Medium") has room to show its full text instead
+         of being squeezed by the options-card's fixed width -- was 324px,
+         tuned back when this column only ever needed to fit the shorter
+         bare model name. */
+      width: 380px;
       flex-shrink: 0;
       display: flex;
       flex-direction: column;
@@ -941,27 +942,16 @@
                 <span class="ios-track"><span class="ios-thumb"></span></span>
               </label>
             </label>
+            <!-- Options populated from window.PhotoAgentConfig.imageModelQualityOptions
+                 (populateModelQualitySelect, app.js) -- single source of truth shared
+                 with #ap-image-model-quality instead of two hand-duplicated selects. -->
             <div class="option-row">
-              <div class="option-text">
+              <div class="option-text option-text-auto">
                 <span class="option-label">修圖模型</span>
               </div>
-              <select id="image-model" class="quality-select">
-                <option value="gpt-image-2" selected>GPT Image 2</option>
-                <option value="nano-banana-2">Nano Banana 2</option>
-              </select>
+              <select id="image-model-quality" class="quality-select model-quality-select"></select>
             </div>
-            <div id="image-quality-wrap">
-              <div class="option-row">
-                <div class="option-text">
-                  <span class="option-label">影像品質</span>
-                </div>
-                <select id="image-quality" class="quality-select">
-                  <option value="low" selected>Low</option>
-                  <option value="medium">Medium</option>
-                </select>
-              </div>
-              <div class="option-divider"></div>
-            </div>
+            <div class="option-divider"></div>
             <div class="option-row">
               <div class="option-text">
                 <span class="option-label">生成張數</span>
@@ -1151,25 +1141,10 @@
             <div class="ap-col-right">
               <div class="options-card">
                 <div class="option-row">
-                  <div class="option-text">
+                  <div class="option-text option-text-auto">
                     <span class="option-label">修圖模型</span>
                   </div>
-                  <select id="ap-image-model" class="quality-select">
-                    <option value="gpt-image-2" selected>GPT Image 2</option>
-                    <option value="nano-banana-2">Nano Banana 2</option>
-                  </select>
-                </div>
-                <div id="ap-image-quality-wrap">
-                  <div class="option-divider"></div>
-                  <div class="option-row">
-                    <div class="option-text">
-                      <span class="option-label">影像品質</span>
-                    </div>
-                    <select id="ap-image-quality" class="quality-select">
-                      <option value="low" selected>Low</option>
-                      <option value="medium">Medium</option>
-                    </select>
-                  </div>
+                  <select id="ap-image-model-quality" class="quality-select model-quality-select"></select>
                 </div>
                 <div id="ap-run-count-wrap" hidden>
                   <div class="option-divider"></div>

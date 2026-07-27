@@ -205,66 +205,50 @@
     });
   }
 
-  // Quality/model selects appear on both the upload screen (#image-quality,
-  // #image-model) and the analysis-preview screen (#ap-image-quality,
-  // #ap-image-model, shown mid-flow so the choice can be revised right
-  // before the AI edit fires). Keep both pairs mirrored, and push the live
-  // value into whichever flow state is active so finishSingleFlow/
-  // editBatchItem (which read singleFlowState/batchSettings) pick up a
-  // change made on the preview screen without any other wiring.
-  // GPT Image models are noticeably slower/costlier at higher quality, so
-  // "low" is the sensible default; Nano Banana's cost/latency profile doesn't
-  // scale the same way, so "medium" is a better default there.
-  function defaultQualityForModel(model) {
-    return model === "nano-banana-2" ? "medium" : "low";
+  // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
+  // combination (window.PhotoAgentConfig.imageModelQualityOptions is the
+  // single source of truth), appearing on both the upload screen
+  // (#image-model-quality) and the analysis-preview screen
+  // (#ap-image-model-quality, shown mid-flow so the choice can be revised
+  // right before the AI edit fires). Keep both selects mirrored, and push
+  // the live {model, quality} into whichever flow state is active so
+  // finishSingleFlow/editBatchItem (which read singleFlowState/batchSettings)
+  // pick up a change made on the preview screen without any other wiring.
+  function findModelQualityOption(value) {
+    const options = window.PhotoAgentConfig.imageModelQualityOptions || [];
+    return options.find((o) => o.value === value) || options[0] || null;
   }
 
-  // The Gemini API (Nano Banana 2) has no quality parameter -- showing the
-  // 影像品質 selector for it would let the user "pick" a setting that quietly
-  // does nothing, so hide it entirely for that model instead.
-  function updateQualityVisibility(model) {
-    const hide = model === "nano-banana-2";
-    if (els.imageQualityWrap) els.imageQualityWrap.hidden = hide;
-    if (els.apImageQualityWrap) els.apImageQualityWrap.hidden = hide;
+  function populateModelQualitySelect(select) {
+    if (!select) return;
+    select.innerHTML = "";
+    (window.PhotoAgentConfig.imageModelQualityOptions || []).forEach((opt) => {
+      const optionEl = document.createElement("option");
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      select.appendChild(optionEl);
+    });
+    select.value = window.PhotoAgentConfig.defaultImageModelQuality || select.value;
+  }
+  populateModelQualitySelect(els.imageModelQualitySelect);
+  populateModelQualitySelect(els.apImageModelQualitySelect);
+
+  function applyModelQualityChange(value) {
+    const opt = findModelQualityOption(value);
+    if (!opt) return;
+    if (els.imageModelQualitySelect) els.imageModelQualitySelect.value = opt.value;
+    if (els.apImageModelQualitySelect) els.apImageModelQualitySelect.value = opt.value;
+    if (singleFlowState) { singleFlowState.imageModel = opt.model; singleFlowState.imageQuality = opt.quality; }
+    if (batchSettings) { batchSettings.imageModel = opt.model; batchSettings.imageQuality = opt.quality; }
   }
 
-  function applyQualityModelChange({ quality, model }) {
-    // A model change with no explicit quality (i.e. the user just picked a
-    // different model, not the quality dropdown) resets quality to that
-    // model's sensible default.
-    if (model !== undefined && quality === undefined) {
-      quality = defaultQualityForModel(model);
-    }
-    if (quality !== undefined) {
-      if (els.imageQualitySelect) els.imageQualitySelect.value = quality;
-      if (els.apImageQualitySelect) els.apImageQualitySelect.value = quality;
-      if (singleFlowState) singleFlowState.imageQuality = quality;
-      if (batchSettings) batchSettings.imageQuality = quality;
-    }
-    if (model !== undefined) {
-      if (els.imageModelSelect) els.imageModelSelect.value = model;
-      if (els.apImageModelSelect) els.apImageModelSelect.value = model;
-      if (singleFlowState) singleFlowState.imageModel = model;
-      if (batchSettings) batchSettings.imageModel = model;
-      updateQualityVisibility(model);
-    }
+  if (els.imageModelQualitySelect) {
+    els.imageModelQualitySelect.addEventListener("change", () =>
+      applyModelQualityChange(els.imageModelQualitySelect.value));
   }
-
-  if (els.imageQualitySelect) {
-    els.imageQualitySelect.addEventListener("change", () =>
-      applyQualityModelChange({ quality: els.imageQualitySelect.value }));
-  }
-  if (els.apImageQualitySelect) {
-    els.apImageQualitySelect.addEventListener("change", () =>
-      applyQualityModelChange({ quality: els.apImageQualitySelect.value }));
-  }
-  if (els.imageModelSelect) {
-    els.imageModelSelect.addEventListener("change", () =>
-      applyQualityModelChange({ model: els.imageModelSelect.value }));
-  }
-  if (els.apImageModelSelect) {
-    els.apImageModelSelect.addEventListener("change", () =>
-      applyQualityModelChange({ model: els.apImageModelSelect.value }));
+  if (els.apImageModelQualitySelect) {
+    els.apImageModelQualitySelect.addEventListener("change", () =>
+      applyModelQualityChange(els.apImageModelQualitySelect.value));
   }
 
   // 生成張數 (single-image RUN count) can now be preset on the upload screen,
@@ -797,8 +781,9 @@
 
     const presetKey = "natural";
     const preset = presets[presetKey] || presets.natural;
-    const imageQuality = els.imageQualitySelect?.value || "medium";
-    const imageModel = els.imageModelSelect?.value || "gpt-image-2";
+    const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
+    const imageQuality = modelQualityOpt.quality || "medium";
+    const imageModel = modelQualityOpt.model || "gpt-image-2";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
     const processingPath = els.processingPathSelect?.value || "local";
@@ -1122,12 +1107,13 @@
       els.runCountSelect.value = els.imageRunCountSelect.value;
     }
     const presetKey = "natural";
+    const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
     batchSettings = {
       presetKey,
       preset: presets[presetKey] || presets.natural,
       // Prompt is entered per-image (or batch-level) at step 2, not at upload.
-      imageQuality: els.imageQualitySelect?.value || "medium",
-      imageModel: els.imageModelSelect?.value || "gpt-image-2",
+      imageQuality: modelQualityOpt.quality || "medium",
+      imageModel: modelQualityOpt.model || "gpt-image-2",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       path: els.processingPathSelect?.value || "local"

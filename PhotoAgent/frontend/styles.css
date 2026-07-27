@@ -429,6 +429,16 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .quality-select:hover { border-color: rgba(255,255,255,.28); }
 .quality-select:focus { border-color: rgba(168,85,247,.55); }
+
+/* The merged model+quality select's longest option ("GPT Image 2 · Medium")
+   is wider than the old plain model name ("GPT Image 2") -- .option-text's
+   shared flex:1 used to claim all the row's slack space before the select
+   got any, squeezing it below what its text needs (worst inside the
+   analyze-preview's narrow fixed-width .ap-col-right). option-text-auto
+   drops that grow so the short "修圖模型" label only takes its own width,
+   and model-quality-select claims the rest instead. */
+.option-text-auto { flex: 0 0 auto; }
+.model-quality-select { flex: 1 1 auto; min-width: 0; }
 .quality-select:disabled { opacity: .5; cursor: not-allowed; }
 
 /* Error banner */
