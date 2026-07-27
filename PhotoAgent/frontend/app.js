@@ -788,6 +788,7 @@
     currentRunTabsOnSelect = null;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchProgress) els.batchProgress.hidden = true;
+    if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
     if (els.batchPromptRow) els.batchPromptRow.hidden = true;
     if (els.batchPromptInput) els.batchPromptInput.value = "";
@@ -1536,6 +1537,54 @@
       const analyzed = batchRecords.filter((r) => r.status === "analyzed").length;
       els.batchProgress.textContent = `已分析 ${analyzed}/${total}${failText}`;
     }
+    updateBatchDownloadAllVisibility();
+  }
+
+  // Batch counterpart of buildResultZip/buildAllRunsZip: bundles every done
+  // image's *every done RUN* into one zip, each image under its own folder
+  // (named after its current/mirrored job, same convention buildAllRunsZip
+  // uses for the single-image case) -- if an image was revised with a higher
+  // RUN count, all of those RUNs are included, not just the currently
+  // mirrored one, so the zip's file count actually matches how many results
+  // were generated instead of silently dropping to one per image.
+  function doneBatchRecordsWithResult() {
+    return batchRecords.filter((r) => r.status === "done" && r.result);
+  }
+
+  // Same "fall back to a synthetic single run" shape as lastResultRuns(),
+  // for a batch record instead of the single-image flow's lastResult.
+  function batchRecordRuns(record) {
+    if (Array.isArray(record.runs) && record.runs.length) return record.runs;
+    return [{ run: 1, result: record.result, jobId: record.jobId, status: "done" }];
+  }
+
+  async function buildAllBatchResultsZip() {
+    const records = doneBatchRecordsWithResult();
+    const groups = await Promise.all(records.map((r) => {
+      const doneRuns = batchRecordRuns(r).filter((run) => run.status === "done");
+      return buildRunFiles(
+        { file: r.file, path: batchSettings.path },
+        doneRuns,
+        imageFolderPrefix(r.jobId)
+      );
+    }));
+    return window.PhotoAgentZip.createZip(groups.flat());
+  }
+
+  function updateBatchDownloadAllVisibility() {
+    if (!els.batchDownloadAllBtn) return;
+    const count = doneBatchRecordsWithResult().length;
+    els.batchDownloadAllBtn.hidden = count === 0;
+    if (count > 0) {
+      const hint = `下載所有已完成的結果（${count} 張）`;
+      els.batchDownloadAllBtn.title = hint;
+      els.batchDownloadAllBtn.setAttribute("aria-label", hint);
+    }
+  }
+
+  function handleDownloadAllBatchClick() {
+    if (!doneBatchRecordsWithResult().length) return;
+    downloadZip(buildAllBatchResultsZip, buildDownloadZipFilename());
   }
 
   function renderBatchSidebarList() {
@@ -2192,6 +2241,7 @@
     if (e.key === "Escape" && els.errorModal && !els.errorModal.hidden) closeErrorModal();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
+  if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
   if (els.batchReviewContinueBtn) {
     els.batchReviewContinueBtn.addEventListener("click", () => {
       if (!currentBatchRecord) return;

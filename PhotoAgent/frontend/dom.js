@@ -65,6 +65,7 @@ window.PhotoAgentDom = (() => {
     batchProgress: document.querySelector("#batch-progress"),
     batchSidebar: document.querySelector("#batch-sidebar"),
     batchSidebarTitle: document.querySelector("#batch-sidebar-title"),
+    batchDownloadAllBtn: document.querySelector("#batch-download-all-btn"),
     batchSidebarList: document.querySelector("#batch-sidebar-list"),
     resultsDetail: document.querySelector("#results-detail"),
     batchMainLoading: document.querySelector("#batch-main-loading"),
