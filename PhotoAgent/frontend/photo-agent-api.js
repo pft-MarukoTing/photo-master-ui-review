@@ -46,8 +46,23 @@ window.PhotoAgentApi = (() => {
     // AIPoC task_ids contain "/" and "+" and must be percent-encoded, or the
     // request either 404s or gets misrouted.
     const url = `${BASE_URL}${pathPrefix(path)}/status/${encodeURIComponent(jobId)}`;
+    // Tracks a fetch()-level failure (e.g. "Failed to fetch") separately from
+    // a real HTTP/job-status error below -- mobile browsers throttle or drop
+    // a backgrounded tab's network access while the user is in another app,
+    // so a single connectivity blip here doesn't mean the backend is down.
+    let lastConnectivityError = null;
     while (Date.now() < deadline) {
-      const response = await fetch(url);
+      let response;
+      try {
+        response = await fetch(url);
+      } catch (error) {
+        // Treat like "still processing" and keep polling within the existing
+        // deadline, instead of failing the whole flow on the first hiccup.
+        lastConnectivityError = error;
+        await sleep(intervalMs);
+        continue;
+      }
+      lastConnectivityError = null;
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(`${data.error || `查詢狀態失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
@@ -56,6 +71,11 @@ window.PhotoAgentApi = (() => {
       if (data.status === "error") throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
       await sleep(intervalMs);
     }
+    // If the deadline was reached while still unable to even reach the
+    // server, surface that connectivity error as-is (friendlyError() turns
+    // it into the "無法連線" message) rather than the generic timeout below,
+    // which implies the job itself is just taking unusually long.
+    if (lastConnectivityError) throw lastConnectivityError;
     throw new Error(`處理逾時，請稍後再試。（Job ID: ${jobId}）`);
   }
 
