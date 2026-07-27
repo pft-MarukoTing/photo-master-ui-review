@@ -255,7 +255,13 @@
   // entirely up to the analysis step; "original" tells the analysis model (at
   // analyze time, via build_analysis_instruction on the backend) and the
   // edit-model API (size/imageConfig.aspectRatio) to keep the source photo's
-  // own proportions. Same upload+preview mirroring pattern as model/quality.
+  // own proportions. Upload-page only, read once when analysis starts
+  // (startSubmit/startSubmitBatch) and carried unchanged into singleFlowState/
+  // batchSettings for every later edit -- unlike model/quality/run-count,
+  // this has no analyze-preview counterpart to mirror, since changing it
+  // after analysis already ran would silently desync from what the analysis
+  // step was actually told (see build_edit_prompt's
+  // _aspect_ratio_pref_at_analysis handling on the backend).
   function populateAspectRatioSelect(select) {
     if (!select) return;
     select.innerHTML = "";
@@ -268,23 +274,6 @@
     select.value = window.PhotoAgentConfig.defaultAspectRatio || select.value;
   }
   populateAspectRatioSelect(els.imageAspectRatioSelect);
-  populateAspectRatioSelect(els.apImageAspectRatioSelect);
-
-  function applyAspectRatioChange(value) {
-    if (els.imageAspectRatioSelect) els.imageAspectRatioSelect.value = value;
-    if (els.apImageAspectRatioSelect) els.apImageAspectRatioSelect.value = value;
-    if (singleFlowState) singleFlowState.aspectRatio = value;
-    if (batchSettings) batchSettings.aspectRatio = value;
-  }
-
-  if (els.imageAspectRatioSelect) {
-    els.imageAspectRatioSelect.addEventListener("change", () =>
-      applyAspectRatioChange(els.imageAspectRatioSelect.value));
-  }
-  if (els.apImageAspectRatioSelect) {
-    els.apImageAspectRatioSelect.addEventListener("change", () =>
-      applyAspectRatioChange(els.apImageAspectRatioSelect.value));
-  }
 
   // 生成張數 (single-image RUN count) can now be preset on the upload screen,
   // ahead of analysis -- keep it and the analysis-preview's own #ap-run-count

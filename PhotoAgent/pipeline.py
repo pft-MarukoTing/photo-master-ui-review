@@ -68,6 +68,13 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
     }
+    # Records which aspect-ratio preference was active when this analysis ran,
+    # so a later edit under a *different* preference (e.g. user picked "keep
+    # original" here but switches to "Auto" on the analyze-preview screen
+    # before regenerating) knows recommended_aspect_ratio="original" was
+    # forced by that earlier choice, not a genuine model judgment -- see
+    # build_edit_prompt's use of this field.
+    analysis["_aspect_ratio_pref_at_analysis"] = aspect_ratio
     return analysis
 
 

@@ -82,7 +82,7 @@ def edit_photo(
     framed_analysis = apply_aspect_ratio_preference(framed_analysis, aspect_ratio)
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
 
-    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback)
+    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio)
 
     # Only "original" forces a concrete aspectRatio derived from the source
     # photo's own ratio -- "auto" leaves imageConfig without an aspectRatio

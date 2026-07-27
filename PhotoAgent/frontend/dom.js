@@ -49,7 +49,6 @@ window.PhotoAgentDom = (() => {
     imageAspectRatioSelect: document.querySelector("#image-aspect-ratio"),
     imageRunCountSelect: document.querySelector("#image-run-count"),
     apImageModelQualitySelect: document.querySelector("#ap-image-model-quality"),
-    apImageAspectRatioSelect: document.querySelector("#ap-image-aspect-ratio"),
     apRunCountWrap: document.querySelector("#ap-run-count-wrap"),
     apRunCountSelect: document.querySelector("#ap-run-count"),
     originalImg: document.querySelector("#original-img"),

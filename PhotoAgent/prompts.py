@@ -271,7 +271,7 @@ def _build_crop_instruction_block(crop_plan):
 Perform exactly this crop/reframe as part of your edit. This is a hard constraint, not a stylistic suggestion: do not pick a different crop, do not soften or ignore it, and do not fall back to the full original frame. Do not include any content from outside this region in the final output. Within the kept region, still honor the ROI, subject extent, and protected regions below."""
 
 
-def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None):
+def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto"):
     user_instruction = analysis.get("user_instruction") or {}
     effective_user_direction = (
         user_instruction.get("normalized_user_direction") or user_direction or ""
@@ -284,11 +284,23 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {}, ensure_ascii=False)
     protected_regions = json.dumps(analysis.get("protected_regions") or [], ensure_ascii=False)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
-    rec_aspect = (
-        analysis.get("recommended_aspect_ratio") or
-        (analysis.get("crop_box") or {}).get("aspect_ratio") or
-        "original"
-    )
+    if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
+        # The analysis was run while the user had "keep original" selected, so
+        # its recommended_aspect_ratio/crop_box.aspect_ratio are forced to
+        # "original" by build_analysis_instruction -- not a genuine model
+        # judgment. The user has since switched to "Auto" for this edit, so
+        # that forced value must not leak in as if it were a real
+        # recommendation (it would otherwise silently keep pinning the output
+        # to the original ratio even though "Auto" was chosen).
+        rec_aspect = "no strong preference -- choose whichever aspect ratio best suits the subject and composition"
+        aspect_ratio_reason = "使用者於本次修圖選擇「Auto」；先前分析階段的原圖比例建議是使用者當時選擇「維持原圖比例」所致，非模型本身的判斷，故本次不採用。"
+    else:
+        rec_aspect = (
+            analysis.get("recommended_aspect_ratio") or
+            (analysis.get("crop_box") or {}).get("aspect_ratio") or
+            "original"
+        )
+        aspect_ratio_reason = analysis.get("aspect_ratio_reason") or ""
 
     user_block = ""
     if user_instruction.get("has_user_direction"):
@@ -544,7 +556,7 @@ Photo analysis:
 - Subject extent box: {subject_extent_box}
 - Protected regions: {protected_regions}
 - Recommended aspect ratio: {rec_aspect}
-- Aspect ratio reason: {analysis.get("aspect_ratio_reason") or ""}
+- Aspect ratio reason: {aspect_ratio_reason}
 - Tool strategy: {analysis.get("tool_strategy") or ""}
 - Lighting strategy: {analysis.get("lighting_strategy") or ""}
 - Memory color strategy: {analysis.get("memory_color_strategy") or ""}
