@@ -41,7 +41,7 @@ window.PhotoAgentApi = (() => {
     return data.job_id || data.task_id;
   }
 
-  async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000 } = {}) {
+  async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000, finalCheckMs = 1 * 60 * 1000 } = {}) {
     const deadline = Date.now() + timeoutMs;
     // AIPoC task_ids contain "/" and "+" and must be percent-encoded, or the
     // request either 404s or gets misrouted.
@@ -51,30 +51,51 @@ window.PhotoAgentApi = (() => {
     // a backgrounded tab's network access while the user is in another app,
     // so a single connectivity blip here doesn't mean the backend is down.
     let lastConnectivityError = null;
-    while (Date.now() < deadline) {
+
+    // One status check: returns true once the job is actually done, throws
+    // on a genuine job failure or HTTP error, or returns false for "still
+    // processing" / a connectivity blip worth retrying (left in
+    // lastConnectivityError for the caller to decide what to do with).
+    async function checkOnce() {
       let response;
       try {
         response = await fetch(url);
       } catch (error) {
-        // Treat like "still processing" and keep polling within the existing
-        // deadline, instead of failing the whole flow on the first hiccup.
         lastConnectivityError = error;
-        await sleep(intervalMs);
-        continue;
+        return false;
       }
       lastConnectivityError = null;
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(`${data.error || `查詢狀態失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
       }
-      if (data.status === "success") return;
+      if (data.status === "success") return true;
       if (data.status === "error") throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+      return false;
+    }
+
+    while (Date.now() < deadline) {
+      if (await checkOnce()) return;
       await sleep(intervalMs);
     }
-    // If the deadline was reached while still unable to even reach the
-    // server, surface that connectivity error as-is (friendlyError() turns
-    // it into the "無法連線" message) rather than the generic timeout below,
-    // which implies the job itself is just taking unusually long.
+
+    // The client's own budget is up, but the backend job runs independently
+    // of this tab and we don't expect it to take longer than timeoutMs --
+    // rather than assume failure off a single client-side deadline (which
+    // may have elapsed largely while the tab was backgrounded/the phone was
+    // asleep, not because the job itself is actually stuck), spend one more
+    // short window asking the server directly for a definitive answer before
+    // giving up.
+    const finalCheckDeadline = Date.now() + finalCheckMs;
+    while (Date.now() < finalCheckDeadline) {
+      if (await checkOnce()) return;
+      await sleep(intervalMs);
+    }
+
+    // If we still couldn't even reach the server, surface that connectivity
+    // error as-is (friendlyError() turns it into the "無法連線" message)
+    // rather than the generic timeout below, which implies the job itself is
+    // just taking unusually long.
     if (lastConnectivityError) throw lastConnectivityError;
     throw new Error(`處理逾時，請稍後再試。（Job ID: ${jobId}）`);
   }
