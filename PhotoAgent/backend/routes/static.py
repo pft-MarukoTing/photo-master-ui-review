@@ -12,7 +12,10 @@ def index():
 
 @static_bp.get("/api/config")
 def config():
-    return jsonify({"debugUi": current_app.config.get("DEBUG_UI", False)})
+    return jsonify({
+        "debugUi": current_app.config.get("DEBUG_UI", False),
+        "aipocDefault": current_app.config.get("AIPOC_DEFAULT", False)
+    })
 
 
 @static_bp.get("/<path:filepath>")
