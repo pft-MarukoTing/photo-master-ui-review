@@ -610,6 +610,14 @@
     return `photoMuse-${dateStr}-${timeStr}.zip`;
   }
 
+  function buildDownloadImageFilename() {
+    const pad = (n) => String(n).padStart(2, "0");
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
+    const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    return `photoMuse-${dateStr}-${timeStr}.png`;
+  }
+
   const PROMPT_KEYS = ["photo_analysis", "user_instruction_review", "crop_validation", "image_edit", "quality_check"];
 
   function buildPromptsJson(prompts) {
@@ -809,10 +817,39 @@
     }
   }
 
+  // Single current-result download: just the generated image itself, not a
+  // zip -- there's only ever one file involved here, so bundling it into a
+  // zip (source image + result) was unnecessary overhead for the common
+  // case. --debug-ui mode still gets the full zip (source + result.json +
+  // prompts.json via buildResultZip), since exposing that raw data is the
+  // whole point of that mode.
+  async function downloadCurrentResultImage() {
+    const runs = lastResultRuns();
+    const current = runs.find((run) => run.run === lastResult.runNumber) || runs[0];
+    try {
+      const imageBuf = await fetch(resultImageUrl(current.jobId, { path: lastResult.path, run: current.run })).then((response) => response.arrayBuffer());
+      const blob = new Blob([imageBuf], { type: "image/png" });
+      const url = URL.createObjectURL(blob);
+      const tempLink = document.createElement("a");
+      tempLink.href = url;
+      tempLink.download = buildDownloadImageFilename();
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      tempLink.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      showError("下載失敗，請稍後再試。");
+    }
+  }
+
   function handleDownloadClick(event) {
     event.preventDefault();
     if (!lastResult) return;
-    downloadZip(buildResultZip, buildDownloadZipFilename());
+    if (isDebugUiActive) {
+      downloadZip(buildResultZip, buildDownloadZipFilename());
+    } else {
+      downloadCurrentResultImage();
+    }
   }
 
   function handleDownloadAllRunsClick(event) {
