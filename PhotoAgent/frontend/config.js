@@ -18,9 +18,13 @@ window.PhotoAgentConfig = {
   // hand-duplicated across both screens). Nano Banana 2 (Gemini) has no
   // quality parameter at all, so it gets a single option with quality fixed
   // to a sensible default rather than a user-facing quality choice.
+  // "Efficient"/"Enhanced" (not "Low"/"Medium") describe what the two tiers
+  // actually trade off -- faster/lighter vs. more detail -- without reading
+  // as "worse" vs. "better" the way the raw API quality names do; `quality`
+  // itself stays "low"/"medium" since that's the literal API param value.
   imageModelQualityOptions: [
-    { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Low" },
-    { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Medium" },
+    { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Efficient" },
+    { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" }
   ],
   defaultImageModelQuality: "gpt-image-2:low",
