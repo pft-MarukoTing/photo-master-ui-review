@@ -158,7 +158,7 @@ Return exactly this JSON shape:
     "risk_level": "low",
     "reasons": []
   },
-  "correction_plan": ["3 到 7 項，實際會做的具體技術調整，供編修模型執行；例如「提升整體曝光 0.3 EV 並拉回高光」。"],
+  "correction_plan": ["1 到 6 項，實際會做的具體技術調整，供編修模型執行；例如「提升整體曝光 0.3 EV 並拉回高光」。只列這張照片真正需要的項目；若某個面向已經夠好就不要列，不要為了湊數而發明問題。照片本來就平衡時，只列一項最必要的即可。"],
   "retouch_recipe": ["與 correction_plan 一一對應、順序相同、項數相同，但改寫成給使用者看的簡潔白話版本；例如對應上例可寫「讓照片更明亮」。"],
   "preserve_rules": ["必須保留的內容。"]
 }
@@ -169,6 +169,7 @@ Analysis responsibilities:
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
+- Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 
@@ -206,6 +207,35 @@ def build_analysis_instruction(aspect_ratio_pref="auto"):
 User aspect ratio requirement:
 - The user explicitly requested that the final output keep exactly the same aspect ratio as the original photo. Set recommended_aspect_ratio to "original". If crop_box.enabled is true, crop_box.aspect_ratio must also be "original" (or left blank) -- do not choose a crop_box or crop_candidates aspect_ratio that changes the original proportions. Any cropping must stay within the original image's aspect ratio.
 """
+
+
+# The light/color direction shared by both retouch modes. The sentence this
+# replaced ("Improve the existing photograph through light, contrast, color
+# harmony, ...") was too abstract to steer an image model: with no definition of
+# "better" and no stopping condition, the model fell back on its training prior
+# for an appealing photo -- more warmth, more saturation -- which is exactly the
+# overshoot we see. So name the craft, and say where the image's presence should
+# come from (light first, color second) rather than capping how much it may move.
+COLOR_CRAFT_DIRECTION = (
+    "Improve the existing photograph the way a skilled colorist would: open the shadows enough to reveal "
+    "detail without flattening them, hold the highlights so they roll off instead of clipping, and build "
+    "depth through tonal separation between subject, midground, and background. Draw the image's presence "
+    "primarily from light -- exposure, contrast placement, micro-contrast -- and only secondarily from "
+    "color; a modest saturation or warmth adjustment is welcome where it helps, but it should refine the "
+    "palette the photograph already has rather than impose a new one."
+)
+
+# Stopping condition, not a priority -- hence its own block at the very end of
+# the edit prompt rather than another numbered item. Each clause is a property
+# the model can actually verify, unlike "don't overdo it": (a)/(c) catch a color
+# cast, (b) catches the skin shift. Overlaps the person-only skin block on
+# purpose; that one is a detailed veto rule, this is a one-line check that runs
+# for every photo.
+COLOR_GRADE_CHECK = """Before finishing, verify the color grade:
+(a) surfaces that should be neutral -- white walls, white clothing, paper, grey concrete, overcast sky -- have not picked up a color tint;
+(b) skin sits inside its natural hue range, not orange, ruddy red, sallow yellow, or grey;
+(c) no single hue dominates the frame that was not dominant in the original.
+These three matter more than how strong the grade looks. The target is a photograph that looks well-lit and well-printed, not auto-enhanced, HDR-processed, or run through a warm filter."""
 
 
 def build_user_instruction_review_prompt(user_direction, analysis):
@@ -423,6 +453,23 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
         negative_block = f"""User-rejected corrections (highest priority, negative instruction -- the user explicitly unchecked these from the suggested recipe; do NOT perform them, even partially, even if the photo analysis, aesthetic diagnosis, or other strategy notes above suggest them):
 {rejected_lines}"""
 
+    # Skin is the one color in a photo that viewers have an absolute reference
+    # for, so a global grade that reads fine on the background can still fail on
+    # skin. Trigger on is_person too, not just subject_category: a 生活紀錄 /
+    # 旅行 / 街拍 photo still has faces that need protecting.
+    subjects = analysis.get("subjects") or []
+    has_person = analysis.get("subject_category") == "人物" or any(
+        isinstance(s, dict) and s.get("is_person") for s in subjects
+    )
+    skin_block = ""
+    if has_person:
+        skin_block = """Skin-tone priority (this photo contains people):
+- Skin is the reference point for every color decision in this edit. Judge white balance, saturation, warmth, and contrast by how the skin reads, not by how the background reads.
+- Preserve the original hue relationship between skin and the scene's neutral surfaces (white walls, white clothing, paper, teeth, eye whites). Do not shift skin hue away from the rest of the frame.
+- Veto rule: if a global color, warmth, or saturation adjustment improves the background but pushes skin toward orange, sallow yellow, sunburnt red, grey/lifeless, or magenta, abandon that global adjustment and treat the background locally instead.
+- Keep natural tonal variation within skin. Forehead, cheeks, nose, and shadowed areas must not flatten into one uniform tone.
+- This bounds the color portion of every instruction above, including the correction plan, the preset style direction, and any lighting override. A result whose overall grade looks appealing but whose skin looks unnatural is a failure, even if every other instruction was followed."""
+
     revision_block = ""
     if revision_feedback:
         revision_block = f"""Revision feedback from the previous QA:
@@ -491,7 +538,7 @@ Priority order:
 1. {crop_priority_line_style}
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
 3. Apply every user-selected style override in full. Angle overrides should clearly move the camera to the selected viewpoint by following that angle's own instruction above; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, follow the quantified subject-size target: wide should reduce the subject's visible frame ratio by about 20%, while wider should reduce it by about 40%. The scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
-4. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup, but only when it supports the selected overrides and approved correction plan.
+4. {COLOR_CRAFT_DIRECTION} Apply this only where it supports the selected overrides and the approved correction plan.
 5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if lighting is not selected, preserve the original lighting logic; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
@@ -507,7 +554,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
-3. Improve the existing photograph through light, contrast, color harmony, highlight rolloff, texture, and restrained local cleanup.
+3. {COLOR_CRAFT_DIRECTION}
 4. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
 5. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
@@ -579,9 +626,13 @@ User extra direction:
 
 {negative_block}
 
+{skin_block}
+
 {revision_block}
 
 {retouch_priorities}
+
+{COLOR_GRADE_CHECK}
 """
 
 

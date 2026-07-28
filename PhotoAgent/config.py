@@ -194,13 +194,14 @@ STYLE_OPTION_VALUE_LABELS = {
 PRESET_PROMPTS = {
     "natural": (
         "A quiet premium retouch: make the existing photograph feel cleaner, calmer, and more intentional. "
-        "Prioritize believable light, neutral but pleasing color, controlled contrast, and small refinements "
-        "that a good human retoucher would make."
+        "Prioritize believable light, faithful color that keeps the original palette and its warm/cool "
+        "character, controlled contrast, and small refinements that a good human retoucher would make. "
+        "Cleaner does not mean warmer or more saturated."
     ),
     "editorial": (
         "A refined editorial finish: add taste, depth, and visual confidence while keeping the exact photograph. "
-        "Think restrained magazine color work, graceful highlight rolloff, richer midtones, better subject "
-        "separation, and no gimmicks."
+        "Think restrained magazine color work, graceful highlight rolloff, midtone separation earned through "
+        "tonal contrast rather than added saturation or warmth, better subject separation, and no gimmicks."
     ),
     "product": (
         "A commercial presentation finish: preserve the exact product or subject, then improve legibility, "
