@@ -1032,13 +1032,26 @@
   async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt = "", runCount = 1, onStage, onRunDone }) {
     const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount, path: "local" });
 
-    let runsSeen = 0;
+    // Tracks which RUN *numbers* have already been delivered (a Set, not a
+    // "highest number seen" watermark) -- /result can transiently return
+    // fewer/out-of-order entries than the true count if one RUN's metadata
+    // download hiccups server-side (see api.py's _runs_from_meta, which just
+    // skips a RUN it can't read yet rather than failing the whole response).
+    // A watermark would let a LATER tick's higher run number permanently
+    // strand the skipped one; a Set delivers each RUN exactly once no matter
+    // what order/gaps show up across polls. lastRunsDoneSeen is separate --
+    // just a cheap "did anything change" gate so a poll tick with no new
+    // progress doesn't bother calling /result at all.
+    let lastRunsDoneSeen = 0;
+    const deliveredRuns = new Set();
     const fetchNewRuns = async () => {
       const { runs } = await getJobRuns(jobId, { path: "local" });
-      for (let i = runsSeen; i < runs.length; i += 1) {
-        if (onRunDone) onRunDone({ ...runs[i], jobId });
-      }
-      runsSeen = runs.length;
+      (runs || []).forEach((runEntry) => {
+        if (!deliveredRuns.has(runEntry.run)) {
+          deliveredRuns.add(runEntry.run);
+          if (onRunDone) onRunDone({ ...runEntry, jobId });
+        }
+      });
     };
 
     // A job covering `runCount` sequential edit calls needs a proportionally
@@ -1050,7 +1063,8 @@
       timeoutMs: runCount * 5 * 60 * 1000,
       onStatus: async (data) => {
         if (onStage && data.stage) onStage(data.stage);
-        if (typeof data.runs_done === "number" && data.runs_done > runsSeen) {
+        if (typeof data.runs_done === "number" && data.runs_done > lastRunsDoneSeen) {
+          lastRunsDoneSeen = data.runs_done;
           await fetchNewRuns();
         }
       }
