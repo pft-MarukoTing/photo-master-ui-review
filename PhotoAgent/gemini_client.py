@@ -2,6 +2,7 @@ import base64
 import os
 from typing import Optional
 
+import backoff
 import requests
 
 from aiserver_utils.aescipher import AESCipher
@@ -44,6 +45,15 @@ def _safe_json(resp) -> dict:
         return resp.json()
     except Exception:
         return {}
+
+
+class _RetryableApiError(RuntimeError):
+    """A transient Gemini API failure (5xx) -- distinct from a 4xx rejection,
+    which will fail identically on retry since the problem is the request's
+    content, not the network. Mirrors openai_client.py's same distinction."""
+
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError, _RetryableApiError)
 
 
 def _extract_inline_image(data: dict) -> Optional[str]:
@@ -93,11 +103,14 @@ def edit_photo(
     if aspect_ratio == "original":
         image_config["aspectRatio"] = nearest_gemini_aspect_ratio(img_w, img_h)
 
+    # Converted once, outside the retry-wrapped call, so a retry doesn't
+    # needlessly re-encode the same bytes.
+    png_b64 = base64.b64encode(ensure_png_bytes(image_bytes)).decode()
     payload = {
         "contents": [{
             "parts": [
                 {"text": prompt_text},
-                {"inlineData": {"mimeType": "image/png", "data": base64.b64encode(ensure_png_bytes(image_bytes)).decode()}},
+                {"inlineData": {"mimeType": "image/png", "data": png_b64}},
             ],
         }],
         "generationConfig": {
@@ -106,6 +119,17 @@ def edit_photo(
         },
     }
 
+    data = _post_generate_content(model, payload)
+
+    b64 = _extract_inline_image(data)
+    if not b64:
+        raise RuntimeError("Gemini 回應沒有包含圖片資料。")
+
+    return {"image_b64": b64, "usage": data.get("usageMetadata")}, prompt_text
+
+
+@backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
+def _post_generate_content(model: str, payload: dict) -> dict:
     resp = requests.post(
         GEMINI_GENERATE_CONTENT_URL.format(model=model),
         headers={"x-goog-api-key": _gemini_api_key(), "Content-Type": "application/json"},
@@ -115,10 +139,7 @@ def edit_photo(
     data = _safe_json(resp)
     if not resp.ok:
         msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
+        if resp.status_code >= 500:
+            raise _RetryableApiError(f"Image edit failed (Gemini): {msg}")
         raise RuntimeError(f"Image edit failed (Gemini): {msg}")
-
-    b64 = _extract_inline_image(data)
-    if not b64:
-        raise RuntimeError("Gemini 回應沒有包含圖片資料。")
-
-    return {"image_b64": b64, "usage": data.get("usageMetadata")}, prompt_text
+    return data

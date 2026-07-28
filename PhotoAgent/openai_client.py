@@ -2,6 +2,7 @@ import json
 import os
 import re
 
+import backoff
 import requests
 
 from config import MODELS, PRESETS, PRESET_PROMPTS
@@ -45,6 +46,16 @@ def _auth_headers() -> dict:
     return {"Authorization": f"Bearer {_openai_api_key()}"}
 
 
+class _RetryableApiError(RuntimeError):
+    """A transient OpenAI API failure (5xx) -- distinct from a 4xx rejection
+    (e.g. the safety system blocking a request), which will fail identically
+    on retry since the problem is the request's content, not the network."""
+
+
+_RETRYABLE_EXCEPTIONS = (requests.exceptions.Timeout, requests.exceptions.ConnectionError, _RetryableApiError)
+
+
+@backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
 def _post_json(url: str, body: dict, label: str, timeout: int = 120) -> dict:
     resp = requests.post(
         url,
@@ -57,6 +68,8 @@ def _post_json(url: str, body: dict, label: str, timeout: int = 120) -> dict:
     data = _safe_json(resp)
     if not resp.ok:
         msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
+        if resp.status_code >= 500:
+            raise _RetryableApiError(f"{label}: {msg}")
         raise RuntimeError(f"{label}: {msg}")
     return data
 
@@ -176,23 +189,34 @@ def edit_photo(
     # keeps its usual freedom to size the output (see nearest_openai_edit_size).
     size_param = nearest_openai_edit_size(img_w, img_h) if aspect_ratio == "original" else "auto"
 
-    resp = requests.post(
-        OPENAI_IMAGES_EDITS_URL,
-        headers=_auth_headers(),
-        files={"image": ("photo.png", ensure_png_bytes(image_bytes), "image/png")},
-        data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
-        timeout=300,
-    )
-    data = _safe_json(resp)
-    if not resp.ok:
-        msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
-        raise RuntimeError(f"Image edit failed: {msg}")
+    # Converted once, outside the retry-wrapped call, so a retry doesn't
+    # needlessly re-encode the same bytes.
+    png_bytes = ensure_png_bytes(image_bytes)
+    data = _post_image_edit(model, prompt_text, quality, size_param, png_bytes)
 
     b64 = (data.get("data") or [{}])[0].get("b64_json")
     if not b64:
         raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
 
     return {"image_b64": b64, "usage": data.get("usage")}, prompt_text
+
+
+@backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
+def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str, png_bytes: bytes) -> dict:
+    resp = requests.post(
+        OPENAI_IMAGES_EDITS_URL,
+        headers=_auth_headers(),
+        files={"image": ("photo.png", png_bytes, "image/png")},
+        data={"model": model, "prompt": prompt_text, "quality": quality, "size": size_param},
+        timeout=300,
+    )
+    data = _safe_json(resp)
+    if not resp.ok:
+        msg = (data.get("error") or {}).get("message") or f"HTTP {resp.status_code}"
+        if resp.status_code >= 500:
+            raise _RetryableApiError(f"Image edit failed: {msg}")
+        raise RuntimeError(f"Image edit failed: {msg}")
+    return data
 
 
 # ── Step 6: quality check ──────────────────────────────────────────────────────
