@@ -9,6 +9,25 @@ window.PhotoAgentApi = (() => {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
+  // A one-shot API call (submit/analyze/continue/get-result) is just as
+  // exposed to a mobile phone's sleep/wake network blip as the long-running
+  // pollJobStatus loop below -- if fetch() itself happens to fire right as
+  // the tab backgrounds or right as it wakes (network not yet reconnected),
+  // it throws "Failed to fetch" with no chance to recover, since there was
+  // never a retry here. Retries only a connectivity-level failure (fetch()
+  // itself rejecting) -- a real HTTP error response still surfaces
+  // immediately to the caller, same as before.
+  async function fetchWithRetry(url, options, { retries = 5, delayMs = 2000 } = {}) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await fetch(url, options);
+      } catch (error) {
+        if (attempt >= retries) throw error;
+        await sleep(delayMs);
+      }
+    }
+  }
+
   // "local" -> /api/photo-agent/... (Redis queue + docker worker)
   // "aipoc" -> /api/photo-agent/aipoc/... (direct call to the shared AIPoC gateway)
   function pathPrefix(path) {
@@ -29,7 +48,7 @@ window.PhotoAgentApi = (() => {
     // remote worker can reuse it (stage="finish") instead of re-analyzing.
     if (analysis) form.append("analysis", JSON.stringify(analysis));
 
-    const response = await fetch(`${BASE_URL}${pathPrefix(path)}/submit`, {
+    const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/submit`, {
       method: "POST",
       body: form
     });
@@ -105,7 +124,7 @@ window.PhotoAgentApi = (() => {
   }
 
   async function getJobResult(jobId, { path = "local" } = {}) {
-    const response = await fetch(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
+    const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
       throw new Error(`${data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
@@ -135,7 +154,7 @@ window.PhotoAgentApi = (() => {
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
-    const response = await fetch(`${BASE_URL}/api/photo-agent/analyze`, {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze`, {
       method: "POST",
       body: form
     });
@@ -156,7 +175,7 @@ window.PhotoAgentApi = (() => {
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
-    const response = await fetch(`${BASE_URL}/api/photo-agent/analyze-batch`, {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze-batch`, {
       method: "POST",
       body: form
     });
@@ -169,7 +188,7 @@ window.PhotoAgentApi = (() => {
   }
 
   async function getAnalyzeResult(jobId) {
-    const response = await fetch(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
       throw new Error(`${data.error || `取得分析結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
@@ -178,7 +197,7 @@ window.PhotoAgentApi = (() => {
   }
 
   async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt }) {
-    const response = await fetch(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -209,7 +228,7 @@ window.PhotoAgentApi = (() => {
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
-    const response = await fetch(`${BASE_URL}/api/photo-agent/aipoc/analyze`, {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/aipoc/analyze`, {
       method: "POST",
       body: form
     });
@@ -230,7 +249,7 @@ window.PhotoAgentApi = (() => {
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     if (userPrompt) form.append("user_prompt", userPrompt);
 
-    const response = await fetch(`${BASE_URL}/api/photo-agent/aipoc/analyze-batch`, {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/aipoc/analyze-batch`, {
       method: "POST",
       body: form
     });
