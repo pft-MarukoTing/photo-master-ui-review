@@ -893,6 +893,14 @@
     if (error.message === "Failed to fetch") {
       return "無法連線到 Photo Master 伺服器，請確認後端服務是否已啟動。";
     }
+    // OpenAI's images/edits API rejects requests its safety system flags --
+    // in practice this fires reliably for photos containing a recognizable
+    // copyrighted/trademarked character (branded plush toys, mascots, etc.),
+    // a platform content policy we can't bypass, not a transient failure
+    // worth retrying with the same photo.
+    if (/rejected by the safety system/i.test(error.message || "")) {
+      return "AI 修圖模型拒絕處理這張照片——這通常是因為照片中包含可辨識的受著作權保護角色或商標（例如卡通玩偶、品牌吉祥物等），基於平台政策無法編輯這類內容。請嘗試更換照片，或改用其他修圖模型再試一次。";
+    }
     return error.message || "發生未知錯誤。";
   }
 
