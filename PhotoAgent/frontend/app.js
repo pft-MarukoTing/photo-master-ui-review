@@ -1238,11 +1238,41 @@
       };
       updateRunProgress();
 
-      await runBatchPool(singleRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob });
+      if (useCombinedJob) {
+        // RUN #1 does a real combined analyze+edit job (establishes the
+        // shared analysis); RUNs 2..N reuse it via the normal continueJob
+        // path instead of each independently re-analyzing -- same rationale
+        // as runCombinedBatchAuto's leader/follower split for batch mode.
+        const leader = singleRuns[0];
+        await runSingleItem(leader, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob: true });
         doneCount += 1;
         updateRunProgress();
-      }, POLL_CONCURRENCY);
+
+        const followers = singleRuns.slice(1);
+        if (followers.length) {
+          if (leader.status === "done") {
+            const followerAnalyzeJobId = leader.jobId;
+            const followerEffectiveAnalysis = buildEffectiveAnalysis(leader.result.analysis, {});
+            await runBatchPool(followers, async (run) => {
+              await runSingleItem(run, { analyzeJobId: followerAnalyzeJobId, effectiveAnalysis: followerEffectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob: false });
+              doneCount += 1;
+              updateRunProgress();
+            }, POLL_CONCURRENCY);
+          } else {
+            // RUN #1 itself failed -- there's no analysis for the rest to reuse.
+            followers.forEach((run) => {
+              run.status = "error";
+              run.error = leader.error || "分析失敗，其餘 RUN 已略過。";
+            });
+          }
+        }
+      } else {
+        await runBatchPool(singleRuns, async (run) => {
+          await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob });
+          doneCount += 1;
+          updateRunProgress();
+        }, POLL_CONCURRENCY);
+      }
 
       if (!singleRuns.some((r) => r.status === "done")) {
         throw new Error(singleRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
@@ -1545,11 +1575,26 @@
     }
   }
 
-  // Batch-auto (skip-review) + local path: analyze and edit run as one
-  // combined job per RUN, per image (runCombinedEditRun) -- skips the
-  // separate analyzeJobBatch/analyzeBatchItem phase entirely, since
-  // batch-auto never pauses at the sidebar for the user to review/adjust
-  // between the two stages anyway.
+  // Batch-auto (skip-review) + local path: skips the separate
+  // analyzeJobBatch/analyzeBatchItem phase entirely, since batch-auto never
+  // pauses at the sidebar for the user to review/adjust between the two
+  // stages anyway. Still only ONE fresh photo analysis per image no matter
+  // how many RUNs are requested -- RUN #1 does a real combined analyze+edit
+  // job (analyzeAndEditBatchItem), and RUNs 2..N reuse that same analysis via
+  // the normal finish-stage continueJob path (editBatchItem, the same
+  // function the manual review flow already uses for its own edit runs).
+  // Without this split, each RUN would independently re-run analyze_stage,
+  // paying for N analyses per image instead of 1 and letting the N "variations"
+  // of one photo silently disagree on crop/recipe since analysis isn't fully
+  // deterministic.
+  //
+  // Each image's own leader->followers sequence runs as an independent
+  // pipeline (Promise.all over records, not a runBatchPool barrier) so one
+  // image's slow/stuck leader (e.g. still inside pollJobStatus's post-sleep
+  // grace window) never holds back another image's followers from starting
+  // -- they only ever wait on their OWN leader. All the pipelines share one
+  // concurrency limiter so the total number of in-flight jobs across every
+  // image still never exceeds POLL_CONCURRENCY, same cap as before.
   async function runCombinedBatchAuto() {
     const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
     batchRecords.forEach((r) => {
@@ -1559,8 +1604,29 @@
       r.mirrorIndex = null;
     });
 
-    const workItems = batchRecords.flatMap((r) => r.runs.map((run) => ({ record: r, run })));
-    await runBatchPool(workItems, analyzeAndEditBatchItem, POLL_CONCURRENCY);
+    const limiter = createConcurrencyLimiter(POLL_CONCURRENCY);
+
+    await Promise.all(batchRecords.map(async (record) => {
+      const leaderRun = record.runs[0];
+      await limiter(() => analyzeAndEditBatchItem({ record, run: leaderRun }));
+
+      const followers = record.runs.slice(1);
+      if (!followers.length) return;
+
+      if (!record.analysis) {
+        // RUN #1 itself failed -- there's no analysis for the rest to reuse.
+        followers.forEach((run) => {
+          run.status = "error";
+          run.error = leaderRun.error || "分析失敗，其餘 RUN 已略過。";
+        });
+        syncRecordMirror(record);
+        updateBatchSidebarItem(record);
+        refreshIfSelected(record);
+        return;
+      }
+
+      await Promise.all(followers.map((run) => limiter(() => editBatchItem({ record, run }))));
+    }));
 
     updateBatchProgress();
     updateBatchHeaderControls();
@@ -1882,6 +1948,32 @@
       })());
     }
     await Promise.all(runners);
+  }
+
+  // A concurrency-limited "run this whenever a slot is free" gate, unlike
+  // runBatchPool's fixed-array-of-known-items design -- needed wherever the
+  // full set of tasks to run isn't known upfront (e.g. runCombinedBatchAuto's
+  // per-image follower RUNs, only submittable once that image's own leader
+  // RUN resolves at an unpredictable time). All callers sharing one limiter
+  // instance still compete for the same concurrency cap.
+  function createConcurrencyLimiter(limit) {
+    let active = 0;
+    const queue = [];
+    function next() {
+      if (active >= limit || queue.length === 0) return;
+      active += 1;
+      const { fn, resolve, reject } = queue.shift();
+      fn().then(resolve, reject).finally(() => {
+        active -= 1;
+        next();
+      });
+    }
+    return function run(fn) {
+      return new Promise((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        next();
+      });
+    };
   }
 
   function updateBatchProgress() {
