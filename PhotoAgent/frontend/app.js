@@ -904,6 +904,28 @@
     return error.message || "發生未知錯誤。";
   }
 
+  // Analyze+edit as ONE backend job (submitJob, no analysis param -> the
+  // worker runs analyze_stage then finish_stage itself, see job_processor.py)
+  // instead of the two-stage analyzeJob+continueJob dance. Used only by the
+  // "auto" (skip-review) flows on the local path, where there's nothing to
+  // review/adjust between the two stages anyway -- the analysis-preview DOM
+  // is never shown, so its recipe/style defaults are always what gets
+  // applied. Collapsing to one job means one poll instead of two, so a phone
+  // sleeping mid-flow only ever has to resume across a single wait instead of
+  // getting stuck between two separately-submitted jobs.
+  // AIPoC's own analyze already runs synchronously (no poll at all), so it
+  // never had this problem and isn't touched here; the manual review flow
+  // still needs the real two-stage analyze->adjust->continue path.
+  async function runCombinedEditRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt = "", onStage }) {
+    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, path: "local" });
+    await pollJobStatus(jobId, {
+      path: "local",
+      onStatus: (data) => { if (onStage && data.stage) onStage(data.stage); }
+    });
+    const { image_url: imageUrl, result } = await getJobResult(jobId, { path: "local" });
+    return { jobId, imageUrl, result };
+  }
+
   async function startSubmit({ skipReview = false } = {}) {
     hideError();
     if (batchRecords.length > 1) {
@@ -942,8 +964,8 @@
 
     try {
       let stepStart = Date.now();
-      let analysis;
-      let analyzeJobId; // only set for the "local" path, needed by continueJob
+      let analysis = null;
+      let analyzeJobId; // only set for the "local" two-stage path, needed by continueJob
 
       // Also collected into analyzeTimings (not just pushed via addTiming) so
       // the RUN-count > 1 path can prepend Step 2's time onto each RUN's own
@@ -955,34 +977,44 @@
         addTiming(label, duration, children);
       };
 
-      if (processingPath === "aipoc") {
-        const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing });
-        analysis = analyzeData.analysis;
-        const t = analysis.timings || {};
-        recordAnalyzeTiming("初步分析", Date.now() - stepStart, [
-          { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
-        ]);
-      } else {
-        analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing });
-        recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
+      // Skip-review + local path: analyze and edit run as one combined job
+      // (runCombinedEditRun), so there's no separate analyze step to run
+      // here at all -- finishSingleFlow fills singleFlowState.analysis in
+      // from the combined job's own result once it completes.
+      const useCombinedJob = skipReview && processingPath === "local";
 
-        stepStart = Date.now();
-        await pollJobStatus(analyzeJobId, { path: "local" });
-        const analyzeWaitDuration = Date.now() - stepStart;
+      if (!useCombinedJob) {
+        if (processingPath === "aipoc") {
+          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing });
+          analysis = analyzeData.analysis;
+          const t = analysis.timings || {};
+          recordAnalyzeTiming("初步分析", Date.now() - stepStart, [
+            { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
+          ]);
+        } else {
+          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing });
+          recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
 
-        stepStart = Date.now();
-        const analyzeResult = await getAnalyzeResult(analyzeJobId);
-        analysis = analyzeResult.result.analysis;
-        const t = analysis.timings || {};
-        recordAnalyzeTiming("分析中", analyzeWaitDuration, [
-          { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
-        ]);
-        recordAnalyzeTiming("取得分析結果", Date.now() - stepStart);
+          stepStart = Date.now();
+          await pollJobStatus(analyzeJobId, { path: "local" });
+          const analyzeWaitDuration = Date.now() - stepStart;
+
+          stepStart = Date.now();
+          const analyzeResult = await getAnalyzeResult(analyzeJobId);
+          analysis = analyzeResult.result.analysis;
+          const t = analysis.timings || {};
+          recordAnalyzeTiming("分析中", analyzeWaitDuration, [
+            { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
+          ]);
+          recordAnalyzeTiming("取得分析結果", Date.now() - stepStart);
+        }
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob };
 
-      if (skipReview) {
+      if (useCombinedJob) {
+        await finishSingleFlow();
+      } else if (skipReview) {
         // Straight through, no stop: still populate the analysis-preview DOM
         // (finishSingleFlow reads its recipe checkboxes/style picks/prompt
         // straight from there) but never show the panel or wait for a click.
@@ -1010,21 +1042,38 @@
   // singleFlowState (set once by analyze) plus whatever the user currently
   // has checked/typed in the analysis-preview DOM.
   async function finishSingleFlow() {
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
     lastSingleSelections = { userPrompt, ...selections };
-    const effectiveAnalysis = buildEffectiveAnalysis(analysis, selections);
+    // No analysis yet in combined mode -- nothing to fold recipe/style
+    // adjustments into, since the combined job computes its own from scratch.
+    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, selections);
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
 
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
-    if (procTitle) procTitle.textContent = aiPhotoEditing ? "AI 正在修圖" : "正在處理照片";
+    if (procTitle) procTitle.textContent = useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
     if (procSub) {
-      procSub.textContent = aiPhotoEditing
-        ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-        : "正在進行本機影像處理，請稍候…";
+      procSub.textContent = useCombinedJob
+        ? "AI 正在分析照片，請稍候…"
+        : (aiPhotoEditing
+            ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
+            : "正在進行本機影像處理，請稍候…");
     }
+    // Live progress messaging for a combined job, driven by the backend's
+    // reported stage (job_processor.py's set_job_info(..., results={"stage": ...})
+    // calls) -- keeps the same two-phase "分析中 -> 修圖中" wording the old
+    // two-job flow showed, even though it's now one job/one poll.
+    const onCombinedStage = (stage) => {
+      if (stage !== "edit") return;
+      if (procTitle) procTitle.textContent = aiPhotoEditing ? "AI 正在修圖" : "正在處理照片";
+      if (procSub) {
+        procSub.textContent = aiPhotoEditing
+          ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
+          : "正在進行本機影像處理，請稍候…";
+      }
+    };
 
     if (runCount === 1) {
       // Single RUN: unchanged from before RUN-count support existed, so the
@@ -1033,30 +1082,46 @@
       singleMirrorIndex = null;
 
       let stepStart = Date.now();
-      let finalJobId;
-      if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+      let finalJobId, imageUrl, result;
+
+      if (useCombinedJob) {
+        const combined = await runCombinedEditRun({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, onStage: onCombinedStage });
+        finalJobId = combined.jobId;
+        imageUrl = combined.imageUrl;
+        result = combined.result;
+        addTiming("分析並修圖", Date.now() - stepStart);
+        // Remember this job + its analysis so a later re-run (回到流程) goes
+        // through the normal two-stage continueJob path instead of combining
+        // again -- continueJob only needs a job id whose Redis record has
+        // valid srcKeys, which this combined job's does.
+        singleFlowState.analysis = result.analysis;
+        singleFlowState.analyzeJobId = finalJobId;
+        singleFlowState.useCombinedJob = false;
       } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt });
+        if (processingPath === "aipoc") {
+          finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+        } else {
+          finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt });
+        }
+        addTiming("提交後續處理", Date.now() - stepStart);
+
+        stepStart = Date.now();
+        await pollJobStatus(finalJobId, { path: processingPath });
+        const finishWaitDuration = Date.now() - stepStart;
+
+        stepStart = Date.now();
+        ({ image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath }));
+        const t = (result["extra-info"] || {}).timings || {};
+        addTiming("AI 修圖中", finishWaitDuration, [
+          { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+          { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+        ]);
+        addTiming("取得結果", Date.now() - stepStart);
       }
-      addTiming("提交後續處理", Date.now() - stepStart);
 
-      stepStart = Date.now();
-      await pollJobStatus(finalJobId, { path: processingPath });
-      const finishWaitDuration = Date.now() - stepStart;
-
-      stepStart = Date.now();
-      const { image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath });
       const extraInfo = result["extra-info"] || {};
-      const t = extraInfo.timings || {};
-      addTiming("AI 修圖中", finishWaitDuration, [
-        { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
-        { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-        { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
-        { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
-      ]);
-      addTiming("取得結果", Date.now() - stepStart);
-
       const usedImageModelLabel = extraInfo.image_model
         ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
         : "本機處理";
@@ -1103,13 +1168,24 @@
       updateRunProgress();
 
       await runBatchPool(singleRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings });
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob });
         doneCount += 1;
         updateRunProgress();
       }, POLL_CONCURRENCY);
 
       if (!singleRuns.some((r) => r.status === "done")) {
         throw new Error(singleRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
+      }
+      // Combined mode: remember the first successfully-done run's analysis +
+      // job id, same reasoning as the runCount===1 branch above, so a later
+      // re-run goes through the normal two-stage continueJob path.
+      if (useCombinedJob) {
+        const doneRun = singleRuns.find((r) => r.status === "done");
+        if (doneRun) {
+          singleFlowState.analysis = doneRun.result.analysis;
+          singleFlowState.analyzeJobId = doneRun.jobId;
+          singleFlowState.useCombinedJob = false;
+        }
       }
       showSingleResult();
     }
@@ -1121,9 +1197,30 @@
   // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --
   // mirrors editBatchItem, but against selectedFile/singleFlowState instead
   // of a batch record.
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings }) {
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob }) {
     try {
       let stepStart = Date.now();
+
+      if (useCombinedJob) {
+        const combined = await runCombinedEditRun({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt });
+        const combinedMs = Date.now() - stepStart;
+        run.jobId = combined.jobId;
+        run.status = "done";
+        run.imageUrl = combined.imageUrl;
+        run.result = combined.result;
+        const t = (combined.result["extra-info"] || {}).timings || {};
+        run.timings = [
+          { label: "分析並修圖", duration: combinedMs, children: [
+            { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
+            { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+            { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+            { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+            { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+          ] }
+        ];
+        return;
+      }
+
       if (processingPath === "aipoc") {
         run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
       } else {
@@ -1295,6 +1392,16 @@
     };
 
     try {
+      if (skipReview && batchSettings.path === "local") {
+        // Batch-auto + local path: analyze and edit run as one combined job
+        // per RUN, per image (runCombinedEditRun) -- skips the separate
+        // analyzeJobBatch/analyzeBatchItem phase below entirely, since
+        // batch-auto never pauses at the sidebar for the user to review/
+        // adjust between the two stages anyway.
+        await runCombinedBatchAuto();
+        return;
+      }
+
       if (batchSettings.path === "aipoc") {
         // AIPoC analyze is synchronous local -- one call returns all analyses.
         let entries;
@@ -1365,6 +1472,93 @@
       els.startButton.disabled = false;
       if (els.startDirectBtn) els.startDirectBtn.disabled = false;
     }
+  }
+
+  // Batch-auto (skip-review) + local path: analyze and edit run as one
+  // combined job per RUN, per image (runCombinedEditRun) -- skips the
+  // separate analyzeJobBatch/analyzeBatchItem phase entirely, since
+  // batch-auto never pauses at the sidebar for the user to review/adjust
+  // between the two stages anyway.
+  async function runCombinedBatchAuto() {
+    const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
+    batchRecords.forEach((r) => {
+      r.runs = Array.from({ length: runCount }, (_, k) => ({
+        run: k + 1, jobId: null, status: "processing", imageUrl: null, result: null, timings: [], error: null
+      }));
+      r.mirrorIndex = null;
+    });
+
+    const workItems = batchRecords.flatMap((r) => r.runs.map((run) => ({ record: r, run })));
+    await runBatchPool(workItems, analyzeAndEditBatchItem, POLL_CONCURRENCY);
+
+    updateBatchProgress();
+    updateBatchHeaderControls();
+  }
+
+  // Combined analyze+edit for one (record, run) pair -- batch-auto
+  // counterpart of runSingleItem's combined-job branch. Only used for a
+  // batch record's very first edit under skip-review + local path;
+  // per-image revise (startInlineBatchReview -> editBatchItem) always uses
+  // the normal continueJob path, reusing record.analysis/record.analyzeJobId
+  // populated below once the first run for a record completes.
+  async function analyzeAndEditBatchItem({ record, run }) {
+    try {
+      const userPrompt = effectivePrompt(record);
+      const stepStart = Date.now();
+      const combined = await runCombinedEditRun({
+        file: record.file,
+        preset: batchSettings.presetKey,
+        imageQuality: batchSettings.imageQuality,
+        imageModel: batchSettings.imageModel,
+        aspectRatio: batchSettings.aspectRatio,
+        aiPhotoEditing: batchSettings.aiPhotoEditing,
+        runQa: batchSettings.runQa,
+        userPrompt,
+        onStage: (stage) => {
+          // First of this record's RUNs to reach "edit" flips the whole
+          // record from "analyzing" to "processing" -- later RUNs' callbacks
+          // see the status already changed and skip the redundant re-render.
+          if (stage === "edit" && record.status === "analyzing") {
+            record.status = "processing";
+            updateBatchSidebarItem(record);
+            refreshIfSelected(record);
+            updateBatchProgress();
+          }
+        }
+      });
+      const combinedMs = Date.now() - stepStart;
+      run.jobId = combined.jobId;
+      run.status = "done";
+      run.imageUrl = combined.imageUrl;
+      run.result = combined.result;
+      const t = (combined.result["extra-info"] || {}).timings || {};
+      run.timings = [
+        { label: "分析並修圖", duration: combinedMs, children: [
+          { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
+          { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
+          { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
+        ] }
+      ];
+    } catch (error) {
+      run.status = "error";
+      run.error = friendlyError(error);
+    }
+    // Remember the first successfully-done run's analysis + job id so a
+    // later per-image revise reuses the normal two-stage continueJob path
+    // instead of needing its own combined submission.
+    if (!record.analysis) {
+      const doneRun = (record.runs || []).find((r) => r.status === "done");
+      if (doneRun) {
+        record.analysis = doneRun.result.analysis;
+        record.analyzeJobId = doneRun.jobId;
+      }
+    }
+    syncRecordMirror(record);
+    updateBatchSidebarItem(record);
+    updateBatchProgress();
+    refreshIfSelected(record);
   }
 
   // Poll one local analyze job and fetch its analysis (step 1).

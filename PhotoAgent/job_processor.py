@@ -6,9 +6,10 @@ import os
 import shutil
 import time
 
+from aiserver_utils.queue import set_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
-from pipeline import run_pipeline, analyze_stage, finish_stage
+from pipeline import analyze_stage, finish_stage
 
 
 def build_job_metadata(task_info):
@@ -120,9 +121,20 @@ class PhotoAgentJobProcessor:
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                 )
             else:
+                # Combined job: analyze_stage then finish_stage in one queued
+                # job (instead of run_pipeline's single-expression version)
+                # so a "stage" marker can be written to the job's Redis info
+                # between the two -- this is what lets /status/<job_id> report
+                # "analyze" vs "edit" for a single-job submission, which the
+                # frontend's skip-review flow relies on for its two-phase
+                # progress message.
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes)')
-                result = run_pipeline(
+                set_job_info(job_id=task_id, results={"stage": "analyze"})
+                analysis = analyze_stage(image_bytes, aspect_ratio=params.get("aspect_ratio", "auto"))
+                set_job_info(job_id=task_id, results={"stage": "edit"})
+                result = finish_stage(
                     image_bytes=image_bytes,
+                    analysis=analysis,
                     user_prompt=params["user_prompt"],
                     preset_key=params["preset"],
                     quality=params["image_quality"],

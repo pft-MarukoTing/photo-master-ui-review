@@ -66,7 +66,11 @@ def submit():
 
 @api_bp.get("/status/<job_id>")
 def status(job_id):
-    info = get_job_info(job_id, keyToGet=["status", "error"])
+    # "stage" is only ever present for a combined analyze+edit job (see
+    # job_processor.py's set_job_info(..., results={"stage": ...}) calls) --
+    # absent for the two-stage analyze-only/finish-only jobs, and absent
+    # until the worker has actually started the combined job.
+    info = get_job_info(job_id, keyToGet=["status", "error", "stage"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     return jsonify(info)

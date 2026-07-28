@@ -41,7 +41,7 @@ window.PhotoAgentApi = (() => {
     return data.job_id || data.task_id;
   }
 
-  async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000, finalCheckMs = 1 * 60 * 1000 } = {}) {
+  async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000, finalCheckMs = 1 * 60 * 1000, onStatus } = {}) {
     const deadline = Date.now() + timeoutMs;
     // AIPoC task_ids contain "/" and "+" and must be percent-encoded, or the
     // request either 404s or gets misrouted.
@@ -71,6 +71,10 @@ window.PhotoAgentApi = (() => {
       }
       if (data.status === "success") return true;
       if (data.status === "error") throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+      // "stage" is only present for a combined analyze+edit job (see
+      // job_processor.py) -- lets a single-job submission still show
+      // "analyzing" -> "editing" progress instead of one flat message.
+      if (onStatus) onStatus(data);
       return false;
     }
 
