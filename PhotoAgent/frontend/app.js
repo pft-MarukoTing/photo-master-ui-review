@@ -1226,6 +1226,21 @@
       }
     };
 
+    // Switches from the processing screen to the results screen the first
+    // time ANY RUN finishes, instead of waiting for every RUN -- called
+    // again (as a no-op) at the very end for whichever RUN-count/path
+    // branch below doesn't already reveal incrementally. showSection resets
+    // scroll to the top, so this must only actually fire once: re-running it
+    // on every later RUN would keep yanking the view back up while the user
+    // is looking at an already-shown result.
+    let resultsRevealed = false;
+    const revealResultsIfNeeded = () => {
+      if (resultsRevealed) return;
+      resultsRevealed = true;
+      if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
+      showSection("results");
+    };
+
     if (useCombinedJob) {
       // Analysis + all `runCount` RUNs happen server-side within ONE job
       // (runCombinedMultiRun) -- unlike the two-stage branches below, this
@@ -1273,6 +1288,8 @@
             ];
             doneCount += 1;
             updateRunProgress();
+            showSingleResult();
+            revealResultsIfNeeded();
           }
         });
       } catch (error) {
@@ -1379,6 +1396,10 @@
         await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings });
         doneCount += 1;
         updateRunProgress();
+        if (run.status === "done") {
+          showSingleResult();
+          revealResultsIfNeeded();
+        }
       }, POLL_CONCURRENCY);
 
       if (!singleRuns.some((r) => r.status === "done")) {
@@ -1387,8 +1408,7 @@
       showSingleResult();
     }
 
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
-    showSection("results");
+    revealResultsIfNeeded();
   }
 
   // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --

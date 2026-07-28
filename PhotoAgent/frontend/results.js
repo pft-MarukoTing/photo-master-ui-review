@@ -51,6 +51,22 @@ window.PhotoAgentResults = (() => {
       .join("、");
   }
 
+  // Same non-default-only filtering as buildStyleOptionsText, but as plain
+  // option labels ("Playful", "Close") for the floating recipe-tags pills on
+  // the result photo itself -- no category prefix, since the pills sit
+  // directly on the image rather than in a labeled text field.
+  function buildStyleOptionTagLabels(styleOptions) {
+    if (!styleOptions) return [];
+    return Object.entries(styleOptions)
+      .map(([key, value]) => {
+        const group = STYLE_OPTION_GROUPS[key];
+        if (!group || !value || value === "default") return "";
+        const opt = group.options.find((o) => o.value === value);
+        return opt ? opt.label : "";
+      })
+      .filter(Boolean);
+  }
+
   // fillRecipeAdherenceList's fallback for styleEntries when QA didn't run
   // (or didn't report recipe_adherence.style_items) -- the user's Pose/Angle/
   // Lighting/Size picks (analysis.style_options) were still sent to the edit
