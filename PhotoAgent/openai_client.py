@@ -15,6 +15,8 @@ from image_tools import (
     apply_framing_size,
     apply_aspect_ratio_preference,
     nearest_openai_edit_size,
+    supports_arbitrary_openai_size,
+    openai_edit_size_for_ratio,
     ensure_png_bytes,
 )
 from prompts import (
@@ -186,8 +188,16 @@ def edit_photo(
 
     # Only "original" forces a concrete size derived from the source photo's
     # own ratio -- "auto" stays the literal "auto" value so the edit model
-    # keeps its usual freedom to size the output (see nearest_openai_edit_size).
-    size_param = nearest_openai_edit_size(img_w, img_h) if aspect_ratio == "original" else "auto"
+    # keeps its usual freedom to size the output. gpt-image-2 accepts an
+    # arbitrary WIDTHxHEIGHT so it gets the input's exact ratio; older models
+    # (gpt-image-1.5) are still limited to nearest_openai_edit_size's fixed enum.
+    size_param = "auto"
+    if aspect_ratio == "original":
+        size_param = (
+            openai_edit_size_for_ratio(img_w, img_h)
+            if supports_arbitrary_openai_size(model)
+            else nearest_openai_edit_size(img_w, img_h)
+        )
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.

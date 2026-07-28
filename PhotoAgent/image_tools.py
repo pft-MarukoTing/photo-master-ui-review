@@ -134,11 +134,25 @@ def apply_aspect_ratio_preference(context: dict, aspect_ratio_pref: str) -> dict
     return ctx
 
 
-# Fixed size/aspect enums each edit-model API actually accepts -- both are
-# closed sets (OpenAI images/edits `size`, Gemini imageConfig.aspectRatio), so
-# a continuous target ratio has to snap to the nearest one.
+# Fixed size/aspect enums the edit-model APIs that *can't* take an arbitrary
+# ratio accept -- both are closed sets (OpenAI images/edits `size` for
+# gpt-image-1.5, Gemini imageConfig.aspectRatio), so a continuous target ratio
+# has to snap to the nearest one.
 _OPENAI_EDIT_SIZE_CHOICES = [("1024x1024", 1.0), ("1536x1024", 1536 / 1024), ("1024x1536", 1024 / 1536)]
-_GEMINI_ASPECT_RATIO_CHOICES = [("1:1", 1.0), ("4:3", 4 / 3), ("3:4", 3 / 4), ("16:9", 16 / 9), ("9:16", 9 / 16)]
+_GEMINI_ASPECT_RATIO_CHOICES = [
+    ("1:1", 1.0), ("2:3", 2 / 3), ("3:2", 3 / 2), ("3:4", 3 / 4), ("4:3", 4 / 3),
+    ("4:5", 4 / 5), ("5:4", 5 / 4), ("9:16", 9 / 16), ("16:9", 16 / 9), ("21:9", 21 / 9),
+]
+
+# gpt-image-2 (unlike gpt-image-1.5) accepts an arbitrary "WIDTHxHEIGHT" `size`
+# instead of a fixed enum, so the source photo's exact aspect ratio can be
+# requested directly rather than snapped. The API still requires both edges
+# divisible by 16 and the ratio within 1:3..3:1.
+_OPENAI_ARBITRARY_SIZE_MODELS = {"gpt-image-2"}
+_OPENAI_SIZE_GRID = 16
+_OPENAI_SIZE_MIN_RATIO = 1 / 3
+_OPENAI_SIZE_MAX_RATIO = 3.0
+_OPENAI_SIZE_TARGET_PIXELS = 1536 * 1024  # same pixel budget as the old 1536x1024 enum choice
 
 
 def _nearest_by_ratio(ratio: float, choices: list) -> str:
@@ -148,13 +162,36 @@ def _nearest_by_ratio(ratio: float, choices: list) -> str:
 def nearest_openai_edit_size(image_width: int, image_height: int) -> str:
     """Snap the source photo's own ratio onto OpenAI's fixed images/edits
     `size` enum -- only meant to be called for the "original" aspect-ratio
-    preference. "auto" is intentionally left alone (passed through as the
-    literal "auto" value) so the edit model keeps the same freedom it always
-    had to size the output however it judges best; forcing "auto" through
-    this same snap made it degenerate into "original" in practice, since the
-    analysis usually recommends recommended_aspect_ratio="original" itself."""
+    preference, for models without arbitrary-size support (see
+    supports_arbitrary_openai_size). "auto" is intentionally left alone
+    (passed through as the literal "auto" value) so the edit model keeps the
+    same freedom it always had to size the output however it judges best;
+    forcing "auto" through this same snap made it degenerate into "original"
+    in practice, since the analysis usually recommends
+    recommended_aspect_ratio="original" itself."""
     ratio = (image_width / image_height) if image_width and image_height else 1.0
     return _nearest_by_ratio(ratio, _OPENAI_EDIT_SIZE_CHOICES)
+
+
+def supports_arbitrary_openai_size(model: str) -> bool:
+    return model in _OPENAI_ARBITRARY_SIZE_MODELS
+
+
+def openai_edit_size_for_ratio(image_width: int, image_height: int) -> str:
+    """Build a gpt-image-2 `size` string matching the source photo's own
+    aspect ratio as closely as the API allows, instead of snapping to one of
+    nearest_openai_edit_size's fixed choices. Only meant to be called for
+    models where supports_arbitrary_openai_size is true."""
+    ratio = (image_width / image_height) if image_width and image_height else 1.0
+    ratio = max(_OPENAI_SIZE_MIN_RATIO, min(_OPENAI_SIZE_MAX_RATIO, ratio))
+
+    height = math.sqrt(_OPENAI_SIZE_TARGET_PIXELS / ratio)
+    width = height * ratio
+
+    def snap(value: float) -> int:
+        return max(_OPENAI_SIZE_GRID, round(value / _OPENAI_SIZE_GRID) * _OPENAI_SIZE_GRID)
+
+    return f"{snap(width)}x{snap(height)}"
 
 
 def nearest_gemini_aspect_ratio(image_width: int, image_height: int) -> str:
