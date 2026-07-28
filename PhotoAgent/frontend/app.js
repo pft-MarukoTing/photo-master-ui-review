@@ -960,19 +960,44 @@
     updateBatchOptionsLocks(); // batchRecords is now empty, so this clears every category's lock/toggle
   }
 
+  // Labels for the categories OpenAI's safety system has been observed to
+  // tag (safety_violations=[...] in the raw error) -- keyed lowercase since
+  // the exact casing isn't guaranteed. Anything not listed here (including a
+  // category OpenAI adds later) falls back to a generic explanation rather
+  // than guessing a specific reason that might be wrong.
+  const SAFETY_VIOLATION_LABELS = {
+    sexual: "照片可能包含裸露或性暗示內容",
+    violence: "照片可能包含暴力或血腥內容",
+    "self-harm": "照片可能包含自我傷害相關內容",
+    self_harm: "照片可能包含自我傷害相關內容",
+    hate: "照片可能包含仇恨或歧視相關內容",
+    harassment: "照片可能包含騷擾相關內容"
+  };
+
   function friendlyError(error) {
     if (error.message === "Failed to fetch") {
       return "無法連線到 Photo Master 伺服器，請確認後端服務是否已啟動。";
     }
+    const msg = error.message || "";
     // OpenAI's images/edits API rejects requests its safety system flags --
-    // in practice this fires reliably for photos containing a recognizable
-    // copyrighted/trademarked character (branded plush toys, mascots, etc.),
     // a platform content policy we can't bypass, not a transient failure
-    // worth retrying with the same photo.
-    if (/rejected by the safety system/i.test(error.message || "")) {
-      return "AI 修圖模型拒絕處理這張照片——這通常是因為照片中包含可辨識的受著作權保護角色或商標（例如卡通玩偶、品牌吉祥物等），基於平台政策無法編輯這類內容。請嘗試更換照片，或改用其他修圖模型再試一次。";
+    // worth retrying with the same photo. The specific reason varies (seen
+    // both a recognizable copyrighted/trademarked character -- branded
+    // plush toys, mascots, etc. -- and sexual-content flags), so read the
+    // actual safety_violations=[...] category out of the error instead of
+    // always assuming it's about copyright.
+    if (/rejected by the safety system/i.test(msg)) {
+      const violationMatch = msg.match(/safety_violations=\[([^\]]*)\]/i);
+      const violations = violationMatch
+        ? violationMatch[1].split(",").map((v) => v.trim().replace(/^['"]|['"]$/g, "").toLowerCase()).filter(Boolean)
+        : [];
+      const knownReasons = violations.map((v) => SAFETY_VIOLATION_LABELS[v]).filter(Boolean);
+      const reasonText = knownReasons.length
+        ? knownReasons.join("、") + "，"
+        : "這通常是因為照片中包含平台內容政策不允許編輯的元素（例如可辨識的受著作權保護角色/商標，或其他敏感內容），";
+      return `AI 修圖模型拒絕處理這張照片——${reasonText}基於平台政策無法編輯這類內容。請嘗試更換照片，或改用其他修圖模型再試一次。`;
     }
-    return error.message || "發生未知錯誤。";
+    return msg || "發生未知錯誤。";
   }
 
   // Analyze+edit as ONE backend job (submitJob, no analysis param -> the
