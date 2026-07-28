@@ -638,13 +638,18 @@
 
   // Fetches the raw bytes needed for one image's download bundle -- shared
   // between the two layouts below so the network fetching isn't duplicated.
-  async function fetchImageDownloadData({ file, path }, runs) {
+  // onItemDone (if given) fires once per completed RUN fetch -- a plain
+  // "one more thing finished" tick, not told how many total, so callers
+  // decide what "done" means at whatever scope they're aggregating at
+  // (a single image's RUNs, or a whole batch's).
+  async function fetchImageDownloadData({ file, path }, runs, onItemDone) {
     const sourceBuf = await file.arrayBuffer();
     const runData = await Promise.all(runs.map(async (run) => {
       // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
       // that URL has no CORS headers, so a browser-side fetch() of it is
       // blocked even though the same URL displays fine in an <img> tag.
       const imageBuf = await fetch(resultImageUrl(run.jobId, { path })).then((response) => response.arrayBuffer());
+      if (onItemDone) onItemDone();
       return { run, imageBuf };
     }));
     return { sourceBuf, runData };
@@ -681,8 +686,8 @@
 
   // Builds one image's full set of download entries -- flat (images only)
   // in normal use, nested with the raw result/prompt JSON in --debug-ui mode.
-  async function buildImageFiles({ file, path, prefix = "" }, runs) {
-    const { sourceBuf, runData } = await fetchImageDownloadData({ file, path }, runs);
+  async function buildImageFiles({ file, path, prefix = "" }, runs, onItemDone) {
+    const { sourceBuf, runData } = await fetchImageDownloadData({ file, path }, runs, onItemDone);
     return isDebugUiActive
       ? buildNestedImageFiles({ file, prefix }, sourceBuf, runData)
       : buildFlatImageFiles({ file, prefix }, sourceBuf, runData);
@@ -693,19 +698,25 @@
     return [{ run: 1, result: lastResult.resultText, jobId: lastResult.jobId, status: "done" }];
   }
 
-  async function buildResultZip() {
+  async function buildResultZip(onProgress) {
     const runs = lastResultRuns();
     const current = runs.find((run) => run.jobId === lastResult.jobId) || runs[0];
-    return window.PhotoAgentZip.createZip(
-      await buildImageFiles({ file: lastResult.file, path: lastResult.path }, [current])
-    );
+    let done = 0;
+    const files = await buildImageFiles({ file: lastResult.file, path: lastResult.path }, [current], () => {
+      done += 1;
+      if (onProgress) onProgress(done, 1);
+    });
+    return window.PhotoAgentZip.createZip(files);
   }
 
-  async function buildAllRunsZip() {
+  async function buildAllRunsZip(onProgress) {
     const doneRuns = lastResultRuns().filter((run) => run.status === "done");
-    return window.PhotoAgentZip.createZip(
-      await buildImageFiles({ file: lastResult.file, path: lastResult.path }, doneRuns)
-    );
+    let done = 0;
+    const files = await buildImageFiles({ file: lastResult.file, path: lastResult.path }, doneRuns, () => {
+      done += 1;
+      if (onProgress) onProgress(done, doneRuns.length);
+    });
+    return window.PhotoAgentZip.createZip(files);
   }
 
   // The all-RUNs download link only makes sense once there's more than one
@@ -728,9 +739,55 @@
     }
   }
 
+  // Centered toast shown while buildZip() is fetching each result image over
+  // the network -- otherwise a batch download with many images just looks
+  // like nothing is happening until the browser's save dialog finally
+  // appears. A single-image download only ever reports one "done" tick, so
+  // without help the fill would otherwise jump straight from 0% to 100%
+  // (and the toast close right behind it) with no visible motion at all --
+  // showDownloadProgress bumps to a small interim value right away so it's
+  // moving immediately, and hideDownloadProgress holds briefly at 100% on
+  // success so the "reaching completion" moment is actually seen.
+  function showDownloadProgress() {
+    if (!els.downloadProgressToast) return;
+    if (els.downloadProgressFill) els.downloadProgressFill.style.width = "0%";
+    if (els.downloadProgressLabel) els.downloadProgressLabel.textContent = "打包下載中…";
+    els.downloadProgressToast.hidden = false;
+    // A short delay so the 0% state is painted before transitioning to 25%
+    // -- rAF would be the "proper" way to wait for that paint, but it never
+    // fires in a backgrounded/inactive tab (or some headless contexts),
+    // silently dropping this bump; a plain timeout always eventually runs.
+    setTimeout(() => {
+      if (els.downloadProgressFill && els.downloadProgressFill.style.width === "0%") {
+        els.downloadProgressFill.style.width = "25%";
+      }
+    }, 30);
+  }
+
+  function updateDownloadProgress(done, total) {
+    if (!els.downloadProgressToast) return;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    if (els.downloadProgressFill) els.downloadProgressFill.style.width = `${pct}%`;
+    if (els.downloadProgressLabel) {
+      els.downloadProgressLabel.textContent = total > 1
+        ? `打包下載中…（${done}/${total}）`
+        : "打包下載中…";
+    }
+  }
+
+  function hideDownloadProgress(success) {
+    if (!els.downloadProgressToast) return;
+    if (success && els.downloadProgressFill) els.downloadProgressFill.style.width = "100%";
+    setTimeout(() => {
+      if (els.downloadProgressToast) els.downloadProgressToast.hidden = true;
+    }, success ? 300 : 0);
+  }
+
   async function downloadZip(buildZip, filename) {
+    showDownloadProgress();
+    let success = false;
     try {
-      const zipBlob = await buildZip();
+      const zipBlob = await buildZip(updateDownloadProgress);
       const url = URL.createObjectURL(zipBlob);
       const tempLink = document.createElement("a");
       tempLink.href = url;
@@ -739,8 +796,11 @@
       tempLink.click();
       tempLink.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      success = true;
     } catch (error) {
       showError("打包下載失敗，請稍後再試。");
+    } finally {
+      hideDownloadProgress(success);
     }
   }
 
@@ -1863,15 +1923,26 @@
     return [{ run: 1, result: record.result, jobId: record.jobId, status: "done" }];
   }
 
-  async function buildAllBatchResultsZip() {
+  async function buildAllBatchResultsZip(onProgress) {
     const records = doneBatchRecordsWithResult();
-    const groups = await Promise.all(records.map((r, i) => {
-      const doneRuns = batchRecordRuns(r).filter((run) => run.status === "done");
-      return buildImageFiles(
+    const runsPerRecord = records.map((r) => batchRecordRuns(r).filter((run) => run.status === "done"));
+    // Aggregate across every image's RUNs, not just one image's -- each
+    // image's fetches run in parallel, so this is a shared counter rather
+    // than a per-image local count.
+    const total = runsPerRecord.reduce((sum, runs) => sum + runs.length, 0);
+    let done = 0;
+    const tick = () => {
+      done += 1;
+      if (onProgress) onProgress(done, total);
+    };
+
+    const groups = await Promise.all(records.map((r, i) =>
+      buildImageFiles(
         { file: r.file, path: batchSettings.path, prefix: `image ${i + 1}/` },
-        doneRuns
-      );
-    }));
+        runsPerRecord[i],
+        tick
+      )
+    ));
     return window.PhotoAgentZip.createZip(groups.flat());
   }
 
