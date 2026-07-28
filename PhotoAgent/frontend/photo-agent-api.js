@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, runCount, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -47,6 +47,9 @@ window.PhotoAgentApi = (() => {
     // AIPoC-only: the analysis already shown on the preview screen, so the
     // remote worker can reuse it (stage="finish") instead of re-analyzing.
     if (analysis) form.append("analysis", JSON.stringify(analysis));
+    // Local path only: how many independent edit variations job_processor.py
+    // generates from ONE shared analysis, entirely within this single job.
+    if (runCount) form.append("run_count", String(runCount));
 
     const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/submit`, {
       method: "POST",
@@ -93,7 +96,10 @@ window.PhotoAgentApi = (() => {
       // "stage" is only present for a combined analyze+edit job (see
       // job_processor.py) -- lets a single-job submission still show
       // "analyzing" -> "editing" progress instead of one flat message.
-      if (onStatus) onStatus(data);
+      // "runs_done" (also combined-job only) similarly lets a multi-RUN
+      // submission notice a newly-landed RUN -- awaited since a caller may
+      // need to fetch that RUN's data (getJobRuns) before the next tick.
+      if (onStatus) await onStatus(data);
       return false;
     }
 
@@ -132,12 +138,32 @@ window.PhotoAgentApi = (() => {
     return data; // { status, image_url, result: { analysis, quality_check, usage } }
   }
 
-  // Same-origin URL for the result image (vs. the presigned S3/AIPoC URL
-  // getJobResult returns, which has no CORS headers for fetch()). Used only
-  // when the browser needs to read the image's bytes itself (e.g. bundling
-  // it into a zip) -- for plain <img> display, the presigned URL is fine.
-  function resultImageUrl(jobId, { path = "local" } = {}) {
-    return `${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}/image`;
+  // Multi-RUN counterpart of getJobResult -- a combined job submitted with
+  // run_count > 1 (see job_processor.py) reports whichever RUNs have
+  // completed SO FAR under "runs", even while status is still "processing"
+  // (each RUN lands in Redis as soon as it's done, not only once every RUN
+  // is). Safe to call repeatedly while polling to pick up newly-landed RUNs.
+  async function getJobRuns(jobId, { path = "local" } = {}) {
+    const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(`${data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+    }
+    if (data.status === "error") {
+      throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+    }
+    return data; // { status, runs: [{ run, image_url, result }], run_count }
+  }
+
+  // Same-origin URL for a result image (vs. the presigned S3/AIPoC URL
+  // getJobResult/getJobRuns return, which has no CORS headers for fetch()).
+  // Used only when the browser needs to read the image's bytes itself (e.g.
+  // bundling it into a zip) -- for plain <img> display, the presigned URL is
+  // fine. `run` (1-based) selects which RUN's image for a multi-RUN job;
+  // omit for a single-run job.
+  function resultImageUrl(jobId, { path = "local", run } = {}) {
+    const base = `${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}/image`;
+    return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
 
   // ── Two-stage local flow: analyze now, review, /continue later ─────────
@@ -277,6 +303,7 @@ window.PhotoAgentApi = (() => {
     submitJob,
     pollJobStatus,
     getJobResult,
+    getJobRuns,
     resultImageUrl,
     getUiConfig,
     analyzeJob,

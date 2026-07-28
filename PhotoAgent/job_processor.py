@@ -41,6 +41,17 @@ def derive_analysis_key(dst_key):
     return prefix + '0_res0_analysis.json'
 
 
+def derive_run_dst_keys(dst_key, run_index):
+    """Per-RUN artifact keys for a combined job's run_count > 1 loop -- each
+    RUN needs its own image/json pair so they don't overwrite each other in
+    the artifact store, unlike derive_dst_keys' fixed single-result names."""
+    prefix = dst_key.rsplit('/', 1)[0] + '/' if '/' in dst_key else ''
+    return [
+        prefix + f'0_res0_thumb_0_run{run_index}.png',
+        prefix + f'0_res0_thumb_1_run{run_index}.json',
+    ]
+
+
 class PhotoAgentJobProcessor:
     def __init__(self, artifact_store, logger, monitor_dst_dir='./tmp'):
         self.artifact_store = artifact_store
@@ -120,18 +131,45 @@ class PhotoAgentJobProcessor:
                     run_qa=params.get("run_qa", True),
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                 )
-            else:
-                # Combined job: analyze_stage then finish_stage in one queued
-                # job (instead of run_pipeline's single-expression version)
-                # so a "stage" marker can be written to the job's Redis info
-                # between the two -- this is what lets /status/<job_id> report
-                # "analyze" vs "edit" for a single-job submission, which the
-                # frontend's skip-review flow relies on for its two-phase
-                # progress message.
-                self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes)')
-                set_job_info(job_id=task_id, results={"stage": "analyze"})
-                analysis = analyze_stage(image_bytes, aspect_ratio=params.get("aspect_ratio", "auto"))
-                set_job_info(job_id=task_id, results={"stage": "edit"})
+
+                derived_dst_keys = derive_dst_keys(request["dst_key"])
+
+                result_image_path = os.path.join(work_dir, '0_res0_thumb_0.png')
+                with open(result_image_path, 'wb') as f:
+                    f.write(base64.b64decode(result["result_image"]))
+
+                result_json_path = os.path.join(work_dir, '0_res0_thumb_1.json')
+                with open(result_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
+
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Pipeline done, uploading artifacts')
+                self.upload_artifacts(task_id, [result_image_path, result_json_path], derived_dst_keys)
+
+                job_results = {f"{request['act_id']}_res0": {"cusKeys": derived_dst_keys}}
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Job results: {job_results}')
+                return job_results
+
+            # Combined job ("full" stage, or stage omitted): analyze_stage
+            # once, then finish_stage `run_count` times INSIDE this single
+            # queued job, from the SAME analysis -- keeps every RUN's
+            # generation entirely server-side and independent of the client
+            # tab staying open, unlike driving each RUN as its own
+            # client-submitted job (which stalls indefinitely if the phone
+            # sleeps between RUNs, since nothing client-side can run in the
+            # background to submit the next one). Each RUN's result is
+            # written to Redis as soon as IT finishes (not only once every
+            # RUN is done), so a client that's still polling can render RUNs
+            # incrementally as they land; a client that isn't polling (phone
+            # asleep) simply catches up to however many are done once it
+            # resumes -- the work itself never depended on it watching.
+            run_count = max(1, min(20, int(params.get("run_count", 1))))
+            self.logger.info(task_id, f'[{EFFECT_NAME}] Running pipeline ({len(image_bytes)} bytes), run_count={run_count}')
+            set_job_info(job_id=task_id, results={"stage": "analyze"})
+            analysis = analyze_stage(image_bytes, aspect_ratio=params.get("aspect_ratio", "auto"))
+            set_job_info(job_id=task_id, results={"stage": "edit", "run_count": run_count, "runs_done": 0})
+
+            run_results = []
+            for run_index in range(run_count):
                 result = finish_stage(
                     image_bytes=image_bytes,
                     analysis=analysis,
@@ -144,20 +182,24 @@ class PhotoAgentJobProcessor:
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                 )
 
-            derived_dst_keys = derive_dst_keys(request["dst_key"])
+                run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index)
+                result_image_path = os.path.join(work_dir, f'0_res0_thumb_0_run{run_index}.png')
+                with open(result_image_path, 'wb') as f:
+                    f.write(base64.b64decode(result["result_image"]))
+                result_json_path = os.path.join(work_dir, f'0_res0_thumb_1_run{run_index}.json')
+                with open(result_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
 
-            result_image_path = os.path.join(work_dir, '0_res0_thumb_0.png')
-            with open(result_image_path, 'wb') as f:
-                f.write(base64.b64decode(result["result_image"]))
+                self.logger.info(task_id, f'[{EFFECT_NAME}] RUN {run_index + 1}/{run_count} done, uploading artifacts')
+                self.upload_artifacts(task_id, [result_image_path, result_json_path], run_dst_keys)
 
-            result_json_path = os.path.join(work_dir, '0_res0_thumb_1.json')
-            with open(result_json_path, 'w', encoding='utf-8') as f:
-                json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
+                run_results.append({"cusKeys": run_dst_keys})
+                set_job_info(job_id=task_id, results={
+                    f"{request['act_id']}_res0": {"runs": run_results},
+                    "runs_done": run_index + 1,
+                })
 
-            self.logger.info(task_id, f'[{EFFECT_NAME}] Pipeline done, uploading artifacts')
-            self.upload_artifacts(task_id, [result_image_path, result_json_path], derived_dst_keys)
-
-            job_results = {f"{request['act_id']}_res0": {"cusKeys": derived_dst_keys}}
+            job_results = {f"{request['act_id']}_res0": {"runs": run_results}}
             self.logger.info(task_id, f'[{EFFECT_NAME}] Job results: {job_results}')
             return job_results
 

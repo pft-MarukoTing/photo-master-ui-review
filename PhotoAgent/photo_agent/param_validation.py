@@ -14,6 +14,7 @@ VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
 VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "nano-banana-2", "nano-banana-lite")
 VALID_ASPECT_RATIOS = ("auto", "original")
+MAX_RUN_COUNT = 20
 
 
 class PhotoAgentRequest(TypedDict):
@@ -108,6 +109,19 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["run_qa"] = run_qa
+
+    # How many independent edit variations the combined ("full" stage) job
+    # generates from ONE shared analysis, entirely within itself -- lets a
+    # multi-RUN request keep generating server-side regardless of whether the
+    # client's tab is open/foregrounded to see it. Not used by the two-stage
+    # analyze-only/finish-only stages (always exactly one result each).
+    run_count = normalized.get("run_count", 1)
+    if isinstance(run_count, bool) or not isinstance(run_count, int) or not (1 <= run_count <= MAX_RUN_COUNT):
+        raise RuntimeError(
+            f"{EFFECT_NAME}: run_count must be an integer between 1 and {MAX_RUN_COUNT}",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["run_count"] = run_count
 
     return normalized
 

@@ -31,6 +31,14 @@ def _parse_and_validate_params(form):
     user_prompt = form.get("user_prompt")
     if user_prompt:
         params["user_prompt"] = user_prompt
+    # Only the combined ("full" stage) job in job_processor.py actually reads
+    # this; a non-numeric value is passed through as None so the shared
+    # validator below rejects it with a clean 400 instead of this raising
+    # ValueError itself.
+    try:
+        params["run_count"] = int(form.get("run_count", 1))
+    except (TypeError, ValueError):
+        params["run_count"] = None
 
     # Fast sync validation via the same validator the worker runs later,
     # so bad params 400 immediately instead of erroring after being queued.
@@ -66,26 +74,71 @@ def submit():
 
 @api_bp.get("/status/<job_id>")
 def status(job_id):
-    # "stage" is only ever present for a combined analyze+edit job (see
-    # job_processor.py's set_job_info(..., results={"stage": ...}) calls) --
+    # "stage"/"run_count"/"runs_done" are only ever present for a combined
+    # analyze+edit job (see job_processor.py's set_job_info(...) calls) --
     # absent for the two-stage analyze-only/finish-only jobs, and absent
-    # until the worker has actually started the combined job.
-    info = get_job_info(job_id, keyToGet=["status", "error", "stage"])
+    # until the worker has actually started the combined job. runs_done lets
+    # the frontend notice a new RUN has landed (and go fetch it via /result)
+    # without having to re-download every RUN's data on every poll tick.
+    info = get_job_info(job_id, keyToGet=["status", "error", "stage", "run_count", "runs_done"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     return jsonify(info)
 
 
+def _runs_from_meta(runs_meta, job_id):
+    """Downloads+presigns whatever RUNs in runs_meta have valid keys so far.
+    A RUN that fails to download is simply skipped (not yet visible/flushed
+    to the artifact store) rather than failing the whole response -- the
+    next poll will pick it up once it's actually there."""
+    runs = []
+    for i, run_meta in enumerate(runs_meta):
+        keys = (run_meta or {}).get("cusKeys") or []
+        if len(keys) < 2:
+            continue
+        image_key, json_key = keys[0], keys[1]
+        json_bytes, download_error = download_bytes(json_key, job_id)
+        if download_error or json_bytes is None:
+            continue
+        runs.append({
+            "run": i + 1,
+            "image_url": create_presigned_url(image_key, "get_object"),
+            "result": json.loads(json_bytes),
+        })
+    return runs
+
+
 @api_bp.get("/result/<job_id>")
 def result(job_id):
-    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0", "run_count"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
 
+    res0 = info.get("0_res0") or {}
+    runs_meta = res0.get("runs")
+
+    if runs_meta is not None:
+        # Multi-run combined job: return whichever RUNs have completed so
+        # far, even while the job as a whole is still "processing" -- the
+        # RUNs are written to Redis one at a time as they finish server-side
+        # (job_processor.py), independent of whether anything is polling, so
+        # this always reflects real current progress rather than an
+        # all-or-nothing final result.
+        out = {
+            "status": info.get("status") or "processing",
+            "runs": _runs_from_meta(runs_meta, job_id),
+            "run_count": info.get("run_count"),
+        }
+        if info.get("status") == "error":
+            out["error"] = info.get("error")
+        return jsonify(out)
+
+    # Single-run job (two-stage finish-only, or an older combined job from
+    # before run_count existed) -- unchanged behavior.
     if info.get("status") != "success":
         return jsonify({"status": info.get("status"), "error": info.get("error")})
 
-    result_keys = (info.get("0_res0") or {}).get("cusKeys") or []
+    result_keys = res0.get("cusKeys") or []
     if len(result_keys) < 2:
         return jsonify({"status": "error", "error": "job succeeded but result keys are missing"})
 
@@ -109,6 +162,10 @@ def result_image(job_id):
     that, so this re-downloads it server-side (where CORS doesn't apply) and
     relays the bytes. job_id is our own trusted job state, not a
     client-supplied URL, so this can't be used as an open fetch proxy.
+
+    For a multi-run combined job, ?run=N (1-based) selects which RUN's image
+    to serve -- defaults to 1 so a caller that doesn't know about multi-run
+    jobs still gets a sensible result.
     """
     info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
     if info is None:
@@ -116,7 +173,20 @@ def result_image(job_id):
     if info.get("status") != "success":
         return jsonify({"error": info.get("error") or "job not successful"}), 400
 
-    result_keys = (info.get("0_res0") or {}).get("cusKeys") or []
+    res0 = info.get("0_res0") or {}
+    runs_meta = res0.get("runs")
+    if runs_meta is not None:
+        run_param = request.args.get("run", "1")
+        try:
+            run_index = int(run_param) - 1
+        except ValueError:
+            return jsonify({"error": "run must be an integer"}), 400
+        if run_index < 0 or run_index >= len(runs_meta):
+            return jsonify({"error": f"run {run_param} not found"}), 404
+        result_keys = runs_meta[run_index].get("cusKeys") or []
+    else:
+        result_keys = res0.get("cusKeys") or []
+
     if not result_keys:
         return jsonify({"error": "job succeeded but result keys are missing"}), 500
 
