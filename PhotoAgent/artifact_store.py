@@ -6,6 +6,13 @@ import time
 
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 
+# How long upload_file/download_file wait for the async S3 accessor's
+# callback before giving up. 30s was too tight under real load -- a transfer
+# that's merely slow (busy shared machine, S3 latency) gets misreported as a
+# hard failure, and the callback still lands seconds later logging "Invalid
+# task_id in callback!!" for an entry we'd already discarded.
+S3_TRANSFER_WAIT_SECONDS = 90
+
 
 class S3ArtifactStore:
     def __init__(self, s3_accessor, logger, monitor_dst_dir='./tmp'):
@@ -45,7 +52,7 @@ class S3ArtifactStore:
             raise
 
         wait_start = time.time()
-        max_wait_time = 30
+        max_wait_time = S3_TRANSFER_WAIT_SECONDS
         error = ''
         while True:
             with self.s3_result_lock:
@@ -87,7 +94,7 @@ class S3ArtifactStore:
         error = ''
         error_code = None
         wait_start = time.time()
-        max_wait_time = 30
+        max_wait_time = S3_TRANSFER_WAIT_SECONDS
         while True:
             with self.s3_result_lock:
                 status = self.s3_result[task_id]['status']
