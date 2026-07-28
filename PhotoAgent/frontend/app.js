@@ -599,16 +599,8 @@
     image.src = previewUrl;
   }
 
-  // ── Download source + result image + result JSON bundled as one zip ────
-  function buildResultBaseName(jobId) {
-    const pad = (n) => String(n).padStart(2, "0");
-    const now = new Date();
-    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-    // AIPoC task ids contain "/" and "+", which aren't safe in a filename.
-    const safeJobId = String(jobId).replace(/[^a-zA-Z0-9._-]/g, "_");
-    return `photoMuse-${dateStr}-${safeJobId}`;
-  }
-
+  // ── Download source + result image (+ JSON in --debug-ui mode) bundled as
+  // one zip ────────────────────────────────────────────────────────────────
   function buildDownloadZipFilename() {
     const pad = (n) => String(n).padStart(2, "0");
     const now = new Date();
@@ -632,44 +624,68 @@
     return JSON.stringify(ordered, null, 2);
   }
 
-  async function buildResultFiles(results, prefix = "") {
-    const { file, resultText, jobId, path } = results;
-    // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
-    // that URL has no CORS headers, so a browser-side fetch() of it is
-    // blocked even though the same URL displays fine in an <img> tag.
-    const [sourceBuf, imageBuf] = await Promise.all([
-      file.arrayBuffer(),
-      fetch(resultImageUrl(jobId, { path })).then((response) => response.arrayBuffer())
-    ]);
-    const jsonBytes = new TextEncoder().encode(JSON.stringify(resultText, null, 2));
-    const promptsBytes = new TextEncoder().encode(buildPromptsJson(resultText.analysis?.prompts || {}));
-
-    return [
-      { name: prefix + (file.name || "source.jpg"), data: new Uint8Array(sourceBuf) },
-      { name: prefix + "result.png", data: new Uint8Array(imageBuf) },
-      { name: prefix + "result.json", data: jsonBytes },
-      { name: prefix + "prompts.json", data: promptsBytes }
-    ];
+  // File names for one RUN's result inside a download zip -- numbered by the
+  // RUN's own .run index (not its position within whatever subset is being
+  // zipped), so the same RUN always gets the same file name whether it's
+  // downloaded alone or as part of "all RUNs"/a whole batch.
+  function resultFileNames(runNumber) {
+    return {
+      image: `result_${runNumber}.png`,
+      json: `result_${runNumber}.json`,
+      prompts: `result_${runNumber}_prompts.json`
+    };
   }
 
-  // The shared per-image bundle used by every download: source.jpg at the
-  // image level, each finished run under run_N/ (result.png/result.json/
-  // prompts.json) -- a lone run lands in run_1/, so the layout is identical
-  // whether there's one run or many.
-  // Reuses buildResultFiles per run and drops its per-call source entry
-  // (always the first item) in favor of a single shared one.
-  async function buildRunFiles(base, runs, prefix = "") {
-    const groups = await Promise.all(runs.map((run) =>
-      buildResultFiles(
-        { file: base.file, resultText: run.result, jobId: run.jobId, path: base.path },
-        `${prefix}run_${run.run}/`
-      ).then((files) => files.slice(1))
-    ));
-    const sourceBuf = await base.file.arrayBuffer();
-    return [
-      { name: prefix + (base.file.name || "source.jpg"), data: new Uint8Array(sourceBuf) },
-      ...groups.flat()
-    ];
+  // Fetches the raw bytes needed for one image's download bundle -- shared
+  // between the two layouts below so the network fetching isn't duplicated.
+  async function fetchImageDownloadData({ file, path }, runs) {
+    const sourceBuf = await file.arrayBuffer();
+    const runData = await Promise.all(runs.map(async (run) => {
+      // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
+      // that URL has no CORS headers, so a browser-side fetch() of it is
+      // blocked even though the same URL displays fine in an <img> tag.
+      const imageBuf = await fetch(resultImageUrl(run.jobId, { path })).then((response) => response.arrayBuffer());
+      return { run, imageBuf };
+    }));
+    return { sourceBuf, runData };
+  }
+
+  // Normal mode: source + one result_N.png per RUN, flat under `prefix` --
+  // no per-RUN subfolder, no JSON. Everyday users just want the pictures.
+  function buildFlatImageFiles({ file, prefix }, sourceBuf, runData) {
+    const files = [{ name: prefix + (file.name || "source.jpg"), data: new Uint8Array(sourceBuf) }];
+    runData.forEach(({ run, imageBuf }) => {
+      files.push({ name: prefix + resultFileNames(run.run || 1).image, data: new Uint8Array(imageBuf) });
+    });
+    return files;
+  }
+
+  // --debug-ui mode: source at `prefix`, each RUN under its own `run_N/`
+  // subfolder alongside the raw result.json/prompts.json -- the original
+  // nested layout, kept for the internal analysis/QA data this mode exists
+  // to expose.
+  function buildNestedImageFiles({ file, prefix }, sourceBuf, runData) {
+    const files = [{ name: prefix + (file.name || "source.jpg"), data: new Uint8Array(sourceBuf) }];
+    runData.forEach(({ run, imageBuf }) => {
+      const runPrefix = `${prefix}run_${run.run || 1}/`;
+      const jsonBytes = new TextEncoder().encode(JSON.stringify(run.result, null, 2));
+      const promptsBytes = new TextEncoder().encode(buildPromptsJson(run.result.analysis?.prompts || {}));
+      files.push(
+        { name: runPrefix + "result.png", data: new Uint8Array(imageBuf) },
+        { name: runPrefix + "result.json", data: jsonBytes },
+        { name: runPrefix + "prompts.json", data: promptsBytes }
+      );
+    });
+    return files;
+  }
+
+  // Builds one image's full set of download entries -- flat (images only)
+  // in normal use, nested with the raw result/prompt JSON in --debug-ui mode.
+  async function buildImageFiles({ file, path, prefix = "" }, runs) {
+    const { sourceBuf, runData } = await fetchImageDownloadData({ file, path }, runs);
+    return isDebugUiActive
+      ? buildNestedImageFiles({ file, prefix }, sourceBuf, runData)
+      : buildFlatImageFiles({ file, prefix }, sourceBuf, runData);
   }
 
   function lastResultRuns() {
@@ -677,23 +693,18 @@
     return [{ run: 1, result: lastResult.resultText, jobId: lastResult.jobId, status: "done" }];
   }
 
-  // Every download shares the same per-image folder name.
-  function imageFolderPrefix(jobId) {
-    return `${buildResultBaseName(jobId)}/`;
-  }
-
   async function buildResultZip() {
     const runs = lastResultRuns();
     const current = runs.find((run) => run.jobId === lastResult.jobId) || runs[0];
     return window.PhotoAgentZip.createZip(
-      await buildRunFiles(lastResult, [current], imageFolderPrefix(lastResult.jobId))
+      await buildImageFiles({ file: lastResult.file, path: lastResult.path }, [current])
     );
   }
 
   async function buildAllRunsZip() {
     const doneRuns = lastResultRuns().filter((run) => run.status === "done");
     return window.PhotoAgentZip.createZip(
-      await buildRunFiles(lastResult, doneRuns, imageFolderPrefix(lastResult.jobId))
+      await buildImageFiles({ file: lastResult.file, path: lastResult.path }, doneRuns)
     );
   }
 
@@ -1835,12 +1846,12 @@
   }
 
   // Batch counterpart of buildResultZip/buildAllRunsZip: bundles every done
-  // image's *every done RUN* into one zip, each image under its own folder
-  // (named after its current/mirrored job, same convention buildAllRunsZip
-  // uses for the single-image case) -- if an image was revised with a higher
-  // RUN count, all of those RUNs are included, not just the currently
-  // mirrored one, so the zip's file count actually matches how many results
-  // were generated instead of silently dropping to one per image.
+  // image's *every done RUN* into one zip, each image under its own
+  // "image N/" folder (1-indexed by position in the batch) -- if an image
+  // was revised with a higher RUN count, all of those RUNs are included, not
+  // just the currently mirrored one, so the zip's file count actually
+  // matches how many results were generated instead of silently dropping to
+  // one per image.
   function doneBatchRecordsWithResult() {
     return batchRecords.filter((r) => r.status === "done" && r.result);
   }
@@ -1854,12 +1865,11 @@
 
   async function buildAllBatchResultsZip() {
     const records = doneBatchRecordsWithResult();
-    const groups = await Promise.all(records.map((r) => {
+    const groups = await Promise.all(records.map((r, i) => {
       const doneRuns = batchRecordRuns(r).filter((run) => run.status === "done");
-      return buildRunFiles(
-        { file: r.file, path: batchSettings.path },
-        doneRuns,
-        imageFolderPrefix(r.jobId)
+      return buildImageFiles(
+        { file: r.file, path: batchSettings.path, prefix: `image ${i + 1}/` },
+        doneRuns
       );
     }));
     return window.PhotoAgentZip.createZip(groups.flat());
