@@ -343,6 +343,7 @@ window.PhotoAgentResults = (() => {
     els.generatedImg.src = data.image;
     els.downloadLink.href = data.image;
     els.modelName.textContent = data.model || imageModel;
+    if (els.recipeTags) renderTags(els.recipeTags, buildStyleOptionTagLabels(analysis.style_options));
     els.resultSummary.textContent = analysis.photo_summary || "已完成影像分析與輸出。";
     els.qaScore.textContent = Number.isFinite(Number(qa?.score)) ? `${qa.score}/10` : "-";
     if (els.recipeVerdictScore) {
