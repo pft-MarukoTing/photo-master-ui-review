@@ -600,28 +600,46 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   min-width: 0;
   align-self: center;
 }
-/* 1:2 flex-grow ratio (both basis pinned at 0%) instead of a fixed px
-   width -- the panel always fills exactly 2/3 of the row and the canvas
-   1/3, so neither side is ever left with unclaimed blank space regardless
-   of viewport width, and the panel stays wide enough that the recipe list
-   doesn't wrap onto several lines. Only flex-grow (a plain number) is
-   transitioned -- flex-basis never changes, and animating `width` between
-   0 and auto (as an earlier version of this did) doesn't have a
-   well-defined midpoint, since "auto" isn't an interpolatable length, so
-   it was snapping instead of easing. */
+/* flex-grow ratio (both basis pinned at 0%) instead of a fixed px width --
+   neither side is ever left with unclaimed blank space regardless of
+   viewport width. Only flex-grow (a plain number) is transitioned --
+   flex-basis never changes, and animating `width` between 0 and auto (as an
+   earlier version of this did) doesn't have a well-defined midpoint, since
+   "auto" isn't an interpolatable length, so it was snapping instead of
+   easing. Single-image default is 65% canvas / 35% panel; batch mode
+   (#results-body.batch-mode below) overrides this to 50%/30%, plus 20% for
+   #batch-sidebar (a sibling of this row, not a descendant, so it needs its
+   own rule keyed off #results-body's mirrored .showing-analysis). */
 .results-analysis-slot {
   flex: 0 1 0%;
   opacity: 0;
   overflow: hidden;
   transition: flex-grow .4s cubic-bezier(.4,0,.2,1), opacity .3s ease;
 }
+.results-canvas-row.showing-analysis .results-canvas-col {
+  flex: 65 1 0%;
+}
 .results-canvas-row.showing-analysis .results-analysis-slot {
-  flex: 2 1 0%;
+  flex: 35 1 0%;
   opacity: 1;
+}
+#results-body.batch-mode .results-canvas-row.showing-analysis .results-canvas-col {
+  flex: 50 1 0%;
+}
+#results-body.batch-mode .results-canvas-row.showing-analysis .results-analysis-slot {
+  flex: 30 1 0%;
+}
+#results-body.batch-mode.showing-analysis #batch-sidebar {
+  flex: 0 0 20%;
 }
 @media (max-width: 900px) {
   .results-canvas-row { flex-direction: column; }
+  .results-canvas-row.showing-analysis .results-canvas-col,
   .results-canvas-row.showing-analysis .results-analysis-slot { flex-basis: auto; width: 100%; }
+  /* Same specificity as the batch-mode 20% rule above (2 IDs + 2 classes
+     either way) -- wins on source order instead, restoring index.html's
+     plain full-width mobile stacking for the sidebar. */
+  #results-body.batch-mode.showing-analysis #batch-sidebar { flex-basis: auto; width: 100%; }
 }
 /* The panel keeps its processing-screen spacing (margin-top:32px) when it's
    shown there; strip that once it's on loan to this narrower side slot. */

@@ -167,6 +167,8 @@
 
     /* ── Analysis preview (shown mid-processing, before "continue") ── */
     .analysis-preview {
+      container-type: inline-size;
+      container-name: ap-panel;
       margin-top: 32px;
       padding: 26px 28px;
       background:
@@ -179,6 +181,11 @@
       flex-direction: column;
       gap: 18px;
       animation: fadeUp .5s ease both;
+      /* max-height is set from JS (updateAnalysisPreviewMaxHeight) -- same
+         "avoid making the user scroll the window" policy as .batch-sidebar's
+         own max-height, capping to the viewport instead of pushing the page
+         taller when the recipe/options content is long. */
+      overflow-y: auto;
     }
     /* Cancel (left) / continue (right) -- only unhidden for the inline
        results-page flow (see openInlineAnalysisPanel in app.js). Normal
@@ -299,7 +306,12 @@
       padding-left: 24px;
       border-left: 1px solid var(--border);
     }
-    @media (max-width: 700px) {
+    /* Container query (not a viewport media query) -- now that the results
+       page can size this panel down to 30-35% of the row (see .results-body
+       batch-mode/single-mode splits in styles.css), a wide *viewport* no
+       longer implies a wide *panel*; .ap-col-right's fixed 380px alone can
+       leave .ap-col-left a sliver a few px wide regardless of viewport size. */
+    @container ap-panel (max-width: 700px) {
       .ap-row-columns { flex-direction: column; }
       .ap-col-right {
         width: 100%;

@@ -430,10 +430,15 @@
     els.analysisPreview.hidden = false;
     setAnalysisPreviewDisabled(false);
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
+    // Mirrored onto #results-body too -- #batch-sidebar's width split (see
+    // styles.css) needs this state and isn't a descendant of #results-canvas-row.
+    if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
+    updateAnalysisPreviewMaxHeight();
   }
 
   function closeInlineAnalysisPanel() {
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     els.analysisPreview.hidden = true;
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     restoreRunTabsRowHome();
@@ -479,6 +484,7 @@
     procVisual.classList.add("done");
     if (procTitle) procTitle.textContent = "初步分析已完成";
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
+    updateAnalysisPreviewMaxHeight();
   }
 
   // Some browsers/OSes don't map .heic/.heif to an image/* MIME type (file.type
@@ -979,6 +985,7 @@
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
     if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
     if (els.batchSidebar) els.batchSidebar.hidden = true;
+    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
     // single-image run (which never touches these) isn't left with the
     // canvas/run-tabs hidden from a prior batch session.
@@ -986,6 +993,7 @@
     if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
     restoreAnalysisPreviewHome();
     if (els.resultsCanvasRow) { els.resultsCanvasRow.hidden = false; els.resultsCanvasRow.classList.remove("showing-analysis"); }
+    if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     if (els.runTabsRow) els.runTabsRow.hidden = false;
     if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
     if (els.runTabsIndex) els.runTabsIndex.hidden = true;
@@ -1215,11 +1223,14 @@
     } catch (error) {
       showSection("upload");
       showError(friendlyError(error));
+      // Back to the upload screen -- unlike a successful finish (which now
+      // leaves analysis-preview open by default beside the results canvas),
+      // there's no results view here for it to belong to.
+      if (els.analysisPreview) els.analysisPreview.hidden = true;
     } finally {
       els.startButton.disabled = false;
       if (els.startDirectBtn) els.startDirectBtn.disabled = false;
       clearContinueWait();
-      if (els.analysisPreview) els.analysisPreview.hidden = true;
     }
   }
 
@@ -1407,6 +1418,11 @@
       if (els.runTabsIndex) els.runTabsIndex.hidden = true;
       currentRunTabsIndex = null;
       currentRunTabsOnSelect = null;
+      // Analysis-preview shows by default alongside the canvas (same as
+      // showSingleResult/showBatchDoneMain -- this is the single-RUN direct
+      // path, which renders the result itself instead of going through
+      // showSingleResult).
+      openInlineAnalysisForCurrentContext();
     } else {
       // N independent RUNs from the same analysis, two-stage manual path:
       // each RUN is its own client-submitted job, run concurrently, and the
@@ -1524,6 +1540,9 @@
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
     renderSingleRunTabs();
+    // Analysis-preview shows by default alongside the canvas -- no-ops if
+    // it's already open (e.g. just switching RUN tabs).
+    openInlineAnalysisForCurrentContext();
   }
 
   // "檢視分析結果": lets the user come back to the recipe checklist/style
@@ -1531,7 +1550,14 @@
   // without leaving the results page -- the panel slides in beside the
   // photo canvas instead of navigating to the processing section.
   async function backToProcessFromResults() {
-    if (!singleFlowState) return;
+    // singleFlowState.analysis is briefly null for a combined job (skip-review
+    // + local path) -- it's only filled in from the first done RUN's result
+    // after the whole multi-RUN job resolves (see finishSingleFlow), but
+    // showSingleResult() (and this auto-open) already fires once per RUN as
+    // each one completes. Bail rather than handing renderAnalysisPreview a
+    // null analysis -- the final showSingleResult() call, once analysis is
+    // actually set, opens it for real.
+    if (!singleFlowState || !singleFlowState.analysis) return;
     hideError();
     clearInlineAnalysisWait();
     if (timingDetails) timingDetails.hidden = true;
@@ -1605,6 +1631,7 @@
     });
 
     els.batchSidebar.hidden = false;
+    if (els.resultsBody) els.resultsBody.classList.add("batch-mode");
     currentBatchRecord = batchRecords[0] || null;
     // Before rendering: renderBatchMain measures the sidebar's real on-page
     // position (updateBatchSidebarMaxHeight) to cap its height, which reads
@@ -2262,6 +2289,19 @@
   }
   window.addEventListener("resize", updateBatchSidebarMaxHeight);
 
+  // Same "avoid making the user scroll the window" policy as
+  // updateBatchSidebarMaxHeight above -- caps #analysis-preview to the
+  // viewport (long recipe lists/style options scroll inside the panel
+  // instead of pushing the whole page taller), whether it's shown mid-
+  // processing (full width) or inline beside the results canvas.
+  function updateAnalysisPreviewMaxHeight() {
+    if (!els.analysisPreview || els.analysisPreview.hidden) return;
+    const top = els.analysisPreview.getBoundingClientRect().top;
+    const maxHeight = Math.max(200, window.innerHeight - top - 24);
+    els.analysisPreview.style.maxHeight = `${maxHeight}px`;
+  }
+  window.addEventListener("resize", updateAnalysisPreviewMaxHeight);
+
   function renderBatchMain(record) {
     if (!record) return;
     updateApSubjectTags(record);
@@ -2483,6 +2523,9 @@
         imageModel: data.model
       });
       populateTimingSection(record.timings);
+      // Analysis-preview shows by default alongside the canvas -- no-ops if
+      // it's already open (e.g. just switching RUN tabs on the same record).
+      openInlineAnalysisForCurrentContext();
     };
     if (els.originalImg.src === record.previewUrl && els.originalImg.complete) {
       applyRender();
@@ -2567,6 +2610,20 @@
 
   // Dispatches "檢視分析結果" to whichever flow is actually active: a single
   // finished batch photo (per-item revise) or the single-image flow.
+  // No-ops if the panel is already open -- also called automatically
+  // whenever a "done" result first renders, since the panel now shows by
+  // default there (see showSingleResult/showBatchDoneMain), not just on an
+  // explicit click.
+  function openInlineAnalysisForCurrentContext() {
+    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) return;
+    const record = currentDetailBatchRecord();
+    if (record) {
+      startInlineBatchReview(record);
+    } else {
+      backToProcessFromResults();
+    }
+  }
+
   function handleViewAnalysisClick() {
     // Toggle: if the panel is already open, pressing the same button again
     // closes it -- simulate the cancel button's click instead of duplicating
@@ -2577,12 +2634,7 @@
       if (els.inlineAnalysisCancelBtn) els.inlineAnalysisCancelBtn.click();
       return;
     }
-    const record = currentDetailBatchRecord();
-    if (record) {
-      startInlineBatchReview(record);
-    } else {
-      backToProcessFromResults();
-    }
+    openInlineAnalysisForCurrentContext();
   }
 
   function analyzedBatchRecords() {
