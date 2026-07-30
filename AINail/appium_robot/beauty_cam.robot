@@ -49,7 +49,6 @@ Open Meitu Application
     ...    platformVersion=${PLATFORM_VERSION}
     ...    udid=${UDID}
     ...    bundleId=${BUNDLE_ID}
-    ...    showXcodeLog=${True}
     ...    newCommandTimeout=3600
 
 Click Page Element
