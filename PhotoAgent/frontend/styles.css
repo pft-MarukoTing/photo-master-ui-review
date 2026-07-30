@@ -744,16 +744,28 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 
 /* Before/After canvas: one full-bleed frame. The toggle button floats on
-   top of the image instead of sitting in a separate header bar.
-   .compare-card itself is just the stable, full-width positioning anchor
-   for the floating controls (see .photo-frame-wrap below) -- it carries no
-   visual framing of its own, so it can be full-width without ever looking
-   like a stretched/letterboxed box. */
+   top of the image instead of sitting in a separate header bar. .compare-card
+   is the stable, full-width positioning anchor for the floating controls
+   (see .photo-frame-wrap below) -- now that .photo-frame is a fixed height
+   (see below) rather than hugging the current image's own height, a narrower
+   or shorter photo leaves blank space around it inside this box, so it gets
+   its own card framing. Background is a brand-tinted glow on --card-2 (a
+   step lighter/richer than the flat --card used by .options-card and
+   friends), not the plain neutral card fill, since this is the main focal
+   element of the results page and should read as visually distinct from the
+   surrounding chrome rather than blend in as just another panel. */
 .compare-card {
   position: relative;
   display: block;
   width: 100%;
   margin: 0 auto;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse 700px 420px at 50% 0%, rgba(168,85,247,.16) 0%, transparent 60%),
+    radial-gradient(ellipse 700px 320px at 50% 100%, rgba(236,72,153,.09) 0%, transparent 60%),
+    var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 /* Stable anchor for the floating controls (.canvas-actions/.compare-hint/
@@ -770,19 +782,23 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   justify-content: center;
 }
 
-/* Hugs whatever the currently-shown image's own size is instead of
-   stretching to the column's full width -- that stretch is what used to
-   letterbox narrower/taller photos with visible checkerboard on the sides.
-   No min-height either -- that used to impose the same kind of letterboxing
-   (a floor of empty checkerboard) whenever the original/generated image
-   being switched to was shorter than the floor. Carries the rounded/shadowed
-   "framed" look itself (rather than .compare-card above) so that look also
-   hugs the image instead of stretching full-width. */
+/* Hugs whatever the currently-shown image's own width is instead of
+   stretching to the column's full width -- that stretch used to letterbox
+   narrower photos with visible checkerboard on the sides. Height is fixed
+   (matching img's own max-height below) rather than hugged, though --
+   #ap-options-card-inline/#run-tabs-row now sit directly under .compare-card
+   in #results-canvas-col, so letting the original/generated toggle change
+   this frame's height shifted them up and down every time #compare-toggle-btn
+   was pressed; a shorter image just centers within the fixed height instead,
+   trading a little vertical checkerboard for a stable layout below. Carries
+   the rounded/shadowed "framed" look itself (rather than .compare-card above)
+   so that look also hugs the image's width instead of stretching full-width. */
 .photo-frame {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 480px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
@@ -813,14 +829,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .compare-card.showing-generated .compare-img-generated { display: block; }
 
 /* Floating glass icon buttons, not a boxed header -- sit directly over the
-   canvas, top-center. Icon-only, so title/aria-label (kept in sync in
+   canvas, top-right (across from the persistent Original/Result label at
+   top-left below). Icon-only, so title/aria-label (kept in sync in
    setCompareView) carry the "switch to X" / "download" meaning instead of
    visible text. */
 .canvas-actions {
   position: absolute;
-  top: 5px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 2px;
+  right: 2px;
   z-index: 5;
   display: flex;
   gap: 10px;
@@ -836,7 +852,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   padding: 0;
   border: 1px solid rgba(255,255,255,.16);
   border-radius: 50%;
-  background: rgba(9,9,11,.55);
+  background: rgba(9,9,11,.3);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   color: #fff;
@@ -856,20 +872,16 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   pointer-events: none;
 }
 
-/* Momentary "Original" badge: top-center, just below the icon button row
-   (.canvas-actions is also top-center now, at top:5px/44px tall -- this
-   sits under it rather than through it), triggered from JS (setCompareView)
-   whenever the view switches to the original -- plays a brief fade in/hold/
-   fade out once via the .is-visible animation, then stays hidden until
-   retriggered. */
+/* Persistent "Original"/"Result" label, top-left -- always shown (not a
+   momentary fade-out toast anymore), text kept in sync with the current view
+   by setCompareView (results.js) on every toggle and every fresh render. */
 .compare-hint {
   position: absolute;
-  top: 58px;
-  left: 50%;
-  transform: translateX(-50%) translateY(-6px);
+  top: 2px;
+  left: 2px;
   padding: 7px 14px;
   border-radius: 8px;
-  background: rgba(20,20,24,.85);
+  background: rgba(20,20,24,.45);
   border: 1px solid rgba(255,255,255,.12);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -879,18 +891,8 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   white-space: nowrap;
   letter-spacing: -.1px;
   pointer-events: none;
-  opacity: 0;
   box-shadow: 0 10px 24px rgba(0,0,0,.35);
   z-index: 4;
-}
-.compare-hint.is-visible {
-  animation: compare-hint-fade 0.5s ease forwards;
-}
-@keyframes compare-hint-fade {
-  0%   { opacity: 0; transform: translateX(-50%) translateY(-6px); }
-  12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-  100% { opacity: 0; transform: translateX(-50%) translateY(-6px); }
 }
 
 /* Recipe tags: floating glass pills at the bottom-left of the photo itself

@@ -1684,10 +1684,10 @@
                   </svg>
                 </a>
               </div>
-              <!-- Momentary badge: flashes top-center of the photo itself
-                   (y=0, not tied to either icon button) whenever the view
-                   switches to the original, then fades back out on its own. -->
-              <div id="compare-hint" class="compare-hint">Original</div>
+              <!-- Persistent label, top-left of the photo itself -- always
+                   shown, text kept in sync with the current view by
+                   setCompareView (results.js). -->
+              <div id="compare-hint" class="compare-hint">After</div>
               <!-- Which optional recipe (pose/angle/lighting/framing size)
                    options were actually applied to this RUN -- only ever
                    populated with non-default picks (renderResult), and only

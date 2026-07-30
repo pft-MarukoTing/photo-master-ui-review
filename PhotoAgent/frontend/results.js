@@ -336,19 +336,7 @@ window.PhotoAgentResults = (() => {
     if (els.compareCard) els.compareCard.classList.toggle("showing-generated", showGenerated);
     const label = showGenerated ? "查看原始照片" : "查看輸出結果";
     if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
-    if (els.compareHint) {
-      if (showGenerated) {
-        els.compareHint.classList.remove("is-visible");
-      } else {
-        // Restart the fade in/out even if it's already mid-animation (e.g.
-        // the user toggles back and forth quickly) -- removing the class,
-        // forcing a reflow, then re-adding it replays the animation from
-        // the start instead of a no-op re-add on an already-applied class.
-        els.compareHint.classList.remove("is-visible");
-        void els.compareHint.offsetWidth;
-        els.compareHint.classList.add("is-visible");
-      }
-    }
+    if (els.compareHint) els.compareHint.textContent = showGenerated ? "After" : "Before";
   }
 
   function renderResult({ data, analysis, preset, imageModel }) {
