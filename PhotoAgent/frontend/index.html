@@ -984,9 +984,20 @@
           </label>
 
           <!-- Preview (shown after a single file is selected, replaces drop zone).
-               Clicking it re-opens the file picker so the photo can be swapped. -->
+               Clicking it re-opens the file picker so the photo can be swapped --
+               the hover hint below is the only thing that actually tells the
+               user that's what clicking it does. -->
           <div id="dz-preview" class="dz-preview" hidden>
             <img id="dz-preview-img" alt="preview">
+            <div class="dz-preview-hint">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor"
+                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M4.5 15a8 8 0 0014.5 3M19.5 9A8 8 0 005 6" stroke="currentColor"
+                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              點擊更換照片
+            </div>
           </div>
 
           <!-- Multi-file thumbnail strip (shown when more than one file selected).

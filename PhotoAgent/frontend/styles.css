@@ -294,9 +294,34 @@ a { text-decoration: none; color: inherit; }
 }
 
 .dz-preview {
+  position: relative;
   width: 100%;
   padding: 20px;
   text-align: center;
+  cursor: pointer;
+}
+/* Hidden until hover -- otherwise nothing about the plain preview image
+   indicates it's clickable to swap the photo (unlike the empty drop zone,
+   which has its own permanent "拖拉或點選上傳照片" instructions). */
+.dz-preview-hint {
+  position: absolute;
+  inset: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(9,9,11,.55);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 16.25px;
+  font-weight: 700;
+  letter-spacing: -.13px;
+  opacity: 0;
+  transition: opacity .2s ease;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .dz-preview:hover .dz-preview-hint { opacity: 1; }
 }
 .dz-preview img {
   display: block;
