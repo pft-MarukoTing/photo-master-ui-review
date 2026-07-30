@@ -767,13 +767,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 
 /* Momentary "Original" badge: top-center, just below the icon button row
-   (.canvas-actions is also top-center now, at top:18px/44px tall -- this
+   (.canvas-actions is also top-center now, at top:5px/44px tall -- this
    sits under it rather than through it), triggered from JS (setCompareView)
-   whenever the view switches to the original -- plays a fade in/hold/fade
-   out once via the .is-visible animation, then stays hidden until retriggered. */
+   whenever the view switches to the original -- plays a brief fade in/hold/
+   fade out once via the .is-visible animation, then stays hidden until
+   retriggered. */
 .compare-hint {
   position: absolute;
-  top: 74px;
+  top: 58px;
   left: 50%;
   transform: translateX(-50%) translateY(-6px);
   padding: 7px 14px;
@@ -793,7 +794,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   z-index: 4;
 }
 .compare-hint.is-visible {
-  animation: compare-hint-fade 1.8s ease forwards;
+  animation: compare-hint-fade 0.5s ease forwards;
 }
 @keyframes compare-hint-fade {
   0%   { opacity: 0; transform: translateX(-50%) translateY(-6px); }
