@@ -654,29 +654,48 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 
 /* Before/After canvas: one full-bleed frame. The toggle button floats on
-   top of the image instead of sitting in a separate header bar. */
+   top of the image instead of sitting in a separate header bar.
+   .compare-card itself is just the stable, full-width positioning anchor
+   for the floating controls (see .photo-frame-wrap below) -- it carries no
+   visual framing of its own, so it can be full-width without ever looking
+   like a stretched/letterboxed box. */
 .compare-card {
   position: relative;
   display: block;
-  width: fit-content;
-  max-width: 100%;
+  width: 100%;
   margin: 0 auto;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-lg);
 }
 
-/* Hugs whatever the currently-shown image's own size is (shrink-wrapped by
-   .compare-card above) instead of stretching to the column's full width --
-   that stretch is what used to letterbox narrower/taller photos with visible
-   checkerboard on the sides. No min-height either -- that used to impose the
-   same kind of letterboxing (a floor of empty checkerboard) whenever the
-   original/generated image being switched to was shorter than the floor. */
+/* Stable anchor for the floating controls (.canvas-actions/.compare-hint/
+   .recipe-tags): full column width, same on every photo, so those buttons
+   never shift with the image's aspect ratio. .photo-frame (the actual
+   photo box) is the only in-flow child -- it still shrink-wraps and centers
+   on its own -- so for narrow/tall photos a button may land slightly off
+   the photo's own corner, over blank space, rather than exactly on the
+   image edge. That's the deliberate tradeoff: a stable, predictable button
+   position over pixel-perfect corner alignment. */
+.photo-frame-wrap {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+/* Hugs whatever the currently-shown image's own size is instead of
+   stretching to the column's full width -- that stretch is what used to
+   letterbox narrower/taller photos with visible checkerboard on the sides.
+   No min-height either -- that used to impose the same kind of letterboxing
+   (a floor of empty checkerboard) whenever the original/generated image
+   being switched to was shorter than the floor. Carries the rounded/shadowed
+   "framed" look itself (rather than .compare-card above) so that look also
+   hugs the image instead of stretching full-width. */
 .photo-frame {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
   background:
     radial-gradient(ellipse 900px 500px at 50% 0%, rgba(168,85,247,.08) 0%, transparent 60%),
     linear-gradient(45deg, rgba(255,255,255,.025) 25%, transparent 25%),
@@ -704,12 +723,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .compare-card.showing-generated .compare-img-generated { display: block; }
 
 /* Floating glass icon buttons, not a boxed header -- sit directly over the
-   canvas. Icon-only, so title/aria-label (kept in sync in setCompareView)
-   carry the "switch to X" / "download" meaning instead of visible text. */
+   canvas, top-center. Icon-only, so title/aria-label (kept in sync in
+   setCompareView) carry the "switch to X" / "download" meaning instead of
+   visible text. */
 .canvas-actions {
   position: absolute;
-  top: 18px;
-  right: 18px;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 5;
   display: flex;
   gap: 10px;
@@ -745,13 +766,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   pointer-events: none;
 }
 
-/* Momentary "Original" badge: y=0, flush against the very top of the photo
-   (not attached to either icon button), triggered from JS (setCompareView)
+/* Momentary "Original" badge: top-center, just below the icon button row
+   (.canvas-actions is also top-center now, at top:18px/44px tall -- this
+   sits under it rather than through it), triggered from JS (setCompareView)
    whenever the view switches to the original -- plays a fade in/hold/fade
    out once via the .is-visible animation, then stays hidden until retriggered. */
 .compare-hint {
   position: absolute;
-  top: 0;
+  top: 74px;
   left: 50%;
   transform: translateX(-50%) translateY(-6px);
   padding: 7px 14px;

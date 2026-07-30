@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Photo Master</title>
+  <title>Photo master</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1469,6 +1469,16 @@
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
                 <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
+                <!-- Shown while re-processing (either flow) runs in the
+                     background, since staying on this page means the
+                     thinking-rings screen never appears for that wait.
+                     Lives inside .photo-frame (not .photo-frame-wrap) so the
+                     dim/blur overlay covers exactly the current image, not
+                     the full-width stable pane the floating buttons anchor
+                     to. -->
+                <div id="canvas-loading" class="canvas-loading" hidden>
+                  <div class="canvas-spinner"></div>
+                </div>
               </div>
               <div class="canvas-actions">
                 <button id="compare-toggle-btn" class="canvas-btn" type="button" aria-label="查看原始照片">
@@ -1503,12 +1513,6 @@
                    populated with non-default picks (renderResult), and only
                    visible while showing the generated image, not Original. -->
               <div id="recipe-tags" class="recipe-tags"></div>
-              <!-- Shown while re-processing (either flow) runs in the
-                   background, since staying on this page means the
-                   thinking-rings screen never appears for that wait. -->
-              <div id="canvas-loading" class="canvas-loading" hidden>
-                <div class="canvas-spinner"></div>
-              </div>
             </div>
             <!-- Kept in the DOM (not shown) so existing code that sets these can
                  stay untouched -- the boxed header they used to sit in is gone. -->
