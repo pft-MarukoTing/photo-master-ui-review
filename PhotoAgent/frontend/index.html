@@ -13,11 +13,45 @@
 
     /* ── Upload left column: holds drop zone OR preview ── */
     .upload-left {
+      position: relative;
       display: flex;
       flex-direction: column;
     }
     .upload-left .upload-zone {
       flex: 1;
+    }
+    /* Floating top-right of #dz-multi (both are #dz-multi's own siblings --
+       drop-zone/preview are hidden whenever the multi-thumbnail strip is
+       shown, so this still lands in the strip's own corner). Same icon-
+       button look as .canvas-btn on the results page. Hidden by default,
+       :has() shows it only while #dz-multi itself is visible -- avoids
+       needing a matching hidden-toggle at every place app.js already
+       shows/hides #dz-multi. */
+    .dz-clear-all-btn {
+      display: none;
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 5;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 50%;
+      background: rgba(9,9,11,.55);
+      backdrop-filter: blur(16px) saturate(1.4);
+      -webkit-backdrop-filter: blur(16px) saturate(1.4);
+      color: #fff;
+      cursor: pointer;
+      transition: background .2s, border-color .2s, transform .2s;
+    }
+    .upload-left:has(#dz-multi:not([hidden])) .dz-clear-all-btn { display: flex; }
+    .dz-clear-all-btn:hover {
+      background: rgba(255,38,0,.4);
+      border-color: rgba(255,38,0,.55);
+      transform: translateY(-1px);
     }
     #dz-preview {
       display: flex;
@@ -479,9 +513,12 @@
       background: var(--card);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
-      cursor: pointer;
       transition: box-shadow .25s, transform .25s;
     }
+    /* No cursor:pointer -- only #dz-add-more is actually clickable now (see
+       routeSelectedFiles/app.js), so a hand cursor over the whole strip
+       promised something a click on a plain thumbnail didn't deliver. The
+       hover lift/shadow itself is harmless either way, so it stays. */
     .dz-multi:hover {
       box-shadow: var(--shadow-accent);
       transform: translateY(-2px);
@@ -496,6 +533,39 @@
       box-shadow: var(--shadow-sm);
     }
     .dz-multi .dz-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* Trailing tile in the thumbnail strip -- same grid cell size as a real
+       .dz-thumb, but a dashed/shaded placeholder instead of a photo, so the
+       strip itself invites adding more instead of looking like a closed set. */
+    .dz-add-more {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      border: 1.5px dashed rgba(255,255,255,.18);
+      border-radius: var(--radius-sm);
+      background: rgba(255,255,255,.02);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    /* Hover on the tile itself, not .dz-multi:hover -- that fired from
+       hovering anywhere in the strip, including thumbnails nowhere near it. */
+    .dz-add-more:hover {
+      border-color: rgba(168,85,247,.4);
+      color: var(--accent);
+    }
+    .dz-add-more-icon {
+      font-size: 28px;
+      font-weight: 300;
+      line-height: 1;
+    }
+    .dz-add-more-label {
+      font-size: 11px;
+      font-weight: 600;
+    }
     .dz-thumb-remove {
       position: absolute;
       top: 5px;
@@ -971,9 +1041,22 @@
           </div>
 
           <!-- Multi-file thumbnail strip (shown when more than one file selected).
-               Clicking it re-opens the file picker; per-thumb remove buttons
-               stop that click from bubbling up. -->
+               Only #dz-add-more (the trailing tile rendered into it) reopens
+               the file picker, to append more photos -- see routeSelectedFiles/
+               addFilesToBatch in app.js. Per-thumb remove buttons stop their
+               own click from bubbling up. -->
           <div id="dz-multi" class="dz-multi" hidden></div>
+          <!-- Only shown while #dz-multi is (see .upload-left:has(...) below) --
+               clears the whole batch selection, same end state as removing
+               every thumbnail one by one (removeBatchFile falls back to
+               resetApp() once the batch would hit zero). -->
+          <button id="dz-clear-all-btn" class="dz-clear-all-btn" type="button"
+            title="清除所有照片" aria-label="清除所有照片">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+              <path d="M4 7h16M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3m3 0-1 13a2 2 0 01-2 2H8a2 2 0 01-2-2L5 7h14z"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
         </div>
 
         <!-- Below the drop zone: compact icon+text option pills, then the

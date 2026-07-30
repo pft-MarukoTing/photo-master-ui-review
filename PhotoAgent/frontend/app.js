@@ -140,7 +140,18 @@
     { key: "lighting", group: "batchGroupLighting", list: "batchLightingList", lockRow: "batchLightingLockRow", lock: "batchLightingLock", lockBadge: "batchLightingLockBadge" },
     { key: "size", group: "batchGroupSize", list: "batchSizeList", lockRow: "batchSizeLockRow", lock: "batchSizeLock", lockBadge: "batchSizeLockBadge" }
   ];
-  let batchRecords = [];   // see setSelectedFileBatch for record shape
+  let batchRecords = [];   // see makeBatchRecord for record shape
+  // Monotonic, never reused even across removals/resets -- batchRecords'
+  // array index alone isn't a safe key (records get spliced out, and
+  // addFilesToBatch appends more after the initial batch already handed out
+  // indices), so each record's localId comes from this counter instead.
+  let nextBatchLocalId = 0;
+  // Set right before #dz-add-more's click reopens the file picker, checked
+  // in routeSelectedFiles -- distinguishes "add more to the existing batch"
+  // from a normal fresh selection, which otherwise re-routes based on the
+  // new file count alone (a lone added photo would switch to single-image
+  // mode and discard the rest of the batch).
+  let addingMoreToBatch = false;
   let batchSettings = null;
   // Direct reference to whichever record the sidebar currently has selected --
   // not a status-filtered position (unlike doneBatchRecords()/analyzedBatchRecords()
@@ -926,29 +937,13 @@
     downloadZip(buildAllRunsZip, buildDownloadZipFilename());
   }
 
-  // Batch counterpart of setSelectedFile: filter to images (same rule/message),
-  // build one record per file, and render the multi-thumbnail strip.
-  async function setSelectedFileBatch(files) {
-    hideError();
-    resetBatchState();
-    const images = files.filter((file) => isSupportedImageFile(file));
-    if (!images.length) {
-      showError("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。");
-      return;
-    }
-    if (images.length !== files.length) {
-      showError("已略過非圖片檔案。");
-    }
-
-    const token = ++fileSelectionToken;
-    selectedFile = null;
-    const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
-    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
-
-    batchRecords = images.map((file, i) => ({
-      localId: `f${i}`,
+  // Shared record shape for both a fresh batch (setSelectedFileBatch) and
+  // photos appended to an already-selected one (addFilesToBatch).
+  function makeBatchRecord(file, previewBlob) {
+    return {
+      localId: `f${nextBatchLocalId++}`,
       file,
-      previewUrl: URL.createObjectURL(previewBlobs[i]),
+      previewUrl: URL.createObjectURL(previewBlob),
       // pending -> analyzing -> analyzed -> processing -> done / error
       status: "pending",
       analysis: null,       // step-1 result (shown in the step-2 review panel)
@@ -963,11 +958,59 @@
       imageUrl: null,
       error: null,
       timings: []
-    }));
+    };
+  }
+
+  // Filters `files` down to supported images, showing the same rule/message
+  // either caller (setSelectedFileBatch/addFilesToBatch) needs -- returns
+  // null (already handled) if nothing usable was left.
+  function filterBatchImageFiles(files) {
+    const images = files.filter((file) => isSupportedImageFile(file));
+    if (!images.length) {
+      showError("請選擇 JPG、PNG、WebP 或 HEIC/HEIF 圖片。");
+      return null;
+    }
+    if (images.length !== files.length) {
+      showError("已略過非圖片檔案。");
+    }
+    return images;
+  }
+
+  // Batch counterpart of setSelectedFile: filter to images (same rule/message),
+  // build one record per file, and render the multi-thumbnail strip.
+  async function setSelectedFileBatch(files) {
+    hideError();
+    resetBatchState();
+    const images = filterBatchImageFiles(files);
+    if (!images) return;
+
+    const token = ++fileSelectionToken;
+    selectedFile = null;
+    const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
+    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
+
+    batchRecords = images.map((file, i) => makeBatchRecord(file, previewBlobs[i]));
 
     els.dropZone.hidden = true;
     els.dzPreview.hidden = true;
     els.dzMulti.hidden = false;
+    renderDzMultiThumbs();
+  }
+
+  // Appends photos to the batch already shown in #dz-multi (triggered only
+  // by #dz-add-more, see routeSelectedFiles) instead of replacing it --
+  // setSelectedFileBatch always starts from a fresh resetBatchState(), which
+  // would otherwise discard whatever was already selected.
+  async function addFilesToBatch(files) {
+    hideError();
+    const images = filterBatchImageFiles(files);
+    if (!images) return;
+
+    const token = ++fileSelectionToken;
+    const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
+    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
+
+    batchRecords = batchRecords.concat(images.map((file, i) => makeBatchRecord(file, previewBlobs[i])));
     renderDzMultiThumbs();
   }
 
@@ -998,6 +1041,19 @@
 
       els.dzMulti.appendChild(thumb);
     });
+
+    // Trailing "add more" tile, same grid cell size as a real thumbnail --
+    // clicking it falls through to #dz-multi's own click handler (reopens
+    // the file picker), same as clicking anywhere else in the strip.
+    const addMore = document.createElement("div");
+    addMore.className = "dz-add-more";
+    addMore.setAttribute("role", "button");
+    addMore.setAttribute("aria-label", "新增照片");
+    addMore.innerHTML = `
+      <span class="dz-add-more-icon">+</span>
+      <span class="dz-add-more-label">新增照片</span>
+    `;
+    els.dzMulti.appendChild(addMore);
   }
 
   // Removes one photo from the pending batch selection (only reachable
@@ -2829,11 +2885,24 @@
   // One file -> single flow (setSelectedFile); more than one -> batch flow.
   function routeSelectedFiles(fileList) {
     const files = Array.from(fileList || []);
+    // Consumed unconditionally (even if the picker was cancelled below) --
+    // otherwise a cancelled "add more" click would leave this stuck true for
+    // the next unrelated selection.
+    const wasAddingMoreToBatch = addingMoreToBatch;
+    addingMoreToBatch = false;
     // Some browsers fire "change" with an empty FileList when the user
     // cancels a re-opened file picker (e.g. by clicking the photo zone again)
     // -- treat that as a no-op so whatever was already selected (single
     // photo, batch, or the empty drop zone) stays exactly as it was.
     if (!files.length) return;
+    // #dz-add-more's click always means "append to the batch already shown",
+    // regardless of how many photos were just picked -- otherwise picking
+    // exactly one more would fall through to the single-image branch below
+    // and discard the rest of the batch.
+    if (wasAddingMoreToBatch) {
+      addFilesToBatch(files);
+      return;
+    }
     if (files.length > 1) {
       setSelectedFileBatch(files);
     } else {
@@ -2844,12 +2913,19 @@
 
   els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
   // Once a photo (or batch) is selected it replaces the drop-zone label, so
-  // clicking the preview/thumbnail-strip re-opens the file picker instead.
+  // clicking the preview re-opens the file picker instead.
   els.dzPreview.addEventListener("click", () => els.fileInput.click());
+  // Only the trailing #dz-add-more tile reopens the file picker -- clicking
+  // an existing thumbnail does nothing (previously the whole strip did,
+  // which read as "click anywhere to start over" rather than "click here to
+  // add more"). addingMoreToBatch tells routeSelectedFiles to append instead
+  // of replacing/switching to single-image mode.
   els.dzMulti.addEventListener("click", (e) => {
-    if (e.target.closest(".dz-thumb-remove")) return;
+    if (!e.target.closest(".dz-add-more")) return;
+    addingMoreToBatch = true;
     els.fileInput.click();
   });
+  if (els.dzClearAllBtn) els.dzClearAllBtn.addEventListener("click", resetApp);
   els.startButton.addEventListener("click", startSubmit);
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.backToProcessBtn.addEventListener("click", handleViewAnalysisClick);
