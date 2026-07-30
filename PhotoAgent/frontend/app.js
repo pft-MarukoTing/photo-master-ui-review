@@ -2750,6 +2750,7 @@
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.backToProcessBtn.addEventListener("click", handleViewAnalysisClick);
   els.resetButton.addEventListener("click", resetApp);
+  if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
   if (els.compareToggleBtn) {
     els.compareToggleBtn.addEventListener("click", () =>

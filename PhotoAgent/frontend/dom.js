@@ -14,6 +14,7 @@ window.PhotoAgentDom = (() => {
     startButton: document.querySelector("#start-btn"),
     startDirectBtn: document.querySelector("#start-direct-btn"),
     resetButton: document.querySelector("#reset-btn"),
+    logoHomeBtn: document.querySelector("#logo-home-btn"),
     backToUploadBtn: document.querySelector("#back-to-upload-btn"),
     viewResultsWrap: document.querySelector("#view-results-wrap"),
     viewResultsBtn: document.querySelector("#view-results-btn"),
