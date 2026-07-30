@@ -53,6 +53,13 @@ Open Meitu Application
 
 Click Page Element
     [Arguments]    ${element}    ${timeout}=20s
+    # A transition animation between screens can leave the element WDA just
+    # found stale by the time the click reaches it (StaleElementReferenceException,
+    # kAXErrorInvalidUIElement). Retrying the wait+click a couple times clears it.
+    Wait Until Keyword Succeeds    3x    0.3s    Wait And Click Element    ${element}    ${timeout}
+
+Wait And Click Element
+    [Arguments]    ${element}    ${timeout}
     Wait Until Element Is Visible    ${element}    timeout=${timeout}
     Click Element    ${element}
 
