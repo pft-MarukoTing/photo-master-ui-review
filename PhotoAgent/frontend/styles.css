@@ -240,6 +240,10 @@ a { text-decoration: none; color: inherit; }
   gap: 12px;
   max-width: 80%;
   margin: 0 auto;
+  /* Breathing room below the Run row -- .upload-grid's flex-grow otherwise
+     stretches it flush to .upload-container's own bottom edge (the
+     viewport's), leaving the button sitting right on the edge. */
+  margin-bottom: 32px;
   width: 100%;
 }
 
