@@ -992,7 +992,6 @@
     currentRunTabsIndex = null;
     currentRunTabsOnSelect = null;
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
-    if (els.batchProgress) els.batchProgress.hidden = true;
     if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
     if (els.batchPromptRow) els.batchPromptRow.hidden = true;
@@ -1605,7 +1604,6 @@
       r.mirrorIndex = null;
     });
 
-    els.batchProgress.hidden = false;
     els.batchSidebar.hidden = false;
     currentBatchRecord = batchRecords[0] || null;
     // Before rendering: renderBatchMain measures the sidebar's real on-page
@@ -1614,7 +1612,7 @@
     showSection("results");
     renderBatchSidebarList();
     renderBatchMain(currentBatchRecord); // shows record 1's "analyzing" placeholder immediately
-    updateBatchProgress();
+    updateBatchDownloadAllVisibility();
 
     const analyzeArgs = {
       files: batchRecords.map((r) => r.file),
@@ -1645,7 +1643,7 @@
           batchRecords.forEach((r) => { r.status = "error"; r.error = friendlyError(error); });
           renderBatchSidebarList();
           renderBatchMain(currentBatchRecord);
-          updateBatchProgress();
+          updateBatchDownloadAllVisibility();
           showError(friendlyError(error));
           return;
         }
@@ -1672,7 +1670,7 @@
           batchRecords.forEach((r) => { r.status = "error"; r.error = friendlyError(error); });
           renderBatchSidebarList();
           renderBatchMain(currentBatchRecord);
-          updateBatchProgress();
+          updateBatchDownloadAllVisibility();
           showError(friendlyError(error));
           return;
         }
@@ -1691,7 +1689,7 @@
         await runBatchPool(analyzing, analyzeBatchItem, POLL_CONCURRENCY);
       }
 
-      updateBatchProgress();
+      updateBatchDownloadAllVisibility();
       if (skipReview) {
         // Straight through, no stop: same as clicking "全部繼續處理" myself,
         // so every analyzed image goes straight to editing with its default
@@ -1728,7 +1726,7 @@
 
     await Promise.all(batchRecords.map((record) => analyzeAndEditBatchRecord(record, runCount)));
 
-    updateBatchProgress();
+    updateBatchDownloadAllVisibility();
     updateBatchHeaderControls();
   }
 
@@ -1759,7 +1757,7 @@
             record.status = "processing";
             updateBatchSidebarItem(record);
             refreshIfSelected(record);
-            updateBatchProgress();
+            updateBatchDownloadAllVisibility();
           }
         },
         onRunDone: (runData) => {
@@ -1788,7 +1786,7 @@
           }
           syncRecordMirror(record);
           updateBatchSidebarItem(record);
-          updateBatchProgress();
+          updateBatchDownloadAllVisibility();
           refreshIfSelected(record);
         }
       });
@@ -1801,7 +1799,7 @@
       });
       syncRecordMirror(record);
       updateBatchSidebarItem(record);
-      updateBatchProgress();
+      updateBatchDownloadAllVisibility();
       refreshIfSelected(record);
     }
   }
@@ -1824,7 +1822,7 @@
     }
     updateBatchSidebarItem(record);
     refreshIfSelected(record);
-    updateBatchProgress();
+    updateBatchDownloadAllVisibility();
   }
 
   // Shows/hides the bulk "全部繼續處理" button + batch-wide prompt/options rows
@@ -1934,7 +1932,7 @@
       updateBatchSidebarItem(r);
       refreshIfSelected(r); // no canvas yet for a first-time edit -- shows the loading placeholder
     });
-    updateBatchProgress();
+    updateBatchDownloadAllVisibility();
     // Only after every target has actually left "analyzed" -- otherwise this
     // still sees them and leaves the bulk prompt/options/continue-all button
     // visible for the whole editing run instead of hiding immediately.
@@ -2021,7 +2019,7 @@
     }
     syncRecordMirror(record);
     updateBatchSidebarItem(record);
-    updateBatchProgress();
+    updateBatchDownloadAllVisibility();
     refreshIfSelected(record);
   }
 
@@ -2057,27 +2055,6 @@
       })());
     }
     await Promise.all(runners);
-  }
-
-  function updateBatchProgress() {
-    const total = batchRecords.length;
-    const failed = batchRecords.filter((r) => r.status === "error").length;
-    const failText = failed ? `，失敗 ${failed}` : "";
-    // Once any image has entered/finished editing, report edit progress;
-    // otherwise report analysis progress.
-    const inEdit = batchRecords.some((r) => r.status === "processing" || r.status === "done");
-    if (inEdit) {
-      const done = batchRecords.filter((r) => r.status === "done").length;
-      const runs = batchRecords.flatMap((r) => r.runs || []);
-      const runText = batchRecords.some((r) => (r.runs || []).length > 1)
-        ? `（共 ${runs.filter((x) => x.status === "done").length}/${runs.length} RUN）`
-        : "";
-      els.batchProgress.textContent = `完成 ${done}/${total}${runText}${failText}`;
-    } else {
-      const analyzed = batchRecords.filter((r) => r.status === "analyzed").length;
-      els.batchProgress.textContent = `已分析 ${analyzed}/${total}${failText}`;
-    }
-    updateBatchDownloadAllVisibility();
   }
 
   // Batch counterpart of buildResultZip/buildAllRunsZip: bundles every done
@@ -2270,9 +2247,9 @@
   // viewport (per this app's "avoid making the user scroll the window"
   // policy), even when the main content column is naturally very tall.
   // Measured from the sidebar's own actual (pre-scroll) rendered top --
-  // a static CSS calc() can't know the results-topbar's real height, which
-  // is what actually pushes that starting position down, not just the fixed
-  // header. Deliberately NOT re-measured on scroll: this uses the sidebar's
+  // a static CSS calc() can't know the fixed header's real height plus
+  // whatever else (results-body-actions, margins) pushes that starting
+  // position down. Deliberately NOT re-measured on scroll: this uses the sidebar's
   // worst-case (unstuck, further down the page) position, which is the
   // binding constraint -- once scrolled enough to actually stick higher up,
   // capping to the same height just leaves a little unused room at the

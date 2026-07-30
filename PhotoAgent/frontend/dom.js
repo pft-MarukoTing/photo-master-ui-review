@@ -62,7 +62,6 @@ window.PhotoAgentDom = (() => {
     modelName: document.querySelector("#model-name"),
     origDim: document.querySelector("#orig-dim"),
     resultSummary: document.querySelector("#res-summary"),
-    batchProgress: document.querySelector("#batch-progress"),
     batchSidebar: document.querySelector("#batch-sidebar"),
     batchSidebarTitle: document.querySelector("#batch-sidebar-title"),
     batchDownloadAllBtn: document.querySelector("#batch-download-all-btn"),
