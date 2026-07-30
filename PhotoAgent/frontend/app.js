@@ -984,11 +984,6 @@
       im.alt = r.file.name;
       thumb.appendChild(im);
 
-      const name = document.createElement("span");
-      name.className = "dz-thumb-name";
-      name.textContent = r.file.name;
-      thumb.appendChild(name);
-
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "dz-thumb-remove";
@@ -1003,10 +998,6 @@
 
       els.dzMulti.appendChild(thumb);
     });
-    const count = document.createElement("p");
-    count.className = "dz-count";
-    count.textContent = `已選擇 ${batchRecords.length} 張`;
-    els.dzMulti.appendChild(count);
   }
 
   // Removes one photo from the pending batch selection (only reachable
@@ -2246,14 +2237,13 @@
     }
 
     // Unlike the old grid (badge overlaid on a large square thumbnail), the
-    // sidebar's thumbnail is small -- the badge sits beside the filename
-    // instead of inside it, where there's enough width for the text.
+    // sidebar's thumbnail is small -- the badge sits in its own column
+    // beside the thumbnail instead of inside it, where there's enough width
+    // for the text. No filename shown here (or in the upload-page multi-file
+    // thumbnail strip) -- the thumbnail image itself is enough to tell
+    // images apart.
     const textCol = document.createElement("div");
     textCol.className = "batch-sidebar-text";
-    const name = document.createElement("p");
-    name.className = "rc-name";
-    name.textContent = record.file.name;
-    textCol.appendChild(name);
     textCol.appendChild(badge);
 
     item.appendChild(media);
