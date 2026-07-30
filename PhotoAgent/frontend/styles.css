@@ -106,7 +106,10 @@ a { text-decoration: none; color: inherit; }
 }
 
 .logo {
-  font-size: 40px;
+  /* Fixed 40px overflowed into .header-actions on narrow phones (nothing
+     here ever shrank it) -- clamp() keeps the desktop size but scales down
+     below ~570px viewport width instead. */
+  font-size: clamp(22px, 7vw, 40px);
   font-weight: 800;
   letter-spacing: -.5px;
   color: var(--text);
@@ -324,6 +327,10 @@ a { text-decoration: none; color: inherit; }
 }
 
 .dz-preview {
+  /* display/flex-direction/align-items/justify-content/flex/min-height/
+     overflow all live on the #dz-preview ID rule (index.html) -- it wins
+     specificity over this class rule for any of the same properties, so
+     sizing is fixed there (see the min-height comment on that rule). */
   position: relative;
   width: 100%;
   padding: 20px;
@@ -355,8 +362,10 @@ a { text-decoration: none; color: inherit; }
 }
 .dz-preview img {
   display: block;
-  width: 100%;
-  max-height: 400px;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   border-radius: 10px;
 }
@@ -1396,6 +1405,12 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 @media (max-width: 560px) {
   .container { padding: 0 18px; }
   .header-inner { padding: 0 18px; }
+
+  /* Icon-only on narrow phones -- even a shrunk .logo (see above) plus two
+     full-label buttons (重新分析/上傳照片, both can show at once in batch
+     mode) don't reliably fit side by side down at 320-390px widths. */
+  .header-actions .btn-label { display: none; }
+  .header-actions .btn { padding: 0 12px; gap: 0; }
 
   .upload-container { padding-top: 40px; padding-bottom: 60px; }
 

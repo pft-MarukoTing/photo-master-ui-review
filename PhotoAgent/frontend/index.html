@@ -65,7 +65,15 @@
       align-items: center;
       justify-content: center;
       flex: 1;
-      min-height: 360px;
+      /* Was a flat 360px floor -- taller than the space .upload-left (a
+         sibling flex chain, see .upload-container/.upload-grid in
+         styles.css) can actually offer on a short/narrow viewport, so a
+         selected photo rendered past .upload-left's own bottom edge and
+         spilled over .upload-below-zone's pills below it. Matches
+         .upload-zone's own floor instead (280px desktop / 160px under the
+         existing 900px width breakpoint, see styles.css), since this and
+         the empty drop zone are mutually-exclusive views of the same slot. */
+      min-height: 280px;
       background: var(--card);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
@@ -76,6 +84,14 @@
     #dz-preview:hover {
       box-shadow: var(--shadow-accent);
       transform: translateY(-2px);
+    }
+    /* Mirrors .upload-zone's own narrow-width floor (styles.css) -- has to
+       live here too, not just there, since this ID rule's base min-height
+       above sits in a later stylesheet (this inline block loads after
+       styles.css) and would otherwise keep winning over an equal-specificity
+       override placed only in styles.css regardless of the media query. */
+    @media (max-width: 900px) {
+      #dz-preview { min-height: 160px; }
     }
 
     .proc-container {
@@ -972,7 +988,7 @@
           <path d="M4.5 15a8 8 0 0014.5 3M19.5 9A8 8 0 005 6" stroke="currentColor"
             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        重新分析
+        <span class="btn-label">重新分析</span>
       </button>
       <button id="reset-btn" class="btn btn-secondary btn-sm" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -981,7 +997,7 @@
           <path d="M3 19h18" stroke="currentColor"
             stroke-width="2" stroke-linecap="round"/>
         </svg>
-        上傳照片
+        <span class="btn-label">上傳照片</span>
       </button>
     </div>
   </div>
