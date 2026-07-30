@@ -292,7 +292,7 @@
       padding-right: 24px;
     }
     .ap-col-right {
-      /* Wide enough that the merged 修圖模型 select (now including quality,
+      /* Wide enough that the merged 模型 select (now including quality,
          e.g. "GPT Image 2 · Medium") has room to show its full text instead
          of being squeezed by the options-card's fixed width -- was 324px,
          tuned back when this column only ever needed to fit the shorter
@@ -370,7 +370,7 @@
     .ap-style-trigger:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
     .ap-style-trigger::after {
       content: '▾';
-      font-size: 10px;
+      font-size: 18px;
       color: var(--text-2);
       transition: transform .15s;
     }
@@ -394,7 +394,14 @@
       left: 0;
       z-index: 20;
       margin-top: 0;
+      /* width:max-content (capped) instead of a flat min-width -- some of
+         these lists hold much longer labels than the original short
+         Pose/Angle/Lighting/Size words (e.g. "GPT Image 2 · Standard" in the
+         upload page's model picker), which wrapped onto a second line at a
+         plain 200px. */
+      width: max-content;
       min-width: 200px;
+      max-width: 320px;
       /* Override .step-list-frame's faint inline tint -- this now floats
          over unrelated content (e.g. the prompt textarea) below it, so it
          needs a solid, opaque surface (a shade lighter than the surrounding
@@ -928,7 +935,7 @@
         </svg>
         重新分析
       </button>
-      <button id="reset-btn" class="btn btn-secondary btn-sm" type="button">
+      <button id="reset-btn" class="btn btn-secondary btn-sm" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M12 15V3M12 3L7 8M12 3l5 5" stroke="currentColor"
             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -988,10 +995,12 @@
           <div id="dz-multi" class="dz-multi" hidden></div>
         </div>
 
-        <!-- Right: Form -->
-        <div class="upload-right">
+        <!-- Below the drop zone: compact icon+text option pills, then the
+             icon+text run buttons -- was a side-by-side 340px form column,
+             now everything sits under the (now full-width) drop zone. -->
+        <div class="upload-below-zone">
 
-          <div class="options-card" id="upload-options-card">
+          <div class="options-card-inline" id="upload-options-card">
             <div id="processing-path-row" class="option-row" style="display: none;">
               <div class="option-text">
                 <span class="option-label">處理路徑</span>
@@ -1024,52 +1033,94 @@
             </label>
             <!-- Options populated from window.PhotoAgentConfig.imageModelQualityOptions
                  (populateModelQualitySelect, app.js) -- single source of truth shared
-                 with #ap-image-model-quality instead of two hand-duplicated selects. -->
-            <div class="option-row">
-              <div class="option-text option-text-auto">
-                <span class="option-label">修圖模型</span>
-              </div>
-              <select id="image-model-quality" class="quality-select model-quality-select"></select>
+                 with #ap-image-model-quality instead of two hand-duplicated selects.
+                 The real <select> stays in the DOM (just hidden) as the actual form
+                 control -- wireOptionPicker (app.js) mirrors its options/value into
+                 this popover instead of duplicating the population logic; picking an
+                 option here still just sets select.value + dispatches "change", so
+                 every existing listener on it keeps working untouched. Same visual
+                 pattern (.ap-style-item/.ap-style-trigger/.ap-style-panel) as the
+                 Pose/Angle/Lighting/Size pickers in the analysis-preview panel. -->
+            <div class="option-pill-group">
+              <span class="option-pill-label">模型</span>
+              <details class="ap-style-item" name="upload-option-picker" id="image-model-quality-picker">
+                <summary class="ap-style-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value"></span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list"></ul>
+                </div>
+                <select id="image-model-quality" class="quality-select model-quality-select" hidden></select>
+              </details>
             </div>
-            <div class="option-divider"></div>
             <!-- Options populated from window.PhotoAgentConfig.aspectRatioOptions
                  (populateAspectRatioSelect, app.js). Upload-page only -- fixed
                  once analysis has run, so it can't drift out of sync with
                  what the analysis step was told (see build_edit_prompt's
                  _aspect_ratio_pref_at_analysis handling on the backend). -->
-            <div class="option-row">
-              <div class="option-text">
-                <span class="option-label">長寬比</span>
-              </div>
-              <select id="image-aspect-ratio" class="quality-select aspect-ratio-select"></select>
+            <div class="option-pill-group">
+              <span class="option-pill-label">長寬比</span>
+              <details class="ap-style-item" name="upload-option-picker" id="image-aspect-ratio-picker">
+                <summary class="ap-style-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value"></span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list"></ul>
+                </div>
+                <select id="image-aspect-ratio" class="quality-select aspect-ratio-select" hidden></select>
+              </details>
             </div>
-            <div class="option-divider"></div>
-            <div class="option-row">
-              <div class="option-text">
-                <span class="option-label">生成張數</span>
-              </div>
-              <select id="image-run-count" class="quality-select">
-                <option value="1" selected>1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="5">5</option>
-                <option value="6">6</option>
-                <option value="7">7</option>
-                <option value="8">8</option>
-                <option value="9">9</option>
-                <option value="10">10</option>
-                <option value="11">11</option>
-                <option value="12">12</option>
-                <option value="13">13</option>
-                <option value="14">14</option>
-                <option value="15">15</option>
-                <option value="16">16</option>
-                <option value="17">17</option>
-                <option value="18">18</option>
-                <option value="19">19</option>
-                <option value="20">20</option>
-              </select>
+            <div class="option-pill-group">
+              <span class="option-pill-label">生成張數</span>
+              <details class="ap-style-item" name="upload-option-picker" id="image-run-count-picker">
+                <summary class="ap-style-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                      <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value"></span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list"></ul>
+                </div>
+                <select id="image-run-count" class="quality-select" hidden>
+                  <option value="1" selected>1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="7">7</option>
+                  <option value="8">8</option>
+                  <option value="9">9</option>
+                  <option value="10">10</option>
+                  <option value="11">11</option>
+                  <option value="12">12</option>
+                  <option value="13">13</option>
+                  <option value="14">14</option>
+                  <option value="15">15</option>
+                  <option value="16">16</option>
+                  <option value="17">17</option>
+                  <option value="18">18</option>
+                  <option value="19">19</option>
+                  <option value="20">20</option>
+                </select>
+              </details>
             </div>
           </div>
 
@@ -1078,13 +1129,13 @@
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"/>
               </svg>
-              Run Photo Master (Auto)
+              Run
             </button>
             <button id="start-btn" class="btn btn-secondary" type="button" hidden>
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"/>
               </svg>
-              Run Photo Master (Manual)
+              Run (Manual)
             </button>
           </div>
 
@@ -1242,7 +1293,7 @@
               <div class="options-card">
                 <div class="option-row">
                   <div class="option-text option-text-auto">
-                    <span class="option-label">修圖模型</span>
+                    <span class="option-label">模型</span>
                   </div>
                   <select id="ap-image-model-quality" class="quality-select model-quality-select"></select>
                 </div>

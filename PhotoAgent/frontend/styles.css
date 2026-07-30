@@ -204,22 +204,36 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -.17px;
 }
 
-/* Run buttons: stacked full-width under the upload-options-card, in the
-   same 420px right column. */
+/* Run buttons: sit inline next to the option pills below the drop zone
+   (see .upload-below-zone), not stacked full-width in a side column anymore. */
 .upload-actions-row {
   display: flex;
-  flex-direction: column;
   gap: 10px;
 }
-.upload-actions-row .btn {
-  width: 100%;
+
+/* Upload grid: drop zone full-width on top, options + run buttons below it
+   (was a side-by-side drop-zone/form-column grid). Capped to 80% of the
+   container and centered -- at full container width it read as too wide
+   once it was just this one column instead of sharing the row with the
+   old 340px form column. */
+.upload-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 80%;
+  margin: 0 auto;
 }
 
-/* Upload grid */
-.upload-grid {
-  display: grid;
-  grid-template-columns: 1fr 340px;
-  gap: 24px;
+/* Options pills + run buttons, spread across the row under the drop zone. */
+.upload-below-zone {
+  display: flex;
+  /* flex-end, not center -- the option pills now carry a label above them
+     (see .option-pill-group) so they're taller than the plain run buttons;
+     bottom-aligning keeps the pills/buttons reading as one toolbar row. */
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 /* Drop zone */
@@ -291,15 +305,6 @@ a { text-decoration: none; color: inherit; }
   object-fit: contain;
   border-radius: 10px;
 }
-/* Right form column: centered vertically against the (taller) drop zone
-   instead of trailing off after its own, shorter content. */
-.upload-right {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 14px;
-}
-
 /* Form fields */
 .form-field {
   display: flex;
@@ -348,6 +353,37 @@ a { text-decoration: none; color: inherit; }
   color: var(--text-2);
   line-height: 1.45;
   letter-spacing: -.12px;
+}
+
+/* Upload page's options row: icon+popover pills (.ap-style-item, same as the
+   analysis-preview's Pose/Angle/Lighting/Size pickers -- see wireOptionPicker
+   in app.js) instead of .options-card's stacked label/select rows (still
+   used as-is inside .ap-col-right) -- the dev-only toggle rows (processing
+   path/QA/AI-edit) are unaffected, still .option-row and still
+   display:none in production. */
+.options-card-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.option-pill-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.option-pill-label {
+  padding-left: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.option-pill-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--accent);
 }
 
 /* Options card */
@@ -445,13 +481,23 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .quality-select:hover { border-color: rgba(255,255,255,.28); }
 .quality-select:focus { border-color: rgba(168,85,247,.55); }
+/* The dropdown's own option list doesn't inherit .quality-select's dark
+   background/text color -- browsers render it as its own popup, defaulting
+   to light/native styling unless given explicit colors here. Only reaches
+   the remaining visible native selects (e.g. #ap-image-model-quality) --
+   the upload page's own selects are hidden now (see .ap-style-item pickers,
+   wireOptionPicker in app.js), but this stays harmless/unused for those. */
+.quality-select option {
+  background: var(--card-2);
+  color: var(--text);
+}
 
 /* The merged model+quality select's longest option ("GPT Image 2 · Medium")
    is wider than the old plain model name ("GPT Image 2") -- .option-text's
    shared flex:1 used to claim all the row's slack space before the select
    got any, squeezing it below what its text needs (worst inside the
    analyze-preview's narrow fixed-width .ap-col-right). option-text-auto
-   drops that grow so the short "修圖模型" label only takes its own width,
+   drops that grow so the short "模型" label only takes its own width,
    and model-quality-select claims the rest instead. */
 .option-text-auto { flex: 0 0 auto; }
 .model-quality-select { flex: 1 1 auto; min-width: 0; }
@@ -1268,9 +1314,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    RESPONSIVE
 ════════════════════════════════════════ */
 @media (max-width: 900px) {
-  .upload-grid {
-    grid-template-columns: 1fr;
-  }
+  .upload-grid { max-width: 100%; }
+  .upload-below-zone { flex-direction: column; align-items: stretch; }
+  .upload-actions-row { flex-direction: column; }
+  .upload-actions-row .btn { width: 100%; }
   .upload-zone { min-height: 240px; }
 
   .proc-top { flex-direction: column; align-items: center; text-align: center; gap: 32px; }

@@ -49,6 +49,9 @@ window.PhotoAgentDom = (() => {
     imageModelQualitySelect: document.querySelector("#image-model-quality"),
     imageAspectRatioSelect: document.querySelector("#image-aspect-ratio"),
     imageRunCountSelect: document.querySelector("#image-run-count"),
+    imageModelQualityPicker: document.querySelector("#image-model-quality-picker"),
+    imageAspectRatioPicker: document.querySelector("#image-aspect-ratio-picker"),
+    imageRunCountPicker: document.querySelector("#image-run-count-picker"),
     apImageModelQualitySelect: document.querySelector("#ap-image-model-quality"),
     apRunCountWrap: document.querySelector("#ap-run-count-wrap"),
     apRunCountSelect: document.querySelector("#ap-run-count"),
@@ -148,6 +151,9 @@ window.PhotoAgentDom = (() => {
   function showSection(name) {
     Object.values(els.sections).forEach((section) => section.classList.remove("visible"));
     els.sections[name]?.classList.add("visible");
+    // #reset-btn lives in the global header now (shown on every screen), but
+    // "上傳照片" doesn't make sense while already on the upload screen itself.
+    if (els.resetButton) els.resetButton.hidden = name === "upload";
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 

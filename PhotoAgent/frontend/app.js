@@ -210,6 +210,65 @@
     });
   }
 
+  // Upload-page option pills (#image-model-quality-picker etc.): a
+  // details/summary popover (same visual language as the analysis-preview's
+  // .ap-style-item/.ap-style-trigger/.ap-style-panel Pose/Angle/Lighting/Size
+  // pickers) instead of the browser's native <option> list, which can't be
+  // styled or spaced away from the trigger the way the rest of this app
+  // looks. `select` stays in the DOM (just hidden) as the real form control --
+  // existing code that reads/writes .value or listens for "change" on it
+  // keeps working untouched; this only mirrors its options into a nicer-
+  // looking front end. Skips options the select itself has hidden (e.g.
+  // applyRunCountOptionLimit trimming the non-debug run-count choices).
+  function wireOptionPicker(details, select) {
+    if (!details || !select) return;
+    const valueEl = details.querySelector(".ap-style-value");
+    const list = details.querySelector(".step-inline-list");
+    if (!valueEl || !list) return;
+    const name = `${select.id}-picker`;
+
+    const rebuild = () => {
+      list.innerHTML = "";
+      Array.from(select.options).filter((opt) => !opt.hidden).forEach((opt) => {
+        const li = document.createElement("li");
+        const label = document.createElement("label");
+        const cb = document.createElement("span");
+        cb.className = "step-cb";
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = name;
+        input.value = opt.value;
+        input.checked = opt.value === select.value;
+        const box = document.createElement("span");
+        box.className = "step-cb-box";
+        cb.appendChild(input);
+        cb.appendChild(box);
+        const text = document.createElement("span");
+        text.className = "step-cb-label";
+        text.textContent = opt.textContent;
+        label.appendChild(cb);
+        label.appendChild(text);
+        li.appendChild(label);
+        list.appendChild(li);
+
+        input.addEventListener("change", () => {
+          select.value = opt.value;
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+          valueEl.textContent = opt.textContent;
+          details.open = false;
+        });
+      });
+      valueEl.textContent = select.selectedOptions[0]?.textContent || "";
+    };
+
+    rebuild();
+    // Re-sync whenever the popover opens, in case select.value/options
+    // changed while it was closed (applyModelQualityChange mirroring a pick
+    // made in analysis-preview, or applyRunCountOptionLimit trimming choices
+    // once the debug-UI check resolves).
+    details.addEventListener("toggle", () => { if (details.open) rebuild(); });
+  }
+
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
   // combination (window.PhotoAgentConfig.imageModelQualityOptions is the
   // single source of truth), appearing on both the upload screen
@@ -237,6 +296,7 @@
   }
   populateModelQualitySelect(els.imageModelQualitySelect);
   populateModelQualitySelect(els.apImageModelQualitySelect);
+  wireOptionPicker(els.imageModelQualityPicker, els.imageModelQualitySelect);
 
   function applyModelQualityChange(value) {
     const opt = findModelQualityOption(value);
@@ -279,6 +339,8 @@
     select.value = window.PhotoAgentConfig.defaultAspectRatio || select.value;
   }
   populateAspectRatioSelect(els.imageAspectRatioSelect);
+  wireOptionPicker(els.imageAspectRatioPicker, els.imageAspectRatioSelect);
+  wireOptionPicker(els.imageRunCountPicker, els.imageRunCountSelect);
 
   // 生成張數 (single-image RUN count) can now be preset on the upload screen,
   // ahead of analysis -- keep it and the analysis-preview's own #ap-run-count
