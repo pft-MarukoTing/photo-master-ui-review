@@ -16,6 +16,12 @@
       position: relative;
       display: flex;
       flex-direction: column;
+      /* Grows to fill .upload-grid's remaining space (see .upload-container/
+         .upload-hero/.upload-grid in styles.css) -- without this, only
+         .upload-zone below flexed, but its own parent stayed auto-height and
+         never actually offered it anything to grow into. */
+      flex: 1 1 auto;
+      min-height: 0;
     }
     .upload-left .upload-zone {
       flex: 1;
@@ -354,7 +360,14 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 9px 16px;
+      height: 41px;
+      /* Explicit height (not just padding + line-height) -- #ap-recipe-picker
+         is a <button>, while every other trigger here (修圖風格選項/模型/
+         生成張數/Pose/Angle/Lighting/Size) is a <summary>; padding alone
+         happened to compute to the same height for both, but pinning it
+         directly guarantees 修圖建議 never drifts out of line with the rest
+         of the row regardless of any button-vs-summary UA quirk. */
+      padding: 0 16px;
       background: var(--card-2);
       border: 1px solid var(--border-2);
       border-radius: 20px;
@@ -1175,7 +1188,7 @@
           </div>
 
           <div class="upload-actions-row">
-            <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後不停下確認，直接接續修圖並顯示結果">
+            <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後，接續修圖並顯示結果">
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"/>
               </svg>

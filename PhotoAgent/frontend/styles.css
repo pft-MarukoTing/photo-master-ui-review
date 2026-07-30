@@ -157,13 +157,25 @@ a { text-decoration: none; color: inherit; }
 /* ════════════════════════════════════════
    SCREEN 1 — UPLOAD
 ════════════════════════════════════════ */
+/* Fills exactly the viewport height below the sticky header (which stays a
+   fixed --header-h bar, not part of this split) so the screen never needs a
+   scroll regardless of resolution -- .upload-hero takes a fixed 10% slice,
+   .upload-grid (drop zone + options/Run row) grows into the rest, and
+   .upload-zone itself is the flexible piece inside that (see below) so it's
+   the drop zone that grows/shrinks with screen height, not the option pills. */
 .upload-container {
-  padding-top: 24px;
-  padding-bottom: 48px;
+  height: calc(100vh - var(--header-h));
+  display: flex;
+  flex-direction: column;
+  padding-top: 8px;
+  padding-bottom: 6px;
 }
 
 .upload-hero {
-  margin-bottom: 52px;
+  flex: 0 0 20%;
+  /* Floor so the heading/sub-copy never get squeezed unreadable on a very
+     short viewport -- 10% only wins once it's actually taller than this. */
+  min-height: 100px;
 }
 
 .eyebrow-label {
@@ -177,7 +189,10 @@ a { text-decoration: none; color: inherit; }
 
 .upload-headline {
   max-width: 600px;
-  font-size: clamp(24px, 4.5vw, 32px);
+  /* min(vw, vh) instead of plain vw -- .upload-hero is now a fixed ~10% (see
+     .upload-container/.upload-hero above), so a short viewport needs this to
+     shrink too, not just a narrow one, or it can overflow the hero's box. */
+  font-size: clamp(20px, min(4.5vw, 4.2vh), 32px);
   font-weight: 800;
   background: var(--mv-grad);
   -webkit-background-clip: text;
@@ -190,14 +205,15 @@ a { text-decoration: none; color: inherit; }
 
 /* Sub-copy row, divider sits below it */
 .upload-sub-row {
-  padding-bottom: 24px;
-  margin-bottom: 32px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
   border-bottom: 1px solid transparent;
   border-image: linear-gradient(90deg, var(--border) 0%, transparent 85%) 1;
 }
 
 .upload-sub {
-  font-size: 18px;
+  /* Same min(vw, vh) shrink as .upload-headline, one step smaller. */
+  font-size: clamp(14px, min(1.8vw, 2vh), 18px);
   color: var(--text-2);
   line-height: 1.6;
   max-width: 640px;
@@ -219,12 +235,18 @@ a { text-decoration: none; color: inherit; }
 .upload-grid {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 12px;
   max-width: 80%;
   margin: 0 auto;
+  width: 100%;
 }
 
-/* Options pills + run buttons, spread across the row under the drop zone. */
+/* Options pills + run buttons, spread across the row under the drop zone --
+   natural height (flex-grow:0, the default), so .upload-zone below is the
+   one piece that actually grows/shrinks to fill whatever's left of
+   .upload-grid's 90% share. */
 .upload-below-zone {
   display: flex;
   /* flex-end, not center -- the option pills now carry a label above them
@@ -233,15 +255,19 @@ a { text-decoration: none; color: inherit; }
   align-items: flex-end;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  flex-shrink: 0;
+  gap: 10px;
 }
 
-/* Drop zone */
+/* Drop zone -- flex:1 makes it the piece that grows/shrinks to fill
+   .upload-grid's remaining space; min-height is just the floor for very
+   short viewports (see .upload-container above), not its normal size. */
 .upload-zone {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   justify-content: center;
-  min-height: 440px;
+  min-height: 280px;
   border: 1.5px dashed rgba(255,255,255,.16);
   border-radius: var(--radius-lg);
   background: var(--card);
@@ -1348,10 +1374,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 ════════════════════════════════════════ */
 @media (max-width: 900px) {
   .upload-grid { max-width: 100%; }
-  .upload-below-zone { flex-direction: column; align-items: stretch; }
+  .upload-below-zone { flex-direction: column; align-items: stretch; gap: 10px; }
   .upload-actions-row { flex-direction: column; }
   .upload-actions-row .btn { width: 100%; }
-  .upload-zone { min-height: 240px; }
+  .upload-zone { min-height: 160px; }
 
   .proc-top { flex-direction: column; align-items: center; text-align: center; gap: 32px; }
   .proc-text { text-align: center; }
@@ -1368,7 +1394,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .header-inner { padding: 0 18px; }
 
   .upload-container { padding-top: 40px; padding-bottom: 60px; }
-  .upload-hero { margin-bottom: 32px; }
 
   .upload-actions-row .btn {
     height: auto;
