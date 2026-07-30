@@ -203,6 +203,27 @@
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
+    // #analysis-preview's own remaining content (ap-summary-row's subject
+    // tags, the 取消 cancel button, 分析結果 detail toggle above) is
+    // testbed-only -- but #ap-options-card-inline (修圖建議/風格/模型/生成
+    // 張數/補充指令/重新處理) and #run-tabs-row always get relocated OUT of
+    // #analysis-preview into #results-canvas-col as soon as the panel opens
+    // (openInlineAnalysisForCurrentContext still auto-opens for every user),
+    // so hiding the now-empty-for-general-users wrapper here doesn't touch
+    // them. #back-to-process-btn only toggles that wrapper's own content, so
+    // it stays debug-only too -- general users already get the pill row
+    // without needing to press anything.
+    if (els.backToProcessBtn) els.backToProcessBtn.style.display = isDebug ? "" : "none";
+    if (els.analysisPreview) els.analysisPreview.style.display = isDebug ? "" : "none";
+    // #results-analysis-slot only ever hosts #analysis-preview (now hidden
+    // above in general mode), so it'd otherwise sit there as a blank 35%-wide
+    // column once .showing-analysis adds its flex-grow -- hide it and let
+    // #results-canvas-col recenter at a fixed width instead of stretching to
+    // fill the whole freed-up row (900px matches .proc-container, the same
+    // single-column canvas width used pre-results on the processing screen).
+    if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = isDebug ? "" : "none";
+    if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = isDebug ? "" : "center";
+    if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = isDebug ? "" : "900px";
     applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.runCountSelect, isDebug);
@@ -308,6 +329,8 @@
   populateModelQualitySelect(els.imageModelQualitySelect);
   populateModelQualitySelect(els.apImageModelQualitySelect);
   wireOptionPicker(els.imageModelQualityPicker, els.imageModelQualitySelect);
+  wireOptionPicker(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
+  wireOptionPicker(els.apRunCountPicker, els.apRunCountSelect);
 
   function applyModelQualityChange(value) {
     const opt = findModelQualityOption(value);
@@ -441,6 +464,11 @@
     if (els.backToUploadBtn) els.backToUploadBtn.disabled = disabled;
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
+        // #ap-recipe-picker just opens a read-only view of the recipe list
+        // (#ap-recipe-modal) -- unlike the other controls here, it doesn't
+        // change anything about the pending/in-flight request, so it should
+        // stay clickable even while the rest of the panel is disabled.
+        if (el === els.apRecipePicker) return;
         el.disabled = disabled;
       });
     }
@@ -496,12 +524,42 @@
     }
   }
 
+  // #ap-options-card-inline (模型/生成張數 pills) moves below .compare-card
+  // (inside #results-canvas-col) while the panel is open, flattening into
+  // the same plain horizontal pill row the upload page uses -- .ap-col-right
+  // (its normal home, still used as-is on the processing screen, which has
+  // no .compare-card to move below) squeezes it into a narrow column instead.
+  // Called before moveRunTabsRowTo so it lands directly under the photo.
+  function moveOptionsCardTo(container) {
+    if (!els.apOptionsCardInline || !container) return;
+    if (els.apOptionsCardInline.parentElement !== container) {
+      container.appendChild(els.apOptionsCardInline);
+    }
+  }
+
+  function restoreOptionsCardHome() {
+    if (els.apOptionsCardHome && els.apOptionsCardInline.previousElementSibling !== els.apOptionsCardHome) {
+      els.apOptionsCardHome.after(els.apOptionsCardInline);
+    }
+  }
+
   function openInlineAnalysisPanel() {
     moveAnalysisPreviewTo(els.resultsAnalysisSlot);
+    // Before moveOptionsCardTo/moveRunTabsRowTo below -- setAnalysisPreviewDisabled
+    // re-enables via els.analysisPreview.querySelectorAll(...), which only
+    // finds #ap-options-card-inline's controls (incl. #inline-analysis-continue-btn)
+    // while that card is still nested inside #analysis-preview. Called after
+    // the move, it silently found nothing there anymore and those controls
+    // stayed disabled forever after the first disable/regenerate cycle.
+    setAnalysisPreviewDisabled(false);
+    moveOptionsCardTo(els.resultsCanvasCol);
     moveRunTabsRowTo(els.resultsCanvasCol);
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
+    // Moved out of #inline-analysis-actions (now lives at the end of
+    // #ap-options-card-inline) -- toggled alongside it here since it lost
+    // that shared parent's hidden gating.
+    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
     els.analysisPreview.hidden = false;
-    setAnalysisPreviewDisabled(false);
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     // Mirrored onto #results-body too -- #batch-sidebar's width split (see
     // styles.css) needs this state and isn't a descendant of #results-canvas-row.
@@ -514,6 +572,8 @@
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     els.analysisPreview.hidden = true;
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
+    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
+    restoreOptionsCardHome();
     restoreRunTabsRowHome();
   }
 
@@ -2325,6 +2385,18 @@
     if (els.errorModal) els.errorModal.hidden = true;
   }
 
+  // 修圖建議 overlay -- same open/close shape as the error modal above,
+  // just toggling #ap-recipe-modal's own hidden attribute. #ap-recipe-list
+  // is already populated by fillCheckList (results.js) whenever analysis
+  // renders; opening this modal doesn't need to re-render anything itself.
+  function openRecipeModal() {
+    if (els.apRecipeModal) els.apRecipeModal.hidden = false;
+  }
+
+  function closeRecipeModal() {
+    if (els.apRecipeModal) els.apRecipeModal.hidden = true;
+  }
+
   // "重新分析": wipe every record's analysis/edit state and re-run step 1
   // from scratch, same as the initial submit -- for when the recipe needs a
   // clean re-analyze rather than a manual revise.
@@ -2859,15 +2931,17 @@
     procVisual.style.height = "";
     clearContinueWait();
     // If the last thing the user did was an inline analysis review (single or
-    // batch), #analysis-preview and #run-tabs-row are currently on loan inside
-    // the results section (#results-analysis-slot / #results-canvas-col) --
-    // move them back to the processing section before the next photo's
-    // analyze tries to show #analysis-preview there, or it renders invisibly
-    // inside the now-hidden results section instead.
+    // batch), #analysis-preview, #ap-options-card-inline, and #run-tabs-row
+    // are currently on loan inside the results section (#results-analysis-slot
+    // / #results-canvas-col) -- move them back to the processing section
+    // before the next photo's analyze tries to show #analysis-preview there,
+    // or it renders invisibly inside the now-hidden results section instead.
     restoreAnalysisPreviewHome();
+    restoreOptionsCardHome();
     restoreRunTabsRowHome();
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
+    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of
@@ -2945,8 +3019,17 @@
       if (e.target.dataset.close) closeErrorModal();
     });
   }
+  if (els.apRecipePicker) els.apRecipePicker.addEventListener("click", openRecipeModal);
+  if (els.apRecipeModalClose) els.apRecipeModalClose.addEventListener("click", closeRecipeModal);
+  if (els.apRecipeModal) {
+    els.apRecipeModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeRecipeModal();
+    });
+  }
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && els.errorModal && !els.errorModal.hidden) closeErrorModal();
+    if (e.key !== "Escape") return;
+    if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
+    if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);

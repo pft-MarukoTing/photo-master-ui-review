@@ -391,6 +391,12 @@ a { text-decoration: none; color: inherit; }
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 10px;
+  /* Mostly matters once moveOptionsCardTo (app.js) relocates this directly
+     under .compare-card, which has no gap of its own with its new siblings
+     -- harmless in its normal .ap-col-right home too, where it just adds a
+     little space below the (invisible, zero-height) #ap-options-card-home
+     anchor. */
+  margin-top: 16px;
 }
 .option-pill-group {
   display: flex;

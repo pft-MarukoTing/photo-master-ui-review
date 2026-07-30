@@ -259,6 +259,12 @@
       color: #fff;
       box-shadow: var(--shadow-accent);
     }
+    /* Pushes #inline-analysis-continue-btn to the far right of
+       .options-card-inline's otherwise plain flex-start pill row, instead
+       of just trailing right after the 生成張數 pill with the row's own gap. */
+    .options-card-inline .analysis-preview-action-right {
+      margin-left: auto;
+    }
     .analysis-preview-action-right:hover {
       box-shadow: 0 14px 36px rgba(168,85,247,.34);
       transform: translateY(-1px);
@@ -305,55 +311,14 @@
       padding-top: 16px;
     }
 
-    /* 修圖風格選項 + 補充指令 (left) alongside image quality/model/RUN +
-       the inline continue button (right). align-items:stretch (rather than
-       flex-start) makes both columns span the row's full height -- ap-col-left
-       is normally the taller one (style toggle + a multi-line textarea), so
-       ap-col-right's own content is bottom-aligned within its stretched box
-       via justify-content:flex-end, and the border-left divider between them
-       (like the row-1/row-2 divider above, but vertical) runs the row's full
-       height instead of stopping wherever ap-col-right's own content ends. */
-    .ap-row-columns {
-      display: flex;
-      align-items: stretch;
-    }
-    .ap-col-left {
-      flex: 1;
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      padding-right: 24px;
-    }
-    .ap-col-right {
-      /* Wide enough that the merged 模型 select (now including quality,
-         e.g. "GPT Image 2 · Medium") has room to show its full text instead
-         of being squeezed by the options-card's fixed width -- was 324px,
-         tuned back when this column only ever needed to fit the shorter
-         bare model name. */
-      width: 380px;
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      gap: 16px;
-      padding-left: 24px;
-      border-left: 1px solid var(--border);
-    }
-    /* Container query (not a viewport media query) -- now that the results
-       page can size this panel down to 30-35% of the row (see .results-body
-       batch-mode/single-mode splits in styles.css), a wide *viewport* no
-       longer implies a wide *panel*; .ap-col-right's fixed 380px alone can
-       leave .ap-col-left a sliver a few px wide regardless of viewport size. */
-    @container ap-panel (max-width: 700px) {
-      .ap-row-columns { flex-direction: column; }
-      .ap-col-right {
-        width: 100%;
-        padding-left: 0;
-        border-left: none;
-        border-top: 1px solid var(--border);
-        padding-top: 16px;
-      }
+    /* #ap-options-prompt (補充指令) is #ap-options-card-inline's own last
+       child now (see markup comment there) -- flex-basis:100% forces it onto
+       its own full-width line below the pill row instead of wrapping in
+       among the pills, since .options-card-inline is otherwise a plain
+       flex-wrap row. */
+    .options-card-inline > .ap-options-prompt {
+      flex-basis: 100%;
+      margin-top: 6px;
     }
 
     .ap-options-toggle > summary {
@@ -447,6 +412,27 @@
       box-shadow: 0 16px 40px rgba(0,0,0,.55);
       animation: fadeUp .2s ease both;
     }
+    /* Holds a whole .ap-style-row (4 pill triggers) instead of a single
+       radio list -- the generic 320px cap above would wrap it too
+       aggressively. */
+    /* Narrow + single-column (not the default wrapped row) -- keeps this
+       popup's own footprint close to its trigger's own width instead of
+       extending out over sibling pills to the right in
+       .options-card-inline's row (a plain left:0 floating panel much wider
+       than its trigger would sit right on top of them, blocking clicks). */
+    .ap-style-item .ap-style-options-panel {
+      width: 200px;
+      max-width: 200px;
+    }
+    .ap-style-options-panel .ap-style-row {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .ap-style-options-panel .ap-style-item { width: 100%; }
+    .ap-style-options-panel .ap-style-trigger { width: 100%; }
+    /* #ap-recipe-picker is a plain <button> (opens #ap-recipe-modal, a real
+       overlay window), not a <details> -- no dropdown to hint at. */
+    .ap-recipe-trigger::after { content: none; }
     .ap-analysis-body {
       display: flex;
       flex-direction: column;
@@ -1277,13 +1263,6 @@
               </svg>
               <span>取消</span>
             </button>
-            <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button">
-              <span>重新處理</span>
-              <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                  stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
           </div>
 
           <div class="ap-row ap-summary-row">
@@ -1295,104 +1274,186 @@
           </div>
 
           <div class="ap-row">
-            <label class="ap-label">修圖建議</label>
-            <div class="step-list-frame">
-              <ul id="ap-recipe-list" class="step-inline-list"></ul>
-            </div>
-          </div>
-
-          <details class="ap-row ap-options-toggle" id="ap-options-toggle">
-            <summary class="ap-label">修圖風格選項</summary>
-
-            <div class="ap-style-row">
-              <details class="ap-style-item" name="ap-style-group" id="ap-group-pose" hidden>
-                <summary class="ap-style-trigger">
-                  <span class="ap-style-name">Pose</span>
-                  <span class="ap-style-value">Default</span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul id="ap-pose-list" class="step-inline-list"></ul>
-                </div>
-              </details>
-              <details class="ap-style-item" name="ap-style-group" id="ap-group-angle" hidden>
-                <summary class="ap-style-trigger">
-                  <span class="ap-style-name">Angle</span>
-                  <span class="ap-style-value">Default</span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul id="ap-angle-list" class="step-inline-list"></ul>
-                </div>
-              </details>
-              <details class="ap-style-item" name="ap-style-group">
-                <summary class="ap-style-trigger">
-                  <span class="ap-style-name">Lighting</span>
-                  <span class="ap-style-value">Default</span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul id="ap-lighting-list" class="step-inline-list"></ul>
-                </div>
-              </details>
-              <details class="ap-style-item" name="ap-style-group">
-                <summary class="ap-style-trigger">
-                  <span class="ap-style-name">Size</span>
-                  <span class="ap-style-value">Default</span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul id="ap-size-list" class="step-inline-list"></ul>
-                </div>
-              </details>
-            </div>
-          </details>
-
-          <div class="ap-row ap-row-columns">
-            <div class="ap-col-left">
-              <div class="form-field ap-options-prompt">
-                <label class="ap-label" for="prompt">補充指令</label>
-                <textarea id="prompt" class="field-ta" rows="4"
-                  placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
-              </div>
-            </div>
-
-            <div class="ap-col-right">
-              <div class="options-card">
-                <div class="option-row">
-                  <div class="option-text option-text-auto">
-                    <span class="option-label">模型</span>
+            <!-- Stable anchor -- moved below .compare-card (inside
+                 #results-canvas-col) while the inline results-page panel is
+                 open, same relocation pattern as #run-tabs-row/
+                 #analysis-preview -- see moveOptionsCardTo/
+                 restoreOptionsCardHome in app.js. On the processing screen
+                 (no .compare-card to move below) it just stays here. -->
+            <div id="ap-options-card-home"></div>
+            <!-- Same icon+popover pill pattern as the upload page's option
+                 pickers (.ap-style-item/.ap-style-trigger/.ap-style-panel,
+                 wireOptionPicker in app.js) instead of .options-card's
+                 plain label/select rows. #ap-options-prompt (below) was
+                 previously a separate .ap-col-left column beside this one --
+                 now it's this element's own last child (flex-basis:100% forces
+                 it onto its own full-width line), so it travels along
+                 automatically whenever moveOptionsCardTo relocates this
+                 whole element, instead of being left behind inside
+                 #analysis-preview. -->
+            <div class="options-card-inline" id="ap-options-card-inline">
+                <!-- Was a plain always-visible .ap-row (label + checklist),
+                     then briefly a popover pill -- now opens #ap-recipe-modal
+                     instead (see openRecipeModal/closeRecipeModal in app.js),
+                     a real overlay window instead of a small anchored panel.
+                     #ap-recipe-list itself (still a fillCheckList-populated
+                     .step-inline-list) just moved into that modal, unchanged
+                     otherwise. -->
+                <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-recipe-picker">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                      <path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value">修圖建議</span>
+                </button>
+                <!-- Was a <details class="ap-row"> that expanded inline
+                     (pushing everything below it down); now a popover pill
+                     like the others in this row, sharing their
+                     name="ap-result-option-picker" exclusive group instead
+                     of its own separate one -- opening this closes 模型/
+                     生成張數's popups and vice versa. The 4 Pose/Angle/
+                     Lighting/Size pickers inside are unchanged, still their
+                     own nested name="ap-style-group" exclusive popovers. -->
+                <details class="ap-style-item" name="ap-result-option-picker" id="ap-options-toggle">
+                  <summary class="ap-style-trigger">
+                    <span class="option-pill-icon">
+                      <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                        <path d="M4 6h9M17 6h3M4 12h4M11 12h9M4 18h12M19 18h1"
+                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="13" cy="6" r="2" fill="currentColor"/>
+                        <circle cx="8" cy="12" r="2" fill="currentColor"/>
+                        <circle cx="16" cy="18" r="2" fill="currentColor"/>
+                      </svg>
+                    </span>
+                    <span class="ap-style-value">修圖風格選項</span>
+                  </summary>
+                  <div class="step-list-frame ap-style-panel ap-style-options-panel">
+                    <div class="ap-style-row">
+                      <details class="ap-style-item" name="ap-style-group" id="ap-group-pose" hidden>
+                        <summary class="ap-style-trigger">
+                          <span class="ap-style-name">Pose</span>
+                          <span class="ap-style-value">Default</span>
+                        </summary>
+                        <div class="step-list-frame ap-style-panel">
+                          <ul id="ap-pose-list" class="step-inline-list"></ul>
+                        </div>
+                      </details>
+                      <details class="ap-style-item" name="ap-style-group" id="ap-group-angle" hidden>
+                        <summary class="ap-style-trigger">
+                          <span class="ap-style-name">Angle</span>
+                          <span class="ap-style-value">Default</span>
+                        </summary>
+                        <div class="step-list-frame ap-style-panel">
+                          <ul id="ap-angle-list" class="step-inline-list"></ul>
+                        </div>
+                      </details>
+                      <details class="ap-style-item" name="ap-style-group">
+                        <summary class="ap-style-trigger">
+                          <span class="ap-style-name">Lighting</span>
+                          <span class="ap-style-value">Default</span>
+                        </summary>
+                        <div class="step-list-frame ap-style-panel">
+                          <ul id="ap-lighting-list" class="step-inline-list"></ul>
+                        </div>
+                      </details>
+                      <details class="ap-style-item" name="ap-style-group">
+                        <summary class="ap-style-trigger">
+                          <span class="ap-style-name">Size</span>
+                          <span class="ap-style-value">Default</span>
+                        </summary>
+                        <div class="step-list-frame ap-style-panel">
+                          <ul id="ap-size-list" class="step-inline-list"></ul>
+                        </div>
+                      </details>
+                    </div>
                   </div>
-                  <select id="ap-image-model-quality" class="quality-select model-quality-select"></select>
+                </details>
+                <div class="option-pill-group">
+                  <span class="option-pill-label">模型</span>
+                  <details class="ap-style-item" name="ap-result-option-picker" id="ap-image-model-quality-picker">
+                    <summary class="ap-style-trigger">
+                      <span class="option-pill-icon">
+                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                          <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                      </span>
+                      <span class="ap-style-value"></span>
+                    </summary>
+                    <div class="step-list-frame ap-style-panel">
+                      <ul class="step-inline-list"></ul>
+                    </div>
+                    <select id="ap-image-model-quality" class="quality-select model-quality-select" hidden></select>
+                  </details>
                 </div>
                 <div id="ap-run-count-wrap" hidden>
-                  <div class="option-divider"></div>
-                  <div class="option-row">
-                    <div class="option-text">
-                      <span class="option-label">生成張數</span>
-                    </div>
-                    <select id="ap-run-count" class="quality-select">
-                      <option value="1" selected>1</option>
-                      <option value="2">2</option>
-                      <option value="3">3</option>
-                      <option value="4">4</option>
-                      <option value="5">5</option>
-                      <option value="6">6</option>
-                      <option value="7">7</option>
-                      <option value="8">8</option>
-                      <option value="9">9</option>
-                      <option value="10">10</option>
-                      <option value="11">11</option>
-                      <option value="12">12</option>
-                      <option value="13">13</option>
-                      <option value="14">14</option>
-                      <option value="15">15</option>
-                      <option value="16">16</option>
-                      <option value="17">17</option>
-                      <option value="18">18</option>
-                      <option value="19">19</option>
-                      <option value="20">20</option>
-                    </select>
+                  <div class="option-pill-group">
+                    <span class="option-pill-label">生成張數</span>
+                    <details class="ap-style-item" name="ap-result-option-picker" id="ap-run-count-picker">
+                      <summary class="ap-style-trigger">
+                        <span class="option-pill-icon">
+                          <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                            <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                          </svg>
+                        </span>
+                        <span class="ap-style-value"></span>
+                      </summary>
+                      <div class="step-list-frame ap-style-panel">
+                        <ul class="step-inline-list"></ul>
+                      </div>
+                      <select id="ap-run-count" class="quality-select" hidden>
+                        <option value="1" selected>1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                        <option value="6">6</option>
+                        <option value="7">7</option>
+                        <option value="8">8</option>
+                        <option value="9">9</option>
+                        <option value="10">10</option>
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                        <option value="14">14</option>
+                        <option value="15">15</option>
+                        <option value="16">16</option>
+                        <option value="17">17</option>
+                        <option value="18">18</option>
+                        <option value="19">19</option>
+                        <option value="20">20</option>
+                      </select>
+                    </details>
                   </div>
                 </div>
+                <!-- Moved out of #inline-analysis-actions (which keeps just
+                     the cancel button) -- sits at the right end of this pill
+                     row instead, pushed there via margin-left:auto since
+                     it's otherwise a plain flex-start row. Own hidden
+                     attribute now (was gated by its old parent's) --
+                     see openInlineAnalysisPanel/closeInlineAnalysisPanel/
+                     resetApp in app.js, same places that used to toggle
+                     #inline-analysis-actions alone. -->
+                <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
+                  <span>Run</span>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                    <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                      stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
+                <!-- flex-basis:100% (see .options-card-inline .ap-options-prompt
+                     in styles) forces this onto its own full-width line below
+                     the pill row instead of wrapping in among them. -->
+                <div class="form-field ap-options-prompt">
+                  <label class="ap-label" for="prompt">補充指令</label>
+                  <textarea id="prompt" class="field-ta" rows="4"
+                    placeholder="例如：不要改變主體，只修正光線偏暗、白平衡偏黃，讓照片更像高質感品牌官網可用的版本。"></textarea>
+                </div>
               </div>
-            </div>
           </div>
 
           <details class="ap-row ap-options-toggle" id="ap-analysis-toggle" hidden>
@@ -1871,6 +1932,22 @@
     </div>
     <p id="error-modal-file" class="error-modal-file"></p>
     <p id="error-modal-msg" class="error-modal-msg"></p>
+  </div>
+</div>
+
+<!-- 修圖建議 overlay: opened by #ap-recipe-picker (see openRecipeModal/
+     closeRecipeModal in app.js) -- same backdrop+box+close pattern as
+     #error-modal above, just holding the recipe checklist instead. -->
+<div id="ap-recipe-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-recipe-modal-title">
+    <div class="error-modal-hdr">
+      <span id="ap-recipe-modal-title">修圖建議</span>
+      <button id="ap-recipe-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div class="step-list-frame">
+      <ul id="ap-recipe-list" class="step-inline-list"></ul>
+    </div>
   </div>
 </div>
 
