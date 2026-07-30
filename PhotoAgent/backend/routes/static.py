@@ -1,8 +1,32 @@
+import hashlib
 import os
 
 from flask import Blueprint, current_app, jsonify, send_from_directory
 
+from aiserver_utils.pf_redis import pf_redis_client
+
 static_bp = Blueprint("static_bp", __name__)
+
+# Matches server.py's WORKER_VERSION_KEY -- the worker container publishes its
+# version here on startup, since it's a separate process/container from this
+# Flask app with no other shared state.
+WORKER_VERSION_KEY = "photoagent:version:worker"
+
+
+def _frontend_version(frontend_dir):
+    """Fingerprint frontend/ so an edited file is detected without restarting
+    this process -- static files are served straight off disk, with no build
+    step or cache-busted filename to version them otherwise."""
+    mtimes = []
+    for root, _dirs, files in os.walk(frontend_dir):
+        for name in files:
+            path = os.path.join(root, name)
+            try:
+                mtimes.append((os.path.relpath(path, frontend_dir), os.path.getmtime(path)))
+            except OSError:
+                continue
+    mtimes.sort()
+    return hashlib.sha1(repr(mtimes).encode()).hexdigest()[:12]
 
 
 @static_bp.get("/")
@@ -15,6 +39,22 @@ def config():
     return jsonify({
         "debugUi": current_app.config.get("DEBUG_UI", False),
         "aipocDefault": current_app.config.get("AIPOC_DEFAULT", False)
+    })
+
+
+@static_bp.get("/api/version")
+def version():
+    try:
+        worker_version = pf_redis_client.get(WORKER_VERSION_KEY)
+        if isinstance(worker_version, bytes):
+            worker_version = worker_version.decode("utf-8")
+    except Exception:
+        # Redis hiccup shouldn't take down frontend-only update detection.
+        worker_version = None
+
+    return jsonify({
+        "frontend": _frontend_version(current_app.config["FRONTEND_DIR"]),
+        "worker": worker_version,
     })
 
 

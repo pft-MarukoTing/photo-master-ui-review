@@ -26,6 +26,14 @@ ENGINE_WORKER_NUM = max(int(os.getenv('ENGINE_WORKER_NUM', '1')), 1)
 
 MSG_ID_QUEUE = os.environ['REDIS_MSG_QUEUE'].split(",")[0]
 
+# Read by backend/routes/static.py's /api/version so the browser can detect a
+# worker deploy even though this process and the Flask app are separate
+# containers with no shared memory -- Redis is the only channel between them.
+# Falls back to a per-process-start value so a plain container restart (no
+# code change) still surfaces as "updated" without requiring a manual bump.
+WORKER_VERSION_KEY = 'photoagent:version:worker'
+WORKER_VERSION = os.getenv('WORKER_VERSION') or '%s-%d' % (ENGINE_VERSION, int(time.time()))
+
 MONITOR_DST_DIR = './tmp'
 os.makedirs(MONITOR_DST_DIR, exist_ok=True)
 
@@ -73,6 +81,12 @@ def init():
     except Exception as e:
         logger.error('', "Fail to connect to redis cluster: %s" % str(e))
         raise e
+
+    try:
+        redis_conn.set(WORKER_VERSION_KEY, WORKER_VERSION)
+        logger.info('', "Published worker version: %s" % WORKER_VERSION)
+    except Exception as e:
+        logger.error('', "Failed to publish worker version: %s" % str(e))
 
     heart_beat_timeout = 60000
     heart_beat = HeartBeatV2(timeout_after_ms=heart_beat_timeout)

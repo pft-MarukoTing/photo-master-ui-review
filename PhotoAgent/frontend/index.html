@@ -656,6 +656,26 @@
       border-radius: var(--radius); box-shadow: var(--shadow-lg);
     }
     .download-progress-toast[hidden] { display: none; }
+
+    /* Shown by update-check.js when /api/version reports a newer frontend or
+       worker build than the one this page loaded with. */
+    .update-banner {
+      position: fixed; left: 50%; top: 16px; transform: translateX(-50%);
+      z-index: 950;
+      display: flex; align-items: center; gap: 14px;
+      max-width: calc(100vw - 32px);
+      padding: 10px 16px;
+      background: var(--card); border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm); box-shadow: var(--shadow-lg);
+    }
+    .update-banner[hidden] { display: none; }
+    .update-banner-text { font-size: 13px; color: var(--text); }
+    .update-banner-refresh {
+      flex-shrink: 0; padding: 6px 14px; border: none; border-radius: 999px;
+      background: var(--mv-grad); color: var(--n100); font-size: 13px; font-weight: 600;
+      cursor: pointer;
+    }
+    .update-banner-refresh:hover { opacity: .9; }
     .download-progress-label { font-size: 13px; color: var(--text-2); text-align: center; }
     .download-progress-track {
       height: 6px; border-radius: 999px; background: var(--card-2); overflow: hidden;
@@ -1740,7 +1760,15 @@
   </div>
 </div>
 
+<!-- Shown by update-check.js when the server reports a newer frontend or
+     worker build than the one this page loaded with. -->
+<div id="update-banner" class="update-banner" hidden>
+  <span id="update-banner-text" class="update-banner-text">網站有新版本，請重新整理頁面以取得最新內容。</span>
+  <button type="button" id="update-banner-refresh" class="update-banner-refresh">重新整理</button>
+</div>
+
 <script src="config.js"></script>
+<script src="update-check.js"></script>
 <script src="dom.js"></script>
 <script src="image-tools.js"></script>
 <script src="zip-tool.js"></script>

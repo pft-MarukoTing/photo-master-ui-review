@@ -63,7 +63,21 @@ window.PhotoAgentApi = (() => {
     return data.job_id || data.task_id;
   }
 
+  // Tells update-check.js a job is being waited on -- see its beginJob/endJob
+  // for why: refreshing away from an in-flight job mid-poll would abandon
+  // jobId (only ever held in an in-memory JS variable) with no way to
+  // recover the result, so an update banner found mid-job waits for this to
+  // clear rather than showing immediately.
   async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000, finalCheckMs = 1 * 60 * 1000, onStatus } = {}) {
+    window.PhotoAgentUpdateCheck?.beginJob();
+    try {
+      return await pollJobStatusInner(jobId, { path, intervalMs, timeoutMs, finalCheckMs, onStatus });
+    } finally {
+      window.PhotoAgentUpdateCheck?.endJob();
+    }
+  }
+
+  async function pollJobStatusInner(jobId, { path, intervalMs, timeoutMs, finalCheckMs, onStatus }) {
     const deadline = Date.now() + timeoutMs;
     // AIPoC task_ids contain "/" and "+" and must be percent-encoded, or the
     // request either 404s or gets misrouted.
