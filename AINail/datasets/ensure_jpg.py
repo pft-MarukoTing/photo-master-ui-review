@@ -3,11 +3,14 @@ import os
 from PIL import Image
 
 
+CANDIDATE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
 def find_candidates(root_dir):
     for dirpath, _, filenames in os.walk(root_dir):
         for fname in filenames:
             stem, ext = os.path.splitext(fname)
-            if ext.lower() == ".jpg" or ext.lower() == ".jpeg":
+            if ext.lower() in CANDIDATE_EXTS:
                 yield os.path.join(dirpath, fname), stem, ext
 
 
@@ -42,7 +45,7 @@ def fix(path, stem):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Verify every *.jpg/*.jpeg file under a directory is a real "
+        description="Verify every *.jpg/*.jpeg/*.png/*.webp file under a directory is a real "
         "JPEG with a lowercase .jpg extension; optionally fix violations."
     )
     parser.add_argument("input_dir", type=str, help="directory to scan recursively")
