@@ -342,6 +342,15 @@
       repositionPanel();
     });
     window.addEventListener("resize", () => { if (details.open) repositionPanel(); });
+    // Native <details> only closes on picking an option (the "change"
+    // listener above sets details.open = false itself) or re-clicking its
+    // own summary -- clicking anywhere else on the page left it sitting
+    // open. details.contains(e.target) covers both the summary and the
+    // panel/list (both live inside <details>), so only a genuine outside
+    // click closes it.
+    document.addEventListener("click", (e) => {
+      if (details.open && !details.contains(e.target)) details.open = false;
+    });
   }
 
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
