@@ -1,6 +1,58 @@
 import json
+import logging
 
 from config import STYLE_OPTION_INSTRUCTIONS, STYLE_OPTION_LABELS, STYLE_OPTION_VALUE_LABELS
+
+logger = logging.getLogger(__name__)
+
+
+# ── Correction axes ───────────────────────────────────────────────────────────
+#
+# The vocabulary for correction_axes: which property of the photograph a
+# correction_plan item moves. Defined here, above ANALYSIS_INSTRUCTION, because
+# it has to be the single source for three things that must not drift apart --
+# the vocabulary the analysis model is given, the axes the edit prompt gates on
+# (CORRECTION_AXES). An
+# axis the analysis model invents but the edit prompt does not know is dropped
+# silently, which is exactly the failure a hand-maintained second copy invites.
+#
+# The description doubles as the model's definition of the axis, so it has to be
+# specific enough to tag by.
+AXIS_DEFINITIONS = {
+    "exposure": "global brightness",
+    "shadow": "shadow density / detail in dark areas",
+    "highlight": "bright-end level and rolloff",
+    "contrast": "tonal separation, micro-contrast, depth",
+    "white_balance": "warm/cool character, color cast",
+    "saturation": "color intensity",
+    "skin": "skin tone or complexion specifically",
+    "sharpen": "acuity, clarity, noise",
+    "distraction": "toning down, blurring, or cleaning up scene elements",
+    "crop": "reframing, straightening",
+    "other": "anything the list above does not cover",
+}
+
+CORRECTION_AXES = tuple(AXIS_DEFINITIONS)
+
+_AXIS_VOCABULARY = ", ".join(f'"{axis}" ({desc})' for axis, desc in AXIS_DEFINITIONS.items())
+
+# Near-misses the analysis model actually produces despite being handed the
+# vocabulary -- "noise" showed up on 3 of 6 photos in the first batch, tagging
+# denoise items that belong to "sharpen". Left unmapped it silently breaks the
+# kept-axis subtraction in resolve_rejected_axes (an approved denoise item fails
+# to protect `sharpen`, so a rejected sharpen item locks it anyway and the prompt
+# contradicts itself). Cheaper and more robust to absorb the synonyms than to
+# keep tightening the instruction.
+AXIS_ALIASES = {
+    "noise": "sharpen", "denoise": "sharpen", "clarity": "sharpen", "sharpness": "sharpen",
+    "brightness": "exposure", "exposures": "exposure",
+    "shadows": "shadow", "highlights": "highlight",
+    "warmth": "white_balance", "color_temperature": "white_balance", "colour_balance": "white_balance",
+    "saturation_level": "saturation", "color": "saturation",
+    "skin_tone": "skin", "complexion": "skin",
+    "distractions": "distraction", "cleanup": "distraction",
+    "cropping": "crop", "framing": "crop", "alignment": "crop", "straighten": "crop",
+}
 
 
 def style_option_entries(analysis):
@@ -115,7 +167,7 @@ Return exactly this JSON shape:
   },
   "tool_strategy": "哪些由本機裁切、曝光、白平衡、對比處理，哪些才交給 AI。",
   "lighting_strategy": "光線與明暗層次調整方向。",
-  "memory_color_strategy": "膚色、天空、綠色、食物、材質等記憶色策略。",
+  "memory_color_strategy": "膚色、天空、綠色、食物、材質等記憶色策略。膚色以還原真實為目標，不要以「更暖、更紅潤、更健康」為方向。",
   "restoration_needs": ["可由傳統影像處理改善的項目。"],
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
@@ -159,17 +211,29 @@ Return exactly this JSON shape:
     "reasons": []
   },
   "correction_plan": ["1 到 6 項，實際會做的具體技術調整，供編修模型執行；例如「提升整體曝光 0.3 EV 並拉回高光」。只列這張照片真正需要的項目；若某個面向已經夠好就不要列，不要為了湊數而發明問題。照片本來就平衡時，只列一項最必要的即可。"],
+  "correction_axes": [["exposure", "highlight"]],
+  "correction_inverse": ["與 correction_plan 一一對應：若使用者取消勾選這一項，改成告訴編修模型「維持原樣」的說法；例如對應上例可寫「維持原圖的整體曝光與高光亮度，不要提亮，也不要壓暗或改變高光的層次」。"],
   "retouch_recipe": ["與 correction_plan 一一對應、順序相同、項數相同，但改寫成給使用者看的簡潔白話版本；例如對應上例可寫「讓照片更明亮」。"],
   "preserve_rules": ["必須保留的內容。"]
 }
 
-correction_plan and retouch_recipe must describe the exact same set of adjustments, in the same order, one-to-one. Write correction_plan first as the precise technical plan the editing model will follow; then write retouch_recipe as a simplified, user-facing paraphrase of each corresponding correction_plan item -- not a separate or reworded set of steps.
+correction_plan, correction_axes, correction_inverse, and retouch_recipe must describe the exact same set of adjustments, in the same order, one-to-one -- same number of entries in all four. Write correction_plan first as the precise technical plan the editing model will follow; then write retouch_recipe as a simplified, user-facing paraphrase of each corresponding correction_plan item -- not a separate or reworded set of steps.
 
+correction_inverse[i] is what the editing model will be told instead if the user unchecks correction_plan[i] on the review screen. Write it as a positive preservation instruction -- name what to reproduce from the original -- rather than as a prohibition, and hold it to the EXACT same scope as the item it inverts:
+- If the item only brightens the subject, the inverse pins the SUBJECT's brightness and says nothing about the rest of the frame. Pinning the whole frame there would suppress corrections the user did approve.
+- If the item bundles several changes, the inverse must cover every one of them.
+- Name the same region, element, or 整體 that the item named.
+- It has to stand on its own, because the editing model may be shown it without the original item next to it.
+This is the only thing standing between an unchecked item and the editing model carrying it out anyway -- the rest of this analysis still describes the problem the item was going to fix, and the editing model reads all of it. A vague inverse fails to prevent the change; an over-broad one suppresses work the user wanted.
+
+""" + f"""correction_axes[i] is the machine-readable tag set for correction_plan[i]: which properties of the photograph that item changes. Pick every axis the item actually moves, from exactly this vocabulary, and nothing else: {_AXIS_VOCABULARY}. Most items need one or two axes; use the narrowest set that is true. The example above shows an item that raises overall brightness and recovers the bright end, hence ["exposure", "highlight"]. These tags let the user's recipe choices switch the corresponding instructions off precisely, so an inaccurate tag causes the wrong part of the edit to be suppressed.
+""" + """
 Analysis responsibilities:
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
 - Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
+- Skin should read naturally in the finished photo -- pushed neither toward orange or ruddy red, nor toward yellow or sallow. In particular, do not write a correction_plan item whose goal is warmer, rosier, or healthier-looking skin; if skin does look wrong, name which direction it is off.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 
@@ -226,16 +290,206 @@ COLOR_CRAFT_DIRECTION = (
 )
 
 # Stopping condition, not a priority -- hence its own block at the very end of
-# the edit prompt rather than another numbered item. Each clause is a property
-# the model can actually verify, unlike "don't overdo it": (a)/(c) catch a color
-# cast, (b) catches the skin shift. Overlaps the person-only skin block on
-# purpose; that one is a detailed veto rule, this is a one-line check that runs
-# for every photo.
-COLOR_GRADE_CHECK = """Before finishing, verify the color grade:
-(a) surfaces that should be neutral -- white walls, white clothing, paper, grey concrete, overcast sky -- have not picked up a color tint;
-(b) skin sits inside its natural hue range, not orange, ruddy red, sallow yellow, or grey;
-(c) no single hue dominates the frame that was not dominant in the original.
-These three matter more than how strong the grade looks. The target is a photograph that looks well-lit and well-printed, not auto-enhanced, HDR-processed, or run through a warm filter."""
+# the edit prompt rather than another numbered item, and phrased as properties
+# the model can verify rather than "don't overdo it".
+#
+# Every clause compares against the original on purpose. An earlier version
+# mixed judgment types -- it asked whether surfaces "that should be neutral"
+# carried a tint, an absolute test -- and that misfired on photos whose grade is
+# deliberately cool: the model read the intentionally cool whites as a defect,
+# neutralized them, and warmed the whole frame. Same root cause as it desaturating
+# stained glass and lightening deep skin: with an external notion of "correct"
+# color it will edit toward that instead of toward a better rendering of this
+# photograph. One comparative rule covers those cases without having to enumerate
+# the subject matter they involve.
+COLOR_GRADE_CHECK = """Before finishing, compare your result against the original. The original defines what the colors are meant to be; your job is to render them better, not to change what they are:
+- a cool or warm character that was clearly deliberate is still there, pointing the same way;
+- what was vividly colored is at least as vivid; what was neutral is still neutral;
+- skin keeps each person's own depth and undertone, neither lightened nor flattened.
+Improving exposure, cleanliness, and separation is the work. Shifting the photograph's color character is not -- that reads as a filter rather than a finish."""
+
+
+# ── Rejected-axis gating ──────────────────────────────────────────────────────
+#
+# Dropping an unchecked item from correction_plan is not enough to stop the edit
+# model from making that change, because the same change is requested in several
+# other places the checkbox never touched: the analysis prose (aesthetic_diagnosis,
+# detected_issues, lighting_strategy, memory_color_strategy) still describes the
+# problem, the preset still asks for a good finish, and COLOR_CRAFT_DIRECTION /
+# COLOR_GRADE_CHECK ask for shadow opening, exposure work and highlight control
+# by name. One negative sentence loses that argument on volume.
+#
+# So each correction_plan item carries axis tags (correction_axes), and unchecking
+# it removes that axis's "do X" clauses from the light/color direction, the grade
+# check, and the two numbered priorities that ask for distraction cleanup and
+# horizon straightening. Removal is the whole job: saying what to preserve
+# instead is correction_inverse's, written per item by the analysis model so it
+# carries that item's scope (see _build_rejected_lines). Several axes -- skin,
+# sharpen, other -- gate nothing today and are kept in the vocabulary only
+# because the model reaches for them naturally; an axis that gates nothing costs
+# nothing.
+#
+# A wrong tag degrades to the pre-feature behavior rather than breaking: the
+# clause stays and correction_inverse still holds the line. The vocabulary lives
+# at the top of this file (AXIS_DEFINITIONS), since ANALYSIS_INSTRUCTION has to
+# hand the same list to the analysis model.
+
+# The light/color direction, decomposed so that with no rejected axis it
+# reassembles into COLOR_CRAFT_DIRECTION verbatim (asserted below) -- that text is
+# tuned, and a rewrite of the default path is not what this change is for.
+# (axis, clause) for the three craft clauses of sentence 1, in order.
+_CRAFT_CLAUSES = (
+    ("shadow", "open the shadows enough to reveal detail without flattening them"),
+    ("highlight", "hold the highlights so they roll off instead of clipping"),
+    ("contrast", "build depth through tonal separation between subject, midground, and background"),
+)
+_CRAFT_LEAD = "Improve the existing photograph the way a skilled colorist would"
+_CRAFT_LIGHT_FIRST = (
+    "Draw the image's presence primarily from light -- exposure, contrast placement, micro-contrast -- "
+    "and only secondarily from color"
+)
+_CRAFT_COLOR_TAIL = (
+    "a modest {allowed} adjustment is welcome where it helps, but it should refine the "
+    "palette the photograph already has rather than impose a new one."
+)
+
+
+def _join_clauses(clauses):
+    """Oxford-comma join, matching the hand-written original's punctuation."""
+    if len(clauses) == 1:
+        return clauses[0]
+    if len(clauses) == 2:
+        return f"{clauses[0]} and {clauses[1]}"
+    return ", ".join(clauses[:-1]) + f", and {clauses[-1]}"
+
+
+def build_color_craft_direction(rejected_axes=()):
+    rejected = set(rejected_axes or ())
+    craft = [clause for axis, clause in _CRAFT_CLAUSES if axis not in rejected]
+
+    sentences = []
+    if craft:
+        sentences.append(f"{_CRAFT_LEAD}: {_join_clauses(craft)}.")
+    else:
+        # All three tonal clauses rejected: keep the framing (retouch, not
+        # reinvention) but stop naming tonal work as the job.
+        sentences.append(f"{_CRAFT_LEAD}, within the preservation limits stated below.")
+
+    # "saturation or warmth" collapses to whichever of the two survives; with
+    # both rejected the color sentence goes away entirely.
+    allowed_color = [
+        label for axis, label in (("saturation", "saturation"), ("white_balance", "warmth"))
+        if axis not in rejected
+    ]
+    color_tail = _CRAFT_COLOR_TAIL.format(allowed=" or ".join(allowed_color)) if allowed_color else ""
+
+    if "exposure" not in rejected:
+        sentences.append(f"{_CRAFT_LIGHT_FIRST}; {color_tail}" if color_tail else f"{_CRAFT_LIGHT_FIRST}.")
+    elif color_tail:
+        sentences.append(color_tail[0].upper() + color_tail[1:])
+
+    return " ".join(sentences)
+
+
+# The default path must stay byte-identical to the tuned constant; the
+# decomposition above is easy to break with a stray comma otherwise.
+assert build_color_craft_direction() == COLOR_CRAFT_DIRECTION, "COLOR_CRAFT_DIRECTION decomposition drifted"
+
+# A clause tagged with an axis the vocabulary no longer has would never be gated.
+assert all(axis in CORRECTION_AXES for axis, _ in _CRAFT_CLAUSES), "unknown axis in _CRAFT_CLAUSES"
+
+
+# Same idea for the closing grade check: its last line names exposure and
+# cleanliness as "the work", which contradicts a rejection of those axes.
+_GRADE_CHECK_HEAD, _GRADE_CHECK_LAST = COLOR_GRADE_CHECK.rsplit("\n", 1)
+_GRADE_WORK_ITEMS = (("exposure", "exposure"), ("distraction", "cleanliness"), ("contrast", "separation"))
+assert all(axis in CORRECTION_AXES for axis, _ in _GRADE_WORK_ITEMS), "unknown axis in _GRADE_WORK_ITEMS"
+
+
+def build_color_grade_check(rejected_axes=()):
+    rejected = set(rejected_axes or ())
+    if not rejected.intersection(axis for axis, _ in _GRADE_WORK_ITEMS):
+        return COLOR_GRADE_CHECK
+    work = [label for axis, label in _GRADE_WORK_ITEMS if axis not in rejected]
+    opening = (
+        f"Improving {_join_clauses(work)} is the work."
+        if work else
+        "Rendering this photograph faithfully, within the preservation limits above, is the work."
+    )
+    return (
+        f"{_GRADE_CHECK_HEAD}\n{opening} Shifting the photograph's color character is not "
+        "-- that reads as a filter rather than a finish."
+    )
+
+
+def resolve_rejected_axes(analysis):
+    """Axes the user switched off, as tagged on the unchecked correction_plan items.
+
+    An axis only counts as rejected when NO kept item still needs it: a kept
+    "darken the busy background" and a rejected "brighten the whole frame" can
+    both carry `contrast`, and locking contrast to the original there would break
+    the correction the user did approve. Falls back to an empty list whenever the
+    tags are missing or untrustworthy, which leaves the previous behavior --
+    rejected item text only -- intact.
+    """
+    rejected = _axis_set(analysis.get("rejected_axes"))
+    if not rejected or not _axes_aligned(analysis):
+        return []
+    kept = _axis_set(analysis.get("correction_axes"))
+    # An unrecognized tag on a KEPT item is not symmetric with one on a rejected
+    # item: unknown rejected axes simply fall out of the CORRECTION_AXES loop
+    # below, but an unknown kept axis means an approved correction has silently
+    # lost its ability to protect itself, and we cannot tell whether it overlaps
+    # something being rejected. Give up on clause removal for this edit rather
+    # than emit a prompt that forbids what it also asks for -- the per-item
+    # correction_inverse text still holds the line, it just isn't reinforced.
+    unknown_kept = kept - set(CORRECTION_AXES)
+    if unknown_kept:
+        logger.warning(
+            "approved corrections carry unrecognized axes %s; skipping axis gating for this edit "
+            "(add them to AXIS_DEFINITIONS or AXIS_ALIASES)", sorted(unknown_kept),
+        )
+        return []
+    return [axis for axis in CORRECTION_AXES if axis in rejected and axis not in kept]
+
+
+def _axes_aligned(analysis):
+    """Whether correction_axes really is one-to-one with correction_plan.
+
+    The analysis prompt demands it, but this is LLM output, and the frontend maps
+    a recipe checkbox to its axes purely by list index -- a length mismatch means
+    unchecking item 2 would suppress item 3's axes, which is worse than not using
+    the tags at all. Checked after the frontend has already split both lists, so
+    the test is that each axis list still matches its text list.
+    """
+    for axes_key, text_key in (("correction_axes", "correction_plan"),
+                               ("rejected_axes", "rejected_corrections")):
+        axes_len, text_len = len(analysis.get(axes_key) or []), len(analysis.get(text_key) or [])
+        if axes_len != text_len:
+            logger.warning(
+                "correction_axes not aligned with correction_plan (%s=%d, %s=%d); "
+                "ignoring axis tags for this edit", axes_key, axes_len, text_key, text_len,
+            )
+            return False
+    return True
+
+
+def _axis_set(value):
+    """Flatten the ["exposure", ["exposure", "highlight"]] shapes into a set.
+
+    correction_axes is a list-of-lists per the schema, rejected_axes a flat list
+    from the frontend, and a model that ignores the nesting sends bare strings --
+    all three normalize here so callers never have to care. Synonyms are folded
+    to their canonical axis via AXIS_ALIASES; anything still unrecognized is kept
+    as-is so callers can notice it rather than have it vanish.
+    """
+    axes = set()
+    for entry in value or []:
+        for axis in ([entry] if isinstance(entry, str) else (entry or [])):
+            if isinstance(axis, str) and axis.strip():
+                name = axis.strip().lower()
+                axes.add(AXIS_ALIASES.get(name, name))
+    return axes
 
 
 def build_user_instruction_review_prompt(user_direction, analysis):
@@ -283,6 +537,35 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
     return head + schema
 
 
+def _build_rejected_lines(analysis, rejected_corrections):
+    """(lines, has_inverse): each rejected item, with its preservation instruction.
+
+    The instruction is correction_inverse, written by the analysis model next to
+    the item it inverts, so it carries that item's scope: "brighten the subject"
+    inverts to pinning the SUBJECT's brightness. A generic per-axis rule would
+    have to say "keep the photograph's global exposure" and would suppress a
+    global lift the user never objected to.
+
+    Without it -- an analysis from before the field existed, or a model that
+    skipped it -- the items go in as bare text, which is what the negative block
+    said before correction_inverse and still beats emitting a mismatched pairing.
+    """
+    inverses = analysis.get("rejected_preserve") or []
+    if len(inverses) != len(rejected_corrections):
+        if inverses:
+            logger.warning(
+                "rejected_preserve does not match rejected_corrections (%d vs %d); "
+                "listing rejected items without their preservation instructions",
+                len(inverses), len(rejected_corrections),
+            )
+        return "\n".join(f"- {item}" for item in rejected_corrections), False
+
+    return "\n".join(
+        f"- {item}\n  Instead: {inverse}"
+        for item, inverse in zip(rejected_corrections, inverses)
+    ), True
+
+
 def _build_crop_instruction_block(crop_plan):
     if not crop_plan:
         return (
@@ -302,6 +585,10 @@ Perform exactly this crop/reframe as part of your edit. This is a hard constrain
 
 
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto"):
+    rejected_axes = resolve_rejected_axes(analysis)
+    color_craft_direction = build_color_craft_direction(rejected_axes)
+    color_grade_check = build_color_grade_check(rejected_axes)
+
     user_instruction = analysis.get("user_instruction") or {}
     effective_user_direction = (
         user_instruction.get("normalized_user_direction") or user_direction or ""
@@ -449,9 +736,30 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     rejected_corrections = analysis.get("rejected_corrections") or []
     negative_block = ""
     if rejected_corrections:
-        rejected_lines = "\n".join(f"- {item}" for item in rejected_corrections)
-        negative_block = f"""User-rejected corrections (highest priority, negative instruction -- the user explicitly unchecked these from the suggested recipe; do NOT perform them, even partially, even if the photo analysis, aesthetic diagnosis, or other strategy notes above suggest them):
-{rejected_lines}"""
+        # Phrased as preservation, not prohibition. "Do not brighten" still puts
+        # brightening in front of the model as the thing under discussion, and an
+        # image model given a described change tends to produce a softened version
+        # of it; "reproduce the original's exposure" gives it a target it can
+        # actually render instead.
+        rejected_lines, has_inverse = _build_rejected_lines(analysis, rejected_corrections)
+        # The header has to match what the list below actually contains -- promising
+        # an "Instead" line that isn't there reads as a truncated prompt.
+        instead_intro = (
+            'so each one\'s "Instead" line is now the instruction for that aspect of the photograph'
+            if has_inverse else
+            "so the corresponding properties of the photograph must come through unchanged from the original"
+        )
+        instead_scope = (
+            'Each "Instead" line is bounded to the region or property its item named; it does not license '
+            "changes elsewhere, and it does not override the approved correction plan. "
+            if has_inverse else
+            "Each item is bounded to the region or property it names; leaving it alone does not license changes "
+            "elsewhere, and does not override the approved correction plan. "
+        )
+        negative_block = f"""User-rejected corrections (highest priority). The user reviewed the suggested recipe and unchecked the items below, {instead_intro}. This overrides everything above that still argues for the change -- the photo analysis, the aesthetic diagnosis, the detected issues, the lighting and color strategy notes, and the preset style direction were all written before the user's review and were not updated by it:
+{rejected_lines}
+
+{instead_scope}Reproducing the original faithfully in these respects is the correct outcome, not a missed opportunity. A result that improves them anyway has failed this edit, however good it looks."""
 
     # Skin is the one color in a photo that viewers have an absolute reference
     # for, so a global grade that reads fine on the background can still fail on
@@ -519,6 +827,31 @@ Feature one subject: {focus_label}. The photo summary and scene description abov
         "transparent/checkerboard padding, or invent empty side bands."
     )
 
+    # Two numbered priorities ask for exactly what a rejected `distraction` or
+    # `crop` item asked for -- found in a real run whose negative block said
+    # "leave every element as it is" three paragraphs above a priority saying
+    # "reduce distractions ... subtle blur, or small cleanup". Drop the offending
+    # clause rather than replace it with a prohibition: the scoped
+    # correction_inverse line does the pinning, and a blanket "never reduce any
+    # distraction" would over-suppress a rejection that was only about one corner
+    # of the frame.
+    distraction_priority = (
+        "Reduce distractions locally through tonal control, local contrast, saturation, subtle blur, or small "
+        "cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make "
+        "the image cleaner."
+        if "distraction" not in rejected_axes else
+        "Do not remove, replace, rebuild, simplify, blur, or clean up scene elements. Distraction cleanup was "
+        "removed from this edit's plan by the user; the scene's elements stay as the original presents them, "
+        "except where an approved correction above asks otherwise."
+    )
+    alignment_priority = (
+        "If credible horizontal/vertical references are unintentionally unstable, correct them subtly. Preserve "
+        "intentional slant only when it clearly supports motion, intimacy, tension, or expression."
+        if "crop" not in rejected_axes else
+        "Preserve the original alignment exactly. Do not level horizons, straighten verticals, correct tilt, or "
+        "adjust perspective, even where they read as unstable -- the user removed that from this edit's plan."
+    )
+
     if has_style_overrides:
         opening_preservation_rule = (
             "Preserve the subject identity, recognizable person/object, clothing, location, environment, props, "
@@ -538,12 +871,12 @@ Priority order:
 1. {crop_priority_line_style}
 2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
 3. Apply every user-selected style override in full. Angle overrides should clearly move the camera to the selected viewpoint by following that angle's own instruction above; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, follow the quantified subject-size target: wide should reduce the subject's visible frame ratio by about 20%, while wider should reduce it by about 40%. The scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
-4. {COLOR_CRAFT_DIRECTION} Apply this only where it supports the selected overrides and the approved correction plan.
-5. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
+4. {color_craft_direction} Apply this only where it supports the selected overrides and the approved correction plan.
+5. {distraction_priority}
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if lighting is not selected, preserve the original lighting logic; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
 8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, change the camera viewpoint clearly as described in that angle's own instruction above, while keeping a believable same-scene result.
-9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. Treat the user-rejected corrections above as forbidden, not merely unnecessary."""
+9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
     else:
         opening_preservation_rule = (
             "Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, "
@@ -554,13 +887,24 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
-3. {COLOR_CRAFT_DIRECTION}
-4. Reduce distractions through tonal control, local contrast, saturation, subtle blur, or small cleanup. Do not remove, replace, rebuild, or simplify contextual/neutral scene elements just to make the image cleaner.
+3. {color_craft_direction}
+4. {distraction_priority}
 5. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
-7. If credible horizontal/vertical references are unintentionally unstable, correct them subtly. Preserve intentional slant only when it clearly supports motion, intimacy, tension, or expression.
+7. {alignment_priority}
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
-9. The user-approved correction plan is the definitive specification of what to change -- apply it in full and do not perform additional corrections beyond it, the user's extra direction, and the preset finish. Treat the user-rejected corrections above as forbidden, not merely unnecessary."""
+9. The user-approved correction plan is the definitive specification of what to change -- apply it in full and do not perform additional corrections beyond it, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
+
+    # The diagnosis lines below are the loudest remaining voice for a rejected
+    # correction, and they sit ~40 lines above the negative block. Caveat them
+    # where they are read, not only where they are overridden.
+    analysis_header = (
+        "Photo analysis (written during automatic analysis, BEFORE the user reviewed the recipe -- "
+        "wherever it diagnoses a problem the user later chose not to fix, the user's decision wins and "
+        "the diagnosis is stale):"
+        if rejected_corrections else
+        "Photo analysis:"
+    )
 
     task_intro = (
         "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
@@ -583,7 +927,7 @@ Crop instruction:
 
 {focus_block}
 
-Photo analysis:
+{analysis_header}
 - Summary: {analysis.get("photo_summary") or ""}
 - Main subject: {analysis.get("main_subject") or ""}
 - Scene type: {analysis.get("scene_type") or ""}
@@ -632,7 +976,7 @@ User extra direction:
 
 {retouch_priorities}
 
-{COLOR_GRADE_CHECK}
+{color_grade_check}
 """
 
 
@@ -679,11 +1023,22 @@ Evaluate whether the output satisfies the user's explicit instruction. If the us
 
     rejected_corrections = analysis.get("rejected_corrections") or []
     if rejected_corrections:
-        rejected_lines = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(rejected_corrections))
+        # Judge against the same scoped instruction the edit prompt was held to,
+        # not the QA model's own reading of a free-text recipe line. Scope is the
+        # whole point: if the rejected item was "brighten the subject", a brighter
+        # background is not a violation of it.
+        inverses = analysis.get("rejected_preserve") or []
+        if len(inverses) == len(rejected_corrections):
+            rejected_lines = "\n".join(
+                f"{i + 1}. {item}\n   Required instead: {inverse}"
+                for i, (item, inverse) in enumerate(zip(rejected_corrections, inverses))
+            )
+        else:
+            rejected_lines = "\n".join(f"{i + 1}. {item}" for i, item in enumerate(rejected_corrections))
         rejected_block = f"""
 User-rejected corrections (the user explicitly unchecked these from the suggested recipe -- the output must NOT show these changes):
 {rejected_lines}
-Judge each rejected item independently and put the result in recipe_adherence.rejected_items, with "violated": true/false (true = the forbidden change is visible in the output anyway, false = correctly avoided; use null only if the item does not apply to this photo)."""
+Judge each rejected item independently and put the result in recipe_adherence.rejected_items, with "violated": true/false (true = the forbidden change is visible in the output anyway, false = correctly avoided; use null only if the item does not apply to this photo). Judge only within the scope each item names: if an item was about the subject, a change elsewhere in the frame is not a violation of it."""
     else:
         rejected_block = "\nThe user did not reject any corrections for this photo. Return recipe_adherence.rejected_items as an empty array -- do not invent rejected items."
 

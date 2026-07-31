@@ -2853,11 +2853,28 @@
     if (Array.isArray(recipeChecked) && recipeChecked.length) {
       const keepChecked = (arr) =>
         Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] !== false) : arr;
+      const dropChecked = (arr) =>
+        Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] === false) : [];
       effective.correction_plan = keepChecked(analysis.correction_plan);
       effective.retouch_recipe = keepChecked(analysis.retouch_recipe);
-      effective.rejected_corrections = Array.isArray(analysis.correction_plan)
-        ? analysis.correction_plan.filter((_, i) => recipeChecked[i] === false)
-        : [];
+      effective.rejected_corrections = dropChecked(analysis.correction_plan);
+      // Same index split for the axis tags (correction_axes[i] pairs with
+      // correction_plan[i]). These are what let build_edit_prompt strip the
+      // matching "do X" clauses out of its own light/color direction and add a
+      // "reproduce the original's X" rule -- the rejected item text alone can't
+      // drive that, being free prose. The kept axes matter too:
+      // resolve_rejected_axes subtracts them, so a rejected "brighten the frame"
+      // doesn't lock contrast for an approved "darken the busy background" that
+      // shares the tag. It also validates the alignment and flattens the
+      // nesting, so nothing here needs to inspect the values.
+      effective.correction_axes = keepChecked(analysis.correction_axes);
+      effective.rejected_axes = dropChecked(analysis.correction_axes);
+      // The analysis model also wrote, per item, what to preserve instead if
+      // that item gets unchecked (correction_inverse). Only the dropped ones
+      // are of any use, and they carry the item's own scope -- "brighten the
+      // subject" inverts to pinning the subject, where the generic per-axis
+      // rule pins the whole frame and over-suppresses.
+      effective.rejected_preserve = dropChecked(analysis.correction_inverse);
     }
 
     const styleOptions = {};
