@@ -7,13 +7,14 @@
 # "open Xcode, Product > Test" step with an equivalent `xcodebuild test`
 # invocation so WDA itself gets torn down and relaunched fresh every chunk.
 #
-# Usage: ./run_in_chunks.sh [--source-offset N] [--reference-offset N] [--total N]
-#                            [--start N] [--chunk-size N]
+# Usage: ./run_in_chunks.sh [--source-offset N] [--reference-offset N]
+#                            [--start N] [--end N] [--chunk-size N]
 #   --source-offset     base offset for the source photo (default 0)
 #   --reference-offset  base offset for the reference/custom photo (default 200)
-#   --total             total iteration count to run (default 500)
 #   --start             iteration to (re)start from - use this to resume after
 #                        an interruption instead of redoing finished work (default 0)
+#   --end               exclusive upper bound to run up to, i.e. iterations run
+#                        are [start, end) (default 500)
 #   --chunk-size        iterations per WDA/Appium session (default 50)
 #
 # If the run is interrupted partway (Ctrl+C, crash, phone locked, etc), note
@@ -24,8 +25,8 @@
 #   ./run_in_chunks.sh \
 #       --source-offset 0 \
 #       --reference-offset 200 \
-#       --total 500 \
 #       --start 0 \
+#       --end 500 \
 #       --chunk-size 50
 #
 # Prerequisite: iPhone connected to this Mac via USB (same as manual flow),
@@ -37,16 +38,16 @@ set -euo pipefail
 
 SOURCE_OFFSET=0
 REFERENCE_OFFSET=200
-TOTAL=500
 START_ITERATION=0
+END_ITERATION=500
 CHUNK=50
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --source-offset) SOURCE_OFFSET="$2"; shift 2 ;;
         --reference-offset) REFERENCE_OFFSET="$2"; shift 2 ;;
-        --total) TOTAL="$2"; shift 2 ;;
         --start) START_ITERATION="$2"; shift 2 ;;
+        --end) END_ITERATION="$2"; shift 2 ;;
         --chunk-size) CHUNK="$2"; shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
@@ -143,10 +144,10 @@ trap cleanup EXIT
 
 start=$START_ITERATION
 chunk_num=1
-while (( start < TOTAL )); do
+while (( start < END_ITERATION )); do
     end=$((start + CHUNK))
-    if (( end > TOTAL )); then
-        end=$TOTAL
+    if (( end > END_ITERATION )); then
+        end=$END_ITERATION
     fi
 
     wda_log="${LOG_DIR}/wda_chunk_${chunk_num}.log"
@@ -163,7 +164,7 @@ while (( start < TOTAL )); do
     # real exit code - can be checked explicitly instead.
     if ! conda run -n "$CONDA_ENV" robot \
         --variable "START_ITERATION:${start}" \
-        --variable "ITERATION_COUNT:${end}" \
+        --variable "END_ITERATION:${end}" \
         --variable "SOURCE_PHOTO_START_OFFSET:${SOURCE_OFFSET}" \
         --variable "REFERENCE_PHOTO_START_OFFSET:${REFERENCE_OFFSET}" \
         "$ROBOT_FILE" \
@@ -187,4 +188,4 @@ while (( start < TOTAL )); do
     chunk_num=$((chunk_num + 1))
 done
 
-echo "All ${TOTAL} iterations complete."
+echo "All iterations up to ${END_ITERATION} complete."

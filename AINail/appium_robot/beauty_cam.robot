@@ -8,17 +8,17 @@ ${REMOTE_URL}          http://127.0.0.1:4723
 ${BUNDLE_ID}           com.meitu.myxj
 ${SOURCE_PHOTO_START_OFFSET}         0
 ${REFERENCE_PHOTO_START_OFFSET}      50
-${ITERATION_COUNT}                   50
 ${START_ITERATION}                   0
+${END_ITERATION}                     50
 
 *** Test Cases ***
 Meitu Test Case
     Open Meitu Application
-    FOR    ${i}    IN RANGE    ${START_ITERATION}    ${ITERATION_COUNT}
+    FOR    ${i}    IN RANGE    ${START_ITERATION}    ${END_ITERATION}
         ${photo_offset}=    Evaluate    ${SOURCE_PHOTO_START_OFFSET} + ${i}
         ${custom_offset}=    Evaluate    ${REFERENCE_PHOTO_START_OFFSET} + ${i}
         ${iteration_display}=    Evaluate    ${i} + 1
-        Log To Console    \n[${iteration_display}/${ITERATION_COUNT}] photo_offset=${photo_offset} custom_offset=${custom_offset}
+        Log To Console    \n[${iteration_display}/${END_ITERATION}] photo_offset=${photo_offset} custom_offset=${custom_offset}
         Beautify Nail Art Photo    ${photo_offset}    ${custom_offset}
     END
 
