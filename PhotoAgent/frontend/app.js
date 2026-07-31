@@ -380,6 +380,17 @@
     if (!opt) return;
     if (els.imageModelQualitySelect) els.imageModelQualitySelect.value = opt.value;
     if (els.apImageModelQualitySelect) els.apImageModelQualitySelect.value = opt.value;
+    // wireOptionPicker only refreshes a picker's own visible label
+    // (.ap-style-value) when THAT picker itself is opened (rebuild runs on
+    // its "toggle") -- so picking a model on the upload page kept the
+    // underlying <select>s in sync (above) but left #ap-image-model-quality-
+    // picker's label showing the old pick on the results page until the user
+    // happened to open it there too. Sync both pickers' visible labels here
+    // directly instead of waiting for that.
+    [els.imageModelQualityPicker, els.apImageModelQualityPicker].forEach((picker) => {
+      const valueEl = picker?.querySelector(".ap-style-value");
+      if (valueEl) valueEl.textContent = opt.label;
+    });
     if (singleFlowState) { singleFlowState.imageModel = opt.model; singleFlowState.imageQuality = opt.quality; }
     if (batchSettings) { batchSettings.imageModel = opt.model; batchSettings.imageQuality = opt.quality; }
   }
