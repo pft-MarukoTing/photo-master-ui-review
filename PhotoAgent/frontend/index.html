@@ -1029,6 +1029,18 @@
     .error-modal-file { font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
     .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; }
 
+    /* #notice-modal's title reuses .logo's own wordmark treatment (Photo in
+       the plain text color, Master in the brand gradient) instead of
+       #error-modal-title's red "failure" styling, since this popup reports
+       something the user needs to act on, not something that went wrong. */
+    .notice-modal-title { font-size: 17px; font-weight: 800; letter-spacing: -.3px; color: var(--text); }
+    .notice-modal-title em {
+      font-style: normal; background: var(--mv-grad);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .notice-modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    #notice-modal-msg { font-size: 18px; }
+
     /* Centered toast shown while a download zip is being assembled --
        buildZip fetches each result image over the network before zipping,
        which is otherwise invisible/silent for a batch with many images. */
@@ -2247,6 +2259,26 @@
     </div>
     <p id="error-modal-file" class="error-modal-file"></p>
     <p id="error-modal-msg" class="error-modal-msg"></p>
+  </div>
+</div>
+
+<!-- Generic in-app notice popup (same backdrop+box pattern as #error-modal
+     above, branded with the PhotoMaster wordmark instead of a "處理失敗"
+     title since it's not reporting a failure) -- shown by
+     showNoticeModal(message) in app.js, e.g. the inline revise panel's Run
+     button when nothing was actually changed. No dedicated close (X) button --
+     just the single OK action below, plus the shared backdrop-click/Escape
+     dismiss every other modal here already gets. -->
+<div id="notice-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="notice-modal-title">
+    <div class="error-modal-hdr">
+      <span id="notice-modal-title" class="notice-modal-title">Photo<em>Master</em></span>
+    </div>
+    <p id="notice-modal-msg" class="error-modal-msg"></p>
+    <div class="notice-modal-actions">
+      <button id="notice-modal-ok-btn" class="btn btn-grad btn-sm" type="button">OK</button>
+    </div>
   </div>
 </div>
 

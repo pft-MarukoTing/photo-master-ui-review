@@ -613,13 +613,38 @@
     }
   }
 
+  // True if the inline revise panel's Run button would submit an unchanged
+  // re-run: every recipe item unchecked, every Pose/Angle/Lighting/Size pick
+  // still "default", and no 補充指令 typed -- reads the DOM directly (via
+  // readStyleSelectionsFromDom, defined below but hoisted) rather than
+  // needing to know whether this is the single-image or batch flow, since
+  // both share the same #ap-recipe-list/#ap-*-list/#prompt markup.
+  function inlineReviseHasNoChanges() {
+    const { options, recipeChecked } = readStyleSelectionsFromDom();
+    const allDefaultStyle = Object.values(options).every((value) => value === "default");
+    const allUnchecked = Array.isArray(recipeChecked) && recipeChecked.length > 0 && recipeChecked.every((checked) => checked === false);
+    const promptEmpty = !els.promptInput || !els.promptInput.value.trim();
+    return allDefaultStyle && allUnchecked && promptEmpty;
+  }
+
   // Resolves "continue" or "cancel" depending on which inline button the user
   // clicks -- same one-shot-listener shape as waitForContinue, just with two
   // possible outcomes instead of one.
   function waitForInlineAnalysisAction() {
     return new Promise((resolve) => {
       clearInlineAnalysisWait();
-      inlineAnalysisContinueHandler = () => { clearInlineAnalysisWait(); resolve("continue"); };
+      inlineAnalysisContinueHandler = () => {
+        // Nothing to actually change vs. the existing result -- rather than
+        // silently spend another edit call reproducing it, ask the user to
+        // either uncheck/pick something or leave via Cancel instead. Doesn't
+        // clear the listener/resolve, so the panel just stays open.
+        if (inlineReviseHasNoChanges()) {
+          showNoticeModal("請至少修改一項修圖建議、風格選項或補充指令後再執行。");
+          return;
+        }
+        clearInlineAnalysisWait();
+        resolve("continue");
+      };
       inlineAnalysisCancelHandler = () => { clearInlineAnalysisWait(); resolve("cancel"); };
       els.inlineAnalysisContinueBtn.addEventListener("click", inlineAnalysisContinueHandler);
       els.inlineAnalysisCancelBtn.addEventListener("click", inlineAnalysisCancelHandler);
@@ -2420,6 +2445,20 @@
     if (els.errorModal) els.errorModal.hidden = true;
   }
 
+  // Generic in-app notice popup -- same open/close shape as the error modal
+  // above, styled with the PhotoMaster wordmark instead since it's not
+  // reporting a failure (e.g. the inline revise panel's Run button when
+  // nothing was actually changed).
+  function showNoticeModal(message) {
+    if (!els.noticeModal) return;
+    if (els.noticeModalMsg) els.noticeModalMsg.textContent = message;
+    els.noticeModal.hidden = false;
+  }
+
+  function closeNoticeModal() {
+    if (els.noticeModal) els.noticeModal.hidden = true;
+  }
+
   // 修圖建議 overlay -- same open/close shape as the error modal above,
   // just toggling #ap-recipe-modal's own hidden attribute. #ap-recipe-list
   // is already populated by fillCheckList (results.js) whenever analysis
@@ -3183,6 +3222,12 @@
       if (e.target.dataset.close) closeErrorModal();
     });
   }
+  if (els.noticeModalOkBtn) els.noticeModalOkBtn.addEventListener("click", closeNoticeModal);
+  if (els.noticeModal) {
+    els.noticeModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeNoticeModal();
+    });
+  }
   if (els.apRecipePicker) els.apRecipePicker.addEventListener("click", openRecipeModal);
   if (els.apRecipeModalClose) els.apRecipeModalClose.addEventListener("click", closeRecipeModal);
   if (els.apRecipeModal) {
@@ -3211,6 +3256,7 @@
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
+    if (els.noticeModal && !els.noticeModal.hidden) closeNoticeModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
