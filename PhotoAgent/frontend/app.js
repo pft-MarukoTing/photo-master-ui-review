@@ -256,8 +256,25 @@
     if (!details || !select) return;
     const valueEl = details.querySelector(".ap-style-value");
     const list = details.querySelector(".step-inline-list");
+    const panel = details.querySelector(".ap-style-panel");
     if (!valueEl || !list) return;
     const name = `${select.id}-picker`;
+
+    // Flips the panel to open above the trigger when there isn't enough
+    // room below it in the viewport (e.g. the upload page's option pills
+    // sitting near the bottom of the screen) -- otherwise it renders past
+    // window.innerHeight and the user has to scroll the page to see it.
+    const repositionPanel = () => {
+      if (!panel) return;
+      panel.classList.remove("open-upward");
+      const anchorRect = details.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - anchorRect.bottom;
+      const spaceAbove = anchorRect.top;
+      if (spaceBelow < panelRect.height + 16 && spaceAbove > spaceBelow) {
+        panel.classList.add("open-upward");
+      }
+    };
 
     const rebuild = () => {
       list.innerHTML = "";
@@ -297,8 +314,13 @@
     // Re-sync whenever the popover opens, in case select.value/options
     // changed while it was closed (applyModelQualityChange mirroring a pick
     // made in analysis-preview, or applyRunCountOptionLimit trimming choices
-    // once the debug-UI check resolves).
-    details.addEventListener("toggle", () => { if (details.open) rebuild(); });
+    // once the debug-UI check resolves). Reposition after rebuild so the
+    // panel height reflects the options actually being shown.
+    details.addEventListener("toggle", () => {
+      if (details.open) rebuild();
+      repositionPanel();
+    });
+    window.addEventListener("resize", () => { if (details.open) repositionPanel(); });
   }
 
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality

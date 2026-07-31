@@ -171,14 +171,20 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   flex-direction: column;
   padding-top: 8px;
-  padding-bottom: 6px;
+  /* Plus .upload-grid's own 32px margin-bottom below -- together these are
+     the only fixed gap between the Run button and the viewport edge (the
+     drop zone is the flexible piece that otherwise eats any extra space),
+     so a small value here left the button sitting right at the bottom on
+     tall viewports. Pulled back down in the short-viewport breakpoints
+     below, where that budget is already tight. */
+  padding-bottom: 68px;
 }
 
 .upload-hero {
-  flex: 0 0 20%;
+  flex: 0 0 10%;
   /* Floor so the heading/sub-copy never get squeezed unreadable on a very
      short viewport -- 10% only wins once it's actually taller than this. */
-  min-height: 100px;
+  /* min-height: 100px; */
 }
 
 .eyebrow-label {
@@ -203,7 +209,7 @@ a { text-decoration: none; color: inherit; }
   color: transparent;
   line-height: 1.14;
   letter-spacing: -.6px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 /* Sub-copy row, divider sits below it */
@@ -282,6 +288,16 @@ a { text-decoration: none; color: inherit; }
   cursor: pointer;
   overflow: hidden;
   transition: border-color .25s, background .25s, box-shadow .25s, transform .25s;
+  /* .dz-empty's icon/title/hint used to be sized off viewport media queries
+     tuned to each min-height floor -- but the zone's *actual* rendered
+     height depends on how much flex space is left over (hero/below-zone
+     size, whether the row wrapped, etc.), not just the floor, so a portrait
+     phone with plenty of room still got the tiny "floor" sizing meant for a
+     genuinely squeezed box. Sizing .dz-empty off the zone's real height via
+     a container query instead means it scales with the space it actually
+     got, not with why that space happened to be small. */
+  container-type: size;
+  container-name: upload-zone;
 }
 .upload-zone:hover { box-shadow: var(--shadow-accent); transform: translateY(-2px); }
 .upload-zone:hover,
@@ -324,6 +340,38 @@ a { text-decoration: none; color: inherit; }
   font-size: 16.25px;
   color: var(--text-2);
   letter-spacing: -.13px;
+}
+
+/* Scaled to .upload-zone's own rendered height (see container-type on
+   .upload-zone above), not the viewport -- these thresholds line up with
+   the min-height floors set across the breakpoints below. */
+@container upload-zone (max-height: 200px) {
+  .dz-empty { padding: 20px 24px; gap: 6px; }
+  .upload-icon-wrap { width: 44px; height: 44px; border-radius: 14px; margin-bottom: 4px; }
+  .upload-icon-wrap svg { width: 18px; height: 18px; }
+  .dz-title { font-size: 16px; }
+  .dz-hint { font-size: 13px; }
+}
+@container upload-zone (max-height: 140px) {
+  .dz-empty { padding: 10px 16px; gap: 4px; }
+  .upload-icon-wrap { width: 34px; height: 34px; border-radius: 10px; margin-bottom: 2px; }
+  .upload-icon-wrap svg { width: 14px; height: 14px; }
+  .dz-title { font-size: 14px; }
+  .dz-hint { font-size: 11px; }
+}
+@container upload-zone (max-height: 100px) {
+  .dz-empty { padding: 6px 12px; gap: 3px; }
+  .upload-icon-wrap { width: 26px; height: 26px; border-radius: 8px; margin-bottom: 0; }
+  .upload-icon-wrap svg { width: 11px; height: 11px; }
+  .dz-title { font-size: 12px; }
+  .dz-hint { font-size: 10px; }
+}
+@container upload-zone (max-height: 65px) {
+  .dz-empty { padding: 2px 8px; gap: 2px; }
+  .upload-icon-wrap { width: 20px; height: 20px; border-radius: 6px; }
+  .upload-icon-wrap svg { width: 9px; height: 9px; }
+  .dz-title { font-size: 11px; }
+  .dz-hint { display: none; }
 }
 
 .dz-preview {
@@ -1412,7 +1460,12 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .header-actions .btn-label { display: none; }
   .header-actions .btn { padding: 0 12px; gap: 0; }
 
-  .upload-container { padding-top: 40px; padding-bottom: 60px; }
+  /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
+     height (see the base rule above), so that padding was eating straight
+     into the same vertical budget .upload-hero/.upload-grid need, working
+     against the portrait-phone compaction below instead of just adding
+     breathing room. */
+  .upload-container { padding-top: 16px; padding-bottom: 16px; }
 
   .upload-actions-row .btn {
     height: auto;
@@ -1436,4 +1489,86 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     min-width: 0;
   }
 
+}
+
+/* Short viewports (small/un-maximized browser windows, not just narrow
+   ones): .upload-zone's 280px floor no longer fits inside .upload-container's
+   fixed calc(100vh - var(--header-h)) box past roughly 650-680px of window
+   height, so it overflowed past its allotted space and
+   .upload-below-zone's pills/Run row (painted after it) rendered on top of
+   its bottom edge instead of below it. Shrinking the floor here reclaims
+   enough height for everything to stack without overlapping. */
+@media (max-height: 700px) {
+  /* --header-h feeds .site-header's own height, .upload-container's
+     calc(100vh - var(--header-h)), and every other screen's matching
+     calc/sticky-offset (see the grep-able uses of --header-h) -- shrinking
+     the variable itself reclaims space everywhere at once instead of
+     re-deriving it per consumer. */
+  :root { --header-h: 56px; }
+  .logo { font-size: 28px; }
+  /* Reclaims the extra breathing room the base rule above adds -- this
+     budget is already tight once the viewport is this short. */
+  .upload-container { padding-bottom: 6px; }
+  .upload-grid { margin-bottom: 16px; }
+  .upload-zone { min-height: 160px; }
+  #dz-preview { min-height: 160px; }
+  /* The option pills/Run button below the drop zone were sized for the
+     280px zone -- scoped to .upload-below-zone (not the bare .ap-style-
+     trigger/.btn classes) so this doesn't also shrink unrelated triggers
+     and buttons elsewhere in the app that happen to share those classes. */
+  .upload-below-zone .ap-style-trigger { height: 34px; padding: 0 12px; font-size: 13px; gap: 4px; }
+  .upload-below-zone .ap-style-trigger::after { font-size: 15px; }
+  .upload-below-zone .option-pill-label { font-size: 10.5px; }
+  .upload-below-zone .option-pill-icon svg { width: 12px; height: 12px; }
+  .upload-below-zone .option-pill-group { gap: 3px; }
+  .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
+  .upload-actions-row .btn svg { width: 13px; height: 13px; }
+}
+
+/* Same overlap, further down: below ~500-520px of window height even the
+   160px floor above no longer leaves enough room. */
+@media (max-height: 520px) {
+  :root { --header-h: 48px; }
+  .logo { font-size: 24px; }
+  .upload-grid { margin-bottom: 8px; }
+  .upload-zone { min-height: 130px; }
+  #dz-preview { min-height: 130px; }
+  .upload-below-zone .ap-style-trigger { height: 28px; padding: 0 10px; font-size: 11px; gap: 3px; }
+  .upload-below-zone .ap-style-trigger::after { font-size: 12px; }
+  .upload-below-zone .option-pill-label { font-size: 9px; }
+  .upload-below-zone .option-pill-icon svg { width: 10px; height: 10px; }
+  .upload-actions-row .btn { height: 30px; padding: 0 12px; font-size: 13px; gap: 4px; }
+  .upload-actions-row .btn svg { width: 11px; height: 11px; }
+}
+
+/* Landscape phones/small tablets (narrow width *and* short height at once):
+   .upload-hero's headline/sub-copy don't shrink past their own font-size
+   floors (20px/14px), and .upload-below-zone stacks into a much taller
+   column at this width (see the max-width:900px block above) -- neither is
+   accounted for by the max-height-only tiers above, so .upload-options-card
+   still overflowed past .upload-zone's floor and got overlaid by it.
+   Combining both conditions lets this compact everything further only for
+   this specific narrow+short case. */
+@media (max-width: 900px) and (max-height: 700px) {
+  .upload-headline { font-size: 16px; margin-bottom: 4px; }
+  .upload-sub-row { padding-bottom: 4px; margin-bottom: 6px; }
+  .upload-sub { font-size: 12px; }
+  .upload-grid { gap: 6px; margin-bottom: 6px; }
+  .upload-below-zone { gap: 6px; }
+  .options-card-inline { margin-top: 6px; gap: 6px; }
+  .upload-zone { min-height: 80px; }
+  #dz-preview { min-height: 80px; }
+}
+
+/* Same narrow+short case, more extreme still (a handful of oddball window
+   sizes under ~450px tall) -- one more notch down so this keeps fitting
+   without falling back to .upload-left's scroll. */
+@media (max-width: 900px) and (max-height: 450px) {
+  .upload-headline { font-size: 14px; margin-bottom: 2px; }
+  .upload-sub-row { padding-bottom: 2px; margin-bottom: 4px; }
+  .upload-sub { font-size: 11px; }
+  .upload-zone { min-height: 50px; }
+  #dz-preview { min-height: 50px; }
+  .upload-actions-row .btn { height: 24px; padding: 0 10px; font-size: 12px; gap: 3px; }
+  .upload-actions-row .btn svg { width: 10px; height: 10px; }
 }

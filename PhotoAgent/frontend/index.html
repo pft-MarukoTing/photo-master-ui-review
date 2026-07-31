@@ -22,6 +22,14 @@
          never actually offered it anything to grow into. */
       flex: 1 1 auto;
       min-height: 0;
+      /* Safety net for narrow+short combos (e.g. a phone in landscape) that
+         fall between the max-height/max-width breakpoints in styles.css:
+         once .upload-zone's min-height floor genuinely doesn't fit the
+         space .upload-left was assigned, this scrolls that overflow inside
+         .upload-left instead of letting it paint past its own box and
+         overlap .upload-below-zone (.upload-grid's other child, positioned
+         right after .upload-left). */
+      overflow-y: auto;
     }
     .upload-left .upload-zone {
       flex: 1;
@@ -440,6 +448,13 @@
       border-color: var(--border-2);
       box-shadow: 0 16px 40px rgba(0,0,0,.55);
       animation: fadeUp .2s ease both;
+    }
+    /* Applied by wireOptionPicker (app.js) when there isn't enough room
+       below the trigger -- flips the panel to open upward instead of
+       spilling past the viewport bottom. */
+    .ap-style-item .ap-style-panel.open-upward {
+      top: auto;
+      bottom: calc(100% + 8px);
     }
     /* #ap-recipe-picker/#ap-style-picker are plain <button>s (open
        #ap-recipe-modal/#ap-style-modal, real overlay windows), not
@@ -1303,7 +1318,7 @@
       <div class="upload-hero">
         <h1 class="upload-headline">讓每張照片<br>都有專屬修圖師</h1>
         <div class="upload-sub-row">
-          <p class="upload-sub">上傳照片，AI 診斷光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
+          <p class="upload-sub">上傳照片，AI調整光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
         </div>
       </div>
 
