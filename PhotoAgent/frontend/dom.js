@@ -75,6 +75,8 @@ window.PhotoAgentDom = (() => {
     compareCard: document.querySelector("#compare-card"),
     compareToggleBtn: document.querySelector("#compare-toggle-btn"),
     compareHint: document.querySelector("#compare-hint"),
+    compareFullscreenBtn: document.querySelector("#compare-fullscreen-btn"),
+    compareFullscreenBackdrop: document.querySelector("#compare-fullscreen-backdrop"),
     recipeTags: document.querySelector("#recipe-tags"),
     downloadLink: document.querySelector("#download-link"),
     downloadAllRunsLink: document.querySelector("#download-all-runs-link"),

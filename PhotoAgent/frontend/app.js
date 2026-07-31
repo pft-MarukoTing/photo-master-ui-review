@@ -2474,6 +2474,60 @@
     if (els.apStyleModal) els.apStyleModal.hidden = true;
   }
 
+  // Full-window compare view: toggles .is-fullscreen on the real
+  // #compare-card in place (CSS switches it to position:fixed) instead of
+  // moving it to a separate overlay -- #compare-fullscreen-btn/#download-link
+  // etc. keep working via their existing listeners since the node never
+  // moves. #compare-fullscreen-btn (inside .canvas-actions inside the card)
+  // doubles as the close control while open -- toggleCompareFullscreen swaps
+  // its icon/label to a "restore" glyph instead of adding a second close
+  // button. The card's parent gets its rendered height frozen inline for the
+  // duration (position:fixed pulls the card out of flow, which would
+  // otherwise collapse the parent and visibly shift the run-tabs/options
+  // panel below it up, then back down on close) so nothing around it moves.
+  const COMPARE_FULLSCREEN_EXPAND_ICON = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+    <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+  const COMPARE_FULLSCREEN_RESTORE_ICON = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+    <path d="M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4"
+      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+
+  function setCompareFullscreenBtnState(isFullscreen) {
+    if (!els.compareFullscreenBtn) return;
+    els.compareFullscreenBtn.innerHTML = isFullscreen ? COMPARE_FULLSCREEN_RESTORE_ICON : COMPARE_FULLSCREEN_EXPAND_ICON;
+    els.compareFullscreenBtn.title = isFullscreen ? "back to original window" : "full screen";
+    els.compareFullscreenBtn.setAttribute("aria-label", isFullscreen ? "返回原視窗" : "全螢幕檢視比較");
+  }
+
+  function isCompareFullscreen() {
+    return !!els.compareCard?.classList.contains("is-fullscreen");
+  }
+
+  function openCompareFullscreen() {
+    if (!els.compareCard || isCompareFullscreen()) return;
+    const parent = els.compareCard.parentElement;
+    if (parent) parent.style.height = `${parent.getBoundingClientRect().height}px`;
+    els.compareCard.classList.add("is-fullscreen");
+    if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = false;
+    setCompareFullscreenBtnState(true);
+  }
+
+  function closeCompareFullscreen() {
+    if (!els.compareCard || !isCompareFullscreen()) return;
+    els.compareCard.classList.remove("is-fullscreen");
+    const parent = els.compareCard.parentElement;
+    if (parent) parent.style.height = "";
+    if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = true;
+    setCompareFullscreenBtnState(false);
+  }
+
+  function toggleCompareFullscreen() {
+    if (isCompareFullscreen()) closeCompareFullscreen();
+    else openCompareFullscreen();
+  }
+
   // "重新分析": wipe every record's analysis/edit state and re-run step 1
   // from scratch, same as the initial submit -- for when the recipe needs a
   // clean re-analyze rather than a manual revise.
@@ -3105,6 +3159,8 @@
     els.compareToggleBtn.addEventListener("click", () =>
       setCompareView(!els.compareCard?.classList.contains("showing-generated")));
   }
+  if (els.compareFullscreenBtn) els.compareFullscreenBtn.addEventListener("click", toggleCompareFullscreen);
+  if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.addEventListener("click", closeCompareFullscreen);
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadAllRunsLink) els.downloadAllRunsLink.addEventListener("click", handleDownloadAllRunsClick);
   if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);
@@ -3144,6 +3200,7 @@
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
+    if (isCompareFullscreen()) closeCompareFullscreen();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
