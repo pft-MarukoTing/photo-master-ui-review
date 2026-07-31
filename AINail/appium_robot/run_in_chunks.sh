@@ -159,17 +159,22 @@ while (( start < END_ITERATION )); do
 
     # Filter the console-only noise from AppiumLibrary's deprecation warning
     # for "Element Should Be Visible" (still fully logged in log.html/output.xml).
-    # The `if !` wrapper keeps `set -e` from acting on the pipeline's own exit
-    # status (which would reflect grep, not robot) so PIPESTATUS[0] - robot's
-    # real exit code - can be checked explicitly instead.
-    if ! conda run -n "$CONDA_ENV" robot \
+    # set +e/-e brackets the pipeline so `set -e`/pipefail can't act on its
+    # collective exit status (which would reflect grep, not robot) - grep -v can
+    # legitimately exit 1 if it filters out every line, which would otherwise be
+    # misread as robot having failed. PIPESTATUS[0] (robot's real exit code) is
+    # captured unconditionally and checked explicitly instead.
+    set +e
+    conda run -n "$CONDA_ENV" robot \
         --variable "START_ITERATION:${start}" \
         --variable "END_ITERATION:${end}" \
         --variable "SOURCE_PHOTO_START_OFFSET:${SOURCE_OFFSET}" \
         --variable "REFERENCE_PHOTO_START_OFFSET:${REFERENCE_OFFSET}" \
         "$ROBOT_FILE" \
-        | grep -v -E "is deprecated\. Use \`Expect Element\` instead|^Verifies that the element identified by \`\`locator\`\` is visible\.$"; then
-        robot_exit=${PIPESTATUS[0]}
+        | grep -v -E "is deprecated\. Use \`Expect Element\` instead|^Verifies that the element identified by \`\`locator\`\` is visible\.$"
+    robot_exit=${PIPESTATUS[0]}
+    set -e
+    if [[ $robot_exit -ne 0 ]]; then
         echo "Chunk ${chunk_num} failed (robot exit ${robot_exit}), see $wda_log / $appium_log if still present" >&2
         exit "$robot_exit"
     fi
@@ -177,9 +182,9 @@ while (( start < END_ITERATION )); do
     stop_appium
     stop_wda
 
-    # Chunk succeeded (robot's `set -e` would have already stopped the script
-    # on failure) - the logs are only useful for debugging a crash, so drop
-    # them now instead of letting them pile up on disk across many chunks.
+    # Chunk succeeded (the `if` above would have already exited the script on
+    # failure) - the logs are only useful for debugging a crash, so drop them
+    # now instead of letting them pile up on disk across many chunks.
     rm -f "$wda_log" "$appium_log"
 
     sleep 3
