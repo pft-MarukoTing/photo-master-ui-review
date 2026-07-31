@@ -28,6 +28,18 @@ window.PhotoAgentResults = (() => {
     { value: "closer", label: "Closer" }
   ];
 
+  // Maps each non-default option value to its example image in
+  // assets/optional_style/<group>/ -- used by fillStyleOptionList to show the
+  // #ap-style-modal overlay's option buttons as image thumbnails instead of
+  // plain text. "default"/"Auto" has no file (there's nothing to show an
+  // example image of), so it renders as a text-only placeholder card instead.
+  const STYLE_OPTION_IMAGES = {
+    pose: { playful: "pose-playful.png", candid: "pose-candid.png", strong: "pose-strong.png" },
+    angle: { high: "angle-highshot.png", low: "angle-lowshot.png", eye: "angle-eyelevel.png" },
+    lighting: { gold: "lighting-goldtone.png", soft: "lighting-soft.png" },
+    size: { wide: "size-wide.png", wider: "size-wider.png", close: "size-close.png", closer: "size-closer.png" }
+  };
+
   // category -> {options list, display label}, used to turn analysis.style_options
   // (the raw {pose, angle, lighting, size} values the user picked on the review
   // screen) back into human-readable text on the results page.
@@ -223,19 +235,185 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  // Same picker as fillRadioList, but rendered as a grid of image-thumbnail
+  // buttons instead of a plain text radio list -- used only by the per-image
+  // #ap-style-modal overlay's Pose/Angle/Lighting/Size lists (assets live in
+  // assets/optional_style/<group>/, see STYLE_OPTION_IMAGES above). The batch
+  // sidebar's equivalent lists keep using fillRadioList/plain text unchanged.
+  function fillStyleOptionList(element, options, name, defaultValue, group) {
+    if (!element) return;
+    element.innerHTML = "";
+    const images = STYLE_OPTION_IMAGES[group] || {};
+    options.forEach((opt, index) => {
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = opt.value;
+      input.id = `${name}-${index}`;
+      input.checked = opt.value === defaultValue;
+      input.className = "ap-style-option-input";
+
+      // "Auto"/default no longer gets a card of its own in the grid -- it
+      // has no example image, and now that clearStylePick (app.js) resets to
+      // it from the picked-chip/pill "x"s instead, a dedicated card is just
+      // dead weight sitting alongside the real style choices. The radio
+      // itself still needs to exist in the DOM (hidden, in its own <li> so
+      // markup stays valid) so it stays a normal, always-present member of
+      // the name="ap-pose" etc radio group -- clearStylePick and the rest of
+      // the selection-reading code (readStyleSelectionsFromDom,
+      // syncStyleTrigger, updateStyleTriggerLabel) all depend on it being
+      // there to check/query.
+      if (opt.value === "default") {
+        const hiddenLi = document.createElement("li");
+        hiddenLi.hidden = true;
+        hiddenLi.appendChild(input);
+        element.appendChild(hiddenLi);
+        return;
+      }
+
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+      label.className = "ap-style-option-btn";
+
+      const imageFile = images[opt.value];
+      let thumb;
+      if (imageFile) {
+        thumb = document.createElement("img");
+        thumb.className = "ap-style-option-thumb";
+        thumb.src = `assets/optional_style/${group}/${imageFile}`;
+        thumb.alt = opt.label;
+      } else {
+        thumb = document.createElement("span");
+        thumb.className = "ap-style-option-thumb ap-style-option-thumb-default";
+        thumb.textContent = "Auto";
+      }
+
+      const text = document.createElement("span");
+      text.className = "ap-style-option-label";
+      text.textContent = opt.label;
+
+      label.appendChild(input);
+      label.appendChild(thumb);
+      label.appendChild(text);
+
+      // A small "x" overlaid on whichever card is currently selected (CSS
+      // shows it via :has(.ap-style-option-input:checked), so it only ever
+      // appears on the checked one), letting the user clear straight from
+      // the card they're already looking at instead of confirming first and
+      // only then reaching for the pill's clear "x" above the grid. A
+      // <button> nested in a <label> is valid HTML (unlike button-in-button
+      // elsewhere in this modal), but its click still bubbles to the
+      // label's own "activate my radio" behavior, hence the
+      // preventDefault/stopPropagation below.
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "ap-style-option-cancel";
+      cancelBtn.setAttribute("aria-label", `清除${opt.label}`);
+      cancelBtn.textContent = "×";
+      cancelBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearStylePick(name);
+      });
+      label.appendChild(cancelBtn);
+
+      li.appendChild(label);
+      element.appendChild(li);
+    });
+  }
+
   // Updates a style-option pill's displayed value (e.g. "Playful") to match
   // whichever radio in its list is currently checked -- shared by the initial
-  // fillRadioList render and by app.js after it restores a saved pick or the
-  // user selects a new one. No-ops quietly if the list isn't wrapped in the
-  // .ap-style-item/.ap-style-value pill structure (e.g. the batch options
-  // row, which still uses the always-visible list layout).
+  // fillRadioList/fillStyleOptionList render and by app.js after it restores
+  // a saved pick or the user selects a new one. Looks for the value pill two
+  // different ways: nested inside a .ap-style-item (the batch options row's
+  // always-visible list layout) or, for the per-image #ap-style-modal
+  // overlay where the type button and its option grid are siblings rather
+  // than nested, via the list's data-style-group attribute matching a
+  // .ap-style-type-btn. No-ops quietly if neither matches.
   function syncStyleTrigger(listElement) {
     if (!listElement) return;
-    const valueEl = listElement.closest(".ap-style-item")?.querySelector(".ap-style-value");
+    const group = listElement.dataset.styleGroup;
+    const valueEl = listElement.closest(".ap-style-item")?.querySelector(".ap-style-value")
+      || (group && document.querySelector(`.ap-style-type-btn[data-style-group="${group}"] .ap-style-value`));
     if (!valueEl) return;
     const checked = listElement.querySelector("input:checked");
-    const label = checked?.closest("label")?.querySelector(".step-cb-label")?.textContent;
+    const label = checked?.closest("label")?.querySelector(".step-cb-label, .ap-style-option-label")?.textContent;
     valueEl.textContent = label || "Default";
+  }
+
+  // Resets one ap-pose/-angle/-lighting/-size radio group back to its
+  // "default" option and fires a real `change` event on it -- app.js's
+  // per-image radio change listener is delegated onto the enclosing
+  // #ap-*-list <ul> (see the wireup at the bottom of app.js), so this single
+  // dispatch is all that's needed to run the exact same markOptionTouched/
+  // syncStyleTrigger/updateStyleTriggerLabel path a normal click on the
+  // "Auto" card would -- no separate copy of that logic here.
+  function clearStylePick(name) {
+    const defaultInput = document.querySelector(`input[name="${name}"][value="default"]`);
+    if (!defaultInput || defaultInput.checked) return;
+    defaultInput.checked = true;
+    defaultInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // Renders #ap-style-picker-value's picked-label row as removable chips
+  // (label + an "x" button) instead of plain renderTags spans -- each chip's
+  // "x" calls clearStylePick so a pick can be undone from here directly,
+  // without reopening #ap-style-modal and finding "Auto" in the grid.
+  function renderStylePickedChips(element, picks) {
+    element.innerHTML = "";
+    picks.forEach(({ name, label }) => {
+      const chip = document.createElement("span");
+      chip.className = "ap-style-picked-chip";
+
+      const text = document.createElement("span");
+      text.textContent = label;
+      chip.appendChild(text);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "ap-style-picked-chip-remove";
+      removeBtn.setAttribute("aria-label", `清除${label}`);
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", () => clearStylePick(name));
+      chip.appendChild(removeBtn);
+
+      element.appendChild(chip);
+    });
+  }
+
+  // Keeps #ap-style-picker-value (the removable-chip row right after the
+  // #ap-style-picker button) in sync with whatever's currently picked across
+  // the 4 ap-pose/-angle/-lighting/-size radio groups -- called whenever
+  // those radios change (app.js) or the analysis preview re-renders. Hidden
+  // entirely while everything's still Default/Auto -- the button itself
+  // always just reads "修圖風格選項", same non-default-only filtering as
+  // buildStyleOptionsText/buildStyleOptionTagLabels above. Reads the radios
+  // directly (same `input[name="..."]:checked` lookup as
+  // readStyleSelectionsFromDom, app.js) rather than depending on that
+  // function, since results.js has no access to app.js's internals.
+  // Also drives the .ap-style-type-clear "x" sitting on each Pose/Angle/
+  // Lighting/Size pill inside #ap-style-modal (index.html) -- same
+  // non-default check as the picked-chip row, just a per-category on/off
+  // instead of building a label, so the in-modal clear affordance and the
+  // outside-the-modal chip row never disagree about which categories are
+  // currently overridden.
+  function updateStyleTriggerLabel() {
+    if (!els.apStylePickerValue) return;
+    const names = ["ap-pose", "ap-angle", "ap-lighting", "ap-size"];
+    const picks = [];
+    names.forEach((name) => {
+      const group = name.replace("ap-", "");
+      const checked = document.querySelector(`input[name="${name}"]:checked`);
+      const isNonDefault = !!checked && checked.value !== "default";
+      const clearBtn = document.querySelector(`.ap-style-type-clear[data-style-group="${group}"]`);
+      if (clearBtn) clearBtn.hidden = !isNonDefault;
+      if (!isNonDefault) return;
+      const opt = STYLE_OPTION_GROUPS[group]?.options.find((o) => o.value === checked.value);
+      if (opt) picks.push({ name, label: opt.label });
+    });
+    renderStylePickedChips(els.apStylePickerValue, picks);
+    els.apStylePickerValue.hidden = picks.length === 0;
   }
 
   function joinParts(parts) {
@@ -554,14 +732,16 @@ window.PhotoAgentResults = (() => {
     // person subject; Angle applies to any subject (product/scene shots
     // benefit from camera-angle framing too). The actual retouch behavior
     // for these selections is not wired up yet -- this is UI only for now.
-    // #ap-options-toggle is now a click-to-open popup (see index.html/
-    // .ap-style-options-panel), not an inline-expanding row -- no longer
-    // forced open on every render.
-    fillRadioList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default");
-    fillRadioList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default");
-    fillRadioList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default");
-    fillRadioList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default");
+    // #ap-style-picker now opens #ap-style-modal, a real overlay window (see
+    // index.html) -- these lists render as image-thumbnail buttons
+    // (fillStyleOptionList) instead of the batch sidebar's plain text
+    // fillRadioList.
+    fillStyleOptionList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default", "pose");
+    fillStyleOptionList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default", "angle");
+    fillStyleOptionList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default", "lighting");
+    fillStyleOptionList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default", "size");
     [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
+    updateStyleTriggerLabel();
     const isPerson = analysis.subject_category === "人物";
     if (els.apGroupPose) els.apGroupPose.hidden = !isPerson;
     if (els.apGroupAngle) els.apGroupAngle.hidden = false;
@@ -579,5 +759,5 @@ window.PhotoAgentResults = (() => {
     [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
   }
 
-  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView, renderTags };
+  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags };
 })();

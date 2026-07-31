@@ -441,27 +441,308 @@
       box-shadow: 0 16px 40px rgba(0,0,0,.55);
       animation: fadeUp .2s ease both;
     }
-    /* Holds a whole .ap-style-row (4 pill triggers) instead of a single
-       radio list -- the generic 320px cap above would wrap it too
-       aggressively. */
-    /* Narrow + single-column (not the default wrapped row) -- keeps this
-       popup's own footprint close to its trigger's own width instead of
-       extending out over sibling pills to the right in
-       .options-card-inline's row (a plain left:0 floating panel much wider
-       than its trigger would sit right on top of them, blocking clicks). */
-    .ap-style-item .ap-style-options-panel {
-      width: 200px;
-      max-width: 200px;
-    }
-    .ap-style-options-panel .ap-style-row {
-      flex-direction: column;
-      align-items: stretch;
-    }
-    .ap-style-options-panel .ap-style-item { width: 100%; }
-    .ap-style-options-panel .ap-style-trigger { width: 100%; }
-    /* #ap-recipe-picker is a plain <button> (opens #ap-recipe-modal, a real
-       overlay window), not a <details> -- no dropdown to hint at. */
+    /* #ap-recipe-picker/#ap-style-picker are plain <button>s (open
+       #ap-recipe-modal/#ap-style-modal, real overlay windows), not
+       <details> -- no dropdown chevron to hint at. */
     .ap-recipe-trigger::after { content: none; }
+    /* Groups #ap-style-picker + its picked-label chips as one flex item
+       inside .options-card-inline's row -- see the HTML comment above this
+       markup for why. */
+    .ap-style-picker-row {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    /* Removable selected-label chips right after #ap-style-picker (see
+       updateStyleTriggerLabel/renderStylePickedChips, results.js) -- one
+       small pill per pick (e.g. "Playful", "Low Shot"), each with its own
+       "x" to clear that one category back to Auto/Default without
+       reopening #ap-style-modal. */
+    .ap-style-picked {
+      display: inline-flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+    }
+    .ap-style-picked-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 4px 3px 10px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .ap-style-picked-chip-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--text-3);
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    .ap-style-picked-chip-remove:hover { background: rgba(255,38,0,.14); color: var(--red); }
+
+    /* ── 修圖風格選項 overlay (#ap-style-modal): Pose/Angle/Lighting/Size
+       shown as a row of type buttons; picking one shows that category's
+       image-option grid below (showStyleGroup in app.js). Wider than the
+       plain #ap-recipe-modal/#error-modal box since it needs room for
+       thumbnail cards, not just list rows. ── */
+    /* Capped to the viewport height + flex column so the option grid (the
+       part that grows with however many images a category has) scrolls
+       internally instead of overflowing past the screen with no way to
+       reach it -- header + the 4 type buttons stay pinned above the
+       scrolling area rather than scrolling away with it. */
+    .ap-style-modal-box {
+      width: min(560px, calc(100vw - 40px));
+      max-height: calc(100vh - 40px);
+      display: flex;
+      flex-direction: column;
+      /* Smaller than .error-modal-box's own 20px 22px -- this box holds a
+         lot more (4 pills or a whole option grid) than the plain text
+         .error-modal-box/#ap-recipe-modal use it for, so it benefits more
+         from the extra breathing room the padding would otherwise eat into. */
+      padding: 14px 16px;
+    }
+    .ap-style-modal-box .step-list-frame {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      /* Smaller than the shared .step-list-frame's own 16px 18px, same
+         reasoning as .ap-style-modal-box's padding override above. */
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      /* One border too many alongside .ap-style-modal-box's own border and
+         the pill/card borders inside -- the modal-header divider below
+         (.ap-style-modal-box .error-modal-hdr) now marks the boundary
+         between the header and everything under it instead. */
+      border: none;
+    }
+    /* Header row for #ap-style-options-frame: category name top-left
+       (set from showStyleGroup, app.js, since the pill row that would
+       otherwise say so is hidden while this frame is open), confirm button
+       top-right. */
+    .ap-style-options-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .ap-style-options-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    /* Icon-only confirm button. Confirms the pick and returns to the
+       pills-only view via showStyleGroup(null), same as the pill row's own
+       click-away -- see the click handler in app.js. */
+    .ap-style-confirm-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      flex-shrink: 0;
+      border: none;
+      border-radius: 50%;
+      background: var(--mv-grad);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: var(--shadow-accent);
+      transition: transform .15s;
+    }
+    .ap-style-confirm-btn:hover { transform: translateY(-1px); }
+    /* Fixed 2-column grid (not flex-wrap) -- Pose/Angle/Lighting/Size's own
+       .ap-style-value text changes length with whatever's picked ("Pose" vs
+       "Pose · Playful"), which made a flex-wrap row reflow/reorder the pills
+       as selections changed. Grid pins each button to its own cell
+       regardless of its label's width, so the 2x2 layout never shifts. */
+    .ap-style-type-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+    /* results.js toggles `hidden` directly on the button (id="ap-group-pose"
+       etc, e.g. hiding Pose for a non-person subject) -- hide its
+       .option-pill-label + wrapping grid cell along with it, so a hidden
+       category doesn't leave an orphaned label with no button under it.
+       Scoped to .ap-style-type-btn specifically (not just `button`) since
+       .ap-style-type-btn-wrap also holds .ap-style-type-clear now, which is
+       hidden for an entirely different, much more common reason (no pick
+       made yet) -- matching any hidden button here would hide the whole
+       group nearly all the time. No `>` combinator since .ap-style-type-btn
+       is now nested one level inside .ap-style-type-btn-wrap, not a direct
+       child of .option-pill-group. */
+    .ap-style-type-row .option-pill-group:has(.ap-style-type-btn[hidden]) { display: none; }
+    /* Clear-pick "x", overlaid on the pill's own corner -- .ap-style-type-btn
+       is itself a <button>, and a <button> can't validly contain another
+       one, so this is a sibling wrapped together with it in
+       .ap-style-type-btn-wrap (sized to just the pill, unlike
+       .option-pill-group which also includes the category label above it --
+       anchoring to that instead previously put the "x" up by the label,
+       which read as clearing the label/category rather than the pick).
+       Hidden/shown per-category by updateStyleTriggerLabel (results.js)
+       alongside the picked-chip row outside the modal; click wiring +
+       clearStylePick live in app.js/results.js respectively. */
+    .ap-style-type-btn-wrap { position: relative; }
+    .ap-style-type-clear {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: var(--card-3);
+      color: var(--text-3);
+      font-size: 12px;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 0 0 2px var(--card);
+      transition: background .15s, color .15s;
+    }
+    .ap-style-type-clear:hover { background: rgba(255,38,0,.14); color: var(--red); }
+    /* Full label always visible -- overrides .ap-style-trigger's fixed
+       height/nowrap (needed elsewhere for single-line pills) so a long pick
+       wraps onto a second line and grows the button instead of being
+       clipped or ellipsis-truncated. Grid row height follows the tallest
+       cell automatically, so a 2-line pill just makes its whole row taller.
+       Smaller + centered + no dropdown chevron -- these are plain buttons
+       that swap the option grid below, not an actual <details> dropdown, so
+       the ▾ affordance (shared with .ap-style-trigger elsewhere) doesn't
+       apply here; the category name already lives in .option-pill-label
+       above, so the pill only needs to read as "currently: X". */
+    .ap-style-type-btn {
+      width: 100%;
+      height: auto;
+      min-height: 30px;
+      padding: 4px 10px;
+      font-size: 13px;
+      white-space: normal;
+      justify-content: center;
+    }
+    .ap-style-type-btn::after { content: none; }
+    .ap-style-type-btn .ap-style-value {
+      white-space: normal;
+      word-break: break-word;
+      text-align: center;
+    }
+    .ap-style-type-btn.is-active {
+      border-color: var(--accent);
+      background: rgba(168,85,247,.14);
+      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+    }
+    /* Fixed 2-column grid for every category (not the single shrink-to-fit
+       row this used to be) -- 2 per row reads as more balanced than
+       squeezing 3-4 options into one row of increasingly narrow cards, and
+       wraps to as many rows as a category needs (1 row for Lighting's 2
+       options, 2 rows for Pose/Angle's 3 and Size's 4) instead of needing a
+       per-category exception like #ap-size-list used to be.
+       #ap-style-options-frame's own overflow-y:auto (see
+       .ap-style-modal-box .step-list-frame above) covers the rare case
+       where the extra rows don't fit the viewport. */
+    .ap-style-option-grid {
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      justify-items: center;
+      gap: 12px;
+    }
+    .ap-style-option-btn {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      /* Capped instead of stretching to fill its whole grid column -- at
+         2:3 (portrait) source images, a full-width card in a 2-column grid
+         gets tall enough (2 rows for Pose/Angle/Size) to force scrolling.
+         justify-items:center above keeps the capped card centered in its
+         column rather than flush left with empty space beside it. */
+      width: 100%;
+      max-width: 140px;
+      padding: 10px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--radius);
+      background: var(--card-2);
+      cursor: pointer;
+      user-select: none;
+      transition: border-color .15s, background .15s, transform .15s;
+    }
+    .ap-style-option-btn:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
+    .ap-style-option-btn:has(.ap-style-option-input:checked) {
+      border-color: var(--accent);
+      background: rgba(168,85,247,.14);
+      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+    }
+    .ap-style-option-input { position: absolute; opacity: 0; width: 0; height: 0; }
+    /* Size-only card-level clear "x" (see fillStyleOptionList, results.js) --
+       overlaid on the thumbnail's corner, only shown on whichever card is
+       currently checked. */
+    .ap-style-option-cancel {
+      display: none;
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 20px;
+      height: 20px;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.55);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      z-index: 1;
+      transition: background .15s;
+    }
+    .ap-style-option-btn:has(.ap-style-option-input:checked) .ap-style-option-cancel { display: flex; }
+    .ap-style-option-cancel:hover { background: rgba(255,38,0,.85); }
+    .ap-style-option-thumb {
+      width: 100%;
+      /* Source images are portrait (mostly 1024x1536, a couple 1122x1402) --
+         contain (not cover) so the example photo is never cropped, just
+         letterboxed against --card-3 on the rare image that isn't exactly
+         2:3. */
+      aspect-ratio: 2 / 3;
+      object-fit: contain;
+      border-radius: calc(var(--radius) - 4px);
+      background: var(--card-3);
+    }
+    .ap-style-option-thumb-default {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-3);
+      font-size: 13px;
+      font-weight: 600;
+      border: 1.5px dashed var(--border-2);
+    }
+    .ap-style-option-label {
+      font-size: 13.75px;
+      font-weight: 600;
+      color: var(--text-2);
+      text-align: center;
+    }
     .ap-analysis-body {
       display: flex;
       flex-direction: column;
@@ -715,6 +996,15 @@
       border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
     }
     .error-modal-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    /* Divider between the header and everything below it, scoped to the
+       style modal only -- #ap-style-options-frame's own border was removed
+       (too many nested borders alongside .ap-style-modal-box's own), so this
+       hairline is what now separates the header from the pills/option grid
+       underneath instead. */
+    .ap-style-modal-box .error-modal-hdr {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
     #error-modal-title { font-size: 17px; font-weight: 700; color: var(--red); }
     .error-modal-close {
       background: none; border: none; color: var(--text-2);
@@ -1338,15 +1628,22 @@
                   <span class="ap-style-value">修圖建議</span>
                 </button>
                 <!-- Was a <details class="ap-row"> that expanded inline
-                     (pushing everything below it down); now a popover pill
-                     like the others in this row, sharing their
-                     name="ap-result-option-picker" exclusive group instead
-                     of its own separate one -- opening this closes 模型/
-                     生成張數's popups and vice versa. The 4 Pose/Angle/
-                     Lighting/Size pickers inside are unchanged, still their
-                     own nested name="ap-style-group" exclusive popovers. -->
-                <details class="ap-style-item" name="ap-result-option-picker" id="ap-options-toggle">
-                  <summary class="ap-style-trigger">
+                     (pushing everything below it down), then a nested-popover
+                     pill (Pose/Angle/Lighting/Size each their own text-only
+                     radio-list popover) -- now a plain button opening
+                     #ap-style-modal, a real overlay window listing the 4
+                     style types as buttons first, then that type's options as
+                     image thumbnail buttons (see openStyleModal/
+                     showStyleGroup in app.js). Same shape as
+                     #ap-recipe-picker/#ap-recipe-modal above. -->
+                <!-- Wraps the picker button + its picked-label chips in one
+                     flex item (.ap-style-picker-row) so the two always sit
+                     together on the same line and wrap as a unit inside
+                     .options-card-inline's own flex-wrap row -- otherwise
+                     they're just two independent items that could end up
+                     split across lines when the row wraps. -->
+                <div class="ap-style-picker-row">
+                  <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-style-picker">
                     <span class="option-pill-icon">
                       <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
                         <path d="M4 6h9M17 6h3M4 12h4M11 12h9M4 18h12M19 18h1"
@@ -1357,48 +1654,16 @@
                       </svg>
                     </span>
                     <span class="ap-style-value">修圖風格選項</span>
-                  </summary>
-                  <div class="step-list-frame ap-style-panel ap-style-options-panel">
-                    <div class="ap-style-row">
-                      <details class="ap-style-item" name="ap-style-group" id="ap-group-pose" hidden>
-                        <summary class="ap-style-trigger">
-                          <span class="ap-style-name">Pose</span>
-                          <span class="ap-style-value">Default</span>
-                        </summary>
-                        <div class="step-list-frame ap-style-panel">
-                          <ul id="ap-pose-list" class="step-inline-list"></ul>
-                        </div>
-                      </details>
-                      <details class="ap-style-item" name="ap-style-group" id="ap-group-angle" hidden>
-                        <summary class="ap-style-trigger">
-                          <span class="ap-style-name">Angle</span>
-                          <span class="ap-style-value">Default</span>
-                        </summary>
-                        <div class="step-list-frame ap-style-panel">
-                          <ul id="ap-angle-list" class="step-inline-list"></ul>
-                        </div>
-                      </details>
-                      <details class="ap-style-item" name="ap-style-group">
-                        <summary class="ap-style-trigger">
-                          <span class="ap-style-name">Lighting</span>
-                          <span class="ap-style-value">Default</span>
-                        </summary>
-                        <div class="step-list-frame ap-style-panel">
-                          <ul id="ap-lighting-list" class="step-inline-list"></ul>
-                        </div>
-                      </details>
-                      <details class="ap-style-item" name="ap-style-group">
-                        <summary class="ap-style-trigger">
-                          <span class="ap-style-name">Size</span>
-                          <span class="ap-style-value">Default</span>
-                        </summary>
-                        <div class="step-list-frame ap-style-panel">
-                          <ul id="ap-size-list" class="step-inline-list"></ul>
-                        </div>
-                      </details>
-                    </div>
-                  </div>
-                </details>
+                  </button>
+                  <!-- Selected Pose/Angle/Lighting/Size label(s) (e.g.
+                       "Playful"/"Low Shot" as separate chips), shown right
+                       after the button instead of replacing its own text --
+                       hidden entirely while everything's still Default/Auto.
+                       updateStyleTriggerLabel (results.js) keeps this in
+                       sync whenever the modal's radios change or the
+                       analysis preview re-renders. -->
+                  <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
+                </div>
                 <div class="option-pill-group">
                   <span class="option-pill-label">模型</span>
                   <details class="ap-style-item" name="ap-result-option-picker" id="ap-image-model-quality-picker">
@@ -1976,6 +2241,105 @@
     </div>
     <div class="step-list-frame">
       <ul id="ap-recipe-list" class="step-inline-list"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- 修圖風格選項 overlay: opened by #ap-style-picker (see openStyleModal/
+     closeStyleModal in app.js) -- same backdrop+box+close pattern as
+     #ap-recipe-modal above. Two-step picker: the 4 buttons below
+     (ids ap-group-pose/-angle/-lighting/-size -- results.js still hides
+     ap-group-pose when the subject isn't a person, same as it hid the old
+     nested Pose popover) switch which #ap-*-list image-option grid is
+     visible (showStyleGroup in app.js). The lists themselves are still
+     fillStyleOptionList-populated radio inputs (results.js) sharing the same
+     name="ap-pose"/"ap-angle"/"ap-lighting"/"ap-size" groups as before, so
+     readStyleSelectionsFromDom/applyStyleSelections/buildEffectiveAnalysis in
+     app.js needed no changes at all. -->
+<div id="ap-style-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box ap-style-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-style-modal-title">
+    <div class="error-modal-hdr">
+      <span id="ap-style-modal-title">修圖風格選項</span>
+      <!-- Same icon-only confirm style as #ap-style-confirm-btn below --
+           closing here has nothing to discard (radio picks already apply
+           live as they're made), so this reads as "done" rather than
+           "cancel", same reasoning as that button. Still wired to
+           closeStyleModal in app.js, unchanged. -->
+      <button id="ap-style-modal-close" class="ap-style-confirm-btn" type="button" aria-label="確認並關閉">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+          <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="ap-style-type-row" id="ap-style-type-row">
+      <!-- Category name is now a plain label above the button (same
+           .option-pill-group/.option-pill-label pattern as 模型/長寬比/生成張數
+           elsewhere), not text inside the button itself -- the button only
+           ever shows the current pick ("Default"/"Playful"/...). The
+           `hidden` toggle (results.js, non-person subjects) still lives on
+           the button (id="ap-group-pose" etc, read directly by
+           showStyleGroup/openStyleModal in app.js); .option-pill-group:has
+           below hides the label along with it. -->
+      <div class="option-pill-group">
+        <span class="option-pill-label">Pose</span>
+        <div class="ap-style-type-btn-wrap">
+          <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-pose" data-style-group="pose" hidden>
+            <span class="ap-style-value">Default</span>
+          </button>
+          <button type="button" class="ap-style-type-clear" data-style-group="pose" aria-label="清除 Pose" hidden>×</button>
+        </div>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">Angle</span>
+        <div class="ap-style-type-btn-wrap">
+          <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-angle" data-style-group="angle" hidden>
+            <span class="ap-style-value">Default</span>
+          </button>
+          <button type="button" class="ap-style-type-clear" data-style-group="angle" aria-label="清除 Angle" hidden>×</button>
+        </div>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">Lighting</span>
+        <div class="ap-style-type-btn-wrap">
+          <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-lighting" data-style-group="lighting">
+            <span class="ap-style-value">Default</span>
+          </button>
+          <button type="button" class="ap-style-type-clear" data-style-group="lighting" aria-label="清除 Lighting" hidden>×</button>
+        </div>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">Size</span>
+        <div class="ap-style-type-btn-wrap">
+          <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-size" data-style-group="size">
+            <span class="ap-style-value">Default</span>
+          </button>
+          <button type="button" class="ap-style-type-clear" data-style-group="size" aria-label="清除 Size" hidden>×</button>
+        </div>
+      </div>
+    </div>
+    <!-- Hidden whenever no Pose/Angle/Lighting/Size button is active (see
+         showStyleGroup, app.js) -- openStyleModal always opens on just the 4
+         pills; #ap-style-type-row is hidden for the duration so this frame
+         gets the full modal to itself instead of splitting space with it.
+         #ap-style-options-title (top-left, e.g. "Lighting") names whichever
+         category's grid is showing, since the pill row that used to say so
+         is hidden right now. #ap-style-confirm-btn (top-right, icon-only)
+         confirms the pick and returns to the pills-only view, same
+         showStyleGroup(null) as before. -->
+    <div class="step-list-frame" id="ap-style-options-frame" hidden>
+      <div class="ap-style-options-hdr">
+        <span class="ap-style-options-title" id="ap-style-options-title"></span>
+        <button type="button" class="ap-style-confirm-btn" id="ap-style-confirm-btn" aria-label="確認選擇">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+      <ul id="ap-pose-list" class="ap-style-option-grid" data-style-group="pose" hidden></ul>
+      <ul id="ap-angle-list" class="ap-style-option-grid" data-style-group="angle" hidden></ul>
+      <ul id="ap-lighting-list" class="ap-style-option-grid" data-style-group="lighting" hidden></ul>
+      <ul id="ap-size-list" class="ap-style-option-grid" data-style-group="size" hidden></ul>
     </div>
   </div>
 </div>

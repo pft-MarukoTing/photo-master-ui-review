@@ -15,7 +15,7 @@
     analyzeAipoc,
     analyzeAipocBatch
   } = window.PhotoAgentApi;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, setCompareView, renderTags } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   // Keeps the run-tabs preview strip capped at 1/3 of #results-canvas-row's
@@ -2397,6 +2397,61 @@
     if (els.apRecipeModal) els.apRecipeModal.hidden = true;
   }
 
+  // 修圖風格選項 overlay: two-step picker inside #ap-style-modal -- a row of
+  // Pose/Angle/Lighting/Size buttons (ids ap-group-pose/-angle/-lighting/
+  // -size), then that type's #ap-*-list image-option grid underneath.
+  // showStyleGroup just flips which button/list pair is visible; it doesn't
+  // touch which radio is checked in any of them (that's still plain radio
+  // input behavior, untouched by this).
+  const STYLE_GROUPS = ["pose", "angle", "lighting", "size"];
+
+  function styleGroupListEl(group) {
+    return els[`ap${group[0].toUpperCase()}${group.slice(1)}List`];
+  }
+
+  // group === null hides every list and clears every button's active state
+  // (no g in STYLE_GROUPS ever equals null) -- also swaps which of
+  // #ap-style-type-row (the 4 pills) / #ap-style-options-frame is visible,
+  // so picking a category hands the whole modal over to that category's
+  // option grid instead of splitting space with the pills, and confirming
+  // (#ap-style-confirm-btn) hands it back. #ap-style-options-title (top-left
+  // of that frame) is set to the same Pose/Angle/Lighting/Size text as the
+  // now-hidden pill's own .option-pill-label, since STYLE_GROUPS entries are
+  // already lowercase versions of those labels.
+  function showStyleGroup(group) {
+    STYLE_GROUPS.forEach((g) => {
+      const btn = document.getElementById(`ap-group-${g}`);
+      const list = styleGroupListEl(g);
+      if (btn) btn.classList.toggle("is-active", g === group);
+      if (list) list.hidden = g !== group;
+    });
+    if (els.apStyleTypeRow) els.apStyleTypeRow.hidden = !!group;
+    if (els.apStyleOptionsTitle) {
+      els.apStyleOptionsTitle.textContent = group ? group[0].toUpperCase() + group.slice(1) : "";
+    }
+    if (els.apStyleOptionsFrame) els.apStyleOptionsFrame.hidden = !group;
+    // #ap-style-options-frame already has its own confirm button
+    // (#ap-style-confirm-btn) for returning to the pills-only view -- hide
+    // the modal's own close button whenever that frame is showing so there
+    // aren't two ways to dismiss/confirm competing for the same corner.
+    if (els.apStyleModalClose) els.apStyleModalClose.hidden = !!group;
+  }
+
+  // Always opens on just the 4 Pose/Angle/Lighting/Size pills -- no
+  // auto-picked or remembered-from-last-time category, so
+  // #ap-style-options-frame stays hidden until the user clicks one of them
+  // (or clicks #ap-style-confirm-btn back to this same state without
+  // closing the whole overlay).
+  function openStyleModal() {
+    if (!els.apStyleModal) return;
+    showStyleGroup(null);
+    els.apStyleModal.hidden = false;
+  }
+
+  function closeStyleModal() {
+    if (els.apStyleModal) els.apStyleModal.hidden = true;
+  }
+
   // "重新分析": wipe every record's analysis/edit state and re-run step 1
   // from scratch, same as the initial submit -- for when the recipe needs a
   // clean re-analyze rather than a manual revise.
@@ -2910,6 +2965,7 @@
         if (input) input.checked = true;
       });
       [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
+      updateStyleTriggerLabel();
     }
     if (Array.isArray(recipeChecked) && els.apRecipeList) {
       const boxes = els.apRecipeList.querySelectorAll("input[type=checkbox]");
@@ -3043,10 +3099,29 @@
       if (e.target.dataset.close) closeRecipeModal();
     });
   }
+  if (els.apStylePicker) els.apStylePicker.addEventListener("click", openStyleModal);
+  if (els.apStyleModalClose) els.apStyleModalClose.addEventListener("click", closeStyleModal);
+  if (els.apStyleModal) {
+    els.apStyleModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeStyleModal();
+    });
+  }
+  document.querySelectorAll(".ap-style-type-btn").forEach((btn) => {
+    btn.addEventListener("click", () => showStyleGroup(btn.dataset.styleGroup));
+  });
+  if (els.apStyleConfirmBtn) els.apStyleConfirmBtn.addEventListener("click", () => showStyleGroup(null));
+  // The in-modal clear "x" on each Pose/Angle/Lighting/Size pill (a sibling
+  // of the pill's own button, not nested inside it -- see the CSS comment
+  // in index.html for why) -- same clearStylePick reset-to-default path the
+  // picked-chip row's own "x" uses.
+  document.querySelectorAll(".ap-style-type-clear").forEach((btn) => {
+    btn.addEventListener("click", () => clearStylePick(`ap-${btn.dataset.styleGroup}`));
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
+    if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
@@ -3060,15 +3135,16 @@
   // Per-image ap-*-list radios: their <ul> elements are stable across
   // renderAnalysisPreview's re-fills (only the <li> children get replaced),
   // so a delegated listener attached once here keeps working for every
-  // future render.
+  // future render. Lives inside #ap-style-modal now (an overlay, not a
+  // nested popover), so there's no auto-close-on-pick here -- the modal
+  // stays open so the user can switch between Pose/Angle/Lighting/Size.
   [["apPoseList", "pose"], ["apAngleList", "angle"], ["apLightingList", "lighting"], ["apSizeList", "size"]]
     .forEach(([elKey, key]) => {
       if (els[elKey]) {
         els[elKey].addEventListener("change", () => {
           markOptionTouched(key);
           syncStyleTrigger(els[elKey]);
-          const details = els[elKey].closest(".ap-style-item");
-          if (details) details.open = false;
+          updateStyleTriggerLabel();
         });
       }
     });
