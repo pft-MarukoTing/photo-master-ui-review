@@ -742,6 +742,19 @@
 
     const token = ++fileSelectionToken;
     selectedFile = file;
+    // The skip-review "Run" path (useCombinedJob, startSubmit) calls
+    // finishSingleFlow() straight away, with no renderAnalysisPreview for
+    // this photo in between -- readStyleSelectionsFromDom() there would
+    // otherwise read whatever recipe checkboxes/style radios the *previous*
+    // photo's review left sitting in the DOM and stash them into
+    // lastSingleSelections, which backToProcessFromResults then reapplies
+    // over this photo's own (freshly rendered, correctly all-checked)
+    // checklist once its results are ready. Clearing them now, before any of
+    // that runs, means a stale pre-render read finds nothing instead.
+    if (els.apRecipeList) els.apRecipeList.innerHTML = "";
+    [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach((list) => {
+      if (list) list.innerHTML = "";
+    });
     const blobForPreview = await previewableBlob(file);
     if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
 
