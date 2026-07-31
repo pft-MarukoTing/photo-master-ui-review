@@ -254,6 +254,7 @@
   // applyRunCountOptionLimit trimming the non-debug run-count choices).
   function wireOptionPicker(details, select) {
     if (!details || !select) return;
+    const summary = details.querySelector("summary");
     const valueEl = details.querySelector(".ap-style-value");
     const list = details.querySelector(".step-inline-list");
     const panel = details.querySelector(".ap-style-panel");
@@ -311,11 +312,31 @@
     };
 
     rebuild();
-    // Re-sync whenever the popover opens, in case select.value/options
-    // changed while it was closed (applyModelQualityChange mirroring a pick
-    // made in analysis-preview, or applyRunCountOptionLimit trimming choices
-    // once the debug-UI check resolves). Reposition after rebuild so the
-    // panel height reflects the options actually being shown.
+    // Deciding open-upward from the "toggle" event (fired *after* <details>
+    // already shows the panel in its default, downward position) meant the
+    // panel visibly flashed open-downward for a frame before jumping
+    // upward. Intercepting the summary's own click instead lets us rebuild
+    // + measure the panel while it's still forced invisible, decide the
+    // direction, and only then actually open <details> -- it's already
+    // correctly positioned on the very first paint. Only opening needs this;
+    // closing has nothing to reposition, so it's left to the native click.
+    if (summary) {
+      summary.addEventListener("click", (e) => {
+        if (details.open || !panel) return;
+        e.preventDefault();
+        rebuild();
+        panel.style.visibility = "hidden";
+        panel.style.display = "block";
+        repositionPanel();
+        panel.style.visibility = "";
+        panel.style.display = "";
+        details.open = true;
+      });
+    }
+    // Native toggle still fires for both directions (including this same
+    // click-driven open) -- harmless double rebuild/reposition on open, and
+    // the only path at all for a same-name sibling picker the browser's own
+    // exclusive-<details> grouping closes on our behalf.
     details.addEventListener("toggle", () => {
       if (details.open) rebuild();
       repositionPanel();
