@@ -191,7 +191,22 @@ def openai_edit_size_for_ratio(image_width: int, image_height: int) -> str:
     def snap(value: float) -> int:
         return max(_OPENAI_SIZE_GRID, round(value / _OPENAI_SIZE_GRID) * _OPENAI_SIZE_GRID)
 
-    return f"{snap(width)}x{snap(height)}"
+    snapped_width, snapped_height = snap(width), snap(height)
+
+    # Independent grid rounding can push a clamped 3:1 target just beyond the
+    # API's hard 3:1 limit (for example 2176x720). Pull only the long edge back
+    # to the closest valid multiple of 16; the fixed target pixel budget keeps
+    # the other documented size constraints valid.
+    if snapped_width / snapped_height > _OPENAI_SIZE_MAX_RATIO:
+        snapped_width = math.floor(
+            snapped_height * _OPENAI_SIZE_MAX_RATIO / _OPENAI_SIZE_GRID
+        ) * _OPENAI_SIZE_GRID
+    elif snapped_width / snapped_height < _OPENAI_SIZE_MIN_RATIO:
+        snapped_height = math.floor(
+            snapped_width / _OPENAI_SIZE_MIN_RATIO / _OPENAI_SIZE_GRID
+        ) * _OPENAI_SIZE_GRID
+
+    return f"{snapped_width}x{snapped_height}"
 
 
 def nearest_gemini_aspect_ratio(image_width: int, image_height: int) -> str:
@@ -199,6 +214,88 @@ def nearest_gemini_aspect_ratio(image_width: int, image_height: int) -> str:
     imageConfig.aspectRatio -- only called for the "original" preference."""
     ratio = (image_width / image_height) if image_width and image_height else 1.0
     return _nearest_by_ratio(ratio, _GEMINI_ASPECT_RATIO_CHOICES)
+
+
+# ── Output geometry verification ───────────────────────────────────────────────
+
+# How far the measured ratios may drift before it is reported. Grid snapping and
+# each provider's own raster tables account for well under 1%; anything past 2%
+# is a real disagreement, not rounding.
+GEOMETRY_RATIO_TOLERANCE = 0.02
+
+
+def crop_plan_pixel_ratio(crop_plan: dict, image_width: int, image_height: int):
+    """The crop region's real w:h in pixels -- not the aspectRatio label it
+    carries, which is exactly the thing that needs verifying. None when there is
+    no crop (the whole source frame is kept) or no usable dimensions."""
+    if not crop_plan or not image_width or not image_height:
+        return None
+    try:
+        w = float(crop_plan.get("w") or 0) * image_width
+        h = float(crop_plan.get("h") or 0) * image_height
+    except (TypeError, ValueError):
+        return None
+    if w <= 0 or h <= 0:
+        return None
+    return w / h
+
+
+def output_geometry_warnings(
+    output_b64: str,
+    requested_ratio_label: str,
+    crop_plan: dict,
+    image_width: int,
+    image_height: int,
+) -> list:
+    """Check, deterministically, that an edit really came back with the geometry
+    it was asked for. Returns human-readable warnings for the QA report (empty
+    list = consistent).
+
+    A stretched/squashed result is always produced the same way: the edit model
+    is handed two frame shapes that cannot both be true, and the only way to
+    satisfy both is to scale width and height by different factors. Two places
+    that can disagree:
+      1. the mandatory crop rectangle in the prompt vs the aspect ratio the same
+         prompt (and the API's size/imageConfig request) declares -- local
+         geometry can fail to reconcile them, e.g. when ROI protection
+         re-expands a box that was just fitted to the target ratio;
+      2. the canvas that came back vs the canvas that was requested.
+    Neither was measured before, so a deformed output looked like a clean run.
+    """
+    requested = parse_aspect_ratio(requested_ratio_label)
+    if requested is None and image_width and image_height:
+        # "original"/blank means the source frame is the request.
+        requested = image_width / image_height
+    if not requested:
+        return []
+
+    warnings = []
+
+    crop_ratio = crop_plan_pixel_ratio(crop_plan, image_width, image_height)
+    if crop_ratio:
+        drift = crop_ratio / requested - 1
+        if abs(drift) > GEOMETRY_RATIO_TOLERANCE:
+            warnings.append(
+                f"裁切框比例與要求的輸出畫布不一致（裁切區 {crop_ratio:.3f} vs 要求 {requested:.3f}，"
+                f"差 {drift:+.1%}）：修圖模型只能靠壓縮或拉伸畫面來同時滿足兩者。"
+            )
+
+    try:
+        out_w, out_h = get_image_dimensions(base64.b64decode(output_b64))
+    except Exception:
+        return warnings
+    if not out_w or not out_h:
+        return warnings
+
+    out_ratio = out_w / out_h
+    drift = out_ratio / requested - 1
+    if abs(drift) > GEOMETRY_RATIO_TOLERANCE:
+        warnings.append(
+            f"輸出畫布比例與要求不一致（實際 {out_w}x{out_h} = {out_ratio:.3f} vs 要求 "
+            f"{requested:.3f}，差 {drift:+.1%}）。"
+        )
+
+    return warnings
 
 
 # ── ROI / protected box helpers ────────────────────────────────────────────────
@@ -527,6 +624,48 @@ def clamp_raw_crop_box(crop_box: dict, context: dict) -> dict:
     }
 
 
+def _grow_to_aspect(crop: dict, image_width: int, image_height: int, target: float) -> dict:
+    """Grow (preferentially, never shrink first) crop to match target, keeping
+    its current bounds fully covered. Used after ROI protection may have
+    re-expanded a crop past the aspect ratio already fitted below -- growing
+    the short dimension (instead of re-shrinking, which could cut the
+    protected region right back out) is what keeps the returned box's real
+    w:h from silently drifting away from the aspectRatio it still claims to
+    be."""
+    x, y, w, h = crop["x"], crop["y"], crop["w"], crop["h"]
+    current = (w * image_width) / (h * image_height)
+    if abs(current - target) < 0.005:
+        return crop
+
+    if current < target:
+        new_w = min(1.0, target * h * image_height / image_width)
+        cx = x + w / 2
+        x = max(0, min(1 - new_w, cx - new_w / 2))
+        w = new_w
+    else:
+        new_h = min(1.0, w * image_width / (target * image_height))
+        cy = y + h / 2
+        y = max(0, min(1 - new_h, cy - new_h / 2))
+        h = new_h
+
+    # The grow above can itself be capped at the frame boundary (1.0) without
+    # reaching target -- e.g. a protected region wider than the target ratio
+    # allows for the source image's actual height (or vice versa). Ratio
+    # compliance wins over full protected-region coverage in that case: the
+    # returned box always matching its own declared aspectRatio is what keeps
+    # the edit model from having to deform the whole image to fit the API's
+    # output-size request, which is worse than the protected region losing
+    # some margin. Shrink the other dimension to force the match.
+    current = (w * image_width) / (h * image_height)
+    if abs(current - target) >= 0.005:
+        if current < target:
+            h = w * image_width / (target * image_height)
+        else:
+            w = h * image_height * target / image_width
+
+    return {**crop, "x": x, "y": y, "w": w, "h": h}
+
+
 def fit_crop_to_aspect(crop: dict, image_width: int, image_height: int, context: dict) -> dict:
     target = parse_aspect_ratio(crop.get("aspectRatio", ""))
     if not target or not image_width or not image_height:
@@ -534,33 +673,37 @@ def fit_crop_to_aspect(crop: dict, image_width: int, image_height: int, context:
 
     x, y, w, h = crop["x"], crop["y"], crop["w"], crop["h"]
     current = (w * image_width) / (h * image_height)
-    if abs(current - target) < 0.01:
-        return crop
 
-    anchor = str(
-        (context.get("crop_intent") or {}).get("subject_anchor") or context.get("roi_anchor") or ""
-    ).lower()
+    if abs(current - target) >= 0.01:
+        anchor = str(
+            (context.get("crop_intent") or {}).get("subject_anchor") or context.get("roi_anchor") or ""
+        ).lower()
 
-    if current > target:
-        new_w = max(0.12, min(w, target * h * image_height / image_width))
-        center = x + w / 2
-        if "right" in anchor:
-            x = max(0, min(1 - new_w, x + w - new_w))
-        elif "left" in anchor:
-            x = max(0, min(1 - new_w, x))
+        if current > target:
+            new_w = max(0.12, min(w, target * h * image_height / image_width))
+            center = x + w / 2
+            if "right" in anchor:
+                x = max(0, min(1 - new_w, x + w - new_w))
+            elif "left" in anchor:
+                x = max(0, min(1 - new_w, x))
+            else:
+                x = max(0, min(1 - new_w, center - new_w / 2))
+            w = new_w
         else:
-            x = max(0, min(1 - new_w, center - new_w / 2))
-        w = new_w
-    else:
-        new_h = max(0.12, min(h, (w * image_width) / (target * image_height)))
-        center = y + h / 2
-        if "upper" in anchor:
-            y = max(0, min(1 - new_h, y))
-        else:
-            y = max(0, min(1 - new_h, center - new_h / 2))
-        h = new_h
+            new_h = max(0.12, min(h, (w * image_width) / (target * image_height)))
+            center = y + h / 2
+            if "upper" in anchor:
+                y = max(0, min(1 - new_h, y))
+            else:
+                y = max(0, min(1 - new_h, center - new_h / 2))
+            h = new_h
 
-    return _protect_roi({**crop, "x": x, "y": y, "w": w, "h": h}, context)
+    protected = _protect_roi({**crop, "x": x, "y": y, "w": w, "h": h}, context)
+    # _protect_roi above (and the one already baked into the input crop from
+    # normalize_crop_box) may have expanded the box past the ratio just fitted
+    # -- restore it by growing the short dimension rather than re-shrinking,
+    # so the protected region stays covered instead of being cut again.
+    return _grow_to_aspect(protected, image_width, image_height, target)
 
 
 # ── Crop report ────────────────────────────────────────────────────────────────
@@ -577,6 +720,29 @@ def resolve_crop_box_with_report(crop_box: dict, context: dict, image_width: int
     normalized = normalize_crop_box(crop_box, context)
 
     if not normalized:
+        # No crop_box was resolved (not enabled, invalid, or effectively
+        # full-frame already) -- but the caller may still be about to request
+        # a real, non-"original" output ratio from the edit API regardless
+        # (recommended_aspect_ratio set here by the caller before this call).
+        # Without a crop plan to justify why the output ratio would differ
+        # from the source's own, the edit model is left to reconcile that gap
+        # itself, which is what produces a squished/stretched result. Fall
+        # back to a full-frame crop fitted to that ratio (bypassing
+        # normalize_crop_box's own effectively-full-frame skip above, since
+        # here full-frame is exactly the starting point, not a reason to
+        # skip) so the crop instruction and the ratio requested via the API
+        # always agree.
+        target_ratio_label = clean_aspect_ratio(context.get("recommended_aspect_ratio"))
+        if target_ratio_label and image_width and image_height:
+            full_frame = _protect_roi({"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "aspectRatio": target_ratio_label}, context)
+            fitted_fallback = fit_crop_to_aspect(full_frame, image_width, image_height, context)
+            if fitted_fallback["w"] < 0.999 or fitted_fallback["h"] < 0.999:
+                return {
+                    "cropBox": fitted_fallback,
+                    "adjustmentReasons": [
+                        "local geometry added a full-frame crop to reach the requested output aspect ratio, since no crop_box was resolved"
+                    ],
+                }
         return {
             "cropBox": None,
             "adjustmentReasons": (

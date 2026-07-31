@@ -1,6 +1,8 @@
+import copy
 import json
 import os
 import re
+from typing import Tuple
 
 import backoff
 import requests
@@ -17,6 +19,7 @@ from image_tools import (
     nearest_openai_edit_size,
     supports_arbitrary_openai_size,
     openai_edit_size_for_ratio,
+    output_geometry_warnings,
     ensure_png_bytes,
 )
 from prompts import (
@@ -33,6 +36,26 @@ OPENAI_IMAGES_EDITS_URL = "https://api.openai.com/v1/images/edits"
 
 ANALYSIS_MODEL = MODELS["analysis"]
 IMAGE_MODEL = MODELS["image"]
+
+# Ratios the analysis prompt may return in auto mode. GPT Image 2 can express
+# all of these with an arbitrary WIDTHxHEIGHT size (subject to its 3:1 API
+# limit); older GPT Image models are snapped to their fixed size enum below.
+_AUTO_ASPECT_RATIOS = {
+    "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4",
+    "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+}
+
+
+def _analysis_aspect_ratio_label(analysis: dict) -> str:
+    label = str(analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio") or "original").strip()
+    if label == "original":
+        return "original"
+    return label if label in _AUTO_ASPECT_RATIOS else "original"
+
+
+def _ratio_dimensions(label: str) -> Tuple[int, int]:
+    left, right = label.split(":", 1)
+    return int(left), int(right)
 
 
 # ── Low-level helpers ──────────────────────────────────────────────────────────
@@ -181,23 +204,29 @@ def edit_photo(
     framed_analysis = apply_framing_size(analysis, size)
     # User's explicit aspect-ratio choice overrides the analysis's own
     # recommendation ("original" only -- "auto" passes through unchanged).
-    framed_analysis = apply_aspect_ratio_preference(framed_analysis, aspect_ratio)
-    crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-
-    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio)
-
-    # Only "original" forces a concrete size derived from the source photo's
-    # own ratio -- "auto" stays the literal "auto" value so the edit model
-    # keeps its usual freedom to size the output. gpt-image-2 accepts an
-    # arbitrary WIDTHxHEIGHT so it gets the input's exact ratio; older models
-    # (gpt-image-1.5) are still limited to nearest_openai_edit_size's fixed enum.
-    size_param = "auto"
+    # The effective output ratio is written into this working copy so crop
+    # geometry and prompt text agree with the API request. Do not mutate the
+    # shared analysis object: it is reused by QA and by independent RUNs.
+    framed_analysis = copy.deepcopy(apply_aspect_ratio_preference(framed_analysis, aspect_ratio))
+    # Resolve one effective ratio and reuse it for crop and output canvas.
     if aspect_ratio == "original":
-        size_param = (
-            openai_edit_size_for_ratio(img_w, img_h)
-            if supports_arbitrary_openai_size(model)
-            else nearest_openai_edit_size(img_w, img_h)
-        )
+        ratio_w, ratio_h = img_w, img_h
+        effective_ratio_label = "original"
+    else:
+        effective_ratio_label = _analysis_aspect_ratio_label(framed_analysis)
+        if effective_ratio_label == "original":
+            ratio_w, ratio_h = img_w, img_h
+        else:
+            ratio_w, ratio_h = _ratio_dimensions(effective_ratio_label)
+    size_param = openai_edit_size_for_ratio(ratio_w, ratio_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(ratio_w, ratio_h)
+    if "x" in size_param:
+        output_w, output_h = (int(v) for v in size_param.lower().split("x", 1))
+        effective_ratio_label = f"{output_w}:{output_h}"
+    framed_analysis["recommended_aspect_ratio"] = effective_ratio_label
+    if framed_analysis.get("crop_box"):
+        framed_analysis["crop_box"]["aspect_ratio"] = effective_ratio_label
+    crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
+    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio)
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.
@@ -208,7 +237,11 @@ def edit_photo(
     if not b64:
         raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
 
-    return {"image_b64": b64, "usage": data.get("usage")}, prompt_text
+    return {
+        "image_b64": b64,
+        "usage": data.get("usage"),
+        "geometry_warnings": output_geometry_warnings(b64, effective_ratio_label, crop_plan, img_w, img_h),
+    }, prompt_text
 
 
 @backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)

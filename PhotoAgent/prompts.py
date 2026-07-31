@@ -120,7 +120,7 @@ Return exactly this JSON shape:
   "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景，以及如何處理。",
   "scene_preservation_strategy": "如何保留原始場景真實性、背景結構、材質、透視與光線關係。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
-  "recommended_aspect_ratio": "original / 1:1 / 4:5 / 3:4 / 5:4 / 4:3 / 3:2 / 16:9",
+  "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
   "subjects": [
     {
@@ -244,7 +244,12 @@ Coordinate rules:
 - Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
 - protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
 - If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
-- The output does not need to preserve the original aspect ratio. Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
+- The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
+- Changing the outer canvas ratio never permits changing the internal proportions of the photographed content. Plan the new frame only by cropping/recomposition; never stretch or squash the original scene to fill it.
+- The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
+- This is not just a label match: each crop_box's own x/y/w/h must itself compute to that same ratio -- (w * original_image_width) : (h * original_image_height) must equal the stated aspect_ratio, for both crop_box and every crop_candidates[].crop_box. A correctly-labeled aspect_ratio paired with geometry sized for a different ratio is an error, not a valid answer.
+- Prefer ordinary photographic ratios (1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9). Use 1:4, 4:1, 1:8, or 8:1 only when strongly justified and subject safety remains excellent.
+- Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
 - Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
 
 Composition decision framework:
@@ -262,16 +267,23 @@ Composition decision framework:
 
 
 def build_analysis_instruction(aspect_ratio_pref="auto"):
-    """ANALYSIS_INSTRUCTION, plus a hard aspect-ratio directive when the user
-    explicitly asked to keep the original photo's proportions -- the schema's
-    own free-choice recommended_aspect_ratio only applies to "auto"."""
-    if aspect_ratio_pref != "original":
-        return ANALYSIS_INSTRUCTION
-    return ANALYSIS_INSTRUCTION + """
+    """Build analysis instructions with one authoritative aspect-ratio policy."""
+    if aspect_ratio_pref == "original":
+        return ANALYSIS_INSTRUCTION + """
 User aspect ratio requirement:
-- The user explicitly requested that the final output keep exactly the same aspect ratio as the original photo. Set recommended_aspect_ratio to "original". If crop_box.enabled is true, crop_box.aspect_ratio must also be "original" (or left blank) -- do not choose a crop_box or crop_candidates aspect_ratio that changes the original proportions. Any cropping must stay within the original image's aspect ratio.
+- The user explicitly requested that the final output keep the original photo's aspect ratio.
+- Set recommended_aspect_ratio to "original".
+- If crop_box.enabled is true, crop_box.aspect_ratio must be "original" (or blank).
+- Every crop candidate must preserve the source aspect ratio.
+- Do not select a named ratio that changes the original proportions.
 """
-
+    return ANALYSIS_INSTRUCTION + """
+Auto aspect ratio requirement:
+- Select recommended_aspect_ratio only from the supported output set declared above.
+- crop_box.aspect_ratio and every crop candidate aspect_ratio must equal recommended_aspect_ratio exactly.
+- The normalized x/y/w/h values are a composition proposal, not permission to use a different ratio.
+- Downstream deterministic geometry will fit the crop rectangle to this selected ratio, so protect the ROI, subject extent, and protected regions with enough breathing room.
+"""
 
 # The light/color direction shared by both retouch modes. The sentence this
 # replaced ("Improve the existing photograph through light, contrast, color
@@ -570,7 +582,8 @@ def _build_crop_instruction_block(crop_plan):
     if not crop_plan:
         return (
             "No crop. Treat the supplied image boundaries as final. Do not crop, "
-            "reframe, expand canvas, add borders, or invent empty side bands."
+            "reframe, expand canvas, add borders, or invent empty side bands. Do not "
+            "stretch, squash, or otherwise distort the image's proportions."
         )
 
     x, y, w, h = crop_plan["x"], crop_plan["y"], crop_plan["w"], crop_plan["h"]
@@ -581,7 +594,8 @@ def _build_crop_instruction_block(crop_plan):
     return f"""Mandatory crop region, decided by the crop-validation step and not up for reinterpretation. Coordinates are normalized (0-1) against the full original image, origin at the top-left:
 - x={x:.3f}, y={y:.3f}, w={w:.3f}, h={h:.3f} -- i.e. trim approximately {left_pct:.0f}% off the left edge, {top_pct:.0f}% off the top edge, {right_pct:.0f}% off the right edge, and {bottom_pct:.0f}% off the bottom edge of the original image.
 - Target output aspect ratio: {aspect}.
-Perform exactly this crop/reframe as part of your edit. This is a hard constraint, not a stylistic suggestion: do not pick a different crop, do not soften or ignore it, and do not fall back to the full original frame. Do not include any content from outside this region in the final output. Within the kept region, still honor the ROI, subject extent, and protected regions below."""
+Perform exactly this crop/reframe as part of your edit. This is a hard constraint, not a stylistic suggestion: do not pick a different crop, do not soften or ignore it, and do not fall back to the full original frame. Do not include any content from outside this region in the final output. Within the kept region, still honor the ROI, subject extent, and protected regions below.
+No stretching or squashing: reach the target aspect ratio purely by cropping/recomposing this region onto the output canvas, never by scaling width and height by different factors. Every subject, face, object, and background element must keep its real-world proportions and shape exactly as in the original photo -- no elongation, flattening, or squeezing along either axis. A result with the correct output dimensions but stretched/squashed content is a failure."""
 
 
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto"):
@@ -917,6 +931,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
     return f"""{task_intro}
 
 {opening_preservation_rule}
+Geometric fidelity is a hard constraint. The output canvas may use a different aspect ratio in Auto mode, but the content inside that canvas must retain the input photo's geometry. Do not interpret the target canvas ratio as permission to stretch, squash, widen, narrow, elongate, flatten, or perspective-warp the existing scene. Use uniform scaling only; obtain a new frame shape only through the specified crop/recomposition. Faces, bodies, circular objects, products, architecture, and background structures must keep believable input-relative proportions.
 Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
 Do not make the result look synthetic, plastic, or heavily filtered.
 

@@ -159,6 +159,18 @@ def finish_stage(
             prompts["quality_check"] = None
             timings["Step 6 - quality_check"] = None
 
+        # Deterministic geometry verification (see
+        # image_tools.output_geometry_warnings): reported alongside the QA model's
+        # own findings, but measured, not judged -- a stretched/squashed output is
+        # arithmetic, and the QA model was silently passing it. Surfaced even when
+        # run_qa=False, since it costs nothing and this is the one check that
+        # catches the crop/canvas mismatch that causes the deformation.
+        geometry_warnings = edit_result.get("geometry_warnings") or []
+        for warning in geometry_warnings:
+            logger.warning("Output geometry check: %s", warning)
+        if geometry_warnings:
+            qa["warnings"] = list(qa.get("warnings") or []) + geometry_warnings
+
         usage = edit_result.get("usage")
     else:
         # Step 5 — local crop + basic enhancement (no AI API call)

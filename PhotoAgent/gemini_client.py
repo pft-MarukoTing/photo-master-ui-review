@@ -1,6 +1,8 @@
 import base64
+import copy
+import math
 import os
-from typing import Optional
+from typing import Optional, Tuple
 
 import backoff
 import requests
@@ -13,7 +15,7 @@ from image_tools import (
     resolve_crop_box_with_report,
     apply_framing_size,
     apply_aspect_ratio_preference,
-    nearest_gemini_aspect_ratio,
+    output_geometry_warnings,
     ensure_png_bytes,
 )
 from prompts import build_edit_prompt
@@ -25,6 +27,84 @@ NANO_BANANA_2_MODEL = "gemini-3.1-flash-image"
 NANO_BANANA_LITE_MODEL = "gemini-3.1-flash-lite-image"
 
 _QUALITY_TO_IMAGE_SIZE = {"low": "1K", "medium": "1K", "high": "2K"}
+
+# Ratios accepted by the Gemini 3.1 image models.
+_GEMINI_COMMON_ASPECT_RATIOS = {
+    "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4",
+    "9:16", "16:9", "21:9",
+}
+_GEMINI_FLASH_EXTRA_ASPECT_RATIOS = {"1:4", "4:1", "1:8", "8:1"}
+_AUTO_ASPECT_RATIOS = _GEMINI_COMMON_ASPECT_RATIOS | _GEMINI_FLASH_EXTRA_ASPECT_RATIOS
+
+# Documented 1K raster dimensions. Higher supported sizes are integer
+# multiples, so these dimensions also define the exact physical output ratio
+# at 2K/4K. Several named ratios are necessarily approximate on the pixel
+# grid (for example, API label 4:3 produces 1200x896).
+_GEMINI_1K_OUTPUT_DIMENSIONS = {
+    "1:1": (1024, 1024),
+    "1:4": (512, 2048),
+    "1:8": (384, 3072),
+    "2:3": (848, 1264),
+    "3:2": (1264, 848),
+    "3:4": (896, 1200),
+    "4:1": (2048, 512),
+    "4:3": (1200, 896),
+    "4:5": (928, 1152),
+    "5:4": (1152, 928),
+    "8:1": (3072, 384),
+    "9:16": (768, 1376),
+    "16:9": (1376, 768),
+    "21:9": (1584, 672),
+}
+
+
+def _analysis_aspect_ratio_label(analysis: dict) -> str:
+    label = str(analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio") or "original").strip()
+    if label == "original":
+        return "original"
+    return label if label in _AUTO_ASPECT_RATIOS else "original"
+
+
+def _ratio_dimensions(label: str) -> Tuple[int, int]:
+    left, right = label.split(":", 1)
+    return int(left), int(right)
+
+
+def _effective_aspect_ratio_label(analysis: dict, image_width: int, image_height: int) -> str:
+    """Return one concrete, model-supported output ratio.
+
+    Auto uses the analysis recommendation when the selected Gemini model
+    accepts it. "original" and invalid labels are snapped to the closest
+    supported ratio. This is necessarily an approximation because Gemini
+    exposes a closed aspect-ratio enum.
+    """
+    requested = _analysis_aspect_ratio_label(analysis)
+    supported = _AUTO_ASPECT_RATIOS
+    if requested in supported:
+        return requested
+
+    if requested == "original":
+        target = (image_width / image_height) if image_width and image_height else 1.0
+    else:
+        ratio_width, ratio_height = _ratio_dimensions(requested)
+        target = ratio_width / ratio_height
+
+    return min(
+        supported,
+        key=lambda label: abs(math.log(target / (_ratio_dimensions(label)[0] / _ratio_dimensions(label)[1]))),
+    )
+
+
+def _image_size_for_model(quality: str, model: str) -> str:
+    # Gemini 3.1 Flash Lite Image supports 1K output only.
+    if model == NANO_BANANA_LITE_MODEL:
+        return "1K"
+    return _QUALITY_TO_IMAGE_SIZE.get(quality, "1K")
+
+
+def _output_geometry_label(api_aspect_ratio: str) -> str:
+    width, height = _GEMINI_1K_OUTPUT_DIMENSIONS[api_aspect_ratio]
+    return f"{width}:{height}"
 
 
 def _gemini_api_key() -> str:
@@ -90,18 +170,20 @@ def edit_photo(
     framed_analysis = apply_framing_size(analysis, size)
     # User's explicit aspect-ratio choice overrides the analysis's own
     # recommendation ("original" only -- "auto" passes through unchanged).
-    framed_analysis = apply_aspect_ratio_preference(framed_analysis, aspect_ratio)
+    # Work on a deep copy because this function writes the effective provider
+    # ratio back into the crop/prompt context. The original analysis is shared
+    # by QA and by every independent RUN.
+    framed_analysis = copy.deepcopy(apply_aspect_ratio_preference(framed_analysis, aspect_ratio))
+    # Resolve one effective ratio and reuse it for crop and output canvas.
+    image_config = {"imageSize": _image_size_for_model(quality, model)}
+    api_ratio_label = _effective_aspect_ratio_label(framed_analysis, img_w, img_h)
+    geometry_ratio_label = _output_geometry_label(api_ratio_label)
+    framed_analysis["recommended_aspect_ratio"] = geometry_ratio_label
+    if framed_analysis.get("crop_box"):
+        framed_analysis["crop_box"]["aspect_ratio"] = geometry_ratio_label
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-
     prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio)
-
-    # Only "original" forces a concrete aspectRatio derived from the source
-    # photo's own ratio -- "auto" leaves imageConfig without an aspectRatio
-    # field, same as before this feature existed, so the edit model keeps its
-    # usual freedom to size the output.
-    image_config = {"imageSize": _QUALITY_TO_IMAGE_SIZE.get(quality, "1K")}
-    if aspect_ratio == "original":
-        image_config["aspectRatio"] = nearest_gemini_aspect_ratio(img_w, img_h)
+    image_config["aspectRatio"] = api_ratio_label
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.
@@ -125,7 +207,14 @@ def edit_photo(
     if not b64:
         raise RuntimeError("Gemini 回應沒有包含圖片資料。")
 
-    return {"image_b64": b64, "usage": data.get("usageMetadata")}, prompt_text
+    return {
+        "image_b64": b64,
+        "usage": data.get("usageMetadata"),
+        # geometry_ratio_label, not api_ratio_label: Gemini's named ratios are
+        # approximate on its own pixel grid (4:3 rasters as 1200x896), so the
+        # physical ratio is what the output can actually be held to.
+        "geometry_warnings": output_geometry_warnings(b64, geometry_ratio_label, crop_plan, img_w, img_h),
+    }, prompt_text
 
 
 @backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)
