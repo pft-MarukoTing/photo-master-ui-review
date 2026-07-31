@@ -847,12 +847,25 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   width: 100%;
   margin: 0 auto;
   padding: 12px;
+  border-radius: var(--radius-lg);
+  /* Dashed brand-tinted line instead of the plain solid hairline every other
+     card here uses -- reads as a deliberate "frame" around the focal photo
+     rather than just another panel border. */
+  border: 1.5px dashed rgba(168,85,247,.45);
   background:
+    var(--card-sheen),
     radial-gradient(ellipse 700px 420px at 50% 0%, rgba(168,85,247,.16) 0%, transparent 60%),
     radial-gradient(ellipse 700px 320px at 50% 100%, rgba(236,72,153,.09) 0%, transparent 60%),
     var(--card-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  transition: box-shadow .25s ease;
+}
+/* Card is the results page's main focal element, not just another panel --
+   a slight glow on hover (same brand-shadow language as .upload-zone:hover)
+   reinforces that instead of it sitting inert like the option cards around
+   it. */
+.compare-card:hover {
+  box-shadow: var(--shadow-lg), var(--shadow-accent);
 }
 
 /* Stable anchor for the floating controls (.canvas-actions/.compare-hint/
@@ -889,15 +902,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   border-radius: var(--radius-lg);
   overflow: hidden;
   box-shadow: var(--shadow-lg);
-  background:
-    radial-gradient(ellipse 900px 500px at 50% 0%, rgba(168,85,247,.08) 0%, transparent 60%),
-    linear-gradient(45deg, rgba(255,255,255,.025) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(255,255,255,.025) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(255,255,255,.025) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,.025) 75%),
-    var(--card);
-  background-size: auto, 20px 20px, 20px 20px, 20px 20px, 20px 20px, auto;
-  background-position: 0 0, 0 0, 0 10px, 10px -10px, -10px 0, 0 0;
 }
 
 .photo-frame img {
@@ -966,52 +970,65 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   position: absolute;
   top: 2px;
   left: 2px;
-  padding: 7px 14px;
+  padding: 6px 12px;
   border-radius: 8px;
-  background: rgba(20,20,24,.45);
-  border: 1px solid rgba(255,255,255,.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  /* Toned down from a solid glass pill to a quieter, barely-there label --
+     it's just a persistent Before/After status marker, not something that
+     should compete with the canvas-actions buttons or the photo itself. */
+  background: rgba(20,20,24,.22);
+  border: 1px solid rgba(255,255,255,.07);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: rgba(255,255,255,.7);
+  font-size: 12px;
+  font-weight: 500;
   white-space: nowrap;
   letter-spacing: -.1px;
   pointer-events: none;
-  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+  box-shadow: 0 6px 16px rgba(0,0,0,.2);
   z-index: 4;
 }
 
-/* Recipe tags: floating glass pills at the bottom-left of the photo itself
-   (same visual language as .canvas-btn/.compare-hint), one per non-default
-   pose/angle/lighting/framing-size pick actually applied to this RUN --
-   describes the GENERATED result, so hidden while viewing Original. */
+/* Recipe tags: which non-default pose/angle/lighting/framing-size picks were
+   actually applied to this RUN -- describes the GENERATED result, so hidden
+   while viewing Original. Floats centered over the bottom of the photo
+   itself (like .canvas-btn/.compare-hint) -- a near-opaque dark purple fill
+   keeps it legible over any photo, with a dashed accent border (echoing
+   .compare-card's own dashed frame) instead of a brighter gradient wash. */
 .recipe-tags {
   position: absolute;
   left: 10px;
+  right: 10px;
   bottom: 10px;
   z-index: 4;
   display: flex;
-  flex-wrap: wrap;
+  /* Always one row -- a wide/narrow photo can leave little room for several
+     tags, so each pill shrinks (and truncates its own text) rather than
+     wrapping onto a second line, which would eat into the photo above it. */
+  flex-wrap: nowrap;
+  justify-content: center;
   gap: 8px;
-  max-width: calc(100% - 36px);
 }
 .compare-card:not(.showing-generated) .recipe-tags { display: none; }
 .recipe-tags span {
   display: inline-flex;
   align-items: center;
-  padding: 7px 14px;
+  justify-content: center;
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(20,20,24,.85);
-  border: 1px solid rgba(255,255,255,.12);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(26,12,50,.68);
+  border: 1px dashed rgba(168,85,247,.55);
   color: #fff;
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
   letter-spacing: -.1px;
-  box-shadow: 0 10px 24px rgba(0,0,0,.25);
+  box-shadow: 0 6px 16px rgba(0,0,0,.3);
 }
 
 /* Full-window compare view: #compare-fullscreen-btn toggles .is-fullscreen

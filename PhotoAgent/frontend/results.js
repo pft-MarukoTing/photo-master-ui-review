@@ -458,6 +458,38 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  // #recipe-tags stays on one row (styles.css: flex-wrap:nowrap) no matter
+  // how many/how long the picks are -- rather than truncating a cramped
+  // pill's text with "...", shrink every pill's font-size in lockstep until
+  // each one's full label actually fits (offsetWidth < scrollWidth is the
+  // standard "this element's text is being clipped" check), so the labels
+  // stay fully readable, just smaller. Resets to the base size first so a
+  // later re-render with fewer/shorter tags isn't left stuck at a previous
+  // shrink. -- shared recipeTagsResizeObserver (bottom of file) re-runs this
+  // whenever #recipe-tags itself changes width (window resize, fullscreen
+  // toggle, etc.), not just on a fresh render.
+  const RECIPE_TAG_BASE_FONT_SIZE = 12;
+  const RECIPE_TAG_MIN_FONT_SIZE = 8;
+  function fitRecipeTagsRow(container) {
+    if (!container) return;
+    const chips = Array.from(container.children);
+    if (!chips.length) return;
+    let size = RECIPE_TAG_BASE_FONT_SIZE;
+    chips.forEach((chip) => { chip.style.fontSize = `${size}px`; });
+    const isClipped = () => chips.some((chip) => chip.scrollWidth > chip.clientWidth + 1);
+    while (size > RECIPE_TAG_MIN_FONT_SIZE && isClipped()) {
+      size -= 1;
+      chips.forEach((chip) => { chip.style.fontSize = `${size}px`; });
+    }
+  }
+
+  // Re-fit whenever #recipe-tags itself changes width -- window resize,
+  // rotating a phone, or #compare-fullscreen-btn's toggle (app.js) all change
+  // how much room the row actually has, independent of any fresh render.
+  if (els.recipeTags && typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => fitRecipeTagsRow(els.recipeTags)).observe(els.recipeTags);
+  }
+
   function buildPhotoContentSummary(analysis) {
     const summary = stripFieldLabel(analysis.photo_summary, ["照片內容", "照片摘要", "內容"]);
     const subject = stripFieldLabel(analysis.main_subject, ["主體", "主要主體"]);
@@ -525,7 +557,10 @@ window.PhotoAgentResults = (() => {
     els.generatedImg.src = data.image;
     els.downloadLink.href = data.image;
     els.modelName.textContent = data.model || imageModel;
-    if (els.recipeTags) renderTags(els.recipeTags, buildStyleOptionTagLabels(analysis.style_options));
+    if (els.recipeTags) {
+      renderTags(els.recipeTags, buildStyleOptionTagLabels(analysis.style_options));
+      fitRecipeTagsRow(els.recipeTags);
+    }
     els.resultSummary.textContent = analysis.photo_summary || "已完成影像分析與輸出。";
     els.qaScore.textContent = Number.isFinite(Number(qa?.score)) ? `${qa.score}/10` : "-";
     if (els.recipeVerdictScore) {
