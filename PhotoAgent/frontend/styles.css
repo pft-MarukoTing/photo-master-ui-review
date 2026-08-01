@@ -152,6 +152,11 @@ a { text-decoration: none; color: inherit; }
   padding: 0;
   cursor: pointer;
 }
+/* Disabled while the processing screen is showing (see showSection, dom.js)
+   -- clicking it would otherwise abandon an in-flight analysis. */
+.logo:disabled {
+  cursor: default;
+}
 .logo em {
   font-style: normal;
   background: var(--mv-grad);

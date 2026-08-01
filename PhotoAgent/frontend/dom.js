@@ -185,6 +185,11 @@ window.PhotoAgentDom = (() => {
     // screen, and the processing screen has no completed result yet to
     // discard either.
     if (els.resetButton) els.resetButton.hidden = name !== "results";
+    // #logo-home-btn resets the whole app (see resetApp, app.js) -- fine as
+    // a stray click target on the upload/results screens, but analysis is
+    // actively running/in-flight on the processing screen, so clicking it
+    // there would silently abandon that work.
+    if (els.logoHomeBtn) els.logoHomeBtn.disabled = name === "processing";
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
