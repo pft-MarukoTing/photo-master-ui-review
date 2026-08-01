@@ -546,10 +546,12 @@
          between the header and everything under it instead. */
       border: none;
     }
-    /* Header row for #ap-style-options-frame: category name top-left
-       (set from showStyleGroup, app.js, since the pill row that would
-       otherwise say so is hidden while this frame is open), confirm button
-       top-right. */
+    /* Header row for #ap-style-options-frame: category name top-left (set
+       from showStyleGroup, app.js, since the pill row that would otherwise
+       say so is hidden while this frame is open), exit button top-right
+       (#ap-style-exit-btn -- manually returns to the pills-only view
+       without picking anything; picking an actual option already does that
+       on its own, see the per-image ap-*-list change handler in app.js). */
     .ap-style-options-hdr {
       display: flex;
       align-items: center;
@@ -561,9 +563,8 @@
       font-weight: 700;
       color: var(--text);
     }
-    /* Icon-only confirm button. Confirms the pick and returns to the
-       pills-only view via showStyleGroup(null), same as the pill row's own
-       click-away -- see the click handler in app.js. */
+    /* Icon-only confirm/close button -- shared by #ap-style-modal-close
+       (this modal's own header, top of the whole overlay). */
     .ap-style-confirm-btn {
       display: inline-flex;
       align-items: center;
@@ -663,6 +664,13 @@
       border-color: var(--accent);
       background: rgba(168,85,247,.14);
       box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+    }
+    /* Set by updateStyleTriggerLabel (results.js) whenever this category's
+       checked radio isn't "default" -- recolors the value text (e.g.
+       "Playful") so a customized pick reads as visually distinct from the
+       plain neutral "Default"/"Auto" label at a glance. */
+    .ap-style-type-btn.is-picked .ap-style-value {
+      color: var(--accent);
     }
     /* Fixed 2-column grid for every category (not the single shrink-to-fit
        row this used to be) -- 2 per row reads as more balanced than
@@ -2406,11 +2414,10 @@
   <div class="error-modal-box ap-style-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-style-modal-title">
     <div class="error-modal-hdr">
       <span id="ap-style-modal-title">修圖風格選項</span>
-      <!-- Same icon-only confirm style as #ap-style-confirm-btn below --
-           closing here has nothing to discard (radio picks already apply
-           live as they're made), so this reads as "done" rather than
-           "cancel", same reasoning as that button. Still wired to
-           closeStyleModal in app.js, unchanged. -->
+      <!-- .ap-style-confirm-btn: icon-only confirm/close style -- closing
+           here has nothing to discard (radio picks already apply live as
+           they're made), so this reads as "done" rather than "cancel".
+           Still wired to closeStyleModal in app.js, unchanged. -->
       <button id="ap-style-modal-close" class="ap-style-confirm-btn" type="button" aria-label="確認並關閉">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
           <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2469,17 +2476,17 @@
          gets the full modal to itself instead of splitting space with it.
          #ap-style-options-title (top-left, e.g. "Lighting") names whichever
          category's grid is showing, since the pill row that used to say so
-         is hidden right now. #ap-style-confirm-btn (top-right, icon-only)
-         confirms the pick and returns to the pills-only view, same
-         showStyleGroup(null) as before. -->
+         is hidden right now. #ap-style-exit-btn (top-right) is the manual
+         way back to the pills-only view -- actually picking an option
+         auto-returns there on its own (see the per-image ap-*-list change
+         handler in app.js), but clearing one back to "Auto" via a card/
+         chip's own "x" deliberately doesn't, so the user can immediately
+         pick a different option in the same grid instead of having to
+         reopen it. -->
     <div class="step-list-frame" id="ap-style-options-frame" hidden>
       <div class="ap-style-options-hdr">
         <span class="ap-style-options-title" id="ap-style-options-title"></span>
-        <button type="button" class="ap-style-confirm-btn" id="ap-style-confirm-btn" aria-label="確認選擇">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-            <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </button>
+        <button type="button" class="error-modal-close" id="ap-style-exit-btn" aria-label="返回類別選擇">×</button>
       </div>
       <ul id="ap-pose-list" class="ap-style-option-grid" data-style-group="pose" hidden></ul>
       <ul id="ap-angle-list" class="ap-style-option-grid" data-style-group="angle" hidden></ul>

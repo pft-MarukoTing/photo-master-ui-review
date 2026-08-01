@@ -408,6 +408,12 @@ window.PhotoAgentResults = (() => {
       const isNonDefault = !!checked && checked.value !== "default";
       const clearBtn = document.querySelector(`.ap-style-type-clear[data-style-group="${group}"]`);
       if (clearBtn) clearBtn.hidden = !isNonDefault;
+      // .ap-style-type-btn.is-picked (styles.css) recolors its own
+      // .ap-style-value so a category reading e.g. "Playful" instead of
+      // "Default" is visually distinct at a glance, same non-default check
+      // as the clear "x" above.
+      const groupBtn = document.getElementById(`ap-group-${group}`);
+      if (groupBtn) groupBtn.classList.toggle("is-picked", isNonDefault);
       if (!isNonDefault) return;
       const opt = STYLE_OPTION_GROUPS[group]?.options.find((o) => o.value === checked.value);
       if (opt) picks.push({ name, label: opt.label });

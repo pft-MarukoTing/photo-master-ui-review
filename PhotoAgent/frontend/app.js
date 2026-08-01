@@ -2553,11 +2553,14 @@
   // (no g in STYLE_GROUPS ever equals null) -- also swaps which of
   // #ap-style-type-row (the 4 pills) / #ap-style-options-frame is visible,
   // so picking a category hands the whole modal over to that category's
-  // option grid instead of splitting space with the pills, and confirming
-  // (#ap-style-confirm-btn) hands it back. #ap-style-options-title (top-left
-  // of that frame) is set to the same Pose/Angle/Lighting/Size text as the
-  // now-hidden pill's own .option-pill-label, since STYLE_GROUPS entries are
-  // already lowercase versions of those labels.
+  // option grid instead of splitting space with the pills. Three ways back
+  // to null: #ap-style-exit-btn (manual, no pick made), picking an actual
+  // option in the grid (the per-image ap-*-list change handler below,
+  // automatic), or -- for either -- reopening the modal fresh (openStyleModal
+  // always starts at null). #ap-style-options-title (top of that frame) is
+  // set to the same Pose/Angle/Lighting/Size text as the now-hidden pill's
+  // own .option-pill-label, since STYLE_GROUPS entries are already
+  // lowercase versions of those labels.
   function showStyleGroup(group) {
     STYLE_GROUPS.forEach((g) => {
       const btn = document.getElementById(`ap-group-${g}`);
@@ -2570,18 +2573,18 @@
       els.apStyleOptionsTitle.textContent = group ? group[0].toUpperCase() + group.slice(1) : "";
     }
     if (els.apStyleOptionsFrame) els.apStyleOptionsFrame.hidden = !group;
-    // #ap-style-options-frame already has its own confirm button
-    // (#ap-style-confirm-btn) for returning to the pills-only view -- hide
-    // the modal's own close button whenever that frame is showing so there
-    // aren't two ways to dismiss/confirm competing for the same corner.
+    // #ap-style-options-frame has its own #ap-style-exit-btn (top-right of
+    // its header) for returning to the pills-only view while it's showing --
+    // hide the modal's own close button whenever that frame is showing so
+    // there aren't two dismiss/back buttons competing for the same corner.
     if (els.apStyleModalClose) els.apStyleModalClose.hidden = !!group;
   }
 
   // Always opens on just the 4 Pose/Angle/Lighting/Size pills -- no
   // auto-picked or remembered-from-last-time category, so
   // #ap-style-options-frame stays hidden until the user clicks one of them
-  // (or clicks #ap-style-confirm-btn back to this same state without
-  // closing the whole overlay).
+  // (picking an option inside it returns here on its own -- see the
+  // per-image ap-*-list change handler below).
   function openStyleModal() {
     if (!els.apStyleModal) return;
     showStyleGroup(null);
@@ -3325,7 +3328,7 @@
   document.querySelectorAll(".ap-style-type-btn").forEach((btn) => {
     btn.addEventListener("click", () => showStyleGroup(btn.dataset.styleGroup));
   });
-  if (els.apStyleConfirmBtn) els.apStyleConfirmBtn.addEventListener("click", () => showStyleGroup(null));
+  if (els.apStyleExitBtn) els.apStyleExitBtn.addEventListener("click", () => showStyleGroup(null));
   // The in-modal clear "x" on each Pose/Angle/Lighting/Size pill (a sibling
   // of the pill's own button, not nested inside it -- see the CSS comment
   // in index.html for why) -- same clearStylePick reset-to-default path the
@@ -3355,16 +3358,21 @@
   // Per-image ap-*-list radios: their <ul> elements are stable across
   // renderAnalysisPreview's re-fills (only the <li> children get replaced),
   // so a delegated listener attached once here keeps working for every
-  // future render. Lives inside #ap-style-modal now (an overlay, not a
-  // nested popover), so there's no auto-close-on-pick here -- the modal
-  // stays open so the user can switch between Pose/Angle/Lighting/Size.
+  // future render. Picking an actual option returns straight to the
+  // pills-only view (showStyleGroup(null)), same as #ap-style-type-row's own
+  // click-away -- the modal itself stays open so the user can go pick
+  // another category next. Clearing one back to "Auto" instead (a card/
+  // chip's own "x" -- clearStylePick, results.js, dispatches this same
+  // "change" event with value "default") deliberately stays in this grid,
+  // so the user can immediately pick a different option in it.
   [["apPoseList", "pose"], ["apAngleList", "angle"], ["apLightingList", "lighting"], ["apSizeList", "size"]]
     .forEach(([elKey, key]) => {
       if (els[elKey]) {
-        els[elKey].addEventListener("change", () => {
+        els[elKey].addEventListener("change", (e) => {
           markOptionTouched(key);
           syncStyleTrigger(els[elKey]);
           updateStyleTriggerLabel();
+          if (e.target.value !== "default") showStyleGroup(null);
         });
       }
     });
