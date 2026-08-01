@@ -1452,14 +1452,14 @@
                 <span class="ios-track"><span class="ios-thumb"></span></span>
               </label>
             </label>
-            <!-- 模型/長寬比/生成張數 pickers used to sit inline here; they now
-                 live inside #settings-modal (see openSettingsModal/
-                 closeSettingsModal in app.js) so this row is just the one
-                 button that opens it. Moving their markup doesn't touch
-                 wireOptionPicker/populateModelQualitySelect/
-                 populateAspectRatioSelect/applyRunCountChange in app.js at
-                 all -- they all look the select/details elements up by id
-                 via dom.js, not by where they sit in the document. -->
+          </div>
+
+          <!-- #settings-btn sits inline with the Run button(s) here, both
+               right-aligned as one group -- it used to be its own row inside
+               #upload-options-card above, but that left it stranded on the
+               left with nothing else in that row once the 模型/長寬比/
+               生成張數 pickers moved into #settings-modal. -->
+          <div class="upload-actions-row">
             <button id="settings-btn" class="btn btn-secondary" type="button">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
                 <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/>
@@ -1468,9 +1468,6 @@
               </svg>
               <span class="btn-label">設定</span>
             </button>
-          </div>
-
-          <div class="upload-actions-row">
             <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後，接續修圖並顯示結果">
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"/>

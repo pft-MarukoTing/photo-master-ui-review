@@ -261,10 +261,12 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -.17px;
 }
 
-/* Run buttons: sit inline next to the option pills below the drop zone
-   (see .upload-below-zone), not stacked full-width in a side column anymore. */
+/* Run buttons (+ #settings-btn) sit inline below the drop zone (see
+   .upload-below-zone), not stacked full-width in a side column anymore --
+   right-aligned as a group instead of hugging the row's left edge. */
 .upload-actions-row {
   display: flex;
+  justify-content: flex-end;
   gap: 10px;
 }
 
@@ -1519,8 +1521,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 @media (max-width: 900px) {
   .upload-grid { max-width: 100%; }
   .upload-below-zone { flex-direction: column; align-items: stretch; gap: 10px; }
-  .upload-actions-row { flex-direction: column; }
-  .upload-actions-row .btn { width: 100%; }
   .upload-zone { min-height: 160px; }
 
   .proc-top { flex-direction: column; align-items: center; text-align: center; gap: 32px; }
@@ -1550,13 +1550,13 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      breathing room. */
   .upload-container { padding-top: 16px; padding-bottom: 16px; }
 
-  .upload-actions-row .btn {
-    height: auto;
-    min-height: 44px;
-    white-space: normal;
-    text-align: center;
-    padding: 10px 16px;
-  }
+  /* #settings-btn + Run sit side by side (.upload-actions-row is a row, not
+     a stack) all the way down -- shrink each button's own padding/font
+     instead of ever going full-width, so both keep fitting the row as the
+     viewport narrows. */
+  .upload-actions-row { gap: 8px; }
+  .upload-actions-row .btn { height: 40px; padding: 0 14px; font-size: 15px; gap: 5px; }
+  .upload-actions-row .btn svg { width: 14px; height: 14px; }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
   .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
@@ -1572,6 +1572,13 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     min-width: 0;
   }
 
+}
+
+/* One notch narrower still (320-380px phones) -- #settings-btn + Run were
+   still crowding the row's available width at 560px's sizing. */
+@media (max-width: 380px) {
+  .upload-actions-row .btn { height: 36px; padding: 0 10px; font-size: 13px; gap: 4px; }
+  .upload-actions-row .btn svg { width: 12px; height: 12px; }
 }
 
 /* Short viewports (small/un-maximized browser windows, not just narrow
