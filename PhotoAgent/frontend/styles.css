@@ -1595,15 +1595,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .upload-grid { margin-bottom: 16px; }
   .upload-zone { min-height: 160px; }
   #dz-preview { min-height: 160px; }
-  /* The option pills/Run button below the drop zone were sized for the
-     280px zone -- scoped to .upload-below-zone (not the bare .ap-style-
-     trigger/.btn classes) so this doesn't also shrink unrelated triggers
-     and buttons elsewhere in the app that happen to share those classes. */
-  .upload-below-zone .ap-style-trigger { height: 34px; padding: 0 12px; font-size: 13px; gap: 4px; }
-  .upload-below-zone .ap-style-trigger::after { font-size: 15px; }
-  .upload-below-zone .option-pill-label { font-size: 10.5px; }
-  .upload-below-zone .option-pill-icon svg { width: 12px; height: 12px; }
-  .upload-below-zone .option-pill-group { gap: 3px; }
+  /* The Run button below the drop zone was sized for the 280px zone --
+     scoped to .upload-actions-row (not the bare .btn class) so this
+     doesn't also shrink unrelated buttons elsewhere in the app. */
   .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 13px; height: 13px; }
 }
@@ -1616,10 +1610,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .upload-grid { margin-bottom: 8px; }
   .upload-zone { min-height: 130px; }
   #dz-preview { min-height: 130px; }
-  .upload-below-zone .ap-style-trigger { height: 28px; padding: 0 10px; font-size: 11px; gap: 3px; }
-  .upload-below-zone .ap-style-trigger::after { font-size: 12px; }
-  .upload-below-zone .option-pill-label { font-size: 9px; }
-  .upload-below-zone .option-pill-icon svg { width: 10px; height: 10px; }
   .upload-actions-row .btn { height: 30px; padding: 0 12px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 11px; height: 11px; }
 }

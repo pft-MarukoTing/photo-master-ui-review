@@ -1028,6 +1028,31 @@
     .error-modal-close:hover { color: var(--text); }
     .error-modal-file { font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
     .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; }
+    /* Shared by #settings-modal (upload page) and #ap-settings-modal
+       (results/analysis-preview page): same .option-pill-group rows as the
+       inline pickers they replaced, just stacked instead of side by side.
+       Out in those pages' flex-wrap rows, .ap-style-trigger just sized
+       itself to its content (nowrap) since the row had room to wrap around
+       it -- stacked full-width in this narrow modal column there's nothing
+       to wrap into, so a long value (e.g. "GPT Image 2 · Standard") would
+       instead push the trigger past the modal's own edge. Stretch the
+       trigger to the row and ellipsize the value instead. */
+    .settings-modal-body { display: flex; flex-direction: column; gap: 16px; }
+    .settings-modal-body .ap-style-item { width: 100%; }
+    .settings-modal-body .ap-style-trigger { width: 100%; box-sizing: border-box; }
+    .settings-modal-body .ap-style-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .settings-modal-body .ap-style-trigger::after { flex-shrink: 0; }
+    /* .settings-modal-title left at the plain <span> default (no explicit
+       size/weight/color) read as barely-there next to #error-modal-title/
+       .notice-modal-title, which both style themselves explicitly -- give
+       it the same treatment. Same reasoning for .option-pill-label here:
+       elsewhere it's a small caption riding along a busy pill row, but as
+       the only label identifying each field in this modal it needs to read
+       as a proper field title, not a caption -- scoped to
+       .settings-modal-body so the shared .option-pill-label style used
+       elsewhere (style-picker pills, analysis-preview pickers) is untouched. */
+    .settings-modal-title { font-size: 17px; font-weight: 800; color: var(--text); }
+    .settings-modal-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
 
     /* #notice-modal's title reuses .logo's own wordmark treatment (Photo in
        the plain text color, Master in the brand gradient) instead of
@@ -1427,97 +1452,22 @@
                 <span class="ios-track"><span class="ios-thumb"></span></span>
               </label>
             </label>
-            <!-- Options populated from window.PhotoAgentConfig.imageModelQualityOptions
-                 (populateModelQualitySelect, app.js) -- single source of truth shared
-                 with #ap-image-model-quality instead of two hand-duplicated selects.
-                 The real <select> stays in the DOM (just hidden) as the actual form
-                 control -- wireOptionPicker (app.js) mirrors its options/value into
-                 this popover instead of duplicating the population logic; picking an
-                 option here still just sets select.value + dispatches "change", so
-                 every existing listener on it keeps working untouched. Same visual
-                 pattern (.ap-style-item/.ap-style-trigger/.ap-style-panel) as the
-                 Pose/Angle/Lighting/Size pickers in the analysis-preview panel. -->
-            <div class="option-pill-group">
-              <span class="option-pill-label">模型</span>
-              <details class="ap-style-item" name="upload-option-picker" id="image-model-quality-picker">
-                <summary class="ap-style-trigger">
-                  <span class="option-pill-icon">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                      <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
-                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </span>
-                  <span class="ap-style-value"></span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul class="step-inline-list"></ul>
-                </div>
-                <select id="image-model-quality" class="quality-select model-quality-select" hidden></select>
-              </details>
-            </div>
-            <!-- Options populated from window.PhotoAgentConfig.aspectRatioOptions
-                 (populateAspectRatioSelect, app.js). Upload-page only -- fixed
-                 once analysis has run, so it can't drift out of sync with
-                 what the analysis step was told (see build_edit_prompt's
-                 _aspect_ratio_pref_at_analysis handling on the backend). -->
-            <div class="option-pill-group">
-              <span class="option-pill-label">長寬比</span>
-              <details class="ap-style-item" name="upload-option-picker" id="image-aspect-ratio-picker">
-                <summary class="ap-style-trigger">
-                  <span class="option-pill-icon">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                      <path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"
-                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </span>
-                  <span class="ap-style-value"></span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul class="step-inline-list"></ul>
-                </div>
-                <select id="image-aspect-ratio" class="quality-select aspect-ratio-select" hidden></select>
-              </details>
-            </div>
-            <div class="option-pill-group">
-              <span class="option-pill-label">生成張數</span>
-              <details class="ap-style-item" name="upload-option-picker" id="image-run-count-picker">
-                <summary class="ap-style-trigger">
-                  <span class="option-pill-icon">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                      <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                      <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </span>
-                  <span class="ap-style-value"></span>
-                </summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul class="step-inline-list"></ul>
-                </div>
-                <select id="image-run-count" class="quality-select" hidden>
-                  <option value="1" selected>1</option>
-                  <option value="2">2</option>
-                  <option value="3">3</option>
-                  <option value="4">4</option>
-                  <option value="5">5</option>
-                  <option value="6">6</option>
-                  <option value="7">7</option>
-                  <option value="8">8</option>
-                  <option value="9">9</option>
-                  <option value="10">10</option>
-                  <option value="11">11</option>
-                  <option value="12">12</option>
-                  <option value="13">13</option>
-                  <option value="14">14</option>
-                  <option value="15">15</option>
-                  <option value="16">16</option>
-                  <option value="17">17</option>
-                  <option value="18">18</option>
-                  <option value="19">19</option>
-                  <option value="20">20</option>
-                </select>
-              </details>
-            </div>
+            <!-- 模型/長寬比/生成張數 pickers used to sit inline here; they now
+                 live inside #settings-modal (see openSettingsModal/
+                 closeSettingsModal in app.js) so this row is just the one
+                 button that opens it. Moving their markup doesn't touch
+                 wireOptionPicker/populateModelQualitySelect/
+                 populateAspectRatioSelect/applyRunCountChange in app.js at
+                 all -- they all look the select/details elements up by id
+                 via dom.js, not by where they sit in the document. -->
+            <button id="settings-btn" class="btn btn-secondary" type="button">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19.5a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4.5a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.08A1.65 1.65 0 0011.5 3.6V3.5a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.08a1.65 1.65 0 001.51 1H19.5a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
+                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="btn-label">設定</span>
+            </button>
           </div>
 
           <div class="upload-actions-row">
@@ -1691,66 +1641,24 @@
                        analysis preview re-renders. -->
                   <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
                 </div>
-                <div class="option-pill-group">
-                  <span class="option-pill-label">模型</span>
-                  <details class="ap-style-item" name="ap-result-option-picker" id="ap-image-model-quality-picker">
-                    <summary class="ap-style-trigger">
-                      <span class="option-pill-icon">
-                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                          <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
-                            stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                      </span>
-                      <span class="ap-style-value"></span>
-                    </summary>
-                    <div class="step-list-frame ap-style-panel">
-                      <ul class="step-inline-list"></ul>
-                    </div>
-                    <select id="ap-image-model-quality" class="quality-select model-quality-select" hidden></select>
-                  </details>
-                </div>
-                <div id="ap-run-count-wrap" hidden>
-                  <div class="option-pill-group">
-                    <span class="option-pill-label">生成張數</span>
-                    <details class="ap-style-item" name="ap-result-option-picker" id="ap-run-count-picker">
-                      <summary class="ap-style-trigger">
-                        <span class="option-pill-icon">
-                          <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                            <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
-                            <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                          </svg>
-                        </span>
-                        <span class="ap-style-value"></span>
-                      </summary>
-                      <div class="step-list-frame ap-style-panel">
-                        <ul class="step-inline-list"></ul>
-                      </div>
-                      <select id="ap-run-count" class="quality-select" hidden>
-                        <option value="1" selected>1</option>
-                        <option value="2">2</option>
-                        <option value="3">3</option>
-                        <option value="4">4</option>
-                        <option value="5">5</option>
-                        <option value="6">6</option>
-                        <option value="7">7</option>
-                        <option value="8">8</option>
-                        <option value="9">9</option>
-                        <option value="10">10</option>
-                        <option value="11">11</option>
-                        <option value="12">12</option>
-                        <option value="13">13</option>
-                        <option value="14">14</option>
-                        <option value="15">15</option>
-                        <option value="16">16</option>
-                        <option value="17">17</option>
-                        <option value="18">18</option>
-                        <option value="19">19</option>
-                        <option value="20">20</option>
-                      </select>
-                    </details>
-                  </div>
-                </div>
+                <!-- 模型/生成張數 pickers used to sit inline here; they now
+                     live inside #ap-settings-modal (see openApSettingsModal/
+                     closeApSettingsModal in app.js), same move as the
+                     upload page's own #settings-modal. #ap-run-count-wrap
+                     keeps its own id/hidden attribute inside that modal --
+                     showAnalysisPreview/startInlineBatchReview etc still
+                     toggle it directly to show/hide 生成張數 for flows
+                     where it doesn't apply, unchanged. -->
+                <button id="ap-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.6"/>
+                      <path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19.5a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4.5a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.08A1.65 1.65 0 0011.5 3.6V3.5a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.08a1.65 1.65 0 001.51 1H19.5a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
+                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value">設定</span>
+                </button>
                 <!-- Moved out of #inline-analysis-actions (which keeps just
                      the cancel button) -- sits at the right end of this pill
                      row instead, pushed there via margin-left:auto since
@@ -2278,6 +2186,181 @@
     <p id="notice-modal-msg" class="error-modal-msg"></p>
     <div class="notice-modal-actions">
       <button id="notice-modal-ok-btn" class="btn btn-grad btn-sm" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Upload-page settings overlay: opened by #settings-btn (see
+     openSettingsModal/closeSettingsModal in app.js) -- same backdrop+box+
+     close pattern as #error-modal above. Holds the 模型/長寬比/生成張數
+     pickers that used to sit inline under the drop zone; moving them here
+     didn't require any changes to wireOptionPicker/populateModelQualitySelect/
+     populateAspectRatioSelect/applyRunCountChange in app.js since those all
+     look elements up by id via dom.js. -->
+<div id="settings-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="error-modal-hdr">
+      <span id="settings-modal-title" class="settings-modal-title">設定</span>
+      <button id="settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="option-pill-group">
+        <span class="option-pill-label">模型</span>
+        <details class="ap-style-item" name="upload-option-picker" id="image-model-quality-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                  stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="image-model-quality" class="quality-select model-quality-select" hidden></select>
+        </details>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">長寬比</span>
+        <details class="ap-style-item" name="upload-option-picker" id="image-aspect-ratio-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="image-aspect-ratio" class="quality-select aspect-ratio-select" hidden></select>
+        </details>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">生成張數</span>
+        <details class="ap-style-item" name="upload-option-picker" id="image-run-count-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="image-run-count" class="quality-select" hidden>
+            <option value="1" selected>1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10</option>
+            <option value="11">11</option>
+            <option value="12">12</option>
+            <option value="13">13</option>
+            <option value="14">14</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="17">17</option>
+            <option value="18">18</option>
+            <option value="19">19</option>
+            <option value="20">20</option>
+          </select>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Results/analysis-preview page settings overlay: opened by
+     #ap-settings-btn (see openApSettingsModal/closeApSettingsModal in
+     app.js) -- same backdrop+box+close pattern as #settings-modal above.
+     Holds the 模型/生成張數 pickers that used to sit inline in
+     #ap-options-card-inline -- no 長寬比 entry here, since aspect ratio is
+     only ever set on the upload page and carried forward unchanged once
+     analysis has run (see build_edit_prompt's _aspect_ratio_pref_at_analysis
+     handling on the backend). -->
+<div id="ap-settings-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-settings-modal-title">
+    <div class="error-modal-hdr">
+      <span id="ap-settings-modal-title" class="settings-modal-title">設定</span>
+      <button id="ap-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div class="settings-modal-body">
+      <div class="option-pill-group">
+        <span class="option-pill-label">模型</span>
+        <details class="ap-style-item" name="ap-result-option-picker" id="ap-image-model-quality-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                  stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="ap-image-model-quality" class="quality-select model-quality-select" hidden></select>
+        </details>
+      </div>
+      <div id="ap-run-count-wrap" hidden>
+        <div class="option-pill-group">
+          <span class="option-pill-label">生成張數</span>
+          <details class="ap-style-item" name="ap-result-option-picker" id="ap-run-count-picker">
+            <summary class="ap-style-trigger">
+              <span class="option-pill-icon">
+                <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+                  <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="ap-style-value"></span>
+            </summary>
+            <div class="step-list-frame ap-style-panel">
+              <ul class="step-inline-list"></ul>
+            </div>
+            <select id="ap-run-count" class="quality-select" hidden>
+              <option value="1" selected>1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+              <option value="9">9</option>
+              <option value="10">10</option>
+              <option value="11">11</option>
+              <option value="12">12</option>
+              <option value="13">13</option>
+              <option value="14">14</option>
+              <option value="15">15</option>
+              <option value="16">16</option>
+              <option value="17">17</option>
+              <option value="18">18</option>
+              <option value="19">19</option>
+              <option value="20">20</option>
+            </select>
+          </details>
+        </div>
+      </div>
     </div>
   </div>
 </div>

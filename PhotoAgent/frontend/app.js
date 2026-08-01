@@ -2500,6 +2500,30 @@
     if (els.noticeModal) els.noticeModal.hidden = true;
   }
 
+  // Upload-page settings overlay -- same open/close shape as the error modal
+  // above, just toggling #settings-modal's own hidden attribute. Holds the
+  // 模型/長寬比/生成張數 pickers (already populated/wired above via
+  // populateModelQualitySelect/populateAspectRatioSelect/wireOptionPicker),
+  // so opening it doesn't need to re-render anything itself either.
+  function openSettingsModal() {
+    if (els.settingsModal) els.settingsModal.hidden = false;
+  }
+
+  function closeSettingsModal() {
+    if (els.settingsModal) els.settingsModal.hidden = true;
+  }
+
+  // Results/analysis-preview page settings overlay -- same shape as
+  // openSettingsModal/closeSettingsModal above, just toggling
+  // #ap-settings-modal's own hidden attribute instead.
+  function openApSettingsModal() {
+    if (els.apSettingsModal) els.apSettingsModal.hidden = false;
+  }
+
+  function closeApSettingsModal() {
+    if (els.apSettingsModal) els.apSettingsModal.hidden = true;
+  }
+
   // 修圖建議 overlay -- same open/close shape as the error modal above,
   // just toggling #ap-recipe-modal's own hidden attribute. #ap-recipe-list
   // is already populated by fillCheckList (results.js) whenever analysis
@@ -3269,6 +3293,20 @@
       if (e.target.dataset.close) closeNoticeModal();
     });
   }
+  if (els.settingsBtn) els.settingsBtn.addEventListener("click", openSettingsModal);
+  if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
+  if (els.settingsModal) {
+    els.settingsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeSettingsModal();
+    });
+  }
+  if (els.apSettingsBtn) els.apSettingsBtn.addEventListener("click", openApSettingsModal);
+  if (els.apSettingsModalClose) els.apSettingsModalClose.addEventListener("click", closeApSettingsModal);
+  if (els.apSettingsModal) {
+    els.apSettingsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeApSettingsModal();
+    });
+  }
   if (els.apRecipePicker) els.apRecipePicker.addEventListener("click", openRecipeModal);
   if (els.apRecipeModalClose) els.apRecipeModalClose.addEventListener("click", closeRecipeModal);
   if (els.apRecipeModal) {
@@ -3298,6 +3336,8 @@
     if (e.key !== "Escape") return;
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
     if (els.noticeModal && !els.noticeModal.hidden) closeNoticeModal();
+    if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
+    if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
