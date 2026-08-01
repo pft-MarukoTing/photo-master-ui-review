@@ -774,7 +774,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
 .results-container {
   padding-top: 44px;
-  padding-bottom: 80px;
+  padding-bottom: 40px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -797,6 +797,16 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   flex: 1 1 0%;
   min-width: 0;
   align-self: center;
+}
+/* Wraps just .compare-card (+ #ap-options-card-inline, moved in here during
+   the inline revise flow -- see moveOptionsCardTo in app.js). display:contents
+   makes it invisible to layout by default, so normal/tall screens render
+   exactly as if this wrapper didn't exist; short screens (see
+   @media max-height:700px below) turn it into a real flex column that caps
+   its own height and splits photo/options-card 70%/30, without touching
+   #run-tabs-row, which stays a sibling of this wrapper, not a child. */
+.results-canvas-top {
+  display: contents;
 }
 /* flex-grow ratio (both basis pinned at 0%) instead of a fixed px width --
    neither side is ever left with unclaimed blank space regardless of
@@ -1607,6 +1617,104 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      doesn't also shrink unrelated buttons elsewhere in the app. */
   .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 13px; height: 13px; }
+
+  /* Results page, inline revise flow: .compare-card's photo-frame is a
+     fixed 480px (see styles.css above) so once #ap-options-card-inline is
+     moved under it (openInlineAnalysisPanel, app.js), the two together
+     routinely ran past a short viewport's height, leaving the settings/
+     recipe/style buttons only reachable by scrolling the whole page down.
+     Turn #results-canvas-top (the wrapper around just the photo + that
+     card, see its own comment in index.html) into a height-capped flex
+     column and split it 70/30 between them instead -- #run-tabs-row isn't
+     part of this wrapper, so it's untouched and can still push the page
+     into scrolling on its own if it doesn't fit below. */
+  .results-canvas-row.showing-analysis #results-canvas-top {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--header-h) - 44px);
+    min-height: 0;
+    gap: 12px;
+  }
+  /* :not(.is-fullscreen) -- #compare-fullscreen-btn's own .photo-frame/
+     .photo-frame-wrap/.photo-frame img overrides (see .compare-card.
+     is-fullscreen above) would otherwise lose to these on specificity
+     (ID + 2 classes beats their plain 2-3 classes), breaking the full-
+     window compare view whenever it's opened during the inline revise
+     flow on a short screen. */
+  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) {
+    /* flex-grow eats whatever #ap-options-card-inline below doesn't need,
+       rather than a fixed 70% share -- that left dead space under the
+       options card (its buttons + textarea rarely fill a full 30%) instead
+       of handing the photo the room it wasn't using. */
+    flex: 1 1 0%;
+    min-height: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) .photo-frame-wrap {
+    flex: 1 1 0%;
+    min-height: 0;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) .photo-frame {
+    height: 100%;
+    max-height: 100%;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) .photo-frame img {
+    max-height: 100%;
+  }
+  /* Sized to its own content (buttons row + 補充指令 textarea), not a fixed
+     flex-basis or max-height -- either one forced a mismatch against this
+     content's actual (roughly constant, ~200-230px) height: a generous cap
+     left blank space below it when content was shorter, a tight cap
+     clipped it into a scrollbar when content was taller. flex-shrink:0
+     means .compare-card (flex:1 1 0%, shrinkable) above absorbs any
+     squeeze first if the column ever runs short overall, instead of this
+     card ever losing its own content to overflow. */
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline {
+    flex: 0 0 auto;
+    min-height: 0;
+    margin-top: 0;
+  }
+  /* 修圖建議/修圖風格選項/設定 (.ap-style-trigger) and Run
+     (.analysis-preview-action) kept their normal full size above -- inside
+     this now much-shorter column they read oversized and unbalanced next to
+     the shrunk photo. Shrink them to match, same proportions as
+     .upload-actions-row's own short-viewport sizing above. */
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .ap-style-trigger {
+    height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
+    gap: 4px;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .option-pill-icon svg {
+    width: 13px;
+    height: 13px;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .analysis-preview-action {
+    height: 30px;
+    padding: 0 14px;
+    font-size: 13px;
+    gap: 5px;
+  }
+  /* 補充指令: rows="4" (index.html) is ~140px tall at .field-ta's normal
+     17.5px/1.55 sizing -- the single biggest piece of #ap-options-card-inline's
+     own height, so it's the main lever for keeping that card (now sized to
+     its content, not a fixed ratio -- see above) from eating too much of
+     the column. Shrunk to ~2 lines instead of 4, same smaller font as the
+     buttons above it. */
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .ap-options-prompt {
+    gap: 4px;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .ap-options-prompt .ap-label {
+    font-size: 13px;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .field-ta {
+    height: 56px;
+    padding: 8px 10px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
 }
 
 /* Same overlap, further down: below ~500-520px of window height even the

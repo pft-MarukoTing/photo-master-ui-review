@@ -27,6 +27,7 @@ window.PhotoAgentDom = (() => {
     inlineAnalysisCancelBtn: document.querySelector("#inline-analysis-cancel-btn"),
     resultsCanvasRow: document.querySelector("#results-canvas-row"),
     resultsCanvasCol: document.querySelector("#results-canvas-col"),
+    resultsCanvasTop: document.querySelector("#results-canvas-top"),
     resultsAnalysisSlot: document.querySelector("#results-analysis-slot"),
     canvasLoading: document.querySelector("#canvas-loading"),
     apSubjectTags: document.querySelector("#ap-subject-tags"),

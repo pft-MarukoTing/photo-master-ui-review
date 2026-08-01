@@ -588,7 +588,8 @@
   }
 
   // #ap-options-card-inline (模型/生成張數 pills) moves below .compare-card
-  // (inside #results-canvas-col) while the panel is open, flattening into
+  // (inside #results-canvas-top, the wrapper around just the photo -- see
+  // its own comment in index.html) while the panel is open, flattening into
   // the same plain horizontal pill row the upload page uses -- .ap-col-right
   // (its normal home, still used as-is on the processing screen, which has
   // no .compare-card to move below) squeezes it into a narrow column instead.
@@ -615,7 +616,7 @@
     // the move, it silently found nothing there anymore and those controls
     // stayed disabled forever after the first disable/regenerate cycle.
     setAnalysisPreviewDisabled(false);
-    moveOptionsCardTo(els.resultsCanvasCol);
+    moveOptionsCardTo(els.resultsCanvasTop);
     moveRunTabsRowTo(els.resultsCanvasCol);
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
     // Moved out of #inline-analysis-actions (now lives at the end of

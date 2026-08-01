@@ -1868,9 +1868,20 @@
            which is what actually drives the slide-in animation (styles.css). -->
       <div class="results-canvas-row" id="results-canvas-row">
         <div class="results-canvas-col" id="results-canvas-col">
-          <!-- Before / After: one full-bleed canvas, toggled between the two
-               images with floating icon buttons instead of a boxed header. -->
-          <div class="compare-card" id="compare-card">
+          <!-- Wraps just .compare-card -- while the inline revise flow is
+               open, #ap-options-card-inline (模型/生成張數 settings +
+               修圖建議/修圖風格選項) is moved inside this wrapper too (see
+               moveOptionsCardTo in app.js), landing right after the photo.
+               #run-tabs-row stays a sibling of this wrapper instead (still a
+               direct child of #results-canvas-col, see moveRunTabsRowTo) so
+               that on short screens (styles.css, @media max-height:700px)
+               capping *this wrapper's* height to split photo/options-card
+               70%/30% doesn't also squeeze the run-tabs strip below it --
+               that can still push the page into scrolling on its own. -->
+          <div class="results-canvas-top" id="results-canvas-top">
+            <!-- Before / After: one full-bleed canvas, toggled between the two
+                 images with floating icon buttons instead of a boxed header. -->
+            <div class="compare-card" id="compare-card">
             <div class="photo-frame-wrap">
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
@@ -1930,6 +1941,7 @@
                  stay untouched -- the boxed header they used to sit in is gone. -->
             <strong id="orig-dim" hidden></strong>
             <strong id="model-name" hidden>AI 智能修圖</strong>
+            </div>
           </div>
         </div>
 
