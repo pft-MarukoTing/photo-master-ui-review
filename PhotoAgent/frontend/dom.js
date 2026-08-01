@@ -180,9 +180,11 @@ window.PhotoAgentDom = (() => {
   function showSection(name) {
     Object.values(els.sections).forEach((section) => section.classList.remove("visible"));
     els.sections[name]?.classList.add("visible");
-    // #reset-btn lives in the global header now (shown on every screen), but
-    // "上傳照片" doesn't make sense while already on the upload screen itself.
-    if (els.resetButton) els.resetButton.hidden = name === "upload";
+    // #reset-btn lives in the global header, but only makes sense on the
+    // results screen -- "上傳照片" doesn't apply while already on the upload
+    // screen, and the processing screen has no completed result yet to
+    // discard either.
+    if (els.resetButton) els.resetButton.hidden = name !== "results";
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 
