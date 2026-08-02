@@ -941,9 +941,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    present once there's more than one RUN) / canvas-actions (right) -- a
    3-column grid rather than flex so the center column stays centered
    against the row's own width regardless of how wide the left/right
-   content is (including when run-count-label is hidden and the center
-   column collapses to nothing). justify-self on each child keeps it
-   hugging its own column edge instead of stretching to fill it. */
+   content is. grid-column is pinned explicitly on all three children --
+   #run-count-label is `hidden` (display:none) whenever there's only one
+   RUN, i.e. most of the time, and a display:none item is dropped from grid
+   auto-placement entirely rather than leaving its track empty, so without
+   this canvas-actions auto-placed into the middle (auto-sized) column
+   instead of the right one and sat ~170px short of the row's right edge.
+   justify-self on the outer two keeps them hugging their own column edge
+   instead of stretching to fill it. */
 .canvas-header-row {
   position: absolute;
   top: 2px;
@@ -955,8 +960,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   align-items: center;
   gap: 10px;
 }
-.canvas-header-row .compare-hint { justify-self: start; }
-.canvas-header-row .canvas-actions { justify-self: end; }
+.canvas-header-row .compare-hint { grid-column: 1; justify-self: start; }
+.canvas-header-row .run-count-label { grid-column: 2; }
+.canvas-header-row .canvas-actions { grid-column: 3; justify-self: end; }
 
 /* Stable anchor for the controls floating directly over the photo itself
    (.canvas-header-row, .recipe-tags, the RUN-switch arrows): full column
