@@ -1801,54 +1801,58 @@
             <!-- Before / After: one full-bleed canvas, toggled between the two
                  images with floating icon buttons instead of a boxed header. -->
             <div class="compare-card" id="compare-card">
-            <!-- Header row above the photo: persistent Original/Result hint
-                 (left) and the canvas action icons (right). -->
-            <div class="canvas-header-row">
-              <!-- Persistent label -- always shown, text kept in sync with
-                   the current view by setCompareView (results.js). -->
-              <div id="compare-hint" class="compare-hint">After</div>
-              <div class="canvas-actions">
-                <button id="compare-toggle-btn" class="canvas-btn" type="button" title="compare" aria-label="查看原始照片">
-                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                    <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
-                    <path d="M12 4v16" stroke="currentColor" stroke-width="2"/>
-                    <path d="M3 7h9V4" fill="currentColor" opacity=".9" stroke="none"/>
-                  </svg>
-                </button>
-                <button id="compare-fullscreen-btn" class="canvas-btn" type="button" title="full screen" aria-label="全螢幕檢視比較">
-                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                    <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
-                <button id="back-to-process-btn" class="canvas-btn" type="button" aria-label="檢視分析結果" hidden>
-                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                    <path d="M3 7h6M15 7h6M3 12h10M17 12h4M3 17h13M20 17h1"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                    <circle cx="10" cy="7" r="2.2" fill="currentColor"/>
-                    <circle cx="14" cy="12" r="2.2" fill="currentColor"/>
-                    <circle cx="17" cy="17" r="2.2" fill="currentColor"/>
-                  </svg>
-                </button>
-                <div class="canvas-btn-wrap" id="download-menu-wrap">
-                  <a id="download-link" class="canvas-btn" download="photo-muse-output.zip" title="download" aria-label="下載結果" hidden>
+            <div class="photo-frame-wrap">
+              <!-- Header row floating over the top of the photo: persistent
+                   Original/Result hint (left), "N / total" RUN counter
+                   (center -- hidden whenever there's only one RUN, see
+                   updateRunSwitcher in app.js), and the canvas action icons
+                   (right). -->
+              <div class="canvas-header-row">
+                <!-- Persistent label -- always shown, text kept in sync with
+                     the current view by setCompareView (results.js). -->
+                <div id="compare-hint" class="compare-hint">After</div>
+                <div id="run-count-label" class="run-count-label" hidden></div>
+                <div class="canvas-actions">
+                  <button id="compare-toggle-btn" class="canvas-btn" type="button" title="compare" aria-label="查看原始照片">
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                      <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                      <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
+                      <path d="M12 4v16" stroke="currentColor" stroke-width="2"/>
+                      <path d="M3 7h9V4" fill="currentColor" opacity=".9" stroke="none"/>
+                    </svg>
+                  </button>
+                  <button id="compare-fullscreen-btn" class="canvas-btn" type="button" title="full screen" aria-label="全螢幕檢視比較">
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                      <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"
                         stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                  </a>
-                  <!-- Shown instead of downloading immediately once there's
-                       more than one finished RUN to choose from (see
-                       handleDownloadClick in app.js) -- lets the user pick
-                       between just the current RUN or all of them as a zip. -->
-                  <div id="download-menu" class="download-menu" hidden>
-                    <button type="button" id="download-current-btn" class="download-menu-item">下載目前 RUN</button>
-                    <button type="button" id="download-all-runs-btn" class="download-menu-item">全部下載（ZIP）</button>
+                  </button>
+                  <button id="back-to-process-btn" class="canvas-btn" type="button" aria-label="檢視分析結果" hidden>
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                      <path d="M3 7h6M15 7h6M3 12h10M17 12h4M3 17h13M20 17h1"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <circle cx="10" cy="7" r="2.2" fill="currentColor"/>
+                      <circle cx="14" cy="12" r="2.2" fill="currentColor"/>
+                      <circle cx="17" cy="17" r="2.2" fill="currentColor"/>
+                    </svg>
+                  </button>
+                  <div class="canvas-btn-wrap" id="download-menu-wrap">
+                    <a id="download-link" class="canvas-btn" download="photo-muse-output.zip" title="download" aria-label="下載結果" hidden>
+                      <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                        <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </a>
+                    <!-- Shown instead of downloading immediately once there's
+                         more than one finished RUN to choose from (see
+                         handleDownloadClick in app.js) -- lets the user pick
+                         between just the current RUN or all of them as a zip. -->
+                    <div id="download-menu" class="download-menu" hidden>
+                      <button type="button" id="download-current-btn" class="download-menu-item">下載目前 RUN</button>
+                      <button type="button" id="download-all-runs-btn" class="download-menu-item">全部下載（ZIP）</button>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-            <div class="photo-frame-wrap">
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
                 <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
@@ -1858,13 +1862,14 @@
                      that wait -- reuses that screen's exact thinking-rings
                      treatment (.proc-visual/.think-ring/.proc-thumb, see
                      styles.css) instead of a generic spinner, just inline
-                     over the existing photo (dimmed/blurred) rather than a
-                     separate section. Text mirrored live from procSub by
-                     setProcSub (app.js), so multi-RUN progress ("已完成
-                     N/total RUN") updates here too. Lives inside
-                     .photo-frame (not .photo-frame-wrap) so the dim/blur
-                     overlay covers exactly the current image, not the
-                     full-width stable pane the floating buttons anchor to. -->
+                     over the existing photo (fully opaque, hiding it rather
+                     than dimming/blurring it) instead of a separate section.
+                     Text mirrored live from procSub by setProcSub (app.js),
+                     so multi-RUN progress ("已完成 N/total RUN") updates
+                     here too. Lives inside .photo-frame (not
+                     .photo-frame-wrap) so the overlay covers exactly the
+                     current image, not the full-width stable pane the
+                     floating buttons anchor to. -->
                 <div id="canvas-loading" class="canvas-loading" hidden>
                   <div class="proc-visual" id="canvas-loading-visual">
                     <div class="think-ring"></div>
@@ -1877,10 +1882,6 @@
                   <p id="canvas-loading-status" class="canvas-loading-status"></p>
                 </div>
               </div>
-              <!-- "N / total" RUN counter, floating top-center over the photo
-                   -- hidden whenever there's only one RUN (see
-                   updateRunSwitcher in app.js). -->
-              <div id="run-count-label" class="run-count-label" hidden></div>
               <!-- Switches between this photo's N edit RUNs -- hidden
                    entirely when there's only one (see updateRunSwitcher in
                    app.js). -->

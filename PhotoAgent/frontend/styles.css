@@ -894,9 +894,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   text-align: center;
 }
 
-/* Before/After canvas: one full-bleed frame, with a header row (Original/
-   Result hint, action icons -- see .canvas-header-row below) above it
-   instead of those floating over the image itself. .photo-frame is
+/* Before/After canvas: one full-bleed frame. The header row (Original/
+   Result hint, RUN counter, action icons -- see .canvas-header-row below)
+   floats over the top of the photo instead of sitting in a separate bar
+   above it. .photo-frame is
    a fixed height (see below) rather than hugging the current image's own
    height, so a narrower or shorter photo leaves blank space around it
    inside this box, and .compare-card gets its own card framing to read as
@@ -933,22 +934,36 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   box-shadow: var(--shadow-lg), var(--shadow-accent);
 }
 
-/* Header row above the photo: compare-hint (left) / canvas-actions
-   (right). */
+/* Header row floating over the top of the photo (a child of
+   .photo-frame-wrap, not .photo-frame, so it spans the full stable column
+   width -- see that rule below -- rather than shifting with the photo's own
+   aspect ratio): compare-hint (left) / run-count-label (center, only
+   present once there's more than one RUN) / canvas-actions (right) -- a
+   3-column grid rather than flex so the center column stays centered
+   against the row's own width regardless of how wide the left/right
+   content is (including when run-count-label is hidden and the center
+   column collapses to nothing). justify-self on each child keeps it
+   hugging its own column edge instead of stretching to fill it. */
 .canvas-header-row {
-  display: flex;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
-  margin-bottom: 10px;
 }
+.canvas-header-row .compare-hint { justify-self: start; }
+.canvas-header-row .canvas-actions { justify-self: end; }
 
-/* Stable anchor for the controls still floating directly over the photo
-   itself (.recipe-tags, the RUN-switch arrows): full column width, same on
-   every photo, so those don't shift with the image's aspect ratio.
-   .photo-frame (the actual photo box) is the only in-flow child -- it
-   still shrink-wraps and centers on its own -- so for narrow/tall photos a
-   button may land slightly off the photo's own corner, over blank space,
+/* Stable anchor for the controls floating directly over the photo itself
+   (.canvas-header-row, .recipe-tags, the RUN-switch arrows): full column
+   width, same on every photo, so those don't shift with the image's aspect
+   ratio. .photo-frame (the actual photo box) is the only in-flow child --
+   it still shrink-wraps and centers on its own -- so for narrow/tall photos
+   a button may land slightly off the photo's own corner, over blank space,
    rather than exactly on the image edge. That's the deliberate tradeoff: a
    stable, predictable button position over pixel-perfect corner alignment. */
 .photo-frame-wrap {
@@ -1194,30 +1209,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   transition: width .3s ease;
 }
 
-/* "N / total" RUN counter, above the photo -- hidden whenever there's only
-   one RUN (see updateRunSwitcher in app.js). */
-/* "N / total" RUN counter -- floats top-center over the photo itself
-   (.photo-frame-wrap has position:relative, see above), same floating-pill
-   treatment as .compare-hint so it stays legible over any photo. */
+/* "N / total" RUN counter, centered in .canvas-header-row (see above) --
+   hidden whenever there's only one RUN (see updateRunSwitcher in app.js). */
 .run-count-label {
-  position: absolute;
-  top: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 4;
-  padding: 6px 12px;
-  border-radius: 8px;
-  background: rgba(20,20,24,.22);
-  border: 1px solid rgba(255,255,255,.07);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  color: rgba(255,255,255,.7);
+  text-align: center;
   font-size: 12px;
   font-weight: 700;
+  color: var(--text-2);
   white-space: nowrap;
-  letter-spacing: -.1px;
-  pointer-events: none;
-  box-shadow: 0 6px 16px rgba(0,0,0,.2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1228,12 +1227,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    spot on close; toggling position:fixed on the same node, with
    its parent's height frozen inline (openCompareFullscreen, app.js) so nothing
    below it reflows, guarantees an exact, jump-free return to the normal
-   layout. Stacked as a flex COLUMN (.canvas-header-row, then
-   .photo-frame-wrap, then #run-progress when visible) rather than the
-   height:calc(100vh - Npx) this used before .canvas-actions/.compare-hint
-   moved into the header row -- .photo-frame-wrap's flex:1 just fills
-   whatever's left after the header row's own (variable) height instead of
-   guessing a fixed number of px for it up front. */
+   layout. Stacked as a flex COLUMN (.photo-frame-wrap -- .canvas-header-row
+   floats inside it, so it doesn't need its own row here -- then
+   #run-progress when visible) so .photo-frame-wrap's flex:1 just fills
+   whatever's left instead of a hardcoded height:calc(100vh - Npx). */
 .compare-fullscreen-backdrop {
   position: fixed;
   inset: 0;
