@@ -866,23 +866,32 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   margin-top: 0;
 }
 
+/* Reuses .proc-visual/.think-ring/.proc-thumb (styles.css above, the
+   upload-flow processing screen's rings animation) as a column stack --
+   #canvas-loading itself supplies an opaque backdrop (same --card-2 fill
+   the upload page's own processing screen sits on) and centers this over
+   whichever part of .photo-frame it covers. Fully opaque, not the old
+   dimmed/blurred see-through over the previous result -- the point of
+   reusing the rings+thumb is to show the SOURCE photo being worked on, not
+   a ghost of the last generated result still showing through underneath. */
 .canvas-loading {
   position: absolute;
   inset: 0;
   z-index: 6;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(9,9,11,.55);
-  backdrop-filter: blur(2px);
+  gap: 16px;
+  background: var(--card-2);
 }
-.canvas-spinner {
-  width: 40px;
-  height: 40px;
-  border: 3px solid rgba(255,255,255,.25);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: rc-spin .8s linear infinite;
+.canvas-loading-status {
+  max-width: 320px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255,255,255,.85);
+  text-align: center;
 }
 
 /* Before/After canvas: one full-bleed frame, with a header row (Original/

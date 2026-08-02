@@ -111,6 +111,16 @@
   const procVisual = document.querySelector(".proc-visual");
   const procTitle = document.querySelector(".proc-title");
   const procSub = document.querySelector(".proc-sub");
+  // Mirrors procSub's text into the results-page canvas overlay
+  // (#canvas-loading) too -- finishSingleFlow (below) is shared by the
+  // initial upload-flow processing screen and the results-page "revise"
+  // regenerate (backToProcessFromResults), but #processing-section stays
+  // hidden the whole time during the latter, so procSub's own updates are
+  // otherwise invisible to a user watching the results page.
+  function setProcSub(text) {
+    if (procSub) procSub.textContent = text;
+    if (els.canvasLoadingStatus) els.canvasLoadingStatus.textContent = text;
+  }
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
@@ -1482,13 +1492,13 @@
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
     if (procTitle) procTitle.textContent = useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
-    if (procSub) {
-      procSub.textContent = useCombinedJob
+    setProcSub(
+      useCombinedJob
         ? "AI 正在分析照片，請稍候…"
         : (aiPhotoEditing
             ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-            : "正在進行本機影像處理，請稍候…");
-    }
+            : "正在進行本機影像處理，請稍候…")
+    );
     // Live progress messaging for a combined job, driven by the backend's
     // reported stage (job_processor.py's set_job_info(..., results={"stage": ...})
     // calls) -- keeps the same two-phase "分析中 -> 修圖中" wording the old
@@ -1496,11 +1506,11 @@
     const onCombinedStage = (stage) => {
       if (stage !== "edit") return;
       if (procTitle) procTitle.textContent = aiPhotoEditing ? "AI 正在修圖" : "正在處理照片";
-      if (procSub) {
-        procSub.textContent = aiPhotoEditing
+      setProcSub(
+        aiPhotoEditing
           ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-          : "正在進行本機影像處理，請稍候…";
-      }
+          : "正在進行本機影像處理，請稍候…"
+      );
     };
 
     // Switches from the processing screen to the results screen the first
@@ -1534,11 +1544,11 @@
 
       let doneCount = 0;
       const updateRunProgress = () => {
-        if (procSub) {
-          procSub.textContent = runCount > 1
+        setProcSub(
+          runCount > 1
             ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖中（已完成 ${doneCount}/${runCount} RUN）…`
-            : `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`;
-        }
+            : `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
+        );
       };
 
       const stepStart = Date.now();
@@ -1663,11 +1673,11 @@
 
       let doneCount = 0;
       const updateRunProgress = () => {
-        if (procSub) {
-          procSub.textContent = aiPhotoEditing
+        setProcSub(
+          aiPhotoEditing
             ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖中（已完成 ${doneCount}/${runCount} RUN）…`
-            : `本機影像處理中（已完成 ${doneCount}/${runCount} RUN）…`;
-        }
+            : `本機影像處理中（已完成 ${doneCount}/${runCount} RUN）…`
+        );
       };
       updateRunProgress();
 
@@ -1804,6 +1814,12 @@
 
     setAnalysisPreviewDisabled(true);
     if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
+    // Same thinking-rings animation as the initial upload-flow processing
+    // screen (#processing-section's .proc-visual), just inline over the
+    // existing photo instead of navigating away from the results page --
+    // sourced from the already-loaded original image rather than needing a
+    // fresh preview URL, since it's already showing in #original-img.
+    if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = els.originalImg.src;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
     try {
       await finishSingleFlow();
