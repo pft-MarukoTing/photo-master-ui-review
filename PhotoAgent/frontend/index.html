@@ -345,8 +345,10 @@
        child now (see markup comment there) -- flex-basis:100% forces it onto
        its own full-width line below the pill row instead of wrapping in
        among the pills, since .options-card-inline is otherwise a plain
-       flex-wrap row. */
+       flex-wrap row. order:6 keeps it last even though .ap-style-picked
+       (below) also claims flex-basis:100% -- see the comment there. */
     .options-card-inline > .ap-options-prompt {
+      order: 6;
       flex-basis: 100%;
       margin-top: 6px;
     }
@@ -460,34 +462,43 @@
        #ap-recipe-modal/#ap-style-modal, real overlay windows), not
        <details> -- no dropdown chevron to hint at. */
     .ap-recipe-trigger::after { content: none; }
-    /* Groups #ap-style-picker + its picked-label chips as one flex item
-       inside .options-card-inline's row -- see the HTML comment above this
-       markup for why. */
-    .ap-style-picker-row {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-    }
-    /* Removable selected-label chips right after #ap-style-picker (see
+    /* Removable selected-label chips for #ap-style-picker (see
        updateStyleTriggerLabel/renderStylePickedChips, results.js) -- one
        small pill per pick (e.g. "Playful", "Low Shot"), each with its own
        "x" to clear that one category back to Auto/Default without
-       reopening #ap-style-modal. */
-    .ap-style-picked {
-      display: inline-flex;
+       reopening #ap-style-modal.
+       order:5 (below, alongside #ap-settings-btn/#inline-analysis-continue-btn's
+       own order:3/4) keeps this out of the top pill line entirely -- with
+       flex-basis:100% it always starts a fresh line, but *after* those two
+       in flex order despite coming before them in the DOM, so they stay
+       pinned to line 1 instead of dropping down whenever a chip appears.
+       The indent + left border reads as "sub-items of #ap-style-picker"
+       (the line directly above), not a disconnected floating row. */
+    .options-card-inline > .ap-style-picked {
+      order: 5;
+      flex-basis: 100%;
+      display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
+      margin-top: 2px;
+      padding-left: 10px;
+      border-left: 2px solid var(--border-2);
     }
+    /* Pin these to line 1 alongside #ap-recipe-picker/#ap-style-picker
+       (which keep the default order:0) regardless of where .ap-style-picked
+       falls in the DOM -- see the comment there. */
+    .options-card-inline > #ap-settings-btn { order: 3; }
+    .options-card-inline > #inline-analysis-continue-btn { order: 4; }
     .ap-style-picked-chip {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 3px 4px 3px 10px;
+      gap: 3px;
+      padding: 2px 3px 2px 8px;
       background: var(--card-2);
       border: 1px solid var(--border-2);
       border-radius: 20px;
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-2);
     }
@@ -495,14 +506,14 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 16px;
-      height: 16px;
+      width: 14px;
+      height: 14px;
       padding: 0;
       border: none;
       border-radius: 50%;
       background: transparent;
       color: var(--text-3);
-      font-size: 13px;
+      font-size: 11px;
       line-height: 1;
       cursor: pointer;
       transition: background .15s, color .15s;
@@ -1618,34 +1629,31 @@
                      image thumbnail buttons (see openStyleModal/
                      showStyleGroup in app.js). Same shape as
                      #ap-recipe-picker/#ap-recipe-modal above. -->
-                <!-- Wraps the picker button + its picked-label chips in one
-                     flex item (.ap-style-picker-row) so the two always sit
-                     together on the same line and wrap as a unit inside
-                     .options-card-inline's own flex-wrap row -- otherwise
-                     they're just two independent items that could end up
-                     split across lines when the row wraps. -->
-                <div class="ap-style-picker-row">
-                  <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-style-picker">
-                    <span class="option-pill-icon">
-                      <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                        <path d="M4 6h9M17 6h3M4 12h4M11 12h9M4 18h12M19 18h1"
-                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        <circle cx="13" cy="6" r="2" fill="currentColor"/>
-                        <circle cx="8" cy="12" r="2" fill="currentColor"/>
-                        <circle cx="16" cy="18" r="2" fill="currentColor"/>
-                      </svg>
-                    </span>
-                    <span class="ap-style-value">修圖風格選項</span>
-                  </button>
-                  <!-- Selected Pose/Angle/Lighting/Size label(s) (e.g.
-                       "Playful"/"Low Shot" as separate chips), shown right
-                       after the button instead of replacing its own text --
-                       hidden entirely while everything's still Default/Auto.
-                       updateStyleTriggerLabel (results.js) keeps this in
-                       sync whenever the modal's radios change or the
-                       analysis preview re-renders. -->
-                  <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
-                </div>
+                <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-style-picker">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M4 6h9M17 6h3M4 12h4M11 12h9M4 18h12M19 18h1"
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                      <circle cx="13" cy="6" r="2" fill="currentColor"/>
+                      <circle cx="8" cy="12" r="2" fill="currentColor"/>
+                      <circle cx="16" cy="18" r="2" fill="currentColor"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value">修圖風格選項</span>
+                </button>
+                <!-- Selected Pose/Angle/Lighting/Size label(s) (e.g.
+                     "Playful"/"Low Shot" as separate chips). flex-basis:100%
+                     (.options-card-inline .ap-style-picked, same trick as
+                     .ap-options-prompt below) puts this on its own full-width
+                     line under the pill row instead of sitting inline after
+                     #ap-style-picker -- inline, a growing/shrinking chip list
+                     shoved #ap-settings-btn/#inline-analysis-continue-btn
+                     sideways (or onto a wrapped second line) every time a
+                     pick changed. Hidden entirely while everything's still
+                     Default/Auto. updateStyleTriggerLabel (results.js) keeps
+                     this in sync whenever the modal's radios change or the
+                     analysis preview re-renders. -->
+                <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
                 <!-- 模型/生成張數 pickers used to sit inline here; they now
                      live inside #ap-settings-modal (see openApSettingsModal/
                      closeApSettingsModal in app.js), same move as the
