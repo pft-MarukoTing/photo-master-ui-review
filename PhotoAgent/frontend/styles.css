@@ -885,17 +885,18 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   animation: rc-spin .8s linear infinite;
 }
 
-/* Before/After canvas: one full-bleed frame. The toggle button floats on
-   top of the image instead of sitting in a separate header bar. .compare-card
-   is the stable, full-width positioning anchor for the floating controls
-   (see .photo-frame-wrap below) -- now that .photo-frame is a fixed height
-   (see below) rather than hugging the current image's own height, a narrower
-   or shorter photo leaves blank space around it inside this box, so it gets
-   its own card framing. Background is a brand-tinted glow on --card-2 (a
-   step lighter/richer than the flat --card used by .options-card and
-   friends), not the plain neutral card fill, since this is the main focal
-   element of the results page and should read as visually distinct from the
-   surrounding chrome rather than blend in as just another panel. */
+/* Before/After canvas: one full-bleed frame, with a header row (Original/
+   Result hint, action icons -- see .canvas-header-row below) above it
+   instead of those floating over the image itself. .photo-frame is
+   a fixed height (see below) rather than hugging the current image's own
+   height, so a narrower or shorter photo leaves blank space around it
+   inside this box, and .compare-card gets its own card framing to read as
+   one coherent unit regardless. Background is a brand-tinted glow on
+   --card-2 (a step lighter/richer than the flat --card used by
+   .options-card and friends), not the plain neutral card fill, since this
+   is the main focal element of the results page and should read as visually
+   distinct from the surrounding chrome rather than blend in as just another
+   panel. */
 .compare-card {
   position: relative;
   display: block;
@@ -923,14 +924,24 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   box-shadow: var(--shadow-lg), var(--shadow-accent);
 }
 
-/* Stable anchor for the floating controls (.canvas-actions/.compare-hint/
-   .recipe-tags): full column width, same on every photo, so those buttons
-   never shift with the image's aspect ratio. .photo-frame (the actual
-   photo box) is the only in-flow child -- it still shrink-wraps and centers
-   on its own -- so for narrow/tall photos a button may land slightly off
-   the photo's own corner, over blank space, rather than exactly on the
-   image edge. That's the deliberate tradeoff: a stable, predictable button
-   position over pixel-perfect corner alignment. */
+/* Header row above the photo: compare-hint (left) / canvas-actions
+   (right). */
+.canvas-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+/* Stable anchor for the controls still floating directly over the photo
+   itself (.recipe-tags, the RUN-switch arrows): full column width, same on
+   every photo, so those don't shift with the image's aspect ratio.
+   .photo-frame (the actual photo box) is the only in-flow child -- it
+   still shrink-wraps and centers on its own -- so for narrow/tall photos a
+   button may land slightly off the photo's own corner, over blank space,
+   rather than exactly on the image edge. That's the deliberate tradeoff: a
+   stable, predictable button position over pixel-perfect corner alignment. */
 .photo-frame-wrap {
   position: relative;
   display: flex;
@@ -972,16 +983,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .compare-card.showing-generated .compare-img-original { display: none; }
 .compare-card.showing-generated .compare-img-generated { display: block; }
 
-/* Floating glass icon buttons, not a boxed header -- sit directly over the
-   canvas, top-right (across from the persistent Original/Result label at
-   top-left below). Icon-only, so title/aria-label (kept in sync in
-   setCompareView) carry the "switch to X" / "download" meaning instead of
-   visible text. */
+/* Glass icon buttons, right-aligned in .canvas-header-row (see above).
+   Icon-only, so title/aria-label (kept in sync in setCompareView) carry the
+   "switch to X" / "download" meaning instead of visible text. */
 .canvas-actions {
-  position: absolute;
-  top: 2px;
-  right: 2px;
-  z-index: 5;
   display: flex;
   gap: 10px;
 }
@@ -1052,18 +1057,15 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .download-menu-item:hover { background: rgba(168,85,247,.4); color: #fff; }
 
-/* Persistent "Original"/"Result" label, top-left -- always shown (not a
-   momentary fade-out toast anymore), text kept in sync with the current view
-   by setCompareView (results.js) on every toggle and every fresh render. */
+/* Persistent "Original"/"Result" label, left-aligned in .canvas-header-row
+   (see above) -- always shown, text kept in sync with the current view by
+   setCompareView (results.js) on every toggle and every fresh render. */
 .compare-hint {
-  position: absolute;
-  top: 2px;
-  left: 2px;
   padding: 6px 12px;
   border-radius: 8px;
   /* Toned down from a solid glass pill to a quieter, barely-there label --
      it's just a persistent Before/After status marker, not something that
-     should compete with the canvas-actions buttons or the photo itself. */
+     should compete with the canvas-actions buttons. */
   background: rgba(20,20,24,.22);
   border: 1px solid rgba(255,255,255,.07);
   backdrop-filter: blur(6px);
@@ -1073,16 +1075,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   font-weight: 500;
   white-space: nowrap;
   letter-spacing: -.1px;
-  pointer-events: none;
   box-shadow: 0 6px 16px rgba(0,0,0,.2);
-  z-index: 4;
 }
 
 /* Recipe tags: which non-default pose/angle/lighting/framing-size picks were
    actually applied to this RUN -- describes the GENERATED result, so hidden
    while viewing Original. Floats centered over the bottom of the photo
-   itself (like .canvas-btn/.compare-hint) -- a near-opaque dark purple fill
-   keeps it legible over any photo, with a dashed accent border (echoing
+   itself (like .canvas-btn above) -- a near-opaque dark purple fill keeps it
+   legible over any photo, with a dashed accent border (echoing
    .compare-card's own dashed frame) instead of a brighter gradient wash. */
 .recipe-tags {
   position: absolute;
@@ -1187,12 +1187,28 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
 /* "N / total" RUN counter, above the photo -- hidden whenever there's only
    one RUN (see updateRunSwitcher in app.js). */
+/* "N / total" RUN counter -- floats top-center over the photo itself
+   (.photo-frame-wrap has position:relative, see above), same floating-pill
+   treatment as .compare-hint so it stays legible over any photo. */
 .run-count-label {
-  margin-bottom: 8px;
-  text-align: center;
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(20,20,24,.22);
+  border: 1px solid rgba(255,255,255,.07);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  color: rgba(255,255,255,.7);
   font-size: 12px;
   font-weight: 700;
-  color: var(--text-2);
+  white-space: nowrap;
+  letter-spacing: -.1px;
+  pointer-events: none;
+  box-shadow: 0 6px 16px rgba(0,0,0,.2);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1203,9 +1219,12 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    spot on close; toggling position:fixed on the same node, with
    its parent's height frozen inline (openCompareFullscreen, app.js) so nothing
    below it reflows, guarantees an exact, jump-free return to the normal
-   layout. .photo-frame's own fixed 480px height (set for the inline canvas)
-   is overridden here so the photo fills the viewport instead of leaving
-   blank space above/below it. */
+   layout. Stacked as a flex COLUMN (.canvas-header-row, then
+   .photo-frame-wrap, then #run-progress when visible) rather than the
+   height:calc(100vh - Npx) this used before .canvas-actions/.compare-hint
+   moved into the header row -- .photo-frame-wrap's flex:1 just fills
+   whatever's left after the header row's own (variable) height instead of
+   guessing a fixed number of px for it up front. */
 .compare-fullscreen-backdrop {
   position: fixed;
   inset: 0;
@@ -1220,24 +1239,21 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   width: auto;
   margin: 0;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   box-shadow: var(--shadow-lg);
 }
-.compare-card.is-fullscreen .photo-frame-wrap { width: 100%; }
+.compare-card.is-fullscreen .photo-frame-wrap {
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+}
 .compare-card.is-fullscreen .photo-frame {
-  height: calc(100vh - 96px);
+  height: 100%;
+  max-height: 100%;
 }
 .compare-card.is-fullscreen .photo-frame img {
-  max-height: calc(100vh - 96px);
+  max-height: 100%;
 }
-/* .compare-card becomes a flex ROW while fullscreen (above), so
-   run-count-label/run-progress (normal-flow siblings of .photo-frame-wrap,
-   not overlays like canvas-actions/compare-hint/recipe-tags) would
-   otherwise be squeezed beside the now full-width photo instead of sitting
-   above/below it -- simplest fix is to just not show them in this immersive
-   view; the switch arrows (inside .photo-frame-wrap itself) still work. */
-.compare-card.is-fullscreen .run-count-label,
-.compare-card.is-fullscreen .run-progress { display: none; }
 /* Verdict + Summary row */
 .verdict-summary-row {
   display: grid;

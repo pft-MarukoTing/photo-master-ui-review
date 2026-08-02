@@ -1801,24 +1801,12 @@
             <!-- Before / After: one full-bleed canvas, toggled between the two
                  images with floating icon buttons instead of a boxed header. -->
             <div class="compare-card" id="compare-card">
-            <!-- "N / total" RUN counter, above the photo -- hidden whenever
-                 there's only one RUN (see updateRunSwitcher in app.js). -->
-            <div id="run-count-label" class="run-count-label" hidden></div>
-            <div class="photo-frame-wrap">
-              <div class="photo-frame">
-                <img id="original-img" alt="original" class="compare-img compare-img-original">
-                <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
-                <!-- Shown while re-processing (either flow) runs in the
-                     background, since staying on this page means the
-                     thinking-rings screen never appears for that wait.
-                     Lives inside .photo-frame (not .photo-frame-wrap) so the
-                     dim/blur overlay covers exactly the current image, not
-                     the full-width stable pane the floating buttons anchor
-                     to. -->
-                <div id="canvas-loading" class="canvas-loading" hidden>
-                  <div class="canvas-spinner"></div>
-                </div>
-              </div>
+            <!-- Header row above the photo: persistent Original/Result hint
+                 (left) and the canvas action icons (right). -->
+            <div class="canvas-header-row">
+              <!-- Persistent label -- always shown, text kept in sync with
+                   the current view by setCompareView (results.js). -->
+              <div id="compare-hint" class="compare-hint">After</div>
               <div class="canvas-actions">
                 <button id="compare-toggle-btn" class="canvas-btn" type="button" title="compare" aria-label="查看原始照片">
                   <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
@@ -1859,6 +1847,26 @@
                   </div>
                 </div>
               </div>
+            </div>
+            <div class="photo-frame-wrap">
+              <div class="photo-frame">
+                <img id="original-img" alt="original" class="compare-img compare-img-original">
+                <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
+                <!-- Shown while re-processing (either flow) runs in the
+                     background, since staying on this page means the
+                     thinking-rings screen never appears for that wait.
+                     Lives inside .photo-frame (not .photo-frame-wrap) so the
+                     dim/blur overlay covers exactly the current image, not
+                     the full-width stable pane the floating buttons anchor
+                     to. -->
+                <div id="canvas-loading" class="canvas-loading" hidden>
+                  <div class="canvas-spinner"></div>
+                </div>
+              </div>
+              <!-- "N / total" RUN counter, floating top-center over the photo
+                   -- hidden whenever there's only one RUN (see
+                   updateRunSwitcher in app.js). -->
+              <div id="run-count-label" class="run-count-label" hidden></div>
               <!-- Switches between this photo's N edit RUNs -- hidden
                    entirely when there's only one (see updateRunSwitcher in
                    app.js). -->
@@ -1872,10 +1880,6 @@
                   <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
-              <!-- Persistent label, top-left of the photo itself -- always
-                   shown, text kept in sync with the current view by
-                   setCompareView (results.js). -->
-              <div id="compare-hint" class="compare-hint">After</div>
               <!-- Which optional recipe (pose/angle/lighting/framing size)
                    options were actually applied to this RUN -- only ever
                    populated with non-default picks (renderResult), and only
