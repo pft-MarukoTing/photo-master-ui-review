@@ -289,14 +289,25 @@
       color: #fff;
       box-shadow: var(--shadow-accent);
     }
-    /* Pushes #ap-settings-btn (order:3, see below) to the far right of
-       .options-card-inline's otherwise plain flex-start pill row -- put on
-       #ap-settings-btn rather than #inline-analysis-continue-btn itself so
-       #ap-settings-btn/Run land right next to each other as one
-       right-aligned group (same pattern as #settings-btn/#start-direct-btn
-       on the upload page's .upload-actions-row), instead of Run alone
-       jumping to the far edge with a big gap after #ap-settings-btn. */
-    .options-card-inline #ap-settings-btn {
+    /* Pushes .ap-settings-run-row (#ap-settings-btn + Run) to the far right
+       of .options-card-inline's otherwise plain flex-start pill row, both as
+       one unit -- same pattern as #settings-btn/#start-direct-btn on the
+       upload page's .upload-actions-row. margin-left:auto lives on the
+       wrapper rather than on #ap-settings-btn alone so the pair moves
+       *together* to whichever line has room and stays right-aligned there,
+       instead of only #ap-settings-btn getting pushed right while Run wraps
+       to its own line flush left.
+       order:6 puts this wrapper on its own line *after* .ap-style-picked's
+       chip line (order:5, below) even though this wrapper comes before
+       .ap-style-picked in the DOM -- see the comment there. When there are
+       no picks, .ap-style-picked is hidden (no flex space at all), so this
+       wrapper just follows #ap-style-picker directly, same as before chips
+       existed. */
+    .options-card-inline .ap-settings-run-row {
+      order: 6;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
       margin-left: auto;
     }
     .analysis-preview-action-right:hover {
@@ -349,10 +360,10 @@
        child now (see markup comment there) -- flex-basis:100% forces it onto
        its own full-width line below the pill row instead of wrapping in
        among the pills, since .options-card-inline is otherwise a plain
-       flex-wrap row. order:6 keeps it last even though .ap-style-picked
+       flex-wrap row. order:7 keeps it last even though .ap-style-picked
        (below) also claims flex-basis:100% -- see the comment there. */
     .options-card-inline > .ap-options-prompt {
-      order: 6;
+      order: 7;
       flex-basis: 100%;
       margin-top: 6px;
     }
@@ -471,13 +482,17 @@
        small pill per pick (e.g. "Playful", "Low Shot"), each with its own
        "x" to clear that one category back to Auto/Default without
        reopening #ap-style-modal.
-       order:5 (below, alongside #ap-settings-btn/#inline-analysis-continue-btn's
-       own order:3/4) keeps this out of the top pill line entirely -- with
-       flex-basis:100% it always starts a fresh line, but *after* those two
-       in flex order despite coming before them in the DOM, so they stay
-       pinned to line 1 instead of dropping down whenever a chip appears.
-       The indent + left border reads as "sub-items of #ap-style-picker"
-       (the line directly above), not a disconnected floating row. */
+       order:5 puts this on its own line between #ap-style-picker's own line
+       (修圖建議/修圖風格選項, default order:0) and .ap-settings-run-row
+       (order:6, see its own comment above) -- flex-basis:100% forces the
+       fresh line, and sorting *before* that wrapper (despite coming before
+       it in the DOM too) means #ap-settings-btn/Run only ever drop down one
+       line when a chip appears, not two. Hidden entirely while there are no
+       picks (see updateStyleTriggerLabel), at which point it takes up no
+       flex space at all and #ap-settings-btn/Run sit right after
+       #ap-style-picker as before. The indent + left border reads as
+       "sub-items of #ap-style-picker" (the line directly above), not a
+       disconnected floating row. */
     .options-card-inline > .ap-style-picked {
       order: 5;
       flex-basis: 100%;
@@ -489,11 +504,6 @@
       padding-left: 10px;
       border-left: 2px solid var(--border-2);
     }
-    /* Pin these to line 1 alongside #ap-recipe-picker/#ap-style-picker
-       (which keep the default order:0) regardless of where .ap-style-picked
-       falls in the DOM -- see the comment there. */
-    .options-card-inline > #ap-settings-btn { order: 3; }
-    .options-card-inline > #inline-analysis-continue-btn { order: 4; }
     /* #ap-settings-btn is icon-only (label dropped) -- square it up and drop
        .ap-style-trigger's own text-oriented 0 16px padding so the gear icon
        fills the button instead of floating in a wide pill. justify-content
@@ -501,7 +511,7 @@
        hugging its own padding instead) is needed now that this button has a
        fixed width wider than its icon -- without it the icon sat flush left
        instead of centered in the extra space. */
-    .options-card-inline > #ap-settings-btn {
+    .ap-settings-run-row > #ap-settings-btn {
       width: 41px;
       padding: 0;
       justify-content: center;
@@ -1685,35 +1695,47 @@
                      showAnalysisPreview/startInlineBatchReview etc still
                      toggle it directly to show/hide 生成張數 for flows
                      where it doesn't apply, unchanged. -->
-                <!-- Icon-only -- label dropped in favor of aria-label since
-                     #ap-settings-btn/#inline-analysis-continue-btn now sit
-                     right next to each other as one group (see the
-                     margin-left:auto comment above); the gear icon alone
-                     reads clearly enough beside the "Run" button. -->
-                <button id="ap-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger" aria-label="設定">
-                  <span class="option-pill-icon">
-                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                      <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/>
-                      <path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19.5a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4.5a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.08A1.65 1.65 0 0011.5 3.6V3.5a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.08a1.65 1.65 0 001.51 1H19.5a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
-                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <!-- Groups #ap-settings-btn + #inline-analysis-continue-btn
+                     as one flex item (.ap-settings-run-row) so they always
+                     wrap together and stay right-aligned as a pair -- before
+                     this they were two independent items in
+                     .options-card-inline's flex-wrap row, so a narrow
+                     container could split them: #ap-settings-btn staying up
+                     on line 1 (pushed right by its own margin-left:auto)
+                     while Run alone wrapped to line 2, flush left instead of
+                     following it right. margin-left:auto now lives on this
+                     wrapper (see styles below) so the *pair* moves as a unit
+                     to whichever line has room, still right-aligned there. -->
+                <div class="ap-settings-run-row">
+                  <!-- Icon-only -- label dropped in favor of aria-label
+                       since #ap-settings-btn/#inline-analysis-continue-btn
+                       sit right next to each other as one group; the gear
+                       icon alone reads clearly enough beside the "Run"
+                       button. -->
+                  <button id="ap-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger" aria-label="設定">
+                    <span class="option-pill-icon">
+                      <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+                        <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/>
+                        <path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19.5a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4.5a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.08A1.65 1.65 0 0011.5 3.6V3.5a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.08a1.65 1.65 0 001.51 1H19.5a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
+                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </span>
+                  </button>
+                  <!-- Moved out of #inline-analysis-actions (which keeps
+                       just the cancel button) -- sits at the right end of
+                       this pill row instead. Own hidden attribute now (was
+                       gated by its old parent's) -- see
+                       openInlineAnalysisPanel/closeInlineAnalysisPanel/
+                       resetApp in app.js, same places that used to toggle
+                       #inline-analysis-actions alone. -->
+                  <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
+                    <span>Run</span>
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                      <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                  </span>
-                </button>
-                <!-- Moved out of #inline-analysis-actions (which keeps just
-                     the cancel button) -- sits at the right end of this pill
-                     row instead, pushed there via margin-left:auto since
-                     it's otherwise a plain flex-start row. Own hidden
-                     attribute now (was gated by its old parent's) --
-                     see openInlineAnalysisPanel/closeInlineAnalysisPanel/
-                     resetApp in app.js, same places that used to toggle
-                     #inline-analysis-actions alone. -->
-                <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
-                  <span>Run</span>
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                    <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                      stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </button>
+                  </button>
+                </div>
                 <!-- flex-basis:100% (see .options-card-inline .ap-options-prompt
                      in styles) forces this onto its own full-width line below
                      the pill row instead of wrapping in among them. -->
