@@ -815,8 +815,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    makes it invisible to layout by default, so normal/tall screens render
    exactly as if this wrapper didn't exist; short screens (see
    @media max-height:700px below) turn it into a real flex column that caps
-   its own height and splits photo/options-card 70%/30, without touching
-   #run-tabs-row, which stays a sibling of this wrapper, not a child. */
+   its own height and splits photo/options-card 70%/30. */
 .results-canvas-top {
   display: contents;
 }
@@ -942,10 +941,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    stretching to the column's full width -- that stretch used to letterbox
    narrower photos with visible checkerboard on the sides. Height is fixed
    (matching img's own max-height below) rather than hugged, though --
-   #ap-options-card-inline/#run-tabs-row now sit directly under .compare-card
-   in #results-canvas-col, so letting the original/generated toggle change
-   this frame's height shifted them up and down every time #compare-toggle-btn
-   was pressed; a shorter image just centers within the fixed height instead,
+   #ap-options-card-inline now sits directly under .compare-card in
+   #results-canvas-top, so letting the original/generated toggle change this
+   frame's height shifted it up and down every time #compare-toggle-btn was
+   pressed; a shorter image just centers within the fixed height instead,
    trading a little vertical checkerboard for a stable layout below. Carries
    the rounded/shadowed "framed" look itself (rather than .compare-card above)
    so that look also hugs the image's width instead of stretching full-width. */
@@ -964,8 +963,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   width: auto;
   height: auto;
   max-width: 100%;
-  /* Capped low enough that the run-tabs strip below the canvas usually
-     lands within the viewport instead of requiring a scroll to reach it. */
   max-height: 480px;
 }
 
@@ -1018,6 +1015,42 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   cursor: not-allowed;
   pointer-events: none;
 }
+
+.canvas-btn-wrap { position: relative; display: inline-flex; }
+
+/* Choice popover shown by #download-link once there's more than one
+   finished RUN to pick from (see handleDownloadClick in app.js) -- closes on
+   an outside click (handleDownloadMenuOutsideClick). */
+.download-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.16);
+  background: rgba(9,9,11,.92);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+}
+.download-menu-item {
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  color: rgba(255,255,255,.85);
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.download-menu-item:hover { background: rgba(168,85,247,.4); color: #fff; }
 
 /* Persistent "Original"/"Result" label, top-left -- always shown (not a
    momentary fade-out toast anymore), text kept in sync with the current view
@@ -1087,11 +1120,87 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   box-shadow: 0 6px 16px rgba(0,0,0,.3);
 }
 
+/* Prev/next arrows for switching between this photo's N edit RUNs -- float
+   over the left/right edges of the photo itself instead of a separate strip
+   below it. Hidden entirely when there's only one RUN, disabled at whichever
+   end has no further "done" RUN to switch to (see updateRunSwitcherArrows in
+   app.js). Same floating-glass language as .canvas-btn above. */
+.photo-switch-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.16);
+  border-radius: 50%;
+  background: rgba(9,9,11,.3);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  transition: background .2s, border-color .2s, transform .2s;
+}
+.photo-switch-arrow:hover { background: rgba(168,85,247,.4); border-color: rgba(168,85,247,.55); }
+.photo-switch-arrow:active { transform: translateY(-50%) scale(.92); }
+.photo-switch-arrow:disabled { opacity: .3; cursor: not-allowed; pointer-events: none; }
+.photo-switch-prev { left: 10px; }
+.photo-switch-next { right: 10px; }
+
+/* "產生中… N/total RUN" progress bar, directly under the photo -- shown for
+   as long as any RUN of the current multi-RUN job is still generating in the
+   background while an earlier (already "done") RUN is on screen (see
+   updateRunProgressBar in app.js). Track/fill visual language matches
+   .download-progress-track/-fill (the only other determinate progress bar
+   in this codebase), just inline instead of a floating toast. */
+.run-progress {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.run-progress-label {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.run-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--card-2);
+  overflow: hidden;
+}
+.run-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--mv-grad);
+  transition: width .3s ease;
+}
+
+/* "N / total" RUN counter, above the photo -- hidden whenever there's only
+   one RUN (see updateRunSwitcher in app.js). */
+.run-count-label {
+  margin-bottom: 8px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Full-window compare view: #compare-fullscreen-btn toggles .is-fullscreen
    on the real #compare-card in place, rather than moving it into a separate
    overlay -- switching a fixed-position element's own ancestor chain (as a
-   move would) risked the surrounding run-tabs/options layout resettling in
-   the wrong spot on close; toggling position:fixed on the same node, with
+   move would) risked the surrounding options layout resettling in the wrong
+   spot on close; toggling position:fixed on the same node, with
    its parent's height frozen inline (openCompareFullscreen, app.js) so nothing
    below it reflows, guarantees an exact, jump-free return to the normal
    layout. .photo-frame's own fixed 480px height (set for the inline canvas)
@@ -1121,6 +1230,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .compare-card.is-fullscreen .photo-frame img {
   max-height: calc(100vh - 96px);
 }
+/* .compare-card becomes a flex ROW while fullscreen (above), so
+   run-count-label/run-progress (normal-flow siblings of .photo-frame-wrap,
+   not overlays like canvas-actions/compare-hint/recipe-tags) would
+   otherwise be squeezed beside the now full-width photo instead of sitting
+   above/below it -- simplest fix is to just not show them in this immersive
+   view; the switch arrows (inside .photo-frame-wrap itself) still work. */
+.compare-card.is-fullscreen .run-count-label,
+.compare-card.is-fullscreen .run-progress { display: none; }
 /* Verdict + Summary row */
 .verdict-summary-row {
   display: grid;
@@ -1643,9 +1760,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      recipe/style buttons only reachable by scrolling the whole page down.
      Turn #results-canvas-top (the wrapper around just the photo + that
      card, see its own comment in index.html) into a height-capped flex
-     column and split it 70/30 between them instead -- #run-tabs-row isn't
-     part of this wrapper, so it's untouched and can still push the page
-     into scrolling on its own if it doesn't fit below. */
+     column and split it 70/30 between them instead. */
   .results-canvas-row.showing-analysis #results-canvas-top {
     display: flex;
     flex-direction: column;

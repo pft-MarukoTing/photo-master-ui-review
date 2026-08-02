@@ -18,74 +18,29 @@
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
-  // Keeps the run-tabs preview strip capped at 1/3 of #results-canvas-row's
-  // own rendered width (the canvas + analysis-panel row, not just the
-  // canvas) -- CSS alone can't size one element against an unrelated
-  // sibling's width, so this tracks that row's actual box (which changes
-  // with the image's natural size, the analysis panel opening/closing,
-  // window resizes, etc.) and mirrors 1/3 of it onto #run-tabs-row. Beyond
-  // that width, .run-tabs' own overflow-x:auto (plus the scroll arrows)
-  // makes it scrollable. That 1/3 cap only applies in #run-tabs-row's normal
-  // (unnested) position -- while the analysis panel is open it's moved
-  // under the photo instead (openInlineAnalysisPanel), where CSS's plain
-  // width:100% against its new parent already fits it to the photo's own
-  // column, so the inline cap is cleared rather than fighting that.
-  if (els.resultsCanvasRow && els.runTabsRow && typeof ResizeObserver !== "undefined") {
-    const runTabsWidthObserver = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect?.width;
-      const nested = els.resultsCanvasCol && els.runTabsRow.parentElement === els.resultsCanvasCol;
-      els.runTabsRow.style.maxWidth = (width && !nested) ? `${Math.round(width / 3)}px` : "";
-      updateRunTabsArrows();
-    });
-    runTabsWidthObserver.observe(els.resultsCanvasRow);
-  }
-
-  // Shows/hides the run-tabs scroll arrows (hidden entirely when the strip
-  // doesn't overflow its 2/3-width cap) and disables whichever end is
-  // already fully scrolled to. Called after (re)building the tabs, on
-  // scroll, and whenever the cap above changes what fits.
-  function updateRunTabsArrows() {
-    if (!els.runTabs || !els.runTabsPrev || !els.runTabsNext) return;
-    const canScroll = els.runTabs.scrollWidth > els.runTabs.clientWidth + 1;
-    els.runTabsPrev.hidden = !canScroll;
-    els.runTabsNext.hidden = !canScroll;
-    if (!canScroll) return;
-    // Disabled state tracks whether there's a selectable ("done") RUN on
-    // that side of the current one, not raw scroll position -- since the
-    // arrows now switch RUNs (selectAdjacentRunTab), not just scroll the
-    // strip, and the current RUN can already be fully in view (nothing left
-    // to physically scroll) while still having an earlier/later RUN to
-    // switch to.
-    const tabs = Array.from(els.runTabs.children);
-    const idx = currentRunTabsIndex;
-    const hasPrevRun = idx != null && tabs.slice(0, idx).some((t) => !t.disabled);
-    const hasNextRun = idx != null && tabs.slice(idx + 1).some((t) => !t.disabled);
-    els.runTabsPrev.disabled = !hasPrevRun;
-    els.runTabsNext.disabled = !hasNextRun;
+  // Disables whichever arrow has no selectable ("done") RUN left on its
+  // side of the current one -- called after every updateRunSwitcher and
+  // whenever the current index changes.
+  function updateRunSwitcherArrows() {
+    if (!els.runSwitchPrev || !els.runSwitchNext || !currentRunList || currentRunIndex == null) return;
+    const hasPrevRun = currentRunList.slice(0, currentRunIndex).some((r) => r.status === "done");
+    const hasNextRun = currentRunList.slice(currentRunIndex + 1).some((r) => r.status === "done");
+    els.runSwitchPrev.disabled = !hasPrevRun;
+    els.runSwitchNext.disabled = !hasNextRun;
   }
 
   // Steps to the next/previous *selectable* (status "done") RUN, skipping
-  // over any still-processing/errored tabs, and brings it into view -- so
-  // the arrows switch the displayed image itself, not just the strip's
-  // scroll position (which used to be all they did).
-  function selectAdjacentRunTab(delta) {
-    if (!els.runTabs || currentRunTabsOnSelect == null || currentRunTabsIndex == null) return;
-    const tabs = Array.from(els.runTabs.children);
-    let idx = currentRunTabsIndex + delta;
-    while (idx >= 0 && idx < tabs.length && tabs[idx].disabled) idx += delta;
-    if (idx < 0 || idx >= tabs.length) return;
-    currentRunTabsOnSelect(idx);
-    const newTab = els.runTabs.children[idx];
-    if (newTab) newTab.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+  // over any still-processing/errored ones.
+  function selectAdjacentRun(delta) {
+    if (!currentRunList || currentRunOnSelect == null || currentRunIndex == null) return;
+    let idx = currentRunIndex + delta;
+    while (idx >= 0 && idx < currentRunList.length && currentRunList[idx].status !== "done") idx += delta;
+    if (idx < 0 || idx >= currentRunList.length) return;
+    currentRunOnSelect(idx);
   }
 
-  if (els.runTabs) els.runTabs.addEventListener("scroll", updateRunTabsArrows);
-  if (els.runTabsPrev) {
-    els.runTabsPrev.addEventListener("click", () => selectAdjacentRunTab(-1));
-  }
-  if (els.runTabsNext) {
-    els.runTabsNext.addEventListener("click", () => selectAdjacentRunTab(1));
-  }
+  if (els.runSwitchPrev) els.runSwitchPrev.addEventListener("click", () => selectAdjacentRun(-1));
+  if (els.runSwitchNext) els.runSwitchNext.addEventListener("click", () => selectAdjacentRun(1));
 
   let selectedFile = null;
   let previewUrl = "";
@@ -114,19 +69,13 @@
   let singleRuns = null;
   let singleMirrorIndex = null;
 
-  // Which `runs` array buildRunTabs last drew from -- lets it tell "still
-  // browsing the same photo's runs" (keep the strip's scroll position) apart
-  // from "switched to a different photo" (scroll back to the start), since
-  // both cases fully rebuild the tab buttons from scratch.
-  let lastRunTabsRuns = null;
-
-  // The currently-active tab index and its select callback, refreshed by
-  // every buildRunTabs call -- lets the prev/next arrows (defined once, up
-  // top, before any runs exist) step to the adjacent RUN via whichever
-  // handler is current (batch vs single-image) instead of just scrolling
-  // the strip without changing what's shown.
-  let currentRunTabsIndex = null;
-  let currentRunTabsOnSelect = null;
+  // The runs array/current index/select-callback last handed to
+  // updateRunSwitcher -- lets the prev/next arrows (defined once, up top,
+  // before any runs exist) step to the adjacent RUN via whichever handler is
+  // current (batch vs single-image).
+  let currentRunList = null;
+  let currentRunIndex = null;
+  let currentRunOnSelect = null;
 
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
@@ -206,11 +155,11 @@
     // #analysis-preview's own remaining content (ap-summary-row's subject
     // tags, the 取消 cancel button, 分析結果 detail toggle above) is
     // testbed-only -- but #ap-options-card-inline (修圖建議/風格/模型/生成
-    // 張數/補充指令/重新處理) and #run-tabs-row always get relocated OUT of
-    // #analysis-preview into #results-canvas-col as soon as the panel opens
+    // 張數/補充指令/重新處理) always gets relocated OUT of #analysis-preview
+    // into #results-canvas-top as soon as the panel opens
     // (openInlineAnalysisForCurrentContext still auto-opens for every user),
     // so hiding the now-empty-for-general-users wrapper here doesn't touch
-    // them. #back-to-process-btn only toggles that wrapper's own content, so
+    // it. #back-to-process-btn only toggles that wrapper's own content, so
     // it stays debug-only too -- general users already get the pill row
     // without needing to press anything.
     if (els.backToProcessBtn) els.backToProcessBtn.style.display = isDebug ? "" : "none";
@@ -568,32 +517,12 @@
     }
   }
 
-  // #run-tabs-row moves under the photo (inside #results-canvas-col) while
-  // the panel is open, so the image and its RUN previews read as one
-  // aligned column next to the panel, instead of staying a full-width row
-  // that now spans underneath both the (narrowed) photo and the panel.
-  function moveRunTabsRowTo(container) {
-    if (!els.runTabsRow || !container) return;
-    if (els.runTabsRow.parentElement !== container) {
-      container.appendChild(els.runTabsRow);
-      updateRunTabsArrows();
-    }
-  }
-
-  function restoreRunTabsRowHome() {
-    if (els.runTabsRowHome && els.runTabsRow.previousElementSibling !== els.runTabsRowHome) {
-      els.runTabsRowHome.after(els.runTabsRow);
-      updateRunTabsArrows();
-    }
-  }
-
   // #ap-options-card-inline (模型/生成張數 pills) moves below .compare-card
   // (inside #results-canvas-top, the wrapper around just the photo -- see
   // its own comment in index.html) while the panel is open, flattening into
   // the same plain horizontal pill row the upload page uses -- .ap-col-right
   // (its normal home, still used as-is on the processing screen, which has
   // no .compare-card to move below) squeezes it into a narrow column instead.
-  // Called before moveRunTabsRowTo so it lands directly under the photo.
   function moveOptionsCardTo(container) {
     if (!els.apOptionsCardInline || !container) return;
     if (els.apOptionsCardInline.parentElement !== container) {
@@ -609,15 +538,14 @@
 
   function openInlineAnalysisPanel() {
     moveAnalysisPreviewTo(els.resultsAnalysisSlot);
-    // Before moveOptionsCardTo/moveRunTabsRowTo below -- setAnalysisPreviewDisabled
-    // re-enables via els.analysisPreview.querySelectorAll(...), which only
-    // finds #ap-options-card-inline's controls (incl. #inline-analysis-continue-btn)
+    // Before moveOptionsCardTo below -- setAnalysisPreviewDisabled re-enables
+    // via els.analysisPreview.querySelectorAll(...), which only finds
+    // #ap-options-card-inline's controls (incl. #inline-analysis-continue-btn)
     // while that card is still nested inside #analysis-preview. Called after
     // the move, it silently found nothing there anymore and those controls
     // stayed disabled forever after the first disable/regenerate cycle.
     setAnalysisPreviewDisabled(false);
     moveOptionsCardTo(els.resultsCanvasTop);
-    moveRunTabsRowTo(els.resultsCanvasCol);
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
     // Moved out of #inline-analysis-actions (now lives at the end of
     // #ap-options-card-inline) -- toggled alongside it here since it lost
@@ -638,7 +566,6 @@
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
     restoreOptionsCardHome();
-    restoreRunTabsRowHome();
   }
 
   let inlineAnalysisContinueHandler = null;
@@ -973,24 +900,22 @@
     return window.PhotoAgentZip.createZip(files);
   }
 
-  // The all-RUNs download link only makes sense once there's more than one
-  // finished RUN to bundle -- hidden otherwise so it doesn't duplicate the
-  // single-preview download link for the common single-RUN case.
+  // How many RUNs of the currently-displayed result have actually finished
+  // -- handleDownloadClick uses this to decide whether clicking #download-link
+  // should just download the current image directly (<=1 done RUN) or first
+  // ask the user to choose between that and all RUNs (see toggleDownloadMenu).
+  let lastDoneRunsCount = 0;
+
   function updateDownloadLinks(runs) {
     // download-link only makes sense once a real edited result exists to zip
     // up -- lastResult is set right before every call to this function (and
     // cleared in reset()), so its presence is the single source of truth.
     els.downloadLink.hidden = !lastResult;
-    if (!els.downloadAllRunsLink) return;
-    const doneCount = (runs || []).filter((run) => run.status === "done").length;
-    els.downloadAllRunsLink.hidden = doneCount <= 1;
-    // Icon-only button -- the RUN count lives in the hover hint (title/
-    // aria-label) instead of a permanently visible label.
-    if (doneCount > 1) {
-      const hint = `全部下載（${doneCount} 個 RUN）`;
-      els.downloadAllRunsLink.title = hint;
-      els.downloadAllRunsLink.setAttribute("aria-label", hint);
-    }
+    lastDoneRunsCount = (runs || []).filter((run) => run.status === "done").length;
+    closeDownloadMenu();
+    const hint = lastDoneRunsCount > 1 ? `下載選項（${lastDoneRunsCount} 個 RUN）` : "下載結果";
+    els.downloadLink.title = hint;
+    els.downloadLink.setAttribute("aria-label", hint);
   }
 
   // Centered toast shown while buildZip() is fetching each result image over
@@ -1083,9 +1008,7 @@
     }
   }
 
-  function handleDownloadClick(event) {
-    event.preventDefault();
-    if (!lastResult) return;
+  function downloadCurrentResultOnly() {
     if (isDebugUiActive) {
       downloadZip(buildResultZip, buildDownloadZipFilename());
     } else {
@@ -1093,10 +1016,50 @@
     }
   }
 
-  function handleDownloadAllRunsClick(event) {
+  // #download-link only asks "current RUN or all RUNs?" when there's an
+  // actual choice to make -- with one (or zero) finished RUNs it just
+  // downloads the current result directly, same as before this menu existed.
+  function handleDownloadClick(event) {
     event.preventDefault();
     if (!lastResult) return;
+    if (lastDoneRunsCount > 1) {
+      toggleDownloadMenu();
+      return;
+    }
+    downloadCurrentResultOnly();
+  }
+
+  function handleDownloadCurrentBtnClick() {
+    closeDownloadMenu();
+    if (!lastResult) return;
+    downloadCurrentResultOnly();
+  }
+
+  function handleDownloadAllRunsBtnClick() {
+    closeDownloadMenu();
+    if (!lastResult) return;
     downloadZip(buildAllRunsZip, buildDownloadZipFilename());
+  }
+
+  function openDownloadMenu() {
+    if (!els.downloadMenu) return;
+    els.downloadMenu.hidden = false;
+    document.addEventListener("click", handleDownloadMenuOutsideClick);
+  }
+
+  function closeDownloadMenu() {
+    if (!els.downloadMenu || els.downloadMenu.hidden) return;
+    els.downloadMenu.hidden = true;
+    document.removeEventListener("click", handleDownloadMenuOutsideClick);
+  }
+
+  function toggleDownloadMenu() {
+    if (!els.downloadMenu) return;
+    if (els.downloadMenu.hidden) openDownloadMenu(); else closeDownloadMenu();
+  }
+
+  function handleDownloadMenuOutsideClick(event) {
+    if (els.downloadMenuWrap && !els.downloadMenuWrap.contains(event.target)) closeDownloadMenu();
   }
 
   // Shared record shape for both a fresh batch (setSelectedFileBatch) and
@@ -1259,17 +1222,13 @@
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
     // single-image run (which never touches these) isn't left with the
-    // canvas/run-tabs hidden from a prior batch session.
+    // canvas/run switcher hidden from a prior batch session.
     if (els.batchMainLoading) { els.batchMainLoading.hidden = true; els.batchMainLoading.classList.remove("is-error", "is-analyzed"); }
     if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
     restoreAnalysisPreviewHome();
     if (els.resultsCanvasRow) { els.resultsCanvasRow.hidden = false; els.resultsCanvasRow.classList.remove("showing-analysis"); }
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
-    if (els.runTabsRow) els.runTabsRow.hidden = false;
-    if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
-    if (els.runTabsIndex) els.runTabsIndex.hidden = true;
-    currentRunTabsIndex = null;
-    currentRunTabsOnSelect = null;
+    resetRunSwitcher();
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
@@ -1564,9 +1523,9 @@
       // (runCombinedMultiRun) -- unlike the two-stage branches below, this
       // doesn't special-case runCount === 1 at all: a single RUN is just the
       // degenerate case of the same server-side loop, and
-      // showSingleResult()/renderSingleRunTabs() already render a lone RUN
-      // identically to how the old inline single-result code did
-      // (renderSingleRunTabs hides the tab strip whenever there's only one).
+      // showSingleResult()/renderSingleRunSwitcher() already render a lone
+      // RUN identically to how the old inline single-result code did
+      // (renderSingleRunSwitcher hides the switcher whenever there's only one).
       singleRuns = Array.from({ length: runCount }, (_, k) => ({
         run: k + 1, jobId: null, status: "processing",
         imageUrl: null, result: null, timings: [], error: null
@@ -1685,10 +1644,7 @@
       updateDownloadLinks();
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
-      if (els.runTabs) { els.runTabs.hidden = true; els.runTabs.innerHTML = ""; }
-      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
-      currentRunTabsIndex = null;
-      currentRunTabsOnSelect = null;
+      resetRunSwitcher();
       // Analysis-preview shows by default alongside the canvas (same as
       // showSingleResult/showBatchDoneMain -- this is the single-RUN direct
       // path, which renders the result itself instead of going through
@@ -1810,9 +1766,9 @@
     updateDownloadLinks(runs);
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
-    renderSingleRunTabs();
+    renderSingleRunSwitcher();
     // Analysis-preview shows by default alongside the canvas -- no-ops if
-    // it's already open (e.g. just switching RUN tabs).
+    // it's already open (e.g. just switching RUNs).
     openInlineAnalysisForCurrentContext();
   }
 
@@ -2604,8 +2560,8 @@
   // its icon/label to a "restore" glyph instead of adding a second close
   // button. The card's parent gets its rendered height frozen inline for the
   // duration (position:fixed pulls the card out of flow, which would
-  // otherwise collapse the parent and visibly shift the run-tabs/options
-  // panel below it up, then back down on close) so nothing around it moves.
+  // otherwise collapse the parent and visibly shift the options panel below
+  // it up, then back down on close) so nothing around it moves.
   const COMPARE_FULLSCREEN_EXPAND_ICON = `<svg width="18" height="18" fill="none" viewBox="0 0 24 24">
     <path d="M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4"
       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2757,7 +2713,6 @@
     if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
     restoreAnalysisPreviewHome(); // vacates #results-analysis-slot if a done record's revise panel is open
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = true;
-    if (els.runTabsRow) els.runTabsRow.hidden = true;
   }
 
   function showBatchMainLoading(record) {
@@ -2815,94 +2770,89 @@
     if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = false;
   }
 
-  // Tab strip for one image's N edit results. Hidden unless there's more than
-  // one run. Shared by the batch detail view and the single-image results
-  // view; `onSelectDone(idx)` decides what re-pointing to that run means for
-  // the caller (batch re-renders via syncRecordMirror+showBatchDoneMain, single
-  // via showSingleResult).
-  function buildRunTabs(runs, currentIdx, onSelectDone) {
-    const samePhoto = runs === lastRunTabsRuns;
-    const prevScrollLeft = els.runTabs.scrollLeft;
-    els.runTabs.hidden = false;
-    els.runTabs.innerHTML = "";
-    runs.forEach((run, idx) => {
-      const tab = document.createElement("button");
-      tab.type = "button";
-      tab.className = `run-tab ${run.status}${idx === currentIdx ? " active" : ""}`;
-      tab.setAttribute("aria-label", `RUN ${run.run}`);
-
-      const media = document.createElement("span");
-      media.className = "run-tab-media";
-      if (run.status === "done") {
-        const im = document.createElement("img");
-        im.src = run.imageUrl;
-        media.appendChild(im);
-      } else if (run.status === "processing") {
-        const spin = document.createElement("span");
-        spin.className = "run-tab-spin";
-        media.appendChild(spin);
-      }
-      tab.appendChild(media);
-
-      if (run.status === "done") {
-        tab.addEventListener("click", () => onSelectDone(idx));
-      } else {
-        tab.disabled = true;
-        if (run.status === "error") tab.title = run.error || "此 RUN 修圖失敗";
-      }
-      els.runTabs.appendChild(tab);
-    });
-    els.runTabs.scrollLeft = samePhoto ? prevScrollLeft : 0;
-    lastRunTabsRuns = runs;
-    currentRunTabsIndex = currentIdx;
-    currentRunTabsOnSelect = onSelectDone;
-    if (els.runTabsIndex) {
-      els.runTabsIndex.hidden = false;
-      els.runTabsIndex.textContent = `${currentIdx + 1} / ${runs.length}`;
+  // Shows a "產生中… N/total RUN" progress bar under the photo for as long
+  // as any RUN of the current multi-RUN batch is still "processing" -- the
+  // switcher (arrows/count label) only ever displays the first *done* RUN,
+  // so without this there's no feedback at all that RUN 2..N are still
+  // generating in the background while the user is looking at RUN 1.
+  function updateRunProgressBar(runs) {
+    if (!els.runProgress) return;
+    const runningCount = runs.filter((r) => r.status === "processing").length;
+    if (!runningCount) {
+      els.runProgress.hidden = true;
+      return;
     }
-    updateRunTabsArrows();
+    const doneCount = runs.filter((r) => r.status === "done").length;
+    els.runProgress.hidden = false;
+    if (els.runProgressLabel) els.runProgressLabel.textContent = `產生中… ${doneCount}/${runs.length} RUN`;
+    if (els.runProgressFill) els.runProgressFill.style.width = `${Math.round((doneCount / runs.length) * 100)}%`;
   }
 
-  // Clicking a finished tab re-points the record's mirror fields at that run
-  // and re-renders the whole report.
-  function renderRunTabs(record) {
-    if (!els.runTabs) return;
+  // Hides/clears the prev/next arrows, the "N / total" label, and the
+  // progress bar, and drops the arrows' current run list/index/select-callback.
+  function resetRunSwitcher() {
+    if (els.runSwitchPrev) els.runSwitchPrev.hidden = true;
+    if (els.runSwitchNext) els.runSwitchNext.hidden = true;
+    if (els.runCountLabel) { els.runCountLabel.hidden = true; els.runCountLabel.textContent = ""; }
+    if (els.runProgress) els.runProgress.hidden = true;
+    currentRunList = null;
+    currentRunIndex = null;
+    currentRunOnSelect = null;
+  }
+
+  // Prev/next arrows + "N / total" label for one image's N edit results.
+  // Hidden unless there's more than one run. Shared by the batch detail view
+  // and the single-image results view; `onSelectDone(idx)` decides what
+  // re-pointing to that run means for the caller (batch re-renders via
+  // syncRecordMirror+showBatchDoneMain, single via showSingleResult).
+  function updateRunSwitcher(runs, currentIdx, onSelectDone) {
+    if (runs.length <= 1) {
+      resetRunSwitcher();
+      return;
+    }
+    currentRunList = runs;
+    currentRunIndex = currentIdx;
+    currentRunOnSelect = onSelectDone;
+    if (els.runSwitchPrev) els.runSwitchPrev.hidden = false;
+    if (els.runSwitchNext) els.runSwitchNext.hidden = false;
+    if (els.runCountLabel) {
+      els.runCountLabel.hidden = false;
+      els.runCountLabel.textContent = `${currentIdx + 1} / ${runs.length}`;
+    }
+    updateRunProgressBar(runs);
+    updateRunSwitcherArrows();
+  }
+
+  // Selecting an adjacent run re-points the record's mirror fields at it and
+  // re-renders the whole report.
+  function renderRunSwitcher(record) {
     const runs = record.runs || [];
     if (runs.length <= 1) {
-      els.runTabs.hidden = true;
-      els.runTabs.innerHTML = "";
-      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
-      currentRunTabsIndex = null;
-      currentRunTabsOnSelect = null;
+      resetRunSwitcher();
       return;
     }
 
     const doneIdx = runs.findIndex((x) => x.status === "done");
     const current = (record.mirrorIndex != null && runs[record.mirrorIndex]) ? record.mirrorIndex : doneIdx;
-    buildRunTabs(runs, current, (idx) => {
+    updateRunSwitcher(runs, current, (idx) => {
       record.mirrorIndex = idx;
       syncRecordMirror(record);
       showBatchDoneMain(record);
     });
   }
 
-  // Single-image counterpart of renderRunTabs: reads/writes the module-level
-  // singleRuns/singleMirrorIndex instead of a batch record.
-  function renderSingleRunTabs() {
-    if (!els.runTabs) return;
+  // Single-image counterpart of renderRunSwitcher: reads/writes the
+  // module-level singleRuns/singleMirrorIndex instead of a batch record.
+  function renderSingleRunSwitcher() {
     const runs = singleRuns || [];
     if (runs.length <= 1) {
-      els.runTabs.hidden = true;
-      els.runTabs.innerHTML = "";
-      if (els.runTabsIndex) els.runTabsIndex.hidden = true;
-      currentRunTabsIndex = null;
-      currentRunTabsOnSelect = null;
+      resetRunSwitcher();
       return;
     }
 
     const doneIdx = runs.findIndex((x) => x.status === "done");
     const current = (singleMirrorIndex != null && runs[singleMirrorIndex]) ? singleMirrorIndex : doneIdx;
-    buildRunTabs(runs, current, (idx) => {
+    updateRunSwitcher(runs, current, (idx) => {
       singleMirrorIndex = idx;
       showSingleResult();
     });
@@ -2920,9 +2870,8 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
-    els.runTabsRow.hidden = false;
     if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
-    renderRunTabs(record);
+    renderRunSwitcher(record);
 
     const applyRender = () => {
       els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
@@ -3018,9 +2967,10 @@
     record.mirrorIndex = newRuns.length - 1;
     record.status = "processing";
     updateBatchSidebarItem(record);
-    // Replaces the canvas/run-tabs with the same processing view a first-time
-    // edit shows (renderBatchMain routes "processing" there) -- rather than
-    // leaving the old (now-stale) canvas up with a spinner overlaid on it.
+    // Replaces the canvas/run switcher with the same processing view a
+    // first-time edit shows (renderBatchMain routes "processing" there) --
+    // rather than leaving the old (now-stale) canvas up with a spinner
+    // overlaid on it.
     refreshIfSelected(record);
 
     await runBatchPool(newRuns.map((run) => ({ record, run })), editBatchItem, POLL_CONCURRENCY);
@@ -3201,14 +3151,13 @@
     procVisual.style.height = "";
     clearContinueWait();
     // If the last thing the user did was an inline analysis review (single or
-    // batch), #analysis-preview, #ap-options-card-inline, and #run-tabs-row
-    // are currently on loan inside the results section (#results-analysis-slot
-    // / #results-canvas-col) -- move them back to the processing section
+    // batch), #analysis-preview and #ap-options-card-inline are currently on
+    // loan inside the results section (#results-analysis-slot /
+    // #results-canvas-top) -- move them back to the processing section
     // before the next photo's analyze tries to show #analysis-preview there,
     // or it renders invisibly inside the now-hidden results section instead.
     restoreAnalysisPreviewHome();
     restoreOptionsCardHome();
-    restoreRunTabsRowHome();
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
@@ -3283,7 +3232,8 @@
   if (els.compareFullscreenBtn) els.compareFullscreenBtn.addEventListener("click", toggleCompareFullscreen);
   if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.addEventListener("click", closeCompareFullscreen);
   els.downloadLink.addEventListener("click", handleDownloadClick);
-  if (els.downloadAllRunsLink) els.downloadAllRunsLink.addEventListener("click", handleDownloadAllRunsClick);
+  if (els.downloadCurrentBtn) els.downloadCurrentBtn.addEventListener("click", handleDownloadCurrentBtnClick);
+  if (els.downloadAllRunsBtn) els.downloadAllRunsBtn.addEventListener("click", handleDownloadAllRunsBtnClick);
   if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);
   if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
   if (els.errorModal) {

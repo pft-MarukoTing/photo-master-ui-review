@@ -967,7 +967,7 @@
     /* align-items: stretch (not flex-start) so the sidebar card's own height
        always matches whichever is taller -- itself or the main content,
        which swings a lot between the compact "analyzing" placeholder and the
-       full compare-card+run-tabs "done" view -- instead of looking like a
+       full compare-card "done" view -- instead of looking like a
        short floating card next to a much taller (or shorter) column. */
     .results-body { display: flex; align-items: stretch; gap: 28px; }
     .batch-sidebar {
@@ -1192,146 +1192,6 @@
     @media (max-width: 900px) {
       .results-body { flex-direction: column; }
       .batch-sidebar { width: 100%; flex-basis: auto; position: static; }
-    }
-
-    /* ── Run preview strip (scrolls horizontally, switches between one
-       image's N edit results) -- a padding-revealed gradient ring marks the
-       active thumbnail, and the RUN label overlays the photo itself as a
-       bottom caption instead of sitting in its own row below it. ── */
-    .run-tabs-row {
-      /* max-width is set inline by app.js (ResizeObserver) -- CSS has no
-         way to size against a sibling's rendered width. */
-      width: 100%;
-      margin: 0 auto;
-    }
-    /* Moved here (see openInlineAnalysisPanel in app.js) while the inline
-       analysis panel is open -- the results-container flex column's own
-       gap provides this spacing in the row's normal (unnested) position,
-       but #results-canvas-col is a plain block container with no gap of
-       its own between the photo and this. */
-    #results-canvas-col > .run-tabs-row {
-      margin-top: 20px;
-    }
-    /* Floats over the strip's own top-right corner instead of sitting in a
-       separate row that pushes it down -- same "icon overlaid on its own
-       content" language as .canvas-actions on the photo canvas. */
-    .run-tabs-download {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      z-index: 4;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      border: 1px solid var(--border-2);
-      background: rgba(9,9,11,.8);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      color: var(--text-2);
-      cursor: pointer;
-      box-shadow: var(--shadow-sm);
-      transition: background .15s, border-color .15s, color .15s, transform .15s;
-    }
-    .run-tabs-download:hover {
-      background: rgba(168,85,247,.4);
-      border-color: rgba(168,85,247,.55);
-      color: var(--text);
-      transform: translateY(-1px);
-    }
-    /* ── Run-tabs scroll arrows (reference: circular arrow overlaying the
-       edge of the carousel) -- hidden entirely when the strip doesn't
-       overflow, disabled at whichever end is already fully scrolled to
-       (see updateRunTabsArrows in app.js). ── */
-    .run-tabs-scroll-wrap { position: relative; }
-    .run-tabs-arrow {
-      position: absolute;
-      top: 50%;
-      transform: translateY(-50%);
-      z-index: 3;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 34px;
-      height: 34px;
-      padding: 0;
-      border: 1px solid var(--border-2);
-      border-radius: 50%;
-      background: rgba(9,9,11,.8);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      color: var(--text);
-      cursor: pointer;
-      box-shadow: var(--shadow-sm);
-      transition: background .15s, border-color .15s, transform .15s, opacity .15s;
-    }
-    .run-tabs-arrow:hover { background: rgba(168,85,247,.4); border-color: rgba(168,85,247,.55); }
-    .run-tabs-arrow:active { transform: translateY(-50%) scale(.92); }
-    .run-tabs-arrow:disabled { opacity: .3; cursor: not-allowed; pointer-events: none; }
-    .run-tabs-arrow-left { left: -6px; }
-    .run-tabs-arrow-right { right: -6px; }
-    .run-tabs {
-      display: flex;
-      gap: 14px;
-      overflow-x: auto;
-      padding: 4px 2px 10px;
-      /* Centered when the row is narrower than the container; "safe"
-         falls back to start-aligned (scrollable) instead of clipping the
-         first thumbnails off-screen once there are enough RUNs to overflow. */
-      justify-content: safe center;
-      /* Drag/trackpad/arrow-button scrolling all still work -- just hides
-         the scrollbar track so it doesn't visually compete with the arrow
-         buttons now doing that job. */
-      scrollbar-width: none;
-    }
-    .run-tabs::-webkit-scrollbar { display: none; }
-    .run-tabs-index {
-      margin-top: -4px;
-      text-align: center;
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-2);
-      font-variant-numeric: tabular-nums;
-    }
-    .run-tab {
-      position: relative;
-      flex-shrink: 0;
-      width: 100px;
-      height: 100px;
-      padding: 2px;
-      border: none;
-      border-radius: 16px;
-      background: var(--border-2);
-      cursor: pointer;
-      transition: background .15s, box-shadow .15s, transform .15s;
-    }
-    .run-tab:hover { transform: translateY(-2px); }
-    .run-tab-media {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-      height: 100%;
-      border-radius: 14px;
-      overflow: hidden;
-      background: var(--card-2);
-    }
-    .run-tab-media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .run-tab.active {
-      background: var(--mv-grad);
-      box-shadow: var(--shadow-accent);
-    }
-    .run-tab:disabled { cursor: default; }
-    .run-tab.error .run-tab-media { background: rgba(220,60,60,.18); }
-    .run-tab-spin {
-      width: 20px; height: 20px;
-      border: 2.5px solid rgba(255,255,255,.25);
-      border-top-color: #fff;
-      border-radius: 50%;
-      animation: rc-spin .8s linear infinite;
     }
 
     /* ── Run count row (inside the batch prompt row) ── */
@@ -1620,11 +1480,11 @@
 
           <div class="ap-row">
             <!-- Stable anchor -- moved below .compare-card (inside
-                 #results-canvas-col) while the inline results-page panel is
-                 open, same relocation pattern as #run-tabs-row/
-                 #analysis-preview -- see moveOptionsCardTo/
-                 restoreOptionsCardHome in app.js. On the processing screen
-                 (no .compare-card to move below) it just stays here. -->
+                 #results-canvas-top) while the inline results-page panel is
+                 open, same relocation pattern as #analysis-preview -- see
+                 moveOptionsCardTo/restoreOptionsCardHome in app.js. On the
+                 processing screen (no .compare-card to move below) it just
+                 stays here. -->
             <div id="ap-options-card-home"></div>
             <!-- Same icon+popover pill pattern as the upload page's option
                  pickers (.ap-style-item/.ap-style-trigger/.ap-style-panel,
@@ -1936,17 +1796,14 @@
           <!-- Wraps just .compare-card -- while the inline revise flow is
                open, #ap-options-card-inline (模型/生成張數 settings +
                修圖建議/修圖風格選項) is moved inside this wrapper too (see
-               moveOptionsCardTo in app.js), landing right after the photo.
-               #run-tabs-row stays a sibling of this wrapper instead (still a
-               direct child of #results-canvas-col, see moveRunTabsRowTo) so
-               that on short screens (styles.css, @media max-height:700px)
-               capping *this wrapper's* height to split photo/options-card
-               70%/30% doesn't also squeeze the run-tabs strip below it --
-               that can still push the page into scrolling on its own. -->
+               moveOptionsCardTo in app.js), landing right after the photo. -->
           <div class="results-canvas-top" id="results-canvas-top">
             <!-- Before / After: one full-bleed canvas, toggled between the two
                  images with floating icon buttons instead of a boxed header. -->
             <div class="compare-card" id="compare-card">
+            <!-- "N / total" RUN counter, above the photo -- hidden whenever
+                 there's only one RUN (see updateRunSwitcher in app.js). -->
+            <div id="run-count-label" class="run-count-label" hidden></div>
             <div class="photo-frame-wrap">
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
@@ -1985,13 +1842,36 @@
                     <circle cx="17" cy="17" r="2.2" fill="currentColor"/>
                   </svg>
                 </button>
-                <a id="download-link" class="canvas-btn" download="photo-muse-output.zip" title="download" aria-label="下載結果" hidden>
-                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                    <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
-                      stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                  </svg>
-                </a>
+                <div class="canvas-btn-wrap" id="download-menu-wrap">
+                  <a id="download-link" class="canvas-btn" download="photo-muse-output.zip" title="download" aria-label="下載結果" hidden>
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                      <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </a>
+                  <!-- Shown instead of downloading immediately once there's
+                       more than one finished RUN to choose from (see
+                       handleDownloadClick in app.js) -- lets the user pick
+                       between just the current RUN or all of them as a zip. -->
+                  <div id="download-menu" class="download-menu" hidden>
+                    <button type="button" id="download-current-btn" class="download-menu-item">下載目前 RUN</button>
+                    <button type="button" id="download-all-runs-btn" class="download-menu-item">全部下載（ZIP）</button>
+                  </div>
+                </div>
               </div>
+              <!-- Switches between this photo's N edit RUNs -- hidden
+                   entirely when there's only one (see updateRunSwitcher in
+                   app.js). -->
+              <button id="run-switch-prev" class="photo-switch-arrow photo-switch-prev" type="button" aria-label="上一個 RUN" hidden>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                  <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+              <button id="run-switch-next" class="photo-switch-arrow photo-switch-next" type="button" aria-label="下一個 RUN" hidden>
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                  <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
               <!-- Persistent label, top-left of the photo itself -- always
                    shown, text kept in sync with the current view by
                    setCompareView (results.js). -->
@@ -2001,6 +1881,16 @@
                    populated with non-default picks (renderResult), and only
                    visible while showing the generated image, not Original. -->
               <div id="recipe-tags" class="recipe-tags"></div>
+            </div>
+            <!-- Shown for as long as any RUN of a multi-RUN job is still
+                 generating in the background while an earlier (already
+                 "done") RUN is on screen -- see updateRunProgressBar in
+                 app.js. -->
+            <div id="run-progress" class="run-progress" hidden>
+              <span id="run-progress-label" class="run-progress-label"></span>
+              <div class="run-progress-track">
+                <div id="run-progress-fill" class="run-progress-fill"></div>
+              </div>
             </div>
             <!-- Kept in the DOM (not shown) so existing code that sets these can
                  stay untouched -- the boxed header they used to sit in is gone. -->
@@ -2013,49 +1903,6 @@
         <!-- #analysis-preview (from the processing section) is moved in here
              on demand -- see openInlineAnalysisPanel in app.js. -->
         <div class="results-analysis-slot" id="results-analysis-slot"></div>
-      </div>
-
-      <!-- Stable anchor: #run-tabs-row is moved back here whenever the
-           inline analysis panel is closed -- see moveRunTabsRowTo/
-           restoreRunTabsRowHome in app.js. -->
-      <div id="run-tabs-row-home"></div>
-
-      <!-- Run preview strip: switch between this image's N edit results.
-           Normally a full-width row below the canvas+panel row (width-capped
-           at 1/3 of #results-canvas-row's own rendered width -- no pure-CSS
-           way to size against a sibling); while the inline analysis panel is
-           open, moved to sit directly under the canvas instead, so the photo
-           and its RUNs read as one aligned vertical column next to the
-           panel rather than a stray full-width row beneath both. Once the
-           thumbnails overflow whatever width applies, .run-tabs' own
-           overflow-x:auto (plus the arrows) makes it scrollable. -->
-      <div class="run-tabs-row" id="run-tabs-row">
-        <div class="run-tabs-scroll-wrap" id="run-tabs-scroll-wrap">
-          <!-- Floats over the strip's own top-right corner (like the
-               canvas-actions icons over the photo) instead of sitting in a
-               separate row that pushes the strip down. Icon-only --
-               title/aria-label (kept in sync with the RUN count in
-               updateDownloadLinks, app.js) carry the meaning as a native
-               hover tooltip instead of a permanently visible label. -->
-          <a id="download-all-runs-link" class="run-tabs-download" download="photo-muse-output-all-runs.zip" title="全部下載" aria-label="全部下載" hidden>
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </a>
-          <button id="run-tabs-prev" class="run-tabs-arrow run-tabs-arrow-left" type="button" aria-label="向左捲動" hidden>
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-              <path d="M15 18l-6-6 6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-          <div id="run-tabs" class="run-tabs" hidden></div>
-          <button id="run-tabs-next" class="run-tabs-arrow run-tabs-arrow-right" type="button" aria-label="向右捲動" hidden>
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-              <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
-        </div>
-        <div id="run-tabs-index" class="run-tabs-index" hidden></div>
       </div>
 
       <!-- Everything below the before/after images: hidden entirely unless
@@ -2556,8 +2403,8 @@
 <!-- Full-window compare view: #compare-fullscreen-btn (canvas-actions,
      inside .compare-card above) toggles this. Rather than moving .compare-card
      to a separate overlay (which briefly collapses #results-canvas-col and
-     visibly shifts the run-tabs/options panel below it while open, and can
-     leave them shifted after closing), openCompareFullscreen (app.js) just
+     visibly shifts the options panel below it while open, and can leave it
+     shifted after closing), openCompareFullscreen (app.js) just
      adds .is-fullscreen to the real #compare-card in place -- CSS switches it
      to position:fixed -- while freezing its parent's height inline so
      nothing below it moves. This backdrop is the only extra element added;
