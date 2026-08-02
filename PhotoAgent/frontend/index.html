@@ -289,10 +289,14 @@
       color: #fff;
       box-shadow: var(--shadow-accent);
     }
-    /* Pushes #inline-analysis-continue-btn to the far right of
-       .options-card-inline's otherwise plain flex-start pill row, instead
-       of just trailing right after the 生成張數 pill with the row's own gap. */
-    .options-card-inline .analysis-preview-action-right {
+    /* Pushes #ap-settings-btn (order:3, see below) to the far right of
+       .options-card-inline's otherwise plain flex-start pill row -- put on
+       #ap-settings-btn rather than #inline-analysis-continue-btn itself so
+       #ap-settings-btn/Run land right next to each other as one
+       right-aligned group (same pattern as #settings-btn/#start-direct-btn
+       on the upload page's .upload-actions-row), instead of Run alone
+       jumping to the far edge with a big gap after #ap-settings-btn. */
+    .options-card-inline #ap-settings-btn {
       margin-left: auto;
     }
     .analysis-preview-action-right:hover {
@@ -490,6 +494,26 @@
        falls in the DOM -- see the comment there. */
     .options-card-inline > #ap-settings-btn { order: 3; }
     .options-card-inline > #inline-analysis-continue-btn { order: 4; }
+    /* #ap-settings-btn is icon-only (label dropped) -- square it up and drop
+       .ap-style-trigger's own text-oriented 0 16px padding so the gear icon
+       fills the button instead of floating in a wide pill. justify-content
+       (unset on .ap-style-trigger, which relies on auto-width content
+       hugging its own padding instead) is needed now that this button has a
+       fixed width wider than its icon -- without it the icon sat flush left
+       instead of centered in the extra space. */
+    .options-card-inline > #ap-settings-btn {
+      width: 41px;
+      padding: 0;
+      justify-content: center;
+    }
+    /* .option-pill-icon (styles.css) defaults to var(--accent), the same
+       purple as 修圖建議/修圖風格選項's icons -- #settings-btn on the upload
+       page instead inherits .btn-secondary's neutral var(--text-4), so
+       override here to match that, now that this is icon-only and the color
+       is all that's left to read. */
+    #ap-settings-btn .option-pill-icon {
+      color: var(--text-4);
+    }
     .ap-style-picked-chip {
       display: inline-flex;
       align-items: center;
@@ -1479,13 +1503,12 @@
                left with nothing else in that row once the 模型/長寬比/
                生成張數 pickers moved into #settings-modal. -->
           <div class="upload-actions-row">
-            <button id="settings-btn" class="btn btn-secondary" type="button">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/>
+            <button id="settings-btn" class="btn btn-secondary" type="button" aria-label="設定">
+              <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
+                <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="2"/>
                 <path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19.5a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4.5a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.08A1.65 1.65 0 0011.5 3.6V3.5a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.08a1.65 1.65 0 001.51 1H19.5a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
-                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span class="btn-label">設定</span>
             </button>
             <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後，接續修圖並顯示結果">
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
@@ -1662,15 +1685,19 @@
                      showAnalysisPreview/startInlineBatchReview etc still
                      toggle it directly to show/hide 生成張數 for flows
                      where it doesn't apply, unchanged. -->
-                <button id="ap-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger">
+                <!-- Icon-only -- label dropped in favor of aria-label since
+                     #ap-settings-btn/#inline-analysis-continue-btn now sit
+                     right next to each other as one group (see the
+                     margin-left:auto comment above); the gear icon alone
+                     reads clearly enough beside the "Run" button. -->
+                <button id="ap-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger" aria-label="設定">
                   <span class="option-pill-icon">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                      <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.6"/>
+                    <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
+                      <path d="M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7z" stroke="currentColor" stroke-width="1.8"/>
                       <path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19.5a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1.08-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4.5a2 2 0 110-4h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33h.08A1.65 1.65 0 0011.5 3.6V3.5a2 2 0 114 0v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82v.08a1.65 1.65 0 001.51 1H19.5a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"
-                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                   </span>
-                  <span class="ap-style-value">設定</span>
                 </button>
                 <!-- Moved out of #inline-analysis-actions (which keeps just
                      the cancel button) -- sits at the right end of this pill

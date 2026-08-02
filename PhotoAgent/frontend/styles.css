@@ -274,6 +274,13 @@ a { text-decoration: none; color: inherit; }
   justify-content: flex-end;
   gap: 10px;
 }
+/* #settings-btn is icon-only (label dropped, see index.html) -- square it up
+   and drop .btn's own text-oriented 0 20px padding so the gear icon fills
+   the button instead of floating in a wide pill built for icon+label. */
+.upload-actions-row #settings-btn {
+  width: 44px;
+  padding: 0;
+}
 
 /* Upload grid: drop zone full-width on top, options + run buttons below it
    (was a side-by-side drop-zone/form-column grid). Capped to 80% of the
@@ -1571,7 +1578,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      viewport narrows. */
   .upload-actions-row { gap: 8px; }
   .upload-actions-row .btn { height: 40px; padding: 0 14px; font-size: 15px; gap: 5px; }
-  .upload-actions-row .btn svg { width: 14px; height: 14px; }
+  .upload-actions-row .btn svg { width: 18px; height: 18px; }
+  .upload-actions-row #settings-btn { width: 40px; padding: 0; }
+  .upload-actions-row #settings-btn svg { width: 22px; height: 22px; }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
   .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
@@ -1593,7 +1602,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    still crowding the row's available width at 560px's sizing. */
 @media (max-width: 380px) {
   .upload-actions-row .btn { height: 36px; padding: 0 10px; font-size: 13px; gap: 4px; }
-  .upload-actions-row .btn svg { width: 12px; height: 12px; }
+  .upload-actions-row .btn svg { width: 16px; height: 16px; }
+  .upload-actions-row #settings-btn { width: 36px; padding: 0; }
+  .upload-actions-row #settings-btn svg { width: 20px; height: 20px; }
 }
 
 /* Short viewports (small/un-maximized browser windows, not just narrow
@@ -1621,7 +1632,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      scoped to .upload-actions-row (not the bare .btn class) so this
      doesn't also shrink unrelated buttons elsewhere in the app. */
   .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
-  .upload-actions-row .btn svg { width: 13px; height: 13px; }
+  .upload-actions-row .btn svg { width: 18px; height: 18px; }
+  .upload-actions-row #settings-btn { width: 36px; padding: 0; }
+  .upload-actions-row #settings-btn svg { width: 20px; height: 20px; }
 
   /* Results page, inline revise flow: .compare-card's photo-frame is a
      fixed 480px (see styles.css above) so once #ap-options-card-inline is
@@ -1693,8 +1706,17 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     gap: 4px;
   }
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .option-pill-icon svg {
-    width: 13px;
-    height: 13px;
+    width: 17px;
+    height: 17px;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline #ap-settings-btn {
+    width: 34px;
+    padding: 0;
+    justify-content: center;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline #ap-settings-btn .option-pill-icon svg {
+    width: 19px;
+    height: 19px;
   }
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .analysis-preview-action {
     height: 30px;
@@ -1731,7 +1753,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .upload-zone { min-height: 130px; }
   #dz-preview { min-height: 130px; }
   .upload-actions-row .btn { height: 30px; padding: 0 12px; font-size: 13px; gap: 4px; }
-  .upload-actions-row .btn svg { width: 11px; height: 11px; }
+  .upload-actions-row .btn svg { width: 15px; height: 15px; }
+  .upload-actions-row #settings-btn { width: 30px; padding: 0; }
+  .upload-actions-row #settings-btn svg { width: 17px; height: 17px; }
 }
 
 /* Landscape phones/small tablets (narrow width *and* short height at once):
@@ -1763,5 +1787,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .upload-zone { min-height: 50px; }
   #dz-preview { min-height: 50px; }
   .upload-actions-row .btn { height: 24px; padding: 0 10px; font-size: 12px; gap: 3px; }
-  .upload-actions-row .btn svg { width: 10px; height: 10px; }
+  .upload-actions-row .btn svg { width: 14px; height: 14px; }
+  .upload-actions-row #settings-btn { width: 24px; padding: 0; }
+  .upload-actions-row #settings-btn svg { width: 14px; height: 14px; }
 }
