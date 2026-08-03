@@ -7,7 +7,6 @@ window.PhotoAgentDom = (() => {
       history: document.querySelector("#history-section")
     },
     accountBadge: document.querySelector("#account-badge"),
-    registerAccountBtn: document.querySelector("#register-account-btn"),
     historyNavBtn: document.querySelector("#history-nav-btn"),
     accountModal: document.querySelector("#account-modal"),
     accountModalInput: document.querySelector("#account-modal-input"),
