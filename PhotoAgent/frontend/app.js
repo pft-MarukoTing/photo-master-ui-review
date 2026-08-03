@@ -107,6 +107,11 @@
   // in the old grid+detail-pagination design), since the sidebar shows every
   // record regardless of status and any of them can be clicked at any time.
   let currentBatchRecord = null;
+  // Set once the user explicitly clicks a sidebar/drawer item -- gates
+  // maybeAutoAdvanceToBatchResult so it only ever jumps the view on its own
+  // while the user is still looking at the default first-record placeholder,
+  // never overriding a deliberate manual pick.
+  let userPickedBatchRecord = false;
 
   const procVisual = document.querySelector(".proc-visual");
   const procTitle = document.querySelector(".proc-title");
@@ -1221,6 +1226,7 @@
     batchRecords = [];
     batchSettings = null;
     currentBatchRecord = null;
+    userPickedBatchRecord = false;
     // Any prior single-image run's "回到流程" state refers to a different
     // photo (or no longer applies once batch mode starts) -- drop it.
     singleFlowState = null;
@@ -1880,6 +1886,7 @@
     els.batchSidebar.hidden = false;
     if (els.resultsBody) els.resultsBody.classList.add("batch-mode");
     currentBatchRecord = batchRecords[0] || null;
+    userPickedBatchRecord = false;
     // Before rendering: renderBatchMain measures the sidebar's real on-page
     // position (updateBatchSidebarMaxHeight) to cap its height, which reads
     // as all-zero while the section is still display:none.
@@ -2651,6 +2658,7 @@
     }
     const previous = currentBatchRecord;
     currentBatchRecord = record;
+    userPickedBatchRecord = true;
     if (previous && previous !== record) updateBatchSidebarItem(previous);
     updateBatchSidebarItem(record);
     renderBatchMain(record);
@@ -2668,7 +2676,29 @@
   // (analyze/edit completing), so the visible view stays live without
   // requiring the user to re-click the sidebar.
   function refreshIfSelected(record) {
+    if (maybeAutoAdvanceToBatchResult(record)) return;
     if (record === currentBatchRecord) renderBatchMain(record);
+  }
+
+  // While the user is still looking at the default first-record placeholder
+  // (never having clicked another sidebar/drawer item yet -- see
+  // selectBatchRecord/userPickedBatchRecord), jump the main view to the
+  // first record anywhere in the batch that actually finishes, instead of
+  // leaving the analyzing/processing animation on screen for a record that
+  // may still take a while, when a result is already sitting there ready to
+  // look at. Returns true if it performed the switch (and rendered), so
+  // refreshIfSelected can skip its own now-redundant render.
+  function maybeAutoAdvanceToBatchResult(record) {
+    if (userPickedBatchRecord) return false;
+    if (record.status !== "done" || !record.result) return false;
+    if (!currentBatchRecord || currentBatchRecord === record) return false;
+    if (currentBatchRecord.status === "done" && currentBatchRecord.result) return false;
+    const previous = currentBatchRecord;
+    currentBatchRecord = record;
+    updateBatchSidebarItem(previous);
+    updateBatchSidebarItem(record);
+    renderBatchMain(record);
+    return true;
   }
 
   // The topbar's subject/scene tags (#ap-subject-tags) are shared with the
