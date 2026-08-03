@@ -13,8 +13,12 @@
     getAnalyzeResult,
     continueJob,
     analyzeAipoc,
-    analyzeAipocBatch
+    analyzeAipocBatch,
+    createAccount,
+    getHistory,
+    getJobStatusOnce
   } = window.PhotoAgentApi;
+  const { initFromUrl, getCurrentUser, setCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
@@ -204,6 +208,16 @@
         els.processingPathSelect.value = "aipoc";
       }
     });
+  }
+
+  // Account bootstrap: ?user=NAME (account.js) identifies who's using the
+  // tool when linked in from elsewhere. Absent -> ask whether to create one
+  // (openAccountModal), since having an account is what lets processing
+  // history (openHistoryPage) get recorded/recalled at all.
+  if (initFromUrl()) {
+    applyAccountUi();
+  } else {
+    openAccountModal();
   }
 
   // Upload-page option pills (#image-model-quality-picker etc.): a
@@ -1321,7 +1335,7 @@
   // own per-RUN edit jobs, since each RUN there can carry different
   // per-image style/recipe overrides picked during review).
   async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt = "", runCount = 1, onStage, onRunDone }) {
-    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount, path: "local" });
+    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount, user: getCurrentUser(), path: "local" });
 
     // Tracks which RUN *numbers* have already been delivered (a Set, not a
     // "highest number seen" watermark) -- /result can transiently return
@@ -1619,9 +1633,9 @@
       let finalJobId, imageUrl, result;
 
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt });
+        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser() });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -1715,9 +1729,9 @@
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
       } else {
-        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt });
+        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser() });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -2254,6 +2268,7 @@
           runQa: batchSettings.runQa,
           userPrompt,
           analysis: effectiveAnalysis,
+          user: getCurrentUser(),
           path: "aipoc"
         });
       } else {
@@ -2265,7 +2280,8 @@
           aspectRatio: batchSettings.aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
-          userPrompt
+          userPrompt,
+          user: getCurrentUser()
         });
       }
       const submitMs = Date.now() - stepStart;
@@ -2485,6 +2501,124 @@
 
   function closeNoticeModal() {
     if (els.noticeModal) els.noticeModal.hidden = true;
+  }
+
+  // Account creation prompt -- shown at startup whenever ?user= is absent
+  // (see the bootstrap call near applyDebugUiVisibility above). Skipping just
+  // closes it; the app stays fully usable without an account, just without
+  // processing history being recorded/recalled.
+  function openAccountModal() {
+    if (els.accountModal) els.accountModal.hidden = false;
+  }
+
+  function closeAccountModal() {
+    if (els.accountModal) els.accountModal.hidden = true;
+    if (els.accountModalError) els.accountModalError.hidden = true;
+    if (els.accountModalInput) els.accountModalInput.value = "";
+  }
+
+  function showAccountModalError(message) {
+    if (!els.accountModalError) return;
+    els.accountModalError.textContent = message;
+    els.accountModalError.hidden = false;
+  }
+
+  // Reflects the current account (if any) into the header badge/history nav
+  // button -- both stay hidden entirely until an account exists.
+  function applyAccountUi() {
+    const user = getCurrentUser();
+    if (els.accountBadge) {
+      els.accountBadge.textContent = user || "";
+      els.accountBadge.hidden = !user;
+    }
+    if (els.historyNavBtn) els.historyNavBtn.hidden = !user;
+  }
+
+  async function handleCreateAccount() {
+    const name = normalizeUsername(els.accountModalInput ? els.accountModalInput.value : "");
+    if (!name) {
+      showAccountModalError("請輸入使用者名稱。");
+      return;
+    }
+    if (els.accountModalCreateBtn) els.accountModalCreateBtn.disabled = true;
+    try {
+      await createAccount(name);
+      setCurrentUser(name);
+      applyAccountUi();
+      closeAccountModal();
+    } catch (err) {
+      showAccountModalError(err.message || "建立帳號失敗，請再試一次。");
+    } finally {
+      if (els.accountModalCreateBtn) els.accountModalCreateBtn.disabled = false;
+    }
+  }
+
+  // Renders one row per past job returned by getHistory -- fires a one-shot
+  // status check per job (getJobStatusOnce) in parallel so each row's
+  // thumbnail/badge reflects its actual current state, same "success"/
+  // "error"/still-processing states the batch sidebar already shows
+  // per-image, just re-derived here since this list survives page reloads
+  // (unlike the in-memory batch records that sidebar reads from).
+  async function renderHistoryList(jobs) {
+    if (!els.historyList) return;
+    els.historyList.innerHTML = "";
+    if (els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
+    if (!jobs.length) return;
+
+    const rows = jobs.map((job) => {
+      const li = document.createElement("li");
+      li.className = "batch-sidebar-item processing";
+      li.innerHTML = `
+        <div class="rc-media"><div class="rc-spinner"></div></div>
+        <div class="batch-sidebar-text">
+          <span>${job.preset || job.job_id}</span>
+          <span class="rc-badge">處理中</span>
+        </div>
+      `;
+      els.historyList.appendChild(li);
+      return { job, li };
+    });
+
+    await Promise.all(rows.map(async ({ job, li }) => {
+      const badge = li.querySelector(".rc-badge");
+      const media = li.querySelector(".rc-media");
+      try {
+        const status = await getJobStatusOnce(job.job_id, { path: job.path });
+        if (status.status === "success") {
+          li.className = "batch-sidebar-item done";
+          if (badge) badge.textContent = "完成";
+          if (media) media.innerHTML = `<img src="${resultImageUrl(job.job_id, { path: job.path })}" alt="">`;
+          li.addEventListener("click", () => {
+            window.open(resultImageUrl(job.job_id, { path: job.path }), "_blank");
+          });
+        } else if (status.status === "error") {
+          li.className = "batch-sidebar-item error";
+          if (badge) badge.textContent = "失敗";
+          if (media) media.innerHTML = "";
+        } else {
+          if (badge) badge.textContent = "處理中";
+        }
+      } catch {
+        li.className = "batch-sidebar-item error";
+        if (badge) badge.textContent = "無法取得狀態";
+      }
+    }));
+  }
+
+  async function openHistoryPage() {
+    showSection("history");
+    const user = getCurrentUser();
+    if (els.historyCurrentUser) els.historyCurrentUser.textContent = user || "";
+    if (!user) {
+      renderHistoryList([]);
+      return;
+    }
+    try {
+      const { jobs } = await getHistory(user);
+      renderHistoryList(jobs || []);
+    } catch {
+      renderHistoryList([]);
+    }
   }
 
   // Upload-page settings overlay -- same open/close shape as the error modal
@@ -3324,6 +3458,14 @@
       if (e.target.dataset.close) closeNoticeModal();
     });
   }
+  if (els.historyNavBtn) els.historyNavBtn.addEventListener("click", openHistoryPage);
+  if (els.accountModalSkipBtn) els.accountModalSkipBtn.addEventListener("click", closeAccountModal);
+  if (els.accountModalCreateBtn) els.accountModalCreateBtn.addEventListener("click", handleCreateAccount);
+  if (els.accountModal) {
+    els.accountModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeAccountModal();
+    });
+  }
   if (els.settingsBtn) els.settingsBtn.addEventListener("click", openSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
   if (els.settingsModal) {
@@ -3367,6 +3509,7 @@
     if (e.key !== "Escape") return;
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
     if (els.noticeModal && !els.noticeModal.hidden) closeNoticeModal();
+    if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
