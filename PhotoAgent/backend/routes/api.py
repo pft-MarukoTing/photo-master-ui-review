@@ -6,23 +6,10 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from aiserver_utils.queue import get_job_info
 from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
-from backend.services.account import create_account, get_history, normalize_username, record_history
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
-
-
-def _record_history_safely(user, job_id, path, preset=None):
-    """History bookkeeping must never fail the actual job submission it's
-    attached to -- a bad/missing username here is a lost history row, not a
-    500 for a job that otherwise queued/ran fine."""
-    if not user:
-        return
-    try:
-        record_history(normalize_username(user), job_id, path, preset=preset)
-    except Exception:
-        pass
 
 
 def _parse_and_validate_params(form):
@@ -69,26 +56,6 @@ def _parse_and_validate_params(form):
     return params, None
 
 
-@api_bp.post("/account")
-def account():
-    body = request.get_json(silent=True) or request.form
-    try:
-        name = normalize_username(body.get("user"))
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    created = create_account(name)
-    return jsonify({"user": name, "created": created})
-
-
-@api_bp.get("/history/<user>")
-def history(user):
-    try:
-        name = normalize_username(user)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    return jsonify({"user": name, "jobs": get_history(name)})
-
-
 @api_bp.post("/submit")
 def submit():
     image = request.files.get("image")
@@ -102,7 +69,6 @@ def submit():
     engine_params = get_engine_params_template()
     engine_params["acts"][0]["params"] = params
     job_id = enqueue(engine_params, src_content=[image.read()])
-    _record_history_safely(request.form.get("user"), job_id, "local", preset=params["preset"])
     return jsonify({"job_id": job_id}), 202
 
 
@@ -331,7 +297,6 @@ def continue_job(job_id):
     engine_params["srcKeys"] = prior["srcKeys"]
     engine_params["acts"][0]["params"] = params
     new_job_id = enqueue(engine_params, src_content=None)
-    _record_history_safely(body.get("user"), new_job_id, "local", preset=params["preset"])
     return jsonify({"job_id": new_job_id}), 202
 
 
@@ -502,7 +467,6 @@ def aipoc_submit():
         return jsonify({"error": f"remote task/run returned no taskId: {body}"}), 502
 
     _aipoc_task_dict[task_id] = {"access_token": access_token}
-    _record_history_safely(request.form.get("user"), task_id, "aipoc", preset=params["preset"])
     return jsonify({"task_id": task_id}), 202
 
 

@@ -3,19 +3,8 @@ window.PhotoAgentDom = (() => {
     sections: {
       upload: document.querySelector("#upload-section"),
       processing: document.querySelector("#processing-section"),
-      results: document.querySelector("#results-section"),
-      history: document.querySelector("#history-section")
+      results: document.querySelector("#results-section")
     },
-    accountBadge: document.querySelector("#account-badge"),
-    historyNavBtn: document.querySelector("#history-nav-btn"),
-    accountModal: document.querySelector("#account-modal"),
-    accountModalInput: document.querySelector("#account-modal-input"),
-    accountModalError: document.querySelector("#account-modal-error"),
-    accountModalSkipBtn: document.querySelector("#account-modal-skip-btn"),
-    accountModalCreateBtn: document.querySelector("#account-modal-create-btn"),
-    historyCurrentUser: document.querySelector("#history-current-user"),
-    historyList: document.querySelector("#history-list"),
-    historyEmpty: document.querySelector("#history-empty"),
     fileInput: document.querySelector("#file-input"),
     dropZone: document.querySelector("#drop-zone"),
     dzPreview: document.querySelector("#dz-preview"),
