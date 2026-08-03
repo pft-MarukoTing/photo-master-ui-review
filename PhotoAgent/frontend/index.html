@@ -1180,6 +1180,24 @@
     #notice-modal-msg { font-size: 18px; }
 
     /* ── Account badge/modal/history (account.js + app.js) ── */
+    /* #register-account-btn keeps its text label at every width -- unlike
+       #history-nav-btn/#reload-batch-btn/#reset-btn (icon+label, collapse to
+       icon-only under 560px via styles.css's ".header-actions .btn-label
+       {display:none}"), this button has nothing to fall back to once
+       skipped/dismissed, so an icon-only version would just look blank. The
+       id selector below outranks that shared rule's specificity at every
+       width (no separate @media override needed -- an id beats two classes
+       regardless of viewport), and also sizes it down to match
+       #account-badge's own compact footprint rather than a full .btn-sm,
+       since this is a low-priority utility action next to the logo. */
+    #register-account-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+    }
+    #register-account-btn .btn-label { display: inline; }
+    #register-account-btn svg { width: 12px; height: 12px; }
     .account-badge {
       display: inline-flex;
       align-items: center;
@@ -1393,6 +1411,18 @@
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
       <span id="account-badge" class="account-badge" hidden></span>
+      <!-- Shown whenever there's no current account (including right after
+           "先略過"/skip on #account-modal) -- the only way back to that modal
+           once it's been dismissed, since skipping it doesn't otherwise leave
+           any way to create an account later. Mutually exclusive with
+           #account-badge/#history-nav-btn (see applyAccountUi, app.js). -->
+      <button id="register-account-btn" class="btn btn-secondary btn-sm" type="button">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 8l5 4-5 4M19 12H9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">登入</span>
+      </button>
       <button id="history-nav-btn" class="btn btn-secondary btn-sm" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>

@@ -213,10 +213,12 @@
   // Account bootstrap: ?user=NAME (account.js) identifies who's using the
   // tool when linked in from elsewhere. Absent -> ask whether to create one
   // (openAccountModal), since having an account is what lets processing
-  // history (openHistoryPage) get recorded/recalled at all.
-  if (initFromUrl()) {
-    applyAccountUi();
-  } else {
+  // history (openHistoryPage) get recorded/recalled at all. applyAccountUi()
+  // runs either way -- it's what shows #register-account-btn when there's no
+  // user yet, including right after this same modal gets skipped.
+  const initialUser = initFromUrl();
+  applyAccountUi();
+  if (!initialUser) {
     openAccountModal();
   }
 
@@ -2524,7 +2526,10 @@
   }
 
   // Reflects the current account (if any) into the header badge/history nav
-  // button -- both stay hidden entirely until an account exists.
+  // button -- both stay hidden until an account exists. #register-account-btn
+  // is the mirror image of those two: it's the only way back to
+  // #account-modal once its initial prompt has been skipped, so it shows
+  // exactly when they're hidden (no account yet) and hides once one exists.
   function applyAccountUi() {
     const user = getCurrentUser();
     if (els.accountBadge) {
@@ -2532,6 +2537,7 @@
       els.accountBadge.hidden = !user;
     }
     if (els.historyNavBtn) els.historyNavBtn.hidden = !user;
+    if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
   }
 
   async function handleCreateAccount() {
@@ -3459,6 +3465,7 @@
     });
   }
   if (els.historyNavBtn) els.historyNavBtn.addEventListener("click", openHistoryPage);
+  if (els.registerAccountBtn) els.registerAccountBtn.addEventListener("click", openAccountModal);
   if (els.accountModalSkipBtn) els.accountModalSkipBtn.addEventListener("click", closeAccountModal);
   if (els.accountModalCreateBtn) els.accountModalCreateBtn.addEventListener("click", handleCreateAccount);
   if (els.accountModal) {
