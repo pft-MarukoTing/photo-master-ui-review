@@ -1230,6 +1230,7 @@
     if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
+    closeBatchDrawer();
     // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
     // single-image run (which never touches these) isn't left with the
     // canvas/run switcher hidden from a prior batch session.
@@ -2388,7 +2389,11 @@
   }
 
   function renderBatchSidebarList() {
-    if (els.batchSidebarTitle) els.batchSidebarTitle.textContent = `批次圖片（${batchRecords.length}）`;
+    if (els.batchSidebarTitle) els.batchSidebarTitle.textContent = `我的照片（${batchRecords.length}）`;
+    if (els.batchDrawerTriggerCount) {
+      els.batchDrawerTriggerCount.textContent = String(batchRecords.length);
+      els.batchDrawerTriggerCount.hidden = batchRecords.length === 0;
+    }
     els.batchSidebarList.innerHTML = "";
     batchRecords.forEach((record) => els.batchSidebarList.appendChild(buildBatchSidebarItem(record)));
   }
@@ -2652,6 +2657,11 @@
     renderBatchMain(record);
     if (record.status === "error") openBatchError(record); // only on explicit click, never from a background refresh
     window.scrollTo({ top: 0, behavior: "instant" });
+    // Picking an image is the drawer's whole purpose on narrow viewports --
+    // close it back up so the just-selected main content is visible instead
+    // of staying hidden behind the open drawer. Only fires from an actual
+    // click (see buildBatchSidebarItem), never a background status refresh.
+    closeBatchDrawer();
   }
 
   // Re-renders the main area only if `record` is still the selected one --
@@ -2695,6 +2705,25 @@
     els.batchSidebar.style.maxHeight = `${maxHeight}px`;
   }
   window.addEventListener("resize", updateBatchSidebarMaxHeight);
+
+  // Narrow-viewport-only slide-in drawer for .batch-sidebar (see the
+  // max-width:900px rules in index.html) -- .drawer-open is what the CSS
+  // transform keys off of. A no-op look-wise on wide viewports since those
+  // rules never apply there, so callers don't need to check width first.
+  function openBatchDrawer() {
+    if (els.batchSidebar) els.batchSidebar.classList.add("drawer-open");
+    if (els.batchSidebarBackdrop) {
+      els.batchSidebarBackdrop.hidden = false;
+      els.batchSidebarBackdrop.classList.add("drawer-open");
+    }
+  }
+  function closeBatchDrawer() {
+    if (els.batchSidebar) els.batchSidebar.classList.remove("drawer-open");
+    if (els.batchSidebarBackdrop) {
+      els.batchSidebarBackdrop.classList.remove("drawer-open");
+      els.batchSidebarBackdrop.hidden = true;
+    }
+  }
 
   // Same "avoid making the user scroll the window" policy as
   // updateBatchSidebarMaxHeight above -- caps #analysis-preview to the
@@ -3314,9 +3343,13 @@
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
+    if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
+  if (els.batchDrawerTrigger) els.batchDrawerTrigger.addEventListener("click", openBatchDrawer);
+  if (els.batchSidebarCloseBtn) els.batchSidebarCloseBtn.addEventListener("click", closeBatchDrawer);
+  if (els.batchSidebarBackdrop) els.batchSidebarBackdrop.addEventListener("click", closeBatchDrawer);
   if (els.batchReviewContinueBtn) {
     els.batchReviewContinueBtn.addEventListener("click", () => {
       if (!currentBatchRecord) return;

@@ -983,6 +983,45 @@
       flex-direction: column;
     }
     #results-detail { flex: 1 1 0%; min-width: 0; }
+    /* Drawer trigger/close/backdrop: no-ops on desktop (sidebar is always
+       inline there); only take effect under the max-width:900px rules
+       further down, which turn .batch-sidebar itself into an off-canvas
+       panel. Declared here since a hidden desktop element still needs a
+       base display rule to toggle from. */
+    .batch-drawer-trigger {
+      display: none; align-items: center; justify-content: center;
+      /* Pinned to the true viewport edge (position:fixed ignores the
+         .container/.results-container ancestors' own padding) instead of
+         sitting inline in #results-detail's flow -- flush against the
+         window's left edge, directly under the sticky .site-header, with
+         no margin/padding of its own. Icon-only (see aria-label for the
+         accessible name) plus a small count badge -- "批次圖片（N）" as
+         visible text read as too dev-facing a label for this. */
+      position: fixed; top: var(--header-h); left: 0; z-index: 999;
+      width: 44px; height: 40px;
+      margin: 0; padding: 0; border-radius: 0;
+      border: 1px solid var(--border); border-left: none;
+      background: var(--card);
+      color: var(--text); cursor: pointer;
+    }
+    .batch-drawer-trigger-count {
+      position: absolute; top: 4px; right: 4px;
+      min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 999px; background: var(--accent); color: #fff;
+      font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+    }
+    .batch-drawer-trigger-count[hidden] { display: none; }
+    .batch-sidebar-close-btn {
+      display: none; position: absolute; top: 14px; right: 14px;
+      align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 999px; border: none;
+      background: var(--card-2); color: var(--text-2); cursor: pointer;
+    }
+    .batch-sidebar-close-btn:hover { color: var(--text); }
+    .batch-sidebar-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,.55);
+    }
     .batch-sidebar-header {
       display: flex; align-items: center; justify-content: space-between;
       gap: 8px; margin: 0 0 16px;
@@ -1177,7 +1216,38 @@
 
     @media (max-width: 900px) {
       .results-body { flex-direction: column; }
-      .batch-sidebar { width: 100%; flex-basis: auto; position: static; }
+      /* Off-canvas drawer instead of the old "full-width, stacked above
+         #results-detail" layout -- that used to push the actual working
+         area (the swirl/compare card) below however many rows the batch
+         list needed, which grew with the batch size. Toggled open/closed
+         via openBatchDrawer/closeBatchDrawer in app.js (.drawer-open),
+         triggered by #batch-drawer-trigger; only relevant while
+         #results-body has "batch-mode" (single-image runs never show the
+         trigger, see the .batch-drawer-trigger rule above). */
+      .batch-sidebar {
+        /* top: var(--header-h) (not 0) -- sits below the sticky
+           .site-header/.header-inner, same as .batch-drawer-trigger, rather
+           than sliding out from underneath it. */
+        position: fixed; top: var(--header-h); left: 0; bottom: 0;
+        width: min(320px, 85vw); flex-basis: auto;
+        max-height: none !important; margin-top: 0;
+        border-radius: 0; border-width: 0 1px 0 0;
+        z-index: 1001;
+        transform: translateX(-100%);
+        transition: transform .25s ease;
+      }
+      .batch-sidebar.drawer-open { transform: translateX(0); }
+      .results-body.batch-mode .batch-drawer-trigger { display: inline-flex; }
+      .batch-sidebar-close-btn { display: flex; }
+      .batch-sidebar-backdrop {
+        /* Matches .batch-sidebar's own top offset -- the header stays
+           unobscured (and clickable) while the drawer is open. */
+        top: var(--header-h);
+      }
+      .batch-sidebar-backdrop.drawer-open { display: block; }
+      /* Room for .batch-sidebar-close-btn (30px, inset 14px from the aside's
+         edge) so a long "全部下載" label never runs underneath it. */
+      .batch-sidebar-header { padding-right: 36px; }
     }
 
     /* ── Run count row (inside the batch prompt row) ── */
@@ -1624,9 +1694,15 @@
          in app.js. Hidden entirely for the single-image (1 file) flow, which
          renders #results-detail exactly as it always has. -->
     <div class="container results-body" id="results-body">
+    <div class="batch-sidebar-backdrop" id="batch-sidebar-backdrop" hidden></div>
     <aside class="batch-sidebar" id="batch-sidebar" hidden>
+      <button id="batch-sidebar-close-btn" class="batch-sidebar-close-btn" type="button" aria-label="關閉批次列表">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+          <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
       <div class="batch-sidebar-header">
-        <h2 id="batch-sidebar-title" class="batch-sidebar-title">批次圖片</h2>
+        <h2 id="batch-sidebar-title" class="batch-sidebar-title">我的照片</h2>
         <button id="batch-download-all-btn" class="batch-download-all-btn" type="button" hidden>
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
             <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
@@ -1739,6 +1815,20 @@
     </aside>
 
     <div class="results-container" id="results-detail">
+
+      <!-- Narrow-viewport only (see @media max-width:900px) -- opens
+           .batch-sidebar as a slide-in drawer instead of it sitting inline
+           above the results, which used to push this content far down the
+           page. Only ever shown while #results-body has "batch-mode" (see
+           renderBatchSidebarList/openBatchDrawer in app.js). -->
+      <button id="batch-drawer-trigger" class="batch-drawer-trigger" type="button" aria-label="批次圖片">
+        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+          <path d="M8 8V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-3"
+            stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <rect x="3" y="8" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <span id="batch-drawer-trigger-count" class="batch-drawer-trigger-count" hidden></span>
+      </button>
 
       <!-- Loading placeholder: shown for a selected image that's still
            analyzing or (first-time, no prior done run) processing -- no result
