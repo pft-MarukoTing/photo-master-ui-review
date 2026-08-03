@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, runCount, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, runCount, user, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -50,6 +50,11 @@ window.PhotoAgentApi = (() => {
     // Local path only: how many independent edit variations job_processor.py
     // generates from ONE shared analysis, entirely within this single job.
     if (runCount) form.append("run_count", String(runCount));
+    // Account username (account.js) -- lets the backend record this job into
+    // that user's processing history (backend/services/account.py). Absent
+    // entirely when no account is set, same as every other optional field
+    // here.
+    if (user) form.append("user", user);
 
     const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/submit`, {
       method: "POST",
@@ -236,7 +241,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -248,7 +253,8 @@ window.PhotoAgentApi = (() => {
         aspect_ratio: aspectRatio || "auto",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
-        user_prompt: userPrompt || ""
+        user_prompt: userPrompt || "",
+        user: user || ""
       })
     });
     const data = await response.json().catch(() => ({}));
@@ -313,6 +319,42 @@ window.PhotoAgentApi = (() => {
     }
   }
 
+  // ── Account / processing history (account.js owns the client-side identity;
+  // these just talk to backend/services/account.py's two endpoints) ────────
+  async function createAccount(user) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/account`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `建立帳號失敗：HTTP ${response.status}`);
+    }
+    return data; // { user, created }
+  }
+
+  async function getHistory(user) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `取得處理紀錄失敗：HTTP ${response.status}`);
+    }
+    return data; // { user, jobs: [{ job_id, path, ts, preset }] }
+  }
+
+  // One-shot status check (unlike pollJobStatus, which loops until done) --
+  // used by the history page to render each past job's current state without
+  // starting a whole poll loop for it.
+  async function getJobStatusOnce(jobId, { path = "local" } = {}) {
+    const response = await fetch(`${BASE_URL}${pathPrefix(path)}/status/${encodeURIComponent(jobId)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `查詢狀態失敗：HTTP ${response.status}`);
+    }
+    return data;
+  }
+
   return {
     submitJob,
     pollJobStatus,
@@ -325,6 +367,9 @@ window.PhotoAgentApi = (() => {
     getAnalyzeResult,
     continueJob,
     analyzeAipoc,
-    analyzeAipocBatch
+    analyzeAipocBatch,
+    createAccount,
+    getHistory,
+    getJobStatusOnce
   };
 })();

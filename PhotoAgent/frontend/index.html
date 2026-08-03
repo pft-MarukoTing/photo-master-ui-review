@@ -1179,6 +1179,67 @@
     .notice-modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
     #notice-modal-msg { font-size: 18px; }
 
+    /* ── Account badge/modal/history (account.js + app.js) ── */
+    .account-badge {
+      display: inline-flex;
+      align-items: center;
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-2);
+    }
+    .account-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .account-modal-input {
+      width: 100%;
+      box-sizing: border-box;
+      height: 42px;
+      margin-top: 12px;
+      padding: 0 14px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text);
+      font-size: 15px;
+    }
+    .account-modal-input:focus { outline: none; border-color: var(--accent); }
+    .account-modal-error {
+      margin: 8px 0 0;
+      font-size: 13.75px;
+      color: var(--red);
+    }
+
+    /* ── History page (Screen 4) -- rows reuse .batch-sidebar-item/.rc-media/
+       .rc-badge (defined above, batch sidebar) for the same thumbnail+badge
+       look, just laid out full-width instead of in a 280px column. ── */
+    .history-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .history-current-user { font-size: 14px; color: var(--text-3); }
+    .history-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .history-list .batch-sidebar-item { padding: 12px; cursor: pointer; }
+    .history-list .rc-media { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 10px; }
+    .history-empty { color: var(--text-3); font-size: 15px; }
+
     /* Centered toast shown while a download zip is being assembled --
        buildZip fetches each result image over the network before zipping,
        which is otherwise invisible/silent for a batch with many images. */
@@ -1331,6 +1392,15 @@
   <div class="header-inner">
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
+      <span id="account-badge" class="account-badge" hidden></span>
+      <button id="history-nav-btn" class="btn btn-secondary btn-sm" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">處理紀錄</span>
+      </button>
       <button id="reload-batch-btn" class="btn btn-secondary" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor"
@@ -2211,6 +2281,20 @@
     </div>
   </section>
 
+  <!-- ══════════════════════════════════
+       SCREEN 4 — HISTORY
+  ══════════════════════════════════ -->
+  <section id="history-section" class="section">
+    <div class="container">
+      <div class="history-header">
+        <h2>處理紀錄</h2>
+        <span id="history-current-user" class="history-current-user"></span>
+      </div>
+      <ul id="history-list" class="history-list"></ul>
+      <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>
+    </div>
+  </section>
+
 </main>
 
 <!-- Error detail popup: opened when a failed batch card is clicked -->
@@ -2242,6 +2326,27 @@
     <p id="notice-modal-msg" class="error-modal-msg"></p>
     <div class="notice-modal-actions">
       <button id="notice-modal-ok-btn" class="btn btn-grad btn-sm" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
+<!-- Account creation prompt: shown at startup whenever the URL has no
+     ?user=NAME (see initFromUrl/openAccountModal, app.js). Not a hard gate --
+     "先略過" (skip) just dismisses it, same shared backdrop-click/Escape
+     dismiss as every other modal here, and leaves the app fully usable
+     without an account/history. -->
+<div id="account-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+    <div class="error-modal-hdr">
+      <span id="account-modal-title" class="notice-modal-title">Photo<em>Master</em></span>
+    </div>
+    <p class="error-modal-msg">尚未偵測到帳號。建立帳號後，我們會記錄你的處理紀錄，方便之後回顧。</p>
+    <input id="account-modal-input" class="account-modal-input" type="text" placeholder="輸入使用者名稱，例如 PEGGY_PENG" maxlength="64">
+    <p id="account-modal-error" class="account-modal-error" hidden></p>
+    <div class="account-modal-actions">
+      <button id="account-modal-skip-btn" class="btn btn-secondary btn-sm" type="button">先略過</button>
+      <button id="account-modal-create-btn" class="btn btn-grad btn-sm" type="button">建立帳號</button>
     </div>
   </div>
 </div>
@@ -2556,6 +2661,7 @@
 </div>
 
 <script src="config.js"></script>
+<script src="account.js"></script>
 <script src="update-check.js"></script>
 <script src="dom.js"></script>
 <script src="image-tools.js"></script>
