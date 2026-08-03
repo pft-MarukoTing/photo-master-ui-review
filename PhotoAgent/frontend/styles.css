@@ -868,22 +868,22 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
 /* Reuses .proc-visual/.think-ring/.proc-thumb (styles.css above, the
    upload-flow processing screen's rings animation) as a column stack --
-   #canvas-loading itself supplies an opaque backdrop (same --card-2 fill
-   the upload page's own processing screen sits on) and centers this over
-   whichever part of .photo-frame it covers. Fully opaque, not the old
-   dimmed/blurred see-through over the previous result -- the point of
-   reusing the rings+thumb is to show the SOURCE photo being worked on, not
-   a ghost of the last generated result still showing through underneath. */
+   a sibling of #photo-frame-wrap (not an overlay inside it, see the markup
+   comment in index.html), replacing it outright at the same fixed height
+   .photo-frame itself uses, so the rings sit where the photo was rather
+   than covering it. Same rounded/shadowed framing as .photo-frame for that
+   reason, on the same --card-2 fill the upload page's own processing
+   screen sits on. */
 .canvas-loading {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 16px;
+  height: 480px;
+  border-radius: var(--radius-lg);
   background: var(--card-2);
+  box-shadow: var(--shadow-lg);
 }
 .canvas-loading-status {
   max-width: 320px;
@@ -1265,6 +1265,17 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .compare-card.is-fullscreen .photo-frame img {
   max-height: 100%;
+}
+/* #canvas-loading replaces .photo-frame-wrap outright while re-processing
+   (see its own comment above) -- same flex:1 fill as .photo-frame-wrap
+   itself gets here, instead of the fixed 480px it uses everywhere else,
+   so it still fills the fullscreen viewport rather than leaving blank
+   space above/below it. */
+.compare-card.is-fullscreen .canvas-loading {
+  width: 100%;
+  flex: 1 1 0%;
+  min-height: 0;
+  height: auto;
 }
 /* Verdict + Summary row */
 .verdict-summary-row {
@@ -1784,64 +1795,54 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   /* Results page, inline revise flow: .compare-card's photo-frame is a
      fixed 480px (see styles.css above) so once #ap-options-card-inline is
      moved under it (openInlineAnalysisPanel, app.js), the two together
-     routinely ran past a short viewport's height, leaving the settings/
-     recipe/style buttons only reachable by scrolling the whole page down.
-     Turn #results-canvas-top (the wrapper around just the photo + that
-     card, see its own comment in index.html) into a height-capped flex
-     column and split it 70/30 between them instead. */
+     can run past a short viewport's height. Deliberately NOT capped to a
+     height-scrolling flex column here -- that nested a second scrollbar
+     inside the page's own -- so #results-canvas-top just stacks the two
+     at their natural size and lets the page itself scroll to reach
+     whatever runs past the fold, same as any other tall page content. */
   .results-canvas-row.showing-analysis #results-canvas-top {
     display: flex;
     flex-direction: column;
-    height: calc(100vh - var(--header-h) - 44px);
-    min-height: 0;
     gap: 12px;
   }
-  /* :not(.is-fullscreen) -- #compare-fullscreen-btn's own .photo-frame/
+  /* .compare-card (and its .photo-frame-wrap/.photo-frame) is not a
+     flex-shrink target here -- it keeps its normal fixed-height look (see
+     the base .photo-frame rule above) even once #ap-options-card-inline
+     grows an extra row for picked style chips. That growth just pushes
+     the settings/Run row and the 補充指令 textarea further down the page
+     instead of squeezing the photo down to make room.
+     :not(.is-fullscreen) -- #compare-fullscreen-btn's own .photo-frame/
      .photo-frame-wrap/.photo-frame img overrides (see .compare-card.
      is-fullscreen above) would otherwise lose to these on specificity
      (ID + 2 classes beats their plain 2-3 classes), breaking the full-
      window compare view whenever it's opened during the inline revise
      flow on a short screen. */
   .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) {
-    /* flex-grow eats whatever #ap-options-card-inline below doesn't need,
-       rather than a fixed 70% share -- that left dead space under the
-       options card (its buttons + textarea rarely fill a full 30%) instead
-       of handing the photo the room it wasn't using. */
-    flex: 1 1 0%;
-    min-height: 0;
+    flex: 0 0 auto;
     margin: 0;
     display: flex;
     flex-direction: column;
-  }
-  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) .photo-frame-wrap {
-    flex: 1 1 0%;
-    min-height: 0;
-  }
-  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) .photo-frame {
-    height: 100%;
-    max-height: 100%;
-  }
-  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) .photo-frame img {
-    max-height: 100%;
   }
   /* Sized to its own content (buttons row + 補充指令 textarea), not a fixed
      flex-basis or max-height -- either one forced a mismatch against this
      content's actual (roughly constant, ~200-230px) height: a generous cap
      left blank space below it when content was shorter, a tight cap
      clipped it into a scrollbar when content was taller. flex-shrink:0
-     means .compare-card (flex:1 1 0%, shrinkable) above absorbs any
-     squeeze first if the column ever runs short overall, instead of this
-     card ever losing its own content to overflow. */
+     keeps this card at its natural content height regardless -- any
+     overflow past the viewport is left to the page's own scroll (see
+     #results-canvas-top above), not absorbed by shrinking this card or
+     the photo. */
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline {
     flex: 0 0 auto;
     min-height: 0;
     margin-top: 0;
   }
   /* 修圖建議/修圖風格選項/設定 (.ap-style-trigger) and Run
-     (.analysis-preview-action) kept their normal full size above -- inside
-     this now much-shorter column they read oversized and unbalanced next to
-     the shrunk photo. Shrink them to match, same proportions as
-     .upload-actions-row's own short-viewport sizing above. */
+     (.analysis-preview-action) kept their normal full size above -- on a
+     short viewport that reads oversized next to the rest of the compacted
+     UI, and pushes more of this card past the fold than necessary. Shrink
+     them to match, same proportions as .upload-actions-row's own
+     short-viewport sizing above. */
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .ap-style-trigger {
     height: 34px;
     padding: 0 12px;

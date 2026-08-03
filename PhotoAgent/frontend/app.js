@@ -1815,11 +1815,13 @@
     setAnalysisPreviewDisabled(true);
     if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
     // Same thinking-rings animation as the initial upload-flow processing
-    // screen (#processing-section's .proc-visual), just inline over the
-    // existing photo instead of navigating away from the results page --
-    // sourced from the already-loaded original image rather than needing a
-    // fresh preview URL, since it's already showing in #original-img.
+    // screen (#processing-section's .proc-visual), replacing the photo
+    // (hidden outright, not dimmed underneath) instead of navigating away
+    // from the results page -- sourced from the already-loaded original
+    // image rather than needing a fresh preview URL, since it's already
+    // showing in #original-img.
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = els.originalImg.src;
+    if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
     try {
       await finishSingleFlow();
@@ -1827,6 +1829,7 @@
       showError(friendlyError(error));
     } finally {
       if (els.canvasLoading) els.canvasLoading.hidden = true;
+      if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
       if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
     }
   }

@@ -29,6 +29,7 @@ window.PhotoAgentDom = (() => {
     resultsCanvasCol: document.querySelector("#results-canvas-col"),
     resultsCanvasTop: document.querySelector("#results-canvas-top"),
     resultsAnalysisSlot: document.querySelector("#results-analysis-slot"),
+    photoFrameWrap: document.querySelector("#photo-frame-wrap"),
     canvasLoading: document.querySelector("#canvas-loading"),
     canvasLoadingThumb: document.querySelector("#canvas-loading-thumb"),
     canvasLoadingStatus: document.querySelector("#canvas-loading-status"),

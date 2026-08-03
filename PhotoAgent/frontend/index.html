@@ -1801,7 +1801,7 @@
             <!-- Before / After: one full-bleed canvas, toggled between the two
                  images with floating icon buttons instead of a boxed header. -->
             <div class="compare-card" id="compare-card">
-            <div class="photo-frame-wrap">
+            <div class="photo-frame-wrap" id="photo-frame-wrap">
               <!-- Header row floating over the top of the photo: persistent
                    Original/Result hint (left), "N / total" RUN counter
                    (center -- hidden whenever there's only one RUN, see
@@ -1856,31 +1856,6 @@
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
                 <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
-                <!-- Shown while re-processing (either flow) runs in the
-                     background, since staying on this page means the
-                     upload page's own #processing-section never shows for
-                     that wait -- reuses that screen's exact thinking-rings
-                     treatment (.proc-visual/.think-ring/.proc-thumb, see
-                     styles.css) instead of a generic spinner, just inline
-                     over the existing photo (fully opaque, hiding it rather
-                     than dimming/blurring it) instead of a separate section.
-                     Text mirrored live from procSub by setProcSub (app.js),
-                     so multi-RUN progress ("已完成 N/total RUN") updates
-                     here too. Lives inside .photo-frame (not
-                     .photo-frame-wrap) so the overlay covers exactly the
-                     current image, not the full-width stable pane the
-                     floating buttons anchor to. -->
-                <div id="canvas-loading" class="canvas-loading" hidden>
-                  <div class="proc-visual" id="canvas-loading-visual">
-                    <div class="think-ring"></div>
-                    <div class="think-ring"></div>
-                    <div class="think-ring"></div>
-                    <div class="think-center">
-                      <img id="canvas-loading-thumb" class="proc-thumb" alt="">
-                    </div>
-                  </div>
-                  <p id="canvas-loading-status" class="canvas-loading-status"></p>
-                </div>
               </div>
               <!-- Switches between this photo's N edit RUNs -- hidden
                    entirely when there's only one (see updateRunSwitcher in
@@ -1900,6 +1875,32 @@
                    populated with non-default picks (renderResult), and only
                    visible while showing the generated image, not Original. -->
               <div id="recipe-tags" class="recipe-tags"></div>
+            </div>
+            <!-- Shown while re-processing (either flow) runs in the
+                 background, since staying on this page means the upload
+                 page's own #processing-section never shows for that wait --
+                 reuses that screen's exact thinking-rings treatment
+                 (.proc-visual/.think-ring/.proc-thumb, see styles.css)
+                 instead of a generic spinner, just inline on the results
+                 page rather than a separate section. Text mirrored live
+                 from procSub by setProcSub (app.js), so multi-RUN progress
+                 ("已完成 N/total RUN") updates here too.
+                 A sibling of #photo-frame-wrap, not an overlay inside it --
+                 #photo-frame-wrap (photo, header row, RUN switcher,
+                 recipe-tags) is hidden outright while this shows instead
+                 (backToProcessFromResults, app.js), rather than dimming/
+                 blurring the previous result underneath it, since none of
+                 those controls act on anything meaningful mid-regenerate. -->
+            <div id="canvas-loading" class="canvas-loading" hidden>
+              <div class="proc-visual" id="canvas-loading-visual">
+                <div class="think-ring"></div>
+                <div class="think-ring"></div>
+                <div class="think-ring"></div>
+                <div class="think-center">
+                  <img id="canvas-loading-thumb" class="proc-thumb" alt="">
+                </div>
+              </div>
+              <p id="canvas-loading-status" class="canvas-loading-status"></p>
             </div>
             <!-- Shown for as long as any RUN of a multi-RUN job is still
                  generating in the background while an earlier (already
