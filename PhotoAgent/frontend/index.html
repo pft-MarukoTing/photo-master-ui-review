@@ -608,24 +608,6 @@
       font-weight: 700;
       color: var(--text);
     }
-    /* Icon-only confirm/close button -- shared by #ap-style-modal-close
-       (this modal's own header, top of the whole overlay). */
-    .ap-style-confirm-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      flex-shrink: 0;
-      border: none;
-      border-radius: 50%;
-      background: var(--mv-grad);
-      color: #fff;
-      cursor: pointer;
-      box-shadow: var(--shadow-accent);
-      transition: transform .15s;
-    }
-    .ap-style-confirm-btn:hover { transform: translateY(-1px); }
     /* Fixed 2-column grid (not flex-wrap) -- Pose/Angle/Lighting/Size's own
        .ap-style-value text changes length with whatever's picked ("Pose" vs
        "Pose · Playful"), which made a flex-wrap row reflow/reorder the pills
@@ -2338,15 +2320,7 @@
   <div class="error-modal-box ap-style-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-style-modal-title">
     <div class="error-modal-hdr">
       <span id="ap-style-modal-title">修圖風格選項</span>
-      <!-- .ap-style-confirm-btn: icon-only confirm/close style -- closing
-           here has nothing to discard (radio picks already apply live as
-           they're made), so this reads as "done" rather than "cancel".
-           Still wired to closeStyleModal in app.js, unchanged. -->
-      <button id="ap-style-modal-close" class="ap-style-confirm-btn" type="button" aria-label="確認並關閉">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-          <path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <button id="ap-style-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div class="ap-style-type-row" id="ap-style-type-row">
       <!-- Category name is now a plain label above the button (same
