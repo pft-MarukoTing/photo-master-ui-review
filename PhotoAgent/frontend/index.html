@@ -849,6 +849,13 @@
     .dz-multi {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+      /* Explicit min-content instead of the implicit "auto" default -- on a
+         narrow viewport (auto-fill collapses to a single column) the browser
+         under-measures each row's aspect-ratio-driven height and the square
+         thumbnails end up stacked with overlapping rows instead of a clean
+         list. min-content forces it to size each row off the thumb's real
+         (aspect-ratio) height. */
+      grid-auto-rows: min-content;
       align-content: flex-start;
       gap: 12px;
       padding: 20px;
