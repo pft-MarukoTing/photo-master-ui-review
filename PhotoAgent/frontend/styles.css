@@ -855,10 +855,13 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .results-canvas-row { flex-direction: column; }
   .results-canvas-row.showing-analysis .results-canvas-col,
   .results-canvas-row.showing-analysis .results-analysis-slot { flex-basis: auto; width: 100%; }
-  /* Same specificity as the batch-mode 20% rule above (2 IDs + 2 classes
-     either way) -- wins on source order instead, restoring index.html's
-     plain full-width mobile stacking for the sidebar. */
-  #results-body.batch-mode.showing-analysis #batch-sidebar { flex-basis: auto; width: 100%; }
+  /* #batch-sidebar no longer gets a width:100% override here -- that was
+     written for the old "sidebar stacks full-width above results" mobile
+     layout. It's now an off-canvas drawer (index.html's own
+     max-width:900px rules) whose width must hold steady regardless of
+     whether the analysis/revise panel is open; the 2-ID-plus-2-class
+     selector here would otherwise beat index.html's plain .batch-sidebar
+     rule on specificity and force it back to full width. */
 }
 /* The panel keeps its processing-screen spacing (margin-top:32px) when it's
    shown there; strip that once it's on loan to this narrower side slot. */

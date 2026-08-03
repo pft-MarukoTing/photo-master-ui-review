@@ -2429,9 +2429,8 @@
     }[record.status] || "";
     if (runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
-      if (runsRunning) badge.textContent = `處理中 RUN ${runsDone}/${runs.length}`;
-      else if (runsDone === runs.length) badge.textContent = `完成 ${runs.length} RUN`;
-      else if (runsDone) badge.textContent = `完成 ${runsDone}/${runs.length} RUN`;
+      if (runsRunning) badge.textContent = `處理中 (${runsDone}/${runs.length})`;
+      else if (runsDone) badge.textContent = `完成 (${runsDone}/${runs.length})`;
     }
 
     // Unlike the old grid (badge overlaid on a large square thumbnail), the

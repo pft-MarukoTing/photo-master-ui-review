@@ -1012,7 +1012,11 @@
     }
     .batch-drawer-trigger-count[hidden] { display: none; }
     .batch-sidebar-close-btn {
-      display: none; position: absolute; top: 14px; right: 14px;
+      /* top: 20px matches .batch-sidebar's own padding -- same starting
+         edge as .batch-sidebar-header's row (also 30px tall, via
+         .batch-download-all-btn), so the two sit on the same horizontal
+         line instead of this one floating 6px higher. */
+      display: none; position: absolute; top: 20px; right: 14px;
       align-items: center; justify-content: center;
       width: 30px; height: 30px; border-radius: 999px; border: none;
       background: var(--card-2); color: var(--text-2); cursor: pointer;
@@ -1025,17 +1029,32 @@
     .batch-sidebar-header {
       display: flex; align-items: center; justify-content: space-between;
       gap: 8px; margin: 0 0 16px;
+      /* min-height:30px matches #batch-download-all-btn's own height --
+         without it, the row is only as tall as the title text before that
+         button appears (hidden until the first image finishes), so its
+         vertical center shifts once the button shows up, throwing off
+         alignment with .batch-sidebar-close-btn's fixed top:20px/30px-tall
+         box. Keeping the row's height steady keeps both states aligned. */
+      min-height: 30px;
     }
     .batch-sidebar-title {
       font-size: 13px; font-weight: 700; color: var(--text-2);
       text-transform: uppercase; letter-spacing: .06em;
       margin: 0;
+      /* min-width:0 so this can actually shrink -- CJK text has no spaces
+         to wrap on, so without this the header row refused to shrink below
+         the title's full text width and instead overflowed past the
+         drawer's own (fixed) edge once #batch-download-all-btn appeared
+         alongside it, which only happens once the first image finishes. */
+      flex: 1 1 auto; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
     .batch-download-all-btn {
-      display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
-      padding: 5px 10px; border-radius: 999px; border: 1px solid var(--border);
+      display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+      width: 30px; height: 30px; padding: 0;
+      border-radius: 999px; border: 1px solid var(--border);
       background: var(--card-2); color: var(--text-2);
-      font-size: 12px; font-weight: 600; cursor: pointer;
+      cursor: pointer;
       transition: border-color .15s, color .15s;
     }
     .batch-download-all-btn:hover { border-color: var(--border-2); color: var(--text); }
@@ -1050,6 +1069,14 @@
       display: flex; align-items: center; gap: 10px;
       padding: 8px; border-radius: var(--radius);
       cursor: pointer; transition: background .15s;
+      /* min-width:0 -- as a flex child of .batch-sidebar-list (column,
+         stretch), this row's own automatic minimum size otherwise follows
+         its content's min-content width (thumb + badge), which can exceed
+         the list's stretched width once the badge grows (e.g. "完成" ->
+         "完成 (3/3)" for a multi-RUN image), forcing the row -- and its
+         selected-state background/border -- to overflow past the drawer's
+         own edge instead of staying clipped to it. */
+      min-width: 0;
     }
     .batch-sidebar-item:hover { background: var(--card-2); }
     .batch-sidebar-item.selected { background: var(--card-2); box-shadow: 0 0 0 2px var(--accent) inset; }
@@ -1063,9 +1090,10 @@
        old grid card's badge -- the sidebar's thumbnail is too small for that
        text to fit without wrapping). */
     .rc-badge {
-      display: inline-flex; align-self: flex-start;
+      display: inline-flex; align-self: flex-start; max-width: 100%;
       padding: 2px 9px; border-radius: 20px;
       font-size: 10.5px; font-weight: 700; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
       background: rgba(255,255,255,.12); color: var(--text-2);
     }
     .batch-sidebar-item.analyzed .rc-badge { background: rgba(168,85,247,.25); color: #d8b4fe; }
@@ -1229,7 +1257,11 @@
            .site-header/.header-inner, same as .batch-drawer-trigger, rather
            than sliding out from underneath it. */
         position: fixed; top: var(--header-h); left: 0; bottom: 0;
-        width: min(320px, 85vw); flex-basis: auto;
+        /* min(220px, 68vw) (was min(320px, 85vw), then min(260px, 78vw)) --
+           still read as covering most of the screen at typical phone
+           widths; narrowed again so the backdrop clearly reads as the
+           dominant surface with the drawer as a slim overlay panel. */
+        width: min(220px, 68vw); flex-basis: auto;
         max-height: none !important; margin-top: 0;
         border-radius: 0; border-width: 0 1px 0 0;
         z-index: 1001;
@@ -1703,12 +1735,12 @@
       </button>
       <div class="batch-sidebar-header">
         <h2 id="batch-sidebar-title" class="batch-sidebar-title">我的照片</h2>
-        <button id="batch-download-all-btn" class="batch-download-all-btn" type="button" hidden>
+        <button id="batch-download-all-btn" class="batch-download-all-btn" type="button" hidden
+          title="全部下載" aria-label="全部下載">
           <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
             <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
-          全部下載
         </button>
       </div>
       <div id="batch-prompt-row" class="form-field batch-prompt-row" hidden>
