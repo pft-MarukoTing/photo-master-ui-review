@@ -163,13 +163,50 @@ STYLE_OPTION_INSTRUCTIONS = {
             "Keep important body parts, props, and role cues intact, with natural breathing room around the subject. "
             "Avoid cramped edges, awkward cuts, or excessive background blur."
         ),
+        # new 7
         "closer": (
-            "Use an extreme close-up that features a single subject. The mandatory crop region already isolates "
-            "that one subject; fill the frame with it. Exclude out-of-frame elements by cropping, not by erasing "
+            "Use an extreme close-up that features a single subject. Pick that one subject out of the photograph "
+            "and fill the frame with it. Exclude out-of-frame elements by cropping, not by erasing "
             "what remains in frame; keep the subject's own context and remove only genuine distractions. "
             "Preserve the chosen subject's identity, expression, and key details. "
             "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
         ),
+        # "closer": (
+        #     "Use an extreme close-up that features a single subject. The mandatory crop region already isolates "
+        #     "that one subject; fill the frame with it and do not reintroduce other people, objects, or background "
+        #     "that fall outside that region -- cropping them out entirely is expected and correct. "
+        #     "Preserve the chosen subject's identity, expression, and key details. "
+        #     "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
+        # ), # new 6
+        # "closer": (
+        #     "Use an extreme close-up framing: pick a single subject to feature -- the one that is largest, most in focus, "
+        #     "or most central in the frame -- and crop tightly onto just their important detail, tighter than the mandatory crop. "
+        #     "This overrides the general instruction to preserve every recognizable person, object, "
+        #     "or protected region elsewhere in the frame: cropping other people or elements out entirely is expected and correct. "
+        #     "Preserve identity, expression, key details, and any essential interaction cues of the chosen subject. "
+        #     "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
+        # ),
+        # "closer": (
+        #     "Use an extreme close-up framing: pick a single subject to feature -- the one that is largest, most "
+        #     "in focus, or most central in the frame -- and crop tightly onto just their face and shoulders (or the "
+        #     "single most important detail for a non-person subject), tighter than the mandatory crop. This "
+        #     "overrides the general instruction to preserve every recognizable person, object, or protected region "
+        #     "elsewhere in the frame: cropping other people or elements out entirely is expected and correct. "
+        #     "Preserve identity, expression, key details, and any essential interaction cues of the chosen subject. "
+        #     "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
+        # ),
+        # "closer": (
+        #     "Use an extreme close-up framing, focusing on a single most prominent subject in a tight crop on "
+        #     "their face and shoulders (or the single most important detail for a non-person subject), tighter "
+        #     "than the mandatory crop above and without revealing more background than it already shows. "
+        #     "Preserve identity, expression, key details, and any essential interaction cues. "
+        #     "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
+        # ),
+        # "closer": (
+        #     "Use a much closer close-up style framing focused on the most important subject area. "
+        #     "Preserve identity, expression, key details, and any essential interaction cues. "
+        #     "Avoid cutting through faces, hands, joints, products, or important props in a visually awkward way."
+        # ),
     },
 }
 

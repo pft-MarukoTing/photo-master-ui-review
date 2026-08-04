@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from config import STYLE_OPTION_INSTRUCTIONS, STYLE_OPTION_LABELS, STYLE_OPTION_VALUE_LABELS
 
@@ -703,27 +704,232 @@ def _build_rejected_lines(analysis, rejected_corrections):
     ), True
 
 
-def _build_crop_instruction_block(crop_plan):
+# The geometric invariant, in one sentence. Deliberately short and free of
+# concrete scene nouns: an earlier version listed "handrail, staircase, rail
+# track, roofline, horizon" as examples of edges that must keep their angle, but
+# an image model reads content words as content, so a café portrait was being
+# handed a rail track. Covers the three things a stretch destroys -- build,
+# tilt, and how elements sit relative to each other.
+CONTENT_SHAPE_RULE = (
+    "Everything inside the frame keeps the proportions, the tilt, and the relative sizes and spacing it has in "
+    "the input photograph."
+)
+
+# The resize half of the answer, stated as a permission first. "Do not stretch"
+# on its own is a weak instruction -- it names the failure without naming a legal
+# move, so the model is left to find one. Naming uniform scaling as the available
+# operation gives it somewhere to go, and only then is the one-axis case ruled
+# out.
+UNIFORM_SCALE_ONLY = (
+    "Where the output's pixel size differs from the input's, scale the whole photograph uniformly -- one and the "
+    "same factor on width and height. Resizing a single axis is not available: the canvas is never filled by "
+    "squeezing or stretching the picture sideways or vertically."
+)
+
+# The reframe half. Kept separate from the sentence above because the no-crop
+# branch needs the scaling permission without an invitation to move edges.
+FRAME_SHAPE_SOURCE = (
+    "Two operations, either or both, get the photograph onto this canvas shape: cropping -- choosing where the "
+    "frame's edges fall, tighter or taking in more of the surrounding scene -- and uniform scaling. "
+    + UNIFORM_SCALE_ONLY
+)
+
+
+def _parse_ratio_label(label):
+    """"1088:1456" / "4:5" -> a float. None for "original", blank, or anything
+    unparseable.
+
+    A local five-liner rather than image_tools.parse_aspect_ratio: prompts.py is
+    pure text assembly and importing image_tools would drag PIL and pillow_heif
+    in behind it.
+    """
+    if not label:
+        return None
+    match = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*[:x/]\s*(\d+(?:\.\d+)?)\s*", str(label))
+    if not match:
+        return None
+    w, h = float(match.group(1)), float(match.group(2))
+    return (w / h) if w > 0 and h > 0 else None
+
+
+# Same threshold as image_tools.GEOMETRY_RATIO_TOLERANCE: below this the two
+# shapes are the provider's raster grid disagreeing with a named ratio, not a
+# real difference the model has to resolve.
+_CANVAS_SHAPE_TOLERANCE = 0.02
+
+
+def _canvas_shape_difference(aspect_label, source_size):
+    """"narrower" / "wider" / "same" -- how the requested canvas differs in shape
+    from the input photograph. None when it cannot be determined.
+
+    This is the one piece of the framing constraint that is arithmetic rather
+    than taste, and it is why an edit can come back squeezed while every stated
+    rule was followed: when the canvas is not the source's shape, part of the
+    photograph cannot be in the output, no matter how well framed it already is.
+    Left unsaid, "the canvas must be 3:4" and "don't crop much" look jointly
+    satisfiable, and the model settles it by scaling one axis.
+
+    Derived from the two ratios only -- it does not depend on where the analysis
+    put its box, which is the unreliable part.
+    """
+    target = _parse_ratio_label(aspect_label)
+    if not target or not source_size:
+        return None
+    try:
+        source_w, source_h = float(source_size[0]), float(source_size[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if source_w <= 0 or source_h <= 0:
+        return None
+
+    drift = target / (source_w / source_h) - 1
+    if abs(drift) <= _CANVAS_SHAPE_TOLERANCE:
+        return "same"
+    return "wider" if drift > 0 else "narrower"
+
+
+# What the shape difference means for the finished picture, said as something the
+# model can see rather than as an amount it would have to measure. "Give up about
+# 7% of the width" is the same kind of instruction as "x=0.120, w=0.600": an
+# image model has no ruler. "The left and right edges cannot both be inside this
+# frame" is a fact it can check by looking.
+_CANVAS_SHAPE_CONSEQUENCE = {
+    "narrower": (
+        "This frame is narrower than the photograph you were given: the photograph's left and right edges cannot "
+        "both be inside it, so something along the sides ends up outside the final frame. You choose what, guided "
+        "by the subject. Where the composition notes below ask for side breathing room this frame cannot hold, let "
+        "part of the scene go rather than narrowing the people and objects in it."
+    ),
+    "wider": (
+        "This frame is wider than the photograph you were given: the photograph's top and bottom edges cannot both "
+        "be inside it, so something along the top or bottom ends up outside the final frame. You choose what, "
+        "guided by the subject. Where the composition notes below ask for headroom this frame cannot hold, let part "
+        "of the scene go rather than flattening the people and objects in it."
+    ),
+    "same": (
+        "This frame is the same shape as the photograph you were given, so nothing has to be given up to reach it. "
+        "If the photograph is already well framed, a small trim is a fine answer."
+    ),
+}
+
+
+def _describe_crop_tightness(w, h):
+    """How tight the proposed region is, qualitatively.
+
+    Only tightness survives from the proposed rectangle -- not its position, and
+    not which edges it trimmed. Those are exactly what the analysis pass gets
+    wrong (a box beside the real subject trims the wrong edges), and a wrong
+    direction stated vaguely is still wrong, just harder to notice. How much of
+    the frame is kept is the one part that stays roughly true even when the box
+    is misplaced.
+    """
+    kept = max(0.0, w) * max(0.0, h)
+    if kept >= 0.85:
+        return "close to the full frame; little more than the outer edges come off"
+    if kept >= 0.6:
+        return "a moderate tightening of the original frame"
+    if kept >= 0.35:
+        return "a noticeably tighter frame than the original"
+    return "a tight frame filled by the subject"
+
+
+def _build_crop_instruction_block(crop_plan, require_tighter=False, source_size=None):
     if not crop_plan:
         return (
-            "No crop. Treat the supplied image boundaries as final. Do not crop, "
-            "reframe, expand canvas, add borders, or invent empty side bands. Do not "
-            "stretch, squash, or otherwise distort the image's proportions."
+            "No crop. The supplied image boundaries are the final frame. Do not reframe, expand canvas, add "
+            "borders, or invent empty side bands. " + UNIFORM_SCALE_ONLY + " " + CONTENT_SHAPE_RULE
         )
 
-    x, y, w, h = crop_plan["x"], crop_plan["y"], crop_plan["w"], crop_plan["h"]
     aspect = crop_plan.get("aspectRatio") or crop_plan.get("aspect_ratio") or "keep the resulting region's natural ratio"
-    left_pct, top_pct = x * 100, y * 100
-    right_pct, bottom_pct = (1 - (x + w)) * 100, (1 - (y + h)) * 100
 
-    return f"""Mandatory crop region, decided by the crop-validation step and not up for reinterpretation. Coordinates are normalized (0-1) against the full original image, origin at the top-left:
-- x={x:.3f}, y={y:.3f}, w={w:.3f}, h={h:.3f} -- i.e. trim approximately {left_pct:.0f}% off the left edge, {top_pct:.0f}% off the top edge, {right_pct:.0f}% off the right edge, and {bottom_pct:.0f}% off the bottom edge of the original image.
-- Target output aspect ratio: {aspect}.
-Perform exactly this crop/reframe as part of your edit. This is a hard constraint, not a stylistic suggestion: do not pick a different crop, do not soften or ignore it, and do not fall back to the full original frame. Do not include any content from outside this region in the final output. Within the kept region, still honor the ROI, subject extent, and protected regions below.
-No stretching or squashing: reach the target aspect ratio purely by cropping/recomposing this region onto the output canvas, never by scaling width and height by different factors. Every subject, face, object, and background element must keep its real-world proportions and shape exactly as in the original photo -- no elongation, flattening, or squeezing along either axis. A result with the correct output dimensions but stretched/squashed content is a failure."""
+    # The "a small trim is a fine answer" reassurance is true only when the canvas
+    # is the source's own shape. On a canvas of a different shape it is arithmetic
+    # nonsense -- there is no zero-trim solution -- and issuing it anyway is what
+    # let a 4:5 photo come back as a 3:4 canvas with the full frame squeezed into
+    # it. So it now lives in the "same" branch alone.
+    shape_difference = _canvas_shape_difference(aspect, source_size)
+    lines = [
+        "Reframing:",
+        f"- Target output aspect ratio: {aspect}. The output canvas has to be this shape.",
+        f"- Roughly how tight: {_describe_crop_tightness(crop_plan['w'], crop_plan['h'])}.",
+    ]
+    if shape_difference:
+        lines.append(_CANVAS_SHAPE_CONSEQUENCE[shape_difference])
+
+    # No coordinates, and no argument about coordinates. An edit model cannot
+    # weigh one instruction source against another, so the misplaced rectangle is
+    # left out rather than included and annotated as unreliable -- and nothing
+    # here describes a bad outcome ("slicing through a face"), which a framing
+    # instruction can read as content to render.
+    guidance = (
+        "Frame the photograph on what it is actually of. Find the main subject and the elements that make the "
+        "scene readable, and place the frame so they sit comfortably inside it, with the edges landing clear of "
+        "faces, hands, and held objects. The tightness above is only a hint; the subject you can see decides "
+        "where the edges go."
+    )
+    if require_tighter:
+        guidance += (
+            " Closer framing was requested, so come in closer than the original frame; you choose where the edges land."
+        )
+    lines.append(guidance)
+    lines.append(f"{FRAME_SHAPE_SOURCE} {CONTENT_SHAPE_RULE}")
+    return "\n".join(lines)
 
 
-def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto"):
+def _box_note(box):
+    """The `reason` an analysis box carries -- the part of it that describes
+    what matters. The x/y/w/h alongside it are the part that keeps landing
+    somewhere else, so the edit prompt takes the words and leaves the numbers."""
+    if isinstance(box, dict):
+        return (box.get("reason") or "").strip()
+    return ""
+
+
+def _build_framing_intent_block(analysis):
+    """What the analysis wanted protected, stated semantically.
+
+    This used to be three lines of raw JSON boxes (ROI, subject extent,
+    protected regions). Handing the edit model coordinates it cannot verify
+    against a photograph it can see produced the contradiction this block now
+    avoids: a box over empty background presented as "the subject", next to a
+    scene description naming someone standing elsewhere.
+    """
+    lines = []
+    anchor = (analysis.get("roi_anchor") or "").strip()
+    if anchor:
+        lines.append(f"- Where the eye should land: {anchor}")
+
+    roi_note = _box_note(analysis.get("roi_box"))
+    if roi_note:
+        lines.append(f"- Most important thing to keep in frame: {roi_note}")
+
+    extent_note = _box_note(analysis.get("subject_extent_box"))
+    if extent_note:
+        lines.append(f"- How much of the subject the framing needs: {extent_note}")
+
+    protected = []
+    for region in analysis.get("protected_regions") or []:
+        if not isinstance(region, dict):
+            continue
+        label = (region.get("label") or "").strip()
+        reason = (region.get("reason") or "").strip()
+        if label and reason:
+            protected.append(f"{label}（{reason}）")
+        elif label or reason:
+            protected.append(label or reason)
+    if protected:
+        lines.append(f"- Also worth keeping: {'; '.join(protected)}")
+
+    if not lines:
+        return ""
+
+    return (
+        "What matters in this photograph, described rather than located -- find each one in the image itself:\n"
+        + "\n".join(lines)
+    )
+
+
+def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None):
     rejected_axes = resolve_rejected_axes(analysis)
     color_craft_direction = build_color_craft_direction(rejected_axes)
     color_grade_check = build_color_grade_check(rejected_axes)
@@ -738,9 +944,7 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     eye_blink_issues = analysis.get("eye_blink_issues") or []
     eye_blink_issues_json = json.dumps(eye_blink_issues, ensure_ascii=False)
-    roi_box = json.dumps(analysis.get("roi_box") or {}, ensure_ascii=False)
-    subject_extent_box = json.dumps(analysis.get("subject_extent_box") or {}, ensure_ascii=False)
-    protected_regions = json.dumps(analysis.get("protected_regions") or [], ensure_ascii=False)
+    framing_intent_block = _build_framing_intent_block(analysis)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
         # The analysis was run while the user had "keep original" selected, so
@@ -788,14 +992,6 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     has_wider_size_override = size_override_value in {"wide", "wider"}
     has_closer_size_override = size_override_value in {"close", "closer"}
 
-    subject_box_for_size = analysis.get("subject_extent_box") or analysis.get("roi_box") or {}
-    try:
-        subject_w = float(subject_box_for_size.get("w") or 0)
-        subject_h = float(subject_box_for_size.get("h") or 0)
-        subject_area = subject_w * subject_h if subject_w and subject_h else 0
-    except (TypeError, ValueError):
-        subject_w = subject_h = subject_area = 0
-
     size_ratio_block = ""
     if size_override_value == "wide":
         size_ratio_block = (
@@ -810,11 +1006,12 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
             "its area share may become roughly 35% to 40% of the original. "
         )
 
-    if size_ratio_block and subject_w and subject_h:
-        size_ratio_block += (
-            f"Original subject extent estimate: width={subject_w:.2f}, height={subject_h:.2f}, area={subject_area:.2f} of the frame. "
-            "Use these values as a visual guide, not a pixel-perfect measurement. "
-        )
+    # The "original subject extent estimate: width=.., height=.., area=.." that
+    # used to be appended here was read straight off subject_extent_box/roi_box --
+    # the same estimated geometry that misses the subject. Nothing replaces it:
+    # the targets above are already stated relative to the original image, which
+    # the model can see, and size_ratio_block is interpolated three times, so any
+    # sentence added here costs triple.
 
     style_block = ""
     if has_style_overrides:
@@ -945,19 +1142,35 @@ This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit
     if framing_focus.get("size") == "closer":
         focus_label = framing_focus.get("label") or "the single most prominent subject"
         focus_block = f"""Single-subject close-up override (highest framing priority):
-Feature one subject: {focus_label}. The photo summary and scene description above may mention several people or elements -- for this close-up, every other person, object, or element outside the mandatory crop region is intentionally and correctly cropped out. Do NOT reintroduce them. Fill the frame with the chosen subject; preserve that subject's identity, expression, and key details."""
+Feature one subject: {focus_label}. Identify that subject in the photograph and frame the close-up around what you see there. The photo summary and scene description above may mention several people or elements -- for this close-up, every other person, object, or element left outside the frame is intentionally and correctly cropped out. Do NOT reintroduce them. Fill the frame with the chosen subject; preserve that subject's identity, expression, and key details."""
 
     if has_wider_size_override:
+        # The consequence sentence used for a plain crop ("the sides cannot both
+        # be inside this frame") is false here: this mode is allowed to outpaint,
+        # so a differently-shaped canvas is reached by adding scene unevenly
+        # rather than by giving anything up.
+        outpaint_shape_line = {
+            "narrower": "This frame is narrower than the photograph you were given, so take in more scene above and "
+                        "below than at the sides to reach its shape. ",
+            "wider": "This frame is wider than the photograph you were given, so take in more scene at the sides "
+                     "than above and below to reach its shape. ",
+        }.get(_canvas_shape_difference(
+            (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio"), source_size
+        ), "")
         crop_instruction_block = (
             "Wider framing requested. Do not treat the original image boundaries as final. "
             + size_ratio_block +
             "Create a wider same-scene composition where the subject appears smaller and more surrounding environment is visible. "
-            "If a crop plan exists, use it only as a subject-safety reference, not as a hard crop that prevents widening. "
+            "Decide the new frame from the photograph's own content and subject. "
+            + outpaint_shape_line +
             "Canvas expansion/outpainting is allowed only to continue the same real scene with matching perspective, lighting, depth, materials, and background logic. "
-            "Do not add blank borders, transparent/checkerboard padding, artificial empty bands, stretched edges, or unrelated scenery."
+            "Do not add blank borders, transparent/checkerboard padding, artificial empty bands, stretched edges, or unrelated scenery. "
+            + UNIFORM_SCALE_ONLY + " " + CONTENT_SHAPE_RULE
         )
     else:
-        crop_instruction_block = _build_crop_instruction_block(crop_plan)
+        crop_instruction_block = _build_crop_instruction_block(
+            crop_plan, require_tighter=has_closer_size_override, source_size=source_size
+        )
     crop_priority_line_style = (
         "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
         + size_ratio_block +
@@ -965,18 +1178,19 @@ Feature one subject: {focus_label}. The photo summary and scene description abov
         "Never add blank borders, transparent/checkerboard padding, artificial empty side bands, stretched edges, or unrelated scenery."
         if has_wider_size_override else
         (
-            "Perform the mandatory crop specified in the Crop instruction above as part of this edit. "
-            "Beyond that exact region, do not add blank borders, transparent/checkerboard padding, or "
-            "artificial empty side bands, unless a selected closer framing-size override explicitly asks for closer framing within the cropped region."
+            "Reframe as described in the Crop instruction above, judging the frame's edges from the photograph's "
+            "own content and subject rather than from stated coordinates. Beyond the frame you settle on, do not "
+            "add blank borders, transparent/checkerboard padding, or artificial empty side bands, unless a selected "
+            "closer framing-size override explicitly asks for closer framing within it."
             if crop_plan else
             "Treat the supplied image boundaries as final unless a selected closer framing-size override explicitly asks for closer framing. "
             "Never add blank borders, transparent/checkerboard padding, or artificial empty side bands."
         )
     )
     crop_priority_line_faithful = (
-        "Perform the mandatory crop specified in the Crop instruction above as part of this edit. Beyond "
-        "that exact region, do not additionally expand canvas, add borders, create transparent/checkerboard "
-        "padding, or invent empty side bands."
+        "Reframe as described in the Crop instruction above, judging the frame's edges from the photograph's own "
+        "content and subject rather than from stated coordinates. Beyond the frame you settle on, do not "
+        "additionally expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands."
         if crop_plan else
         "Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create "
         "transparent/checkerboard padding, or invent empty side bands."
@@ -1072,7 +1286,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
     return f"""{task_intro}
 
 {opening_preservation_rule}
-Geometric fidelity is a hard constraint. The output canvas may use a different aspect ratio in Auto mode, but the content inside that canvas must retain the input photo's geometry. Do not interpret the target canvas ratio as permission to stretch, squash, widen, narrow, elongate, flatten, or perspective-warp the existing scene. Use uniform scaling only; obtain a new frame shape only through the specified crop/recomposition. Faces, bodies, circular objects, products, architecture, and background structures must keep believable input-relative proportions.
+The photographed content keeps its true shape throughout: every person, face, object, and background structure comes through with the proportions, the tilt, and the relative sizes and distances it has in the input photograph. The output canvas may be a different shape than the input; that new shape comes from cropping and uniform scaling alone, never from resizing one axis on its own.
 Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
 Do not make the result look synthetic, plastic, or heavily filtered.
 
@@ -1099,19 +1313,18 @@ Crop instruction:
 - Alignment strategy: {analysis.get("alignment_strategy") or ""}
 - Distraction strategy: {analysis.get("distraction_strategy") or ""}
 - Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
-- ROI box: {roi_box}
-- Subject extent box: {subject_extent_box}
-- Protected regions: {protected_regions}
 - Eye blink / half-closed-eye issues: {eye_blink_issues_json}
 - Recommended aspect ratio: {rec_aspect}
 - Aspect ratio reason: {aspect_ratio_reason}
 - Tool strategy: {analysis.get("tool_strategy") or ""}
 - Lighting strategy: {analysis.get("lighting_strategy") or ""}
 - Memory color strategy: {analysis.get("memory_color_strategy") or ""}
-- Crop/reframe recommendation: {analysis.get("crop_recommendation") or ""}
-- Crop intent: {crop_intent}
+- Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}
+- Crop intent (advisory): {crop_intent}
 - Correction plan: {correction_plan}
 - Must preserve: {preserve_rules}
+
+{framing_intent_block}
 
 Style direction:
 {preset_prompt}

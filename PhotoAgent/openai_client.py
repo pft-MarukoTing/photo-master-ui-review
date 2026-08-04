@@ -226,7 +226,7 @@ def edit_photo(
     if framed_analysis.get("crop_box"):
         framed_analysis["crop_box"]["aspect_ratio"] = effective_ratio_label
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio)
+    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio, source_size=(img_w, img_h))
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.
