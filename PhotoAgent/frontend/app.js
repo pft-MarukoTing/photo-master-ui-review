@@ -1878,7 +1878,7 @@
   // showSingleResult is also how an entirely unrelated, already-finished
   // record gets its own settings panel shown when the user switches to view
   // it while some *other* record is still mid-revise in the background.
-  function showSingleResult({ autoOpenPanel = true } = {}) {
+  function showSingleResult({ autoOpenPanel = true, forceReopen = false } = {}) {
     const runs = singleRuns || [];
     const pick = (singleMirrorIndex != null && runs[singleMirrorIndex])
       ? runs[singleMirrorIndex]
@@ -1925,7 +1925,7 @@
     // Analysis-preview shows by default alongside the canvas -- no-ops if
     // it's already open (e.g. just switching RUNs). See autoOpenPanel's own
     // doc above for when/why this is suppressed.
-    if (autoOpenPanel) openInlineAnalysisForCurrentContext();
+    if (autoOpenPanel) openInlineAnalysisForCurrentContext(forceReopen);
   }
 
   // "檢視分析結果": lets the user come back to the recipe checklist/style
@@ -2962,7 +2962,11 @@
       const applyRender = () => {
         els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
         showSection("results");
-        showSingleResult();
+        // forceReopen: true -- this may be a genuinely different record than
+        // whatever the analysis panel was last showing, even if it was
+        // already open (see openInlineAnalysisForCurrentContext's own doc on
+        // this).
+        showSingleResult({ forceReopen: true });
       };
       if (els.originalImg.src === selectedFileSourceUrl && els.originalImg.complete) {
         applyRender();
@@ -3622,8 +3626,19 @@
   // whenever a "done" result first renders, since the panel now shows by
   // default there (see showSingleResult/showBatchDoneMain), not just on an
   // explicit click.
-  function openInlineAnalysisForCurrentContext() {
-    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) return;
+  // forceReopen bypasses the "already open, no-op" guard below -- needed
+  // when the record being shown has actually changed (viewHistoryRecord)
+  // even though the panel itself was already open from whichever record was
+  // shown before. Without it, switching from record A to record B while A's
+  // panel was open left it showing A's own recipe checkboxes/style picks
+  // (renderAnalysisPreview/applyStyleSelections never re-ran for B), which
+  // reads as B "inheriting" A's checked/unchecked state and style pick, and
+  // as A's own chip never reappearing when switching back to it later.
+  // Every other caller (plain RUN-tab switching, a per-RUN progress update)
+  // wants the normal guarded behavior, since nothing about which record is
+  // shown actually changed there.
+  function openInlineAnalysisForCurrentContext(forceReopen = false) {
+    if (!forceReopen && els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) return;
     const record = currentDetailBatchRecord();
     if (record) {
       startInlineBatchReview(record);
@@ -3717,7 +3732,13 @@
     Object.entries(options || {}).forEach(([key, value]) => {
       if (value && value !== "default") styleOptions[key] = value;
     });
-    if (Object.keys(styleOptions).length) effective.style_options = styleOptions;
+    // Always assign (even {}), not just when non-empty -- `effective` starts
+    // as a spread of `analysis`, which already has its own style_options
+    // from whatever was picked last time (a prior revise, or a historical
+    // record's own baked-in pick). Only conditionally assigning meant
+    // clearing every pick back to Default left that stale object in place
+    // instead of erasing it, so the "cleared" style silently kept applying.
+    effective.style_options = styleOptions;
 
     return effective;
   }
