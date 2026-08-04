@@ -407,6 +407,40 @@ window.PhotoAgentApi = (() => {
     return data;
   }
 
+  // Flags job_id (whatever RUN/photo is currently on screen) as needing
+  // review, attributed to the given name -- backend/services/report.py.
+  // Re-reporting the same job by the same name is a no-op refresh, not an
+  // error, so this never needs to check "did I already report this" first.
+  // `note` is the reporter's optional free-text description of the issue
+  // (report-modal, app.js) -- absent entirely when left blank, same as
+  // every other optional field elsewhere in this file.
+  async function reportJob(user, jobId, path = "local", note = "") {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user, job_id: jobId, path, note: note || undefined })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `回報失敗：HTTP ${response.status}`);
+    }
+    return data;
+  }
+
+  // Every flagged job across every user -- backend 403s unless `user` is a
+  // recognized admin account (backend/services/report.py's is_admin), which
+  // checkAdminAccess (app.js) also relies on as its "am I admin" check.
+  async function getReports(user) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = new Error(data.error || `取得回報清單失敗：HTTP ${response.status}`);
+      err.status = response.status;
+      throw err;
+    }
+    return data; // { reports: [{ job_id, user, path, ts }] }
+  }
+
   // One-shot status check (unlike pollJobStatus, which loops until done) --
   // used by the history page to render each past job's current state without
   // starting a whole poll loop for it.
@@ -439,6 +473,8 @@ window.PhotoAgentApi = (() => {
     getHistory,
     deleteHistoryEntry,
     clearHistory,
-    getJobStatusOnce
+    getJobStatusOnce,
+    reportJob,
+    getReports
   };
 })();

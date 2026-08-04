@@ -1226,6 +1226,15 @@
       font-size: 13px;
       border-radius: 999px;
     }
+    /* #admin-reports-btn sits in the same row (right before #account-badge)
+       -- same compact-pill override as #reset-btn just above, same reasons. */
+    #admin-reports-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
+    }
     .account-badge {
       display: inline-flex;
       align-items: center;
@@ -1283,6 +1292,32 @@
       font-size: 13.75px;
       color: var(--red);
     }
+    /* #report-modal's two labeled fields -- .account-modal-input/-actions/
+       -error above are reused as-is for the name input and its error line;
+       only the label and the new textarea need their own rules. */
+    .report-modal-label {
+      display: block;
+      margin-top: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-2);
+    }
+    .report-modal-label:first-of-type { margin-top: 12px; }
+    .report-modal-textarea {
+      width: 100%;
+      box-sizing: border-box;
+      min-height: 84px;
+      margin-top: 6px;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      border: 1.5px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+    }
+    .report-modal-textarea:focus { outline: none; border-color: var(--accent); }
 
     /* ── Processing history: a slide-in drawer, not a full screen -- opened
        over whatever's currently showing (upload/processing/results) via
@@ -1496,6 +1531,58 @@
     }
     .history-cube-remove:hover { background: rgba(220,60,60,.85); transform: scale(1.08); }
     .history-empty { color: var(--text-3); font-size: 15px; }
+    /* #reports-drawer's own list -- plain rows (not the day-grouped cube
+       grid #history-list uses) since reports have no per-day grouping and
+       carry a username instead of a status badge. */
+    .reports-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .report-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px;
+      border-radius: var(--radius);
+      background: var(--card-2);
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .report-item:hover { background: var(--border); }
+    .report-item-thumb {
+      flex-shrink: 0;
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--card);
+    }
+    .report-item-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .report-item-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+    .report-item-user {
+      font-size: 14px;
+      font-weight: 600;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .report-item-meta { font-size: 12px; color: var(--text-3); }
+    .report-item-note {
+      font-size: 12.5px;
+      color: var(--text-2);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
     /* Centered toast shown while a download zip is being assembled --
        buildZip fetches each result image over the network before zipping,
@@ -1685,6 +1772,17 @@
            applyAccountUi's textContent write doesn't clobber this icon.
            Last in .header-actions (not first) so it's the rightmost element
            in the whole header, not just first-after-the-logo. -->
+      <!-- Admin-only entry into #reports-drawer -- shown only once
+           checkAdminAccess (app.js) confirms the current account is an admin
+           (backend/services/report.py's is_admin); hidden for everyone else,
+           same as #account-badge is hidden until an account exists. -->
+      <button id="admin-reports-btn" class="btn btn-secondary btn-sm" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M5 3v18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M5 4.5h11.5l-2.7 3.5 2.7 3.5H5" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">回報清單</span>
+      </button>
       <button id="account-badge" class="account-badge" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2294,6 +2392,17 @@
                       <circle cx="17" cy="17" r="2.2" fill="currentColor"/>
                     </svg>
                   </button>
+                  <!-- Flags the currently-displayed job_id (lastResult, app.js)
+                       under the current account -- see handleReportClick/
+                       updateReportButton (app.js) and backend/services/
+                       report.py. Hidden until lastResult exists, same gating
+                       as #download-link below. -->
+                  <button id="report-btn" class="canvas-btn" type="button" title="回報此結果" aria-label="回報此結果" hidden>
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                      <path d="M5 3v18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                      <path d="M5 4.5h11.5l-2.7 3.5 2.7 3.5H5" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                    </svg>
+                  </button>
                   <div class="canvas-btn-wrap" id="download-menu-wrap">
                     <a id="download-link" class="canvas-btn" download="photo-muse-output.zip" title="download" aria-label="下載結果" hidden>
                       <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
@@ -2606,6 +2715,27 @@
   </button>
 </aside>
 
+<!-- Admin-only: every reported job across every user (backend/services/
+     report.py). Same slide-in-drawer shape as #history-drawer above,
+     reusing its .history-drawer/.history-list/.history-empty classes --
+     opened via #admin-reports-btn, which only ever shows once
+     checkAdminAccess (app.js) confirms the current account is an admin. -->
+<div class="history-drawer-backdrop" id="reports-drawer-backdrop" hidden></div>
+<aside class="history-drawer" id="reports-drawer">
+  <button class="history-drawer-close-btn" id="reports-drawer-close-btn" type="button" aria-label="關閉">
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+      <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
+  <div class="history-header">
+    <div class="history-header-top">
+      <h2>回報案件</h2>
+    </div>
+  </div>
+  <ul id="reports-list" class="reports-list"></ul>
+  <p id="reports-empty" class="history-empty" hidden>目前尚無回報案件。</p>
+</aside>
+
 <!-- Error detail popup: opened when a failed batch card is clicked -->
 <div id="error-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
@@ -2656,6 +2786,30 @@
     <div class="account-modal-actions">
       <button id="account-modal-skip-btn" class="btn btn-secondary btn-sm" type="button">先略過</button>
       <button id="account-modal-create-btn" class="btn btn-grad btn-sm" type="button">建立帳號</button>
+    </div>
+  </div>
+</div>
+
+<!-- Report sheet: opened by #report-btn (see handleReportClick, app.js)
+     before actually submitting -- lets the user confirm/edit which name the
+     report is attributed to (prefilled from the current account, if any)
+     and add an optional note describing the issue. Same shared backdrop+box
+     modal shape as #account-modal above. -->
+<div id="report-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="report-modal-title">
+    <div class="error-modal-hdr">
+      <span id="report-modal-title" class="notice-modal-title">回報此結果</span>
+      <button id="report-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <label class="report-modal-label" for="report-modal-name">你的名稱</label>
+    <input id="report-modal-name" class="account-modal-input" type="text" placeholder="輸入你的名稱" maxlength="64">
+    <label class="report-modal-label" for="report-modal-note">問題描述（選填）</label>
+    <textarea id="report-modal-note" class="report-modal-textarea" placeholder="請描述這筆結果的問題…" maxlength="500"></textarea>
+    <p id="report-modal-error" class="account-modal-error" hidden></p>
+    <div class="account-modal-actions">
+      <button id="report-modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">取消</button>
+      <button id="report-modal-submit-btn" class="btn btn-grad btn-sm" type="button">送出回報</button>
     </div>
   </div>
 </div>

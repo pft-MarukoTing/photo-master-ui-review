@@ -21,7 +21,9 @@
     getHistory,
     deleteHistoryEntry,
     clearHistory,
-    getJobStatusOnce
+    getJobStatusOnce,
+    reportJob,
+    getReports
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
@@ -263,6 +265,7 @@
   // it (see the listener below) is what opens #account-modal on demand.
   initFromUrl();
   applyAccountUi();
+  checkAdminAccess();
 
   // Upload-page option pills (#image-model-quality-picker etc.): a
   // details/summary popover (same visual language as the analysis-preview's
@@ -1051,6 +1054,92 @@
     els.downloadLink.setAttribute("aria-label", hint);
   }
 
+  // In-memory only -- a reload just lets a RUN be reported again, which
+  // backend/services/report.py treats as a harmless refresh, not a
+  // duplicate. Keyed by "jobId:runNumber" since a multi-RUN combined job
+  // shares one jobId across every RUN, but each RUN is a genuinely distinct
+  // edited result worth flagging separately.
+  const reportedRuns = new Set();
+
+  function reportKeyFor(jobId, runNumber) {
+    return `${jobId}:${runNumber || 1}`;
+  }
+
+  // #report-btn only makes sense once a real result exists to flag -- same
+  // "lastResult is the single source of truth" reasoning as
+  // updateDownloadLinks above, called at the same points lastResult changes.
+  function updateReportButton() {
+    if (!els.reportBtn) return;
+    els.reportBtn.hidden = !lastResult;
+    if (!lastResult) return;
+    const already = reportedRuns.has(reportKeyFor(lastResult.jobId, lastResult.runNumber));
+    els.reportBtn.disabled = already;
+    els.reportBtn.classList.toggle("is-reported", already);
+    const hint = already ? "已回報" : "回報此結果";
+    els.reportBtn.title = hint;
+    els.reportBtn.setAttribute("aria-label", hint);
+  }
+
+  // Captured when #report-modal opens (not re-read from lastResult at
+  // submit time) -- lastResult could in principle move on to a different
+  // RUN/photo while the sheet is still open (e.g. the user switches RUNs
+  // behind it), and the report should still land on whatever was actually
+  // being looked at when 回報 was clicked.
+  let reportModalTarget = null;
+
+  // Opens the report sheet instead of reporting immediately -- lets the
+  // user confirm/edit which name it's attributed to (prefilled from the
+  // current account, blank if there isn't one -- a name is required to
+  // submit either way, see handleReportSubmit) and add an optional note
+  // describing the issue.
+  function openReportModal() {
+    if (!lastResult || !els.reportModal) return;
+    reportModalTarget = { jobId: lastResult.jobId, path: lastResult.path, runNumber: lastResult.runNumber };
+    if (els.reportModalName) els.reportModalName.value = getCurrentUser() || "";
+    if (els.reportModalNote) els.reportModalNote.value = "";
+    if (els.reportModalError) els.reportModalError.hidden = true;
+    els.reportModal.hidden = false;
+  }
+
+  function closeReportModal() {
+    if (els.reportModal) els.reportModal.hidden = true;
+    reportModalTarget = null;
+  }
+
+  function showReportModalError(message) {
+    if (!els.reportModalError) return;
+    els.reportModalError.textContent = message;
+    els.reportModalError.hidden = false;
+  }
+
+  async function handleReportSubmit() {
+    if (!reportModalTarget) return;
+    const name = normalizeUsername(els.reportModalName ? els.reportModalName.value : "");
+    if (!name) {
+      showReportModalError("請輸入你的名稱。");
+      return;
+    }
+    const note = (els.reportModalNote ? els.reportModalNote.value : "").trim();
+    const target = reportModalTarget;
+    if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.disabled = true;
+    try {
+      await reportJob(name, target.jobId, target.path, note);
+      reportedRuns.add(reportKeyFor(target.jobId, target.runNumber));
+      // Only touch #report-btn if it's still showing the same RUN this
+      // report was just submitted for -- lastResult may have already moved
+      // on to something else while the sheet was open.
+      if (lastResult && lastResult.jobId === target.jobId && lastResult.runNumber === target.runNumber) {
+        updateReportButton();
+      }
+      closeReportModal();
+      showNoticeModal("已回報，我們會盡快確認這筆結果。");
+    } catch (err) {
+      showReportModalError(err.message || "回報失敗，請稍後再試。");
+    } finally {
+      if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.disabled = false;
+    }
+  }
+
   // Centered toast shown while buildZip() is fetching each result image over
   // the network -- otherwise a batch download with many images just looks
   // like nothing is happening until the browser's save dialog finally
@@ -1837,6 +1926,7 @@
 
         lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: finalJobId, runNumber: 1, path: processingPath };
         updateDownloadLinks();
+        updateReportButton();
         renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
         populateTimingSection();
         resetRunSwitcher();
@@ -1995,6 +2085,7 @@
 
     lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: pick.jobId, runNumber: pick.run, path: singleFlowState.processingPath, runs };
     updateDownloadLinks(runs);
+    updateReportButton();
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
     renderSingleRunSwitcher();
@@ -2814,6 +2905,7 @@
       await createAccount(name);
       setCurrentUser(name);
       applyAccountUi();
+      checkAdminAccess();
       closeAccountModal();
     } catch (err) {
       showAccountModalError(err.message || "建立帳號失敗，請再試一次。");
@@ -3050,6 +3142,109 @@
       renderHistoryList(jobs || []);
     } catch {
       renderHistoryList([]);
+    }
+  }
+
+  // Shows #admin-reports-btn only for an account the backend recognizes as
+  // an admin -- there's no separate "am I admin" endpoint, GET /reports/user
+  // itself 403s a non-admin account (backend/services/report.py's is_admin),
+  // so a failure here just means "stay hidden", same as any other account-
+  // gated check in this file. Re-run after every account change (init,
+  // handleCreateAccount) since a fresh login could be either.
+  async function checkAdminAccess() {
+    if (els.adminReportsBtn) els.adminReportsBtn.hidden = true;
+    const user = getCurrentUser();
+    if (!user) return;
+    try {
+      await getReports(user);
+      if (els.adminReportsBtn) els.adminReportsBtn.hidden = false;
+    } catch {
+      // 403 (not an admin) or a request failure -- either way, stay hidden.
+    }
+  }
+
+  function openReportsDrawer() {
+    if (els.reportsDrawer) els.reportsDrawer.classList.add("drawer-open");
+    if (els.reportsDrawerBackdrop) {
+      els.reportsDrawerBackdrop.hidden = false;
+      els.reportsDrawerBackdrop.classList.add("drawer-open");
+    }
+  }
+
+  function closeReportsDrawer() {
+    if (els.reportsDrawer) els.reportsDrawer.classList.remove("drawer-open");
+    if (els.reportsDrawerBackdrop) {
+      els.reportsDrawerBackdrop.classList.remove("drawer-open");
+      els.reportsDrawerBackdrop.hidden = true;
+    }
+  }
+
+  function formatReportTimestamp(ts) {
+    const d = new Date(ts * 1000);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  // One row per flagged job -- clicking a row reuses viewHistoryRecord
+  // (the same history-entry playback the processing-history drawer uses)
+  // against a minimal {path, runs} stand-in, since a report only ever
+  // records job_id/path, not the rest of a real history entry's fields
+  // (preset/image_quality/...) -- viewHistoryRecord already falls back to
+  // sensible defaults for those when absent.
+  function renderReportsList(reports) {
+    if (!els.reportsList) return;
+    els.reportsList.innerHTML = "";
+    if (els.reportsEmpty) els.reportsEmpty.hidden = reports.length > 0;
+    reports.forEach((r) => {
+      const li = document.createElement("li");
+      li.className = "report-item";
+
+      const thumb = document.createElement("div");
+      thumb.className = "report-item-thumb";
+      if (r.path === "local") {
+        const img = document.createElement("img");
+        img.alt = "";
+        img.src = resultThumbnailUrl(r.job_id);
+        img.addEventListener("error", () => img.remove());
+        thumb.appendChild(img);
+      }
+
+      const info = document.createElement("div");
+      info.className = "report-item-info";
+      const userLine = document.createElement("span");
+      userLine.className = "report-item-user";
+      userLine.textContent = r.user;
+      const metaLine = document.createElement("span");
+      metaLine.className = "report-item-meta";
+      metaLine.textContent = `${formatReportTimestamp(r.ts)} · ${r.path === "aipoc" ? "AIPoC" : "Local"}`;
+      info.appendChild(userLine);
+      info.appendChild(metaLine);
+      if (r.note) {
+        const noteLine = document.createElement("span");
+        noteLine.className = "report-item-note";
+        noteLine.textContent = r.note;
+        info.appendChild(noteLine);
+      }
+
+      li.appendChild(thumb);
+      li.appendChild(info);
+      li.addEventListener("click", () => {
+        closeReportsDrawer();
+        viewHistoryRecord({ path: r.path, runs: [r.job_id] });
+      });
+      els.reportsList.appendChild(li);
+    });
+  }
+
+  async function openReportsPage() {
+    const user = getCurrentUser();
+    if (!user) return;
+    openReportsDrawer();
+    try {
+      const { reports } = await getReports(user);
+      renderReportsList(reports || []);
+    } catch {
+      renderReportsList([]);
     }
   }
 
@@ -3793,6 +3988,7 @@
       // straight from -- see fetchImageDownloadData.
       lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
       updateDownloadLinks(record.runs);
+      updateReportButton();
       renderResult({
         data,
         analysis: record.result.analysis,
@@ -4085,6 +4281,7 @@
     els.generatedImg.removeAttribute("src");
     els.downloadLink.removeAttribute("href");
     updateDownloadLinks();
+    updateReportButton();
     els.dropZone.hidden = false;
     els.dzPreview.hidden = true;
     els.origDim.textContent = "";
@@ -4172,6 +4369,15 @@
   }
   if (els.compareFullscreenBtn) els.compareFullscreenBtn.addEventListener("click", toggleCompareFullscreen);
   if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.addEventListener("click", closeCompareFullscreen);
+  if (els.reportBtn) els.reportBtn.addEventListener("click", openReportModal);
+  if (els.reportModalClose) els.reportModalClose.addEventListener("click", closeReportModal);
+  if (els.reportModalCancelBtn) els.reportModalCancelBtn.addEventListener("click", closeReportModal);
+  if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.addEventListener("click", handleReportSubmit);
+  if (els.reportModal) {
+    els.reportModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeReportModal();
+    });
+  }
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadCurrentBtn) els.downloadCurrentBtn.addEventListener("click", handleDownloadCurrentBtnClick);
   if (els.downloadAllRunsBtn) els.downloadAllRunsBtn.addEventListener("click", handleDownloadAllRunsBtnClick);
@@ -4194,6 +4400,9 @@
     });
   }
   if (els.accountBadge) els.accountBadge.addEventListener("click", openHistoryPage);
+  if (els.adminReportsBtn) els.adminReportsBtn.addEventListener("click", openReportsPage);
+  if (els.reportsDrawerCloseBtn) els.reportsDrawerCloseBtn.addEventListener("click", closeReportsDrawer);
+  if (els.reportsDrawerBackdrop) els.reportsDrawerBackdrop.addEventListener("click", closeReportsDrawer);
   if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
   if (els.historyLogoutBtn) els.historyLogoutBtn.addEventListener("click", handleLogout);
@@ -4251,6 +4460,7 @@
     if (els.noticeModal && !els.noticeModal.hidden) closeNoticeModal();
     if (els.confirmModal && !els.confirmModal.hidden) confirmModalHandlers?.cancel();
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
+    if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
@@ -4258,6 +4468,7 @@
     if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
     if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();
+    if (els.reportsDrawer && els.reportsDrawer.classList.contains("drawer-open")) closeReportsDrawer();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);

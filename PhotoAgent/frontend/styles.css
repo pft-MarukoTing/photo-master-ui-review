@@ -1053,6 +1053,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   cursor: not-allowed;
   pointer-events: none;
 }
+/* #report-btn once this RUN has been flagged (updateReportButton, app.js) --
+   stays disabled (no re-reporting) but reads as "done", not "unavailable",
+   so it needs its own opacity/color rather than the generic :disabled dim. */
+.canvas-btn.is-reported {
+  opacity: 1;
+  background: rgba(220,60,60,.55);
+  border-color: rgba(220,60,60,.7);
+}
 
 .canvas-btn-wrap { position: relative; display: inline-flex; }
 

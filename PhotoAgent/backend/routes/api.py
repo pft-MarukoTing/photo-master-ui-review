@@ -10,6 +10,7 @@ from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail
+from backend.services.report import get_reports, is_admin, record_report
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -123,6 +124,34 @@ def delete_all_history(user):
         return jsonify({"error": str(exc)}), 400
     clear_history(name)
     return jsonify({"user": name, "deleted": "all"})
+
+
+@api_bp.post("/report")
+def report_job():
+    body = request.get_json(silent=True) or request.form
+    try:
+        name = normalize_username(body.get("user"))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    job_id = body.get("job_id")
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+    record_report(name, job_id, body.get("path") or "local", note=body.get("note"))
+    return jsonify({"reported": True})
+
+
+@api_bp.get("/reports/<user>")
+def reports(user):
+    # Doubles as the frontend's "is this account an admin?" check (see
+    # checkAdminAccess, app.js) -- a 403 here just means "hide the admin
+    # button", not a real error to surface.
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not is_admin(name):
+        return jsonify({"error": "not authorized"}), 403
+    return jsonify({"reports": get_reports()})
 
 
 @api_bp.post("/submit")
