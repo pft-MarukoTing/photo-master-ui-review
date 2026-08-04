@@ -2713,10 +2713,19 @@
     const rows = jobs.map((job) => {
       const li = document.createElement("li");
       li.className = "batch-sidebar-item processing";
+      // Local-path jobs keep their srcKeys forever (see account.py), so the
+      // original photo is available immediately -- no need to wait for the
+      // status check below just to show *something* here. AIPoC-path jobs
+      // have no recoverable original (same reason the before/after compare
+      // skips them elsewhere), so those stay spinner-only. The .processing
+      // class already dims .rc-media img (see styles.css), so this reads as
+      // "not final yet" rather than the actual done result.
+      const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+      const referenceThumb = job.path === "local" ? `<img src="${sourceImageUrl(jobIds[0])}" alt="">` : "";
       li.innerHTML = `
-        <div class="rc-media"><div class="rc-spinner"></div></div>
+        <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
         <div class="batch-sidebar-text">
-          <span>${job.preset || job.job_id}</span>
+          <span>${job.preset || (job.runs && job.runs[0]) || job.job_id || ""}</span>
           <span class="rc-badge">處理中</span>
         </div>
       `;
@@ -2745,7 +2754,10 @@
         } else if (statuses.every((s) => s.status === "error")) {
           li.className = "batch-sidebar-item error";
           if (badge) badge.textContent = "失敗";
-          if (media) media.innerHTML = "";
+          // Drop only the spinner -- keep the reference thumb (if any) so the
+          // row still shows a recognizable photo instead of going blank; the
+          // badge/border already communicate the failure.
+          media?.querySelector(".rc-spinner")?.remove();
         } else {
           if (badge) badge.textContent = "處理中";
           // Still clickable -- otherwise there's no way to come back and
@@ -2871,20 +2883,19 @@
     // bearing here the way it is in viewHistoryRecord.
     if (els.canvasLoading) els.canvasLoading.hidden = true;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-    showBatchMainLoading({
-      previewUrl: job.path === "local" ? sourceImageUrl(job.job_id) : "",
-      status: "processing"
-    });
-
+    // job.job_id doesn't exist on a history entry (see record_history/
+    // account.py) -- every job from the same action lives in job.runs
+    // instead, with job.job_id kept only as a fallback for an entry recorded
+    // before that field existed.
     const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+    const previewUrl = job.path === "local" ? sourceImageUrl(jobIds[0]) : "";
+    showBatchMainLoading({ previewUrl, status: "processing" });
+
     try {
       await Promise.any(jobIds.map((id) => pollJobStatus(id, { path: job.path })));
     } catch {
       if (historyViewToken !== myToken) return; // navigated away meanwhile
-      showBatchMainError({
-        previewUrl: job.path === "local" ? sourceImageUrl(job.job_id) : "",
-        error: "所有 RUN 皆處理失敗，請稍後再試。"
-      });
+      showBatchMainError({ previewUrl, error: "所有 RUN 皆處理失敗，請稍後再試。" });
       return;
     }
     if (historyViewToken !== myToken) return; // navigated away meanwhile
@@ -2930,7 +2941,11 @@
 
     if (job.path === "local") {
       selectedFile = null;
-      selectedFileSourceUrl = sourceImageUrl(job.job_id);
+      // job.job_id doesn't exist on a history entry (job ids live in
+      // job.runs instead, see record_history/account.py) -- runs[0].jobId is
+      // the actual resolved job_id fetchAllHistoryRuns already looked up,
+      // and every job in this action shares the same source image anyway.
+      selectedFileSourceUrl = sourceImageUrl(runs[0].jobId);
       singleRuns = runs;
       singleMirrorIndex = null;
       const firstDone = singleRuns[0];
