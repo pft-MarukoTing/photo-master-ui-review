@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, runCount, user, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, runCount, user, actionId, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -55,6 +55,12 @@ window.PhotoAgentApi = (() => {
     // entirely when no account is set, same as every other optional field
     // here.
     if (user) form.append("user", user);
+    // Groups every job submitted from ONE "Run" click (runSingleItem/
+    // editBatchItem submitting N separate AIPoC jobs for a runCount>1 revise)
+    // into the same history entry instead of each overwriting the last --
+    // see backend/services/account.py's action_id grouping. Absent for a
+    // single-job submission, which just groups under its own id.
+    if (actionId) form.append("action_id", actionId);
 
     const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/submit`, {
       method: "POST",
@@ -248,7 +254,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user, actionId }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -261,7 +267,14 @@ window.PhotoAgentApi = (() => {
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         user_prompt: userPrompt || "",
-        user: user || ""
+        user: user || "",
+        // Groups every job submitted from ONE "Run" click (runSingleItem/
+        // editBatchItem submitting N separate continueJob calls for a
+        // runCount>1 revise) into the same history entry instead of each
+        // overwriting the last -- see backend/services/account.py's
+        // action_id grouping. Absent for a single-RUN continue, which just
+        // groups under its own new job id.
+        action_id: actionId || ""
       })
     });
     const data = await response.json().catch(() => ({}));

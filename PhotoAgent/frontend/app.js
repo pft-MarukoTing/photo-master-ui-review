@@ -23,6 +23,18 @@
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
+  // Groups every job submitted from ONE "Run" click into the same history
+  // entry (backend/services/account.py's action_id) -- needed only where a
+  // single click fires N *separate* submitJob/continueJob calls (a
+  // runCount>1 revise, two-stage manual path: runSingleItem/editBatchItem),
+  // since the backend can't otherwise tell those apart from N unrelated
+  // later revises of the same photo (they'd all share the same prior job_id
+  // too). Not cryptographic -- just needs to not collide with another id
+  // generated in the same session.
+  function generateActionId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   // Disables whichever arrow has no selectable ("done") RUN left on its
   // side of the current one -- called after every updateRunSwitcher and
   // whenever the current index changes.
@@ -1727,8 +1739,9 @@
       };
       updateRunProgress();
 
+      const actionId = generateActionId();
       await runBatchPool(singleRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings });
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
         if (run.status === "done") {
@@ -1749,14 +1762,14 @@
   // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --
   // mirrors editBatchItem, but against selectedFile/singleFlowState instead
   // of a batch record.
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings }) {
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser() });
+        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -2283,7 +2296,7 @@
   // nested timing display. Results land on the run entry `run`;
   // syncRecordMirror keeps the record's legacy fields pointing at the
   // selected/first-done run so all existing readers stay unchanged.
-  async function editBatchItem({ record, run }) {
+  async function editBatchItem({ record, run, actionId }) {
     try {
       const userPrompt = effectivePrompt(record);
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
@@ -2303,6 +2316,7 @@
           userPrompt,
           analysis: effectiveAnalysis,
           user: getCurrentUser(),
+          actionId,
           path: "aipoc"
         });
       } else {
@@ -2315,7 +2329,8 @@
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           userPrompt,
-          user: getCurrentUser()
+          user: getCurrentUser(),
+          actionId
         });
       }
       const submitMs = Date.now() - stepStart;
@@ -2620,14 +2635,22 @@
     await Promise.all(rows.map(async ({ job, li }) => {
       const badge = li.querySelector(".rc-badge");
       const media = li.querySelector(".rc-media");
+      // job.runs holds every job_id from the same action (see
+      // backend/services/account.py's action_id grouping) -- job.job_id is
+      // the fallback for an entry recorded before `runs` existed.
+      const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
       try {
-        const status = await getJobStatusOnce(job.job_id, { path: job.path });
-        if (status.status === "success") {
+        const statuses = await Promise.all(
+          jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch(() => ({ status: "error" })))
+        );
+        const doneIdx = statuses.findIndex((s) => s.status === "success");
+        if (doneIdx !== -1) {
           li.className = "batch-sidebar-item done";
-          if (badge) badge.textContent = "完成";
-          if (media) media.innerHTML = `<img src="${resultImageUrl(job.job_id, { path: job.path })}" alt="">`;
+          const doneCount = statuses.filter((s) => s.status === "success").length;
+          if (badge) badge.textContent = jobIds.length > 1 ? `完成（${doneCount}/${jobIds.length}）` : "完成";
+          if (media) media.innerHTML = `<img src="${resultImageUrl(jobIds[doneIdx], { path: job.path })}" alt="">`;
           li.addEventListener("click", () => viewHistoryRecord(job));
-        } else if (status.status === "error") {
+        } else if (statuses.every((s) => s.status === "error")) {
           li.className = "batch-sidebar-item error";
           if (badge) badge.textContent = "失敗";
           if (media) media.innerHTML = "";
@@ -2698,6 +2721,34 @@
     return { analysis: restoredAnalysis, selections: { userPrompt: "", options, recipeChecked } };
   }
 
+  // A "Run" click with run_count > 1 (two-stage manual path) submits N
+  // *separate* job_ids (runSingleItem/editBatchItem), all recorded together
+  // under one history entry's `runs` list by backend/services/account.py's
+  // action_id grouping -- fetch every one of them (each of which might
+  // itself be a combined job with its own internal multi-RUN shape too) and
+  // flatten into one run-numbered list, same shape either way. job.job_id is
+  // kept as a fallback for a history entry recorded before `runs` existed.
+  async function fetchAllHistoryRuns(job) {
+    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+    const perJobData = await Promise.all(jobIds.map((id) => getJobRuns(id, { path: job.path }).catch(() => null)));
+    const flat = [];
+    perJobData.forEach((data, idx) => {
+      if (!data) return;
+      const jobId = jobIds[idx];
+      const rawRuns = Array.isArray(data.runs) && data.runs.length
+        ? data.runs
+        : [{ image_url: data.image_url, result: data.result }];
+      rawRuns.forEach((r) => {
+        if (!r.result) return; // this job/RUN hasn't actually finished
+        flat.push({ jobId, imageUrl: r.image_url, result: r.result });
+      });
+    });
+    // Re-numbered sequentially regardless of each job's own internal RUN
+    // numbering -- these may come from entirely separate job_ids that each
+    // think of themselves as "RUN 1".
+    return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
+  }
+
   // Reconstructs the full single-photo results view (recipe/analysis/QA
   // panel, RUN switcher, before/after compare, download) for a finished
   // history entry, pulling this job's data fresh from the backend instead of
@@ -2714,21 +2765,11 @@
   // mapping doesn't survive a restart) -- those fall back to showBatchDoneMain
   // in its read-only (reviewable:false) mode instead.
   async function viewHistoryRecord(job) {
-    let data;
-    try {
-      data = await getJobRuns(job.job_id, { path: job.path });
-    } catch (err) {
-      showNoticeModal(err.message || "無法取得這筆處理紀錄，請稍後再試。");
+    const runs = await fetchAllHistoryRuns(job);
+    if (!runs.length) {
+      showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
       return;
     }
-
-    // getJobRuns passes through whichever shape the backend returned:
-    // {runs: [...]} for a multi-RUN job, or the plain {image_url, result}
-    // shape for a single-RUN one -- normalize to one array either way so the
-    // rest of this can treat every job the same.
-    const rawRuns = Array.isArray(data.runs) && data.runs.length
-      ? data.runs
-      : [{ run: 1, image_url: data.image_url, result: data.result }];
 
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
@@ -2740,12 +2781,9 @@
     if (job.path === "local") {
       selectedFile = null;
       selectedFileSourceUrl = sourceImageUrl(job.job_id);
-      singleRuns = rawRuns.map((r) => ({
-        run: r.run || 1, jobId: job.job_id, status: "done",
-        imageUrl: r.image_url, result: r.result, timings: [], error: null
-      }));
+      singleRuns = runs;
       singleMirrorIndex = null;
-      const firstDone = singleRuns.find((r) => r.status === "done");
+      const firstDone = singleRuns[0];
       // job.* comes from the history entry (backend/services/account.py) --
       // absent (rather than falsy-but-present) only for an entry recorded
       // before that field existed. Falling back to undefined here would
@@ -2757,7 +2795,7 @@
       const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis);
       singleFlowState = {
         analysis: restoredAnalysis,
-        analyzeJobId: job.job_id,
+        analyzeJobId: firstDone.jobId,
         presetKey: job.preset || "natural",
         preset: presets[job.preset] || presets.natural,
         imageQuality: job.image_quality || extraInfo.image_quality || "medium",
@@ -2786,14 +2824,6 @@
       return;
     }
 
-    const runs = rawRuns.map((r) => ({
-      run: r.run || 1,
-      status: "done",
-      jobId: job.job_id,
-      imageUrl: r.image_url,
-      result: r.result,
-      timings: []
-    }));
     const first = runs[0];
     const extraInfo = first.result["extra-info"] || {};
 
@@ -3418,7 +3448,8 @@
     // overlaid on it.
     refreshIfSelected(record);
 
-    await runBatchPool(newRuns.map((run) => ({ record, run })), editBatchItem, POLL_CONCURRENCY);
+    const actionId = generateActionId();
+    await runBatchPool(newRuns.map((run) => ({ record, run, actionId })), editBatchItem, POLL_CONCURRENCY);
     // Re-point the mirror at the newest run that actually succeeded, in case
     // it wasn't the last one (a slower earlier run finished first) -- other-
     // wise record.status could read "done" while the mirrored pick is a

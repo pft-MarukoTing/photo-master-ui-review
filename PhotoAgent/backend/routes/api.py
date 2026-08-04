@@ -14,7 +14,7 @@ from backend.services.template_params import get_engine_params_template
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
 
 
-def _record_history_safely(user, job_id, path, image_key, params=None):
+def _record_history_safely(user, job_id, path, image_key, action_id, params=None):
     """History bookkeeping must never fail the actual job submission it's
     attached to -- a bad/missing username here is a lost history row, not a
     500 for a job that otherwise queued/ran fine."""
@@ -25,7 +25,7 @@ def _record_history_safely(user, job_id, path, image_key, params=None):
             key: (params or {}).get(key)
             for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa")
         }
-        record_history(normalize_username(user), job_id, path, image_key, params=history_params)
+        record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
         pass
 
@@ -109,7 +109,10 @@ def submit():
     job_id = enqueue(engine_params, src_content=[image.read()])
     # enqueue() resolves srcKeys' "{msg_id}" placeholder in place -- this is
     # a genuinely new upload, so srcKeys[0] is this job's own fresh S3 path.
-    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], params=params)
+    # action_id=job_id: run_count (if any) is handled entirely server-side
+    # within this one job (job_processor.py), so there's no sibling call to
+    # group this with.
+    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], job_id, params=params)
     return jsonify({"job_id": job_id}), 202
 
 
@@ -373,7 +376,20 @@ def continue_job(job_id):
     # for enqueue() to substitute) -- same image identity as whatever job(s)
     # this chain already recorded, so this overwrites that same history entry
     # instead of adding a new one.
-    _record_history_safely(body.get("user"), new_job_id, "local", engine_params["srcKeys"][0], params=params)
+    #
+    # action_id groups every job from ONE "Run" click together -- this route's
+    # own job_id (URL param, the prior job being continued from) can't be used
+    # for that: it stays the SAME across every *separate* later revise too
+    # (the frontend's singleFlowState.analyzeJobId is set once and never
+    # updated for a plain single-RUN continue), so grouping by it would merge
+    # unrelated revises done minutes/hours apart into one entry, not just the
+    # N parallel RUNs of a single runCount>1 click. The frontend instead
+    # generates and passes its own action_id explicitly for that case
+    # (runSingleItem/editBatchItem); falling back to this call's own
+    # new_job_id when absent makes a plain single-RUN continue its own
+    # standalone group, same as before action_id existed.
+    action_id = body.get("action_id") or new_job_id
+    _record_history_safely(body.get("user"), new_job_id, "local", engine_params["srcKeys"][0], action_id, params=params)
     return jsonify({"job_id": new_job_id}), 202
 
 
@@ -559,9 +575,14 @@ def aipoc_submit():
 
     _aipoc_task_dict[task_id] = {"access_token": access_token}
     # No durable per-image identity exists for an AIPoC-path job (task_id is
-    # in-memory only, lost on restart) -- use task_id itself, so this always
-    # records as its own entry rather than deduping against anything.
-    _record_history_safely(request.form.get("user"), task_id, "aipoc", task_id, params=params)
+    # in-memory only, lost on restart) -- action_id (see /continue's own
+    # comment on this) is what groups N parallel AIPoC submissions from one
+    # runCount>1 "Run" click together, falling back to this task's own id for
+    # a solo submission. Reused as image_key too here (nothing better to key
+    # on for this path), so a grouped submission's entries all land on the
+    # same hash field instead of each getting its own.
+    action_id = request.form.get("action_id") or task_id
+    _record_history_safely(request.form.get("user"), task_id, "aipoc", action_id, action_id, params=params)
     return jsonify({"task_id": task_id}), 202
 
 

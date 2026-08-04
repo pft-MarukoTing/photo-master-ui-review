@@ -43,7 +43,7 @@ def account_exists(username):
     return bool(pf_redis_client.sismember(USERS_SET_KEY, username))
 
 
-def record_history(username, job_id, path, image_key, params=None):
+def record_history(username, job_id, path, image_key, action_id, params=None):
     """image_key identifies "the same uploaded image" across an entire
     revise/continue chain -- a local-path job's resolved srcKeys[0] (stable
     across every continue of that same photo, since continue_job carries the
@@ -55,6 +55,19 @@ def record_history(username, job_id, path, image_key, params=None):
     piling up a new row per edit -- the history page always shows just each
     photo's latest status, not one row per edit ever made.
 
+    A single "Run" click with run_count > 1 (two-stage manual path --
+    runSingleItem/editBatchItem in app.js) submits N *separate*
+    /continue/<job_id> calls, one per RUN, each producing its own job_id --
+    without action_id, whichever call's response lands last would silently
+    overwrite the others right back out of history. action_id identifies
+    "one user action" so every RUN from it accumulates into the same entry's
+    `runs` list instead of clobbering each other: it's the prior job_id being
+    continued from (shared by every RUN of one action, since none of them
+    change what they're continuing from mid-action) for /continue, or just
+    the job's own id for /submit (run_count handled entirely server-side in
+    ONE job there, job_processor.py) and /aipoc/submit (no revise-chain
+    concept to group at all).
+
     params carries the full submitted settings (preset/image_quality/
     image_model/aspect_ratio/ai_photo_editing/run_qa) -- not just for display,
     but so the frontend's history page can resubmit a local-path job (revise
@@ -62,7 +75,27 @@ def record_history(username, job_id, path, image_key, params=None):
     with, without having to re-derive those from the job's own Redis hash.
     """
     key = USER_HISTORY_KEY_FORMAT.format(user=username)
-    entry = {"job_id": job_id, "path": path, "ts": time.time(), **(params or {})}
+    existing = None
+    existing_raw = pf_redis_client.hget(key, image_key)
+    if existing_raw:
+        try:
+            existing = json.loads(existing_raw)
+        except (TypeError, ValueError):
+            existing = None
+
+    if existing and existing.get("action_id") == action_id:
+        runs = existing.get("runs") or []
+        if job_id not in runs:
+            runs.append(job_id)
+        entry = {**existing, "runs": runs, "ts": time.time()}
+    else:
+        entry = {
+            "action_id": action_id,
+            "path": path,
+            "runs": [job_id],
+            "ts": time.time(),
+            **(params or {}),
+        }
     pf_redis_client.hset(key, image_key, json.dumps(entry))
     _prune_oldest(key)
 
