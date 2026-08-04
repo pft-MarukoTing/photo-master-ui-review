@@ -1235,15 +1235,67 @@
       color: var(--red);
     }
 
-    /* ── History page (Screen 4) -- rows reuse .batch-sidebar-item/.rc-media/
-       .rc-badge (defined above, batch sidebar) for the same thumbnail+badge
-       look, just laid out full-width instead of in a 280px column. ── */
+    /* ── Processing history: a slide-in drawer, not a full screen -- opened
+       over whatever's currently showing (upload/processing/results) via
+       openHistoryDrawer/closeHistoryDrawer (app.js), same
+       backdrop+close-button shape as .batch-sidebar's own narrow-viewport
+       drawer. Unlike that one, this is a drawer at every viewport width, not
+       just narrow ones -- History was never meant to replace the whole
+       page, just a panel the user glances at and dismisses. ── */
+    .history-drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0,0,0,.55);
+      display: none;
+    }
+    .history-drawer-backdrop.drawer-open { display: block; }
+    .history-drawer {
+      position: fixed;
+      top: var(--header-h);
+      right: 0;
+      bottom: 0;
+      width: min(420px, 90vw);
+      z-index: 1001;
+      background: var(--card);
+      border-left: 1px solid var(--border);
+      box-shadow: var(--shadow-lg);
+      padding: 20px;
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform .25s ease;
+    }
+    .history-drawer.drawer-open { transform: translateX(0); }
+    .history-drawer-close-btn {
+      position: absolute;
+      top: 20px;
+      right: 14px;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: none;
+      border-radius: 999px;
+      background: var(--card-2);
+      color: var(--text-2);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .history-drawer-close-btn:hover { color: var(--text); }
+    /* rows reuse .batch-sidebar-item/.rc-media/.rc-badge (defined above,
+       batch sidebar) for the same thumbnail+badge look, just laid out
+       full-width instead of in a 280px column. */
     .history-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
       margin-bottom: 20px;
+      /* Room for .history-drawer-close-btn (30px, inset 14px), same reasoning
+         as .batch-sidebar-header's own padding-right. */
+      padding-right: 36px;
     }
     .history-current-user { font-size: 14px; color: var(--text-3); }
     .history-list {
@@ -2310,21 +2362,24 @@
     </div>
   </section>
 
-  <!-- ══════════════════════════════════
-       SCREEN 4 — HISTORY
-  ══════════════════════════════════ -->
-  <section id="history-section" class="section">
-    <div class="container">
-      <div class="history-header">
-        <h2>處理紀錄</h2>
-        <span id="history-current-user" class="history-current-user"></span>
-      </div>
-      <ul id="history-list" class="history-list"></ul>
-      <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>
-    </div>
-  </section>
 
 </main>
+
+<!-- Processing history: a slide-in drawer (not a full screen -- opened over
+     whatever's currently showing, upload/processing/results alike) rather
+     than one of the section-toggle "screens" above. Toggled via
+     openHistoryDrawer/closeHistoryDrawer (app.js), same backdrop + close-
+     button + Escape/outside-click-to-dismiss shape as every modal below. -->
+<div class="history-drawer-backdrop" id="history-drawer-backdrop" hidden></div>
+<aside class="history-drawer" id="history-drawer">
+  <button class="history-drawer-close-btn" id="history-drawer-close-btn" type="button" aria-label="關閉">×</button>
+  <div class="history-header">
+    <h2>處理紀錄</h2>
+    <span id="history-current-user" class="history-current-user"></span>
+  </div>
+  <ul id="history-list" class="history-list"></ul>
+  <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>
+</aside>
 
 <!-- Error detail popup: opened when a failed batch card is clicked -->
 <div id="error-modal" class="error-modal" hidden>

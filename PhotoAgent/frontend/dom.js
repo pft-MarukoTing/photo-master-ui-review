@@ -3,8 +3,7 @@ window.PhotoAgentDom = (() => {
     sections: {
       upload: document.querySelector("#upload-section"),
       processing: document.querySelector("#processing-section"),
-      results: document.querySelector("#results-section"),
-      history: document.querySelector("#history-section")
+      results: document.querySelector("#results-section")
     },
     accountBadge: document.querySelector("#account-badge"),
     registerAccountBtn: document.querySelector("#register-account-btn"),
@@ -14,6 +13,11 @@ window.PhotoAgentDom = (() => {
     accountModalError: document.querySelector("#account-modal-error"),
     accountModalSkipBtn: document.querySelector("#account-modal-skip-btn"),
     accountModalCreateBtn: document.querySelector("#account-modal-create-btn"),
+    // Drawer, not a section.toggle screen -- see openHistoryDrawer/
+    // closeHistoryDrawer (app.js).
+    historyDrawer: document.querySelector("#history-drawer"),
+    historyDrawerBackdrop: document.querySelector("#history-drawer-backdrop"),
+    historyDrawerCloseBtn: document.querySelector("#history-drawer-close-btn"),
     historyCurrentUser: document.querySelector("#history-current-user"),
     historyList: document.querySelector("#history-list"),
     historyEmpty: document.querySelector("#history-empty"),

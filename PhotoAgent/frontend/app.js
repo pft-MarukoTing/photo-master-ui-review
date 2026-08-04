@@ -2772,9 +2772,28 @@
     }));
   }
 
+  // Opens the drawer over whatever's currently showing -- not a
+  // showSection() screen, since History is a panel the user glances at and
+  // dismisses, not a destination that replaces the whole page.
+  function openHistoryDrawer() {
+    if (els.historyDrawer) els.historyDrawer.classList.add("drawer-open");
+    if (els.historyDrawerBackdrop) {
+      els.historyDrawerBackdrop.hidden = false;
+      els.historyDrawerBackdrop.classList.add("drawer-open");
+    }
+  }
+
+  function closeHistoryDrawer() {
+    if (els.historyDrawer) els.historyDrawer.classList.remove("drawer-open");
+    if (els.historyDrawerBackdrop) {
+      els.historyDrawerBackdrop.classList.remove("drawer-open");
+      els.historyDrawerBackdrop.hidden = true;
+    }
+  }
+
   async function openHistoryPage() {
     historyViewToken += 1;
-    showSection("history");
+    openHistoryDrawer();
     const user = getCurrentUser();
     if (els.historyCurrentUser) els.historyCurrentUser.textContent = user || "";
     if (!user) {
@@ -2870,6 +2889,7 @@
   // job they've since stopped looking at.
   async function viewProcessingHistoryRecord(job) {
     const myToken = ++historyViewToken;
+    closeHistoryDrawer();
     showSection("results");
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
@@ -2924,6 +2944,7 @@
       showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
       return;
     }
+    closeHistoryDrawer();
 
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
@@ -3919,6 +3940,8 @@
     });
   }
   if (els.historyNavBtn) els.historyNavBtn.addEventListener("click", openHistoryPage);
+  if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
+  if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
   if (els.registerAccountBtn) els.registerAccountBtn.addEventListener("click", openAccountModal);
   if (els.accountModalSkipBtn) els.accountModalSkipBtn.addEventListener("click", closeAccountModal);
   if (els.accountModalCreateBtn) els.accountModalCreateBtn.addEventListener("click", handleCreateAccount);
@@ -3977,6 +4000,7 @@
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
+    if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);
