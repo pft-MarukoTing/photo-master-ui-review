@@ -14,7 +14,7 @@ from backend.services.template_params import get_engine_params_template
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
 
 
-def _record_history_safely(user, job_id, path, params=None):
+def _record_history_safely(user, job_id, path, image_key, params=None):
     """History bookkeeping must never fail the actual job submission it's
     attached to -- a bad/missing username here is a lost history row, not a
     500 for a job that otherwise queued/ran fine."""
@@ -25,7 +25,7 @@ def _record_history_safely(user, job_id, path, params=None):
             key: (params or {}).get(key)
             for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa")
         }
-        record_history(normalize_username(user), job_id, path, params=history_params)
+        record_history(normalize_username(user), job_id, path, image_key, params=history_params)
     except Exception:
         pass
 
@@ -107,7 +107,9 @@ def submit():
     engine_params = get_engine_params_template()
     engine_params["acts"][0]["params"] = params
     job_id = enqueue(engine_params, src_content=[image.read()])
-    _record_history_safely(request.form.get("user"), job_id, "local", params=params)
+    # enqueue() resolves srcKeys' "{msg_id}" placeholder in place -- this is
+    # a genuinely new upload, so srcKeys[0] is this job's own fresh S3 path.
+    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], params=params)
     return jsonify({"job_id": job_id}), 202
 
 
@@ -367,7 +369,11 @@ def continue_job(job_id):
     engine_params["srcKeys"] = prior["srcKeys"]
     engine_params["acts"][0]["params"] = params
     new_job_id = enqueue(engine_params, src_content=None)
-    _record_history_safely(body.get("user"), new_job_id, "local", params=params)
+    # srcKeys was carried forward from prior (unchanged, no "{msg_id}" left
+    # for enqueue() to substitute) -- same image identity as whatever job(s)
+    # this chain already recorded, so this overwrites that same history entry
+    # instead of adding a new one.
+    _record_history_safely(body.get("user"), new_job_id, "local", engine_params["srcKeys"][0], params=params)
     return jsonify({"job_id": new_job_id}), 202
 
 
@@ -552,7 +558,10 @@ def aipoc_submit():
         return jsonify({"error": f"remote task/run returned no taskId: {body}"}), 502
 
     _aipoc_task_dict[task_id] = {"access_token": access_token}
-    _record_history_safely(request.form.get("user"), task_id, "aipoc", params=params)
+    # No durable per-image identity exists for an AIPoC-path job (task_id is
+    # in-memory only, lost on restart) -- use task_id itself, so this always
+    # records as its own entry rather than deduping against anything.
+    _record_history_safely(request.form.get("user"), task_id, "aipoc", task_id, params=params)
     return jsonify({"task_id": task_id}), 202
 
 
