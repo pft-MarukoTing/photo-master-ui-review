@@ -2704,15 +2704,51 @@
   // "error"/still-processing states the batch sidebar already shows
   // per-image, just re-derived here since this list survives page reloads
   // (unlike the in-memory batch records that sidebar reads from).
+  // "今天"/"昨天" for the two most recent calendar days (local time), else
+  // "M月D日" -- jobs arrive newest-first (ts desc, see get_history/
+  // account.py), so consecutive entries sharing this label naturally cluster
+  // into one slot without needing to re-sort anything.
+  function formatHistoryDayLabel(ts) {
+    const d = new Date(ts * 1000);
+    const startOfDay = (date) => new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const diffDays = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+    if (diffDays === 0) return "今天";
+    if (diffDays === 1) return "昨天";
+    return `${d.getMonth() + 1}月${d.getDate()}日`;
+  }
+
   async function renderHistoryList(jobs) {
     if (!els.historyList) return;
     els.historyList.innerHTML = "";
     if (els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
     if (!jobs.length) return;
 
+    // One heading + grid per calendar day, cube tiles instead of full-width
+    // rows -- jobs is already grouped by construction (see this function's
+    // own doc above), so a fresh group starts only when the label changes.
+    let currentLabel = null;
+    let currentGrid = null;
     const rows = jobs.map((job) => {
+      const label = formatHistoryDayLabel(job.ts);
+      if (label !== currentLabel) {
+        currentLabel = label;
+        const group = document.createElement("div");
+        group.className = "history-day-group";
+        const heading = document.createElement("h3");
+        heading.className = "history-day-heading";
+        heading.textContent = label;
+        group.appendChild(heading);
+        currentGrid = document.createElement("ul");
+        currentGrid.className = "history-grid";
+        group.appendChild(currentGrid);
+        els.historyList.appendChild(group);
+      }
+
       const li = document.createElement("li");
-      li.className = "batch-sidebar-item processing";
+      // history-cube layers the square/grid-cell layout on top of
+      // batch-sidebar-item's existing status-driven styling (done/error/
+      // processing colors, dimming) -- reused as-is rather than duplicated.
+      li.className = "history-cube batch-sidebar-item processing";
       // Local-path jobs keep their srcKeys forever (see account.py), so the
       // original photo is available immediately -- no need to wait for the
       // status check below just to show *something* here. AIPoC-path jobs
@@ -2724,12 +2760,9 @@
       const referenceThumb = job.path === "local" ? `<img src="${sourceImageUrl(jobIds[0])}" alt="">` : "";
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
-        <div class="batch-sidebar-text">
-          <span>${job.preset || (job.runs && job.runs[0]) || job.job_id || ""}</span>
-          <span class="rc-badge">處理中</span>
-        </div>
+        <span class="rc-badge">處理中</span>
       `;
-      els.historyList.appendChild(li);
+      currentGrid.appendChild(li);
       return { job, li };
     });
 
@@ -2746,16 +2779,16 @@
         );
         const doneIdx = statuses.findIndex((s) => s.status === "success");
         if (doneIdx !== -1) {
-          li.className = "batch-sidebar-item done";
+          li.className = "history-cube batch-sidebar-item done";
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = jobIds.length > 1 ? `完成（${doneCount}/${jobIds.length}）` : "完成";
           if (media) media.innerHTML = `<img src="${resultImageUrl(jobIds[doneIdx], { path: job.path })}" alt="">`;
           li.addEventListener("click", () => viewHistoryRecord(job));
         } else if (statuses.every((s) => s.status === "error")) {
-          li.className = "batch-sidebar-item error";
+          li.className = "history-cube batch-sidebar-item error";
           if (badge) badge.textContent = "失敗";
           // Drop only the spinner -- keep the reference thumb (if any) so the
-          // row still shows a recognizable photo instead of going blank; the
+          // tile still shows a recognizable photo instead of going blank; the
           // badge/border already communicate the failure.
           media?.querySelector(".rc-spinner")?.remove();
         } else {
@@ -2766,7 +2799,7 @@
           li.addEventListener("click", () => viewProcessingHistoryRecord(job));
         }
       } catch {
-        li.className = "batch-sidebar-item error";
+        li.className = "history-cube batch-sidebar-item error";
         if (badge) badge.textContent = "無法取得狀態";
       }
     }));

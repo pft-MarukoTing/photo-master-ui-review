@@ -1298,16 +1298,65 @@
       padding-right: 36px;
     }
     .history-current-user { font-size: 14px; color: var(--text-3); }
+    /* One heading + grid per calendar day (see formatHistoryDayLabel/
+       renderHistoryList, app.js) -- .history-list itself just stacks the
+       day-groups, each of which owns its own heading + grid. */
     .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .history-day-heading {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-2);
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      margin: 0 0 10px;
+    }
+    /* Cube tiles instead of the old full-width rows -- a fixed 3 columns
+       (not auto-fill) so the row count stays consistent even at the
+       drawer's own narrowest width (90vw on a small phone). */
+    .history-grid {
       list-style: none;
       margin: 0;
       padding: 0;
-      display: flex;
-      flex-direction: column;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
     }
-    .history-list .batch-sidebar-item { padding: 12px; cursor: pointer; }
-    .history-list .rc-media { width: 64px; height: 64px; flex: 0 0 64px; border-radius: 10px; }
+    /* Layers the square/grid-cell layout on top of batch-sidebar-item's own
+       status-driven styling (also applied to every .history-cube -- see
+       renderHistoryList) -- done/error/processing colors and dimming are
+       reused as-is, not duplicated here. */
+    .history-cube {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--card-2);
+      box-shadow: var(--shadow-sm);
+    }
+    .history-cube .rc-media {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 0;
+    }
+    /* Overlaid on the photo's bottom-left corner instead of sitting beside
+       it (the old row layout's own arrangement) -- a cube has no room for
+       the badge next to the thumbnail. */
+    .history-cube .rc-badge {
+      position: absolute;
+      left: 6px;
+      bottom: 6px;
+      max-width: calc(100% - 12px);
+      background: rgba(9,9,11,.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+    }
     .history-empty { color: var(--text-3); font-size: 15px; }
 
     /* Centered toast shown while a download zip is being assembled --
@@ -2377,7 +2426,7 @@
     <h2>處理紀錄</h2>
     <span id="history-current-user" class="history-current-user"></span>
   </div>
-  <ul id="history-list" class="history-list"></ul>
+  <div id="history-list" class="history-list"></div>
   <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>
 </aside>
 
