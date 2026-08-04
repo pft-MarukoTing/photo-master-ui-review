@@ -412,13 +412,16 @@ window.PhotoAgentApi = (() => {
   // Re-reporting the same job by the same name is a no-op refresh, not an
   // error, so this never needs to check "did I already report this" first.
   // `note` is the reporter's optional free-text description of the issue
-  // (report-modal, app.js) -- absent entirely when left blank, same as
-  // every other optional field elsewhere in this file.
-  async function reportJob(user, jobId, path = "local", note = "") {
+  // (report-modal, app.js); `userPrompt` is the 補充指令 text the original
+  // submission actually used (lastSingleSelections.userPrompt, app.js) --
+  // there's nowhere server-side this could be looked up from otherwise, so
+  // the frontend has to hand it over at report time. Both absent entirely
+  // when blank, same as every other optional field elsewhere in this file.
+  async function reportJob(user, jobId, path = "local", note = "", userPrompt = "") {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/report`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user, job_id: jobId, path, note: note || undefined })
+      body: JSON.stringify({ user, job_id: jobId, path, note: note || undefined, user_prompt: userPrompt || undefined })
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -438,7 +441,7 @@ window.PhotoAgentApi = (() => {
       err.status = response.status;
       throw err;
     }
-    return data; // { reports: [{ job_id, user, path, ts }] }
+    return data; // { reports: [{ job_id, user, path, ts, note?, user_prompt? }] }
   }
 
   // One-shot status check (unlike pollJobStatus, which loops until done) --

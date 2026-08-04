@@ -1094,7 +1094,19 @@
   // describing the issue.
   function openReportModal() {
     if (!lastResult || !els.reportModal) return;
-    reportModalTarget = { jobId: lastResult.jobId, path: lastResult.path, runNumber: lastResult.runNumber };
+    // Whatever 補充指令 text actually produced the result currently on
+    // screen: currentBatchRecord's own effectivePrompt (its per-image
+    // override, or the batch-wide prompt) when a batch result is showing,
+    // else lastSingleSelections.userPrompt -- set by finishSingleFlow for a
+    // live single-image submission, or restored from job.user_prompt
+    // (restoreReviseSelections) when viewing a history/report record.
+    const userPrompt = currentBatchRecord ? effectivePrompt(currentBatchRecord) : (lastSingleSelections?.userPrompt || "");
+    reportModalTarget = {
+      jobId: lastResult.jobId,
+      path: lastResult.path,
+      runNumber: lastResult.runNumber,
+      userPrompt
+    };
     if (els.reportModalName) els.reportModalName.value = getCurrentUser() || "";
     if (els.reportModalNote) els.reportModalNote.value = "";
     if (els.reportModalError) els.reportModalError.hidden = true;
@@ -1123,7 +1135,7 @@
     const target = reportModalTarget;
     if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.disabled = true;
     try {
-      await reportJob(name, target.jobId, target.path, note);
+      await reportJob(name, target.jobId, target.path, note, target.userPrompt);
       reportedRuns.add(reportKeyFor(target.jobId, target.runNumber));
       // Only touch #report-btn if it's still showing the same RUN this
       // report was just submitted for -- lastResult may have already moved
@@ -3219,10 +3231,19 @@
       metaLine.textContent = `${formatReportTimestamp(r.ts)} · ${r.path === "aipoc" ? "AIPoC" : "Local"}`;
       info.appendChild(userLine);
       info.appendChild(metaLine);
+      // r.user_prompt (what the original submission actually asked for) is
+      // distinct from r.note (the reporter's own description of what's
+      // wrong) -- shown as its own labeled line so the two aren't confused.
+      if (r.user_prompt) {
+        const promptLine = document.createElement("span");
+        promptLine.className = "report-item-note";
+        promptLine.textContent = `補充指令：${r.user_prompt}`;
+        info.appendChild(promptLine);
+      }
       if (r.note) {
         const noteLine = document.createElement("span");
         noteLine.className = "report-item-note";
-        noteLine.textContent = r.note;
+        noteLine.textContent = `回報說明：${r.note}`;
         info.appendChild(noteLine);
       }
 
@@ -3232,8 +3253,12 @@
         closeReportsDrawer();
         // revealDetailExtra: true -- an admin checking a flagged case should
         // see the full QA verdict/recipe-adherence/prompts panel, normally
-        // debug-only, for this specific record.
-        viewHistoryRecord({ path: r.path, runs: [r.job_id] }, { revealDetailExtra: true });
+        // debug-only, for this specific record. user_prompt: r.user_prompt --
+        // a real history entry carries its own job.user_prompt (see
+        // restoreReviseSelections), but this minimal report-derived stand-in
+        // has nowhere else to get it from; without this, #prompt would come
+        // back empty even though the report captured the original 補充指令.
+        viewHistoryRecord({ path: r.path, runs: [r.job_id], user_prompt: r.user_prompt }, { revealDetailExtra: true });
       });
       els.reportsList.appendChild(li);
     });
@@ -3265,7 +3290,11 @@
   // kept items first, then whatever was rejected -- the original interleaving
   // isn't recoverable, only membership) and returns a recipeChecked/options
   // pair matching that restored order, for lastSingleSelections to apply.
-  function restoreReviseSelections(analysis) {
+  // userPrompt is the history entry's own stored job.user_prompt (absent for
+  // an entry recorded before that field existed, or if none was typed) --
+  // passed through as-is rather than read from analysis, since the user's
+  // raw typed instruction isn't part of it.
+  function restoreReviseSelections(analysis, userPrompt) {
     const rejectedRecipe = analysis.rejected_retouch_recipe || [];
     const rejectedPlan = analysis.rejected_corrections || [];
     const rejectedAxes = analysis.rejected_axes || [];
@@ -3289,7 +3318,7 @@
       lighting: styleOptions.lighting || "default",
       size: styleOptions.size || "default"
     };
-    return { analysis: restoredAnalysis, selections: { userPrompt: "", options, recipeChecked } };
+    return { analysis: restoredAnalysis, selections: { userPrompt: userPrompt || "", options, recipeChecked } };
   }
 
   // A "Run" click with run_count > 1 (two-stage manual path) submits N
@@ -3432,7 +3461,7 @@
       // when an AI edit actually ran, see pipeline.py's finish_stage) is a
       // more accurate fallback than a blind default for that one specifically.
       const extraInfo = firstDone.result["extra-info"] || {};
-      const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis);
+      const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis, job.user_prompt);
       singleFlowState = {
         analysis: restoredAnalysis,
         analyzeJobId: firstDone.jobId,

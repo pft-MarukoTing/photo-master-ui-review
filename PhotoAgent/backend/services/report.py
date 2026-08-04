@@ -27,19 +27,26 @@ def is_admin(username):
     return normalize_username(username).lower() in _ADMIN_USERS
 
 
-def record_report(username, job_id, path, note=None):
+def record_report(username, job_id, path, note=None, user_prompt=None):
     """One entry per (job_id, user) pair -- re-reporting the same job by the
-    same user just refreshes its timestamp (and note) in place, but two
-    different users reporting the same job both show up to the admin as
-    separate entries. note is the reporter's optional free-text description
-    of the issue -- omitted from the stored entry entirely when blank,
-    rather than stored as "" (keeps get_reports' output the same shape as
-    before note existed for every report that doesn't use it)."""
+    same user just refreshes its timestamp (and note/user_prompt) in place,
+    but two different users reporting the same job both show up to the
+    admin as separate entries. note is the reporter's optional free-text
+    description of the issue; user_prompt is whatever 補充指令 text the
+    original submission actually used (the frontend reads it off its own
+    in-memory record of that job, since neither is stored anywhere else the
+    report could look it up from -- the raw text a user types is never
+    persisted into the job's own analysis/result JSON). Both are omitted
+    from the stored entry entirely when blank, rather than stored as ""
+    (keeps get_reports' output the same shape as before either field existed
+    for every report that doesn't use them)."""
     name = normalize_username(username)
     field = f"{job_id}:{name}"
     entry = {"job_id": job_id, "path": path, "user": name, "ts": time.time()}
     if note:
         entry["note"] = note
+    if user_prompt:
+        entry["user_prompt"] = user_prompt
     pf_redis_client.hset(REPORTS_KEY, field, json.dumps(entry))
 
 

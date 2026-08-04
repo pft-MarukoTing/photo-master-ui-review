@@ -69,7 +69,7 @@ def record_history(username, job_id, path, image_key, action_id, params=None):
     concept to group at all).
 
     params carries the full submitted settings (preset/image_quality/
-    image_model/aspect_ratio/ai_photo_editing/run_qa) -- not just for display,
+    image_model/aspect_ratio/ai_photo_editing/run_qa/user_prompt) -- not just for display,
     but so the frontend's history page can resubmit a local-path job (revise
     the recipe/style and continue) using exactly what it was first processed
     with, without having to re-derive those from the job's own Redis hash.

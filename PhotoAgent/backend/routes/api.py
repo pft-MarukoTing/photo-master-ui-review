@@ -25,7 +25,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa")
+            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
@@ -136,7 +136,7 @@ def report_job():
     job_id = body.get("job_id")
     if not job_id:
         return jsonify({"error": "job_id is required"}), 400
-    record_report(name, job_id, body.get("path") or "local", note=body.get("note"))
+    record_report(name, job_id, body.get("path") or "local", note=body.get("note"), user_prompt=body.get("user_prompt"))
     return jsonify({"reported": True})
 
 
