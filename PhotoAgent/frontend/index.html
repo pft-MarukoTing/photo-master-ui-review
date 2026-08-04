@@ -1185,6 +1185,13 @@
     #notice-modal-msg { font-size: 18px; }
 
     /* ── Account badge/modal/history (account.js + app.js) ── */
+    /* Hidden outright (not via the "hidden" attribute JS toggles based on
+       account state, applyAccountUi -- an id-selector rule always beats the
+       browser's own [hidden]{display:none} UA rule, so this stays hidden
+       unconditionally regardless of what applyAccountUi sets). The
+       underlying account/login logic is untouched -- this only hides the
+       entry points into it. */
+    #register-account-btn, #history-logout-btn { display: none; }
     /* #register-account-btn keeps its text label at every width -- unlike
        #reload-batch-btn/#reset-btn (icon+label, collapse to
        icon-only under 560px via styles.css's ".header-actions .btn-label
@@ -1334,7 +1341,7 @@
     .history-drawer-close-btn {
       position: absolute;
       top: 20px;
-      right: 14px;
+      right: 6px;
       width: 30px;
       height: 30px;
       display: flex;
@@ -1344,8 +1351,6 @@
       border-radius: 999px;
       background: var(--card-2);
       color: var(--text-2);
-      font-size: 20px;
-      line-height: 1;
       cursor: pointer;
     }
     .history-drawer-close-btn:hover { color: var(--text); }
@@ -1354,24 +1359,36 @@
        full-width instead of in a 280px column. */
     .history-header {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      flex-direction: column;
+      gap: 4px;
       margin-bottom: 20px;
-      /* Room for .history-drawer-close-btn (30px, inset 14px), same reasoning
+      /* Room for .history-drawer-close-btn (30px, inset 6px), same reasoning
          as .batch-sidebar-header's own padding-right. */
       padding-right: 36px;
     }
-    .history-header-right {
+    .history-header-top {
       display: flex;
       align-items: center;
-      gap: 10px;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    /* Browser-default <h2> sizing (~1.5em+) left too little room next to
+       #history-clear-all-btn at the drawer's narrowest width (min(420px,
+       90vw)) -- "處理紀錄" wrapped mid-word into two lines instead of
+       shrinking to fit, since CJK text wraps between any two characters with
+       no whitespace needed. Fixed, smaller size + nowrap so the (always-
+       short, 4-char) title never wraps. */
+    .history-header h2 {
+      font-size: 20px;
+      margin: 0;
+      white-space: nowrap;
     }
     #history-clear-all-btn.btn {
       height: 28px;
       width: 28px;
       padding: 0;
       gap: 0;
+      flex-shrink: 0;
     }
     /* Red hover hint on the trash icon, same "this is destructive" cue as
        .history-cube-remove:hover on each individual tile's own × button. */
@@ -1380,7 +1397,18 @@
       background: rgba(178,42,42,.9);
       border-color: rgba(178,42,42,.9);
     }
-    .history-current-user { font-size: 14px; color: var(--text-3); }
+    /* Its own full-width subtitle line below .history-header-top now (not
+       squeezed into the same row as the title/button) -- still truncates
+       rather than wraps, for the rare case of a username wider than the
+       drawer itself. */
+    .history-current-user {
+      display: block;
+      font-size: 14px;
+      color: var(--text-3);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     /* One heading + grid per calendar day (see formatHistoryDayLabel/
        renderHistoryList, app.js) -- .history-list itself just stacks the
        day-groups, each of which owns its own heading + grid. */
@@ -2537,11 +2565,14 @@
      button + Escape/outside-click-to-dismiss shape as every modal below. -->
 <div class="history-drawer-backdrop" id="history-drawer-backdrop" hidden></div>
 <aside class="history-drawer" id="history-drawer">
-  <button class="history-drawer-close-btn" id="history-drawer-close-btn" type="button" aria-label="關閉">×</button>
+  <button class="history-drawer-close-btn" id="history-drawer-close-btn" type="button" aria-label="關閉">
+    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+      <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </button>
   <div class="history-header">
-    <h2>處理紀錄</h2>
-    <div class="history-header-right">
-      <span id="history-current-user" class="history-current-user"></span>
+    <div class="history-header-top">
+      <h2>處理紀錄</h2>
       <!-- Hidden whenever the list is empty (nothing to clear) -- toggled
            alongside #history-empty in renderHistoryList/
            removeHistoryCubeFromDom (app.js). Icon-only -- aria-label/title
@@ -2554,6 +2585,11 @@
         </svg>
       </button>
     </div>
+    <!-- Subtitle line, not squeezed into the same row as the title anymore
+         -- gets the drawer's full width to itself, so a long username
+         truncates far less often than it would sharing a row with "處理紀錄"
+         and the trash button. -->
+    <span id="history-current-user" class="history-current-user"></span>
   </div>
   <div id="history-list" class="history-list"></div>
   <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>
