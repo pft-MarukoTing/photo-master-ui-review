@@ -3230,7 +3230,10 @@
       li.appendChild(info);
       li.addEventListener("click", () => {
         closeReportsDrawer();
-        viewHistoryRecord({ path: r.path, runs: [r.job_id] });
+        // revealDetailExtra: true -- an admin checking a flagged case should
+        // see the full QA verdict/recipe-adherence/prompts panel, normally
+        // debug-only, for this specific record.
+        viewHistoryRecord({ path: r.path, runs: [r.job_id] }, { revealDetailExtra: true });
       });
       els.reportsList.appendChild(li);
     });
@@ -3377,7 +3380,16 @@
   // gateway is the only place that ever had it, and even its in-memory task
   // mapping doesn't survive a restart) -- those fall back to showBatchDoneMain
   // in its read-only (reviewable:false) mode instead.
-  async function viewHistoryRecord(job) {
+  // revealDetailExtra: true only for the admin reports drawer (see
+  // renderReportsList) -- lets an admin checking a flagged case see the
+  // normally debug-only #results-detail-extra panel (QA verdict, recipe
+  // adherence, prompts, ...) for that one record specifically, without
+  // flipping isDebugUiActive (and every other debug-only row/limit that
+  // gates) on for the rest of the session. Not persisted -- the very next
+  // viewHistoryRecord call (a different record) or resetApp() puts
+  // #results-detail-extra's visibility back to whatever isDebugUiActive
+  // alone says.
+  async function viewHistoryRecord(job, { revealDetailExtra = false } = {}) {
     historyViewToken += 1;
     const runs = await fetchAllHistoryRuns(job);
     if (!runs.length) {
@@ -3385,6 +3397,7 @@
       return;
     }
     closeHistoryDrawer();
+    if (resultsDetailExtra) resultsDetailExtra.hidden = !(isDebugUiActive || revealDetailExtra);
 
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
@@ -4262,6 +4275,11 @@
 
   function resetApp() {
     hideError();
+    // Undoes viewHistoryRecord's own revealDetailExtra override (admin
+    // reviewing a flagged case) -- a fresh upload afterward shouldn't
+    // inherit that one record's forced visibility for the rest of the
+    // session; back to whatever isDebugUiActive alone says.
+    if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebugUiActive;
     selectedFile = null;
     selectedFileSourceUrl = null;
     lastResult = null;
