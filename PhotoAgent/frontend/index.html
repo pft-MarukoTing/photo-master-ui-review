@@ -473,6 +473,21 @@
       top: auto;
       bottom: calc(100% + 8px);
     }
+    /* 生成張數 (run count) offers up to 20 options -- unlike every other
+       picker here (a handful of options at most), that list alone is tall
+       enough to run past the viewport/window regardless of open-upward.
+       Cap it to about 4 rows (.step-cb-label's 16.25px/1.5 line-height ~=
+       24px, .step-inline-list's own 10px gap between rows: 4*24 + 3*10 =
+       126px, rounded up) and let it scroll internally instead of resizing
+       the whole picker panel around however many options happen to exist.
+       Scoped to just these two run-count pickers (upload page + analysis-
+       preview page) -- every other .ap-style-panel list stays exactly as
+       tall as its content, unconstrained. */
+    #image-run-count-picker .step-inline-list,
+    #ap-run-count-picker .step-inline-list {
+      max-height: 150px;
+      overflow-y: auto;
+    }
     /* #ap-recipe-picker/#ap-style-picker are plain <button>s (open
        #ap-recipe-modal/#ap-style-modal, real overlay windows), not
        <details> -- no dropdown chevron to hint at. */
