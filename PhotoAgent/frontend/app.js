@@ -211,16 +211,11 @@
   }
 
   // Account bootstrap: ?user=NAME (account.js) identifies who's using the
-  // tool when linked in from elsewhere. Absent -> ask whether to create one
-  // (openAccountModal), since having an account is what lets processing
-  // history (openHistoryPage) get recorded/recalled at all. applyAccountUi()
-  // runs either way -- it's what shows #register-account-btn when there's no
-  // user yet, including right after this same modal gets skipped.
-  const initialUser = initFromUrl();
+  // tool when linked in from elsewhere. Not shown automatically when absent --
+  // applyAccountUi() just shows #register-account-btn instead, and clicking
+  // it (see the listener below) is what opens #account-modal on demand.
+  initFromUrl();
   applyAccountUi();
-  if (!initialUser) {
-    openAccountModal();
-  }
 
   // Upload-page option pills (#image-model-quality-picker etc.): a
   // details/summary popover (same visual language as the analysis-preview's

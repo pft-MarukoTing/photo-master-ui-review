@@ -1411,11 +1411,10 @@
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
       <span id="account-badge" class="account-badge" hidden></span>
-      <!-- Shown whenever there's no current account (including right after
-           "先略過"/skip on #account-modal) -- the only way back to that modal
-           once it's been dismissed, since skipping it doesn't otherwise leave
-           any way to create an account later. Mutually exclusive with
-           #account-badge/#history-nav-btn (see applyAccountUi, app.js). -->
+      <!-- Shown whenever there's no current account -- the only entry point
+           into #account-modal, which is never opened automatically. Mutually
+           exclusive with #account-badge/#history-nav-btn (see
+           applyAccountUi, app.js). -->
       <button id="register-account-btn" class="btn btn-secondary btn-sm" type="button">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2360,19 +2359,19 @@
   </div>
 </div>
 
-<!-- Account creation prompt: shown at startup whenever the URL has no
-     ?user=NAME (see initFromUrl/openAccountModal, app.js). Not a hard gate --
-     "先略過" (skip) just dismisses it, same shared backdrop-click/Escape
-     dismiss as every other modal here, and leaves the app fully usable
-     without an account/history. -->
+<!-- Account creation prompt: opened on demand by #register-account-btn (see
+     openAccountModal, app.js) whenever there's no current user -- not shown
+     automatically on load. "先略過" just dismisses it, same shared
+     backdrop-click/Escape dismiss as every other modal here, and leaves the
+     app fully usable without an account/history. -->
 <div id="account-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
     <div class="error-modal-hdr">
       <span id="account-modal-title" class="notice-modal-title">Photo<em>Master</em></span>
     </div>
-    <p class="error-modal-msg">尚未偵測到帳號。建立帳號後，我們會記錄你的處理紀錄，方便之後回顧。</p>
-    <input id="account-modal-input" class="account-modal-input" type="text" placeholder="輸入使用者名稱，例如 PEGGY_PENG" maxlength="64">
+    <p class="error-modal-msg">登入後，你修過的每張照片都會留下紀錄，隨時可以回來查看。</p>
+    <input id="account-modal-input" class="account-modal-input" type="text" placeholder="輸入你的名稱" maxlength="64">
     <p id="account-modal-error" class="account-modal-error" hidden></p>
     <div class="account-modal-actions">
       <button id="account-modal-skip-btn" class="btn btn-secondary btn-sm" type="button">先略過</button>
