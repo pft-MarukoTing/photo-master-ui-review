@@ -185,6 +185,13 @@ window.PhotoAgentApi = (() => {
     return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
 
+  // Local-path only -- see backend/routes/api.py's source_image() docstring
+  // for why there's no AIPoC equivalent. Used for the history page's
+  // before/after compare when revisiting a past job.
+  function sourceImageUrl(jobId) {
+    return `${BASE_URL}/api/photo-agent/source/${encodeURIComponent(jobId)}/image`;
+  }
+
   // ── Two-stage local flow: analyze now, review, /continue later ─────────
   // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
   // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
@@ -361,6 +368,7 @@ window.PhotoAgentApi = (() => {
     getJobResult,
     getJobRuns,
     resultImageUrl,
+    sourceImageUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,

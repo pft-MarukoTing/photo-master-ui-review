@@ -555,9 +555,18 @@ window.PhotoAgentResults = (() => {
     if (els.compareHint) els.compareHint.textContent = showGenerated ? "After" : "Before";
   }
 
-  function renderResult({ data, analysis, preset, imageModel }) {
+  function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }) {
     const qa = data.qualityCheck || null;
     const validation = analysis.crop_validation || null;
+
+    // hasOriginal is false only for historical playback of a job with no
+    // original photo to compare against (see viewHistoryRecord, app.js) --
+    // every live flow always has one, so this defaults to true and every
+    // existing caller is unaffected. Reset unconditionally (not just when
+    // false) so a later live render doesn't inherit a hidden state left over
+    // from an earlier historical one.
+    if (els.compareToggleBtn) els.compareToggleBtn.hidden = !hasOriginal;
+    if (els.compareFullscreenBtn) els.compareFullscreenBtn.hidden = !hasOriginal;
 
     setCompareView(true);
     els.generatedImg.src = data.image;

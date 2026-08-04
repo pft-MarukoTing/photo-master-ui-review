@@ -36,9 +36,15 @@ def account_exists(username):
     return bool(pf_redis_client.sismember(USERS_SET_KEY, username))
 
 
-def record_history(username, job_id, path, preset=None):
+def record_history(username, job_id, path, params=None):
+    """params carries the full submitted settings (preset/image_quality/
+    image_model/aspect_ratio/ai_photo_editing/run_qa) -- not just for display,
+    but so the frontend's history page can resubmit a local-path job (revise
+    the recipe/style and continue) using exactly what it was first processed
+    with, without having to re-derive those from the job's own Redis hash.
+    """
     key = USER_HISTORY_KEY_FORMAT.format(user=username)
-    entry = {"job_id": job_id, "path": path, "ts": time.time(), "preset": preset}
+    entry = {"job_id": job_id, "path": path, "ts": time.time(), **(params or {})}
     pf_redis_client.lpush(key, json.dumps(entry))
     pf_redis_client.ltrim(key, 0, HISTORY_MAX_LEN - 1)
 

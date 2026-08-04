@@ -7,6 +7,7 @@
     getJobResult,
     getJobRuns,
     resultImageUrl,
+    sourceImageUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,
@@ -47,6 +48,11 @@
   if (els.runSwitchNext) els.runSwitchNext.addEventListener("click", () => selectAdjacentRun(1));
 
   let selectedFile = null;
+  // Set only by viewHistoryRecord (local-path history revisit): selectedFile
+  // stays null there (there's no local File object for a job pulled back
+  // from the backend), so this is what showSingleResult/finishSingleFlow
+  // fall back to for the zip download's source entry instead.
+  let selectedFileSourceUrl = null;
   let previewUrl = "";
   // Bumped by every setSelectedFile/setSelectedFileBatch call so a stale,
   // still-converting HEIC preview can't clobber a newer selection's UI once
@@ -458,7 +464,13 @@
   }
 
   function populateTimingSection(timings = getTimings()) {
-    if (!timingList || !timingDetails || !timings.length) return;
+    if (!timingList || !timingDetails) return;
+    // Historical playback (viewHistoryRecord) has no locally-recorded timings
+    // for a job that may have run in a different session entirely -- hide the
+    // panel instead of leaving whatever an earlier live render populated it
+    // with (the live flow always calls this with a non-empty list, so this
+    // branch is otherwise never hit in practice).
+    if (!timings.length) { timingDetails.hidden = true; return; }
     timingList.innerHTML = "";
     let total = 0;
     timings.forEach(({ label, duration, children }) => {
@@ -562,7 +574,14 @@
     }
   }
 
-  function openInlineAnalysisPanel() {
+  // readOnly (used for historical playback, viewHistoryRecord) shows the same
+  // panel purely as information -- no revise/re-run controls, since that
+  // doesn't apply to a past job. Must disable (or re-enable) BEFORE
+  // moveOptionsCardTo, same reasoning as the comment below: once
+  // #ap-options-card-inline is moved out of #analysis-preview,
+  // setAnalysisPreviewDisabled's els.analysisPreview.querySelectorAll(...)
+  // can no longer find its controls to toggle.
+  function openInlineAnalysisPanel(readOnly = false) {
     moveAnalysisPreviewTo(els.resultsAnalysisSlot);
     // Before moveOptionsCardTo below -- setAnalysisPreviewDisabled re-enables
     // via els.analysisPreview.querySelectorAll(...), which only finds
@@ -570,13 +589,13 @@
     // while that card is still nested inside #analysis-preview. Called after
     // the move, it silently found nothing there anymore and those controls
     // stayed disabled forever after the first disable/regenerate cycle.
-    setAnalysisPreviewDisabled(false);
+    setAnalysisPreviewDisabled(readOnly);
     moveOptionsCardTo(els.resultsCanvasTop);
-    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = false;
+    if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = readOnly;
     // Moved out of #inline-analysis-actions (now lives at the end of
     // #ap-options-card-inline) -- toggled alongside it here since it lost
     // that shared parent's hidden gating.
-    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
+    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = readOnly;
     els.analysisPreview.hidden = false;
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     // Mirrored onto #results-body too -- #batch-sidebar's width split (see
@@ -845,8 +864,17 @@
   // "one more thing finished" tick, not told how many total, so callers
   // decide what "done" means at whatever scope they're aggregating at
   // (a single image's RUNs, or a whole batch's).
-  async function fetchImageDownloadData({ file, path }, runs, onItemDone) {
-    const sourceBuf = await file.arrayBuffer();
+  async function fetchImageDownloadData({ file, sourceUrl, path }, runs, onItemDone) {
+    // file (a local File object) is only ever absent for historical playback
+    // (viewHistoryRecord) -- sourceUrl (our own /source/<job_id>/image, local
+    // path only) is its fallback there, and if even that's unavailable
+    // (AIPoC-path history) sourceBuf stays null and the zip just omits the
+    // source photo entirely (see buildFlatImageFiles/buildNestedImageFiles).
+    const sourceBuf = file
+      ? await file.arrayBuffer()
+      : sourceUrl
+        ? await fetch(sourceUrl).then((response) => response.arrayBuffer())
+        : null;
     const runData = await Promise.all(runs.map(async (run) => {
       // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
       // that URL has no CORS headers, so a browser-side fetch() of it is
@@ -861,7 +889,7 @@
   // Normal mode: source + one result_N.png per RUN, flat under `prefix` --
   // no per-RUN subfolder, no JSON. Everyday users just want the pictures.
   function buildFlatImageFiles({ file, prefix }, sourceBuf, runData) {
-    const files = [{ name: prefix + (file.name || "source.jpg"), data: new Uint8Array(sourceBuf) }];
+    const files = sourceBuf ? [{ name: prefix + (file?.name || "source.jpg"), data: new Uint8Array(sourceBuf) }] : [];
     runData.forEach(({ run, imageBuf }) => {
       files.push({ name: prefix + resultFileNames(run.run || 1).image, data: new Uint8Array(imageBuf) });
     });
@@ -873,7 +901,7 @@
   // nested layout, kept for the internal analysis/QA data this mode exists
   // to expose.
   function buildNestedImageFiles({ file, prefix }, sourceBuf, runData) {
-    const files = [{ name: prefix + (file.name || "source.jpg"), data: new Uint8Array(sourceBuf) }];
+    const files = sourceBuf ? [{ name: prefix + (file?.name || "source.jpg"), data: new Uint8Array(sourceBuf) }] : [];
     runData.forEach(({ run, imageBuf }) => {
       const runPrefix = `${prefix}run_${run.run || 1}/`;
       const jsonBytes = new TextEncoder().encode(JSON.stringify(run.result, null, 2));
@@ -889,8 +917,8 @@
 
   // Builds one image's full set of download entries -- flat (images only)
   // in normal use, nested with the raw result/prompt JSON in --debug-ui mode.
-  async function buildImageFiles({ file, path, prefix = "" }, runs, onItemDone) {
-    const { sourceBuf, runData } = await fetchImageDownloadData({ file, path }, runs, onItemDone);
+  async function buildImageFiles({ file, sourceUrl, path, prefix = "" }, runs, onItemDone) {
+    const { sourceBuf, runData } = await fetchImageDownloadData({ file, sourceUrl, path }, runs, onItemDone);
     return isDebugUiActive
       ? buildNestedImageFiles({ file, prefix }, sourceBuf, runData)
       : buildFlatImageFiles({ file, prefix }, sourceBuf, runData);
@@ -909,7 +937,7 @@
     // lastResult was set with instead (see showSingleResult/syncRecordMirror).
     const current = runs.find((run) => run.run === lastResult.runNumber) || runs[0];
     let done = 0;
-    const files = await buildImageFiles({ file: lastResult.file, path: lastResult.path }, [current], () => {
+    const files = await buildImageFiles({ file: lastResult.file, sourceUrl: lastResult.sourceUrl, path: lastResult.path }, [current], () => {
       done += 1;
       if (onProgress) onProgress(done, 1);
     });
@@ -919,7 +947,7 @@
   async function buildAllRunsZip(onProgress) {
     const doneRuns = lastResultRuns().filter((run) => run.status === "done");
     let done = 0;
-    const files = await buildImageFiles({ file: lastResult.file, path: lastResult.path }, doneRuns, () => {
+    const files = await buildImageFiles({ file: lastResult.file, sourceUrl: lastResult.sourceUrl, path: lastResult.path }, doneRuns, () => {
       done += 1;
       if (onProgress) onProgress(done, doneRuns.length);
     });
@@ -1668,7 +1696,7 @@
         retryCount: 0
       };
 
-      lastResult = { file: selectedFile, resultText: result, jobId: finalJobId, runNumber: 1, path: processingPath };
+      lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: finalJobId, runNumber: 1, path: processingPath };
       updateDownloadLinks();
       renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
       populateTimingSection();
@@ -1790,7 +1818,7 @@
       retryCount: 0
     };
 
-    lastResult = { file: selectedFile, resultText: result, jobId: pick.jobId, runNumber: pick.run, path: singleFlowState.processingPath, runs };
+    lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: pick.jobId, runNumber: pick.run, path: singleFlowState.processingPath, runs };
     updateDownloadLinks(runs);
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
@@ -2598,9 +2626,7 @@
           li.className = "batch-sidebar-item done";
           if (badge) badge.textContent = "完成";
           if (media) media.innerHTML = `<img src="${resultImageUrl(job.job_id, { path: job.path })}" alt="">`;
-          li.addEventListener("click", () => {
-            window.open(resultImageUrl(job.job_id, { path: job.path }), "_blank");
-          });
+          li.addEventListener("click", () => viewHistoryRecord(job));
         } else if (status.status === "error") {
           li.className = "batch-sidebar-item error";
           if (badge) badge.textContent = "失敗";
@@ -2629,6 +2655,129 @@
     } catch {
       renderHistoryList([]);
     }
+  }
+
+  // Reconstructs the full single-photo results view (recipe/analysis/QA
+  // panel, RUN switcher, before/after compare, download) for a finished
+  // history entry, pulling this job's data fresh from the backend instead of
+  // in-memory batch/single state.
+  //
+  // Local-path jobs keep their srcKeys on the job's own Redis hash forever
+  // (see backend/services/account.py) -- there's nothing stopping a further
+  // revise/continue on one, so this seeds the single-image flow's own module
+  // state (singleRuns/singleFlowState/...) as if this job were the current
+  // session's result, then hands off to showSingleResult/
+  // backToProcessFromResults/finishSingleFlow completely unchanged. AIPoC-
+  // path jobs have no recoverable original file to resubmit with (the remote
+  // gateway is the only place that ever had it, and even its in-memory task
+  // mapping doesn't survive a restart) -- those fall back to showBatchDoneMain
+  // in its read-only (reviewable:false) mode instead.
+  async function viewHistoryRecord(job) {
+    let data;
+    try {
+      data = await getJobRuns(job.job_id, { path: job.path });
+    } catch (err) {
+      showNoticeModal(err.message || "無法取得這筆處理紀錄，請稍後再試。");
+      return;
+    }
+
+    // getJobRuns passes through whichever shape the backend returned:
+    // {runs: [...]} for a multi-RUN job, or the plain {image_url, result}
+    // shape for a single-RUN one -- normalize to one array either way so the
+    // rest of this can treat every job the same.
+    const rawRuns = Array.isArray(data.runs) && data.runs.length
+      ? data.runs
+      : [{ run: 1, image_url: data.image_url, result: data.result }];
+
+    // A live batch (if one happened to be running in this same session) has
+    // nothing to do with a historical record -- make sure its sidebar/
+    // batch-mode layout doesn't bleed into this single-photo view.
+    if (els.batchSidebar) els.batchSidebar.hidden = true;
+    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
+    currentBatchRecord = null;
+
+    if (job.path === "local") {
+      selectedFile = null;
+      selectedFileSourceUrl = sourceImageUrl(job.job_id);
+      singleRuns = rawRuns.map((r) => ({
+        run: r.run || 1, jobId: job.job_id, status: "done",
+        imageUrl: r.image_url, result: r.result, timings: [], error: null
+      }));
+      singleMirrorIndex = null;
+      const firstDone = singleRuns.find((r) => r.status === "done");
+      // job.* comes from the history entry (backend/services/account.py) --
+      // absent (rather than falsy-but-present) only for an entry recorded
+      // before that field existed. Falling back to undefined here would
+      // silently submit ai_photo_editing=false on continue (the cheap local-
+      // only pass, not a real AI edit) -- extra-info.image_model (set only
+      // when an AI edit actually ran, see pipeline.py's finish_stage) is a
+      // more accurate fallback than a blind default for that one specifically.
+      const extraInfo = firstDone.result["extra-info"] || {};
+      singleFlowState = {
+        analysis: firstDone.result.analysis,
+        analyzeJobId: job.job_id,
+        presetKey: job.preset || "natural",
+        preset: presets[job.preset] || presets.natural,
+        imageQuality: job.image_quality || extraInfo.image_quality || "medium",
+        imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
+        aspectRatio: job.aspect_ratio || "auto",
+        aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
+        runQa: job.run_qa != null ? job.run_qa : true,
+        processingPath: "local",
+        analyzeTimings: [],
+        useCombinedJob: false
+      };
+      lastSingleSelections = null;
+
+      const applyRender = () => {
+        els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
+        showSection("results");
+        showSingleResult();
+      };
+      if (els.originalImg.src === selectedFileSourceUrl && els.originalImg.complete) {
+        applyRender();
+      } else {
+        els.originalImg.onload = () => { els.originalImg.onload = null; applyRender(); };
+        els.originalImg.onerror = () => { els.originalImg.onload = null; applyRender(); };
+        els.originalImg.src = selectedFileSourceUrl;
+      }
+      return;
+    }
+
+    const runs = rawRuns.map((r) => ({
+      run: r.run || 1,
+      status: "done",
+      jobId: job.job_id,
+      imageUrl: r.image_url,
+      result: r.result,
+      timings: []
+    }));
+    const first = runs[0];
+    const extraInfo = first.result["extra-info"] || {};
+
+    const record = {
+      file: null,
+      previewUrl: null, // no recoverable original for an AIPoC-path job
+      jobId: first.jobId,
+      runNumber: first.run,
+      result: first.result,
+      imageUrl: first.imageUrl,
+      runs,
+      mirrorIndex: 0,
+      timings: [],
+      status: "done"
+    };
+
+    showSection("results");
+    showBatchDoneMain(record, {
+      preset: presets[job.preset] || presets.natural,
+      // job.ai_photo_editing is only absent for a history entry recorded
+      // before that field existed -- fall back to inferring it the same way
+      // renderResult's own "本機處理" label does.
+      aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
+      path: "aipoc",
+      reviewable: false
+    });
   }
 
   // Upload-page settings overlay -- same open/close shape as the error modal
@@ -3045,8 +3194,11 @@
   }
 
   // Selecting an adjacent run re-points the record's mirror fields at it and
-  // re-renders the whole report.
-  function renderRunSwitcher(record) {
+  // re-renders the whole report. `settings` is threaded straight through to
+  // the re-render so switching RUN tabs on a historical record (see
+  // viewHistoryRecord) keeps using that record's own settings instead of
+  // falling back to showBatchDoneMain's batchSettings default.
+  function renderRunSwitcher(record, settings = batchSettings) {
     const runs = record.runs || [];
     if (runs.length <= 1) {
       resetRunSwitcher();
@@ -3058,7 +3210,7 @@
     updateRunSwitcher(runs, current, (idx) => {
       record.mirrorIndex = idx;
       syncRecordMirror(record);
-      showBatchDoneMain(record);
+      showBatchDoneMain(record, settings);
     });
   }
 
@@ -3081,7 +3233,16 @@
 
   // Reuse the single-image report DOM (renderResult) for the selected record.
   // Set the original image first so resolveCropBoxForDisplay sees its dims.
-  function showBatchDoneMain(record) {
+  // `settings` defaults to the shared live batch state (batchSettings) so
+  // every existing call site (renderRunSwitcher/selectBatchRecord) is
+  // unaffected -- viewHistoryRecord is the only caller that passes its own,
+  // since a historical job's own preset/path/aiPhotoEditing has nothing to do
+  // with whatever batch might currently be live in this same session.
+  // settings.reviewable (default true) additionally gates whether this looks
+  // like a live, revisable result (back-to-process + inline analysis) or a
+  // read-only historical one -- re-running a job from another session
+  // through the live single/batch revise flow doesn't apply here.
+  function showBatchDoneMain(record, settings = batchSettings) {
     // Skip the teardown when the canvas is already showing -- this runs
     // again every time a RUN tab is clicked (same record, just a different
     // run), and hideAllBatchMainViews' restoreAnalysisPreviewHome() would
@@ -3091,11 +3252,15 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
-    renderRunSwitcher(record);
+    const reviewable = settings.reviewable !== false;
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = !reviewable;
+    renderRunSwitcher(record, settings);
 
+    const hasOriginal = !!record.previewUrl;
     const applyRender = () => {
-      els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
+      els.origDim.textContent = hasOriginal
+        ? `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`
+        : "-";
       // Report the models that actually ran, same label logic as single.
       const extraInfo = record.result["extra-info"] || {};
       const usedImageModelLabel = extraInfo.image_model
@@ -3109,27 +3274,44 @@
         model: usedModelLabel,
         usage: record.result.usage,
         qualityCheck: record.result.quality_check,
-        localOnly: !batchSettings.aiPhotoEditing,
+        localOnly: !settings.aiPhotoEditing,
         retryCount: 0
       };
       // Point the zip download at the currently-viewed image, same shape the
       // single flow sets so handleDownloadClick works here too. The extra
       // runs field switches the download to an all-runs bundle when this
-      // image was edited more than once.
-      lastResult = { file: record.file, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: batchSettings.path, runs: record.runs };
+      // image was edited more than once. sourceUrl is buildImageFiles'
+      // fallback for when there's no local File object (record.file) to read
+      // straight from -- see fetchImageDownloadData.
+      lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
       updateDownloadLinks(record.runs);
       renderResult({
         data,
         analysis: record.result.analysis,
-        preset: batchSettings.preset,
-        imageModel: data.model
+        preset: settings.preset,
+        imageModel: data.model,
+        hasOriginal
       });
       populateTimingSection(record.timings);
       // Analysis-preview shows by default alongside the canvas -- no-ops if
       // it's already open (e.g. just switching RUN tabs on the same record).
-      openInlineAnalysisForCurrentContext();
+      // Read-only historical playback shows the very same panel (recipe/
+      // style picks, diagnosis) but with every control disabled and no
+      // Run/Cancel actions -- re-running a past job through this flow
+      // doesn't apply, but the information itself is exactly what's asked
+      // for. Re-rendered on every RUN switch too, since each RUN of a
+      // multi-RUN job carries its own analysis.
+      if (reviewable) {
+        openInlineAnalysisForCurrentContext();
+      } else {
+        renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset });
+        openInlineAnalysisPanel(true);
+      }
     };
-    if (els.originalImg.src === record.previewUrl && els.originalImg.complete) {
+    if (!hasOriginal) {
+      els.originalImg.removeAttribute("src");
+      applyRender();
+    } else if (els.originalImg.src === record.previewUrl && els.originalImg.complete) {
       applyRender();
     } else {
       els.originalImg.onload = () => {
@@ -3351,6 +3533,7 @@
   function resetApp() {
     hideError();
     selectedFile = null;
+    selectedFileSourceUrl = null;
     lastResult = null;
     singleRuns = null;
     singleMirrorIndex = null;

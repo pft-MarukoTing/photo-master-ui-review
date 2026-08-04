@@ -14,14 +14,18 @@ from backend.services.template_params import get_engine_params_template
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
 
 
-def _record_history_safely(user, job_id, path, preset=None):
+def _record_history_safely(user, job_id, path, params=None):
     """History bookkeeping must never fail the actual job submission it's
     attached to -- a bad/missing username here is a lost history row, not a
     500 for a job that otherwise queued/ran fine."""
     if not user:
         return
     try:
-        record_history(normalize_username(user), job_id, path, preset=preset)
+        history_params = {
+            key: (params or {}).get(key)
+            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa")
+        }
+        record_history(normalize_username(user), job_id, path, params=history_params)
     except Exception:
         pass
 
@@ -103,7 +107,7 @@ def submit():
     engine_params = get_engine_params_template()
     engine_params["acts"][0]["params"] = params
     job_id = enqueue(engine_params, src_content=[image.read()])
-    _record_history_safely(request.form.get("user"), job_id, "local", preset=params["preset"])
+    _record_history_safely(request.form.get("user"), job_id, "local", params=params)
     return jsonify({"job_id": job_id}), 202
 
 
@@ -232,6 +236,37 @@ def result_image(job_id):
     return Response(image_bytes, mimetype="image/png")
 
 
+@api_bp.get("/source/<job_id>/image")
+def source_image(job_id):
+    """The original uploaded photo for job_id -- lets the history page (and
+    any other local-path job) show a real before/after compare instead of
+    just the generated result. srcKeys is retained on the job's own Redis
+    hash for as long as that hash lives (no TTL, same as every other job
+    field), independent of whether the job ever finished successfully, so
+    this works even for a job that's still processing or that errored.
+
+    AIPoC-path jobs have no local Redis job at all (dispatched externally),
+    so there's nothing this endpoint can serve for a task_id -- callers
+    should only use this for path="local" jobs.
+    """
+    info = get_job_info(job_id, keyToGet=["srcKeys"])
+    if info is None:
+        return jsonify({"error": "Job not found"}), 404
+    src_keys = info.get("srcKeys") or []
+    if not src_keys:
+        return jsonify({"error": "no source image for this job"}), 404
+
+    image_bytes, download_error = download_bytes(src_keys[0], job_id)
+    if download_error or image_bytes is None:
+        return jsonify({"error": f"failed to download source image: {download_error}"}), 502
+
+    # srcKeys is always a "src.jpg"-named key (see template_params.py) --
+    # store bytes are the raw upload regardless of the browser's own original
+    # content-type, so this is a fixed label, same as /result/<job_id>/image's
+    # own hardcoded "image/png" for its (always-PNG) output.
+    return Response(image_bytes, mimetype="image/jpeg")
+
+
 # ── Two-stage local flow: analyze now, review, /continue later ─────────────
 #
 # /submit + /result above run the full pipeline in one job. These routes let
@@ -332,7 +367,7 @@ def continue_job(job_id):
     engine_params["srcKeys"] = prior["srcKeys"]
     engine_params["acts"][0]["params"] = params
     new_job_id = enqueue(engine_params, src_content=None)
-    _record_history_safely(body.get("user"), new_job_id, "local", preset=params["preset"])
+    _record_history_safely(body.get("user"), new_job_id, "local", params=params)
     return jsonify({"job_id": new_job_id}), 202
 
 
@@ -517,7 +552,7 @@ def aipoc_submit():
         return jsonify({"error": f"remote task/run returned no taskId: {body}"}), 502
 
     _aipoc_task_dict[task_id] = {"access_token": access_token}
-    _record_history_safely(request.form.get("user"), task_id, "aipoc", preset=params["preset"])
+    _record_history_safely(request.form.get("user"), task_id, "aipoc", params=params)
     return jsonify({"task_id": task_id}), 202
 
 
