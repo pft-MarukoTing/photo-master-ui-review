@@ -8,7 +8,7 @@ from aiserver_utils.queue import get_job_info
 from image_tools import create_preview_bytes, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
-from backend.services.account import create_account, delete_history_entry, get_history, normalize_username, record_history
+from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail
 from backend.services.template_params import get_engine_params_template
 
@@ -109,6 +109,20 @@ def delete_history(user):
         return jsonify({"error": "image_key is required"}), 400
     delete_history_entry(name, image_key)
     return jsonify({"user": name, "deleted": image_key})
+
+
+@api_bp.delete("/history/<user>/all")
+def delete_all_history(user):
+    """Clears every entry in one call -- distinct from delete_history above
+    (which needs a specific image_key) rather than looping that endpoint
+    once per entry client-side, so "remove all" is one request/one Redis
+    round trip regardless of history size."""
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    clear_history(name)
+    return jsonify({"user": name, "deleted": "all"})
 
 
 @api_bp.post("/submit")

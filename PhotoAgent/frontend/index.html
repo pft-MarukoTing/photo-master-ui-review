@@ -1362,6 +1362,24 @@
          as .batch-sidebar-header's own padding-right. */
       padding-right: 36px;
     }
+    .history-header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    #history-clear-all-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+    }
+    /* Red hover hint on the trash icon, same "this is destructive" cue as
+       .history-cube-remove:hover on each individual tile's own × button. */
+    #history-clear-all-btn.btn:hover {
+      color: #fff;
+      background: rgba(178,42,42,.9);
+      border-color: rgba(178,42,42,.9);
+    }
     .history-current-user { font-size: 14px; color: var(--text-3); }
     /* One heading + grid per calendar day (see formatHistoryDayLabel/
        renderHistoryList, app.js) -- .history-list itself just stacks the
@@ -2522,7 +2540,20 @@
   <button class="history-drawer-close-btn" id="history-drawer-close-btn" type="button" aria-label="關閉">×</button>
   <div class="history-header">
     <h2>處理紀錄</h2>
-    <span id="history-current-user" class="history-current-user"></span>
+    <div class="history-header-right">
+      <span id="history-current-user" class="history-current-user"></span>
+      <!-- Hidden whenever the list is empty (nothing to clear) -- toggled
+           alongside #history-empty in renderHistoryList/
+           removeHistoryCubeFromDom (app.js). Icon-only -- aria-label/title
+           carry the "全部刪除" label since there's no visible text. -->
+      <button id="history-clear-all-btn" class="btn btn-outline btn-sm" type="button" hidden aria-label="全部刪除" title="全部刪除">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M4 7h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
   </div>
   <div id="history-list" class="history-list"></div>
   <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>

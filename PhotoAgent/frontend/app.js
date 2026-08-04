@@ -20,6 +20,7 @@
     createAccount,
     getHistory,
     deleteHistoryEntry,
+    clearHistory,
     getJobStatusOnce
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
@@ -2848,7 +2849,9 @@
     li.remove();
     if (grid && !grid.children.length) grid.parentElement?.remove(); // the day-group
     if (els.historyList && els.historyEmpty) {
-      els.historyEmpty.hidden = els.historyList.children.length > 0;
+      const empty = els.historyList.children.length === 0;
+      els.historyEmpty.hidden = !empty;
+      if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = empty;
     }
   }
 
@@ -2860,8 +2863,36 @@
     try {
       await deleteHistoryEntry(user, job.image_key);
       removeHistoryCubeFromDom(li);
+      // Nothing left to browse -- back out to a fresh upload screen instead
+      // of leaving the drawer open over whatever page happened to be
+      // showing behind it once its last entry is gone.
+      if (els.historyList && !els.historyList.children.length) {
+        closeHistoryDrawer();
+        resetApp();
+      }
     } catch (err) {
       showNoticeModal(err.message || "刪除紀錄失敗，請稍後再試。");
+    }
+  }
+
+  // One request (clearHistory) instead of looping handleDeleteHistoryEntry
+  // per tile -- always leaves the list empty afterward, so this can go
+  // straight to the same "nothing left to browse" reset that
+  // handleDeleteHistoryEntry only reaches conditionally.
+  async function handleClearAllHistory() {
+    const user = getCurrentUser();
+    if (!user) return;
+    const confirmed = await showConfirmModal("確定要刪除所有處理紀錄嗎？此操作無法復原。");
+    if (!confirmed) return;
+    try {
+      await clearHistory(user);
+      if (els.historyList) els.historyList.innerHTML = "";
+      if (els.historyEmpty) els.historyEmpty.hidden = false;
+      if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = true;
+      closeHistoryDrawer();
+      resetApp();
+    } catch (err) {
+      showNoticeModal(err.message || "刪除所有紀錄失敗，請稍後再試。");
     }
   }
 
@@ -2884,6 +2915,7 @@
     if (!els.historyList) return;
     els.historyList.innerHTML = "";
     if (els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
+    if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = jobs.length === 0;
     if (!jobs.length) return;
 
     // One heading + grid per calendar day, cube tiles instead of full-width
@@ -4165,6 +4197,7 @@
   if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
   if (els.historyLogoutBtn) els.historyLogoutBtn.addEventListener("click", handleLogout);
+  if (els.historyClearAllBtn) els.historyClearAllBtn.addEventListener("click", handleClearAllHistory);
   if (els.registerAccountBtn) els.registerAccountBtn.addEventListener("click", openAccountModal);
   if (els.accountModalSkipBtn) els.accountModalSkipBtn.addEventListener("click", closeAccountModal);
   if (els.accountModalCreateBtn) els.accountModalCreateBtn.addEventListener("click", handleCreateAccount);

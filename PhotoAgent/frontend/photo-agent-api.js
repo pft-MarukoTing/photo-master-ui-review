@@ -393,6 +393,20 @@ window.PhotoAgentApi = (() => {
     return data;
   }
 
+  // Clears every entry in one request instead of looping deleteHistoryEntry
+  // once per job.image_key -- see backend/routes/api.py's delete_all_history.
+  async function clearHistory(user) {
+    const response = await fetchWithRetry(
+      `${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}/all`,
+      { method: "DELETE" }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `刪除所有紀錄失敗：HTTP ${response.status}`);
+    }
+    return data;
+  }
+
   // One-shot status check (unlike pollJobStatus, which loops until done) --
   // used by the history page to render each past job's current state without
   // starting a whole poll loop for it.
@@ -424,6 +438,7 @@ window.PhotoAgentApi = (() => {
     createAccount,
     getHistory,
     deleteHistoryEntry,
+    clearHistory,
     getJobStatusOnce
   };
 })();

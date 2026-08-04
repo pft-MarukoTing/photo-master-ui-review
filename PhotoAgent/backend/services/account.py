@@ -144,3 +144,13 @@ def delete_history_entry(username, image_key):
     touched, only the history pointer to them."""
     key = USER_HISTORY_KEY_FORMAT.format(user=username)
     pf_redis_client.hdel(key, image_key)
+
+
+def clear_history(username):
+    """Removes every entry from a user's history in one call -- same "only
+    the history pointers, not the underlying jobs" scope as
+    delete_history_entry, just for all of them at once. Deleting the whole
+    hash key outright (vs. hdel-ing every field) is both one round trip and
+    avoids fetching the field list at all."""
+    key = USER_HISTORY_KEY_FORMAT.format(user=username)
+    pf_redis_client.delete(key)
