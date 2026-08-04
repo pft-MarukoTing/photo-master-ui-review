@@ -7,7 +7,9 @@
     getJobResult,
     getJobRuns,
     resultImageUrl,
+    resultThumbnailUrl,
     sourceImageUrl,
+    sourceThumbnailUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,
@@ -79,6 +81,19 @@
   // started with."
   let historyViewToken = 0;
   let previewUrl = "";
+  // Small client-side JPEG counterpart of previewUrl, used only for the
+  // "AI is working" processing-animation thumbnails (#proc-thumb,
+  // #canvas-loading-thumb) -- those animate (blur/pulse) for the whole
+  // duration of a job, so repeatedly compositing a multi-megapixel photo
+  // every frame is real, avoidable cost compared to a few-hundred-px
+  // thumbnail. previewUrl itself stays full-res: #original-img (crop math
+  // via naturalWidth/naturalHeight) and the drop-zone preview still need it.
+  let previewThumbUrl = "";
+  // Mirrors whatever #original-img.src currently is (previewThumbUrl for a
+  // fresh upload, or sourceThumbnailUrl(jobId) for a history revisit) so
+  // backToProcessFromResults' canvas-loading-thumb doesn't have to guess
+  // which of those two produced #original-img's current full-res src.
+  let originalImgThumbUrl = "";
   // Bumped by every setSelectedFile/setSelectedFileBatch call so a stale,
   // still-converting HEIC preview can't clobber a newer selection's UI once
   // its async conversion finally resolves.
@@ -797,6 +812,34 @@
     }
   }
 
+  // Small JPEG thumbnail for the processing-animation elements (see
+  // previewThumbUrl's own doc above) -- blob is already browser-renderable
+  // at this point (previewableBlob converted HEIC above), so createImageBitmap
+  // decodes it directly, no libheif involvement needed a second time. Returns
+  // null (never throws) on any failure -- callers fall back to the full-res
+  // preview, same as previewableBlob's own HEIC-conversion failure fallback.
+  const PROC_THUMB_MAX_SIDE = 320;
+
+  async function createProcThumbUrl(blob) {
+    try {
+      const bitmap = await createImageBitmap(blob);
+      const scale = Math.min(1, PROC_THUMB_MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+      const width = Math.max(1, Math.round(bitmap.width * scale));
+      const height = Math.max(1, Math.round(bitmap.height * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+      bitmap.close?.();
+
+      const thumbBlob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.82));
+      return thumbBlob ? URL.createObjectURL(thumbBlob) : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function setSelectedFile(file) {
     hideError();
     if (!isSupportedImageFile(file)) {
@@ -824,9 +867,19 @@
 
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = URL.createObjectURL(blobForPreview);
+    if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
+    previewThumbUrl = await createProcThumbUrl(blobForPreview);
+    if (token !== fileSelectionToken) {
+      // Superseded by a newer selection while the thumbnail was generating --
+      // that newer call already owns previewUrl/previewThumbUrl now, so only
+      // clean up this now-orphaned thumbnail blob, nothing else.
+      if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
+      return;
+    }
+    originalImgThumbUrl = previewThumbUrl;
 
     els.dzPreviewImg.src = previewUrl;
-    els.procThumb.src = previewUrl;
+    els.procThumb.src = previewThumbUrl || previewUrl;
     els.originalImg.src = previewUrl;
     els.dropZone.hidden = true;
     els.dzPreview.hidden = false;
@@ -1143,11 +1196,16 @@
 
   // Shared record shape for both a fresh batch (setSelectedFileBatch) and
   // photos appended to an already-selected one (addFilesToBatch).
-  function makeBatchRecord(file, previewBlob) {
+  function makeBatchRecord(file, previewBlob, thumbUrl) {
     return {
       localId: `f${nextBatchLocalId++}`,
       file,
       previewUrl: URL.createObjectURL(previewBlob),
+      // Small JPEG counterpart of previewUrl, for the batch "processing"
+      // main-thumb animation only -- see previewThumbUrl's own doc above for
+      // why. May be null (createProcThumbUrl failed) -- callers fall back to
+      // previewUrl itself.
+      thumbUrl,
       // pending -> analyzing -> analyzed -> processing -> done / error
       status: "pending",
       analysis: null,       // step-1 result (shown in the step-2 review panel)
@@ -1193,7 +1251,13 @@
     const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
     if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
 
-    batchRecords = images.map((file, i) => makeBatchRecord(file, previewBlobs[i]));
+    const thumbUrls = await Promise.all(previewBlobs.map((blob) => createProcThumbUrl(blob)));
+    if (token !== fileSelectionToken) {
+      thumbUrls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
+      return;
+    }
+
+    batchRecords = images.map((file, i) => makeBatchRecord(file, previewBlobs[i], thumbUrls[i]));
 
     els.dropZone.hidden = true;
     els.dzPreview.hidden = true;
@@ -1214,7 +1278,13 @@
     const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
     if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
 
-    batchRecords = batchRecords.concat(images.map((file, i) => makeBatchRecord(file, previewBlobs[i])));
+    const thumbUrls = await Promise.all(previewBlobs.map((blob) => createProcThumbUrl(blob)));
+    if (token !== fileSelectionToken) {
+      thumbUrls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
+      return;
+    }
+
+    batchRecords = batchRecords.concat(images.map((file, i) => makeBatchRecord(file, previewBlobs[i], thumbUrls[i])));
     renderDzMultiThumbs();
   }
 
@@ -1269,6 +1339,7 @@
     if (index === -1) return;
     batchRecords.splice(index, 1);
     if (record.previewUrl) URL.revokeObjectURL(record.previewUrl);
+    if (record.thumbUrl) URL.revokeObjectURL(record.thumbUrl);
 
     if (!batchRecords.length) {
       resetApp();
@@ -1286,7 +1357,10 @@
   // Drop batch state and restore the results view to its single-image default,
   // so the untouched single flow always starts from a known layout.
   function resetBatchState() {
-    batchRecords.forEach((r) => { if (r.previewUrl) URL.revokeObjectURL(r.previewUrl); });
+    batchRecords.forEach((r) => {
+      if (r.previewUrl) URL.revokeObjectURL(r.previewUrl);
+      if (r.thumbUrl) URL.revokeObjectURL(r.thumbUrl);
+    });
     batchRecords = [];
     batchSettings = null;
     currentBatchRecord = null;
@@ -1964,10 +2038,12 @@
     // Same thinking-rings animation as the initial upload-flow processing
     // screen (#processing-section's .proc-visual), replacing the photo
     // (hidden outright, not dimmed underneath) instead of navigating away
-    // from the results page -- sourced from the already-loaded original
-    // image rather than needing a fresh preview URL, since it's already
-    // showing in #original-img.
-    if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = els.originalImg.src;
+    // from the results page. originalImgThumbUrl mirrors whichever full-res
+    // source #original-img is currently showing (a fresh upload's own
+    // previewThumbUrl, or sourceThumbnailUrl(jobId) for a history revisit) --
+    // falls back to the full-res src itself only if that thumbnail somehow
+    // never got set.
+    if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
     try {
@@ -2816,7 +2892,7 @@
       // class already dims .rc-media img (see styles.css), so this reads as
       // "not final yet" rather than the actual done result.
       const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
-      const referenceThumb = job.path === "local" ? `<img src="${sourceImageUrl(jobIds[0])}" alt="">` : "";
+      const referenceThumb = job.path === "local" ? `<img src="${sourceThumbnailUrl(jobIds[0])}" alt="">` : "";
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
         <span class="rc-badge">處理中</span>
@@ -2852,7 +2928,13 @@
           li.className = "history-cube batch-sidebar-item done";
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = jobIds.length > 1 ? `完成（${doneCount}/${jobIds.length}）` : "完成";
-          if (media) media.innerHTML = `<img src="${resultImageUrl(jobIds[doneIdx], { path: job.path })}" alt="">`;
+          // Thumbnail route only exists for the local path (see
+          // photo-agent-api.js's resultThumbnailUrl) -- AIPoC-path jobs fall
+          // back to the full-res image, same as before this change.
+          const doneThumbSrc = job.path === "local"
+            ? resultThumbnailUrl(jobIds[doneIdx])
+            : resultImageUrl(jobIds[doneIdx], { path: job.path });
+          if (media) media.innerHTML = `<img src="${doneThumbSrc}" alt="">`;
           li.addEventListener("click", () => viewHistoryRecord(job));
         } else if (statuses.every((s) => s.status === "error")) {
           li.className = "history-cube batch-sidebar-item error";
@@ -3070,6 +3152,7 @@
       // the actual resolved job_id fetchAllHistoryRuns already looked up,
       // and every job in this action shares the same source image anyway.
       selectedFileSourceUrl = sourceImageUrl(runs[0].jobId);
+      originalImgThumbUrl = sourceThumbnailUrl(runs[0].jobId);
       singleRuns = runs;
       singleMirrorIndex = null;
       const firstDone = singleRuns[0];
@@ -3454,7 +3537,7 @@
     hideAllBatchMainViews();
     if (!els.batchMainLoading) return;
     els.batchMainLoading.hidden = false;
-    if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.previewUrl;
+    if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.thumbUrl || record.previewUrl;
     if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is working";
     const analyzing = record.status === "analyzing";
     if (els.batchMainLoadingTitle) {
@@ -3472,7 +3555,7 @@
     if (!els.batchMainLoading) return;
     els.batchMainLoading.hidden = false;
     els.batchMainLoading.classList.add("is-error");
-    if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.previewUrl;
+    if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.thumbUrl || record.previewUrl;
     if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master hit a snag";
     if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = "處理失敗";
     if (els.batchMainLoadingText) {
@@ -3495,7 +3578,7 @@
     if (els.batchMainLoading) {
       els.batchMainLoading.hidden = false;
       els.batchMainLoading.classList.add("is-analyzed");
-      if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.previewUrl;
+      if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.thumbUrl || record.previewUrl;
       if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is ready";
       if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = "已完成分析";
       if (els.batchMainLoadingText) {
@@ -3930,6 +4013,9 @@
     singleMirrorIndex = null;
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
+    if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
+    previewThumbUrl = "";
+    originalImgThumbUrl = "";
     resetBatchState();
 
     els.fileInput.value = "";

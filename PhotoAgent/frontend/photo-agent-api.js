@@ -191,11 +191,26 @@ window.PhotoAgentApi = (() => {
     return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
 
+  // Small JPEG counterpart of resultImageUrl -- local-path only (see
+  // backend/routes/api.py's result_thumbnail()). Used for the history grid,
+  // which only ever renders this at a few dozen CSS pixels and shouldn't pay
+  // for a full-res download to do it.
+  function resultThumbnailUrl(jobId, { run } = {}) {
+    const base = `${BASE_URL}/api/photo-agent/result/${encodeURIComponent(jobId)}/thumbnail`;
+    return run ? `${base}?run=${encodeURIComponent(run)}` : base;
+  }
+
   // Local-path only -- see backend/routes/api.py's source_image() docstring
   // for why there's no AIPoC equivalent. Used for the history page's
   // before/after compare when revisiting a past job.
   function sourceImageUrl(jobId) {
     return `${BASE_URL}/api/photo-agent/source/${encodeURIComponent(jobId)}/image`;
+  }
+
+  // Small JPEG counterpart of sourceImageUrl -- used for the history grid's
+  // still-processing tiles instead of downloading the full-res upload.
+  function sourceThumbnailUrl(jobId) {
+    return `${BASE_URL}/api/photo-agent/source/${encodeURIComponent(jobId)}/thumbnail`;
   }
 
   // ── Two-stage local flow: analyze now, review, /continue later ─────────
@@ -396,7 +411,9 @@ window.PhotoAgentApi = (() => {
     getJobResult,
     getJobRuns,
     resultImageUrl,
+    resultThumbnailUrl,
     sourceImageUrl,
+    sourceThumbnailUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,

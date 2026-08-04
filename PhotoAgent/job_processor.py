@@ -52,6 +52,29 @@ def derive_run_dst_keys(dst_key, run_index):
     ]
 
 
+def _write_result_artifacts(work_dir, result, suffix=''):
+    """Decode one finish_stage result into local files: the full-res PNG and
+    its JSON metadata, in the same order derive_dst_keys/derive_run_dst_keys
+    list their S3 keys, so callers can zip them directly into
+    upload_artifacts. (No thumbnail is generated here -- see
+    backend/routes/api.py's result_thumbnail(): which job/RUN of a multi-job
+    action or multi-run combined job actually ends up displayed by the
+    history list is only decided client-side after the fact, so
+    pre-generating one here would mostly go to waste. The thumbnail is
+    instead generated lazily on first request and cached back to S3.)"""
+    image_bytes = base64.b64decode(result["result_image"])
+
+    image_path = os.path.join(work_dir, f'0_res0_thumb_0{suffix}.png')
+    with open(image_path, 'wb') as f:
+        f.write(image_bytes)
+
+    json_path = os.path.join(work_dir, f'0_res0_thumb_1{suffix}.json')
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
+
+    return [image_path, json_path]
+
+
 class PhotoAgentJobProcessor:
     def __init__(self, artifact_store, logger, monitor_dst_dir='./tmp'):
         self.artifact_store = artifact_store
@@ -133,17 +156,10 @@ class PhotoAgentJobProcessor:
                 )
 
                 derived_dst_keys = derive_dst_keys(request["dst_key"])
-
-                result_image_path = os.path.join(work_dir, '0_res0_thumb_0.png')
-                with open(result_image_path, 'wb') as f:
-                    f.write(base64.b64decode(result["result_image"]))
-
-                result_json_path = os.path.join(work_dir, '0_res0_thumb_1.json')
-                with open(result_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
+                local_paths = _write_result_artifacts(work_dir, result)
 
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Pipeline done, uploading artifacts')
-                self.upload_artifacts(task_id, [result_image_path, result_json_path], derived_dst_keys)
+                self.upload_artifacts(task_id, local_paths, derived_dst_keys)
 
                 job_results = {f"{request['act_id']}_res0": {"cusKeys": derived_dst_keys}}
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Job results: {job_results}')
@@ -183,15 +199,10 @@ class PhotoAgentJobProcessor:
                 )
 
                 run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index)
-                result_image_path = os.path.join(work_dir, f'0_res0_thumb_0_run{run_index}.png')
-                with open(result_image_path, 'wb') as f:
-                    f.write(base64.b64decode(result["result_image"]))
-                result_json_path = os.path.join(work_dir, f'0_res0_thumb_1_run{run_index}.json')
-                with open(result_json_path, 'w', encoding='utf-8') as f:
-                    json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
+                local_paths = _write_result_artifacts(work_dir, result, suffix=f'_run{run_index}')
 
                 self.logger.info(task_id, f'[{EFFECT_NAME}] RUN {run_index + 1}/{run_count} done, uploading artifacts')
-                self.upload_artifacts(task_id, [result_image_path, result_json_path], run_dst_keys)
+                self.upload_artifacts(task_id, local_paths, run_dst_keys)
 
                 run_results.append({"cusKeys": run_dst_keys})
                 set_job_info(job_id=task_id, results={

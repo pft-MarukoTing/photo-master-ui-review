@@ -15,6 +15,11 @@ pillow_heif.register_heif_opener()
 
 VISION_PREVIEW_MAX_SIDE = 1024
 
+# Small JPEG variant used purely for fast-loading UI surfaces (history list
+# thumbnails) -- much smaller than VISION_PREVIEW_MAX_SIDE since these are
+# rendered at a few dozen CSS pixels, not analyzed by a model.
+HISTORY_THUMBNAIL_MAX_SIDE = 320
+
 
 # ── Bytes / encoding helpers ───────────────────────────────────────────────────
 
