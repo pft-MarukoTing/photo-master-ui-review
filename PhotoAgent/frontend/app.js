@@ -65,6 +65,18 @@
   // from the backend), so this is what showSingleResult/finishSingleFlow
   // fall back to for the zip download's source entry instead.
   let selectedFileSourceUrl = null;
+  // Bumped by every history navigation (openHistoryPage/viewHistoryRecord) --
+  // both lets a pending viewProcessingHistoryRecord poll (which can run for
+  // minutes) notice the user has since navigated elsewhere and skip its
+  // "done, render it" step, and lets finishSingleFlow's own completion
+  // (captured as its own snapshot of this token when it starts) recognize
+  // the user has since switched to a different record and skip re-applying
+  // ITS result to the now-unrelated screen -- unlike the batch flow's
+  // editBatchItem, which guards its own re-render with
+  // refreshIfSelected(record), the single-image flow has no per-record
+  // identity to check against, just "is the screen still showing what I
+  // started with."
+  let historyViewToken = 0;
   let previewUrl = "";
   // Bumped by every setSelectedFile/setSelectedFileBatch call so a stale,
   // still-converting HEIC preview can't clobber a newer selection's UI once
@@ -1538,6 +1550,16 @@
   // singleFlowState (set once by analyze) plus whatever the user currently
   // has checked/typed in the analysis-preview DOM.
   async function finishSingleFlow() {
+    // Snapshot of historyViewToken as of when THIS revise started -- if it's
+    // changed by the time (part of) this job's result comes back, the user
+    // has since switched to viewing a different record (viewHistoryRecord/
+    // viewProcessingHistoryRecord both bump it), and this job's result must
+    // NOT be applied to the screen: there's no per-record identity here (the
+    // batch flow guards its own re-render with refreshIfSelected(record)
+    // instead) to check against, just "is the screen still showing what this
+    // job started from."
+    const myHistoryToken = historyViewToken;
+    const isCurrent = () => historyViewToken === myHistoryToken;
     const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
@@ -1580,7 +1602,7 @@
     // is looking at an already-shown result.
     let resultsRevealed = false;
     const revealResultsIfNeeded = () => {
-      if (resultsRevealed) return;
+      if (resultsRevealed || !isCurrent()) return;
       resultsRevealed = true;
       if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
       showSection("results");
@@ -1594,10 +1616,18 @@
       // showSingleResult()/renderSingleRunSwitcher() already render a lone
       // RUN identically to how the old inline single-result code did
       // (renderSingleRunSwitcher hides the switcher whenever there's only one).
-      singleRuns = Array.from({ length: runCount }, (_, k) => ({
+      // Captured once here, then read/mutated as myRuns throughout this
+      // branch instead of the bare singleRuns identifier -- onRunDone (and
+      // the post-loop checks below) run after this async job's awaits, by
+      // which point singleRuns may have been reassigned to a totally
+      // different record's array (viewHistoryRecord). Reading the global
+      // fresh each time would silently write this job's results into (or
+      // read completion state from) that unrelated array.
+      const myRuns = Array.from({ length: runCount }, (_, k) => ({
         run: k + 1, jobId: null, status: "processing",
         imageUrl: null, result: null, timings: [], error: null
       }));
+      singleRuns = myRuns;
       singleMirrorIndex = null;
 
       let doneCount = 0;
@@ -1615,7 +1645,7 @@
           file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: (runData) => {
-            const run = singleRuns[runData.run - 1];
+            const run = myRuns[runData.run - 1];
             if (!run) return;
             run.jobId = runData.jobId;
             run.status = "done";
@@ -1633,32 +1663,37 @@
             ];
             doneCount += 1;
             updateRunProgress();
-            showSingleResult();
-            revealResultsIfNeeded();
+            // autoOpenPanel: false -- this fires per-RUN, not just once at
+            // the end (see showSingleResult's own doc on this param).
+            if (isCurrent()) { showSingleResult({ autoOpenPanel: false }); revealResultsIfNeeded(); }
           }
         });
       } catch (error) {
         // The job itself failed (e.g. analyze_stage threw) -- whichever RUNs
         // never got an onRunDone callback can't proceed, since there's no
         // shared analysis for them to have used anyway.
-        singleRuns.forEach((run) => {
+        myRuns.forEach((run) => {
           if (run.status !== "done") { run.status = "error"; run.error = friendlyError(error); }
         });
       }
 
-      if (!singleRuns.some((r) => r.status === "done")) {
-        throw new Error(singleRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
+      if (!myRuns.some((r) => r.status === "done")) {
+        throw new Error(myRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
       }
       // Remember the first successfully-done RUN's analysis + job id so a
       // later re-run (回到流程) goes through the normal two-stage continueJob
       // path instead of submitting a combined job again -- continueJob only
       // needs a job id whose Redis record has valid srcKeys, which this
-      // job's does.
-      const doneRun = singleRuns.find((r) => r.status === "done");
-      singleFlowState.analysis = doneRun.result.analysis;
-      singleFlowState.analyzeJobId = doneRun.jobId;
-      singleFlowState.useCombinedJob = false;
-      showSingleResult();
+      // job's does. Skipped entirely if stale: singleFlowState may by now
+      // belong to a different record, and must not be overwritten with this
+      // job's own.
+      if (isCurrent()) {
+        const doneRun = myRuns.find((r) => r.status === "done");
+        singleFlowState.analysis = doneRun.result.analysis;
+        singleFlowState.analyzeJobId = doneRun.jobId;
+        singleFlowState.useCombinedJob = false;
+        showSingleResult();
+      }
     } else if (runCount === 1) {
       // Single RUN, two-stage manual/AIPoC path: unchanged from before
       // RUN-count support existed, so the common case keeps its exact step
@@ -1708,25 +1743,48 @@
         retryCount: 0
       };
 
-      lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: finalJobId, runNumber: 1, path: processingPath };
-      updateDownloadLinks();
-      renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
-      populateTimingSection();
-      resetRunSwitcher();
-      // Analysis-preview shows by default alongside the canvas (same as
-      // showSingleResult/showBatchDoneMain -- this is the single-RUN direct
-      // path, which renders the result itself instead of going through
-      // showSingleResult).
-      openInlineAnalysisForCurrentContext();
+      // Skipped entirely if the user has since switched to viewing a
+      // different record -- this branch renders straight to the DOM (not
+      // through showSingleResult, which at least re-derives from whatever's
+      // currently global), so applying it unconditionally would overwrite
+      // that other record's canvas with this job's own result.
+      if (isCurrent()) {
+        // Same reset showSingleResult now does itself -- this branch renders
+        // straight to the DOM instead of going through it, so it needs its
+        // own copy: otherwise #batch-main-loading (left visible by
+        // viewProcessingHistoryRecord on some *other* still-processing
+        // history record) would stay stuck covering the screen instead of
+        // revealing this actual result.
+        const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+        if (!alreadyShowing) hideAllBatchMainViews();
+        if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
+
+        lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: finalJobId, runNumber: 1, path: processingPath };
+        updateDownloadLinks();
+        renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
+        populateTimingSection();
+        resetRunSwitcher();
+        // Analysis-preview shows by default alongside the canvas (same as
+        // showSingleResult/showBatchDoneMain -- this is the single-RUN direct
+        // path, which renders the result itself instead of going through
+        // showSingleResult).
+        openInlineAnalysisForCurrentContext();
+      }
     } else {
       // N independent RUNs from the same analysis, two-stage manual path:
       // each RUN is its own client-submitted job, run concurrently, and the
       // finished report mirrors the first one done (switchable via the RUN
       // tabs, same UI batch uses).
-      singleRuns = Array.from({ length: runCount }, (_, k) => ({
+      // Captured once (see the useCombinedJob branch's own comment on this) --
+      // runBatchPool itself is safe (its `items` param is this same array
+      // reference, not re-read from the global), but the post-loop checks
+      // below aren't unless they read myRuns instead of the (possibly
+      // reassigned-by-then) global singleRuns.
+      const myRuns = Array.from({ length: runCount }, (_, k) => ({
         run: k + 1, jobId: null, status: "processing",
         imageUrl: null, result: null, timings: [], error: null
       }));
+      singleRuns = myRuns;
       singleMirrorIndex = null;
 
       let doneCount = 0;
@@ -1740,20 +1798,22 @@
       updateRunProgress();
 
       const actionId = generateActionId();
-      await runBatchPool(singleRuns, async (run) => {
+      await runBatchPool(myRuns, async (run) => {
         await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
-        if (run.status === "done") {
-          showSingleResult();
+        // autoOpenPanel: false -- this fires per-RUN, not just once at the
+        // end (see showSingleResult's own doc on this param).
+        if (run.status === "done" && isCurrent()) {
+          showSingleResult({ autoOpenPanel: false });
           revealResultsIfNeeded();
         }
       }, POLL_CONCURRENCY);
 
-      if (!singleRuns.some((r) => r.status === "done")) {
-        throw new Error(singleRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
+      if (!myRuns.some((r) => r.status === "done")) {
+        throw new Error(myRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
       }
-      showSingleResult();
+      if (isCurrent()) showSingleResult();
     }
 
     revealResultsIfNeeded();
@@ -1805,12 +1865,38 @@
   // Renders whichever singleRuns entry is mirrored (first done, or the
   // user's chosen tab) into the shared results DOM -- the RUN-count > 1
   // counterpart of finishSingleFlow's single-RUN render tail.
-  function showSingleResult() {
+  // autoOpenPanel: false is for finishSingleFlow's own per-RUN progress
+  // calls during a runCount>1 revise (see its call sites) -- the panel was
+  // already closed when "Run" was clicked, so calling this with the default
+  // (true) on an early RUN's completion would re-trigger a second,
+  // overlapping backToProcessFromResults/finishSingleFlow session sharing
+  // this same singleRuns/singleFlowState while the original submission is
+  // still in flight, silently corrupting whichever one writes last. Every
+  // OTHER caller (viewing a record from History, switching RUN tabs, or the
+  // final call once every RUN has actually settled) wants the normal
+  // default -- this must NOT be a shared/global suppression flag, since
+  // showSingleResult is also how an entirely unrelated, already-finished
+  // record gets its own settings panel shown when the user switches to view
+  // it while some *other* record is still mid-revise in the background.
+  function showSingleResult({ autoOpenPanel = true } = {}) {
     const runs = singleRuns || [];
     const pick = (singleMirrorIndex != null && runs[singleMirrorIndex])
       ? runs[singleMirrorIndex]
       : (runs.find((x) => x.status === "done") || runs[0]);
     if (!pick || pick.status !== "done") return;
+
+    // Same "already showing" optimization as showBatchDoneMain (avoids
+    // needlessly tearing down -- and losing -- an already-open inline
+    // revise panel on every RUN-switch/completion re-render), and the same
+    // reason for it: #batch-main-loading (shown by viewProcessingHistoryRecord
+    // while a *different* history record is still processing) must never
+    // stay stuck covering the screen once a real "done" result needs to
+    // render here instead -- this function used to assume #results-canvas-row
+    // was already visible, which was always true before the History page
+    // existed but no longer is.
+    const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+    if (!alreadyShowing) hideAllBatchMainViews();
+    if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
 
     const { preset, aiPhotoEditing } = singleFlowState;
     const result = pick.result;
@@ -1837,8 +1923,9 @@
     populateTimingSection(pick.timings);
     renderSingleRunSwitcher();
     // Analysis-preview shows by default alongside the canvas -- no-ops if
-    // it's already open (e.g. just switching RUNs).
-    openInlineAnalysisForCurrentContext();
+    // it's already open (e.g. just switching RUNs). See autoOpenPanel's own
+    // doc above for when/why this is suppressed.
+    if (autoOpenPanel) openInlineAnalysisForCurrentContext();
   }
 
   // "檢視分析結果": lets the user come back to the recipe checklist/style
@@ -1887,6 +1974,11 @@
     } catch (error) {
       showError(friendlyError(error));
     } finally {
+      // Harmless even if the user has since switched to a different record
+      // (viewHistoryRecord/viewProcessingHistoryRecord reset these same two
+      // elements themselves whenever they show anything) -- either way, the
+      // end state is "loading hidden, frame visible", which is always
+      // correct for whatever is currently on screen.
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
       if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
@@ -2656,6 +2748,10 @@
           if (media) media.innerHTML = "";
         } else {
           if (badge) badge.textContent = "處理中";
+          // Still clickable -- otherwise there's no way to come back and
+          // check on a record that was still processing last time this list
+          // was fetched (see viewProcessingHistoryRecord).
+          li.addEventListener("click", () => viewProcessingHistoryRecord(job));
         }
       } catch {
         li.className = "batch-sidebar-item error";
@@ -2665,6 +2761,7 @@
   }
 
   async function openHistoryPage() {
+    historyViewToken += 1;
     showSection("history");
     const user = getCurrentUser();
     if (els.historyCurrentUser) els.historyCurrentUser.textContent = user || "";
@@ -2749,6 +2846,51 @@
     return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
   }
 
+  // Lets the user come back and check on a history record that was still
+  // processing last time the list was fetched -- previously such a row had
+  // no click handler at all, so there was no way back to it short of
+  // reopening the history page over and over until it finished. Shows the
+  // same "AI is working" placeholder the batch flow uses, then polls every
+  // RUN in this action and renders the real result (via viewHistoryRecord)
+  // as soon as any one of them succeeds. historyViewToken guards against the
+  // user navigating elsewhere while this poll (which can run for minutes) is
+  // still in flight -- it must not yank them back to a results page for a
+  // job they've since stopped looking at.
+  async function viewProcessingHistoryRecord(job) {
+    const myToken = ++historyViewToken;
+    showSection("results");
+    if (els.batchSidebar) els.batchSidebar.hidden = true;
+    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
+    currentBatchRecord = null;
+    // Nothing to review/revise yet, and #back-to-process-btn would otherwise
+    // fall through to backToProcessFromResults' stale singleFlowState.
+    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
+    // In case some OTHER record's live revise (finishSingleFlow) left these
+    // toggled -- showBatchMainLoading below hides #results-canvas-row
+    // entirely (its parent), so this is mostly cheap insurance, not load-
+    // bearing here the way it is in viewHistoryRecord.
+    if (els.canvasLoading) els.canvasLoading.hidden = true;
+    if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+    showBatchMainLoading({
+      previewUrl: job.path === "local" ? sourceImageUrl(job.job_id) : "",
+      status: "processing"
+    });
+
+    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+    try {
+      await Promise.any(jobIds.map((id) => pollJobStatus(id, { path: job.path })));
+    } catch {
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+      showBatchMainError({
+        previewUrl: job.path === "local" ? sourceImageUrl(job.job_id) : "",
+        error: "所有 RUN 皆處理失敗，請稍後再試。"
+      });
+      return;
+    }
+    if (historyViewToken !== myToken) return; // navigated away meanwhile
+    await viewHistoryRecord(job);
+  }
+
   // Reconstructs the full single-photo results view (recipe/analysis/QA
   // panel, RUN switcher, before/after compare, download) for a finished
   // history entry, pulling this job's data fresh from the backend instead of
@@ -2765,6 +2907,7 @@
   // mapping doesn't survive a restart) -- those fall back to showBatchDoneMain
   // in its read-only (reviewable:false) mode instead.
   async function viewHistoryRecord(job) {
+    historyViewToken += 1;
     const runs = await fetchAllHistoryRuns(job);
     if (!runs.length) {
       showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
@@ -2777,6 +2920,13 @@
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
+    // Some OTHER record's live revise (finishSingleFlow) may have left these
+    // toggled to show its own "AI is working" overlay -- reset unconditionally
+    // so that stale overlay never covers up whatever's actually being shown
+    // here (finishSingleFlow's own completion no longer touches the DOM at
+    // all once historyViewToken has moved on, see its own comment).
+    if (els.canvasLoading) els.canvasLoading.hidden = true;
+    if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
 
     if (job.path === "local") {
       selectedFile = null;
