@@ -21,6 +21,7 @@ window.PhotoAgentDom = (() => {
     historyCurrentUser: document.querySelector("#history-current-user"),
     historyList: document.querySelector("#history-list"),
     historyEmpty: document.querySelector("#history-empty"),
+    historyLogoutBtn: document.querySelector("#history-logout-btn"),
     fileInput: document.querySelector("#file-input"),
     dropZone: document.querySelector("#drop-zone"),
     dzPreview: document.querySelector("#dz-preview"),

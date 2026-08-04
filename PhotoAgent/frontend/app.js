@@ -22,7 +22,7 @@
     deleteHistoryEntry,
     getJobStatusOnce
   } = window.PhotoAgentApi;
-  const { initFromUrl, getCurrentUser, setCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
+  const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
@@ -2734,7 +2734,11 @@
     confirmModalHandlers = null;
   }
 
-  function showConfirmModal(message) {
+  // confirmLabel/danger default to the original delete-history-entry wording
+  // (btn-danger red "刪除") -- callers for a non-destructive confirmation
+  // (e.g. handleLogout) override both so the button doesn't misleadingly
+  // read "刪除" for an action that isn't deleting anything.
+  function showConfirmModal(message, { confirmLabel = "刪除", danger = true } = {}) {
     return new Promise((resolve) => {
       if (!els.confirmModal) {
         resolve(window.confirm(message));
@@ -2742,6 +2746,11 @@
       }
       clearConfirmModalWait(); // drop any stale listener from an abandoned prior prompt
       if (els.confirmModalMsg) els.confirmModalMsg.textContent = message;
+      if (els.confirmModalOkBtn) {
+        els.confirmModalOkBtn.textContent = confirmLabel;
+        els.confirmModalOkBtn.classList.toggle("btn-danger", danger);
+        els.confirmModalOkBtn.classList.toggle("btn-secondary", !danger);
+      }
       const finish = (result) => {
         clearConfirmModalWait();
         els.confirmModal.hidden = true;
@@ -2854,6 +2863,21 @@
     } catch (err) {
       showNoticeModal(err.message || "刪除紀錄失敗，請稍後再試。");
     }
+  }
+
+  // A full reload (rather than manually resetting every module-level piece
+  // of state -- batchRecords, singleFlowState, lastResult, ...) is the
+  // simplest way to guarantee none of it survives into the logged-out UI,
+  // same reasoning as clearCurrentUser only owning the ?user= identity
+  // itself, not the rest of the app's state (account.js).
+  async function handleLogout() {
+    const confirmed = await showConfirmModal(
+      "登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。確定要登出嗎？",
+      { confirmLabel: "登出", danger: false }
+    );
+    if (!confirmed) return;
+    clearCurrentUser();
+    window.location.reload();
   }
 
   async function renderHistoryList(jobs) {
@@ -4140,6 +4164,7 @@
   if (els.accountBadge) els.accountBadge.addEventListener("click", openHistoryPage);
   if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
+  if (els.historyLogoutBtn) els.historyLogoutBtn.addEventListener("click", handleLogout);
   if (els.registerAccountBtn) els.registerAccountBtn.addEventListener("click", openAccountModal);
   if (els.accountModalSkipBtn) els.accountModalSkipBtn.addEventListener("click", closeAccountModal);
   if (els.accountModalCreateBtn) els.accountModalCreateBtn.addEventListener("click", handleCreateAccount);

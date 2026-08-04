@@ -1302,12 +1302,35 @@
       background: var(--card);
       border-left: 1px solid var(--border);
       box-shadow: var(--shadow-lg);
-      padding: 20px;
+      /* Extra bottom room (vs. the uniform 20px everywhere else) so
+         #history-logout-btn -- absolutely positioned against this box, not
+         part of the scrolling flow -- never sits on top of the last row of
+         #history-list/#history-empty's own text. */
+      padding: 20px 20px 64px;
       overflow-y: auto;
       transform: translateX(100%);
       transition: transform .25s ease;
     }
     .history-drawer.drawer-open { transform: translateX(0); }
+    /* Anchored to .history-drawer's own box (its nearest positioned
+       ancestor, itself position:fixed) rather than scrolling with
+       #history-list/#history-empty -- stays pinned at the drawer's visual
+       bottom-right corner no matter how far the list is scrolled. Sized down
+       from the default .btn-sm (38px) to the same compact 32px footprint
+       #account-badge/#reset-btn already use in the header -- this is a
+       low-priority utility action in the corner of a drawer, not a primary
+       action, so it shouldn't be the biggest thing in view. */
+    .history-logout-btn {
+      position: absolute;
+      right: 20px;
+      bottom: 20px;
+      z-index: 1;
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+    }
+    .history-logout-btn svg { width: 12px; height: 12px; }
     .history-drawer-close-btn {
       position: absolute;
       top: 20px;
@@ -2503,6 +2526,17 @@
   </div>
   <div id="history-list" class="history-list"></div>
   <p id="history-empty" class="history-empty" hidden>目前尚無處理紀錄。</p>
+  <!-- Anchored to #history-drawer itself (position:absolute against its
+       position:fixed box), not to the scrolling content -- stays pinned at
+       the drawer's own bottom-right corner regardless of how far
+       #history-list is scrolled, instead of scrolling away with it. -->
+  <button id="history-logout-btn" class="btn btn-secondary btn-sm history-logout-btn" type="button">
+    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+      <path d="M15 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M10 16l5-4-5-4M15 12H3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span class="btn-label">登出</span>
+  </button>
 </aside>
 
 <!-- Error detail popup: opened when a failed batch card is clicked -->

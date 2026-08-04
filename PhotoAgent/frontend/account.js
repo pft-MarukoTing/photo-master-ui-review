@@ -31,5 +31,16 @@ window.PhotoAgentAccount = (() => {
     window.history.replaceState({}, "", url);
   }
 
-  return { initFromUrl, getCurrentUser, setCurrentUser, normalizeUsername };
+  // Mirror image of setCurrentUser -- drops the ?user= identity so a
+  // refresh/bookmark/share of this tab no longer carries it either. Callers
+  // still need to reload/re-render the app themselves afterward (this module
+  // only owns the identity, not the rest of the app's state).
+  function clearCurrentUser() {
+    currentUser = null;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("user");
+    window.history.replaceState({}, "", url);
+  }
+
+  return { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername };
 })();
