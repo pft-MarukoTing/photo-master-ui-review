@@ -17,6 +17,7 @@
     analyzeAipocBatch,
     createAccount,
     getHistory,
+    deleteHistoryEntry,
     getJobStatusOnce
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
@@ -2644,6 +2645,39 @@
     if (els.noticeModal) els.noticeModal.hidden = true;
   }
 
+  // App-styled stand-in for window.confirm() -- same backdrop+box shape as
+  // the modals above, resolving true/false instead of blocking the thread.
+  // Backdrop-click/Escape (wired in the shared modal-dismiss block below)
+  // resolve false, same as Cancel.
+  let confirmModalHandlers = null;
+
+  function clearConfirmModalWait() {
+    if (!confirmModalHandlers) return;
+    els.confirmModalOkBtn?.removeEventListener("click", confirmModalHandlers.ok);
+    els.confirmModalCancelBtn?.removeEventListener("click", confirmModalHandlers.cancel);
+    confirmModalHandlers = null;
+  }
+
+  function showConfirmModal(message) {
+    return new Promise((resolve) => {
+      if (!els.confirmModal) {
+        resolve(window.confirm(message));
+        return;
+      }
+      clearConfirmModalWait(); // drop any stale listener from an abandoned prior prompt
+      if (els.confirmModalMsg) els.confirmModalMsg.textContent = message;
+      const finish = (result) => {
+        clearConfirmModalWait();
+        els.confirmModal.hidden = true;
+        resolve(result);
+      };
+      confirmModalHandlers = { ok: () => finish(true), cancel: () => finish(false) };
+      els.confirmModalOkBtn?.addEventListener("click", confirmModalHandlers.ok);
+      els.confirmModalCancelBtn?.addEventListener("click", confirmModalHandlers.cancel);
+      els.confirmModal.hidden = false;
+    });
+  }
+
   // Account creation prompt -- shown at startup whenever ?user= is absent
   // (see the bootstrap call near applyDebugUiVisibility above). Skipping just
   // closes it; the app stays fully usable without an account, just without
@@ -2717,6 +2751,31 @@
     return `${d.getMonth() + 1}月${d.getDate()}日`;
   }
 
+  // Removes one tile from the DOM after a successful delete -- also drops
+  // its now-possibly-empty day-group heading, and shows the empty state if
+  // that was the last entry left, without needing to re-fetch the whole list.
+  function removeHistoryCubeFromDom(li) {
+    const grid = li.parentElement;
+    li.remove();
+    if (grid && !grid.children.length) grid.parentElement?.remove(); // the day-group
+    if (els.historyList && els.historyEmpty) {
+      els.historyEmpty.hidden = els.historyList.children.length > 0;
+    }
+  }
+
+  async function handleDeleteHistoryEntry(job, li) {
+    const user = getCurrentUser();
+    if (!user || !job.image_key) return;
+    const confirmed = await showConfirmModal("確定要刪除這筆處理紀錄嗎？");
+    if (!confirmed) return;
+    try {
+      await deleteHistoryEntry(user, job.image_key);
+      removeHistoryCubeFromDom(li);
+    } catch (err) {
+      showNoticeModal(err.message || "刪除紀錄失敗，請稍後再試。");
+    }
+  }
+
   async function renderHistoryList(jobs) {
     if (!els.historyList) return;
     els.historyList.innerHTML = "";
@@ -2761,8 +2820,19 @@
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
         <span class="rc-badge">處理中</span>
+        <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
       `;
       currentGrid.appendChild(li);
+      const removeBtn = li.querySelector(".history-cube-remove");
+      if (removeBtn) {
+        removeBtn.addEventListener("click", (e) => {
+          // Stop this from also bubbling into the tile's own click handler
+          // (viewHistoryRecord/viewProcessingHistoryRecord), attached below
+          // once the status check resolves.
+          e.stopPropagation();
+          handleDeleteHistoryEntry(job, li);
+        });
+      }
       return { job, li };
     });
 
@@ -3972,6 +4042,11 @@
       if (e.target.dataset.close) closeNoticeModal();
     });
   }
+  if (els.confirmModal) {
+    els.confirmModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) confirmModalHandlers?.cancel();
+    });
+  }
   if (els.historyNavBtn) els.historyNavBtn.addEventListener("click", openHistoryPage);
   if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
@@ -4026,6 +4101,7 @@
     if (e.key !== "Escape") return;
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
     if (els.noticeModal && !els.noticeModal.hidden) closeNoticeModal();
+    if (els.confirmModal && !els.confirmModal.hidden) confirmModalHandlers?.cancel();
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();

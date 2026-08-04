@@ -360,7 +360,22 @@ window.PhotoAgentApi = (() => {
     if (!response.ok) {
       throw new Error(data.error || `取得處理紀錄失敗：HTTP ${response.status}`);
     }
-    return data; // { user, jobs: [{ job_id, path, ts, preset }] }
+    return data; // { user, jobs: [{ job_id, path, ts, preset, image_key }] }
+  }
+
+  // imageKey (job.image_key from getHistory) identifies which entry to
+  // remove -- it's an S3 key path (contains "/"), so it's a query param
+  // rather than a URL path segment.
+  async function deleteHistoryEntry(user, imageKey) {
+    const response = await fetchWithRetry(
+      `${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}?image_key=${encodeURIComponent(imageKey)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `刪除紀錄失敗：HTTP ${response.status}`);
+    }
+    return data;
   }
 
   // One-shot status check (unlike pollJobStatus, which loops until done) --
@@ -391,6 +406,7 @@ window.PhotoAgentApi = (() => {
     analyzeAipocBatch,
     createAccount,
     getHistory,
+    deleteHistoryEntry,
     getJobStatusOnce
   };
 })();

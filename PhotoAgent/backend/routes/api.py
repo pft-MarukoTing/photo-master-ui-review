@@ -7,7 +7,7 @@ from flask import Blueprint, Response, current_app, jsonify, request
 from aiserver_utils.queue import get_job_info
 from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
-from backend.services.account import create_account, get_history, normalize_username, record_history
+from backend.services.account import create_account, delete_history_entry, get_history, normalize_username, record_history
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes
 from backend.services.template_params import get_engine_params_template
 
@@ -92,6 +92,22 @@ def history(user):
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     return jsonify({"user": name, "jobs": get_history(name)})
+
+
+@api_bp.delete("/history/<user>")
+def delete_history(user):
+    # image_key is an S3 key path (contains "/"), so it comes as a query
+    # param instead of a URL path segment -- encoding a literal "/" into one
+    # path segment is inconsistently handled across WSGI servers.
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    image_key = request.args.get("image_key")
+    if not image_key:
+        return jsonify({"error": "image_key is required"}), 400
+    delete_history_entry(name, image_key)
+    return jsonify({"user": name, "deleted": image_key})
 
 
 @api_bp.post("/submit")

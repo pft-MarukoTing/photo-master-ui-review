@@ -1117,6 +1117,11 @@
     @keyframes rc-spin { to { transform: rotate(360deg); } }
     .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .error-modal[hidden] { display: none; }
+    /* #confirm-modal can be triggered from inside the history drawer (its
+       delete button) -- the drawer itself sits at z-index 1001 (see
+       .history-drawer below), above every other .error-modal-based popup, so
+       this needs its own higher stacking order to actually show on top of it. */
+    #confirm-modal { z-index: 1002; }
     .error-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
     .error-modal-box {
       position: relative; width: min(440px, calc(100vw - 40px));
@@ -1357,6 +1362,33 @@
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
     }
+    /* Top-right corner, opposite the badge (bottom-left) -- deletes just
+       this history entry (see handleDeleteHistoryEntry, app.js); the job(s)
+       it points to aren't touched, only the history pointer. Always visible
+       (not hover-revealed like .dz-thumb-remove) since these tiles are small
+       enough that a hover-only target would be hard to find/hit. */
+    .history-cube-remove {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 20px;
+      height: 20px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background .15s, transform .15s;
+    }
+    .history-cube-remove:hover { background: rgba(220,60,60,.85); transform: scale(1.08); }
     .history-empty { color: var(--text-3); font-size: 15px; }
 
     /* Centered toast shown while a download zip is being assembled --
@@ -2480,6 +2512,26 @@
     <div class="account-modal-actions">
       <button id="account-modal-skip-btn" class="btn btn-secondary btn-sm" type="button">先略過</button>
       <button id="account-modal-create-btn" class="btn btn-grad btn-sm" type="button">建立帳號</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic in-app confirm popup (same backdrop+box pattern as #notice-modal
+     above) -- shown by showConfirmModal(message) in app.js wherever the app
+     used to fall back to window.confirm(), e.g. history-record deletion.
+     Resolves true/false depending on which action button was pressed;
+     backdrop-click/Escape (the same shared dismiss every other modal here
+     gets) resolves false, same as Cancel. -->
+<div id="confirm-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="error-modal-hdr">
+      <span id="confirm-modal-title" class="notice-modal-title">Photo<em>Master</em></span>
+    </div>
+    <p id="confirm-modal-msg" class="error-modal-msg"></p>
+    <div class="account-modal-actions">
+      <button id="confirm-modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">取消</button>
+      <button id="confirm-modal-ok-btn" class="btn btn-danger btn-sm" type="button">刪除</button>
     </div>
   </div>
 </div>

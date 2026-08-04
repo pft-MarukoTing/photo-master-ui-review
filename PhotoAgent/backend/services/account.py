@@ -124,10 +124,23 @@ def get_history(username, limit=50):
     key = USER_HISTORY_KEY_FORMAT.format(user=username)
     raw_entries = pf_redis_client.hgetall(key)
     entries = []
-    for raw in raw_entries.values():
+    for field, raw in raw_entries.items():
         try:
-            entries.append(json.loads(raw))
+            entry = json.loads(raw)
         except (TypeError, ValueError):
             continue
+        # image_key (the hash field itself, not part of the stored value) --
+        # the frontend needs this back to identify which entry to delete
+        # (delete_history_entry below), since it's otherwise never exposed.
+        entry["image_key"] = field.decode() if isinstance(field, bytes) else field
+        entries.append(entry)
     entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
     return entries[:limit]
+
+
+def delete_history_entry(username, image_key):
+    """Removes one entry (one distinct photo, however many RUNs/revises it
+    accumulated) from a user's history -- the job(s) it points to aren't
+    touched, only the history pointer to them."""
+    key = USER_HISTORY_KEY_FORMAT.format(user=username)
+    pf_redis_client.hdel(key, image_key)

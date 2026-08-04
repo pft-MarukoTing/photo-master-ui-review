@@ -1689,6 +1689,15 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .btn-outline:hover { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.28); }
 
+.btn-danger {
+  /* Same muted red already used by this app's other destructive controls
+     (.dz-thumb-remove/.history-cube-remove hover) -- var(--red) itself is a
+     pure, saturated #FF2600 and reads as too alarming at full-button size. */
+  background: rgba(178,42,42,.9);
+  color: #fff;
+}
+.btn-danger:hover { background: rgba(150,32,32,1); transform: translateY(-1px); }
+
 .btn-sm {
   height: 38px;
   padding: 0 16px;
