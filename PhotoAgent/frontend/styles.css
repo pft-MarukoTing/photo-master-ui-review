@@ -1053,15 +1053,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   cursor: not-allowed;
   pointer-events: none;
 }
-/* #report-btn once this RUN has been flagged (updateReportButton, app.js) --
-   stays disabled (no re-reporting) but reads as "done", not "unavailable",
-   so it needs its own opacity/color rather than the generic :disabled dim. */
-.canvas-btn.is-reported {
-  opacity: 1;
-  background: rgba(220,60,60,.55);
-  border-color: rgba(220,60,60,.7);
-}
-
 .canvas-btn-wrap { position: relative; display: inline-flex; }
 
 /* Choice popover shown by #download-link once there's more than one
@@ -1740,6 +1731,15 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      mode) don't reliably fit side by side down at 320-390px widths. */
   .header-actions .btn-label { display: none; }
   .header-actions .btn { padding: 0 12px; gap: 0; }
+  /* Up to four icon-only pills can share this row at once now (#reset-btn,
+     #report-btn, #admin-reports-btn, #account-badge) -- the row's own
+     12px gap (fine for the 1-2 buttons this was originally sized for) adds
+     up fast across four, pushing the row wide enough to crowd .logo or spill
+     past the viewport edge on a 320-360px phone. Tighter gap here, on top of
+     #reset-btn/#report-btn/#admin-reports-btn/.account-badge's own further-
+     reduced padding (index.html, same breakpoint), keeps all four fitting
+     comfortably beside even .logo's un-shrunk clamp() floor. */
+  .header-actions { gap: 6px; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
      height (see the base rule above), so that padding was eating straight

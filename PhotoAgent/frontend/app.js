@@ -1070,8 +1070,18 @@
   // updateDownloadLinks above, called at the same points lastResult changes.
   function updateReportButton() {
     if (!els.reportBtn) return;
-    els.reportBtn.hidden = !lastResult;
-    if (!lastResult) return;
+    // Now that #report-btn lives in the global header (not nested inside
+    // #results-canvas-row/#photo-frame-wrap the way it used to be), it no
+    // longer gets hidden "for free" whenever those are hidden to show a
+    // loading/error placeholder instead of a real result (hideAllBatchMainViews,
+    // backToProcessFromResults' own revise animation) -- check both directly,
+    // on top of lastResult itself, so it can't stay visible/clickable for a
+    // stale previous result while a placeholder (not that result) is on screen.
+    const canvasVisible = !(els.resultsCanvasRow && els.resultsCanvasRow.hidden)
+      && !(els.photoFrameWrap && els.photoFrameWrap.hidden);
+    const isShowingResult = !!lastResult && canvasVisible;
+    els.reportBtn.hidden = !isShowingResult;
+    if (!isShowingResult) return;
     const already = reportedRuns.has(reportKeyFor(lastResult.jobId, lastResult.runNumber));
     els.reportBtn.disabled = already;
     els.reportBtn.classList.toggle("is-reported", already);
@@ -2150,6 +2160,7 @@
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
+    updateReportButton(); // hide #report-btn for the duration of this revise's loading animation
     try {
       await finishSingleFlow();
     } catch (error) {
@@ -2163,6 +2174,12 @@
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
       if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
+      // Restores #report-btn if this ended in the error branch above (still
+      // showing the same lastResult as before, now that the frame is back) --
+      // a successful finishSingleFlow already called this itself via
+      // showSingleResult with the new lastResult, so this is a harmless
+      // repeat in that case.
+      updateReportButton();
     }
   }
 
@@ -3828,6 +3845,11 @@
     if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
     restoreAnalysisPreviewHome(); // vacates #results-analysis-slot if a done record's revise panel is open
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = true;
+    // #report-btn (header) must not stay visible/clickable for whatever
+    // lastResult still is once the real canvas is gone -- see
+    // updateReportButton's own comment on why this can't rely on DOM
+    // containment the way it used to.
+    updateReportButton();
   }
 
   function showBatchMainLoading(record) {
