@@ -4,7 +4,9 @@ import time
 from functools import partial
 
 from image_tools import (
+    apply_derived_aspect_ratio,
     create_local_enhanced_bytes,
+    get_image_dimensions,
     image_to_data_url,
 )
 from gemini_client import edit_photo as edit_photo_gemini, NANO_BANANA_LITE_MODEL
@@ -61,6 +63,21 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
     analysis = analyze_photo(image_bytes, aspect_ratio)
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
+
+    # Auto mode: the output ratio is decided here, from the crop rectangle the
+    # analysis proposed, rather than by the analysis model itself (which is
+    # asked not to pick one). A model-chosen label that disagreed with its own
+    # crop geometry used to make the crop and the output canvas mutually
+    # unsatisfiable -- see image_tools.derive_aspect_ratio_from_crop. Done
+    # before the analysis leaves this stage so every downstream consumer, and
+    # the JSON the user reviews, sees one already-consistent value.
+    if aspect_ratio == "auto":
+        img_w, img_h = get_image_dimensions(image_bytes)
+        analysis = apply_derived_aspect_ratio(analysis, img_w, img_h)
+        logger.info(
+            "Step 2 aspect ratio derived locally: %s (crop measured %s)",
+            analysis.get("recommended_aspect_ratio"), analysis.get("crop_box_measured_ratio"),
+        )
 
     analysis["prompts"] = {
         "photo_analysis": build_analysis_instruction(aspect_ratio),

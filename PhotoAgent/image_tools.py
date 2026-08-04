@@ -113,6 +113,94 @@ def _recommended_aspect_ratio(context: dict, fallback: str = "") -> str:
     )
 
 
+# The closed set of output ratios the edit APIs can be asked for in auto mode
+# -- the same list the analysis prompt used to choose from itself. "original"
+# (the source photo's own ratio) is always an extra candidate alongside these.
+AUTO_ASPECT_RATIO_LABELS = (
+    "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4",
+    "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+)
+
+
+def derive_aspect_ratio_from_crop(crop_box: dict, image_width: int, image_height: int):
+    """Pick the output ratio from the crop geometry the analysis proposed,
+    instead of from the ratio label it wrote.
+
+    The analysis was asked to keep the two consistent and repeatedly didn't --
+    e.g. a 0.85 x 1.00 rectangle on a 1600x1600 photo (really 0.85:1, portrait)
+    labelled "3:2". The label is what drives the requested output canvas, so a
+    mislabelled rectangle makes the crop and the canvas mutually unsatisfiable,
+    and the canvas always wins: the crop intent is discarded and the photo is
+    reframed to something nobody asked for. Measuring the rectangle removes the
+    disagreement at its source -- whatever framing the analysis proposed, the
+    canvas becomes the closest supported ratio to that framing.
+
+    The source photo's own ratio competes as "original" and is listed first, so
+    a crop that keeps the original proportions (or a near-tie) keeps them
+    rather than being snapped onto a named ratio for no reason.
+
+    Returns (label, measured_ratio); measured_ratio is None when there is no
+    usable crop to measure, in which case the label is "original".
+    """
+    if not image_width or not image_height:
+        return "original", None
+    if not crop_box or crop_box.get("enabled") is not True:
+        return "original", None
+    try:
+        w = float(crop_box.get("w") or 0)
+        h = float(crop_box.get("h") or 0)
+    except (TypeError, ValueError):
+        return "original", None
+    if not (math.isfinite(w) and math.isfinite(h)) or w <= 0 or h <= 0:
+        return "original", None
+
+    measured = (w * image_width) / (h * image_height)
+    if not math.isfinite(measured) or measured <= 0:
+        return "original", None
+
+    choices = [("original", image_width / image_height)]
+    choices += [(label, parse_aspect_ratio(label)) for label in AUTO_ASPECT_RATIO_LABELS]
+    return _nearest_by_ratio(measured, choices), measured
+
+
+def apply_derived_aspect_ratio(analysis: dict, image_width: int, image_height: int) -> dict:
+    """Auto mode: replace the analysis's own aspect-ratio fields with ones
+    derived from its crop geometry (see derive_aspect_ratio_from_crop).
+
+    Applied once, right after the analysis comes back, so every consumer --
+    edit prompt, crop fitting, output-canvas request, QA, debug UI -- reads the
+    same locally-decided value and no stale model-picked label survives
+    anywhere. Each crop candidate is measured on its own, since candidates are
+    alternative framings and need not share one ratio.
+    """
+    label, measured = derive_aspect_ratio_from_crop(analysis.get("crop_box"), image_width, image_height)
+
+    ctx = dict(analysis)
+    ctx["recommended_aspect_ratio"] = label
+    if ctx.get("crop_box"):
+        ctx["crop_box"] = {**ctx["crop_box"], "aspect_ratio": label}
+
+    candidates = analysis.get("crop_candidates")
+    if candidates:
+        ctx["crop_candidates"] = [
+            {**c, "crop_box": {**c["crop_box"],
+                               "aspect_ratio": derive_aspect_ratio_from_crop(c["crop_box"], image_width, image_height)[0]}}
+            if c.get("crop_box") else c
+            for c in candidates
+        ]
+
+    ctx["aspect_ratio_reason"] = (
+        f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）於支援清單中選出最接近的「{label}」；"
+        "分析模型不再自行挑選輸出比例。"
+        if measured is not None else
+        "AI 未提出裁切建議，維持原圖比例。"
+    )
+    # Debug/report fields: what the local decision was based on.
+    ctx["aspect_ratio_source"] = "crop_box_geometry"
+    ctx["crop_box_measured_ratio"] = measured
+    return ctx
+
+
 def apply_aspect_ratio_preference(context: dict, aspect_ratio_pref: str) -> dict:
     """When the user explicitly asked to keep the original photo's aspect
     ratio, force recommended_aspect_ratio/crop_box(.candidates) aspect_ratio
@@ -629,7 +717,47 @@ def clamp_raw_crop_box(crop_box: dict, context: dict) -> dict:
     }
 
 
-def _grow_to_aspect(crop: dict, image_width: int, image_height: int, target: float) -> dict:
+def _axis_span(boxes: list, axis: str):
+    """Union extent of a list of normalized boxes along one axis.
+
+    Returns (lower, upper), or None when there is nothing to cover."""
+    if not boxes:
+        return None
+    size_key = "w" if axis == "x" else "h"
+    return (
+        min(b[axis] for b in boxes),
+        max(b[axis] + b[size_key] for b in boxes),
+    )
+
+
+def _place_window(start: float, size: float, spans: list) -> float:
+    """Where to put a window of `size` along one axis so that it covers the
+    given spans, moving as little as possible from `start`.
+
+    Each span contributes the interval of window offsets that maximizes that
+    span's coverage -- offsets that contain it outright when the window is the
+    longer of the two, offsets that sit entirely inside it when it isn't. The
+    intervals are intersected in the order given, and a span that cannot also
+    be satisfied is skipped rather than allowed to break the ones before it, so
+    the caller's first span wins any conflict.
+
+    Within whatever interval survives, the offset closest to `start` is chosen:
+    this only ever slides the window along the axis, never resizes it, so it
+    cannot change the aspect ratio the caller just fitted."""
+    lo, hi = 0.0, max(0.0, 1.0 - size)
+    for span in spans:
+        if not span:
+            continue
+        span_lo, span_hi = sorted((span[1] - size, span[0]))
+        span_lo = min(max(span_lo, 0.0), hi)
+        span_hi = min(max(span_hi, 0.0), hi)
+        if span_hi < lo or span_lo > hi:
+            continue
+        lo, hi = max(lo, span_lo), min(hi, span_hi)
+    return min(max(start, lo), hi)
+
+
+def _grow_to_aspect(crop: dict, image_width: int, image_height: int, target: float, context: dict = None) -> dict:
     """Grow (preferentially, never shrink first) crop to match target, keeping
     its current bounds fully covered. Used after ROI protection may have
     re-expanded a crop past the aspect ratio already fitted below -- growing
@@ -661,12 +789,30 @@ def _grow_to_aspect(crop: dict, image_width: int, image_height: int, target: flo
     # the edit model from having to deform the whole image to fit the API's
     # output-size request, which is worse than the protected region losing
     # some margin. Shrink the other dimension to force the match.
+    #
+    # Shrinking alone used to leave the box's origin where it was, so the whole
+    # loss came off one side -- and that side was often exactly where the ROI
+    # sat, because _protect_roi had just grown the box in that direction. A
+    # real case: a crop protected out to x=0.915 to cover an ROI ending at 0.85
+    # was shrunk straight back to width 0.747 anchored at x=0, cutting 26% off
+    # the ROI. The edit model, told to crop there but also to honor an ROI
+    # reaching past that edge, resolved the contradiction by squeezing the
+    # photo horizontally. So slide the shortened window along its axis first
+    # (_place_window) and only accept the loss that sliding cannot avoid; the
+    # ROI is tried before the full protected union, since it is the one region
+    # that must survive.
     current = (w * image_width) / (h * image_height)
     if abs(current - target) >= 0.005:
+        boxes = protected_boxes(context or {})
+        roi_boxes = [b for b in boxes if b["kind"] == "roi"] or [b for b in boxes if b["kind"] == "subject"]
         if current < target:
-            h = w * image_width / (target * image_height)
+            new_h = w * image_width / (target * image_height)
+            y = _place_window(y, new_h, [_axis_span(roi_boxes, "y"), _axis_span(boxes, "y")])
+            h = new_h
         else:
-            w = h * image_height * target / image_width
+            new_w = h * image_height * target / image_width
+            x = _place_window(x, new_w, [_axis_span(roi_boxes, "x"), _axis_span(boxes, "x")])
+            w = new_w
 
     return {**crop, "x": x, "y": y, "w": w, "h": h}
 
@@ -708,7 +854,7 @@ def fit_crop_to_aspect(crop: dict, image_width: int, image_height: int, context:
     # normalize_crop_box) may have expanded the box past the ratio just fitted
     # -- restore it by growing the short dimension rather than re-shrinking,
     # so the protected region stays covered instead of being cut again.
-    return _grow_to_aspect(protected, image_width, image_height, target)
+    return _grow_to_aspect(protected, image_width, image_height, target, context)
 
 
 # ── Crop report ────────────────────────────────────────────────────────────────

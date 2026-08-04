@@ -29,8 +29,9 @@ window.PhotoAgentConfig = {
   ],
   defaultImageModelQuality: "gpt-image-2:low",
   // Two user-facing aspect-ratio choices (upload page + analyze-preview,
-  // above 生成張數) -- "auto" leaves recommended_aspect_ratio entirely up to
-  // the analysis step (today's default behavior); "original" tells the
+  // above 生成張數) -- "auto" lets the analyze step decide the output ratio
+  // (derived on the backend from the analysis's own crop_box geometry, not
+  // picked by the analysis model); "original" tells the
   // analysis model (at analyze time) and the edit-model API's own
   // size/aspectRatio parameter to keep the source photo's own proportions.
   aspectRatioOptions: [

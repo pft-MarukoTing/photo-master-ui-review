@@ -9,6 +9,8 @@ from PIL import Image
 import gemini_client
 import openai_client
 from image_tools import (
+    apply_derived_aspect_ratio,
+    derive_aspect_ratio_from_crop,
     openai_edit_size_for_ratio,
     output_geometry_warnings,
     resolve_crop_box_with_report,
@@ -53,6 +55,129 @@ class CropGeometryTests(unittest.TestCase):
         self.assertIsNotNone(crop)
         actual = crop["w"] * 1200 / (crop["h"] * 800)
         self.assertAlmostEqual(actual, 4 / 5, places=6)
+
+
+class RatioFitPlacementTests(unittest.TestCase):
+    """Forcing a box back onto its aspect ratio slides it before it sacrifices
+    the ROI -- the loss used to come off whichever side the origin wasn't on,
+    which was regularly the side ROI protection had just grown toward."""
+
+    def _context(self):
+        # Real case: a full-height crop whose ROI sits on the right, protected
+        # out to x=0.915, then forced back to a 0.747-wide 3:4 window.
+        return {
+            "recommended_aspect_ratio": "3:4",
+            "crop_box": {"enabled": True, "x": 0, "y": 0, "w": 0.75, "h": 1, "aspect_ratio": "3:4"},
+            "roi_box": {"x": 0.45, "y": 0.55, "w": 0.4, "h": 0.4},
+            "subject_extent_box": {"x": 0.22, "y": 0.38, "w": 0.63, "h": 0.55},
+            "protected_regions": [{"label": "left rail", "x": 0.05, "y": 0.5, "w": 0.25, "h": 0.45}],
+            "crop_intent": {"subject_anchor": "center", "trim_right": True},
+        }
+
+    def test_shortened_window_slides_to_keep_the_roi_inside(self):
+        context = self._context()
+        crop = resolve_crop_box_with_report(context["crop_box"], context, 1600, 1600)["cropBox"]
+
+        self.assertAlmostEqual(crop["w"] / crop["h"], 3 / 4, places=2)
+        roi = context["roi_box"]
+        self.assertLessEqual(crop["x"], roi["x"])
+        self.assertGreaterEqual(crop["x"] + crop["w"], roi["x"] + roi["w"])
+        # It slid right rather than staying pinned at the frame's left edge.
+        self.assertGreater(crop["x"], 0)
+
+    def test_sliding_never_changes_the_fitted_size(self):
+        context = self._context()
+        pinned = resolve_crop_box_with_report(context["crop_box"], context, 1600, 1600)["cropBox"]
+        # Same geometry, ROI moved to the left half: the window must end up
+        # somewhere else, at exactly the same size.
+        context["roi_box"] = {"x": 0.05, "y": 0.55, "w": 0.4, "h": 0.4}
+        context["subject_extent_box"] = {"x": 0.05, "y": 0.38, "w": 0.5, "h": 0.55}
+        moved = resolve_crop_box_with_report(context["crop_box"], context, 1600, 1600)["cropBox"]
+
+        self.assertAlmostEqual(pinned["w"], moved["w"], places=6)
+        self.assertAlmostEqual(pinned["h"], moved["h"], places=6)
+        self.assertLess(moved["x"], pinned["x"])
+
+    def test_window_too_small_for_everything_still_covers_the_roi(self):
+        # ROI plus a protected region on the far side span more than the window
+        # can hold: the ROI wins and the protected region takes the loss.
+        context = self._context()
+        context["protected_regions"] = [{"label": "far left", "x": 0.0, "y": 0.5, "w": 0.1, "h": 0.45}]
+        crop = resolve_crop_box_with_report(context["crop_box"], context, 1600, 1600)["cropBox"]
+
+        roi = context["roi_box"]
+        self.assertLessEqual(crop["x"], roi["x"])
+        self.assertGreaterEqual(crop["x"] + crop["w"], roi["x"] + roi["w"])
+
+
+class DerivedAspectRatioTests(unittest.TestCase):
+    """Auto mode decides the output ratio from the crop rectangle the analysis
+    proposed, not from the ratio label it wrote -- the two used to disagree."""
+
+    def test_ratio_comes_from_the_rectangle_not_from_the_label(self):
+        # A real failure: 0.85 x 1.00 on a square photo is 0.85:1 (portrait),
+        # and the analysis labelled it "3:2".
+        crop = {"enabled": True, "x": 0.15, "y": 0, "w": 0.85, "h": 1, "aspect_ratio": "3:2"}
+        label, measured = derive_aspect_ratio_from_crop(crop, 1600, 1600)
+        self.assertEqual(label, "4:5")
+        self.assertAlmostEqual(measured, 0.85, places=6)
+
+    def test_a_crop_close_to_the_source_ratio_keeps_the_original(self):
+        crop = {"enabled": True, "x": 0.05, "y": 0, "w": 0.9, "h": 1, "aspect_ratio": "3:2"}
+        self.assertEqual(derive_aspect_ratio_from_crop(crop, 1600, 1600)[0], "original")
+        # Same rectangle on a 3:2 source measures 1.35 -> 4:3 is closer than 3:2.
+        self.assertEqual(derive_aspect_ratio_from_crop(crop, 1200, 800)[0], "4:3")
+
+    def test_no_usable_crop_means_original(self):
+        self.assertEqual(derive_aspect_ratio_from_crop(None, 1600, 1600), ("original", None))
+        self.assertEqual(
+            derive_aspect_ratio_from_crop({"enabled": False, "w": 0.5, "h": 0.5}, 1600, 1600),
+            ("original", None),
+        )
+        self.assertEqual(
+            derive_aspect_ratio_from_crop({"enabled": True, "w": 0, "h": 1}, 1600, 1600),
+            ("original", None),
+        )
+
+    def test_apply_rewrites_every_ratio_field_and_leaves_the_input_alone(self):
+        analysis = {
+            "recommended_aspect_ratio": "3:2",
+            "aspect_ratio_reason": "模型自己的理由",
+            "crop_box": {"enabled": True, "x": 0.15, "y": 0, "w": 0.85, "h": 1, "aspect_ratio": "3:2"},
+            "crop_candidates": [
+                {"id": "c1", "crop_box": {"enabled": True, "x": 0, "y": 0.2, "w": 1, "h": 0.6, "aspect_ratio": "3:2"}},
+            ],
+        }
+        before = copy.deepcopy(analysis)
+        applied = apply_derived_aspect_ratio(analysis, 1600, 1600)
+
+        self.assertEqual(applied["recommended_aspect_ratio"], "4:5")
+        self.assertEqual(applied["crop_box"]["aspect_ratio"], "4:5")
+        # Candidates are alternative framings, each measured on its own:
+        # 1.00 x 0.60 of a square is 1.667, closest to 16:9.
+        self.assertEqual(applied["crop_candidates"][0]["crop_box"]["aspect_ratio"], "16:9")
+        self.assertEqual(applied["aspect_ratio_source"], "crop_box_geometry")
+        self.assertIn("4:5", applied["aspect_ratio_reason"])
+        self.assertEqual(analysis, before)
+
+    def test_derived_ratio_lets_the_crop_survive_instead_of_being_replaced(self):
+        # With the model's own "3:2" the crop could not be reconciled with the
+        # canvas at all, so it was dropped and a middle band was invented.
+        analysis = {
+            "recommended_aspect_ratio": "3:2",
+            "crop_box": {"enabled": True, "x": 0.15, "y": 0, "w": 0.85, "h": 1, "aspect_ratio": "3:2"},
+            "roi_box": {"x": 0.4, "y": 0.6, "w": 0.5, "h": 0.35},
+            "protected_regions": [],
+        }
+        applied = apply_derived_aspect_ratio(analysis, 1600, 1600)
+        crop = resolve_crop_box_with_report(applied["crop_box"], applied, 1600, 1600)["cropBox"]
+
+        self.assertIsNotNone(crop)
+        self.assertAlmostEqual(crop["w"] / crop["h"], 4 / 5, places=3)
+        # The ROI (y 0.60-0.95) stays inside the frame, which the 3:2 label's
+        # forced middle band (y 0.167-0.833) did not manage.
+        self.assertLessEqual(crop["y"], 0.6)
+        self.assertGreaterEqual(crop["y"] + crop["h"], 0.95)
 
 
 class OutputGeometryCheckTests(unittest.TestCase):
@@ -129,8 +254,8 @@ class OpenAIAspectRatioTests(unittest.TestCase):
         self.assertNotEqual(size_param, "auto")
         width, height = (int(value) for value in size_param.split("x"))
         self.assertAlmostEqual(width / height, 4 / 5, delta=0.02)
-        self.assertIn("Geometric fidelity is a hard constraint", prompt)
-        self.assertIn("No stretching or squashing", prompt)
+        self.assertIn("Resizing a single axis is not available", prompt)
+        self.assertIn("keeps the proportions, the tilt", prompt)
         self.assertEqual(analysis, original_analysis)
 
     @patch.object(
@@ -175,7 +300,7 @@ class GeminiAspectRatioTests(unittest.TestCase):
         # geometry follows that physical ratio rather than the approximate
         # API label.
         self.assertIn("Target output aspect ratio: 928:1152", prompt)
-        self.assertIn("Geometric fidelity is a hard constraint", prompt)
+        self.assertIn("Resizing a single axis is not available", prompt)
         self.assertEqual(analysis, original_analysis)
 
     @patch.object(
