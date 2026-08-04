@@ -29,4 +29,10 @@ if __name__ == "__main__":
     host = os.environ.get("HOST", "0.0.0.0")
     port = int(os.environ.get("PORT", "8991"))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
-    app.run(host=host, port=port, debug=debug)
+    # threaded=True: batch mode fires off several long-running requests at
+    # once (synchronous per-image analyze/upload calls in the /analyze-batch,
+    # /aipoc/analyze-batch, and /submit routes) -- Werkzeug's dev server
+    # defaults to handling one request at a time, so without this a large
+    # batch blocks every other concurrent request (status polls, other users,
+    # update-check.js) until it finishes, surfacing as spurious 500s/timeouts.
+    app.run(host=host, port=port, debug=debug, threaded=True)

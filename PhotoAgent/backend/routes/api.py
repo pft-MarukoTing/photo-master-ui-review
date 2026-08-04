@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, request
@@ -379,13 +380,27 @@ def aipoc_analyze_batch():
     if error:
         return jsonify({"error": error}), 400
 
-    entries = []
-    for image in images:
+    aspect_ratio = params.get("aspect_ratio", "auto")
+    # Read every file's bytes up front -- request.files' underlying streams
+    # belong to this request context and aren't safe to touch from the
+    # worker threads below. Each analyze_stage() call is a real OpenAI vision
+    # call (~30s+); running them one at a time in a plain loop makes this
+    # single request's duration scale linearly with batch size, which is
+    # exactly what was blowing past client/proxy timeouts on larger batches.
+    # A bounded thread pool collapses that to roughly one image's latency
+    # regardless of batch size, while still capping how many images hit the
+    # OpenAI API at once.
+    file_bytes = [(image.filename, image.read()) for image in images]
+
+    def _analyze_one(entry):
+        filename, data = entry
         try:
-            analysis = analyze_stage(image.read(), aspect_ratio=params.get("aspect_ratio", "auto"))
-            entries.append({"filename": image.filename, "analysis": analysis})
+            return {"filename": filename, "analysis": analyze_stage(data, aspect_ratio=aspect_ratio)}
         except Exception as exc:
-            entries.append({"filename": image.filename, "error": str(exc)})
+            return {"filename": filename, "error": str(exc)}
+
+    with ThreadPoolExecutor(max_workers=min(6, len(file_bytes))) as pool:
+        entries = list(pool.map(_analyze_one, file_bytes))
 
     return jsonify({"jobs": entries}), 200
 

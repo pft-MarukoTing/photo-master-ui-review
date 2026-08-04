@@ -2021,7 +2021,16 @@
       r.mirrorIndex = null;
     });
 
-    await Promise.all(batchRecords.map((record) => analyzeAndEditBatchRecord(record, runCount)));
+    // Unlike every other batch phase in this file, this used to fire every
+    // record's combined analyze+edit job at once via Promise.all -- with no
+    // submission throttling, a large batch queues far more jobs than the
+    // server's fixed worker pool can run concurrently (5 worker threads, see
+    // server.py's ENGINE_WORKER_NUM), so later images sit queued long enough
+    // to blow past pollJobStatus's own timeout budget before a worker even
+    // picks them up. Routing through the same runBatchPool/POLL_CONCURRENCY
+    // used elsewhere keeps queue depth bounded to what the server can
+    // actually work through concurrently.
+    await runBatchPool(batchRecords, (record) => analyzeAndEditBatchRecord(record, runCount), POLL_CONCURRENCY);
 
     updateBatchDownloadAllVisibility();
     updateBatchHeaderControls();

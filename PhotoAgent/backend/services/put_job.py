@@ -24,13 +24,24 @@ MSG_DETAIL_QUEUE = os.getenv("REDIS_MSG_INFO_FORMAT", "yce_ai:photoAgent:{msg_id
 
 _s3_accessor = None
 _s3_accessor_v2 = None
+_s3_accessor_lock = threading.Lock()
+# S3Access.upload_to_s3() (unlike S3AccessV2) isn't safe for concurrent
+# callers: it recreates and restarts its own thread pool as instance state on
+# every call, assuming only one upload runs at a time on this shared
+# singleton. Under app.run(threaded=True), two /submit or /analyze-batch
+# requests landing close together race on that state and one of them dies
+# with "cannot join thread before it is started". Serializing just the
+# upload call (not the whole request) keeps requests concurrent everywhere
+# else while avoiding the race.
+_s3_upload_lock = threading.Lock()
 
 
 def get_s3_accessor():
     global _s3_accessor
-    if _s3_accessor is None:
-        _s3_accessor = S3Access()
-    return _s3_accessor
+    with _s3_accessor_lock:
+        if _s3_accessor is None:
+            _s3_accessor = S3Access()
+        return _s3_accessor
 
 
 def get_s3_accessor_v2():
@@ -76,7 +87,8 @@ def enqueue(engine_param_dict, src_content=None, job_id=None):
                     engine_param_dict[key][k] = engine_param_dict[key][k].replace("{msg_id}", f"{job_id}")
 
     if src_content:
-        get_s3_accessor().upload_to_s3(src_content, engine_param_dict["srcKeys"])
+        with _s3_upload_lock:
+            get_s3_accessor().upload_to_s3(src_content, engine_param_dict["srcKeys"])
 
     upload_dict = engine_param_dict.copy()
     upload_dict["srcKeys"] = json.dumps(engine_param_dict["srcKeys"])
