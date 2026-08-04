@@ -2657,6 +2657,47 @@
     }
   }
 
+  // A live single-image session never re-renders the recipe checklist from a
+  // filtered analysis -- singleFlowState.analysis is pinned to the original,
+  // untouched analyze-stage result for the whole session, so retouch_recipe
+  // never shrinks and lastSingleSelections.recipeChecked always stays index-
+  // aligned to it. Historical playback (viewHistoryRecord) has no choice but
+  // to start from result.analysis, which -- if the last revise unchecked
+  // anything -- is already that filtered, shrunk version (buildEffectiveAnalysis
+  // drops unchecked items from correction_plan/retouch_recipe entirely before
+  // submitting). Left as-is, a previously-unchecked item would just be gone
+  // for good the next time this job's history is revisited. This restores it:
+  // merges each rejected_* array back onto its kept counterpart (order:
+  // kept items first, then whatever was rejected -- the original interleaving
+  // isn't recoverable, only membership) and returns a recipeChecked/options
+  // pair matching that restored order, for lastSingleSelections to apply.
+  function restoreReviseSelections(analysis) {
+    const rejectedRecipe = analysis.rejected_retouch_recipe || [];
+    const rejectedPlan = analysis.rejected_corrections || [];
+    const rejectedAxes = analysis.rejected_axes || [];
+    const hasRejected = rejectedRecipe.length > 0 || rejectedPlan.length > 0;
+    const keptCount = (analysis.retouch_recipe || []).length;
+    const restoredAnalysis = hasRejected
+      ? {
+          ...analysis,
+          retouch_recipe: [...(analysis.retouch_recipe || []), ...rejectedRecipe],
+          correction_plan: [...(analysis.correction_plan || []), ...rejectedPlan],
+          correction_axes: [...(analysis.correction_axes || []), ...rejectedAxes]
+        }
+      : analysis;
+    const recipeChecked = hasRejected
+      ? restoredAnalysis.retouch_recipe.map((_, i) => i < keptCount)
+      : null;
+    const styleOptions = analysis.style_options || {};
+    const options = {
+      pose: styleOptions.pose || "default",
+      angle: styleOptions.angle || "default",
+      lighting: styleOptions.lighting || "default",
+      size: styleOptions.size || "default"
+    };
+    return { analysis: restoredAnalysis, selections: { userPrompt: "", options, recipeChecked } };
+  }
+
   // Reconstructs the full single-photo results view (recipe/analysis/QA
   // panel, RUN switcher, before/after compare, download) for a finished
   // history entry, pulling this job's data fresh from the backend instead of
@@ -2713,8 +2754,9 @@
       // when an AI edit actually ran, see pipeline.py's finish_stage) is a
       // more accurate fallback than a blind default for that one specifically.
       const extraInfo = firstDone.result["extra-info"] || {};
+      const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis);
       singleFlowState = {
-        analysis: firstDone.result.analysis,
+        analysis: restoredAnalysis,
         analyzeJobId: job.job_id,
         presetKey: job.preset || "natural",
         preset: presets[job.preset] || presets.natural,
@@ -2727,7 +2769,7 @@
         analyzeTimings: [],
         useCombinedJob: false
       };
-      lastSingleSelections = null;
+      lastSingleSelections = selections;
 
       const applyRender = () => {
         els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
@@ -3463,6 +3505,14 @@
       effective.correction_plan = keepChecked(analysis.correction_plan);
       effective.retouch_recipe = keepChecked(analysis.retouch_recipe);
       effective.rejected_corrections = dropChecked(analysis.correction_plan);
+      // retouch_recipe's own dropped text (correction_plan's is the internal/
+      // technical description build_edit_prompt reads; this is the
+      // human-readable one fillCheckList actually displays) -- without this,
+      // a later re-render fed this same (now-shrunk) analysis back -- e.g.
+      // viewHistoryRecord revisiting a job whose last revise unchecked
+      // something -- has no way to show that item again at all, checked or
+      // not; it's just gone.
+      effective.rejected_retouch_recipe = dropChecked(analysis.retouch_recipe);
       // Same index split for the axis tags (correction_axes[i] pairs with
       // correction_plan[i]). These are what let build_edit_prompt strip the
       // matching "do X" clauses out of its own light/color direction and add a
