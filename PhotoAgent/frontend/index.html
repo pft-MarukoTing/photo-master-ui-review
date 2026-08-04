@@ -1186,7 +1186,7 @@
 
     /* ── Account badge/modal/history (account.js + app.js) ── */
     /* #register-account-btn keeps its text label at every width -- unlike
-       #history-nav-btn/#reload-batch-btn/#reset-btn (icon+label, collapse to
+       #reload-batch-btn/#reset-btn (icon+label, collapse to
        icon-only under 560px via styles.css's ".header-actions .btn-label
        {display:none}"), this button has nothing to fall back to once
        skipped/dismissed, so an icon-only version would just look blank. The
@@ -1203,17 +1203,54 @@
     }
     #register-account-btn .btn-label { display: inline; }
     #register-account-btn svg { width: 12px; height: 12px; }
+    /* #reset-btn sits right next to #account-badge (last in .header-actions
+       now) -- sized down to the same compact footprint, same pattern as
+       #register-account-btn just above, plus the same 999px pill radius
+       #account-badge itself uses (.btn-sm's own 10px would otherwise still
+       show, since height/padding/gap/font-size aren't the only things that
+       differ). Unlike #register-account-btn, #reset-btn already collapses
+       to icon-only under 560px via the shared ".header-actions .btn-label"
+       rule, so only the always-on container size needs overriding here, not
+       the label/icon display rules too. */
+    #reset-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
+    }
     .account-badge {
       display: inline-flex;
       align-items: center;
+      gap: 6px;
       height: 32px;
       padding: 0 14px;
       border-radius: 999px;
       background: var(--card-2);
       border: 1px solid var(--border-2);
+      font: inherit;
       font-size: 13px;
       font-weight: 700;
       color: var(--text-2);
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .account-badge svg { flex-shrink: 0; }
+    .account-badge:hover { background: var(--card); border-color: var(--border); }
+    .account-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* Icon-only under 560px, same breakpoint styles.css's own
+       ".header-actions .btn-label {display:none}" uses for the other header
+       buttons -- #account-badge isn't a .btn so that rule doesn't reach it.
+       Has to live here (not in styles.css) since this inline block loads
+       after styles.css and its own unconditional .account-badge padding
+       above would otherwise keep winning over an equal-specificity override
+       placed only in styles.css, regardless of the media query (see
+       #dz-preview's own comment on this same gotcha). At a fixed 32px
+       height, 9px of side padding around the 14px icon keeps it a circle
+       instead of an oval once the username label disappears. */
+    @media (max-width: 560px) {
+      #account-badge-label { display: none; }
+      .account-badge { padding: 0 9px; gap: 0; }
     }
     .account-modal-actions {
       display: flex;
@@ -1543,25 +1580,15 @@
   <div class="header-inner">
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
-      <span id="account-badge" class="account-badge" hidden></span>
       <!-- Shown whenever there's no current account -- the only entry point
            into #account-modal, which is never opened automatically. Mutually
-           exclusive with #account-badge/#history-nav-btn (see
-           applyAccountUi, app.js). -->
+           exclusive with #account-badge (see applyAccountUi, app.js). -->
       <button id="register-account-btn" class="btn btn-secondary btn-sm" type="button">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M14 8l5 4-5 4M19 12H9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="btn-label">登入</span>
-      </button>
-      <button id="history-nav-btn" class="btn btn-secondary btn-sm" type="button" hidden>
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span class="btn-label">處理紀錄</span>
       </button>
       <button id="reload-batch-btn" class="btn btn-secondary" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -1580,6 +1607,22 @@
             stroke-width="2" stroke-linecap="round"/>
         </svg>
         <span class="btn-label">上傳照片</span>
+      </button>
+      <!-- Doubles as the entry point into the history drawer (see
+           applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
+           button exists; the clock icon (same one that button used to use)
+           signals "this opens your processing history" alongside the
+           username text, set separately into #account-badge-label so
+           applyAccountUi's textContent write doesn't clobber this icon.
+           Last in .header-actions (not first) so it's the rightmost element
+           in the whole header, not just first-after-the-logo. -->
+      <button id="account-badge" class="account-badge" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span id="account-badge-label"></span>
       </button>
     </div>
   </div>

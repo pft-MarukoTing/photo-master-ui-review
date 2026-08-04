@@ -2774,18 +2774,22 @@
     els.accountModalError.hidden = false;
   }
 
-  // Reflects the current account (if any) into the header badge/history nav
-  // button -- both stay hidden until an account exists. #register-account-btn
-  // is the mirror image of those two: it's the only way back to
-  // #account-modal once its initial prompt has been skipped, so it shows
-  // exactly when they're hidden (no account yet) and hides once one exists.
+  // Reflects the current account (if any) into the header badge, which also
+  // doubles as the history-drawer open button (see its click listener below)
+  // -- stays hidden until an account exists. #register-account-btn is the
+  // mirror image of it: the only way back to #account-modal once its initial
+  // prompt has been skipped, so it shows exactly when the badge is hidden
+  // (no account yet) and hides once one exists.
   function applyAccountUi() {
     const user = getCurrentUser();
     if (els.accountBadge) {
-      els.accountBadge.textContent = user || "";
+      // .textContent (not on accountBadge itself) so the clock icon markup
+      // beside #account-badge-label survives every call to this.
+      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user || "";
       els.accountBadge.hidden = !user;
+      els.accountBadge.title = user ? "查看處理紀錄" : "";
+      els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
     }
-    if (els.historyNavBtn) els.historyNavBtn.hidden = !user;
     if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
   }
 
@@ -4133,7 +4137,7 @@
       if (e.target.dataset.close) confirmModalHandlers?.cancel();
     });
   }
-  if (els.historyNavBtn) els.historyNavBtn.addEventListener("click", openHistoryPage);
+  if (els.accountBadge) els.accountBadge.addEventListener("click", openHistoryPage);
   if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
   if (els.registerAccountBtn) els.registerAccountBtn.addEventListener("click", openAccountModal);
