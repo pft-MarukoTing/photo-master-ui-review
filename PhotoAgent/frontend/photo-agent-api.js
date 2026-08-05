@@ -342,6 +342,25 @@ window.PhotoAgentApi = (() => {
     return data.jobs || [];
   }
 
+  // Demo photos bundled server-side (./demo_images) -- lets a user try the
+  // app without a photo of their own. Falls back to [] on any failure, same
+  // reasoning as getUiConfig() below: a demo-picker glitch shouldn't block
+  // the rest of the upload page.
+  async function getDemoImages() {
+    try {
+      const response = await fetch(`${BASE_URL}/api/photo-agent/demo-images`);
+      if (!response.ok) return [];
+      const data = await response.json().catch(() => ({}));
+      return data.images || [];
+    } catch {
+      return [];
+    }
+  }
+
+  function demoImageUrl(filename) {
+    return `${BASE_URL}/api/photo-agent/demo-images/${encodeURIComponent(filename)}`;
+  }
+
   // Server-side UI flags (e.g. `--debug-ui` on run_backend.py). Falls back to
   // {} on any failure so a missing/unreachable backend never blocks the page.
   async function getUiConfig() {
@@ -465,6 +484,8 @@ window.PhotoAgentApi = (() => {
     resultThumbnailUrl,
     sourceImageUrl,
     sourceThumbnailUrl,
+    getDemoImages,
+    demoImageUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,

@@ -1,8 +1,9 @@
 import json
+import os
 from concurrent.futures import ThreadPoolExecutor
 
 import requests
-from flask import Blueprint, Response, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory
 
 from aiserver_utils.queue import get_job_info
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
@@ -74,6 +75,32 @@ def _parse_and_validate_params(form):
         message = exc.args[0] if exc.args else str(exc)
         return None, message
     return params, None
+
+
+DEMO_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+
+
+@api_bp.get("/demo-images")
+def demo_images():
+    demo_dir = current_app.config.get("DEMO_IMAGES_DIR")
+    if not demo_dir or not os.path.isdir(demo_dir):
+        return jsonify({"images": []})
+    names = sorted(
+        name for name in os.listdir(demo_dir)
+        if os.path.splitext(name)[1].lower() in DEMO_IMAGE_EXTENSIONS
+    )
+    return jsonify({"images": names})
+
+
+@api_bp.get("/demo-images/<path:filename>")
+def demo_image_file(filename):
+    """Serves one demo_images/ file by name -- send_from_directory's own
+    safe_join guards against path traversal the same way static.py's
+    static_files() route relies on for FRONTEND_DIR."""
+    demo_dir = current_app.config.get("DEMO_IMAGES_DIR")
+    if not demo_dir:
+        return jsonify({"error": "demo images not configured"}), 404
+    return send_from_directory(demo_dir, filename)
 
 
 @api_bp.post("/account")

@@ -1192,6 +1192,52 @@
     .settings-modal-title { font-size: 17px; font-weight: 800; color: var(--text); }
     .settings-modal-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
 
+    /* #demo-images-modal's picker grid -- wider than the plain 440px
+       .error-modal-box (that width is tuned for a message/form, not a photo
+       grid), and a fixed 4 columns (not auto-fill) so tile size stays
+       consistent regardless of how many demo photos exist. Same cube-tile
+       look as .history-cube (history-drawer), just without its status
+       badge/remove button since a demo photo has neither. */
+    .demo-images-modal-box { width: min(560px, calc(100vw - 40px)); }
+    .demo-images-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+    .demo-image-tile {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: var(--radius);
+      overflow: hidden;
+      cursor: pointer;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      padding: 0;
+      transition: border-color .15s, transform .15s;
+    }
+    .demo-image-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .demo-image-tile:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .demo-image-tile:disabled { opacity: .5; cursor: wait; transform: none; }
+    /* HEIC/HEIF fallback (see renderDemoImagesGrid, app.js) -- filename in
+       place of a thumbnail no browser can actually decode into an <img>. */
+    .demo-image-tile-label {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      padding: 6px;
+      box-sizing: border-box;
+      font-size: 11px;
+      line-height: 1.3;
+      color: var(--text-2);
+      text-align: center;
+      overflow: hidden;
+      word-break: break-all;
+    }
+
     /* #notice-modal's title reuses .logo's own wordmark treatment (Photo in
        the plain text color, Master in the brand gradient) instead of
        #error-modal-title's red "failure" styling, since this popup reports
@@ -1938,6 +1984,15 @@
              icon+text run buttons -- was a side-by-side 340px form column,
              now everything sits under the (now full-width) drop zone. -->
         <div class="upload-below-zone">
+
+          <button id="demo-images-btn" class="btn btn-secondary btn-sm" type="button">
+            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+              <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            範例照片
+          </button>
 
           <div class="options-card-inline" id="upload-options-card">
             <div id="processing-path-row" class="option-row" style="display: none;">
@@ -2912,6 +2967,23 @@
      didn't require any changes to wireOptionPicker/populateModelQualitySelect/
      populateAspectRatioSelect/applyRunCountChange in app.js since those all
      look elements up by id via dom.js. -->
+<!-- Demo photo picker: opened by #demo-images-btn (see openDemoImagesModal/
+     closeDemoImagesModal in app.js) -- same backdrop+box+close pattern as
+     #settings-modal below. Grid is populated lazily on first open from
+     GET /api/photo-agent/demo-images (backend/routes/api.py), each tile
+     serving the demo file straight off ./demo_images. -->
+<div id="demo-images-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box demo-images-modal-box" role="dialog" aria-modal="true" aria-labelledby="demo-images-modal-title">
+    <div class="error-modal-hdr">
+      <span id="demo-images-modal-title" class="settings-modal-title">範例照片</span>
+      <button id="demo-images-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div id="demo-images-grid" class="demo-images-grid"></div>
+    <p id="demo-images-empty" class="history-empty" hidden>目前沒有範例照片。</p>
+  </div>
+</div>
+
 <div id="settings-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">

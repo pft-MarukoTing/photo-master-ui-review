@@ -12,6 +12,9 @@ def create_app(config=None):
     app.config["FRONTEND_DIR"] = os.path.join(
         os.path.dirname(os.path.dirname(__file__)), "frontend"
     )
+    app.config["DEMO_IMAGES_DIR"] = os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "demo_images"
+    )
     if config:
         app.config.update(config)
 

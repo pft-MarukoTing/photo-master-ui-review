@@ -10,6 +10,8 @@
     resultThumbnailUrl,
     sourceImageUrl,
     sourceThumbnailUrl,
+    getDemoImages,
+    demoImageUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,
@@ -3773,6 +3775,79 @@
     });
   }
 
+  // Demo photo picker -- lazily fetched once (getDemoImages) and cached here,
+  // since the list is static server-side content that can't change mid-session.
+  let demoImagesCache = null;
+
+  function renderDemoImagesGrid(names) {
+    if (!els.demoImagesGrid) return;
+    els.demoImagesGrid.innerHTML = "";
+    if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = names.length > 0;
+    names.forEach((name) => {
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "demo-image-tile";
+      tile.title = name;
+      // Browsers can't render HEIC/HEIF in a plain <img> (same limitation
+      // noted on source_image(), backend/routes/api.py) -- show the filename
+      // instead of a broken-image icon for those, rather than attempting a
+      // thumbnail this tile can't actually display.
+      if (isHeicFile({ name })) {
+        const label = document.createElement("span");
+        label.className = "demo-image-tile-label";
+        label.textContent = name;
+        tile.appendChild(label);
+      } else {
+        const img = document.createElement("img");
+        img.src = demoImageUrl(name);
+        img.alt = name;
+        img.loading = "lazy";
+        tile.appendChild(img);
+      }
+      tile.addEventListener("click", () => selectDemoImage(name, tile));
+      els.demoImagesGrid.appendChild(tile);
+    });
+  }
+
+  function openDemoImagesModal() {
+    if (!els.demoImagesModal) return;
+    els.demoImagesModal.hidden = false;
+    if (demoImagesCache) {
+      renderDemoImagesGrid(demoImagesCache);
+      return;
+    }
+    getDemoImages().then((names) => {
+      demoImagesCache = names;
+      // The modal may have been closed again before this resolves.
+      if (!els.demoImagesModal.hidden) renderDemoImagesGrid(names);
+    });
+  }
+
+  function closeDemoImagesModal() {
+    if (els.demoImagesModal) els.demoImagesModal.hidden = true;
+  }
+
+  // Fetches the picked demo photo's bytes and hands it to the same
+  // routeSelectedFiles path a real file-picker selection goes through, so it
+  // gets the exact same single-vs-batch handling, HEIC conversion, preview,
+  // etc. as an actual upload -- nothing else needs to know this file didn't
+  // come from the user's own device.
+  async function selectDemoImage(name, tile) {
+    tile.disabled = true;
+    try {
+      const response = await fetch(demoImageUrl(name));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const file = new File([blob], name, { type: blob.type || "image/jpeg" });
+      closeDemoImagesModal();
+      routeSelectedFiles([file]);
+    } catch (error) {
+      showError(`載入範例照片失敗：${error.message || error}`);
+    } finally {
+      tile.disabled = false;
+    }
+  }
+
   // Upload-page settings overlay -- same open/close shape as the error modal
   // above, just toggling #settings-modal's own hidden attribute. Holds the
   // 模型/長寬比/生成張數 pickers (already populated/wired above via
@@ -4685,6 +4760,13 @@
     els.fileInput.click();
   });
   if (els.dzClearAllBtn) els.dzClearAllBtn.addEventListener("click", resetApp);
+  if (els.demoImagesBtn) els.demoImagesBtn.addEventListener("click", openDemoImagesModal);
+  if (els.demoImagesModalClose) els.demoImagesModalClose.addEventListener("click", closeDemoImagesModal);
+  if (els.demoImagesModal) {
+    els.demoImagesModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeDemoImagesModal();
+    });
+  }
   els.startButton.addEventListener("click", startSubmit);
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.backToProcessBtn.addEventListener("click", handleViewAnalysisClick);
@@ -4790,6 +4872,7 @@
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
+    if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
