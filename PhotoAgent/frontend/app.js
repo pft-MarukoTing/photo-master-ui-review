@@ -12,6 +12,7 @@
     sourceThumbnailUrl,
     getDemoImages,
     demoImageUrl,
+    demoImageThumbnailUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,
@@ -3818,22 +3819,15 @@
       tile.type = "button";
       tile.className = "demo-image-tile";
       tile.title = name;
-      // Browsers can't render HEIC/HEIF in a plain <img> (same limitation
-      // noted on source_image(), backend/routes/api.py) -- show the filename
-      // instead of a broken-image icon for those, rather than attempting a
-      // thumbnail this tile can't actually display.
-      if (isHeicFile({ name })) {
-        const label = document.createElement("span");
-        label.className = "demo-image-tile-label";
-        label.textContent = name;
-        tile.appendChild(label);
-      } else {
-        const img = document.createElement("img");
-        img.src = demoImageUrl(name);
-        img.alt = name;
-        img.loading = "lazy";
-        tile.appendChild(img);
-      }
+      // Always a real JPEG regardless of the source format (backend runs it
+      // through the same Pillow/pillow-heif decode ensure_jpeg_bytes uses
+      // elsewhere) -- unlike a plain <img> pointed straight at the original
+      // file, this renders fine even for the HEIC demo photos.
+      const img = document.createElement("img");
+      img.src = demoImageThumbnailUrl(name);
+      img.alt = name;
+      img.loading = "lazy";
+      tile.appendChild(img);
       tile.addEventListener("click", () => selectDemoImage(name, tile));
       els.demoImagesGrid.appendChild(tile);
     });

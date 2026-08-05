@@ -361,6 +361,15 @@ window.PhotoAgentApi = (() => {
     return `${BASE_URL}/api/photo-agent/demo-images/${encodeURIComponent(filename)}`;
   }
 
+  // Small JPEG counterpart of demoImageUrl -- used for the picker grid's
+  // tiles (some demo photos are multi-MB, and a couple are HEIC, which no
+  // browser can render in a plain <img>). Selecting a tile still fetches the
+  // real file via demoImageUrl, so the actual upload/analysis always runs
+  // against the full-resolution source, never this thumbnail.
+  function demoImageThumbnailUrl(filename) {
+    return `${BASE_URL}/api/photo-agent/demo-images/${encodeURIComponent(filename)}/thumbnail`;
+  }
+
   // Server-side UI flags (e.g. `--debug-ui` on run_backend.py). Falls back to
   // {} on any failure so a missing/unreachable backend never blocks the page.
   async function getUiConfig() {
@@ -486,6 +495,7 @@ window.PhotoAgentApi = (() => {
     sourceThumbnailUrl,
     getDemoImages,
     demoImageUrl,
+    demoImageThumbnailUrl,
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,

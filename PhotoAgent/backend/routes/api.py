@@ -1,9 +1,11 @@
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
+from functools import lru_cache
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory
+from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
@@ -101,6 +103,40 @@ def demo_image_file(filename):
     if not demo_dir:
         return jsonify({"error": "demo images not configured"}), 404
     return send_from_directory(demo_dir, filename)
+
+
+@lru_cache(maxsize=64)
+def _demo_thumbnail_bytes(path):
+    """Cached on the resolved absolute path (not just the filename) -- demo
+    photos never change while the process is running, so there's no need to
+    re-decode/resize the same file on every picker grid render."""
+    with open(path, "rb") as f:
+        return create_preview_bytes(f.read(), max_side=HISTORY_THUMBNAIL_MAX_SIDE)
+
+
+@api_bp.get("/demo-images/<path:filename>/thumbnail")
+def demo_image_thumbnail(filename):
+    """Small JPEG counterpart of demo_image_file(), for the picker grid
+    (#demo-images-modal) -- some demo photos are multi-MB, and a couple are
+    HEIC (which create_preview_bytes/ensure_jpeg_bytes-style Pillow decoding
+    handles the same as any other format, unlike a plain <img> tag pointed
+    straight at demo_image_file's raw bytes). Selecting a tile still fetches
+    the real file via demo_image_file above -- this is display-only.
+    """
+    demo_dir = current_app.config.get("DEMO_IMAGES_DIR")
+    if not demo_dir:
+        return jsonify({"error": "demo images not configured"}), 404
+    # safe_join (same guard demo_image_file gets for free from
+    # send_from_directory) since this route reads+transcodes the bytes
+    # itself rather than handing the path straight to send_from_directory.
+    safe_path = safe_join(demo_dir, filename)
+    if not safe_path or not os.path.isfile(safe_path):
+        return jsonify({"error": "image not found"}), 404
+    try:
+        thumb_bytes = _demo_thumbnail_bytes(safe_path)
+    except Exception as exc:
+        return jsonify({"error": f"failed to generate thumbnail: {exc}"}), 500
+    return Response(thumb_bytes, mimetype="image/jpeg")
 
 
 @api_bp.post("/account")
