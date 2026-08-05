@@ -43,6 +43,7 @@ window.PhotoAgentDom = (() => {
     demoImagesModalClose: document.querySelector("#demo-images-modal-close"),
     demoImagesGrid: document.querySelector("#demo-images-grid"),
     demoImagesEmpty: document.querySelector("#demo-images-empty"),
+    demoImagesConfirmBtn: document.querySelector("#demo-images-confirm-btn"),
     procThumb: document.querySelector("#proc-thumb"),
     startButton: document.querySelector("#start-btn"),
     startDirectBtn: document.querySelector("#start-direct-btn"),

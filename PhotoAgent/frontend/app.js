@@ -3809,6 +3809,12 @@
   // Demo photo picker -- lazily fetched once (getDemoImages) and cached here,
   // since the list is static server-side content that can't change mid-session.
   let demoImagesCache = null;
+  // Filenames currently toggled on (see toggleDemoImageSelection) -- persists
+  // across the modal being closed and reopened (e.g. the user backed out
+  // without confirming, or wants to review/adjust the picks they already
+  // confirmed into the upload area), and is only cleared by resetApp -- a
+  // real fresh start, not just a closed dialog.
+  let demoSelectedNames = new Set();
 
   function renderDemoImagesGrid(names) {
     if (!els.demoImagesGrid) return;
@@ -3817,7 +3823,7 @@
     names.forEach((name) => {
       const tile = document.createElement("button");
       tile.type = "button";
-      tile.className = "demo-image-tile";
+      tile.className = demoSelectedNames.has(name) ? "demo-image-tile selected" : "demo-image-tile";
       tile.title = name;
       // Always a real JPEG regardless of the source format (backend runs it
       // through the same Pillow/pillow-heif decode ensure_jpeg_bytes uses
@@ -3828,13 +3834,39 @@
       img.alt = name;
       img.loading = "lazy";
       tile.appendChild(img);
-      tile.addEventListener("click", () => selectDemoImage(name, tile));
+      const check = document.createElement("span");
+      check.className = "demo-image-tile-check";
+      check.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      tile.appendChild(check);
+      tile.addEventListener("click", () => toggleDemoImageSelection(name, tile));
       els.demoImagesGrid.appendChild(tile);
     });
   }
 
+  // Enables/labels #demo-images-confirm-btn off however many tiles are
+  // currently toggled on -- called after every toggle, so the button always
+  // reflects the live selection instead of only updating on open/confirm.
+  function updateDemoImagesConfirmBtn() {
+    if (!els.demoImagesConfirmBtn) return;
+    const count = demoSelectedNames.size;
+    els.demoImagesConfirmBtn.disabled = count === 0;
+    els.demoImagesConfirmBtn.textContent = count > 0 ? `使用所選照片 (${count})` : "使用所選照片";
+  }
+
+  function toggleDemoImageSelection(name, tile) {
+    if (demoSelectedNames.has(name)) {
+      demoSelectedNames.delete(name);
+      tile.classList.remove("selected");
+    } else {
+      demoSelectedNames.add(name);
+      tile.classList.add("selected");
+    }
+    updateDemoImagesConfirmBtn();
+  }
+
   function openDemoImagesModal() {
     if (!els.demoImagesModal) return;
+    updateDemoImagesConfirmBtn();
     els.demoImagesModal.hidden = false;
     if (demoImagesCache) {
       renderDemoImagesGrid(demoImagesCache);
@@ -3851,24 +3883,30 @@
     if (els.demoImagesModal) els.demoImagesModal.hidden = true;
   }
 
-  // Fetches the picked demo photo's bytes and hands it to the same
-  // routeSelectedFiles path a real file-picker selection goes through, so it
-  // gets the exact same single-vs-batch handling, HEIC conversion, preview,
-  // etc. as an actual upload -- nothing else needs to know this file didn't
-  // come from the user's own device.
-  async function selectDemoImage(name, tile) {
-    tile.disabled = true;
+  // Fetches every currently-selected demo photo's bytes and hands them all
+  // to the same routeSelectedFiles path a real file-picker selection goes
+  // through, so it gets the exact same single-vs-batch handling, HEIC
+  // conversion, preview, etc. as an actual upload -- nothing else needs to
+  // know these files didn't come from the user's own device.
+  async function confirmDemoImageSelection() {
+    const names = Array.from(demoSelectedNames);
+    if (!names.length) return;
+    els.demoImagesConfirmBtn.disabled = true;
+    if (els.demoImagesGrid) els.demoImagesGrid.classList.add("is-loading");
     try {
-      const response = await fetch(demoImageUrl(name));
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const file = new File([blob], name, { type: blob.type || "image/jpeg" });
+      const files = await Promise.all(names.map(async (name) => {
+        const response = await fetch(demoImageUrl(name));
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const blob = await response.blob();
+        return new File([blob], name, { type: blob.type || "image/jpeg" });
+      }));
       closeDemoImagesModal();
-      routeSelectedFiles([file]);
+      routeSelectedFiles(files);
     } catch (error) {
       showError(`載入範例照片失敗：${error.message || error}`);
     } finally {
-      tile.disabled = false;
+      if (els.demoImagesGrid) els.demoImagesGrid.classList.remove("is-loading");
+      updateDemoImagesConfirmBtn();
     }
   }
 
@@ -4694,6 +4732,12 @@
     lastResult = null;
     singleRuns = null;
     singleMirrorIndex = null;
+    // A real fresh start (unlike just closing #demo-images-modal without
+    // confirming, which leaves the picks in place -- see demoSelectedNames'
+    // own doc above) -- next time the picker opens it should show nothing
+    // checked, not whatever an unrelated earlier upload had picked.
+    demoSelectedNames.clear();
+    updateDemoImagesConfirmBtn();
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
     if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
@@ -4786,6 +4830,7 @@
   if (els.dzClearAllBtn) els.dzClearAllBtn.addEventListener("click", resetApp);
   if (els.demoImagesBtn) els.demoImagesBtn.addEventListener("click", openDemoImagesModal);
   if (els.demoImagesModalClose) els.demoImagesModalClose.addEventListener("click", closeDemoImagesModal);
+  if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.addEventListener("click", confirmDemoImageSelection);
   if (els.demoImagesModal) {
     els.demoImagesModal.addEventListener("click", (e) => {
       if (e.target.dataset.close) closeDemoImagesModal();

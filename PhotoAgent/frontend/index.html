@@ -1244,6 +1244,66 @@
     .demo-image-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .demo-image-tile:hover { border-color: var(--accent); transform: translateY(-2px); }
     .demo-image-tile:disabled { opacity: .5; cursor: wait; transform: none; }
+    /* Multi-select state (toggleDemoImageSelection, app.js) -- accent border
+       + a translucent tint over the photo itself, same accent-colored
+       treatment .demo-image-tile:hover already uses so "selected" reads as
+       an extension of that, not an unrelated style. */
+    .demo-image-tile.selected { border-color: var(--accent); }
+    .demo-image-tile.selected::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: rgba(168, 85, 247, .25);
+      pointer-events: none;
+    }
+    /* Checkmark badge -- always in the DOM (so it can transition), only
+       opaque once .selected is added to its own tile. */
+    .demo-image-tile-check {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9,9,11,.55);
+      border: 1.5px solid rgba(255,255,255,.6);
+      color: #fff;
+      opacity: 0;
+      transition: opacity .15s, background-color .15s, border-color .15s;
+    }
+    .demo-image-tile.selected .demo-image-tile-check {
+      opacity: 1;
+      background: var(--mv-grad);
+      border-color: transparent;
+    }
+    /* Disabled while #demo-images-confirm-btn's own fetch-then-use is in
+       flight (confirmDemoImageSelection, app.js) -- blocks toggling more
+       tiles mid-fetch instead of letting the selection change out from
+       under a request that's already in progress. */
+    .demo-images-grid.is-loading { pointer-events: none; opacity: .6; }
+    .demo-images-modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 14px;
+    }
+    /* Tinted with the same accent purple as .demo-image-tile.selected's own
+       border/checkmark (#A855F7, --accent) instead of .btn-secondary's plain
+       gray -- ties the confirm action back to the selection it's acting on,
+       without going all the way to .btn-grad's full CTA treatment (that
+       read as competing with the page's actual primary action, the Run
+       button below the modal). */
+    #demo-images-confirm-btn {
+      background: rgba(168, 85, 247, .14);
+      border-color: rgba(168, 85, 247, .4);
+      color: #fff;
+    }
+    #demo-images-confirm-btn:hover:not(:disabled) {
+      background: rgba(168, 85, 247, .22);
+      border-color: rgba(168, 85, 247, .6);
+    }
 
     /* #notice-modal's title reuses .logo's own wordmark treatment (Photo in
        the plain text color, Master in the brand gradient) instead of
@@ -2987,7 +3047,12 @@
      closeDemoImagesModal in app.js) -- same backdrop+box+close pattern as
      #settings-modal below. Grid is populated lazily on first open from
      GET /api/photo-agent/demo-images (backend/routes/api.py), each tile
-     serving the demo file straight off ./demo_images. -->
+     serving the demo file straight off ./demo_images. Tiles toggle a
+     selected state on click (see toggleDemoImageSelection, app.js) rather
+     than using the photo immediately -- #demo-images-confirm-btn below
+     fetches every selected photo and hands them all to routeSelectedFiles
+     at once, so picking several demo photos gets the same batch handling a
+     real multi-file picker selection would. -->
 <div id="demo-images-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box demo-images-modal-box" role="dialog" aria-modal="true" aria-labelledby="demo-images-modal-title">
@@ -2997,6 +3062,9 @@
     </div>
     <div id="demo-images-grid" class="demo-images-grid"></div>
     <p id="demo-images-empty" class="history-empty" hidden>目前沒有範例照片。</p>
+    <div class="demo-images-modal-footer">
+      <button id="demo-images-confirm-btn" class="btn btn-secondary btn-sm" type="button" disabled>使用所選照片</button>
+    </div>
   </div>
 </div>
 
