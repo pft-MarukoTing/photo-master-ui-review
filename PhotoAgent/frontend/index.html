@@ -1997,15 +1997,6 @@
              now everything sits under the (now full-width) drop zone. -->
         <div class="upload-below-zone">
 
-          <button id="demo-images-btn" class="btn btn-secondary btn-sm" type="button">
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
-              <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
-              <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            範例照片
-          </button>
-
           <div class="options-card-inline" id="upload-options-card">
             <div id="processing-path-row" class="option-row" style="display: none;">
               <div class="option-text">
@@ -2043,8 +2034,21 @@
                right-aligned as one group -- it used to be its own row inside
                #upload-options-card above, but that left it stranded on the
                left with nothing else in that row once the 模型/長寬比/
-               生成張數 pickers moved into #settings-modal. -->
+               生成張數 pickers moved into #settings-modal. #demo-images-btn
+               (see openDemoImagesModal, app.js) joins the same row but stays
+               pinned to its left edge (margin-right:auto, styles.css) while
+               #settings-btn/Run stay grouped at the right; its own label
+               drops to icon-only under 560px, same squeeze #settings-btn
+               already gets. -->
           <div class="upload-actions-row">
+            <button id="demo-images-btn" class="btn btn-secondary" type="button">
+              <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
+                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
+                <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span class="btn-label">範例照片</span>
+            </button>
             <button id="settings-btn" class="btn btn-secondary" type="button" aria-label="設定">
               <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>

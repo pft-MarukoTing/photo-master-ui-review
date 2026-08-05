@@ -273,6 +273,11 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   justify-content: flex-end;
   gap: 10px;
+  /* Grow to fill whatever the row has left (#upload-options-card is 0-width
+     outside debug mode) -- #demo-images-btn's own margin-right:auto below
+     needs real slack in this box to push against, or it just sits flush
+     next to #settings-btn with nothing to separate them. */
+  flex: 1 1 auto;
 }
 /* #settings-btn is icon-only (label dropped, see index.html) -- square it up
    and drop .btn's own text-oriented 0 20px padding so the gear icon fills
@@ -280,6 +285,14 @@ a { text-decoration: none; color: inherit; }
 .upload-actions-row #settings-btn {
   width: 44px;
   padding: 0;
+}
+/* #demo-images-btn shares this row with #settings-btn/Run (index.html) but
+   reads as a separate, lower-priority action from them -- margin-right:auto
+   soaks up the row's own flex-end-driven extra space, pinning this one
+   button to the row's left edge while #settings-btn/Run stay grouped and
+   right-aligned as before. */
+.upload-actions-row #demo-images-btn {
+  margin-right: auto;
 }
 
 /* Upload grid: drop zone full-width on top, options + run buttons below it
