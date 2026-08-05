@@ -118,7 +118,7 @@ def _recommended_aspect_ratio(context: dict, fallback: str = "") -> str:
 # (the source photo's own ratio) is always an extra candidate alongside these.
 AUTO_ASPECT_RATIO_LABELS = (
     "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4",
-    "9:16", "16:9", "21:9", "1:4", "4:1", "1:8", "8:1",
+    "9:16", "16:9" #, "21:9", "1:4", "4:1", "1:8", "8:1",
 )
 
 
