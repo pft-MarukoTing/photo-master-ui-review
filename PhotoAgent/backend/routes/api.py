@@ -377,6 +377,22 @@ def result_image(job_id):
     return Response(image_bytes, mimetype="image/png")
 
 
+def _immutable_image_response(image_bytes, mimetype):
+    """Same Response(bytes, mimetype) every image route already returns, plus
+    a long-lived Cache-Control -- used only where the bytes for a given URL
+    can never change once served (a finished job's result/source thumbnail),
+    so the browser can skip re-fetching it every time the history/batch
+    record list re-renders (opening the drawer, switching tabs, etc.)
+    instead of re-hitting this server -> S3 round trip for the same bytes
+    every single time.
+    """
+    resp = Response(image_bytes, mimetype=mimetype)
+    resp.cache_control.public = True
+    resp.cache_control.max_age = 31536000
+    resp.cache_control.immutable = True
+    return resp
+
+
 @api_bp.get("/result/<job_id>/thumbnail")
 def result_thumbnail(job_id):
     """Small JPEG counterpart of result_image(), for fast-loading UI lists
@@ -408,7 +424,7 @@ def result_thumbnail(job_id):
 
     thumb_bytes, thumb_error = download_bytes(thumb_key, job_id)
     if not thumb_error and thumb_bytes is not None:
-        return Response(thumb_bytes, mimetype="image/jpeg")
+        return _immutable_image_response(thumb_bytes, "image/jpeg")
 
     image_bytes, download_error = download_bytes(image_key, job_id)
     if download_error or image_bytes is None:
@@ -416,7 +432,7 @@ def result_thumbnail(job_id):
 
     thumb_bytes = create_preview_bytes(image_bytes, max_side=HISTORY_THUMBNAIL_MAX_SIDE)
     cache_thumbnail(thumb_bytes, thumb_key, job_id)
-    return Response(thumb_bytes, mimetype="image/jpeg")
+    return _immutable_image_response(thumb_bytes, "image/jpeg")
 
 
 @api_bp.get("/source/<job_id>/image")
@@ -472,7 +488,7 @@ def source_thumbnail(job_id):
 
     thumb_bytes, thumb_error = download_bytes(derive_thumbnail_key(src_keys[0]), job_id)
     if not thumb_error and thumb_bytes is not None:
-        return Response(thumb_bytes, mimetype="image/jpeg")
+        return _immutable_image_response(thumb_bytes, "image/jpeg")
 
     image_bytes, download_error = download_bytes(src_keys[0], job_id)
     if download_error or image_bytes is None:
@@ -480,7 +496,7 @@ def source_thumbnail(job_id):
     # Unlike thumb_bytes above (already a real JPEG from create_preview_bytes
     # at upload time), this is the raw full-res upload -- same HEIC/HEIF risk
     # as source_image() above, so normalize it the same way.
-    return Response(ensure_jpeg_bytes(image_bytes), mimetype="image/jpeg")
+    return _immutable_image_response(ensure_jpeg_bytes(image_bytes), "image/jpeg")
 
 
 # ── Two-stage local flow: analyze now, review, /continue later ─────────────
