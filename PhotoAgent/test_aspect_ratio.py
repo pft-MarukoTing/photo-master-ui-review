@@ -9,6 +9,8 @@ from PIL import Image
 import gemini_client
 import openai_client
 from image_tools import (
+    AUTO_ASPECT_RATIO_LABELS,
+    _allowed_auto_ratio_labels,
     apply_derived_aspect_ratio,
     derive_aspect_ratio_from_crop,
     openai_edit_size_for_ratio,
@@ -128,6 +130,41 @@ class DerivedAspectRatioTests(unittest.TestCase):
         # Same rectangle on a 3:2 source measures 1.35 -> 4:3 is closer than 3:2.
         self.assertEqual(derive_aspect_ratio_from_crop(crop, 1200, 800)[0], "4:3")
 
+    def test_16_9_and_9_16_need_a_source_at_least_that_elongated(self):
+        # 0.80 x 0.45 of a square measures 1.778 -- exactly 16:9, which would
+        # win outright. The square source is nowhere near that wide, so 3:2
+        # takes it instead.
+        wide = {"enabled": True, "x": 0.1, "y": 0.275, "w": 0.8, "h": 0.45}
+        self.assertEqual(derive_aspect_ratio_from_crop(wide, 1600, 1600)[0], "3:2")
+        tall = {"enabled": True, "x": 0.275, "y": 0.1, "w": 0.45, "h": 0.8}
+        self.assertEqual(derive_aspect_ratio_from_crop(tall, 1600, 1600)[0], "2:3")
+
+        # A 7:4 photo (1.75) is within tolerance of 16:9, so a crop of it that
+        # measures 1.9 -- nearer 16:9 than to the source's own ratio -- may snap
+        # there. On the square photo above the same crop could not.
+        near_16_9 = {"enabled": True, "x": 0.025, "y": 0.0625, "w": 0.95, "h": 0.875}
+        self.assertEqual(derive_aspect_ratio_from_crop(near_16_9, 1400, 800)[0], "16:9")
+
+    def test_allowed_labels_drop_only_the_extremes(self):
+        square = _allowed_auto_ratio_labels(1.0)
+        self.assertNotIn("16:9", square)
+        self.assertNotIn("9:16", square)
+        self.assertEqual(
+            [l for l in AUTO_ASPECT_RATIO_LABELS if l not in ("16:9", "9:16")], list(square)
+        )
+        # Exactly 16:9 / 9:16 qualifies, and so does anything more elongated
+        # than that in the same direction (21:9, 1:2) -- those photos are
+        # already past the extreme, so offering it takes nothing extra away.
+        self.assertIn("16:9", _allowed_auto_ratio_labels(16 / 9))
+        self.assertIn("16:9", _allowed_auto_ratio_labels(21 / 9))
+        self.assertIn("9:16", _allowed_auto_ratio_labels(9 / 16))
+        self.assertIn("9:16", _allowed_auto_ratio_labels(1 / 2))
+        # Less elongated stays out, and neither extreme unlocks its transpose.
+        self.assertNotIn("16:9", _allowed_auto_ratio_labels(3 / 2))
+        self.assertNotIn("9:16", _allowed_auto_ratio_labels(2 / 3))
+        self.assertNotIn("9:16", _allowed_auto_ratio_labels(21 / 9))
+        self.assertNotIn("16:9", _allowed_auto_ratio_labels(1 / 2))
+
     def test_no_usable_crop_means_original(self):
         self.assertEqual(derive_aspect_ratio_from_crop(None, 1600, 1600), ("original", None))
         self.assertEqual(
@@ -154,8 +191,9 @@ class DerivedAspectRatioTests(unittest.TestCase):
         self.assertEqual(applied["recommended_aspect_ratio"], "4:5")
         self.assertEqual(applied["crop_box"]["aspect_ratio"], "4:5")
         # Candidates are alternative framings, each measured on its own:
-        # 1.00 x 0.60 of a square is 1.667, closest to 16:9.
-        self.assertEqual(applied["crop_candidates"][0]["crop_box"]["aspect_ratio"], "16:9")
+        # 1.00 x 0.60 of a square is 1.667 -- 3:2, since 16:9 is only offered to
+        # photos already at least that wide.
+        self.assertEqual(applied["crop_candidates"][0]["crop_box"]["aspect_ratio"], "3:2")
         self.assertEqual(applied["aspect_ratio_source"], "crop_box_geometry")
         self.assertIn("4:5", applied["aspect_ratio_reason"])
         self.assertEqual(analysis, before)
