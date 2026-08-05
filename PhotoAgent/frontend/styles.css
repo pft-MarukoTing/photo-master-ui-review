@@ -1016,6 +1016,22 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .compare-card.showing-generated .compare-img-original { display: none; }
 .compare-card.showing-generated .compare-img-generated { display: block; }
 
+/* Hover layer over the still-visible previous RUN/record while the next
+   one's image downloads (selectAdjacentRun/selectBatchRecord/the history-
+   list click handler, app.js) -- dims the photo and blocks clicks on it
+   rather than swapping .compare-img's src mid-download, which would
+   otherwise paint progressively right in front of the user. Anchored to
+   .photo-frame-wrap (see this element's own HTML comment for why, not
+   .photo-frame -- its own rounding, since it's no longer clipped by
+   .photo-frame's overflow:hidden. */
+.run-switch-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: var(--radius-lg);
+  background: rgba(10, 10, 14, .45);
+}
+
 /* Glass icon buttons, right-aligned in .canvas-header-row (see above).
    Icon-only, so title/aria-label (kept in sync in setCompareView) carry the
    "switch to X" / "download" meaning instead of visible text. */

@@ -1108,6 +1108,11 @@
     .rc-media img { width: 100%; height: 100%; object-fit: cover; }
     .batch-sidebar-item.processing .rc-media img,
     .batch-sidebar-item.analyzing .rc-media img { opacity: .35; }
+    /* Transient "opening this record" feedback for a just-clicked history
+       tile (renderHistoryList, app.js) -- same dim treatment as .processing
+       above, kept as its own class since the tile's real done/error status
+       (and badge) must stay untouched underneath it. */
+    .history-cube.opening .rc-media img { opacity: .35; }
     /* Static pill beside the filename (not overlaid on the thumbnail like the
        old grid card's badge -- the sidebar's thumbnail is too small for that
        text to fit without wrapping). */
@@ -2476,6 +2481,20 @@
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
                 <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
+              </div>
+              <!-- Shown while switching RUN/record/history entry (see
+                   app.js's selectAdjacentRun/selectBatchRecord/the history-
+                   list click handler) -- a sibling of .photo-frame, not
+                   nested inside it: .photo-frame shrink-wraps to whatever
+                   image is currently loaded, and a record switch briefly
+                   reassigns #original-img's src before its replacement has
+                   loaded, collapsing .photo-frame to a broken-image-icon's
+                   tiny box in that gap. .photo-frame-wrap (this element's
+                   actual positioned ancestor) stays the stable full-column
+                   size regardless, so anchoring here keeps this a normal
+                   rectangle instead of shrinking down to a sliver too. -->
+              <div id="run-switch-loading" class="run-switch-loading" hidden>
+                <div class="rc-spinner"></div>
               </div>
               <!-- Switches between this photo's N edit RUNs -- hidden
                    entirely when there's only one (see updateRunSwitcher in

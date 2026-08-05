@@ -143,6 +143,7 @@ window.PhotoAgentDom = (() => {
     batchReviewContinueBtn: document.querySelector("#batch-review-continue-btn"),
     runSwitchPrev: document.querySelector("#run-switch-prev"),
     runSwitchNext: document.querySelector("#run-switch-next"),
+    runSwitchLoading: document.querySelector("#run-switch-loading"),
     runCountLabel: document.querySelector("#run-count-label"),
     runProgress: document.querySelector("#run-progress"),
     runProgressLabel: document.querySelector("#run-progress-label"),

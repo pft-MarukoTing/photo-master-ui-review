@@ -53,13 +53,28 @@
   }
 
   // Steps to the next/previous *selectable* (status "done") RUN, skipping
-  // over any still-processing/errored ones.
-  function selectAdjacentRun(delta) {
+  // over any still-processing/errored ones. Shows #run-switch-loading over
+  // the still-visible current RUN (and disables both arrows) for as long as
+  // onSelectDone takes -- its target RUN's image can take a moment to fetch,
+  // and without this the button press looked like it did nothing until the
+  // new image suddenly popped in.
+  async function selectAdjacentRun(delta) {
     if (!currentRunList || currentRunOnSelect == null || currentRunIndex == null) return;
     let idx = currentRunIndex + delta;
     while (idx >= 0 && idx < currentRunList.length && currentRunList[idx].status !== "done") idx += delta;
     if (idx < 0 || idx >= currentRunList.length) return;
-    currentRunOnSelect(idx);
+    if (els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+    if (els.runSwitchPrev) els.runSwitchPrev.disabled = true;
+    if (els.runSwitchNext) els.runSwitchNext.disabled = true;
+    try {
+      await currentRunOnSelect(idx);
+    } finally {
+      if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+      // Recomputes each arrow's real enabled/disabled state for the RUN we
+      // landed on -- may differ from what we forced above, and must still
+      // run even if onSelectDone above threw or bailed early.
+      updateRunSwitcherArrows();
+    }
   }
 
   if (els.runSwitchPrev) els.runSwitchPrev.addEventListener("click", () => selectAdjacentRun(-1));
@@ -504,6 +519,21 @@
   // addTiming/appendTimingRow expect ms or a non-number sentinel.
   function secToMs(seconds) {
     return typeof seconds === "number" ? seconds * 1000 : null;
+  }
+
+  // Fully downloads an image before anything swaps a visible <img> to it --
+  // otherwise the browser paints the real element progressively (partial/
+  // low-res-first) right in front of the user once whatever "still working"
+  // UI was covering it has already been dismissed. Resolves (never rejects)
+  // even on error, since the caller still has to proceed and show whatever
+  // it's got -- a broken-image icon beats hanging the reveal forever.
+  function preloadImage(src) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(true);
+      img.onerror = () => resolve(false);
+      img.src = src;
+    });
   }
 
   function appendTimingRow(container, label, duration, { sub = false } = {}) {
@@ -1859,7 +1889,7 @@
         await runCombinedMultiRun({
           file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount,
           onStage: onCombinedStage,
-          onRunDone: (runData) => {
+          onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
             if (!run) return;
             run.jobId = runData.jobId;
@@ -1880,7 +1910,11 @@
             updateRunProgress();
             // autoOpenPanel: false -- this fires per-RUN, not just once at
             // the end (see showSingleResult's own doc on this param).
-            if (isCurrent()) { showSingleResult({ autoOpenPanel: false }); revealResultsIfNeeded(); }
+            // showSingleResult now preloads the image itself before rendering,
+            // so the processing screen (still up until revealResultsIfNeeded
+            // runs) stays visible for the whole download instead of the
+            // results canvas appearing with a half-painted image.
+            if (isCurrent()) { await showSingleResult({ autoOpenPanel: false }); revealResultsIfNeeded(); }
           }
         });
       } catch (error) {
@@ -1907,7 +1941,7 @@
         singleFlowState.analysis = doneRun.result.analysis;
         singleFlowState.analyzeJobId = doneRun.jobId;
         singleFlowState.useCombinedJob = false;
-        showSingleResult();
+        await showSingleResult();
       }
     } else if (runCount === 1) {
       // Single RUN, two-stage manual/AIPoC path: unchanged from before
@@ -2019,9 +2053,12 @@
         doneCount += 1;
         updateRunProgress();
         // autoOpenPanel: false -- this fires per-RUN, not just once at the
-        // end (see showSingleResult's own doc on this param).
+        // end (see showSingleResult's own doc on this param). showSingleResult
+        // preloads the image before rendering, so revealResultsIfNeeded below
+        // (which flips away from the processing screen, the first time only)
+        // never runs before the image is actually ready to show.
         if (run.status === "done" && isCurrent()) {
-          showSingleResult({ autoOpenPanel: false });
+          await showSingleResult({ autoOpenPanel: false });
           revealResultsIfNeeded();
         }
       }, POLL_CONCURRENCY);
@@ -2029,7 +2066,7 @@
       if (!myRuns.some((r) => r.status === "done")) {
         throw new Error(myRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
       }
-      if (isCurrent()) showSingleResult();
+      if (isCurrent()) await showSingleResult();
     }
 
     revealResultsIfNeeded();
@@ -2094,12 +2131,26 @@
   // showSingleResult is also how an entirely unrelated, already-finished
   // record gets its own settings panel shown when the user switches to view
   // it while some *other* record is still mid-revise in the background.
-  function showSingleResult({ autoOpenPanel = true, forceReopen = false } = {}) {
+  async function showSingleResult({ autoOpenPanel = true, forceReopen = false } = {}) {
     const runs = singleRuns || [];
     const pick = (singleMirrorIndex != null && runs[singleMirrorIndex])
       ? runs[singleMirrorIndex]
       : (runs.find((x) => x.status === "done") || runs[0]);
     if (!pick || pick.status !== "done") return;
+
+    // Fully download the RUN's image before touching the DOM at all --
+    // whatever was previously on screen (an earlier RUN, or the processing
+    // animation) stays up for the whole wait instead of getting torn down
+    // and replaced by a partially-painted <img>. If the user switches RUN
+    // tabs (or a new record loads) while this is in flight, `runs`/`pick`
+    // are stale by the time it resolves -- bail and let whichever call
+    // actually reflects the current selection render instead.
+    await preloadImage(pick.imageUrl);
+    if (singleRuns !== runs) return;
+    const stillPicked = (singleMirrorIndex != null && runs[singleMirrorIndex])
+      ? runs[singleMirrorIndex]
+      : (runs.find((x) => x.status === "done") || runs[0]);
+    if (stillPicked !== pick) return;
 
     // Same "already showing" optimization as showBatchDoneMain (avoids
     // needlessly tearing down -- and losing -- an already-open inline
@@ -3144,7 +3195,34 @@
             ? resultThumbnailUrl(jobIds[doneIdx])
             : resultImageUrl(jobIds[doneIdx], { path: job.path });
           if (media) media.innerHTML = `<img src="${doneThumbSrc}" alt="">`;
-          li.addEventListener("click", () => viewHistoryRecord(job));
+          // viewHistoryRecord fetches the full record and preloads its result
+          // image before showing anything (see its own/showSingleResult's
+          // preload guard) -- without feedback here, the tap on this tile
+          // reads as dead until the results page suddenly appears. .opening
+          // reuses the same dim treatment as .processing (see the CSS rule
+          // above) without touching the "done" class/badge itself. Also
+          // shows #run-switch-loading over the main canvas, same as
+          // selectBatchRecord/selectAdjacentRun -- the history drawer opens
+          // over whatever's already showing (openHistoryDrawer's own doc),
+          // so there's very often a previous record's photo underneath this
+          // click that should stay visible, dimmed, instead of disappearing
+          // until the newly-picked one is ready.
+          li.addEventListener("click", async () => {
+            if (li.classList.contains("opening")) return;
+            li.classList.add("opening");
+            const spinner = document.createElement("div");
+            spinner.className = "rc-spinner";
+            media?.appendChild(spinner);
+            const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+            if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+            try {
+              await viewHistoryRecord(job);
+            } finally {
+              li.classList.remove("opening");
+              spinner.remove();
+              if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+            }
+          });
         } else if (statuses.every((s) => s.status === "error")) {
           li.className = "history-cube batch-sidebar-item error";
           if (badge) badge.textContent = "失敗";
@@ -3631,22 +3709,28 @@
       };
       lastSingleSelections = selections;
 
-      const applyRender = () => {
-        els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
-        showSection("results");
-        // forceReopen: true -- this may be a genuinely different record than
-        // whatever the analysis panel was last showing, even if it was
-        // already open (see openInlineAnalysisForCurrentContext's own doc on
-        // this).
-        showSingleResult({ forceReopen: true });
-      };
-      if (els.originalImg.src === selectedFileSourceUrl && els.originalImg.complete) {
-        applyRender();
-      } else {
-        els.originalImg.onload = () => { els.originalImg.onload = null; applyRender(); };
-        els.originalImg.onerror = () => { els.originalImg.onload = null; applyRender(); };
-        els.originalImg.src = selectedFileSourceUrl;
-      }
+      // Awaited (not fire-and-forget) so this function's own promise only
+      // resolves once the result photo is actually showing -- callers like
+      // the history-list click handler use that to keep their own "opening…"
+      // spinner up for the whole wait instead of dropping it the instant the
+      // network fetch above resolved.
+      await new Promise((resolve) => {
+        if (els.originalImg.src === selectedFileSourceUrl && els.originalImg.complete) {
+          resolve();
+        } else {
+          els.originalImg.onload = () => { els.originalImg.onload = null; resolve(); };
+          els.originalImg.onerror = () => { els.originalImg.onload = null; resolve(); };
+          els.originalImg.src = selectedFileSourceUrl;
+        }
+      });
+      els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
+      showSection("results");
+      // forceReopen: true -- this may be a genuinely different record than
+      // whatever the analysis panel was last showing, even if it was already
+      // open (see openInlineAnalysisForCurrentContext's own doc on this).
+      // showSingleResult itself preloads the RUN's image before painting, so
+      // this doesn't return until that's done either.
+      await showSingleResult({ forceReopen: true });
       return;
     }
 
@@ -3667,7 +3751,11 @@
     };
 
     showSection("results");
-    showBatchDoneMain(record, {
+    // Awaited for the same reason as the local-path branch above --
+    // showBatchDoneMain preloads record.imageUrl before painting, so this
+    // keeps viewHistoryRecord's own promise open (and the history-list
+    // click handler's spinner up) for that whole wait too.
+    await showBatchDoneMain(record, {
       preset: presets[job.preset] || presets.natural,
       // job.ai_photo_editing is only absent for a history entry recorded
       // before that field existed -- fall back to inferring it the same way
@@ -3836,7 +3924,7 @@
   // ── Core dispatcher: sidebar click -> whatever main-area view matches the
   // selected record's current status. Replaces the old grid/detail-pagination/
   // separate-review-screen split entirely -- one page, one selection model. ──
-  function selectBatchRecord(record) {
+  async function selectBatchRecord(record) {
     if (!record) return;
     // If a done record's inline revise-panel is open, close it directly
     // rather than simulating a click on its cancel button -- that click's
@@ -3852,7 +3940,19 @@
     userPickedBatchRecord = true;
     if (previous && previous !== record) updateBatchSidebarItem(previous);
     updateBatchSidebarItem(record);
-    renderBatchMain(record);
+    // Same hover-and-dim treatment as the RUN-switch arrows
+    // (selectAdjacentRun) -- only worth showing when a photo is already on
+    // screen to keep visible while the newly-selected record's image
+    // downloads (showBatchDoneMain now preloads it before painting); every
+    // other target view (analyzing/error/analyzed) replaces the whole
+    // canvas outright regardless, so there's nothing to hover over there.
+    const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+    if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+    try {
+      await renderBatchMain(record);
+    } finally {
+      if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+    }
     if (record.status === "error") openBatchError(record); // only on explicit click, never from a background refresh
     window.scrollTo({ top: 0, behavior: "instant" });
     // Picking an image is the drawer's whole purpose on narrow viewports --
@@ -3958,7 +4058,7 @@
   }
   window.addEventListener("resize", updateAnalysisPreviewMaxHeight);
 
-  function renderBatchMain(record) {
+  async function renderBatchMain(record) {
     if (!record) return;
     updateApSubjectTags(record);
     updateBatchSidebarMaxHeight();
@@ -3968,7 +4068,7 @@
     // "any run done" check flips record.status to "done" before the specific
     // mirrored run has actually resolved -- record.result would still be
     // null then, so fall through to the loading view instead of crashing.
-    else if (record.status === "done" && record.result) showBatchDoneMain(record);
+    else if (record.status === "done" && record.result) await showBatchDoneMain(record);
     else if (record.status === "error") showBatchMainError(record);
     else showBatchMainLoading(record); // "analyzing" / "processing"
   }
@@ -4113,7 +4213,7 @@
     updateRunSwitcher(runs, current, (idx) => {
       record.mirrorIndex = idx;
       syncRecordMirror(record);
-      showBatchDoneMain(record, settings);
+      return showBatchDoneMain(record, settings);
     });
   }
 
@@ -4130,7 +4230,7 @@
     const current = (singleMirrorIndex != null && runs[singleMirrorIndex]) ? singleMirrorIndex : doneIdx;
     updateRunSwitcher(runs, current, (idx) => {
       singleMirrorIndex = idx;
-      showSingleResult();
+      return showSingleResult();
     });
   }
 
@@ -4145,7 +4245,24 @@
   // like a live, revisable result (back-to-process + inline analysis) or a
   // read-only historical one -- re-running a job from another session
   // through the live single/batch revise flow doesn't apply here.
-  function showBatchDoneMain(record, settings = batchSettings) {
+  async function showBatchDoneMain(record, settings = batchSettings) {
+    // Fully download this record/RUN's image before touching the DOM at
+    // all -- same reasoning as showSingleResult's identical guard: keeps
+    // whatever was on screen (a different record, or an earlier RUN of this
+    // one) visible for the whole download instead of tearing it down and
+    // repainting progressively. Guards against two kinds of staleness that
+    // can happen while this await is in flight: a later RUN landing on this
+    // same record (record.imageUrl reassigned by syncRecordMirror), or the
+    // user selecting an altogether different record/history entry
+    // (currentBatchRecord/historyViewToken) -- either way, whichever call
+    // actually reflects the current selection should be the one to render.
+    const targetImageUrl = record.imageUrl;
+    const guardToken = historyViewToken;
+    await preloadImage(targetImageUrl);
+    if (record.imageUrl !== targetImageUrl) return;
+    if (currentBatchRecord !== null && currentBatchRecord !== record) return;
+    if (historyViewToken !== guardToken) return;
+
     // Skip the teardown when the canvas is already showing -- this runs
     // again every time a RUN tab is clicked (same record, just a different
     // run), and hideAllBatchMainViews' restoreAnalysisPreviewHome() would
