@@ -36,6 +36,7 @@ window.PhotoAgentDom = (() => {
     dropZone: document.querySelector("#drop-zone"),
     dzPreview: document.querySelector("#dz-preview"),
     dzPreviewImg: document.querySelector("#dz-preview-img"),
+    dzPreviewLoading: document.querySelector("#dz-preview-loading"),
     dzMulti: document.querySelector("#dz-multi"),
     dzClearAllBtn: document.querySelector("#dz-clear-all-btn"),
     demoImagesBtn: document.querySelector("#demo-images-btn"),

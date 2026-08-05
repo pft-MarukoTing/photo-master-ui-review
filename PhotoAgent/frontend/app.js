@@ -930,6 +930,16 @@
     [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach((list) => {
       if (list) list.innerHTML = "";
     });
+
+    // Switch to the preview shell right away, with its loading hover up --
+    // a HEIC photo's decode (previewableBlob's libheif WASM call, below) can
+    // take a moment, and #dz-preview-img has no src at all until it's done,
+    // so leaving the empty drop zone on screen for that whole gap looks like
+    // the selection did nothing.
+    els.dropZone.hidden = true;
+    els.dzPreview.hidden = false;
+    if (els.dzPreviewLoading) els.dzPreviewLoading.hidden = false;
+
     const blobForPreview = await previewableBlob(file);
     if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
 
@@ -949,8 +959,7 @@
     els.dzPreviewImg.src = previewUrl;
     els.procThumb.src = previewThumbUrl || previewUrl;
     els.originalImg.src = previewUrl;
-    els.dropZone.hidden = true;
-    els.dzPreview.hidden = false;
+    if (els.dzPreviewLoading) els.dzPreviewLoading.hidden = true;
 
     const image = new Image();
     image.onload = () => {

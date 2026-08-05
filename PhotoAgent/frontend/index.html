@@ -2034,6 +2034,17 @@
               </svg>
               點擊更換照片
             </div>
+            <!-- Shown from the moment a file is picked until its preview is
+                 actually ready (setSelectedFile, app.js) -- a HEIC photo's
+                 decode (libheif WASM) can take a moment, and #dz-preview-img
+                 has no src at all until then, so without this the drop zone
+                 would look like the selection did nothing for that whole
+                 gap. Reuses .run-switch-loading's look (see its own doc,
+                 styles.css) for the same "still working" language as the
+                 results page. -->
+            <div id="dz-preview-loading" class="run-switch-loading" hidden>
+              <div class="rc-spinner"></div>
+            </div>
           </div>
 
           <!-- Multi-file thumbnail strip (shown when more than one file selected).
