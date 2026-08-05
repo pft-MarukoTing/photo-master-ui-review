@@ -25,6 +25,7 @@ Meitu Test Case
 *** Keywords ***
 Beautify Nail Art Photo
     [Arguments]    ${photo_offset}    ${custom_offset}
+    Dismiss Unsaved Photo Dialog
     Click Page Element    accessibility_id=Beautify
     Scroll To Bottom Of Photo List    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView
     Click Photo From Bottom By Grid    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView    ${photo_offset}
@@ -39,6 +40,14 @@ Beautify Nail Art Photo
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
     Click Page Element    accessibility_id=CosmesisPhotoBrowerBackButton
+
+Dismiss Unsaved Photo Dialog
+    ${dialog_shown}=    Run Keyword And Return Status
+    ...    Element Should Be Visible
+    ...    xpath=//XCUIElementTypeButton[@name="Cancel"]
+    IF    ${dialog_shown}
+        Click Page Element    xpath=//XCUIElementTypeButton[@name="Cancel"]
+    END
 
 Open Meitu Application
     Open Application
