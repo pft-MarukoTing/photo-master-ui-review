@@ -10,6 +10,7 @@ is-just-a-namespace model.
 import json
 import os
 import time
+import uuid
 
 from aiserver_utils.pf_redis import pf_redis_client
 from backend.services.account import normalize_username
@@ -28,24 +29,32 @@ def is_admin(username):
 
 
 def record_report(username, job_id, path, note=None, user_prompt=None, screenshot_key=None):
-    """One entry per (job_id, user) pair -- re-reporting the same job by the
-    same user just refreshes its timestamp (and note/user_prompt/screenshot)
-    in place, but two different users reporting the same job both show up
-    to the admin as separate entries. note is the reporter's optional
-    free-text description of the issue; user_prompt is whatever 補充指令
-    text the original submission actually used (the frontend reads it off
-    its own in-memory record of that job, since neither is stored anywhere
-    else the report could look it up from -- the raw text a user types is
-    never persisted into the job's own analysis/result JSON). screenshot_key
-    is the S3 key report_job (backend/routes/api.py) already uploaded the
-    reporter's screen capture to, if any -- stored so report_screenshot can
-    resolve it later without the client ever handling a raw S3 key itself.
-    All three are omitted from the stored entry entirely when absent, rather
-    than stored as "" (keeps get_reports' output the same shape as before
-    any of them existed for every report that doesn't use them)."""
+    """job_id is optional -- #report-btn is always clickable (app.js), even
+    with no result on screen, for a general "something's wrong" report with
+    nothing to point at. A job-tied report keys on (job_id, user): re-
+    reporting the same job by the same user just refreshes its timestamp
+    (and note/user_prompt/screenshot) in place, while two different users
+    reporting the same job both show up to the admin as separate entries.
+    A job-less report has no such natural dedup key -- each submission gets
+    its own random id instead, so a second general report from the same
+    user doesn't overwrite the first. Returns the report's id (the Redis
+    hash field itself), which report_screenshot resolves by later.
+
+    note is the reporter's optional free-text description of the issue;
+    user_prompt is whatever 補充指令 text the original submission actually
+    used (the frontend reads it off its own in-memory record of that job,
+    since neither is stored anywhere else the report could look it up from
+    -- the raw text a user types is never persisted into the job's own
+    analysis/result JSON). screenshot_key is the S3 key report_job
+    (backend/routes/api.py) already uploaded the reporter's screen capture
+    to, if any -- stored so report_screenshot can resolve it later without
+    the client ever handling a raw S3 key itself. All three are omitted
+    from the stored entry entirely when absent, rather than stored as ""
+    (keeps get_reports' output the same shape as before any of them existed
+    for every report that doesn't use them)."""
     name = normalize_username(username)
-    field = f"{job_id}:{name}"
-    entry = {"job_id": job_id, "path": path, "user": name, "ts": time.time()}
+    field = f"{job_id}:{name}" if job_id else f"general:{name}:{uuid.uuid4().hex}"
+    entry = {"report_id": field, "job_id": job_id, "path": path, "user": name, "ts": time.time()}
     if note:
         entry["note"] = note
     if user_prompt:
@@ -53,16 +62,17 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
     if screenshot_key:
         entry["screenshot_key"] = screenshot_key
     pf_redis_client.hset(REPORTS_KEY, field, json.dumps(entry))
+    return field
 
 
-def get_report(job_id, username):
+def get_report_by_id(report_id):
     """One report entry, including its raw screenshot_key -- for
     report_screenshot (backend/routes/api.py) to resolve server-side only;
     get_reports below strips that same key from what it hands to the
     frontend (has_screenshot instead), so a client never needs to know or
-    pass around the actual S3 key."""
-    name = normalize_username(username)
-    raw = pf_redis_client.hget(REPORTS_KEY, f"{job_id}:{name}")
+    pass around the actual S3 key. Keyed by report_id (not job_id/user
+    separately) since a general report has no job_id to key on at all."""
+    raw = pf_redis_client.hget(REPORTS_KEY, report_id)
     if not raw:
         return None
     try:

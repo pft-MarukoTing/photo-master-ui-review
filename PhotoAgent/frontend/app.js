@@ -864,7 +864,7 @@
     return html2canvasLoadPromise;
   }
 
-  // Best-effort capture of the whole visible results panel at the moment
+  // Best-effort capture of whatever's actually visible at the moment
   // #report-btn is clicked -- attached to the report so whoever reviews it
   // sees exactly what the reporter was looking at (a layout glitch, which
   // RUN was on screen, ...), which is more than viewHistoryRecord's own
@@ -875,27 +875,42 @@
   // so a real failure is at least visible in devtools instead of silently
   // never producing a screenshot with no trace of why.
   async function captureReportScreenshot(jobId, path, runNumber) {
-    const target = els.sections.results;
-    if (!target) return null;
     try {
       const html2canvas = await loadHtml2Canvas();
-      const canvas = await html2canvas(target, {
+      const viewportWidth = document.documentElement.clientWidth;
+      const viewportHeight = document.documentElement.clientHeight;
+      const scale = Math.min(2, window.devicePixelRatio || 1);
+      // Captures document.body (not just whichever #upload-section/
+      // #processing-section/#results-section is .visible) -- any of this
+      // app's overlay modals (#demo-images-modal, #ap-style-modal,
+      // #settings-modal, ...) are siblings of those sections, not nested
+      // inside them, so scoping the capture to one section silently missed
+      // whichever modal the reporter actually had open on top of it.
+      // Deliberately NOT passing x/y/width/height/scrollX/scrollY here to
+      // crop to the viewport -- html2canvas's own crop options didn't
+      // reliably agree with each other on where "the current scroll
+      // position" actually was, desyncing the capture from what was really
+      // on screen. windowWidth/windowHeight are still pinned so responsive
+      // @media rules (e.g. this app's own icon-only header collapse below
+      // 560px) match the real page; scrollX/scrollY are left at html2canvas's
+      // own default (window.scrollX/scrollY, read fresh at call time), which
+      // is what correctly places any position:fixed element (the header,
+      // #report-btn) at its real on-screen spot in the render below.
+      const fullCanvas = await html2canvas(document.body, {
         backgroundColor: "#09090b",
         useCORS: true,
-        scale: Math.min(2, window.devicePixelRatio || 1),
-        // Pins html2canvas's own offscreen render to the CURRENT live
-        // viewport -- left at its defaults, it can pick a different
-        // effective width (tripping different @media breakpoints than
-        // whatever's actually on screen, e.g. this app's own icon-only
-        // header collapse below 560px) and/or ignore how far the page is
-        // actually scrolled, capturing the wrong vertical region entirely.
-        // Both show up as "the screenshot doesn't match what I was looking
-        // at" -- this makes the offscreen render use the exact same
-        // viewport size and scroll position as the real page.
-        windowWidth: document.documentElement.clientWidth,
-        windowHeight: document.documentElement.clientHeight,
-        scrollX: -window.scrollX,
-        scrollY: -window.scrollY,
+        scale,
+        windowWidth: viewportWidth,
+        windowHeight: viewportHeight,
+        // openReportModal kicks this capture off before revealing
+        // #report-modal, but html2canvas's own DOM read happens somewhere
+        // inside its (possibly slow, first-load-fetches-the-library) async
+        // chain -- there's no guarantee that read still happens before
+        // #report-modal.hidden flips to false. Excluding it (and its own
+        // #report-screenshot-modal preview popup) outright removes the race
+        // entirely: this is a capture of what the reporter was looking at
+        // *before* clicking 回報, never the report sheet itself.
+        ignoreElements: (el) => el.id === "report-modal" || el.id === "report-screenshot-modal",
         // #generated-img's real src is always a presigned S3 URL with no
         // CORS headers (see resultImageUrl's own comment) -- reading its
         // pixels back via canvas.toBlob below would taint the whole canvas
@@ -910,6 +925,23 @@
         // (rather than rejecting) so a proxy hiccup degrades to "photo
         // missing from the screenshot," not "no screenshot at all."
         onclone: (clonedDoc) => {
+          // Every element using background-clip:text for a gradient fill
+          // (.logo em's "Master" half, .upload-headline, .notice-modal-title
+          // em -- shared by #notice-modal/#account-modal/#confirm-modal's
+          // own title) -- html2canvas can't rasterize that clip, so it was
+          // rendering the full gradient rectangle behind the text instead of
+          // the text itself, reading as a solid color block. Flattened to
+          // the gradient's own accent color as plain, visible text -- purely
+          // cosmetic to this clone, the real on-screen elements are never
+          // touched. Keep this selector list in sync with any new
+          // background-clip:text usage (grep for it in styles.css/index.html).
+          clonedDoc.querySelectorAll(".logo em, .upload-headline, .notice-modal-title em").forEach((el) => {
+            el.style.background = "none";
+            el.style.webkitBackgroundClip = "unset";
+            el.style.backgroundClip = "unset";
+            el.style.webkitTextFillColor = "unset";
+            el.style.color = "var(--accent)";
+          });
           const clonedImg = clonedDoc.getElementById("generated-img");
           if (!clonedImg || !jobId) return undefined;
           return new Promise((resolve) => {
@@ -919,7 +951,20 @@
           });
         }
       });
-      return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+      // fullCanvas is document.body rendered at its full natural
+      // scrollHeight, not just one screenful -- crop down to just the
+      // currently-visible viewport (a plain 2D drawImage slice, not another
+      // html2canvas option) so the screenshot matches what the reporter was
+      // actually looking at rather than the entire scrollable page.
+      const croppedCanvas = document.createElement("canvas");
+      croppedCanvas.width = viewportWidth * scale;
+      croppedCanvas.height = viewportHeight * scale;
+      croppedCanvas.getContext("2d").drawImage(
+        fullCanvas,
+        window.scrollX * scale, window.scrollY * scale, viewportWidth * scale, viewportHeight * scale,
+        0, 0, viewportWidth * scale, viewportHeight * scale
+      );
+      return await new Promise((resolve) => croppedCanvas.toBlob((blob) => resolve(blob), "image/png"));
     } catch (err) {
       console.error("回報截圖擷取失敗", err);
       return null;
@@ -1222,29 +1267,51 @@
     return `${jobId}:${runNumber || 1}`;
   }
 
-  // #report-btn only makes sense once a real result exists to flag -- same
-  // "lastResult is the single source of truth" reasoning as
-  // updateDownloadLinks above, called at the same points lastResult changes.
+  // #report-btn is always visible/clickable (a permanent header action, not
+  // gated on lastResult the way #reset-btn is on the results section) --
+  // this only keeps its "already reported" tint in sync with whatever
+  // lastResult currently is, called at the same points lastResult changes.
+  // Re-reporting the same RUN is a harmless refresh server-side (see
+  // backend/services/report.py), so this is cosmetic, not a hard lock --
+  // openReportModal itself decides whether there's actually anything to
+  // report right now.
   function updateReportButton() {
     if (!els.reportBtn) return;
-    // Now that #report-btn lives in the global header (not nested inside
-    // #results-canvas-row/#photo-frame-wrap the way it used to be), it no
-    // longer gets hidden "for free" whenever those are hidden to show a
-    // loading/error placeholder instead of a real result (hideAllBatchMainViews,
-    // backToProcessFromResults' own revise animation) -- check both directly,
-    // on top of lastResult itself, so it can't stay visible/clickable for a
-    // stale previous result while a placeholder (not that result) is on screen.
-    const canvasVisible = !(els.resultsCanvasRow && els.resultsCanvasRow.hidden)
-      && !(els.photoFrameWrap && els.photoFrameWrap.hidden);
-    const isShowingResult = !!lastResult && canvasVisible;
-    els.reportBtn.hidden = !isShowingResult;
-    if (!isShowingResult) return;
-    const already = reportedRuns.has(reportKeyFor(lastResult.jobId, lastResult.runNumber));
-    els.reportBtn.disabled = already;
+    const already = !!lastResult && reportedRuns.has(reportKeyFor(lastResult.jobId, lastResult.runNumber));
     els.reportBtn.classList.toggle("is-reported", already);
     const hint = already ? "已回報" : "回報此結果";
     els.reportBtn.title = hint;
     els.reportBtn.setAttribute("aria-label", hint);
+  }
+
+  // #report-btn is position:fixed (see its own markup comment, index.html)
+  // so it keeps winning against modals/drawers, which also takes it out of
+  // .header-actions' own flex flow -- #report-btn-spacer is a same-sized,
+  // invisible stand-in left in that flow instead, purely to reserve the
+  // slot #reset-btn/#admin-reports-btn/#account-badge lay out around. This
+  // copies the spacer's live position onto the real button, so it always
+  // renders exactly where that reserved slot actually is. Called whenever
+  // anything in that row could have changed size (account/admin state,
+  // window resize) -- see its own call sites.
+  function syncReportBtnPosition() {
+    if (!els.reportBtn || !els.reportBtnSpacer) return;
+    const rect = els.reportBtnSpacer.getBoundingClientRect();
+    // .header-inner has no flex-wrap, and neither .logo nor .header-actions'
+    // own children shrink below their content size -- on a narrow enough
+    // phone, .logo + up to four header buttons (#reset-btn,
+    // #report-btn-spacer, #admin-reports-btn, #account-badge) can still add
+    // up to more than the viewport's width despite the 560px tightening,
+    // pushing the spacer itself (and therefore #report-btn, which just
+    // copies its position) partway or fully off-screen. Clamping here
+    // guarantees #report-btn always stays fully inside the viewport
+    // regardless -- at the cost of no longer lining up with the spacer
+    // exactly in that overflow case, which only matters visually, not
+    // functionally (nothing else is positioned relative to #report-btn).
+    const margin = 8;
+    const maxLeft = window.innerWidth - els.reportBtn.offsetWidth - margin;
+    const clampedLeft = Math.min(Math.max(rect.left, margin), Math.max(margin, maxLeft));
+    els.reportBtn.style.top = `${rect.top}px`;
+    els.reportBtn.style.left = `${clampedLeft}px`;
   }
 
   // Captured when #report-modal opens (not re-read from lastResult at
@@ -1298,30 +1365,40 @@
   // that's about to be attached, and add an optional note describing the
   // issue.
   function openReportModal() {
-    if (!lastResult || !els.reportModal) return;
+    if (!els.reportModal) return;
+    // #report-btn is always clickable, with or without a current result --
+    // job-tied fields below are simply absent for a general "something's
+    // wrong" report with nothing on screen to point at (reportJob/
+    // record_report both already treat job_id as optional).
     // Whatever 補充指令 text actually produced the result currently on
     // screen: currentBatchRecord's own effectivePrompt (its per-image
     // override, or the batch-wide prompt) when a batch result is showing,
     // else lastSingleSelections.userPrompt -- set by finishSingleFlow for a
     // live single-image submission, or restored from job.user_prompt
     // (restoreReviseSelections) when viewing a history/report record.
-    const userPrompt = currentBatchRecord ? effectivePrompt(currentBatchRecord) : (lastSingleSelections?.userPrompt || "");
+    const userPrompt = lastResult
+      ? (currentBatchRecord ? effectivePrompt(currentBatchRecord) : (lastSingleSelections?.userPrompt || ""))
+      : "";
     resetReportModalScreenshotPreview();
     const target = {
-      jobId: lastResult.jobId,
-      path: lastResult.path,
-      runNumber: lastResult.runNumber,
+      jobId: lastResult?.jobId || null,
+      path: lastResult?.path || "local",
+      runNumber: lastResult?.runNumber || null,
       userPrompt,
       // Kicked off now (before #report-modal itself is shown below), not at
-      // submit time -- captures the results panel as the reporter actually
-      // saw it, not however it might look after they've been filling in the
-      // sheet for a while. Awaited again in handleReportSubmit (already
-      // resolved by then in the common case), and applied to the preview
-      // below as soon as it resolves.
-      screenshotPromise: captureReportScreenshot(lastResult.jobId, lastResult.path, lastResult.runNumber)
+      // submit time -- captures whatever the reporter actually saw, not
+      // however it might look after they've been filling in the sheet for
+      // a while. Awaited again in handleReportSubmit (already resolved by
+      // then in the common case), and applied to the preview below as soon
+      // as it resolves.
+      screenshotPromise: captureReportScreenshot(lastResult?.jobId, lastResult?.path, lastResult?.runNumber)
     };
     reportModalTarget = target;
     target.screenshotPromise.then((blob) => applyReportModalScreenshotPreview(target, blob));
+    if (els.reportModalTitle) els.reportModalTitle.textContent = lastResult ? "回報此結果" : "回報問題";
+    if (els.reportModalNote) {
+      els.reportModalNote.placeholder = lastResult ? "請描述這筆結果的問題…" : "請描述遇到的問題…";
+    }
     if (els.reportModalName) els.reportModalName.value = getCurrentUser() || "";
     if (els.reportModalNote) els.reportModalNote.value = "";
     if (els.reportModalError) els.reportModalError.hidden = true;
@@ -1356,12 +1433,17 @@
       // itself -- worst case this report just goes without a screenshot.
       const screenshotBlob = await target.screenshotPromise;
       await reportJob(name, target.jobId, target.path, note, target.userPrompt, screenshotBlob);
-      reportedRuns.add(reportKeyFor(target.jobId, target.runNumber));
-      // Only touch #report-btn if it's still showing the same RUN this
-      // report was just submitted for -- lastResult may have already moved
-      // on to something else while the sheet was open.
-      if (lastResult && lastResult.jobId === target.jobId && lastResult.runNumber === target.runNumber) {
-        updateReportButton();
+      // A general (job-less) report has no RUN to mark as "already
+      // reported" -- reportedRuns/the button's tint only ever applies to a
+      // job-tied report.
+      if (target.jobId) {
+        reportedRuns.add(reportKeyFor(target.jobId, target.runNumber));
+        // Only touch #report-btn if it's still showing the same RUN this
+        // report was just submitted for -- lastResult may have already
+        // moved on to something else while the sheet was open.
+        if (lastResult && lastResult.jobId === target.jobId && lastResult.runNumber === target.runNumber) {
+          updateReportButton();
+        }
       }
       closeReportModal();
       showNoticeModal("已回報，我們會盡快確認這筆結果。");
@@ -2478,7 +2560,6 @@
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
-    updateReportButton(); // hide #report-btn for the duration of this revise's loading animation
     try {
       await finishSingleFlow();
     } catch (error) {
@@ -2497,12 +2578,6 @@
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
       if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
-      // Restores #report-btn if this ended in the error branch above (still
-      // showing the same lastResult as before, now that the frame is back) --
-      // a successful finishSingleFlow already called this itself via
-      // showSingleResult with the new lastResult, so this is a harmless
-      // repeat in that case.
-      updateReportButton();
     }
   }
 
@@ -3244,6 +3319,7 @@
       els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
     }
     if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
+    syncReportBtnPosition();
   }
 
   async function handleCreateAccount() {
@@ -3533,12 +3609,17 @@
   async function checkAdminAccess() {
     if (els.adminReportsBtn) els.adminReportsBtn.hidden = true;
     const user = getCurrentUser();
-    if (!user) return;
+    if (!user) {
+      syncReportBtnPosition();
+      return;
+    }
     try {
       await getReports(user);
       if (els.adminReportsBtn) els.adminReportsBtn.hidden = false;
     } catch {
       // 403 (not an admin) or a request failure -- either way, stay hidden.
+    } finally {
+      syncReportBtnPosition();
     }
   }
 
@@ -3593,7 +3674,11 @@
 
       const thumb = document.createElement("div");
       thumb.className = "report-item-thumb";
-      if (r.path === "local") {
+      // r.job_id is absent for a general report (#report-btn is clickable
+      // with nothing on screen -- record_report, backend/services/report.py)
+      // -- nothing to thumbnail in that case, same as an AIPoC-path report
+      // already has no thumbnail route to use.
+      if (r.job_id && r.path === "local") {
         const img = document.createElement("img");
         img.alt = "";
         img.src = resultThumbnailUrl(r.job_id);
@@ -3608,7 +3693,9 @@
       userLine.textContent = r.user;
       const metaLine = document.createElement("span");
       metaLine.className = "report-item-meta";
-      metaLine.textContent = `${formatReportTimestamp(r.ts)} · ${r.path === "aipoc" ? "AIPoC" : "Local"}`;
+      metaLine.textContent = r.job_id
+        ? `${formatReportTimestamp(r.ts)} · ${r.path === "aipoc" ? "AIPoC" : "Local"}`
+        : `${formatReportTimestamp(r.ts)} · 一般回報`;
       info.appendChild(userLine);
       info.appendChild(metaLine);
       // r.user_prompt (what the original submission actually asked for) is
@@ -3641,24 +3728,33 @@
         screenshotBtn.textContent = "查看回報截圖";
         screenshotBtn.addEventListener("click", (e) => {
           e.stopPropagation();
-          openReportScreenshotModal(reportScreenshotUrl(r.job_id, r.user));
+          openReportScreenshotModal(reportScreenshotUrl(r.report_id));
         });
         info.appendChild(screenshotBtn);
       }
 
       li.appendChild(thumb);
       li.appendChild(info);
-      li.addEventListener("click", () => {
-        closeReportsDrawer();
-        // revealDetailExtra: true -- an admin checking a flagged case should
-        // see the full QA verdict/recipe-adherence/prompts panel, normally
-        // debug-only, for this specific record. user_prompt: r.user_prompt --
-        // a real history entry carries its own job.user_prompt (see
-        // restoreReviseSelections), but this minimal report-derived stand-in
-        // has nowhere else to get it from; without this, #prompt would come
-        // back empty even though the report captured the original 補充指令.
-        viewHistoryRecord({ path: r.path, runs: [r.job_id], user_prompt: r.user_prompt }, { revealDetailExtra: true });
-      });
+      // A general report has no job_id -- nothing for the row's own click
+      // to open (the screenshot button above is the only thing to look at
+      // for one of these), so it stays a plain non-interactive row instead
+      // of a dead click target.
+      if (r.job_id) {
+        li.addEventListener("click", () => {
+          closeReportsDrawer();
+          // revealDetailExtra: true -- an admin checking a flagged case
+          // should see the full QA verdict/recipe-adherence/prompts panel,
+          // normally debug-only, for this specific record. user_prompt:
+          // r.user_prompt -- a real history entry carries its own
+          // job.user_prompt (see restoreReviseSelections), but this
+          // minimal report-derived stand-in has nowhere else to get it
+          // from; without this, #prompt would come back empty even though
+          // the report captured the original 補充指令.
+          viewHistoryRecord({ path: r.path, runs: [r.job_id], user_prompt: r.user_prompt }, { revealDetailExtra: true });
+        });
+      } else {
+        li.classList.add("is-static");
+      }
       els.reportsList.appendChild(li);
     });
   }
@@ -4432,6 +4528,10 @@
     els.analysisPreview.style.maxHeight = `${maxHeight}px`;
   }
   window.addEventListener("resize", updateAnalysisPreviewMaxHeight);
+  // #report-btn-spacer's position/size can shift with viewport width (the
+  // 560px icon-only breakpoint, .logo's own clamp()) even with no account/
+  // admin-state change -- keep #report-btn following it.
+  window.addEventListener("resize", syncReportBtnPosition);
 
   async function renderBatchMain(record) {
     if (!record) return;
@@ -4456,11 +4556,6 @@
     if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
     restoreAnalysisPreviewHome(); // vacates #results-analysis-slot if a done record's revise panel is open
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = true;
-    // #report-btn (header) must not stay visible/clickable for whatever
-    // lastResult still is once the real canvas is gone -- see
-    // updateReportButton's own comment on why this can't rely on DOM
-    // containment the way it used to.
-    updateReportButton();
   }
 
   function showBatchMainLoading(record) {

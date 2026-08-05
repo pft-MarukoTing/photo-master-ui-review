@@ -1776,8 +1776,15 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
   /* Icon-only on narrow phones -- even a shrunk .logo (see above) plus two
      full-label buttons (重新分析/上傳照片, both can show at once in batch
-     mode) don't reliably fit side by side down at 320-390px widths. */
-  .header-actions .btn-label { display: none; }
+     mode) don't reliably fit side by side down at 320-390px widths.
+     #report-btn (index.html) is a body-level sibling of <header> now, not
+     a descendant of .header-actions -- this selector alone can't reach it,
+     so it's added explicitly, or its label would stay full-width forever
+     while #report-btn-spacer (still a real .header-actions child) shrinks
+     to match it, leaving #report-btn wider than the slot it's supposed to
+     sit in and spilling into whatever's next to it (#reset-btn). */
+  .header-actions .btn-label,
+  #report-btn .btn-label { display: none; }
   .header-actions .btn { padding: 0 12px; gap: 0; }
   /* Up to four icon-only pills can share this row at once now (#reset-btn,
      #report-btn, #admin-reports-btn, #account-badge) -- the row's own

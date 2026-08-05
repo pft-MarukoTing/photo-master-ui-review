@@ -14,7 +14,7 @@ from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
-from backend.services.report import get_report, get_reports, is_admin, record_report
+from backend.services.report import get_report_by_id, get_reports, is_admin, record_report
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -234,25 +234,27 @@ def report_job():
         name = normalize_username(body.get("user"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    job_id = body.get("job_id")
-    if not job_id:
-        return jsonify({"error": "job_id is required"}), 400
+    # Optional -- #report-btn (app.js) is always clickable, even with no
+    # result on screen, for a general "something's wrong" report with no
+    # job to point at. record_report keys those by a random id instead of
+    # job_id since there's nothing to dedup them against.
+    job_id = body.get("job_id") or None
 
     screenshot = request.files.get("screenshot")
     screenshot_key = None
     if screenshot and screenshot.filename:
-        # Deterministic-enough (job_id + reporter + upload time), not looked
-        # up anywhere else -- report_screenshot below resolves it straight
-        # from this same report entry rather than the client ever handling
-        # or passing around the actual key.
-        screenshot_key = f"demo/photoAgent/reports/{job_id}/{name}_{int(time.time())}_screenshot.png"
-        upload_report_screenshot(screenshot.read(), screenshot_key, job_id)
+        # Deterministic-enough (job or "general" + reporter + upload time),
+        # not looked up anywhere else -- report_screenshot below resolves it
+        # straight from this same report entry rather than the client ever
+        # handling or passing around the actual key.
+        screenshot_key = f"demo/photoAgent/reports/{job_id or 'general'}/{name}_{int(time.time())}_screenshot.png"
+        upload_report_screenshot(screenshot.read(), screenshot_key, job_id or "general")
 
-    record_report(
+    report_id = record_report(
         name, job_id, body.get("path") or "local",
         note=body.get("note"), user_prompt=body.get("user_prompt"), screenshot_key=screenshot_key
     )
-    return jsonify({"reported": True})
+    return jsonify({"reported": True, "report_id": report_id})
 
 
 @api_bp.get("/reports/<user>")
@@ -269,24 +271,20 @@ def reports(user):
     return jsonify({"reports": get_reports()})
 
 
-@api_bp.get("/reports/<job_id>/<user>/screenshot")
-def report_screenshot(job_id, user):
+@api_bp.get("/reports/screenshot/<report_id>")
+def report_screenshot(report_id):
     """Same trust level as /source/<job_id>/image and /result/<job_id>/image
     above -- no admin check of its own, just this app's usual "the caller
-    already knows the job_id (and here, the reporting user) so there's
-    nothing to look up that isn't already effectively public" model. The
-    admin reports drawer is the only place this URL is ever constructed
-    from (renderReportsList, app.js), same as every other job_id-keyed
-    route here.
+    already knows the id so there's nothing to look up that isn't already
+    effectively public" model. report_id (not job_id/user) is the lookup key
+    since a general report (record_report, backend/services/report.py) has
+    no job_id to key on at all. The admin reports drawer is the only place
+    this URL is ever constructed from (renderReportsList, app.js).
     """
-    try:
-        name = normalize_username(user)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-    entry = get_report(job_id, name)
+    entry = get_report_by_id(report_id)
     if not entry or not entry.get("screenshot_key"):
         return jsonify({"error": "no screenshot for this report"}), 404
-    image_bytes, download_error = download_bytes(entry["screenshot_key"], job_id)
+    image_bytes, download_error = download_bytes(entry["screenshot_key"], entry.get("job_id") or "general")
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download screenshot: {download_error}"}), 502
     return Response(image_bytes, mimetype="image/png")

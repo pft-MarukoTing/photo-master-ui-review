@@ -1142,10 +1142,18 @@
        .history-drawer below), above every other .error-modal-based popup, so
        this needs its own higher stacking order to actually show on top of it. */
     #confirm-modal { z-index: 1002; }
+    /* #report-btn itself is position:fixed at z-index:2000 (see its own
+       rule further down) so it stays clickable above any other modal/
+       drawer, dynamically-launched or not -- #report-modal is what it
+       opens, so it needs to win against whatever else might already be
+       open too, not just sit at the plain .error-modal base of 1000. */
+    #report-modal { z-index: 2001; }
     /* Same reasoning as #confirm-modal above -- opened from inside
-       #reports-drawer (also z-index 1001, .history-drawer), so it needs the
-       same bump to actually land on top of it instead of behind it. */
-    #report-screenshot-modal { z-index: 1002; }
+       #reports-drawer (z-index 1001, .history-drawer) on the admin side,
+       or from inside #report-modal itself (z-index 2001, just above) via
+       its own screenshot preview -- needs to beat whichever of those it's
+       actually opened from. */
+    #report-screenshot-modal { z-index: 2002; }
     .error-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
     .error-modal-box {
       position: relative; width: min(440px, calc(100vw - 40px));
@@ -1387,13 +1395,48 @@
     /* #report-btn uses .btn-grad (see its markup) instead of the neutral
        .btn-secondary its header siblings use, so it stands out as worth a
        second look -- compact-pill sizing override, same reasons as
-       #reset-btn above. */
-    #report-btn.btn {
+       #reset-btn above. #report-btn-spacer (index.html) shares this rule so
+       it always renders at exactly the same size as the real button it's
+       standing in for. */
+    #report-btn.btn,
+    #report-btn-spacer.btn {
       height: 32px;
       padding: 0 14px;
       gap: 6px;
       font-size: 13px;
       border-radius: 999px;
+    }
+    /* Invisible but still fully laid out (visibility:hidden, not
+       display:none/hidden) -- #report-btn-spacer's only job is to occupy
+       its flex slot in .header-actions exactly as if the real button were
+       still there, so #reset-btn/#admin-reports-btn/#account-badge line up
+       the same way regardless of whether #report-btn itself is now a
+       fixed-position element elsewhere. syncReportBtnPosition (app.js)
+       reads its live position every time this row's own content could have
+       changed. */
+    #report-btn-spacer { visibility: hidden; pointer-events: none; }
+    /* Pinned to the viewport at a z-index above every modal/drawer in this
+       file (highest otherwise is 1002, #confirm-modal/#report-screenshot-
+       modal). Its markup lives as a sibling of <header>, not a descendant
+       (see index.html) -- .site-header has its own backdrop-filter, and
+       per spec that makes it the CONTAINING BLOCK for any position:fixed
+       descendant instead of the viewport, which traps that descendant
+       inside .site-header's own stacking context (z-index:100) regardless
+       of its own z-index here. Escaping <header> entirely is what makes
+       z-index:2000 actually win against a modal appended as a true
+       body-level sibling (e.g. a dynamically-launched one like
+       #demo-images-modal), and also means #history-drawer/#reports-drawer
+       opening (both start below the header) never reaches it either.
+
+       top/left aren't set here -- being outside .header-actions' own flex
+       flow now (fixed elements never participate in layout, wherever they
+       sit in the DOM), this button has no natural position of its own
+       anymore. syncReportBtnPosition (app.js) copies #report-btn-spacer's
+       live getBoundingClientRect() onto these as inline styles instead, so
+       it always renders exactly where that reserved slot is. */
+    #report-btn {
+      position: fixed;
+      z-index: 2000;
     }
     /* #report-btn once this RUN has been flagged (updateReportButton,
        app.js) -- stays disabled (no re-reporting) but should read as "done",
@@ -1447,22 +1490,27 @@
        #dz-preview's own comment on this same gotcha). At a fixed 32px
        height, 7px of side padding around the 14px icon keeps it a circle
        instead of an oval once the username label disappears.
-       #reset-btn/#report-btn/#admin-reports-btn are real .btn elements, so
-       ".header-actions .btn-label {display:none}" already drops their label
-       text at this width -- but their own #x.btn overrides above keep the
-       label's 14px/6px side padding/gap, leaving an icon stranded in a wide
-       oval instead of the same tight circle #account-badge becomes. Same
-       fix, same reason -- 7px rather than the plain .header-actions .btn
-       fallback's 12px (styles.css) since up to four of these can now share
-       the row at once (#reset-btn, #report-btn, #admin-reports-btn,
-       #account-badge), and every px saved per button is what keeps that
-       row from crowding .logo or spilling past the viewport edge on a
-       320-360px phone. */
+       #reset-btn/#report-btn-spacer/#admin-reports-btn are real .btn
+       elements, so ".header-actions .btn-label {display:none}" already
+       drops their label text at this width -- but their own #x.btn
+       overrides above keep the label's 14px/6px side padding/gap, leaving
+       an icon stranded in a wide oval instead of the same tight circle
+       #account-badge becomes. Same fix, same reason -- 7px rather than the
+       plain .header-actions .btn fallback's 12px (styles.css) since up to
+       four of these can share the row at once (#reset-btn,
+       #report-btn-spacer, #admin-reports-btn, #account-badge), and every px
+       saved per button is what keeps that row from crowding .logo or
+       spilling past the viewport edge on a 320-360px phone. #report-btn.btn
+       itself gets the exact same override (not just its spacer) so the
+       real fixed-position button matches the reserved slot's size at every
+       width -- syncReportBtnPosition (app.js) only copies position, not
+       size, so the two have to already agree via this shared CSS. */
     @media (max-width: 560px) {
       #account-badge-label { display: none; }
       .account-badge,
       #reset-btn.btn,
       #report-btn.btn,
+      #report-btn-spacer.btn,
       #admin-reports-btn.btn {
         padding: 0 7px;
         gap: 0;
@@ -1790,6 +1838,11 @@
       transition: background .15s;
     }
     .report-item:hover { background: var(--border); }
+    /* A general (job-less) report has nothing for the row's own click to
+       open -- see renderReportsList, app.js -- so it drops the pointer
+       cursor/hover highlight that implies there's somewhere to go. */
+    .report-item.is-static { cursor: default; }
+    .report-item.is-static:hover { background: var(--card-2); }
     .report-item-thumb {
       flex-shrink: 0;
       width: 44px;
@@ -2041,26 +2094,67 @@
         </svg>
         <span id="account-badge-label"></span>
       </button>
-      <!-- Flags the currently-displayed job_id (lastResult, app.js) under
-           the current account -- see openReportModal/updateReportButton
-           (app.js) and backend/services/report.py. Hidden until lastResult
-           exists (updateReportButton), same as #reset-btn is hidden outside
-           the results section. Last in .header-actions, after even
-           #account-badge, so it's the rightmost element in the whole
-           header -- its own accent color (.btn-grad, see styles.css) is
-           meant to catch the eye, which reads oddly tucked in the middle of
-           the row instead of standing out at the row's own edge. -->
-      <button id="report-btn" class="btn btn-grad btn-sm" type="button" title="回報此結果" aria-label="回報此結果" hidden>
+      <!-- Invisible, non-interactive stand-in for #report-btn (a real
+           position:fixed element living outside <header> -- see its own
+           markup comment further down) -- reserves this exact flex slot so
+           #reset-btn/#admin-reports-btn/#account-badge lay out as if the
+           button were still here, while syncReportBtnPosition (app.js)
+           copies this element's live position onto the real button. Same
+           #report-btn.btn sizing rule also applies to this id (styles.css/
+           index.html <style>) so it always matches the real button's
+           dimensions exactly, at every breakpoint. -->
+      <span id="report-btn-spacer" class="btn btn-grad btn-sm" aria-hidden="true">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
           <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
           <path d="M12 15.01h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
         </svg>
         <span class="btn-label">回報</span>
-      </button>
+      </span>
     </div>
   </div>
 </header>
+
+<!-- Flags the currently-displayed job_id (lastResult, app.js) under the
+     current account, or -- with no result on screen -- a general
+     "something's wrong" report instead (openReportModal/updateReportButton,
+     app.js; backend/services/report.py). Always visible/enabled, unlike
+     #reset-btn/#account-badge which hide until there's a result/account.
+
+     Deliberately placed OUTSIDE <header> (a sibling, not a descendant) --
+     it's position:fixed with a z-index above every modal/drawer, but
+     .site-header has its own backdrop-filter (styles.css), and per spec a
+     backdrop-filter (like a transform) makes its element the CONTAINING
+     BLOCK for any position:fixed descendant instead of the viewport. Left
+     inside .header-actions, this button's "fixed" position would actually
+     resolve against .site-header's own box, trapped inside its stacking
+     context (z-index:100) same as everything else in the header -- a
+     dynamically-launched modal (e.g. #demo-images-modal, appended as a true
+     body-level sibling) would still paint over it regardless of this
+     button's own z-index.
+
+     Living outside <header> is what makes it actually fixed to the
+     viewport, but that also takes it out of .header-actions' flex flow
+     entirely (fixed elements never participate in layout, wherever they
+     sit in the DOM), so it can no longer just fall into place next to
+     #reset-btn/#admin-reports-btn/#account-badge the way a normal flex
+     child would. #report-btn-spacer (a same-sized, invisible stand-in
+     actually left inside .header-actions, right where this button used to
+     sit) reserves that slot instead -- syncReportBtnPosition (app.js) reads
+     its live position (getBoundingClientRect) and copies it onto this
+     button's own inline top/left, so it renders exactly where the spacer
+     would have, but as a real fixed element that still wins against every
+     modal and isn't covered by #history-drawer/#reports-drawer opening
+     either (both start below the header, so they never reach up into
+     .header-actions' own row in the first place). -->
+<button id="report-btn" class="btn btn-grad btn-sm" type="button" title="回報此結果" aria-label="回報此結果">
+  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M12 15.01h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+  <span class="btn-label">回報</span>
+</button>
 
 <main>
 
