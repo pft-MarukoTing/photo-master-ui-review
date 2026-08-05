@@ -1192,34 +1192,46 @@
     .settings-modal-title { font-size: 17px; font-weight: 800; color: var(--text); }
     .settings-modal-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
 
-    /* #demo-images-modal's picker strip -- wider than the plain 440px
+    /* #demo-images-modal's picker grid -- wider than the plain 440px
        .error-modal-box (that width is tuned for a message/form, not a photo
-       strip). One row, with the rest scrolled off to the right instead of
-       every tile getting squeezed to fit however many photos exist. Tile
-       size is a fraction of the grid's own width (minus its gaps), not a
-       fixed px -- a fixed px only fit 3 at the 560px desktop width this was
-       tuned against; on a narrower phone (.demo-images-modal-box itself
-       already shrinks to fit the viewport, see below) that same fixed
-       width left room for barely 2. Divisor is 3.3, not a flat 3, so a
-       sliver of the 4th tile always peeks in at the edge as a "there's
-       more, scroll" hint, on any viewport width. Same cube-tile look as
-       .history-cube (history-drawer), just without its status badge/remove
-       button since a demo photo has neither. */
-    .demo-images-modal-box { width: min(560px, calc(100vw - 40px)); }
+       grid). CSS grid (not flex-wrap: a computed flex-basis has to guess
+       the exact px width 3 tiles + their gaps will render at, and rounding
+       there was enough to tip the 3rd tile onto its own row) -- `repeat(3,
+       minmax(0, 1fr))` always divides the row into exactly 3 equal columns,
+       no guessing involved. Capped to showing 2 full rows at a time, the
+       rest reachable by scrolling down. --demo-tile mirrors
+       .demo-images-modal-box's own min(560px, 100vw-40px) width formula (in
+       absolute px, not a %) purely so max-height below can size itself off
+       the same approximate row height -- being a few px off there just
+       shifts how much of row 3 peeks in, unlike the column width above
+       which has to be exact. Same cube-tile look as .history-cube
+       (history-drawer), just without its status badge/remove button since a
+       demo photo has neither. */
+    .demo-images-modal-box {
+      width: min(560px, calc(100vw - 40px));
+      /* -44px: .error-modal-box's own 22px*2 padding. -8px: .demo-images-grid's
+         own padding-right (its scrollbar's breathing room, below). -20px:
+         the 2 gaps between 3 tiles. */
+      --demo-tile: calc((min(560px, calc(100vw - 40px)) - 44px - 8px - 20px) / 3);
+    }
     .demo-images-grid {
-      display: flex;
-      flex-wrap: nowrap;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-content: flex-start;
       gap: 10px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      /* Room for the scrollbar itself so it doesn't sit flush under the
+      overflow-x: hidden;
+      overflow-y: auto;
+      /* 2 rows of tiles + the 1 gap between them, plus a little slack so a
+         3rd row's tiles peek in just enough to hint there's more below
+         (mirrors the horizontal strip's earlier peek trick, vertical now). */
+      max-height: calc(var(--demo-tile) * 2 + 10px + 24px);
+      /* Room for the scrollbar itself so it doesn't sit flush against the
          tiles (browsers that don't reserve this, e.g. macOS overlay
          scrollbars, just see a harmless bit of empty space instead). */
-      padding-bottom: 8px;
+      padding-right: 8px;
     }
     .demo-image-tile {
       position: relative;
-      flex: 0 0 calc((100% - 20px) / 3.3);
       aspect-ratio: 1 / 1;
       border-radius: var(--radius);
       overflow: hidden;
