@@ -247,7 +247,7 @@ def report_job():
         # not looked up anywhere else -- report_screenshot below resolves it
         # straight from this same report entry rather than the client ever
         # handling or passing around the actual key.
-        screenshot_key = f"demo/photoAgent/reports/{job_id or 'general'}/{name}_{int(time.time())}_screenshot.png"
+        screenshot_key = f"demo/photoAgent/reports/{job_id or 'general'}/{name}_{int(time.time())}_screenshot.jpg"
         upload_report_screenshot(screenshot.read(), screenshot_key, job_id or "general")
 
     report_id = record_report(
@@ -287,7 +287,7 @@ def report_screenshot(report_id):
     image_bytes, download_error = download_bytes(entry["screenshot_key"], entry.get("job_id") or "general")
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download screenshot: {download_error}"}), 502
-    return Response(image_bytes, mimetype="image/png")
+    return Response(image_bytes, mimetype="image/jpeg")
 
 
 @api_bp.post("/submit")

@@ -864,107 +864,161 @@
     return html2canvasLoadPromise;
   }
 
-  // Best-effort capture of whatever's actually visible at the moment
-  // #report-btn is clicked -- attached to the report so whoever reviews it
-  // sees exactly what the reporter was looking at (a layout glitch, which
-  // RUN was on screen, ...), which is more than viewHistoryRecord's own
-  // fresh re-render of the same job_id can show an admin on its own. Must
-  // never block or fail opening/submitting the report sheet: any failure
-  // (library didn't load, an unreadable image, or anything else) just means
-  // this one report goes without a screenshot -- logged (not just swallowed)
-  // so a real failure is at least visible in devtools instead of silently
-  // never producing a screenshot with no trace of why.
+  // ---------- Screenshot encoding helpers (insert near loadHtml2Canvas) ----------
+  const MAX_SCREENSHOT_BYTES = 7_500_000; // keep a margin under the backend 8 MB limit
+
+  function canvasToBlobAsync(canvas, type = "image/jpeg", quality = 0.85) {
+    return new Promise((resolve) => {
+      if (canvas.toBlob) {
+        canvas.toBlob((b) => resolve(b), type, quality);
+      } else {
+        // Fallback for environments without toBlob
+        const dataUrl = canvas.toDataURL(type, quality);
+        const parts = dataUrl.split(",");
+        const m = parts[0].match(/:(.*?);/);
+        const mime = m ? m[1] : type;
+        const binary = atob(parts[1]);
+        const len = binary.length;
+        const ub = new Uint8Array(len);
+        for (let i = 0; i < len; i++) ub[i] = binary.charCodeAt(i);
+        resolve(new Blob([ub], { type: mime }));
+      }
+    });
+  }
+
+  async function encodeUnderCap(canvas, maxBytes) {
+    // Try quality-only passes first
+    let lastBlob = null;
+    for (const quality of [0.85, 0.75, 0.6]) {
+      const blob = await canvasToBlobAsync(canvas, "image/jpeg", quality);
+      if (!blob) continue;
+      lastBlob = blob;
+      if (blob.size <= maxBytes) return blob;
+    }
+
+    // If still too big, downscale and retry
+    for (const factor of [0.75, 0.5]) {
+      const small = document.createElement("canvas");
+      small.width = Math.max(1, Math.round(canvas.width * factor));
+      small.height = Math.max(1, Math.round(canvas.height * factor));
+      const ctx = small.getContext("2d");
+      if (!ctx) break;
+      ctx.drawImage(canvas, 0, 0, small.width, small.height);
+      const blob = await canvasToBlobAsync(small, "image/jpeg", 0.7);
+      if (!blob) continue;
+      lastBlob = blob;
+      if (blob.size <= maxBytes) return blob;
+    }
+
+    // Return best attempt even if over cap
+    return lastBlob;
+  }
+
   async function captureReportScreenshot(jobId, path, runNumber) {
     try {
       const html2canvas = await loadHtml2Canvas();
       const viewportWidth = document.documentElement.clientWidth;
       const viewportHeight = document.documentElement.clientHeight;
-      const scale = Math.min(2, window.devicePixelRatio || 1);
-      // Captures document.body (not just whichever #upload-section/
-      // #processing-section/#results-section is .visible) -- any of this
-      // app's overlay modals (#demo-images-modal, #ap-style-modal,
-      // #settings-modal, ...) are siblings of those sections, not nested
-      // inside them, so scoping the capture to one section silently missed
-      // whichever modal the reporter actually had open on top of it.
-      // Deliberately NOT passing x/y/width/height/scrollX/scrollY here to
-      // crop to the viewport -- html2canvas's own crop options didn't
-      // reliably agree with each other on where "the current scroll
-      // position" actually was, desyncing the capture from what was really
-      // on screen. windowWidth/windowHeight are still pinned so responsive
-      // @media rules (e.g. this app's own icon-only header collapse below
-      // 560px) match the real page; scrollX/scrollY are left at html2canvas's
-      // own default (window.scrollX/scrollY, read fresh at call time), which
-      // is what correctly places any position:fixed element (the header,
-      // #report-btn) at its real on-screen spot in the render below.
-      const fullCanvas = await html2canvas(document.body, {
-        backgroundColor: "#09090b",
-        useCORS: true,
-        scale,
-        windowWidth: viewportWidth,
-        windowHeight: viewportHeight,
-        // openReportModal kicks this capture off before revealing
-        // #report-modal, but html2canvas's own DOM read happens somewhere
-        // inside its (possibly slow, first-load-fetches-the-library) async
-        // chain -- there's no guarantee that read still happens before
-        // #report-modal.hidden flips to false. Excluding it (and its own
-        // #report-screenshot-modal preview popup) outright removes the race
-        // entirely: this is a capture of what the reporter was looking at
-        // *before* clicking 回報, never the report sheet itself.
-        ignoreElements: (el) => el.id === "report-modal" || el.id === "report-screenshot-modal",
-        // #generated-img's real src is always a presigned S3 URL with no
-        // CORS headers (see resultImageUrl's own comment) -- reading its
-        // pixels back via canvas.toBlob below would taint the whole canvas
-        // and throw a SecurityError, silently killing the entire capture,
-        // not just that one image. html2canvas clones the target subtree
-        // before rendering it (the real on-screen <img> is never touched),
-        // so this only has to redirect the clone's copy to this app's own
-        // same-origin image proxy -- the exact same one buildImageFiles/the
-        // zip download already rely on to sidestep this same CORS gap.
-        // Returning a Promise here makes html2canvas wait for that swapped
-        // image to actually load before rendering; resolving on error too
-        // (rather than rejecting) so a proxy hiccup degrades to "photo
-        // missing from the screenshot," not "no screenshot at all."
-        onclone: (clonedDoc) => {
-          // Every element using background-clip:text for a gradient fill
-          // (.logo em's "Master" half, .upload-headline, .notice-modal-title
-          // em -- shared by #notice-modal/#account-modal/#confirm-modal's
-          // own title) -- html2canvas can't rasterize that clip, so it was
-          // rendering the full gradient rectangle behind the text instead of
-          // the text itself, reading as a solid color block. Flattened to
-          // the gradient's own accent color as plain, visible text -- purely
-          // cosmetic to this clone, the real on-screen elements are never
-          // touched. Keep this selector list in sync with any new
-          // background-clip:text usage (grep for it in styles.css/index.html).
-          clonedDoc.querySelectorAll(".logo em, .upload-headline, .notice-modal-title em").forEach((el) => {
-            el.style.background = "none";
-            el.style.webkitBackgroundClip = "unset";
-            el.style.backgroundClip = "unset";
-            el.style.webkitTextFillColor = "unset";
-            el.style.color = "var(--accent)";
-          });
-          const clonedImg = clonedDoc.getElementById("generated-img");
-          if (!clonedImg || !jobId) return undefined;
-          return new Promise((resolve) => {
-            clonedImg.onload = resolve;
-            clonedImg.onerror = resolve;
-            clonedImg.src = resultImageUrl(jobId, { path, run: runNumber });
-          });
-        }
-      });
-      // fullCanvas is document.body rendered at its full natural
-      // scrollHeight, not just one screenful -- crop down to just the
-      // currently-visible viewport (a plain 2D drawImage slice, not another
-      // html2canvas option) so the screenshot matches what the reporter was
-      // actually looking at rather than the entire scrollable page.
-      const croppedCanvas = document.createElement("canvas");
-      croppedCanvas.width = viewportWidth * scale;
-      croppedCanvas.height = viewportHeight * scale;
-      croppedCanvas.getContext("2d").drawImage(
-        fullCanvas,
-        window.scrollX * scale, window.scrollY * scale, viewportWidth * scale, viewportHeight * scale,
-        0, 0, viewportWidth * scale, viewportHeight * scale
-      );
-      return await new Promise((resolve) => croppedCanvas.toBlob((blob) => resolve(blob), "image/png"));
+
+      // Conservative DPR cap on iOS to avoid OOM/timeouts on mobile Safari.
+      const isiOS = /iP(hone|od|ad)/.test(navigator.platform) || /iPhone|iPad|iPod/.test(navigator.userAgent);
+      const maxScale = isiOS ? 1.5 : 2;
+      const scale = Math.min(maxScale, Math.max(1, window.devicePixelRatio || 1));
+
+      // x/y/width/height crop the render down to just the current viewport
+      // (in document coordinates -- window.scrollX/scrollY is exactly
+      // "where the viewport currently starts" in that space) instead of
+      // rendering document.body's entire scrollable height and cropping
+      // afterward: that full-page render was the actual cause of the
+      // capture silently failing on iPhone (Safari's canvas size/memory
+      // ceiling is far tighter than desktop browsers', easily exceeded by a
+      // whole scrollable page at 1.5-2x scale). html2canvas's own default
+      // scrollX/scrollY is already the real window.scrollX/scrollY read
+      // fresh at call time, so no separate scroll override is needed here.
+      // windowWidth/windowHeight are still pinned so responsive @media
+      // rules (e.g. this app's own icon-only header collapse below 560px)
+      // match the real page. Deliberately not allowTaint: true -- that
+      // would let any stray cross-origin image without CORS headers taint
+      // the whole canvas, and a tainted canvas.toBlob() below resolves null
+      // silently (no thrown error, so the catch below never fires) instead
+      // of the single #generated-img swap this onclone already handles.
+      const canvas = await Promise.race([
+        html2canvas(document.body, {
+          backgroundColor: "#09090b",
+          useCORS: true,
+          scale,
+          windowWidth: viewportWidth,
+          windowHeight: viewportHeight,
+          x: window.scrollX,
+          y: window.scrollY,
+          width: viewportWidth,
+          height: viewportHeight,
+          logging: false,
+          // openReportModal kicks this capture off before revealing
+          // #report-modal, but html2canvas's own DOM read happens somewhere
+          // inside its (possibly slow, first-load-fetches-the-library) async
+          // chain -- there's no guarantee that read still happens before
+          // #report-modal.hidden flips to false. Excluding it (and its own
+          // #report-screenshot-modal preview popup) outright removes the
+          // race entirely: this is a capture of what the reporter was
+          // looking at *before* clicking 回報, never the report sheet itself.
+          ignoreElements: (el) => el.id === "report-modal" || el.id === "report-screenshot-modal",
+          // #generated-img's real src is always a presigned S3 URL with no
+          // CORS headers (see resultImageUrl's own comment) -- reading its
+          // pixels back via canvas.toBlob below would taint the whole canvas
+          // and throw/resolve-null, silently killing the entire capture, not
+          // just that one image. html2canvas clones the target subtree
+          // before rendering it (the real on-screen <img> is never touched),
+          // so this only has to redirect the clone's copy to this app's own
+          // same-origin image proxy -- the exact same one buildImageFiles/
+          // the zip download already rely on to sidestep this same CORS gap.
+          onclone: (clonedDoc) => {
+            // Every element using background-clip:text for a gradient fill
+            // (.logo em's "Master" half, .upload-headline,
+            // .notice-modal-title em) -- html2canvas can't rasterize that
+            // clip, so it was rendering the full gradient rectangle behind
+            // the text instead of the text itself. Flattened to plain,
+            // visible text -- purely cosmetic to this clone.
+            clonedDoc.querySelectorAll(".logo em, .upload-headline, .notice-modal-title em").forEach((el) => {
+              el.style.background = "none";
+              el.style.webkitBackgroundClip = "unset";
+              el.style.backgroundClip = "unset";
+              el.style.webkitTextFillColor = "unset";
+              el.style.color = "var(--accent)";
+            });
+            // Demo-picker thumbnails (renderDemoImagesGrid) set img.loading
+            // = "lazy" for real on-page perf. That's fine live, but
+            // WebKit/iOS Safari never starts a lazy <img>'s load at all
+            // while its ancestor is display:none (e.g. #demo-images-modal
+            // closed) -- html2canvas has to wait for every <img> in the
+            // clone to finish loading before it can rasterize anything, so
+            // that image never resolves and never errors, hanging the whole
+            // capture forever. Forcing eager here (only on this throwaway
+            // clone) makes the browser fetch them immediately regardless of
+            // visibility.
+            clonedDoc.querySelectorAll("img[loading='lazy']").forEach((img) => {
+              img.loading = "eager";
+            });
+            const clonedImg = clonedDoc.getElementById("generated-img");
+            if (!clonedImg || !jobId) return undefined;
+            return new Promise((resolve) => {
+              clonedImg.onload = resolve;
+              clonedImg.onerror = resolve;
+              clonedImg.src = resultImageUrl(jobId, { path, run: runNumber });
+            });
+          }
+        }),
+        // Past ~8s something is stuck, not just slow -- reportModal's
+        // existing "無法擷取畫面預覽" fallback is a fine outcome; an
+        // indefinitely hung 回報 modal is not.
+        new Promise((_, reject) => setTimeout(() => reject(new Error("擷取畫面逾時")), 8000))
+      ]);
+
+      // Encode JPEG under size cap (quality-first then downscale).
+      const jpegBlob = await encodeUnderCap(canvas, MAX_SCREENSHOT_BYTES);
+      if (jpegBlob) return jpegBlob;
+      // If encoding produced nothing (very unlikely), fall back to PNG.
+      return await new Promise((resolve) => canvas.toBlob((b) => resolve(b), "image/png"));
     } catch (err) {
       console.error("回報截圖擷取失敗", err);
       return null;
