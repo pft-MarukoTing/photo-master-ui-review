@@ -96,6 +96,18 @@ def cache_thumbnail(thumb_bytes, thumb_key, task_id):
         pass
 
 
+def upload_report_screenshot(image_bytes, key, task_id):
+    """Fire-and-forget upload for a reported job's screenshot -- same
+    best-effort tradeoff as cache_thumbnail above: a slow/failed write here
+    must never fail the report submission it's attached to
+    (backend/routes/api.py's report_job), just leave that report without a
+    viewable screenshot."""
+    try:
+        get_s3_accessor_v2().upload_buffer(lambda result: None, image_bytes, key, task_id)
+    except Exception:
+        pass
+
+
 def _upload_source_thumbnail(image_bytes, src_key, task_id):
     """Best-effort: unlike a result thumbnail (see result_thumbnail()'s
     docstring for why that one is lazy), a source image's thumbnail is

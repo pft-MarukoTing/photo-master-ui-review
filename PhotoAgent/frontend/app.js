@@ -26,7 +26,8 @@
     clearHistory,
     getJobStatusOnce,
     reportJob,
-    getReports
+    getReports,
+    reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
@@ -842,6 +843,89 @@
     return libheifInstancePromise;
   }
 
+  // html2canvas (vendored, MIT) -- ~195KB, loaded on demand the first time
+  // the report sheet actually opens rather than paying that cost on every
+  // page load, same lazy-load reasoning as loadLibheifFactory above.
+  let html2canvasLoadPromise = null;
+  function loadHtml2Canvas() {
+    if (window.html2canvas) return Promise.resolve(window.html2canvas);
+    if (!html2canvasLoadPromise) {
+      html2canvasLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "html2canvas.min.js";
+        script.onload = () => resolve(window.html2canvas);
+        script.onerror = () => {
+          html2canvasLoadPromise = null; // allow retrying next time the sheet opens
+          reject(new Error("截圖元件載入失敗"));
+        };
+        document.head.appendChild(script);
+      });
+    }
+    return html2canvasLoadPromise;
+  }
+
+  // Best-effort capture of the whole visible results panel at the moment
+  // #report-btn is clicked -- attached to the report so whoever reviews it
+  // sees exactly what the reporter was looking at (a layout glitch, which
+  // RUN was on screen, ...), which is more than viewHistoryRecord's own
+  // fresh re-render of the same job_id can show an admin on its own. Must
+  // never block or fail opening/submitting the report sheet: any failure
+  // (library didn't load, an unreadable image, or anything else) just means
+  // this one report goes without a screenshot -- logged (not just swallowed)
+  // so a real failure is at least visible in devtools instead of silently
+  // never producing a screenshot with no trace of why.
+  async function captureReportScreenshot(jobId, path, runNumber) {
+    const target = els.sections.results;
+    if (!target) return null;
+    try {
+      const html2canvas = await loadHtml2Canvas();
+      const canvas = await html2canvas(target, {
+        backgroundColor: "#09090b",
+        useCORS: true,
+        scale: Math.min(2, window.devicePixelRatio || 1),
+        // Pins html2canvas's own offscreen render to the CURRENT live
+        // viewport -- left at its defaults, it can pick a different
+        // effective width (tripping different @media breakpoints than
+        // whatever's actually on screen, e.g. this app's own icon-only
+        // header collapse below 560px) and/or ignore how far the page is
+        // actually scrolled, capturing the wrong vertical region entirely.
+        // Both show up as "the screenshot doesn't match what I was looking
+        // at" -- this makes the offscreen render use the exact same
+        // viewport size and scroll position as the real page.
+        windowWidth: document.documentElement.clientWidth,
+        windowHeight: document.documentElement.clientHeight,
+        scrollX: -window.scrollX,
+        scrollY: -window.scrollY,
+        // #generated-img's real src is always a presigned S3 URL with no
+        // CORS headers (see resultImageUrl's own comment) -- reading its
+        // pixels back via canvas.toBlob below would taint the whole canvas
+        // and throw a SecurityError, silently killing the entire capture,
+        // not just that one image. html2canvas clones the target subtree
+        // before rendering it (the real on-screen <img> is never touched),
+        // so this only has to redirect the clone's copy to this app's own
+        // same-origin image proxy -- the exact same one buildImageFiles/the
+        // zip download already rely on to sidestep this same CORS gap.
+        // Returning a Promise here makes html2canvas wait for that swapped
+        // image to actually load before rendering; resolving on error too
+        // (rather than rejecting) so a proxy hiccup degrades to "photo
+        // missing from the screenshot," not "no screenshot at all."
+        onclone: (clonedDoc) => {
+          const clonedImg = clonedDoc.getElementById("generated-img");
+          if (!clonedImg || !jobId) return undefined;
+          return new Promise((resolve) => {
+            clonedImg.onload = resolve;
+            clonedImg.onerror = resolve;
+            clonedImg.src = resultImageUrl(jobId, { path, run: runNumber });
+          });
+        }
+      });
+      return await new Promise((resolve) => canvas.toBlob((blob) => resolve(blob), "image/png"));
+    } catch (err) {
+      console.error("回報截圖擷取失敗", err);
+      return null;
+    }
+  }
+
   // Most desktop browsers (Chrome/Firefox/Edge) can't render HEIC/HEIF in an
   // <img> tag at all, even though the backend decodes it fine -- decode to a
   // canvas and re-encode as a JPEG blob purely for on-page preview/thumbnail
@@ -1170,11 +1254,49 @@
   // being looked at when 回報 was clicked.
   let reportModalTarget = null;
 
+  // The blob: URL backing #report-modal-screenshot-img -- tracked so it can
+  // be revoked (URL.revokeObjectURL) once it's no longer needed, rather
+  // than leaking one every time the sheet opens.
+  let reportModalScreenshotObjectUrl = null;
+
+  function resetReportModalScreenshotPreview() {
+    if (reportModalScreenshotObjectUrl) {
+      URL.revokeObjectURL(reportModalScreenshotObjectUrl);
+      reportModalScreenshotObjectUrl = null;
+    }
+    if (els.reportModalScreenshotStatus) {
+      els.reportModalScreenshotStatus.textContent = "擷取畫面中…";
+      els.reportModalScreenshotStatus.hidden = false;
+    }
+    if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = true;
+    if (els.reportModalScreenshotImg) els.reportModalScreenshotImg.removeAttribute("src");
+  }
+
+  // Applies whatever captureReportScreenshot ended up resolving to -- called
+  // once per open, guarded against a stale capture from an already-closed/
+  // reopened sheet still resolving in the background (myTarget no longer
+  // being the live reportModalTarget means the user moved on already).
+  function applyReportModalScreenshotPreview(myTarget, blob) {
+    if (reportModalTarget !== myTarget) return;
+    if (!blob) {
+      if (els.reportModalScreenshotStatus) {
+        els.reportModalScreenshotStatus.textContent = "無法擷取畫面預覽，回報仍可送出。";
+        els.reportModalScreenshotStatus.hidden = false;
+      }
+      return;
+    }
+    reportModalScreenshotObjectUrl = URL.createObjectURL(blob);
+    if (els.reportModalScreenshotStatus) els.reportModalScreenshotStatus.hidden = true;
+    if (els.reportModalScreenshotImg) els.reportModalScreenshotImg.src = reportModalScreenshotObjectUrl;
+    if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = false;
+  }
+
   // Opens the report sheet instead of reporting immediately -- lets the
   // user confirm/edit which name it's attributed to (prefilled from the
   // current account, blank if there isn't one -- a name is required to
-  // submit either way, see handleReportSubmit) and add an optional note
-  // describing the issue.
+  // submit either way, see handleReportSubmit), preview the screenshot
+  // that's about to be attached, and add an optional note describing the
+  // issue.
   function openReportModal() {
     if (!lastResult || !els.reportModal) return;
     // Whatever 補充指令 text actually produced the result currently on
@@ -1184,12 +1306,22 @@
     // live single-image submission, or restored from job.user_prompt
     // (restoreReviseSelections) when viewing a history/report record.
     const userPrompt = currentBatchRecord ? effectivePrompt(currentBatchRecord) : (lastSingleSelections?.userPrompt || "");
-    reportModalTarget = {
+    resetReportModalScreenshotPreview();
+    const target = {
       jobId: lastResult.jobId,
       path: lastResult.path,
       runNumber: lastResult.runNumber,
-      userPrompt
+      userPrompt,
+      // Kicked off now (before #report-modal itself is shown below), not at
+      // submit time -- captures the results panel as the reporter actually
+      // saw it, not however it might look after they've been filling in the
+      // sheet for a while. Awaited again in handleReportSubmit (already
+      // resolved by then in the common case), and applied to the preview
+      // below as soon as it resolves.
+      screenshotPromise: captureReportScreenshot(lastResult.jobId, lastResult.path, lastResult.runNumber)
     };
+    reportModalTarget = target;
+    target.screenshotPromise.then((blob) => applyReportModalScreenshotPreview(target, blob));
     if (els.reportModalName) els.reportModalName.value = getCurrentUser() || "";
     if (els.reportModalNote) els.reportModalNote.value = "";
     if (els.reportModalError) els.reportModalError.hidden = true;
@@ -1199,6 +1331,7 @@
   function closeReportModal() {
     if (els.reportModal) els.reportModal.hidden = true;
     reportModalTarget = null;
+    resetReportModalScreenshotPreview();
   }
 
   function showReportModalError(message) {
@@ -1218,7 +1351,11 @@
     const target = reportModalTarget;
     if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.disabled = true;
     try {
-      await reportJob(name, target.jobId, target.path, note, target.userPrompt);
+      // Never lets a slow/failed capture (captureReportScreenshot already
+      // swallows its own errors, resolving null) block or fail the report
+      // itself -- worst case this report just goes without a screenshot.
+      const screenshotBlob = await target.screenshotPromise;
+      await reportJob(name, target.jobId, target.path, note, target.userPrompt, screenshotBlob);
       reportedRuns.add(reportKeyFor(target.jobId, target.runNumber));
       // Only touch #report-btn if it's still showing the same RUN this
       // report was just submitted for -- lastResult may have already moved
@@ -3427,6 +3564,19 @@
     return `${d.getMonth() + 1}月${d.getDate()}日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
+  function openReportScreenshotModal(url) {
+    if (!els.reportScreenshotModal || !els.reportScreenshotModalImg) return;
+    els.reportScreenshotModalImg.src = url;
+    els.reportScreenshotModal.hidden = false;
+  }
+
+  function closeReportScreenshotModal() {
+    if (els.reportScreenshotModal) els.reportScreenshotModal.hidden = true;
+    // Drops the loaded image immediately rather than leaving last report's
+    // screenshot sitting in memory/the DOM until the next one overwrites it.
+    if (els.reportScreenshotModalImg) els.reportScreenshotModalImg.removeAttribute("src");
+  }
+
   // One row per flagged job -- clicking a row reuses viewHistoryRecord
   // (the same history-entry playback the processing-history drawer uses)
   // against a minimal {path, runs} stand-in, since a report only ever
@@ -3475,6 +3625,25 @@
         noteLine.className = "report-item-note";
         noteLine.textContent = `回報說明：${r.note}`;
         info.appendChild(noteLine);
+      }
+      // The reporter's own screen capture of the whole results panel at the
+      // moment they clicked 回報 (captureReportScreenshot) -- separate from
+      // the job_id thumbnail above (that's this job's actual output image;
+      // this is what the reporter's browser was showing, which can differ:
+      // a layout glitch, a different RUN on screen, ...). Its own button
+      // (not the row's own click, which opens the job's real result) since
+      // a report can have one without the other -- opens #report-screenshot-
+      // modal in-app rather than a new tab.
+      if (r.has_screenshot) {
+        const screenshotBtn = document.createElement("button");
+        screenshotBtn.type = "button";
+        screenshotBtn.className = "report-item-screenshot-link";
+        screenshotBtn.textContent = "查看回報截圖";
+        screenshotBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openReportScreenshotModal(reportScreenshotUrl(r.job_id, r.user));
+        });
+        info.appendChild(screenshotBtn);
       }
 
       li.appendChild(thumb);
@@ -4914,6 +5083,14 @@
   if (els.reportModalClose) els.reportModalClose.addEventListener("click", closeReportModal);
   if (els.reportModalCancelBtn) els.reportModalCancelBtn.addEventListener("click", closeReportModal);
   if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.addEventListener("click", handleReportSubmit);
+  if (els.reportModalScreenshotPreviewBtn) {
+    // Reuses the admin side's own #report-screenshot-modal for the
+    // enlarged view -- the local blob: URL works there exactly like the
+    // backend's reportScreenshotUrl does, it's still just an <img src>.
+    els.reportModalScreenshotPreviewBtn.addEventListener("click", () => {
+      if (reportModalScreenshotObjectUrl) openReportScreenshotModal(reportModalScreenshotObjectUrl);
+    });
+  }
   if (els.reportModal) {
     els.reportModal.addEventListener("click", (e) => {
       if (e.target.dataset.close) closeReportModal();
@@ -4944,6 +5121,12 @@
   if (els.adminReportsBtn) els.adminReportsBtn.addEventListener("click", openReportsPage);
   if (els.reportsDrawerCloseBtn) els.reportsDrawerCloseBtn.addEventListener("click", closeReportsDrawer);
   if (els.reportsDrawerBackdrop) els.reportsDrawerBackdrop.addEventListener("click", closeReportsDrawer);
+  if (els.reportScreenshotModalClose) els.reportScreenshotModalClose.addEventListener("click", closeReportScreenshotModal);
+  if (els.reportScreenshotModal) {
+    els.reportScreenshotModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeReportScreenshotModal();
+    });
+  }
   if (els.historyDrawerCloseBtn) els.historyDrawerCloseBtn.addEventListener("click", closeHistoryDrawer);
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
   if (els.historyLogoutBtn) els.historyLogoutBtn.addEventListener("click", handleLogout);
@@ -5002,6 +5185,7 @@
     if (els.confirmModal && !els.confirmModal.hidden) confirmModalHandlers?.cancel();
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
+    if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();

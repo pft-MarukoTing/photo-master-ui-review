@@ -1142,6 +1142,10 @@
        .history-drawer below), above every other .error-modal-based popup, so
        this needs its own higher stacking order to actually show on top of it. */
     #confirm-modal { z-index: 1002; }
+    /* Same reasoning as #confirm-modal above -- opened from inside
+       #reports-drawer (also z-index 1001, .history-drawer), so it needs the
+       same bump to actually land on top of it instead of behind it. */
+    #report-screenshot-modal { z-index: 1002; }
     .error-modal-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.6); }
     .error-modal-box {
       position: relative; width: min(440px, calc(100vw - 40px));
@@ -1312,6 +1316,19 @@
       background: rgba(168, 85, 247, .22);
       border-color: rgba(168, 85, 247, .6);
     }
+
+    /* #report-screenshot-modal -- wider still than #demo-images-modal-box's
+       560px, since a captured results panel is a full desktop-width photo+
+       panels layout, not a single square tile. */
+    .report-screenshot-modal-box { width: min(900px, calc(100vw - 40px)); }
+    .report-screenshot-modal-body {
+      max-height: 78vh;
+      overflow: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card-2);
+    }
+    .report-screenshot-modal-body img { display: block; width: 100%; height: auto; }
 
     /* #notice-modal's title reuses .logo's own wordmark treatment (Photo in
        the plain text color, Master in the brand gradient) instead of
@@ -1501,6 +1518,43 @@
       resize: vertical;
     }
     .report-modal-textarea:focus { outline: none; border-color: var(--accent); }
+    /* Compact preview strip -- #report-modal-box stays the plain 440px
+       .error-modal-box (sized for a form, not a photo), so this is a small
+       thumbnail rather than the admin side's full-size #report-screenshot-
+       modal-box. A fixed height covers both the loading/failed text state
+       and the eventual image without the sheet's height jumping once the
+       capture resolves. */
+    .report-modal-screenshot {
+      margin-top: 12px;
+      height: 120px;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .report-modal-screenshot-status { margin: 0; font-size: 13px; color: var(--text-3); padding: 0 12px; text-align: center; }
+    .report-modal-screenshot-preview-btn {
+      display: block;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      border: none;
+      background: none;
+      cursor: zoom-in;
+    }
+    .report-modal-screenshot-preview-btn img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      /* contain (not cover) -- this is a confirmation preview of exactly
+         what's about to be sent, so it should show the whole capture
+         scaled to fit, not crop away whatever doesn't fit the strip's
+         fixed height. */
+      object-fit: contain;
+    }
 
     /* ── Processing history: a slide-in drawer, not a full screen -- opened
        over whatever's currently showing (upload/processing/results) via
@@ -1766,6 +1820,20 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* A <button> (opens #report-screenshot-modal in-app), not an <a> -- reset
+       the native button chrome so it still just reads as a plain text link. */
+    .report-item-screenshot-link {
+      font: inherit;
+      font-size: 12.5px;
+      color: var(--accent);
+      background: none;
+      border: none;
+      padding: 0;
+      text-decoration: none;
+      width: fit-content;
+      cursor: pointer;
+    }
+    .report-item-screenshot-link:hover { text-decoration: underline; }
 
     /* Centered toast shown while a download zip is being assembled --
        buildZip fetches each result image over the network before zipping,
@@ -3037,6 +3105,19 @@
     <input id="report-modal-name" class="account-modal-input" type="text" placeholder="輸入你的名稱" maxlength="64">
     <label class="report-modal-label" for="report-modal-note">問題描述（選填）</label>
     <textarea id="report-modal-note" class="report-modal-textarea" placeholder="請描述這筆結果的問題…" maxlength="500"></textarea>
+    <!-- Preview of captureReportScreenshot's own capture (app.js) -- lets
+         the reporter see (and confirm) what's about to be attached before
+         送出回報, rather than finding out only after an admin looks it up
+         later. Status text covers the async gap between opening the sheet
+         and the capture actually resolving, and the "capture failed" case
+         (openReportModal/applyReportModalScreenshotPreview, app.js). -->
+    <span class="report-modal-label">畫面截圖預覽</span>
+    <div id="report-modal-screenshot" class="report-modal-screenshot">
+      <p id="report-modal-screenshot-status" class="report-modal-screenshot-status">擷取畫面中…</p>
+      <button id="report-modal-screenshot-preview-btn" class="report-modal-screenshot-preview-btn" type="button" hidden aria-label="放大檢視截圖">
+        <img id="report-modal-screenshot-img" alt="回報截圖預覽">
+      </button>
+    </div>
     <p id="report-modal-error" class="account-modal-error" hidden></p>
     <div class="account-modal-actions">
       <button id="report-modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">取消</button>
@@ -3093,6 +3174,24 @@
     <p id="demo-images-empty" class="history-empty" hidden>目前沒有範例照片。</p>
     <div class="demo-images-modal-footer">
       <button id="demo-images-confirm-btn" class="btn btn-secondary btn-sm" type="button" disabled>使用所選照片</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin-only: shows one report's screenshot (captureReportScreenshot,
+     app.js) in-app instead of a new tab -- opened by the "查看回報截圖"
+     button in #reports-list (renderReportsList, app.js). Same shared
+     backdrop+box modal shape as #demo-images-modal above, just wider still
+     since a results-panel screenshot is taller/wider than a photo tile. -->
+<div id="report-screenshot-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box report-screenshot-modal-box" role="dialog" aria-modal="true" aria-labelledby="report-screenshot-modal-title">
+    <div class="error-modal-hdr">
+      <span id="report-screenshot-modal-title" class="settings-modal-title">回報截圖</span>
+      <button id="report-screenshot-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div class="report-screenshot-modal-body">
+      <img id="report-screenshot-modal-img" alt="回報截圖">
     </div>
   </div>
 </div>

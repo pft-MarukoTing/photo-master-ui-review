@@ -443,13 +443,25 @@ window.PhotoAgentApi = (() => {
   // (report-modal, app.js); `userPrompt` is the 補充指令 text the original
   // submission actually used (lastSingleSelections.userPrompt, app.js) --
   // there's nowhere server-side this could be looked up from otherwise, so
-  // the frontend has to hand it over at report time. Both absent entirely
-  // when blank, same as every other optional field elsewhere in this file.
-  async function reportJob(user, jobId, path = "local", note = "", userPrompt = "") {
+  // the frontend has to hand it over at report time. `screenshotBlob` is
+  // captureReportScreenshot's own best-effort capture of the results panel
+  // (app.js) -- null whenever that failed, in which case this just omits
+  // the field like every other optional one here. FormData (not JSON) is
+  // required once a Blob is in the mix; backend/routes/api.py's report_job
+  // already falls back to request.form for a non-JSON body, so this needs
+  // no change on that side beyond reading request.files too.
+  async function reportJob(user, jobId, path = "local", note = "", userPrompt = "", screenshotBlob = null) {
+    const form = new FormData();
+    form.append("user", user);
+    form.append("job_id", jobId);
+    form.append("path", path);
+    if (note) form.append("note", note);
+    if (userPrompt) form.append("user_prompt", userPrompt);
+    if (screenshotBlob) form.append("screenshot", screenshotBlob, "report-screenshot.png");
+
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/report`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user, job_id: jobId, path, note: note || undefined, user_prompt: userPrompt || undefined })
+      body: form
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -469,7 +481,14 @@ window.PhotoAgentApi = (() => {
       err.status = response.status;
       throw err;
     }
-    return data; // { reports: [{ job_id, user, path, ts, note?, user_prompt? }] }
+    return data; // { reports: [{ job_id, user, path, ts, note?, user_prompt?, has_screenshot }] }
+  }
+
+  // Same-origin URL for a report's screenshot (see backend/routes/api.py's
+  // report_screenshot) -- used as an <img> src in the admin reports drawer,
+  // shown only when that report's has_screenshot is true.
+  function reportScreenshotUrl(jobId, user) {
+    return `${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(jobId)}/${encodeURIComponent(user)}/screenshot`;
   }
 
   // One-shot status check (unlike pollJobStatus, which loops until done) --
@@ -509,6 +528,7 @@ window.PhotoAgentApi = (() => {
     clearHistory,
     getJobStatusOnce,
     reportJob,
-    getReports
+    getReports,
+    reportScreenshotUrl
   };
 })();

@@ -27,19 +27,22 @@ def is_admin(username):
     return normalize_username(username).lower() in _ADMIN_USERS
 
 
-def record_report(username, job_id, path, note=None, user_prompt=None):
+def record_report(username, job_id, path, note=None, user_prompt=None, screenshot_key=None):
     """One entry per (job_id, user) pair -- re-reporting the same job by the
-    same user just refreshes its timestamp (and note/user_prompt) in place,
-    but two different users reporting the same job both show up to the
-    admin as separate entries. note is the reporter's optional free-text
-    description of the issue; user_prompt is whatever 補充指令 text the
-    original submission actually used (the frontend reads it off its own
-    in-memory record of that job, since neither is stored anywhere else the
-    report could look it up from -- the raw text a user types is never
-    persisted into the job's own analysis/result JSON). Both are omitted
-    from the stored entry entirely when blank, rather than stored as ""
-    (keeps get_reports' output the same shape as before either field existed
-    for every report that doesn't use them)."""
+    same user just refreshes its timestamp (and note/user_prompt/screenshot)
+    in place, but two different users reporting the same job both show up
+    to the admin as separate entries. note is the reporter's optional
+    free-text description of the issue; user_prompt is whatever 補充指令
+    text the original submission actually used (the frontend reads it off
+    its own in-memory record of that job, since neither is stored anywhere
+    else the report could look it up from -- the raw text a user types is
+    never persisted into the job's own analysis/result JSON). screenshot_key
+    is the S3 key report_job (backend/routes/api.py) already uploaded the
+    reporter's screen capture to, if any -- stored so report_screenshot can
+    resolve it later without the client ever handling a raw S3 key itself.
+    All three are omitted from the stored entry entirely when absent, rather
+    than stored as "" (keeps get_reports' output the same shape as before
+    any of them existed for every report that doesn't use them)."""
     name = normalize_username(username)
     field = f"{job_id}:{name}"
     entry = {"job_id": job_id, "path": path, "user": name, "ts": time.time()}
@@ -47,7 +50,25 @@ def record_report(username, job_id, path, note=None, user_prompt=None):
         entry["note"] = note
     if user_prompt:
         entry["user_prompt"] = user_prompt
+    if screenshot_key:
+        entry["screenshot_key"] = screenshot_key
     pf_redis_client.hset(REPORTS_KEY, field, json.dumps(entry))
+
+
+def get_report(job_id, username):
+    """One report entry, including its raw screenshot_key -- for
+    report_screenshot (backend/routes/api.py) to resolve server-side only;
+    get_reports below strips that same key from what it hands to the
+    frontend (has_screenshot instead), so a client never needs to know or
+    pass around the actual S3 key."""
+    name = normalize_username(username)
+    raw = pf_redis_client.hget(REPORTS_KEY, f"{job_id}:{name}")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def get_reports(limit=200):
@@ -55,8 +76,10 @@ def get_reports(limit=200):
     entries = []
     for raw in raw_entries.values():
         try:
-            entries.append(json.loads(raw))
+            entry = json.loads(raw)
         except (TypeError, ValueError):
             continue
+        entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
+        entries.append(entry)
     entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
     return entries[:limit]
