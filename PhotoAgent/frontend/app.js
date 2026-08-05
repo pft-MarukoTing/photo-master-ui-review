@@ -1312,6 +1312,11 @@
     const clampedLeft = Math.min(Math.max(rect.left, margin), Math.max(margin, maxLeft));
     els.reportBtn.style.top = `${rect.top}px`;
     els.reportBtn.style.left = `${clampedLeft}px`;
+    // Starts visibility:hidden (index.html <style>) so it never flashes at
+    // its own static-flow position (flush left, right after </header>)
+    // before this function's first call places it correctly -- reveal it
+    // now that top/left are actually set.
+    els.reportBtn.style.visibility = "visible";
   }
 
   // Captured when #report-modal opens (not re-read from lastResult at

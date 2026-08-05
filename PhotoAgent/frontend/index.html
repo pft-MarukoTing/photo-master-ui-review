@@ -1433,10 +1433,19 @@
        sit in the DOM), this button has no natural position of its own
        anymore. syncReportBtnPosition (app.js) copies #report-btn-spacer's
        live getBoundingClientRect() onto these as inline styles instead, so
-       it always renders exactly where that reserved slot is. */
+       it always renders exactly where that reserved slot is.
+
+       visibility starts hidden for the same reason -- with no top/left set
+       yet, a position:fixed element with no offsets renders at its own
+       static-flow position (here, flush against the left edge, right after
+       <header> in the DOM) until JS runs, so it would otherwise flash
+       there first and visibly jump to the right corner once
+       syncReportBtnPosition's first call lands. That same function flips
+       this back to visible once it's actually positioned correctly. */
     #report-btn {
       position: fixed;
       z-index: 2000;
+      visibility: hidden;
     }
     /* #report-btn once this RUN has been flagged (updateReportButton,
        app.js) -- stays disabled (no re-reporting) but should read as "done",
