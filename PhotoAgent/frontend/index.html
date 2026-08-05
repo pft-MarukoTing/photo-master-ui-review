@@ -1192,22 +1192,34 @@
     .settings-modal-title { font-size: 17px; font-weight: 800; color: var(--text); }
     .settings-modal-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
 
-    /* #demo-images-modal's picker grid -- wider than the plain 440px
+    /* #demo-images-modal's picker strip -- wider than the plain 440px
        .error-modal-box (that width is tuned for a message/form, not a photo
-       grid), and a fixed 4 columns (not auto-fill) so tile size stays
-       consistent regardless of how many demo photos exist. Same cube-tile
-       look as .history-cube (history-drawer), just without its status
-       badge/remove button since a demo photo has neither. */
+       strip). One row, with the rest scrolled off to the right instead of
+       every tile getting squeezed to fit however many photos exist. Tile
+       size is a fraction of the grid's own width (minus its gaps), not a
+       fixed px -- a fixed px only fit 3 at the 560px desktop width this was
+       tuned against; on a narrower phone (.demo-images-modal-box itself
+       already shrinks to fit the viewport, see below) that same fixed
+       width left room for barely 2. Divisor is 3.3, not a flat 3, so a
+       sliver of the 4th tile always peeks in at the edge as a "there's
+       more, scroll" hint, on any viewport width. Same cube-tile look as
+       .history-cube (history-drawer), just without its status badge/remove
+       button since a demo photo has neither. */
     .demo-images-modal-box { width: min(560px, calc(100vw - 40px)); }
     .demo-images-grid {
-      display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      display: flex;
+      flex-wrap: nowrap;
       gap: 10px;
-      max-height: 60vh;
-      overflow-y: auto;
+      overflow-x: auto;
+      overflow-y: hidden;
+      /* Room for the scrollbar itself so it doesn't sit flush under the
+         tiles (browsers that don't reserve this, e.g. macOS overlay
+         scrollbars, just see a harmless bit of empty space instead). */
+      padding-bottom: 8px;
     }
     .demo-image-tile {
       position: relative;
+      flex: 0 0 calc((100% - 20px) / 3.3);
       aspect-ratio: 1 / 1;
       border-radius: var(--radius);
       overflow: hidden;
