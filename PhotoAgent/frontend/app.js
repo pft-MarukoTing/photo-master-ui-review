@@ -196,6 +196,15 @@
     if (procSub) procSub.textContent = text;
     if (els.canvasLoadingStatus) els.canvasLoadingStatus.textContent = text;
   }
+
+  // Same mirroring as setProcSub, for the title line -- finishSingleFlow sets
+  // procTitle directly (not through this) in the couple of spots that only
+  // ever run before #canvas-loading can even be visible (the initial
+  // analyze-preview screens), so those are left as plain assignments.
+  function setProcTitle(text) {
+    if (procTitle) procTitle.textContent = text;
+    if (els.canvasLoadingTitle) els.canvasLoadingTitle.textContent = text;
+  }
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
@@ -1828,7 +1837,7 @@
 
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
-    if (procTitle) procTitle.textContent = useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
+    setProcTitle(useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片"));
     setProcSub(
       useCombinedJob
         ? "AI 正在分析照片，請稍候…"
@@ -1842,7 +1851,7 @@
     // two-job flow showed, even though it's now one job/one poll.
     const onCombinedStage = (stage) => {
       if (stage !== "edit") return;
-      if (procTitle) procTitle.textContent = aiPhotoEditing ? "AI 正在修圖" : "正在處理照片";
+      setProcTitle(aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
       setProcSub(
         aiPhotoEditing
           ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
@@ -1857,12 +1866,28 @@
     // scroll to the top, so this must only actually fire once: re-running it
     // on every later RUN would keep yanking the view back up while the user
     // is looking at an already-shown result.
+    // Also flips #canvas-loading/#photo-frame-wrap back here (not just in
+    // backToProcessFromResults's finally, which only runs after every RUN
+    // settles) -- a results-page re-run must swap its ring-animation loading
+    // card for the actual photo the moment RUN 1 lands, same as the upload
+    // flow does, instead of leaving that card up (stacked awkwardly over the
+    // #run-progress bar, which starts showing as soon as any RUN is done)
+    // for the whole multi-RUN job. A no-op for the original upload flow,
+    // where neither element is ever toggled away from its default state.
+    // #ap-options-card-inline itself stays closed the whole time regardless
+    // (see showSingleResult's autoOpenPanel doc) -- opening it early would
+    // let the user fire a second, overlapping revise session sharing this
+    // same singleRuns/singleFlowState while these still-processing RUNs are
+    // still writing into it. It only reopens once every RUN has settled, via
+    // the plain (autoOpenPanel default true) showSingleResult() call below.
     let resultsRevealed = false;
     const revealResultsIfNeeded = () => {
       if (resultsRevealed || !isCurrent()) return;
       resultsRevealed = true;
       if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
       showSection("results");
+      if (els.canvasLoading) els.canvasLoading.hidden = true;
+      if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
     };
 
     if (useCombinedJob) {
@@ -2259,7 +2284,12 @@
     } catch (error) {
       showError(friendlyError(error));
     } finally {
-      // Harmless even if the user has since switched to a different record
+      // finishSingleFlow's own revealResultsIfNeeded already flips these back
+      // as soon as RUN 1 lands, so this is only load-bearing when every RUN
+      // failed (revealResultsIfNeeded never ran) -- restoring the frame lets
+      // the user see the error against last known image instead of being
+      // stuck behind the loading card. Harmless no-op otherwise, and still
+      // harmless even if the user has since switched to a different record
       // (viewHistoryRecord/viewProcessingHistoryRecord reset these same two
       // elements themselves whenever they show anything) -- either way, the
       // end state is "loading hidden, frame visible", which is always

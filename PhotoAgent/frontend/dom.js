@@ -64,6 +64,7 @@ window.PhotoAgentDom = (() => {
     photoFrameWrap: document.querySelector("#photo-frame-wrap"),
     canvasLoading: document.querySelector("#canvas-loading"),
     canvasLoadingThumb: document.querySelector("#canvas-loading-thumb"),
+    canvasLoadingTitle: document.querySelector("#canvas-loading-title"),
     canvasLoadingStatus: document.querySelector("#canvas-loading-status"),
     apSubjectTags: document.querySelector("#ap-subject-tags"),
     apSubject: document.querySelector("#ap-subject"),

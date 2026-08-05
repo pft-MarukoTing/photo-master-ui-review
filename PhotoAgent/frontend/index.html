@@ -2574,11 +2574,14 @@
                  background, since staying on this page means the upload
                  page's own #processing-section never shows for that wait --
                  reuses that screen's exact thinking-rings treatment
-                 (.proc-visual/.think-ring/.proc-thumb, see styles.css)
-                 instead of a generic spinner, just inline on the results
-                 page rather than a separate section. Text mirrored live
-                 from procSub by setProcSub (app.js), so multi-RUN progress
-                 ("已完成 N/total RUN") updates here too.
+                 (.proc-visual/.think-ring/.proc-thumb, see styles.css) plus
+                 its eyebrow/title/sub text trio, just inline on the results
+                 page (as its own column stack) rather than a separate
+                 section. Title/sub mirrored live from procTitle/procSub by
+                 setProcTitle/setProcSub (app.js), so multi-RUN progress
+                 ("已完成 N/total RUN") updates here too -- the eyebrow is
+                 static ("Photo Master is working") on the upload screen too,
+                 so it's plain markup, not mirrored.
                  A sibling of #photo-frame-wrap, not an overlay inside it --
                  #photo-frame-wrap (photo, header row, RUN switcher,
                  recipe-tags) is hidden outright while this shows instead
@@ -2594,6 +2597,8 @@
                   <img id="canvas-loading-thumb" class="proc-thumb" alt="">
                 </div>
               </div>
+              <p id="canvas-loading-eyebrow" class="canvas-loading-eyebrow">Photo Master is working</p>
+              <h2 id="canvas-loading-title" class="canvas-loading-title"></h2>
               <p id="canvas-loading-status" class="canvas-loading-status"></p>
             </div>
             <!-- Shown for as long as any RUN of a multi-RUN job is still

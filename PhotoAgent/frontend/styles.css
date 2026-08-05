@@ -882,11 +882,30 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
+  gap: 12px;
   height: 480px;
   border-radius: var(--radius-lg);
   background: var(--card-2);
   box-shadow: var(--shadow-lg);
+}
+/* Same eyebrow/title treatment as .proc-eyebrow/.proc-title (styles.css
+   above), just smaller -- those are sized for the upload page's full-width
+   hero row, which would overflow this card's fixed 480px/narrow-column
+   footprint. */
+.canvas-loading-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  text-align: center;
+}
+.canvas-loading-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: -.4px;
+  text-align: center;
 }
 .canvas-loading-status {
   max-width: 320px;
