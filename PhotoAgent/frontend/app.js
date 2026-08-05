@@ -3873,7 +3873,6 @@
   // job they've since stopped looking at.
   async function viewProcessingHistoryRecord(job) {
     const myToken = ++historyViewToken;
-    closeHistoryDrawer();
     showSection("results");
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
@@ -3954,6 +3953,10 @@
           els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
           showSection("results");
           showSingleResult({ autoOpenPanel: false, forceReopen: !revealed });
+          // First RUN to actually land -- keep the drawer open until now so
+          // it doesn't disappear during the still-processing wait, then close
+          // it now that a result page is actually visible behind it.
+          if (!revealed) closeHistoryDrawer();
           revealed = true;
         };
         if (els.originalImg.src === selectedFileSourceUrl) {
@@ -4040,12 +4043,16 @@
   // alone says.
   async function viewHistoryRecord(job, { revealDetailExtra = false } = {}) {
     historyViewToken += 1;
+    const myToken = historyViewToken;
     const runs = await fetchAllHistoryRuns(job);
     if (!runs.length) {
       showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
       return;
     }
-    closeHistoryDrawer();
+    // Drawer stays open (not closed here) until the result page it's opening
+    // has actually finished rendering below -- closing it immediately after
+    // this fetch left a visible gap where neither the drawer nor the result
+    // was on screen while the rest of this function awaited.
     if (resultsDetailExtra) resultsDetailExtra.hidden = !(isDebugUiActive || revealDetailExtra);
 
     // A live batch (if one happened to be running in this same session) has
@@ -4115,6 +4122,7 @@
       // showSingleResult itself preloads the RUN's image before painting, so
       // this doesn't return until that's done either.
       await showSingleResult({ forceReopen: true });
+      if (historyViewToken === myToken) closeHistoryDrawer();
       return;
     }
 
@@ -4148,6 +4156,7 @@
       path: "aipoc",
       reviewable: false
     });
+    if (historyViewToken === myToken) closeHistoryDrawer();
   }
 
   // Demo photo picker -- lazily fetched once (getDemoImages) and cached here,
