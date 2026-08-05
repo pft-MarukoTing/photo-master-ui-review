@@ -1584,7 +1584,14 @@
   // per-image style/recipe overrides picked during review).
   async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt = "", runCount = 1, onStage, onRunDone }) {
     const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount, user: getCurrentUser(), path: "local" });
+    await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
+  }
 
+  // The polling half of runCombinedMultiRun, split out so a still-processing
+  // combined job can be RESUMED (e.g. from viewProcessingHistoryRecord, after
+  // navigating away and back through history) without resubmitting it --
+  // this just watches an already-submitted jobId's own progress.
+  async function watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone } = {}) {
     // Tracks which RUN *numbers* have already been delivered (a Set, not a
     // "highest number seen" watermark) -- /result can transiently return
     // fewer/out-of-order entries than the true count if one RUN's metadata
@@ -1596,6 +1603,7 @@
     // just a cheap "did anything change" gate so a poll tick with no new
     // progress doesn't bother calling /result at all.
     let lastRunsDoneSeen = 0;
+    let lastStageSeen = null;
     const deliveredRuns = new Set();
     const fetchNewRuns = async () => {
       const { runs } = await getJobRuns(jobId, { path: "local" });
@@ -1615,7 +1623,15 @@
       path: "local",
       timeoutMs: runCount * 5 * 60 * 1000,
       onStatus: async (data) => {
-        if (onStage && data.stage) onStage(data.stage);
+        // data.stage stays "edit" for the entire edit phase (job_processor.py
+        // sets it once and never clears it), so this must only fire on the
+        // actual analyze->edit transition -- calling onStage on every tick
+        // re-applied its generic "請稍候" wording every ~1.5s, stomping the
+        // "已完成 X/N RUN" progress text updateRunProgress had just set below.
+        if (onStage && data.stage && data.stage !== lastStageSeen) {
+          lastStageSeen = data.stage;
+          onStage(data.stage);
+        }
         if (typeof data.runs_done === "number" && data.runs_done > lastRunsDoneSeen) {
           lastRunsDoneSeen = data.runs_done;
           await fetchNewRuns();
@@ -3412,6 +3428,114 @@
     const previewUrl = job.path === "local" ? sourceImageUrl(jobIds[0]) : "";
     showBatchMainLoading({ previewUrl, status: "processing" });
 
+    // A combined multi-RUN job (runCombinedMultiRun) is ONE job_id covering
+    // every RUN (job_processor.py runs finish_stage `run_count` times inside
+    // it), unlike the two-stage manual path's N *separate* job_ids below --
+    // resume watching it incrementally (same watchCombinedJobRuns the live
+    // in-page flow uses) instead of only finding out once EVERYTHING is
+    // done, so the progress bar/RUN switcher/canvas come back the same way
+    // they would have if the user had just stayed on the page.
+    if (job.path === "local" && jobIds.length === 1) {
+      const combinedJobId = jobIds[0];
+      const runCount = Math.max(1, parseInt(job.run_count, 10) || 1);
+
+      // hideAllBatchMainViews (called by showBatchMainLoading above) only
+      // repositions #analysis-preview home (restoreAnalysisPreviewHome), not
+      // closes it -- if it was left open from viewing some other, already-
+      // FINISHED record earlier this session, it would otherwise keep
+      // showing #ap-options-card-inline over this still-processing one too.
+      // The live in-page flow never opens this panel until every RUN is
+      // actually done (finishSingleFlow always passes autoOpenPanel:false
+      // for its own per-RUN progress calls); match that here.
+      closeInlineAnalysisPanel();
+
+      selectedFile = null;
+      selectedFileSourceUrl = sourceImageUrl(combinedJobId);
+      originalImgThumbUrl = sourceThumbnailUrl(combinedJobId);
+      const myRuns = Array.from({ length: runCount }, (_, k) => ({
+        run: k + 1, jobId: combinedJobId, status: "processing",
+        imageUrl: null, result: null, timings: [], error: null
+      }));
+      singleRuns = myRuns;
+      singleMirrorIndex = null;
+
+      let revealed = false;
+      const renderIfPossible = () => {
+        if (historyViewToken !== myToken) return; // navigated away meanwhile
+        const doneRun = myRuns.find((r) => r.status === "done");
+        if (!doneRun) return; // nothing landed yet -- leave the loading placeholder up
+        if (!singleFlowState || singleFlowState.analyzeJobId !== doneRun.jobId) {
+          const extraInfo = doneRun.result["extra-info"] || {};
+          const { analysis: restoredAnalysis, selections } = restoreReviseSelections(doneRun.result.analysis, job.user_prompt);
+          singleFlowState = {
+            analysis: restoredAnalysis,
+            analyzeJobId: doneRun.jobId,
+            presetKey: job.preset || "natural",
+            preset: presets[job.preset] || presets.natural,
+            imageQuality: job.image_quality || extraInfo.image_quality || "medium",
+            imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
+            aspectRatio: job.aspect_ratio || "auto",
+            aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
+            runQa: job.run_qa != null ? job.run_qa : true,
+            processingPath: "local",
+            analyzeTimings: [],
+            useCombinedJob: false
+          };
+          lastSingleSelections = selections;
+        }
+        const applyRender = () => {
+          els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
+          showSection("results");
+          showSingleResult({ autoOpenPanel: false, forceReopen: !revealed });
+          revealed = true;
+        };
+        if (els.originalImg.src === selectedFileSourceUrl) {
+          // A load from an EARLIER call to this same function may already be
+          // pending (a later RUN landing before the image from an earlier
+          // RUN finished loading) -- overwriting .onload here would silently
+          // discard that pending render instead of ever showing it. Since
+          // applyRender reads myRuns/singleRuns live (not a stale closure),
+          // that already-pending handler will naturally reflect however many
+          // RUNs are done by the time it actually fires -- nothing to do here
+          // but wait for it, unless the image is already fully loaded.
+          if (els.originalImg.complete) applyRender();
+        } else {
+          els.originalImg.onload = () => { els.originalImg.onload = null; applyRender(); };
+          els.originalImg.onerror = () => { els.originalImg.onload = null; applyRender(); };
+          els.originalImg.src = selectedFileSourceUrl;
+        }
+      };
+
+      try {
+        await watchCombinedJobRuns(combinedJobId, runCount, {
+          onRunDone: (runData) => {
+            const run = myRuns[runData.run - 1];
+            if (!run) return;
+            run.status = "done";
+            run.imageUrl = runData.image_url;
+            run.result = runData.result;
+            renderIfPossible();
+          }
+        });
+      } catch (error) {
+        if (historyViewToken !== myToken) return; // navigated away meanwhile
+        if (!myRuns.some((r) => r.status === "done")) {
+          showBatchMainError({ previewUrl, error: "所有 RUN 皆處理失敗，請稍後再試。" });
+        }
+        // Otherwise at least one RUN already rendered -- leave it displayed
+        // rather than clobbering it with an error for the whole record.
+        return;
+      }
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+      // Finalizes exactly like a normally-finished record (revise button,
+      // etc.) now that every RUN is confirmed done.
+      await viewHistoryRecord(job);
+      return;
+    }
+
+    // Two-stage manual path (N separate job_ids) or the AIPoC path (no
+    // incremental combined-job concept, synchronous analyze) -- unchanged:
+    // wait for any ONE of them to succeed, then render whatever's done.
     try {
       await Promise.any(jobIds.map((id) => pollJobStatus(id, { path: job.path })));
     } catch {

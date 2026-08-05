@@ -25,7 +25,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt")
+            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "run_count")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
