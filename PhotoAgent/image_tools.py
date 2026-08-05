@@ -48,6 +48,20 @@ def ensure_png_bytes(image_bytes: bytes) -> bytes:
     return _to_png_bytes(_open_rgb(image_bytes))
 
 
+def ensure_jpeg_bytes(image_bytes: bytes) -> bytes:
+    """Re-encode arbitrary input bytes (HEIC/JPEG/WebP/PNG/...) as a real JPEG.
+
+    Same reasoning as ensure_png_bytes, for the "serve the original upload
+    back to the browser" endpoints (backend/routes/api.py's source_image/
+    source_thumbnail) instead of an edit-model API: srcKeys is always a
+    "src.jpg"-named key regardless of what the user actually uploaded (see
+    put_job.py), and most browsers can't render a HEIC/HEIF photo in an
+    <img> tag under any label -- returning those bytes as-is looks like a
+    broken image to the user even though the file itself is fine.
+    """
+    return _to_jpeg_bytes(_open_rgb(image_bytes))
+
+
 def image_to_data_url(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
     b64 = base64.b64encode(image_bytes).decode("utf-8")
     return f"data:{mime_type};base64,{b64}"

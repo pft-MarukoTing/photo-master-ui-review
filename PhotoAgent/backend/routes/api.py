@@ -5,7 +5,7 @@ import requests
 from flask import Blueprint, Response, current_app, jsonify, request
 
 from aiserver_utils.queue import get_job_info
-from image_tools import create_preview_bytes, HISTORY_THUMBNAIL_MAX_SIDE
+from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
@@ -382,9 +382,13 @@ def source_image(job_id):
 
     # srcKeys is always a "src.jpg"-named key (see template_params.py) --
     # store bytes are the raw upload regardless of the browser's own original
-    # content-type, so this is a fixed label, same as /result/<job_id>/image's
-    # own hardcoded "image/png" for its (always-PNG) output.
-    return Response(image_bytes, mimetype="image/jpeg")
+    # content-type, so a HEIC/HEIF photo (most browsers can't render that in
+    # an <img> tag under any label, see image_tools.py's own doc on this) would
+    # otherwise come back looking like a broken image. ensure_jpeg_bytes
+    # normalizes it to a real JPEG first -- same reasoning as /result/<job_id>
+    # /image's hardcoded "image/png" mimetype, which is safe as-is since that
+    # one's bytes are always genuinely PNG-encoded already.
+    return Response(ensure_jpeg_bytes(image_bytes), mimetype="image/jpeg")
 
 
 @api_bp.get("/source/<job_id>/thumbnail")
@@ -410,7 +414,10 @@ def source_thumbnail(job_id):
     image_bytes, download_error = download_bytes(src_keys[0], job_id)
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download source image: {download_error}"}), 502
-    return Response(image_bytes, mimetype="image/jpeg")
+    # Unlike thumb_bytes above (already a real JPEG from create_preview_bytes
+    # at upload time), this is the raw full-res upload -- same HEIC/HEIF risk
+    # as source_image() above, so normalize it the same way.
+    return Response(ensure_jpeg_bytes(image_bytes), mimetype="image/jpeg")
 
 
 # ── Two-stage local flow: analyze now, review, /continue later ─────────────
