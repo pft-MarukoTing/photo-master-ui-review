@@ -1367,8 +1367,10 @@
       font-size: 13px;
       border-radius: 999px;
     }
-    /* #report-btn sits between #reset-btn and #account-badge -- same
-       compact-pill override as #reset-btn just above, same reasons. */
+    /* #report-btn uses .btn-grad (see its markup) instead of the neutral
+       .btn-secondary its header siblings use, so it stands out as worth a
+       second look -- compact-pill sizing override, same reasons as
+       #reset-btn above. */
     #report-btn.btn {
       height: 32px;
       padding: 0 14px;
@@ -1379,11 +1381,15 @@
     /* #report-btn once this RUN has been flagged (updateReportButton,
        app.js) -- stays disabled (no re-reporting) but should read as "done",
        not "unavailable", so it needs its own opacity/color instead of the
-       generic .btn:disabled dim. */
+       generic .btn:disabled dim. border/box-shadow are spelled out in full
+       (not just color) since .btn-grad sets neither the way .btn-secondary
+       used to, and its purple glow would otherwise clash with this red
+       "done" state. */
     #report-btn.is-reported {
       opacity: 1;
       background: rgba(255,38,0,.14);
-      border-color: rgba(255,38,0,.45);
+      border: 1px solid rgba(255,38,0,.45);
+      box-shadow: none;
       color: var(--red);
     }
     /* #admin-reports-btn sits in the same row (right before #account-badge)
@@ -1941,26 +1947,12 @@
         </svg>
         <span class="btn-label">上傳照片</span>
       </button>
-      <!-- Flags the currently-displayed job_id (lastResult, app.js) under
-           the current account -- see openReportModal/updateReportButton
-           (app.js) and backend/services/report.py. Hidden until lastResult
-           exists (updateReportButton), same as #reset-btn is hidden outside
-           the results section. -->
-      <button id="report-btn" class="btn btn-secondary btn-sm" type="button" title="回報此結果" aria-label="回報此結果" hidden>
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M5 3v18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M5 4.5h11.5l-2.7 3.5 2.7 3.5H5" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
-        </svg>
-        <span class="btn-label">回報</span>
-      </button>
       <!-- Doubles as the entry point into the history drawer (see
            applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
            button exists; the clock icon (same one that button used to use)
            signals "this opens your processing history" alongside the
            username text, set separately into #account-badge-label so
-           applyAccountUi's textContent write doesn't clobber this icon.
-           Last in .header-actions (not first) so it's the rightmost element
-           in the whole header, not just first-after-the-logo. -->
+           applyAccountUi's textContent write doesn't clobber this icon. -->
       <!-- Admin-only entry into #reports-drawer -- shown only once
            checkAdminAccess (app.js) confirms the current account is an admin
            (backend/services/report.py's is_admin); hidden for everyone else,
@@ -1979,6 +1971,22 @@
           <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span id="account-badge-label"></span>
+      </button>
+      <!-- Flags the currently-displayed job_id (lastResult, app.js) under
+           the current account -- see openReportModal/updateReportButton
+           (app.js) and backend/services/report.py. Hidden until lastResult
+           exists (updateReportButton), same as #reset-btn is hidden outside
+           the results section. Last in .header-actions, after even
+           #account-badge, so it's the rightmost element in the whole
+           header -- its own accent color (.btn-grad, see styles.css) is
+           meant to catch the eye, which reads oddly tucked in the middle of
+           the row instead of standing out at the row's own edge. -->
+      <button id="report-btn" class="btn btn-grad btn-sm" type="button" title="回報此結果" aria-label="回報此結果" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M5 3v18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M5 4.5h11.5l-2.7 3.5 2.7 3.5H5" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">回報</span>
       </button>
     </div>
   </div>
