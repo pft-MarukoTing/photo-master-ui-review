@@ -1380,17 +1380,26 @@
   }
 
   // Shared record shape for both a fresh batch (setSelectedFileBatch) and
-  // photos appended to an already-selected one (addFilesToBatch).
-  function makeBatchRecord(file, previewBlob, thumbUrl) {
+  // photos appended to an already-selected one (addFilesToBatch). previewUrl/
+  // thumbUrl start null -- convertBatchRecord fills them in once this one
+  // photo's own HEIC decode/thumbnail generation finishes, independently of
+  // every other record (see its own doc for why that's not done up front,
+  // all at once, here).
+  function makeBatchRecord(file) {
     return {
       localId: `f${nextBatchLocalId++}`,
       file,
-      previewUrl: URL.createObjectURL(previewBlob),
+      previewUrl: null,
       // Small JPEG counterpart of previewUrl, for the batch "processing"
       // main-thumb animation only -- see previewThumbUrl's own doc above for
-      // why. May be null (createProcThumbUrl failed) -- callers fall back to
-      // previewUrl itself.
-      thumbUrl,
+      // why. May stay null (createProcThumbUrl failed) -- callers fall back
+      // to previewUrl itself.
+      thumbUrl: null,
+      // Sets renderDzMultiThumbs' tile to a spinner placeholder instead of
+      // the (not yet available) photo -- separate from `status` below, which
+      // only starts once the user presses Start and has nothing to do with
+      // this purely-local preview-rendering step.
+      previewPending: true,
       // pending -> analyzing -> analyzed -> processing -> done / error
       status: "pending",
       analysis: null,       // step-1 result (shown in the step-2 review panel)
@@ -1423,81 +1432,125 @@
     return images;
   }
 
+  // Converts one batch photo's own preview (HEIC decode + thumbnail) --
+  // called once per record, independently, instead of Promise.all-ing the
+  // whole batch, so one slow HEIC photo can't hold up every other
+  // already-ready thumbnail from appearing. Updates just this record's own
+  // tile in place once done, rather than re-rendering the whole strip.
+  //
+  // Bails at each step if `record` is no longer part of the current batch --
+  // deliberately checking that instead of comparing fileSelectionToken. That
+  // counter is shared with addFilesToBatch's own later calls, which append
+  // rather than replace the batch, and would otherwise wrongly cancel an
+  // earlier still-converting photo's result just because a second "add
+  // more" click happened first. Removal (removeBatchFile) or the whole
+  // batch being replaced by an unrelated new selection both take `record`
+  // out of batchRecords, which this still correctly catches.
+  async function convertBatchRecord(record) {
+    const blob = await previewableBlob(record.file);
+    if (!batchRecords.includes(record)) return;
+
+    const thumbUrl = await createProcThumbUrl(blob);
+    if (!batchRecords.includes(record)) {
+      if (thumbUrl) URL.revokeObjectURL(thumbUrl);
+      return;
+    }
+
+    record.previewUrl = URL.createObjectURL(blob);
+    record.thumbUrl = thumbUrl;
+    record.previewPending = false;
+
+    const tile = els.dzMulti.querySelector(`[data-local-id="${record.localId}"]`);
+    if (tile) fillDzThumb(tile, record);
+  }
+
   // Batch counterpart of setSelectedFile: filter to images (same rule/message),
-  // build one record per file, and render the multi-thumbnail strip.
+  // build one record per file, and render the multi-thumbnail strip. Each
+  // photo's own preview then converts independently (convertBatchRecord) --
+  // the strip shows every tile immediately, as spinner placeholders, rather
+  // than waiting for every single one to finish before showing any of them.
   async function setSelectedFileBatch(files) {
     hideError();
     resetBatchState();
     const images = filterBatchImageFiles(files);
     if (!images) return;
 
-    const token = ++fileSelectionToken;
+    fileSelectionToken++; // invalidates any still-in-flight single-photo (setSelectedFile) conversion
     selectedFile = null;
-    const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
-    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
-
-    const thumbUrls = await Promise.all(previewBlobs.map((blob) => createProcThumbUrl(blob)));
-    if (token !== fileSelectionToken) {
-      thumbUrls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
-      return;
-    }
-
-    batchRecords = images.map((file, i) => makeBatchRecord(file, previewBlobs[i], thumbUrls[i]));
+    batchRecords = images.map((file) => makeBatchRecord(file));
 
     els.dropZone.hidden = true;
     els.dzPreview.hidden = true;
     els.dzMulti.hidden = false;
     renderDzMultiThumbs();
+
+    batchRecords.forEach((record) => convertBatchRecord(record));
   }
 
   // Appends photos to the batch already shown in #dz-multi (triggered only
   // by #dz-add-more, see routeSelectedFiles) instead of replacing it --
   // setSelectedFileBatch always starts from a fresh resetBatchState(), which
-  // would otherwise discard whatever was already selected.
+  // would otherwise discard whatever was already selected. Same
+  // immediate-placeholder-then-convert-independently shape as
+  // setSelectedFileBatch, just concatenated onto the existing batchRecords
+  // instead of replacing them.
   async function addFilesToBatch(files) {
     hideError();
     const images = filterBatchImageFiles(files);
     if (!images) return;
 
-    const token = ++fileSelectionToken;
-    const previewBlobs = await Promise.all(images.map((file) => previewableBlob(file)));
-    if (token !== fileSelectionToken) return; // superseded by a newer selection while converting
+    fileSelectionToken++; // invalidates any still-in-flight single-photo (setSelectedFile) conversion
+    const newRecords = images.map((file) => makeBatchRecord(file));
+    batchRecords = batchRecords.concat(newRecords);
+    renderDzMultiThumbs();
 
-    const thumbUrls = await Promise.all(previewBlobs.map((blob) => createProcThumbUrl(blob)));
-    if (token !== fileSelectionToken) {
-      thumbUrls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
+    newRecords.forEach((record) => convertBatchRecord(record));
+  }
+
+  // Fills one #dz-multi tile with `record`'s current state -- either a
+  // spinner placeholder (still converting) or the real photo + remove
+  // button. Shared by renderDzMultiThumbs (initial render, and rebuilding
+  // after a removal) and convertBatchRecord (in-place update of just the one
+  // tile whose own conversion just finished).
+  function fillDzThumb(thumb, record) {
+    thumb.innerHTML = "";
+    thumb.classList.toggle("is-converting", !!record.previewPending);
+    if (record.previewPending) {
+      const spinner = document.createElement("div");
+      spinner.className = "rc-spinner";
+      thumb.appendChild(spinner);
       return;
     }
 
-    batchRecords = batchRecords.concat(images.map((file, i) => makeBatchRecord(file, previewBlobs[i], thumbUrls[i])));
-    renderDzMultiThumbs();
+    const im = document.createElement("img");
+    im.src = record.previewUrl;
+    im.alt = record.file.name;
+    thumb.appendChild(im);
+
+    const removeBtn = document.createElement("button");
+    removeBtn.type = "button";
+    removeBtn.className = "dz-thumb-remove";
+    removeBtn.setAttribute("aria-label", "移除照片");
+    removeBtn.textContent = "×";
+    removeBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      removeBatchFile(record);
+    });
+    thumb.appendChild(removeBtn);
   }
 
-  // Rebuilds the multi-file thumbnail strip (with a per-thumb remove button)
-  // from the current batchRecords. Called on initial selection and again
-  // whenever a thumbnail is removed.
+  // Rebuilds the multi-file thumbnail strip from the current batchRecords.
+  // Called on initial selection and again whenever a thumbnail is removed --
+  // a single record finishing its own conversion updates its tile directly
+  // instead (convertBatchRecord), without rebuilding every other tile too.
   function renderDzMultiThumbs() {
     els.dzMulti.innerHTML = "";
     batchRecords.forEach((r) => {
       const thumb = document.createElement("div");
       thumb.className = "dz-thumb";
-      const im = document.createElement("img");
-      im.src = r.previewUrl;
-      im.alt = r.file.name;
-      thumb.appendChild(im);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "dz-thumb-remove";
-      removeBtn.setAttribute("aria-label", "移除照片");
-      removeBtn.textContent = "×";
-      removeBtn.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        removeBatchFile(r);
-      });
-      thumb.appendChild(removeBtn);
-
+      thumb.dataset.localId = r.localId;
+      fillDzThumb(thumb, r);
       els.dzMulti.appendChild(thumb);
     });
 
