@@ -521,19 +521,29 @@
     return typeof seconds === "number" ? seconds * 1000 : null;
   }
 
-  // Fully downloads an image before anything swaps a visible <img> to it --
-  // otherwise the browser paints the real element progressively (partial/
-  // low-res-first) right in front of the user once whatever "still working"
-  // UI was covering it has already been dismissed. Resolves (never rejects)
-  // even on error, since the caller still has to proceed and show whatever
-  // it's got -- a broken-image icon beats hanging the reveal forever.
-  function preloadImage(src) {
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(true);
-      img.onerror = () => resolve(false);
-      img.src = src;
+  // Loads `src` directly into `imgEl` while it's invisible, only revealing
+  // it once the image has actually finished (successfully or not) -- rather
+  // than fetching into a throwaway Image() first and hoping the browser
+  // reuses that response for the real element once its own src is set to
+  // the same URL. That reuse only happens if the server actually lets the
+  // response be cached; for a non-cacheable result/history endpoint it
+  // would silently refetch, showing the browser's built-in broken-image
+  // icon plus alt text for however long that takes -- and since
+  // .photo-frame shrink-wraps to whatever the image's current rendered size
+  // is, that gap collapses the whole frame down to a narrow sliver too.
+  // Loading straight into the real (hidden) element sidesteps caching
+  // entirely: there's only ever one fetch, and nothing is visible until it
+  // resolves either way. Resolves (never rejects) even on error, since the
+  // caller still has to proceed and show whatever it's got.
+  async function setImgSrcPreloaded(imgEl, src) {
+    if (imgEl.src === src && imgEl.complete) return;
+    imgEl.style.visibility = "hidden";
+    await new Promise((resolve) => {
+      imgEl.onload = () => { imgEl.onload = null; imgEl.onerror = null; resolve(); };
+      imgEl.onerror = () => { imgEl.onload = null; imgEl.onerror = null; resolve(); };
+      imgEl.src = src;
     });
+    imgEl.style.visibility = "";
   }
 
   function appendTimingRow(container, label, duration, { sub = false } = {}) {
@@ -2138,14 +2148,16 @@
       : (runs.find((x) => x.status === "done") || runs[0]);
     if (!pick || pick.status !== "done") return;
 
-    // Fully download the RUN's image before touching the DOM at all --
-    // whatever was previously on screen (an earlier RUN, or the processing
-    // animation) stays up for the whole wait instead of getting torn down
-    // and replaced by a partially-painted <img>. If the user switches RUN
-    // tabs (or a new record loads) while this is in flight, `runs`/`pick`
-    // are stale by the time it resolves -- bail and let whichever call
-    // actually reflects the current selection render instead.
-    await preloadImage(pick.imageUrl);
+    // Load the RUN's image into #generated-img itself while it's hidden,
+    // before touching anything else -- whatever was previously on screen (an
+    // earlier RUN, or the processing animation) stays up for the whole wait
+    // instead of getting torn down and replaced by a partially-painted/
+    // broken <img>. renderResult below re-sets the same src once this
+    // resolves, which is a no-op once it's already loaded. If the user
+    // switches RUN tabs (or a new record loads) while this is in flight,
+    // `runs`/`pick` are stale by the time it resolves -- bail and let
+    // whichever call actually reflects the current selection render instead.
+    await setImgSrcPreloaded(els.generatedImg, pick.imageUrl);
     if (singleRuns !== runs) return;
     const stillPicked = (singleMirrorIndex != null && runs[singleMirrorIndex])
       ? runs[singleMirrorIndex]
@@ -3713,16 +3725,11 @@
       // resolves once the result photo is actually showing -- callers like
       // the history-list click handler use that to keep their own "opening…"
       // spinner up for the whole wait instead of dropping it the instant the
-      // network fetch above resolved.
-      await new Promise((resolve) => {
-        if (els.originalImg.src === selectedFileSourceUrl && els.originalImg.complete) {
-          resolve();
-        } else {
-          els.originalImg.onload = () => { els.originalImg.onload = null; resolve(); };
-          els.originalImg.onerror = () => { els.originalImg.onload = null; resolve(); };
-          els.originalImg.src = selectedFileSourceUrl;
-        }
-      });
+      // network fetch above resolved. setImgSrcPreloaded (not a bare
+      // src assignment) keeps #original-img itself from ever showing the
+      // browser's broken-image icon/alt text while this record's own photo
+      // is a different one than whatever was on screen before.
+      await setImgSrcPreloaded(els.originalImg, selectedFileSourceUrl);
       els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
       showSection("results");
       // forceReopen: true -- this may be a genuinely different record than
@@ -4246,19 +4253,20 @@
   // read-only historical one -- re-running a job from another session
   // through the live single/batch revise flow doesn't apply here.
   async function showBatchDoneMain(record, settings = batchSettings) {
-    // Fully download this record/RUN's image before touching the DOM at
-    // all -- same reasoning as showSingleResult's identical guard: keeps
-    // whatever was on screen (a different record, or an earlier RUN of this
-    // one) visible for the whole download instead of tearing it down and
-    // repainting progressively. Guards against two kinds of staleness that
-    // can happen while this await is in flight: a later RUN landing on this
-    // same record (record.imageUrl reassigned by syncRecordMirror), or the
-    // user selecting an altogether different record/history entry
+    // Load this record/RUN's image into #generated-img itself while it's
+    // hidden, before touching anything else -- same reasoning as
+    // showSingleResult's identical guard: keeps whatever was on screen (a
+    // different record, or an earlier RUN of this one) visible for the
+    // whole download instead of tearing it down and repainting broken/
+    // progressively. Guards against two kinds of staleness that can happen
+    // while this await is in flight: a later RUN landing on this same
+    // record (record.imageUrl reassigned by syncRecordMirror), or the user
+    // selecting an altogether different record/history entry
     // (currentBatchRecord/historyViewToken) -- either way, whichever call
     // actually reflects the current selection should be the one to render.
     const targetImageUrl = record.imageUrl;
     const guardToken = historyViewToken;
-    await preloadImage(targetImageUrl);
+    await setImgSrcPreloaded(els.generatedImg, targetImageUrl);
     if (record.imageUrl !== targetImageUrl) return;
     if (currentBatchRecord !== null && currentBatchRecord !== record) return;
     if (historyViewToken !== guardToken) return;
@@ -4331,16 +4339,14 @@
     };
     if (!hasOriginal) {
       els.originalImg.removeAttribute("src");
-      applyRender();
-    } else if (els.originalImg.src === record.previewUrl && els.originalImg.complete) {
-      applyRender();
     } else {
-      els.originalImg.onload = () => {
-        els.originalImg.onload = null;
-        applyRender();
-      };
-      els.originalImg.src = record.previewUrl;
+      // setImgSrcPreloaded (not a bare src assignment) keeps #original-img
+      // from ever showing the browser's broken-image icon/alt text while
+      // this record's own photo is a different one than whatever was on
+      // screen before.
+      await setImgSrcPreloaded(els.originalImg, record.previewUrl);
     }
+    applyRender();
   }
 
   // Is a single already-finished batch record currently open in the main
