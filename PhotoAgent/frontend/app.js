@@ -1256,34 +1256,6 @@
     els.downloadLink.setAttribute("aria-label", hint);
   }
 
-  // In-memory only -- a reload just lets a RUN be reported again, which
-  // backend/services/report.py treats as a harmless refresh, not a
-  // duplicate. Keyed by "jobId:runNumber" since a multi-RUN combined job
-  // shares one jobId across every RUN, but each RUN is a genuinely distinct
-  // edited result worth flagging separately.
-  const reportedRuns = new Set();
-
-  function reportKeyFor(jobId, runNumber) {
-    return `${jobId}:${runNumber || 1}`;
-  }
-
-  // #report-btn is always visible/clickable (a permanent header action, not
-  // gated on lastResult the way #reset-btn is on the results section) --
-  // this only keeps its "already reported" tint in sync with whatever
-  // lastResult currently is, called at the same points lastResult changes.
-  // Re-reporting the same RUN is a harmless refresh server-side (see
-  // backend/services/report.py), so this is cosmetic, not a hard lock --
-  // openReportModal itself decides whether there's actually anything to
-  // report right now.
-  function updateReportButton() {
-    if (!els.reportBtn) return;
-    const already = !!lastResult && reportedRuns.has(reportKeyFor(lastResult.jobId, lastResult.runNumber));
-    els.reportBtn.classList.toggle("is-reported", already);
-    const hint = already ? "已回報" : "回報此結果";
-    els.reportBtn.title = hint;
-    els.reportBtn.setAttribute("aria-label", hint);
-  }
-
   // #report-btn is position:fixed (see its own markup comment, index.html)
   // so it keeps winning against modals/drawers, which also takes it out of
   // .header-actions' own flex flow -- #report-btn-spacer is a same-sized,
@@ -1438,18 +1410,6 @@
       // itself -- worst case this report just goes without a screenshot.
       const screenshotBlob = await target.screenshotPromise;
       await reportJob(name, target.jobId, target.path, note, target.userPrompt, screenshotBlob);
-      // A general (job-less) report has no RUN to mark as "already
-      // reported" -- reportedRuns/the button's tint only ever applies to a
-      // job-tied report.
-      if (target.jobId) {
-        reportedRuns.add(reportKeyFor(target.jobId, target.runNumber));
-        // Only touch #report-btn if it's still showing the same RUN this
-        // report was just submitted for -- lastResult may have already
-        // moved on to something else while the sheet was open.
-        if (lastResult && lastResult.jobId === target.jobId && lastResult.runNumber === target.runNumber) {
-          updateReportButton();
-        }
-      }
       closeReportModal();
       showNoticeModal("已回報，我們會盡快確認這筆結果。");
     } catch (err) {
@@ -2334,7 +2294,6 @@
 
         lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: finalJobId, runNumber: 1, path: processingPath };
         updateDownloadLinks();
-        updateReportButton();
         renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
         populateTimingSection();
         resetRunSwitcher();
@@ -2512,7 +2471,6 @@
 
     lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: pick.jobId, runNumber: pick.run, path: singleFlowState.processingPath, runs };
     updateDownloadLinks(runs);
-    updateReportButton();
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
     renderSingleRunSwitcher();
@@ -4781,7 +4739,6 @@
       // straight from -- see fetchImageDownloadData.
       lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
       updateDownloadLinks(record.runs);
-      updateReportButton();
       renderResult({
         data,
         analysis: record.result.analysis,
@@ -5083,7 +5040,6 @@
     els.generatedImg.removeAttribute("src");
     els.downloadLink.removeAttribute("href");
     updateDownloadLinks();
-    updateReportButton();
     els.dropZone.hidden = false;
     els.dzPreview.hidden = true;
     els.origDim.textContent = "";

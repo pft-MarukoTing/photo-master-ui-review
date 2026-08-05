@@ -1447,20 +1447,6 @@
       z-index: 2000;
       visibility: hidden;
     }
-    /* #report-btn once this RUN has been flagged (updateReportButton,
-       app.js) -- stays disabled (no re-reporting) but should read as "done",
-       not "unavailable", so it needs its own opacity/color instead of the
-       generic .btn:disabled dim. border/box-shadow are spelled out in full
-       (not just color) since .btn-grad sets neither the way .btn-secondary
-       used to, and its purple glow would otherwise clash with this red
-       "done" state. */
-    #report-btn.is-reported {
-      opacity: 1;
-      background: rgba(255,38,0,.14);
-      border: 1px solid rgba(255,38,0,.45);
-      box-shadow: none;
-      color: var(--red);
-    }
     /* #admin-reports-btn sits in the same row (right before #account-badge)
        -- same compact-pill override as #reset-btn just above, same reasons. */
     #admin-reports-btn.btn {
@@ -2126,9 +2112,11 @@
 
 <!-- Flags the currently-displayed job_id (lastResult, app.js) under the
      current account, or -- with no result on screen -- a general
-     "something's wrong" report instead (openReportModal/updateReportButton,
-     app.js; backend/services/report.py). Always visible/enabled, unlike
-     #reset-btn/#account-badge which hide until there's a result/account.
+     "something's wrong" report instead (openReportModal, app.js;
+     backend/services/report.py). Always visible/enabled, unlike
+     #reset-btn/#account-badge which hide until there's a result/account --
+     its own style never changes based on report state either (no
+     "already reported" tint), even right after a submission.
 
      Deliberately placed OUTSIDE <header> (a sibling, not a descendant) --
      it's position:fixed with a z-index above every modal/drawer, but
