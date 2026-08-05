@@ -29,9 +29,26 @@ def _frontend_version(frontend_dir):
     return hashlib.sha1(repr(mtimes).encode()).hexdigest()[:12]
 
 
+def _no_cache(resp):
+    """Forces revalidation (a cheap 304 if unchanged) on every request for a
+    frontend file, instead of leaving it to each browser's own heuristics --
+    send_from_directory already sets Last-Modified/ETag, so revalidation
+    itself is free, but with no explicit Cache-Control some browsers (iOS
+    Safari especially) will happily serve a page/script straight from their
+    own cache for a long time without even asking the server, so an edited
+    app.js/index.html can silently keep serving the pre-edit version on a
+    phone that "looks like" it refreshed. no-cache (not no-store) still lets
+    the browser keep a local copy -- it just requires that revalidation
+    round-trip before trusting it. See _frontend_version's own doc above for
+    the deeper reason: these files have no cache-busted build hash to make a
+    stale copy detectable by URL alone."""
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
+
+
 @static_bp.get("/")
 def index():
-    return send_from_directory(current_app.config["FRONTEND_DIR"], "index.html")
+    return _no_cache(send_from_directory(current_app.config["FRONTEND_DIR"], "index.html"))
 
 
 @static_bp.get("/api/config")
@@ -60,4 +77,4 @@ def version():
 
 @static_bp.get("/<path:filepath>")
 def static_files(filepath):
-    return send_from_directory(current_app.config["FRONTEND_DIR"], filepath)
+    return _no_cache(send_from_directory(current_app.config["FRONTEND_DIR"], filepath))
