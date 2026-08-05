@@ -32,10 +32,12 @@ Beautify Nail Art Photo
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Retouch"]
     Scroll To Retouch Feature    Nail Art
     Click Page Element    xpath=//XCUIElementTypeCollectionView/XCUIElementTypeCell[.//XCUIElementTypeStaticText[@name="Nail Art"]]
-    Click Page Element    accessibility_id=Custom
-    Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
-    Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    ${custom_offset}
-    Confirm Nail Art Result
+    Select Reference Photo    ${custom_offset}
+    ${nail_art_success}=    Confirm Nail Art Result
+    WHILE    not ${nail_art_success}
+        Select Reference Photo    ${custom_offset}
+        ${nail_art_success}=    Confirm Nail Art Result
+    END
     Click Page Element    xpath=//XCUIElementTypeButton[@name="Save"]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeButton[1]
     Click Page Element    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther/XCUIElementTypeOther[1]/XCUIElementTypeOther[1]
@@ -230,11 +232,39 @@ Scroll To Retouch Feature
         Sleep    0.5s
     END
 
+Select Reference Photo
+    [Arguments]    ${custom_offset}
+    # After the reselect-required network-error dialog, the Custom button is
+    # sometimes still on screen and clickable directly, but sometimes the screen
+    # is left one level deeper and needs a back navigation before Custom reappears.
+    ${custom_visible}=    Run Keyword And Return Status    Element Should Be Visible    accessibility_id=Custom
+    IF    not ${custom_visible}
+        Click Page Element    xpath=//XCUIElementTypeButton[@name="MBCAlbumBackButton"]
+    END
+    Click Page Element    accessibility_id=Custom
+    Scroll To Bottom Of Photo List    //XCUIElementTypeCollectionView
+    Click Photo From Bottom By Grid    //XCUIElementTypeCollectionView    ${custom_offset}
+
 Confirm Nail Art Result
     ${confirm_locator}=    Set Variable    xpath=//XCUIElementTypeWindow/XCUIElementTypeOther[2]/XCUIElementTypeOther/XCUIElementTypeOther[6]/XCUIElementTypeOther[2]/XCUIElementTypeButton[2]
     ${error_locator}=    Set Variable    xpath=//XCUIElementTypeStaticText[@name="Change photo"]
+    # The network-error dialog shares the same message in both variants: one offers
+    # Retry/Cancel (safe to retry in place), the other offers only Confirm, which
+    # discards the generation attempt and requires reselecting the reference photo.
+    ${retry_locator}=    Set Variable    xpath=//XCUIElementTypeButton[@name="Retry"]
+    ${network_error_locator}=    Set Variable    xpath=//XCUIElementTypeButton[@name="Confirm"]
     ${error_shown}=    Set Variable    ${False}
     FOR    ${i}    IN RANGE    180
+        ${retry_shown}=    Run Keyword And Return Status    Element Should Be Visible    ${retry_locator}
+        IF    ${retry_shown}
+            Click Page Element    ${retry_locator}
+            CONTINUE
+        END
+        ${network_error_shown}=    Run Keyword And Return Status    Element Should Be Visible    ${network_error_locator}
+        IF    ${network_error_shown}
+            Click Page Element    ${network_error_locator}
+            RETURN    ${False}
+        END
         ${error_shown}=    Run Keyword And Return Status    Element Should Be Visible    ${error_locator}
         IF    ${error_shown}    BREAK
         ${confirm_shown}=    Run Keyword And Return Status    Element Should Be Visible    ${confirm_locator}
@@ -246,3 +276,4 @@ Confirm Nail Art Result
         Click Page Element    accessibility_id=MBCAlbumBackButton
     END
     Click Page Element    ${confirm_locator}
+    RETURN    ${True}
