@@ -473,6 +473,18 @@
     if (els.imageRunCountSelect) els.imageRunCountSelect.value = value;
     if (els.apRunCountSelect) els.apRunCountSelect.value = value;
     if (els.runCountSelect) els.runCountSelect.value = value;
+    // wireOptionPicker only refreshes a picker's own visible label
+    // (.ap-style-value) when THAT picker itself is opened (rebuild runs on
+    // its "toggle") -- so picking a count on one picker left the other
+    // picker's label showing the old value until the user happened to open
+    // it too. Sync both pickers' visible labels here directly instead of
+    // waiting for that (same fix as applyModelQualityChange above).
+    [els.imageRunCountPicker, els.apRunCountPicker].forEach((picker) => {
+      const valueEl = picker?.querySelector(".ap-style-value");
+      const select = picker?.querySelector("select");
+      const label = select?.querySelector(`option[value="${value}"]`)?.textContent;
+      if (valueEl && label != null) valueEl.textContent = label;
+    });
   }
 
   if (els.imageRunCountSelect) {
