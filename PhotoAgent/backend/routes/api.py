@@ -80,6 +80,39 @@ def _parse_and_validate_params(form):
 
 
 DEMO_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+# Optional manifest, sits alongside the photos themselves -- see
+# _ordered_demo_image_names for the ordering rule it drives. Plain filename,
+# not a config.py setting, since editing it is meant to be as low-friction as
+# dropping a new photo into the folder: no server restart, no code touched.
+DEMO_IMAGE_ORDER_FILE = "order.json"
+
+
+def _ordered_demo_image_names(demo_dir, available):
+    """`available` (a set of filenames) ordered per demo_images/order.json if
+    present -- a JSON array of filenames, shown in that order (entries no
+    longer in `available`, e.g. a deleted photo, are silently skipped).
+    Anything in `available` but NOT listed in the manifest is appended after,
+    alphabetically -- so a newly-added photo always shows up (at the end)
+    without requiring the manifest to be updated first. Falls back to plain
+    alphabetical order if the manifest is missing or unparsable, so it's
+    optional, not a hard requirement for the picker to work at all.
+    """
+    try:
+        with open(os.path.join(demo_dir, DEMO_IMAGE_ORDER_FILE), "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        manifest = []
+    if not isinstance(manifest, list):
+        manifest = []
+
+    ordered = []
+    seen = set()
+    for name in manifest:
+        if name in available and name not in seen:
+            ordered.append(name)
+            seen.add(name)
+    ordered.extend(sorted(available - seen))
+    return ordered
 
 
 @api_bp.get("/demo-images")
@@ -87,11 +120,11 @@ def demo_images():
     demo_dir = current_app.config.get("DEMO_IMAGES_DIR")
     if not demo_dir or not os.path.isdir(demo_dir):
         return jsonify({"images": []})
-    names = sorted(
+    available = {
         name for name in os.listdir(demo_dir)
         if os.path.splitext(name)[1].lower() in DEMO_IMAGE_EXTENSIONS
-    )
-    return jsonify({"images": names})
+    }
+    return jsonify({"images": _ordered_demo_image_names(demo_dir, available)})
 
 
 @api_bp.get("/demo-images/<path:filename>")
