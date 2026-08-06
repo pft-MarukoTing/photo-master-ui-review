@@ -250,11 +250,14 @@
     procSubGetMessages = null;
   }
   // Called at a stage's genuine completion (not a mid-stall rotation swap):
-  // if the message list hasn't played through once yet, shows whatever's
-  // left at PROC_SUB_FINISH_MS apart before resolving, so a job that
-  // finishes quickly doesn't cut the rotation off mid-list right before the
-  // screen switches away from it. Resolves immediately if the list already
-  // finished its first pass (or nothing was rotating at all).
+  // if the message list hasn't played through once yet, plays a quick
+  // catch-up before resolving so the screen doesn't switch away mid-list.
+  // Capped at the list's last two ("almost done") entries no matter how far
+  // behind the rotation actually was -- a job that finishes right after
+  // message 1 of 10 shouldn't have to fast-play through 8 more messages
+  // just to reach the end; it should land on the same closing phrasing(s) a
+  // slow job would have settled into. Resolves immediately if the list
+  // already finished its first pass (or nothing was rotating at all).
   function finishProcSubRotation() {
     return new Promise((resolve) => {
       clearInterval(procSubRotateTimer);
@@ -263,11 +266,12 @@
       const startIdx = procSubRotateIndex;
       procSubRotateIndex = 0;
       procSubGetMessages = null;
-      if (!messages || startIdx >= messages.length) {
+      if (!messages || !messages.length || startIdx >= messages.length) {
         resolve();
         return;
       }
-      const remaining = messages.slice(startIdx);
+      const lastTwoStart = Math.max(0, messages.length - 2);
+      const remaining = messages.slice(Math.max(startIdx, lastTwoStart));
       let i = 0;
       const step = () => {
         if (i >= remaining.length) { resolve(); return; }
