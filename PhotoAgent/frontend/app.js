@@ -289,13 +289,16 @@
     });
   }
 
-  // Account bootstrap: ?user=NAME (account.js) identifies who's using the
-  // tool when linked in from elsewhere. Not shown automatically when absent --
+  // Account bootstrap: ?user=NAME, or ?user_id=<ciphertext> decrypted via a
+  // backend round trip (account.js), identifies who's using the tool when
+  // linked in from elsewhere. Not shown automatically when absent --
   // applyAccountUi() just shows #register-account-btn instead, and clicking
   // it (see the listener below) is what opens #account-modal on demand.
-  initFromUrl();
-  applyAccountUi();
-  checkAdminAccess();
+  (async () => {
+    await initFromUrl();
+    applyAccountUi();
+    checkAdminAccess();
+  })();
 
   // Upload-page option pills (#image-model-quality-picker etc.): a
   // details/summary popover (same visual language as the analysis-preview's

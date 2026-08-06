@@ -13,6 +13,7 @@ from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNA
 from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
+from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
 from backend.services.report import get_report_by_id, get_reports, is_admin, record_report
 from backend.services.template_params import get_engine_params_template
@@ -171,6 +172,20 @@ def demo_image_thumbnail(filename):
     except Exception as exc:
         return jsonify({"error": f"failed to generate thumbnail: {exc}"}), 500
     return Response(thumb_bytes, mimetype="image/jpeg")
+
+
+@api_bp.get("/decrypt-user-id")
+def decrypt_user_id_route():
+    """Resolves ?user_id=<AES-256-CBC ciphertext> (OpenLink_photoMaster.js)
+    into the plain username, for account.js's fallback when a page is
+    linked in with user_id instead of a plain ?user=NAME."""
+    encrypted = request.args.get("user_id")
+    if not encrypted:
+        return jsonify({"error": "user_id is required"}), 400
+    try:
+        return jsonify({"user": decrypt_user_id(encrypted)})
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 400
 
 
 @api_bp.post("/account")

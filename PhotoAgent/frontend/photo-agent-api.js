@@ -382,6 +382,18 @@ window.PhotoAgentApi = (() => {
     }
   }
 
+  // Decrypts a ?user_id= ciphertext (account.js's fallback when a page is
+  // linked in without a plain ?user=NAME) via backend/services/decrypt_user_id.py --
+  // the AES key/IV live server-side only, so this can't be done in-browser.
+  async function resolveUserId(userId) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/decrypt-user-id?user_id=${encodeURIComponent(userId)}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `解析帳號失敗：HTTP ${response.status}`);
+    }
+    return data.user; // decrypted username
+  }
+
   // ── Account / processing history (account.js owns the client-side identity;
   // these just talk to backend/services/account.py's two endpoints) ────────
   async function createAccount(user) {
@@ -528,6 +540,7 @@ window.PhotoAgentApi = (() => {
     continueJob,
     analyzeAipoc,
     analyzeAipocBatch,
+    resolveUserId,
     createAccount,
     getHistory,
     deleteHistoryEntry,

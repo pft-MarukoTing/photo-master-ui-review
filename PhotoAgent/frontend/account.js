@@ -3,6 +3,11 @@
 // this is purely a namespace for grouping a person's own job history
 // (backend/services/account.py), so it deliberately holds nothing more than
 // the plain username string.
+//
+// ?user_id=<ciphertext> is a fallback for links that carry an encrypted
+// identity instead (OpenLink_photoMaster.js) -- only used when ?user= itself
+// is absent, and resolved via a backend call (PhotoAgentApi.resolveUserId)
+// since the AES key/IV live server-side only (backend/services/decrypt_user_id.py).
 window.PhotoAgentAccount = (() => {
   let currentUser = null;
 
@@ -10,9 +15,23 @@ window.PhotoAgentAccount = (() => {
     return (raw || "").trim();
   }
 
-  function initFromUrl() {
-    const raw = new URLSearchParams(window.location.search).get("user");
-    currentUser = normalizeUsername(raw) || null;
+  async function initFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("user");
+    if (raw) {
+      currentUser = normalizeUsername(raw) || null;
+      return currentUser;
+    }
+    const userId = params.get("user_id");
+    if (userId) {
+      try {
+        currentUser = normalizeUsername(await window.PhotoAgentApi.resolveUserId(userId)) || null;
+      } catch {
+        currentUser = null;
+      }
+      return currentUser;
+    }
+    currentUser = null;
     return currentUser;
   }
 
