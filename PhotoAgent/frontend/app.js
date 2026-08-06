@@ -729,6 +729,13 @@
 
   let inlineAnalysisContinueHandler = null;
   let inlineAnalysisCancelHandler = null;
+  // Recipe/style/prompt state as of the moment the revise panel opened --
+  // captured via captureInlineReviseSnapshot() right before
+  // waitForInlineAnalysisAction() starts watching for a click, since both
+  // backToProcessFromResults and startInlineBatchReview can open the panel
+  // with a prior round's non-default picks already restored (applyStyleSelections/
+  // applyBatchReviewSelections), not just fresh defaults.
+  let inlineReviseSnapshot = null;
 
   function clearInlineAnalysisWait() {
     if (inlineAnalysisContinueHandler) {
@@ -741,18 +748,49 @@
     }
   }
 
-  // True if the inline revise panel's Run button would submit an unchanged
-  // re-run: every recipe item unchecked, every Pose/Angle/Lighting/Size pick
-  // still "default", and no 補充指令 typed -- reads the DOM directly (via
-  // readStyleSelectionsFromDom, defined below but hoisted) rather than
-  // needing to know whether this is the single-image or batch flow, since
-  // both share the same #ap-recipe-list/#ap-*-list/#prompt markup.
-  function inlineReviseHasNoChanges() {
+  // Snapshots the panel's current recipe/style/prompt state so a later
+  // inlineReviseHasNoChanges() call can tell "changed since the panel opened"
+  // apart from "left at default" -- must run after renderAnalysisPreview/
+  // applyStyleSelections/applyBatchReviewSelections have already populated the
+  // DOM for this round. Reads via readStyleSelectionsFromDom, defined below
+  // but hoisted. Also covers #ap-settings-modal's own two pickers (模型 and
+  // 生成張數) -- those aren't part of readStyleSelectionsFromDom since they're
+  // not "style" picks, but changing either is just as much a real edit as the
+  // recipe/style/prompt fields.
+  function captureInlineReviseSnapshot() {
     const { options, recipeChecked } = readStyleSelectionsFromDom();
-    const allDefaultStyle = Object.values(options).every((value) => value === "default");
-    const allUnchecked = Array.isArray(recipeChecked) && recipeChecked.length > 0 && recipeChecked.every((checked) => checked === false);
-    const promptEmpty = !els.promptInput || !els.promptInput.value.trim();
-    return allDefaultStyle && allUnchecked && promptEmpty;
+    inlineReviseSnapshot = {
+      options: { ...options },
+      recipeChecked: Array.isArray(recipeChecked) ? [...recipeChecked] : recipeChecked,
+      prompt: els.promptInput ? els.promptInput.value.trim() : "",
+      modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
+      runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null
+    };
+  }
+
+  // True if the inline revise panel's Run button would submit an unchanged
+  // re-run: recipe checkboxes, Pose/Angle/Lighting/Size picks, 補充指令 text,
+  // and the 模型/生成張數 settings all still match inlineReviseSnapshot (the
+  // state captured when the panel opened) -- NOT simply "everything at
+  // default", since a second revise round (or a history revisit) can open
+  // with a prior round's non-default picks already restored. Falls back to
+  // allowing the run (no block) if no snapshot was captured, rather than
+  // blocking blind.
+  function inlineReviseHasNoChanges() {
+    if (!inlineReviseSnapshot) return false;
+    const { options, recipeChecked } = readStyleSelectionsFromDom();
+    const prompt = els.promptInput ? els.promptInput.value.trim() : "";
+    const modelQuality = els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null;
+    const runCount = els.apRunCountSelect ? els.apRunCountSelect.value : null;
+    const sameOptions = Object.keys(options).every((key) => options[key] === inlineReviseSnapshot.options[key]);
+    const sameRecipe = Array.isArray(recipeChecked) && Array.isArray(inlineReviseSnapshot.recipeChecked)
+      ? recipeChecked.length === inlineReviseSnapshot.recipeChecked.length
+        && recipeChecked.every((checked, i) => checked === inlineReviseSnapshot.recipeChecked[i])
+      : recipeChecked === inlineReviseSnapshot.recipeChecked;
+    const samePrompt = prompt === inlineReviseSnapshot.prompt;
+    const sameModelQuality = modelQuality === inlineReviseSnapshot.modelQuality;
+    const sameRunCount = runCount === inlineReviseSnapshot.runCount;
+    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount;
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
@@ -767,7 +805,7 @@
         // either uncheck/pick something or leave via Cancel instead. Doesn't
         // clear the listener/resolve, so the panel just stays open.
         if (inlineReviseHasNoChanges()) {
-          showNoticeModal("請至少修改一項修圖建議、風格選項或補充指令後再執行。");
+          showNoticeModal("請至少修改一項修圖建議、風格選項、補充指令或設定後再執行。");
           return;
         }
         clearInlineAnalysisWait();
@@ -2564,6 +2602,7 @@
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     openInlineAnalysisPanel();
+    captureInlineReviseSnapshot();
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
@@ -4875,6 +4914,7 @@
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     if (els.apRunCountSelect) els.apRunCountSelect.value = String((record.runs || []).length || 1);
     openInlineAnalysisPanel();
+    captureInlineReviseSnapshot();
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
