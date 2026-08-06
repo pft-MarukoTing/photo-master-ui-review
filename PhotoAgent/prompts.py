@@ -140,7 +140,7 @@ Return exactly this JSON shape:
     {
       "subject_label": "對應 subjects 裡的人，例如 最右男性 / 前排中間小孩。",
       "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
-      "eye_state": "open / natural_smiling_squint / intentional_wink / intentional_closed / expressive_closed / downward_gaze / occluded_or_unclear / accidental_blink / accidental_half_blink / uncertain",
+      "eye_state": "open / natural_smiling_squint / intentional_wink / intentional_closed / expressive_closed / downward_gaze / sleeping / occluded_or_unclear / accidental_blink / accidental_half_blink / uncertain",
       "severity": "none / minor / moderate / severe",
       "intent_cues": ["列出支持這個判斷的可見線索，例如 wink 手勢、嘴角表情、眉毛情緒、看鏡頭、雙眼同步閉合、眼皮不對稱、低頭視線、眼鏡遮擋。"],
       "closure_intent": "intentional_expression / accidental_capture / ambiguous",
@@ -253,12 +253,12 @@ This is an expression-intent classification task before it is a repair task. Do 
 Two-stage decision process:
 Stage 1 -- Expression coherence test:
 - Ask whether the eye state supports the visible expression. Look at mouth shape, eyebrows, cheeks, head pose, hand gesture, body language, gaze direction, social context, and scene type.
-- If the closed/narrowed/winked eye supports the person's expression or emotion, classify it as intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, or downward_gaze. Set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
+- If the closed/narrowed/winked eye supports the person's expression or emotion, classify it as intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, or sleeping. Set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
 - Examples of expression-coherent eye closure: wink with smile/smirk/greeting; crying face with squeezed eyes; laughing with eyes closed; cute child expression; playful selfie/video gesture; stage/fan-service expression; pain/sadness/embarrassment face; looking down or away.
 
 Stage 2 -- Accidental capture test:
 - Only if the eye state does NOT support the expression, ask whether it looks like a shutter-timing mistake.
-- Accidental blink/half-blink means the eye closure conflicts with the rest of the face or moment: the mouth/expression is otherwise neutral or photo-ready, but the eyelids look droopy, transitional, uneven, sleepy, or mistimed.
+- Accidental blink/half-blink means the eye closure conflicts with the rest of the face or moment: the mouth/expression is otherwise neutral or photo-ready, but the eyelids look droopy, transitional, uneven, or mistimed -- for an instant, not for the whole visible moment. This is different from a person who is genuinely asleep; run the sleeping guardrail below before concluding accidental capture.
 - If the eye state conflicts with the intended expression and blink_failure_confidence >= 0.65, set closure_intent="accidental_capture", expression_coherence="conflicts_with_expression", and should_fix=true.
 - If evidence is mixed, set closure_intent="ambiguous", expression_coherence="unclear", and should_fix=false.
 
@@ -275,6 +275,7 @@ Decision labels:
 - intentional_closed: eyes are deliberately closed as part of a pose, prayer/resting expression, savoring food, calm moment, or other intentional moment; this is not a failure.
 - expressive_closed: eyes are closed as part of a strong emotional or expressive face, such as crying, exaggerated sadness, pain, embarrassment, cute reaction, dramatic performance, or meme-like reaction face; this is not a failure.
 - downward_gaze: eyes appear closed or narrowed mostly because the person is looking downward or away; this is not a blink failure unless the rest of the face clearly looks mistimed.
+- sleeping: the person is genuinely asleep or napping -- both eyes fully and evenly closed, face and jaw relaxed/slack, and a resting posture (head tilted onto a pillow/shoulder/arm, reclined or lying down, eyes closed for the whole visible moment rather than mid-transition); this is not a failure, regardless of how neutral the mouth looks.
 - occluded_or_unclear: eyes are hard to judge because of glasses, hair, motion blur, shadow, hand/object occlusion, low resolution, compression, or face size. Do not fix unless the accidental blink is visually clear.
 - accidental_blink: eyes are caught closed in an unintentionally mistimed shutter moment.
 - accidental_half_blink: one or both eyes are caught unevenly half-closed, droopy, sleepy-looking, or transitional in a way that conflicts with the person's expression and likely weakens the photo.
@@ -296,11 +297,19 @@ Emotional closed-eye guardrail:
 - Do not open eyes when opening them would erase the emotional meaning of the photo.
 - Counterfactual test: If opening the eyes would make the expression less truthful, less funny, less cute, less emotional, or less like the captured moment, then should_fix=false.
 
+Sleeping guardrail:
+- Before concluding accidental_blink or accidental_half_blink, check whether the person is genuinely asleep rather than mid-blink while awake.
+- Evidence of genuine sleep: both eyelids are fully and evenly closed (not droopy, uneven, or half-open); the face and jaw are relaxed/slack rather than tensed for a shot; the head/body is in a resting posture -- tilted onto a pillow, shoulder, arm, car seat, stroller, or someone's lap, reclined, or lying down; the eyes are closed for the entire visible moment, not caught transitioning between open and closed. This applies to babies, children, and adults alike, and to candid or posed photos of someone napping.
+- Genuine sleep does not require a reclined posture. A person can be sitting or standing upright with eyes fully and evenly closed, a slack/disengaged face, and no interaction with the camera or surroundings, and still be genuinely dozing off rather than caught mid-blink.
+- A neutral or slack mouth on a sleeping person is expected and is not, by itself, evidence of an accidental blink -- a real accidental blink still requires the droopy/uneven/transitional eyelid look, not just closed eyes plus a neutral mouth.
+- When genuine sleep is indicated, classify as eye_state=sleeping, closure_intent=intentional_expression, expression_coherence=supports_expression, blink_failure_confidence 0.0-0.25, should_fix=false. Never add an eye-opening correction_plan item for a sleeping subject.
+- Only override this and treat it as accidental capture if the eyelids themselves look droopy, uneven, or mid-transition (evidence the person is awake and drifting/struggling to keep eyes open) rather than fully and evenly at rest.
+
 Balanced should_fix rule:
-- Set should_fix=true only when blink_failure_confidence >= 0.65 AND the eye issue visibly looks like accidental capture timing.
-- Moderate accidental half-blinks should be fixed when they make a person look unintentionally sleepy, tired, distracted, unprepared, or mid-blink, and there is no strong intentional-expression cue.
+- Set should_fix=true only when blink_failure_confidence >= 0.65 AND the eye issue visibly looks like accidental capture timing on someone who is awake.
+- Moderate accidental half-blinks should be fixed when they make a person who is awake and otherwise posed/ready look unintentionally droopy, distracted, unprepared, or mid-blink, and there is no strong intentional-expression cue and no sleeping-guardrail evidence.
 - For blurry, occluded, compressed, shadowed, glasses-reflected, or unclear eyes, require stronger confidence around 0.85 before fixing. This is about visual ambiguity, not subject size or prominence.
-- If there is strong evidence of intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, or playful/performance/emotional expression, should_fix=false even if one or both eyes are closed.
+- If there is strong evidence of intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, sleeping, or playful/performance/emotional expression, should_fix=false even if one or both eyes are closed.
 
 Strong evidence for accidental capture:
 - The person otherwise looks normally posed or photo-ready.
@@ -314,6 +323,7 @@ Strong evidence against accidental capture:
 - One eye is closed and the other eye is open in a controlled way, with a wink-like expression, smirk, greeting, salute, wave, playful mouth shape, or camera interaction.
 - Both eyes are closed because of laughter, smile-squint, crying, pain, sadness, embarrassment, cute expression, prayer/rest, eating/savoring, dramatic reaction, or downward gaze.
 - The image is a selfie, video screenshot, stage/performance moment, fan-service moment, close-up social-media capture, or playful social snapshot where expressive eyes are normal.
+- The person is genuinely asleep: eyes fully and evenly closed, face relaxed, head/body in a resting posture (pillow, shoulder, reclined, lying down) -- see the sleeping guardrail above.
 
 Practical examples:
 - Close-up selfie or video frame where one eye is closed and the other eye looks at the camera, with a smile/smirk/salute/wave/greeting gesture: intentional_wink, closure_intent=intentional_expression, should_fix=false.
@@ -322,6 +332,7 @@ Practical examples:
 - Person laughing so hard both eyes close: natural_smiling_squint or expressive_closed, should_fix=false.
 - Casual child photo where the child smiles/plays with eyes closed: natural_smiling_squint or expressive_closed, should_fix=false unless the eye state clearly conflicts with the expression.
 - Group photo where one person has a sleepy half-blink while the mouth/brows are otherwise neutral and everyone else is ready: accidental_half_blink, closure_intent=accidental_capture, should_fix=true.
+- A baby or adult napping with eyes fully and evenly closed, relaxed face, and head resting on a pillow/shoulder/arm or lying down, even if the mouth is neutral: sleeping, closure_intent=intentional_expression, should_fix=false.
 - Formal or ordinary portrait where the subject's eyelids are accidentally half-closed and the expression otherwise looks neutral/photo-ready: accidental_half_blink, should_fix=true.
 - Person looking down or away: downward_gaze, should_fix=false unless the eye state clearly conflicts with the rest of the face.
 - Blurry, compressed, shadowed, or unclear eyes: should_fix=false unless the accidental capture is visually clear.
@@ -345,9 +356,11 @@ Mini-model calibration:
 - Do not reason as: "eyes closed means accidental blink."
 - Do not reason as: "one eye closed means half-blink."
 - Do not reason as: "emotional closed eyes should be opened."
+- Do not reason as: "neutral mouth plus closed eyes means accidental blink" -- a genuinely sleeping person also has a neutral, relaxed mouth; check the sleeping guardrail's posture and eyelid cues before assuming a mistake.
 - Always ask first: "Does the eye state support the visible mouth/brow/gesture/emotion?" If yes, do not fix.
 - For one-eye-closed faces, run the wink guardrail before any blink-failure reasoning.
 - For strong emotional faces, run the emotional closed-eye guardrail before any blink-failure reasoning.
+- For any fully-closed-eyes case, run the sleeping guardrail before any blink-failure reasoning.
 - When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
 - When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
 
@@ -359,6 +372,7 @@ Analysis responsibilities:
 - Eye-opening is not a routine portrait enhancement. Add eye or blink repair to correction_plan only when the expression-intent rules above say should_fix=true.
 - For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
 - For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
+- For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
 - Skin should read naturally in the finished photo -- pushed neither toward orange or ruddy red, nor toward yellow or sallow. In particular, do not write a correction_plan item whose goal is warmer, rosier, or healthier-looking skin; if skin does look wrong, name which direction it is off.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
@@ -1117,8 +1131,8 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
 - If the approved correction plan includes a blink/eye repair item, fix only the named person's eyes. Do not change the person's identity, face shape, age, gaze direction, smile, head pose, glasses, makeup, skin texture, or lighting.
 - Reopen or relax the eyes naturally so they match the person's existing expression and the photo's moment. Avoid making the eyes too large, symmetrical, doll-like, or copied from another person.
-- Do not alter people whose eye_blink_issues.should_fix is false or whose eye_state is natural_smiling_squint, intentional_wink, intentional_closed, expressive_closed, downward_gaze, occluded_or_unclear, or uncertain.
-- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, or deliberate closed-eye expression into neutral open eyes.
+- Do not alter people whose eye_blink_issues.should_fix is false or whose eye_state is natural_smiling_squint, intentional_wink, intentional_closed, expressive_closed, downward_gaze, sleeping, occluded_or_unclear, or uncertain.
+- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes.
 - Eye blink issues from analysis: """ + eye_blink_issues_json
 
     skin_block = ""
