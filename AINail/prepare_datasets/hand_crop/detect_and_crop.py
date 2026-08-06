@@ -8,12 +8,15 @@ line up.
 """
 import argparse
 import os
+import sys
 from pathlib import Path
 
 from PIL import Image
 
 from crop_utils import compute_crop_info, apply_crop, pad_to_square
-from sam3_hand_detector import load_model, detect_hands
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "sam3_common"))
+from sam3_detector import load_model, detect
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 
@@ -77,7 +80,7 @@ def main():
     n_crops = 0
     for control_1_path, control_2_path, target_path, basename in pairs:
         target_img = Image.open(target_path).convert("RGB")
-        boxes = detect_hands(
+        boxes = detect(
             processor, target_img,
             confidence_threshold=args.confidence_threshold,
             text_prompt=args.text_prompt,
