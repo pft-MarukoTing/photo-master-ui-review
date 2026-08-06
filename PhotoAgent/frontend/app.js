@@ -209,6 +209,119 @@
     if (procTitle) procTitle.textContent = text;
     if (els.canvasLoadingTitle) els.canvasLoadingTitle.textContent = text;
   }
+
+  // Cycles procSub through a list of phrasings for the current stage
+  // (analyze/edit) so a long-running RUN doesn't sit on the exact same
+  // sentence for minutes and read as frozen. getMessages() is re-invoked on
+  // every tick (not captured once) so live info baked into a message --
+  // e.g. "已完成 X/N RUN" -- never goes stale mid-rotation. Once the full
+  // list has played through once, rotation settles into alternating just
+  // the last two entries (the "almost there" phrasings) instead of looping
+  // back to message 0 -- a stall lasting long enough to exhaust the whole
+  // list should keep sounding like it's near the end, not restart at
+  // "AI 正在分析照片" again.
+  const PROC_SUB_ROTATE_MS = 5000;
+  // How fast the catch-up plays once a stage genuinely finishes before its
+  // message list has cycled through once -- see finishProcSubRotation.
+  const PROC_SUB_FINISH_MS = 500;
+  let procSubRotateTimer = null;
+  let procSubRotateIndex = 0;
+  let procSubGetMessages = null;
+  function startProcSubRotation(getMessages) {
+    stopProcSubRotation();
+    procSubGetMessages = getMessages;
+    const show = () => {
+      const messages = getMessages();
+      if (!messages || !messages.length) return;
+      const lastTwoStart = Math.max(0, messages.length - 2);
+      const idx = procSubRotateIndex < messages.length
+        ? procSubRotateIndex
+        : lastTwoStart + ((procSubRotateIndex - messages.length) % 2);
+      setProcSub(messages[idx]);
+      procSubRotateIndex += 1;
+    };
+    show();
+    procSubRotateTimer = setInterval(show, PROC_SUB_ROTATE_MS);
+  }
+  function stopProcSubRotation() {
+    clearInterval(procSubRotateTimer);
+    procSubRotateTimer = null;
+    procSubRotateIndex = 0;
+    procSubGetMessages = null;
+  }
+  // Called at a stage's genuine completion (not a mid-stall rotation swap):
+  // if the message list hasn't played through once yet, shows whatever's
+  // left at PROC_SUB_FINISH_MS apart before resolving, so a job that
+  // finishes quickly doesn't cut the rotation off mid-list right before the
+  // screen switches away from it. Resolves immediately if the list already
+  // finished its first pass (or nothing was rotating at all).
+  function finishProcSubRotation() {
+    return new Promise((resolve) => {
+      clearInterval(procSubRotateTimer);
+      procSubRotateTimer = null;
+      const messages = procSubGetMessages ? procSubGetMessages() : null;
+      const startIdx = procSubRotateIndex;
+      procSubRotateIndex = 0;
+      procSubGetMessages = null;
+      if (!messages || startIdx >= messages.length) {
+        resolve();
+        return;
+      }
+      const remaining = messages.slice(startIdx);
+      let i = 0;
+      const step = () => {
+        if (i >= remaining.length) { resolve(); return; }
+        setProcSub(remaining[i]);
+        i += 1;
+        setTimeout(step, PROC_SUB_FINISH_MS);
+      };
+      step();
+    });
+  }
+  function analyzeSubMessages() {
+    return [
+      "AI 正在分析照片，請稍候…",
+      "正在辨識照片中的人物、光線與構圖…",
+      "正在讀取照片的曝光與色彩資訊…",
+      "正在比對適合的修圖建議…",
+      "正在偵測照片中的細節與紋理…",
+      "正在計算最佳的裁切與構圖建議…",
+      "分析仍在進行中，可能需要多一點時間…",
+      "正在整理分析結果…",
+      "快好了，請再稍候一下…",
+      "即將完成，請稍候…"
+    ];
+  }
+  function editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }) {
+    const modelLabel = window.PhotoAgentConfig.imageModels[imageModel] || imageModel;
+    const progress = runCount > 1 ? `（已完成 ${doneCount}/${runCount} RUN）` : "";
+    return aiPhotoEditing
+      ? [
+          `AI 正在使用 ${modelLabel} 修圖${progress}，請稍候…`,
+          `AI 正在調整光影與細節${progress}，請稍候…`,
+          `AI 正在細修色調${progress}，請稍候…`,
+          `AI 正在校正白平衡與色彩${progress}，請稍候…`,
+          `AI 正在優化背景與構圖${progress}，請稍候…`,
+          `AI 正在強化畫面細節${progress}，請稍候…`,
+          `修圖仍在進行中${progress}，感謝您的耐心等候…`,
+          `AI 正在進行最後的品質檢查${progress}…`,
+          `快完成了，請再稍候一下${progress}…`,
+          `即將完成，請再稍候一下${progress}…`
+        ]
+      : [
+          `正在進行本機影像處理${progress}，請稍候…`,
+          `影像處理仍在進行中${progress}，請稍候…`,
+          `正在套用影像調整${progress}，請稍候…`,
+          `正在進行色彩與亮度校正${progress}，請稍候…`,
+          `正在處理照片細節${progress}，請稍候…`,
+          `本機處理仍在進行中${progress}，請稍候…`,
+          `正在完成最後的影像調整${progress}…`,
+          `處理即將完成${progress}，請稍候…`,
+          `快完成了，請再稍候一下${progress}…`,
+          `即將完成，請再稍候一下${progress}…`
+        ];
+  }
+
   const timingDetails = document.querySelector("#timing-details");
   const timingList = document.querySelector("#timing-list");
   const processingPathRow = document.querySelector("#processing-path-row");
@@ -817,7 +930,7 @@
     });
   }
 
-  function showAnalysisPreview(analysis, preset) {
+  async function showAnalysisPreview(analysis, preset) {
     restoreAnalysisPreviewHome();
     renderAnalysisPreview({ analysis, preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
@@ -827,10 +940,13 @@
     // startInlineBatchReview's per-image revise, which sets this itself).
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     setAnalysisPreviewDisabled(false);
+    updateAnalysisPreviewMaxHeight();
+    // Lets any not-yet-shown analyze-stage phrasings finish playing (fast-
+    // forwarded) before flipping the processing card to its "done" state.
+    await finishProcSubRotation();
     procVisual.classList.add("done");
     if (procTitle) procTitle.textContent = "初步分析已完成";
     if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
-    updateAnalysisPreviewMaxHeight();
   }
 
   // Some browsers/OSes don't map .heic/.heif to an image/* MIME type (file.type
@@ -2073,7 +2189,7 @@
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     if (procTitle) procTitle.textContent = "正在分析照片";
-    if (procSub) procSub.textContent = "AI 正在分析照片，請稍候…";
+    startProcSubRotation(analyzeSubMessages);
     showSection("processing");
 
     try {
@@ -2141,6 +2257,9 @@
         await finishSingleFlow();
       }
     } catch (error) {
+      // Lets any not-yet-shown phrasings finish playing (fast-forwarded)
+      // before bailing back to the upload screen.
+      await finishProcSubRotation();
       showSection("upload");
       showError(friendlyError(error));
       // Back to the upload screen -- unlike a successful finish (which now
@@ -2151,6 +2270,11 @@
       els.startButton.disabled = false;
       if (els.startDirectBtn) els.startDirectBtn.disabled = false;
       clearContinueWait();
+      // Safety net for the isCurrent()===false edge case, where
+      // revealResultsIfNeeded/showAnalysisPreview bail out without ever
+      // consuming the rotation themselves -- instant, not fast-forwarded,
+      // since there's no longer a screen for it to play out on.
+      stopProcSubRotation();
     }
   }
 
@@ -2178,17 +2302,19 @@
     // adjustments into, since the combined job computes its own from scratch.
     const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, selections);
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
+    // Declared here (not inside the useCombinedJob branch below) so
+    // onCombinedStage -- defined next, also outside that branch -- can read
+    // the live count once the backend reports the analyze->edit transition.
+    let doneCount = 0;
 
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
     setProcTitle(useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片"));
-    setProcSub(
-      useCombinedJob
-        ? "AI 正在分析照片，請稍候…"
-        : (aiPhotoEditing
-            ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-            : "正在進行本機影像處理，請稍候…")
-    );
+    if (useCombinedJob) {
+      startProcSubRotation(analyzeSubMessages);
+    } else {
+      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount: 0, runCount }));
+    }
     // Live progress messaging for a combined job, driven by the backend's
     // reported stage (job_processor.py's set_job_info(..., results={"stage": ...})
     // calls) -- keeps the same two-phase "分析中 -> 修圖中" wording the old
@@ -2196,11 +2322,7 @@
     const onCombinedStage = (stage) => {
       if (stage !== "edit") return;
       setProcTitle(aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
-      setProcSub(
-        aiPhotoEditing
-          ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-          : "正在進行本機影像處理，請稍候…"
-      );
+      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
     };
 
     // Switches from the processing screen to the results screen the first
@@ -2225,9 +2347,12 @@
     // still writing into it. It only reopens once every RUN has settled, via
     // the plain (autoOpenPanel default true) showSingleResult() call below.
     let resultsRevealed = false;
-    const revealResultsIfNeeded = () => {
+    const revealResultsIfNeeded = async () => {
       if (resultsRevealed || !isCurrent()) return;
       resultsRevealed = true;
+      // Lets any not-yet-shown edit-stage phrasings finish playing (fast-
+      // forwarded) before switching away from the processing screen.
+      await finishProcSubRotation();
       if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
       showSection("results");
       if (els.canvasLoading) els.canvasLoading.hidden = true;
@@ -2256,13 +2381,8 @@
       singleRuns = myRuns;
       singleMirrorIndex = null;
 
-      let doneCount = 0;
       const updateRunProgress = () => {
-        setProcSub(
-          runCount > 1
-            ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖中（已完成 ${doneCount}/${runCount} RUN）…`
-            : `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖，請稍候…`
-        );
+        startProcSubRotation(() => editSubMessages({ aiPhotoEditing: true, imageModel, doneCount, runCount }));
       };
 
       const stepStart = Date.now();
@@ -2419,11 +2539,7 @@
 
       let doneCount = 0;
       const updateRunProgress = () => {
-        setProcSub(
-          aiPhotoEditing
-            ? `AI 正在使用 ${window.PhotoAgentConfig.imageModels[imageModel] || imageModel} 修圖中（已完成 ${doneCount}/${runCount} RUN）…`
-            : `本機影像處理中（已完成 ${doneCount}/${runCount} RUN）…`
-        );
+        startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
       };
       updateRunProgress();
 
@@ -2635,10 +2751,15 @@
       // (viewHistoryRecord/viewProcessingHistoryRecord reset these same two
       // elements themselves whenever they show anything) -- either way, the
       // end state is "loading hidden, frame visible", which is always
-      // correct for whatever is currently on screen.
+      // correct for whatever is currently on screen. Only actually plays a
+      // fast-forward here in that same all-RUNs-failed case -- the success
+      // path already consumed it via revealResultsIfNeeded, so this resolves
+      // instantly then.
+      await finishProcSubRotation();
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
       if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
+      stopProcSubRotation();
     }
   }
 
@@ -5159,6 +5280,7 @@
     els.origDim.textContent = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
+    stopProcSubRotation();
     clearContinueWait();
     // If the last thing the user did was an inline analysis review (single or
     // batch), #analysis-preview and #ap-options-card-inline are currently on
