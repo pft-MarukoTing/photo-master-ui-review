@@ -77,7 +77,7 @@ def init():
 
     try:
         redis_conn.ping()
-        logger.info('', "Redis connection successful")
+        logger.info('', "Redis connection successful %s" %(MSG_ID_QUEUE))
     except Exception as e:
         logger.error('', "Fail to connect to redis cluster: %s" % str(e))
         raise e
