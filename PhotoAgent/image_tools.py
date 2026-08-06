@@ -3,7 +3,7 @@ import math
 import base64
 import re
 
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageOps
 import pillow_heif
 
 # Pillow has no built-in HEIC/HEIF decoder (patent-encumbered codec, not
@@ -68,12 +68,18 @@ def image_to_data_url(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
 
 
 def get_image_dimensions(image_bytes: bytes):
-    img = Image.open(io.BytesIO(image_bytes))
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes)))
     return img.width, img.height
 
 
 def _open_rgb(image_bytes: bytes) -> Image.Image:
-    img = Image.open(io.BytesIO(image_bytes))
+    # A phone shot in portrait can still store pixels in a landscape buffer,
+    # relying on the EXIF Orientation tag to rotate it back for display --
+    # this bakes that rotation into the pixels themselves at the earliest
+    # point every consumer (preview/PNG/JPEG conversion, cropping, the
+    # width/height fed to the edit-model APIs) reads the image, so nothing
+    # downstream needs to know the tag ever existed.
+    img = ImageOps.exif_transpose(Image.open(io.BytesIO(image_bytes)))
     if img.mode == "RGBA":
         bg = Image.new("RGB", img.size, (255, 255, 255))
         bg.paste(img, mask=img.split()[3])
