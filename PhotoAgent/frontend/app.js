@@ -90,7 +90,9 @@
   // from the backend), so this is what showSingleResult/finishSingleFlow
   // fall back to for the zip download's source entry instead.
   let selectedFileSourceUrl = null;
-  // Bumped by every history navigation (openHistoryPage/viewHistoryRecord) --
+  // Bumped by actually navigating to a different record (viewHistoryRecord/
+  // viewProcessingHistoryRecord) -- NOT by merely opening the history drawer
+  // (openHistoryPage), which just lists records without selecting one. This
   // both lets a pending viewProcessingHistoryRecord poll (which can run for
   // minutes) notice the user has since navigated elsewhere and skip its
   // "done, render it" step, and lets finishSingleFlow's own completion
@@ -3601,7 +3603,13 @@
   }
 
   async function openHistoryPage() {
-    historyViewToken += 1;
+    // Does NOT bump historyViewToken -- that's reserved for actually
+    // navigating to a different record (viewHistoryRecord/
+    // viewProcessingHistoryRecord already do it themselves). Bumping it here
+    // too would invalidate isCurrent() for any in-flight processing job the
+    // instant the user so much as glances at the drawer, even if they close
+    // it again without selecting anything -- silently preventing that job's
+    // own completion from ever revealing the results page.
     openHistoryDrawer();
     const user = getCurrentUser();
     if (els.historyCurrentUser) els.historyCurrentUser.textContent = user || "";
