@@ -45,12 +45,10 @@ pip install pillow "numpy<2" einops ftfy regex iopath huggingface_hub \
     transformers timm safetensors pycocotools psutil
 
 echo ""
-echo "Setup complete. To use the pipeline:"
+echo "Setup complete. To use it from a tool that imports sam3_detector.py (e.g. hand_crop/, nail_segment/):"
 echo "  conda activate ${ENV_NAME}"
-echo "  cd ${SCRIPT_DIR}"
 echo ""
 echo "You still need a local SAM3 checkpoint (sam3.pt). Symlink your own copy, e.g.:"
 echo "  ln -s /path/to/your/sam3.pt ${SCRIPT_DIR}/models/sam3.pt"
-echo "then pass it explicitly, e.g.:"
-echo "  python detect_and_crop.py --checkpoint ${SCRIPT_DIR}/models/sam3.pt ..."
+echo "then pass that path via --checkpoint to whichever tool you're running."
 mkdir -p "${SCRIPT_DIR}/models"

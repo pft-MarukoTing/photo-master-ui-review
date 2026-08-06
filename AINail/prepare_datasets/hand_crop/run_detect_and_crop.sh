@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTROL_1_DIR="/data/home/rdmt/jack_lin/MTImageAI_dataset/AINail/datasets/nailsalon_control_1"
 CONTROL_2_DIR="/data/home/rdmt/jack_lin/MTImageAI_dataset/AINail/datasets/nailsalon_control_2"
 TARGET_DIR="/data/home/rdmt/jack_lin/MTImageAI_dataset/AINail/datasets/nailsalon_target"
-CHECKPOINT="${SCRIPT_DIR}/models/sam3.pt"
+CHECKPOINT="${SCRIPT_DIR}/../sam3_common/models/sam3.pt"
 
 OUTPUT_DIR="${1:-${SCRIPT_DIR}/sam3_cropped_output}"
 LIMIT="${2:--1}"
