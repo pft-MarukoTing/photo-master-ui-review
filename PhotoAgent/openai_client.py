@@ -121,10 +121,18 @@ def _parse_json_from_text(text: str) -> dict:
     try:
         return json.loads(text)
     except Exception:
-        m = re.search(r"\{[\s\S]*\}", str(text or ""))
-        if not m:
-            raise ValueError("AI 回應沒有包含有效 JSON。")
+        pass
+    try:
+        return json.loads(text, strict=False)
+    except Exception:
+        pass
+    m = re.search(r"\{[\s\S]*\}", str(text or ""))
+    if not m:
+        raise ValueError("AI 回應沒有包含有效 JSON。")
+    try:
         return json.loads(m.group(0))
+    except Exception:
+        return json.loads(m.group(0), strict=False)
 
 
 def _responses_payload(model: str, content: list, text_format: dict = None) -> dict:
