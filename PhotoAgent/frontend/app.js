@@ -227,17 +227,19 @@
   let procSubRotateTimer = null;
   let procSubRotateIndex = 0;
   let procSubGetMessages = null;
+  function procSubIndexFor(messages, rotateIndex) {
+    const lastTwoStart = Math.max(0, messages.length - 2);
+    return rotateIndex < messages.length
+      ? rotateIndex
+      : lastTwoStart + ((rotateIndex - messages.length) % 2);
+  }
   function startProcSubRotation(getMessages) {
     stopProcSubRotation();
     procSubGetMessages = getMessages;
     const show = () => {
       const messages = getMessages();
       if (!messages || !messages.length) return;
-      const lastTwoStart = Math.max(0, messages.length - 2);
-      const idx = procSubRotateIndex < messages.length
-        ? procSubRotateIndex
-        : lastTwoStart + ((procSubRotateIndex - messages.length) % 2);
-      setProcSub(messages[idx]);
+      setProcSub(messages[procSubIndexFor(messages, procSubRotateIndex)]);
       procSubRotateIndex += 1;
     };
     show();
@@ -248,6 +250,18 @@
     procSubRotateTimer = null;
     procSubRotateIndex = 0;
     procSubGetMessages = null;
+  }
+  // Re-renders whatever message is currently on screen with fresh data
+  // (e.g. an updated "已完成 X/N RUN" count) without advancing or resetting
+  // the rotation -- lets a real progress event (a RUN finishing) show up
+  // immediately in place, instead of restarting the whole phrase sequence
+  // back at message 1 the way calling startProcSubRotation again would.
+  function refreshProcSubRotation() {
+    if (!procSubGetMessages) return;
+    const messages = procSubGetMessages();
+    if (!messages || !messages.length) return;
+    const shownIdx = Math.max(0, procSubRotateIndex - 1);
+    setProcSub(messages[procSubIndexFor(messages, shownIdx)]);
   }
   // Called at a stage's genuine completion (not a mid-stall rotation swap):
   // if the message list hasn't played through once yet, plays a quick
@@ -2306,9 +2320,10 @@
     // adjustments into, since the combined job computes its own from scratch.
     const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, selections);
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
-    // Declared here (not inside the useCombinedJob branch below) so
-    // onCombinedStage -- defined next, also outside that branch -- can read
-    // the live count once the backend reports the analyze->edit transition.
+    // Declared here (not inside either branch below) so every edit-stage
+    // rotation closure -- the initial one right below, onCombinedStage, and
+    // both updateRunProgress functions further down -- shares this single
+    // live binding instead of each closing over its own frozen snapshot.
     let doneCount = 0;
 
     setAnalysisPreviewDisabled(true);
@@ -2317,7 +2332,7 @@
     if (useCombinedJob) {
       startProcSubRotation(analyzeSubMessages);
     } else {
-      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount: 0, runCount }));
+      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
     }
     // Live progress messaging for a combined job, driven by the backend's
     // reported stage (job_processor.py's set_job_info(..., results={"stage": ...})
@@ -2385,9 +2400,7 @@
       singleRuns = myRuns;
       singleMirrorIndex = null;
 
-      const updateRunProgress = () => {
-        startProcSubRotation(() => editSubMessages({ aiPhotoEditing: true, imageModel, doneCount, runCount }));
-      };
+      const updateRunProgress = () => refreshProcSubRotation();
 
       const stepStart = Date.now();
       try {
@@ -2541,11 +2554,7 @@
       singleRuns = myRuns;
       singleMirrorIndex = null;
 
-      let doneCount = 0;
-      const updateRunProgress = () => {
-        startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
-      };
-      updateRunProgress();
+      const updateRunProgress = () => refreshProcSubRotation();
 
       const actionId = generateActionId();
       await runBatchPool(myRuns, async (run) => {
