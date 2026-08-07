@@ -3794,6 +3794,16 @@
     }
   }
 
+  // Secret admin path: ?admin in the URL (no value needed) requests access
+  // as the "admin" account itself -- PHOTO_AGENT_ADMIN_USERS' default
+  // (backend/services/report.py) -- without needing any real account/login.
+  // Same no-real-auth model already documented there: knowing the flag is
+  // the whole check, and the backend's is_admin() still has the final say.
+  function resolveAdminUser() {
+    if (new URLSearchParams(window.location.search).has("admin")) return "admin";
+    return getCurrentUser();
+  }
+
   // Shows #admin-reports-btn only for an account the backend recognizes as
   // an admin -- there's no separate "am I admin" endpoint, GET /reports/user
   // itself 403s a non-admin account (backend/services/report.py's is_admin),
@@ -3802,7 +3812,7 @@
   // handleCreateAccount) since a fresh login could be either.
   async function checkAdminAccess() {
     if (els.adminReportsBtn) els.adminReportsBtn.hidden = true;
-    const user = getCurrentUser();
+    const user = resolveAdminUser();
     if (!user) {
       syncReportBtnPosition();
       return;
@@ -3954,7 +3964,7 @@
   }
 
   async function openReportsPage() {
-    const user = getCurrentUser();
+    const user = resolveAdminUser();
     if (!user) return;
     openReportsDrawer();
     try {
