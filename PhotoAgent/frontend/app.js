@@ -3823,19 +3823,81 @@
   // handleCreateAccount) since a fresh login could be either.
   async function checkAdminAccess() {
     if (els.adminReportsBtn) els.adminReportsBtn.hidden = true;
+    stopReportsPolling();
+    setNewReportsAlert(false);
     const user = resolveAdminUser();
     if (!user) {
       syncReportBtnPosition();
       return;
     }
     try {
-      await getReports(user);
+      const { reports } = await getReports(user);
       if (els.adminReportsBtn) els.adminReportsBtn.hidden = false;
+      // This call is also the baseline for pollForNewReports below -- a
+      // report that already existed before this session started shouldn't
+      // itself count as "new" the moment polling kicks in.
+      seedKnownReports(reports);
+      startReportsPolling();
     } catch {
       // 403 (not an admin) or a request failure -- either way, stay hidden.
     } finally {
       syncReportBtnPosition();
     }
+  }
+
+  // Baseline for pollForNewReports -- reset every time the drawer actually
+  // loads fresh data (checkAdminAccess, openReportsPage, refreshReportsList),
+  // never by the poll itself, so a report the poll has flagged keeps showing
+  // the alert on every subsequent tick until an admin actually goes and
+  // looks (rather than the alert quietly clearing itself on the next poll).
+  let knownReportIds = null;
+  let hasNewReports = false;
+  let reportsPollTimer = null;
+  const REPORTS_POLL_INTERVAL_MS = 30000;
+
+  function seedKnownReports(reports) {
+    knownReportIds = new Set((reports || []).map((r) => r.report_id));
+  }
+
+  // Puts the "unseen report" dot on whichever entry point is actually
+  // reachable right now -- #admin-reports-btn while the drawer is closed
+  // (that's the only way back in), #reports-refresh-btn while it's open
+  // (the drawer's own list is already on screen; the dot just says it's
+  // stale). Re-evaluated on every drawer open/close too, not just here, so
+  // an alert that arrived while the drawer was open still relocates to
+  // #admin-reports-btn if the drawer gets closed without a refresh click.
+  function setNewReportsAlert(show) {
+    hasNewReports = show;
+    const drawerOpen = !!(els.reportsDrawer && els.reportsDrawer.classList.contains("drawer-open"));
+    if (els.adminReportsBtn) els.adminReportsBtn.classList.toggle("has-report-alert", show && !drawerOpen);
+    if (els.reportsRefreshBtn) els.reportsRefreshBtn.classList.toggle("has-report-alert", show && drawerOpen);
+  }
+
+  // Doesn't touch #reports-list -- only ever raises the alert dot, never
+  // silently rewrites whatever an admin currently has open (that's what
+  // the explicit refresh button/drawer reopen are for). A transient
+  // failure just tries again next tick; nothing to surface for that.
+  async function pollForNewReports() {
+    const user = resolveAdminUser();
+    if (!user || !knownReportIds) return;
+    try {
+      const { reports } = await getReports(user);
+      if ((reports || []).some((r) => !knownReportIds.has(r.report_id))) setNewReportsAlert(true);
+    } catch {
+      // ignore -- see comment above
+    }
+  }
+
+  function stopReportsPolling() {
+    if (reportsPollTimer) {
+      clearInterval(reportsPollTimer);
+      reportsPollTimer = null;
+    }
+  }
+
+  function startReportsPolling() {
+    stopReportsPolling();
+    reportsPollTimer = setInterval(pollForNewReports, REPORTS_POLL_INTERVAL_MS);
   }
 
   function openReportsDrawer() {
@@ -3844,6 +3906,7 @@
       els.reportsDrawerBackdrop.hidden = false;
       els.reportsDrawerBackdrop.classList.add("drawer-open");
     }
+    setNewReportsAlert(hasNewReports);
   }
 
   function closeReportsDrawer() {
@@ -3852,6 +3915,7 @@
       els.reportsDrawerBackdrop.classList.remove("drawer-open");
       els.reportsDrawerBackdrop.hidden = true;
     }
+    setNewReportsAlert(hasNewReports);
   }
 
   function formatReportTimestamp(ts) {
@@ -4094,8 +4158,29 @@
     try {
       const { reports } = await getReports(user);
       renderReportsList(reports || []);
+      // Fresh data just loaded -- resets pollForNewReports' baseline and
+      // clears whatever alert brought the admin in here in the first place.
+      seedKnownReports(reports);
+      setNewReportsAlert(false);
     } catch {
       renderReportsList([]);
+    }
+  }
+
+  // Reloads the list in place without closing/reopening the drawer -- the
+  // manual counterpart to openReportsPage's own fetch, for an admin who's
+  // already in the drawer when pollForNewReports raises the alert on
+  // #reports-refresh-btn (see setNewReportsAlert).
+  async function refreshReportsList() {
+    const user = resolveAdminUser();
+    if (!user) return;
+    try {
+      const { reports } = await getReports(user);
+      renderReportsList(reports || []);
+      seedKnownReports(reports);
+      setNewReportsAlert(false);
+    } catch {
+      showNoticeModal("重新載入回報清單失敗，請稍後再試。");
     }
   }
 
@@ -5555,6 +5640,7 @@
   }
   if (els.accountBadge) els.accountBadge.addEventListener("click", openHistoryPage);
   if (els.adminReportsBtn) els.adminReportsBtn.addEventListener("click", openReportsPage);
+  if (els.reportsRefreshBtn) els.reportsRefreshBtn.addEventListener("click", refreshReportsList);
   if (els.reportsDrawerCloseBtn) els.reportsDrawerCloseBtn.addEventListener("click", closeReportsDrawer);
   if (els.reportsDrawerBackdrop) els.reportsDrawerBackdrop.addEventListener("click", closeReportsDrawer);
   if (els.reportScreenshotModalClose) els.reportScreenshotModalClose.addEventListener("click", closeReportScreenshotModal);

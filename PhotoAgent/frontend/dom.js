@@ -30,6 +30,7 @@ window.PhotoAgentDom = (() => {
     reportsDrawer: document.querySelector("#reports-drawer"),
     reportsDrawerBackdrop: document.querySelector("#reports-drawer-backdrop"),
     reportsDrawerCloseBtn: document.querySelector("#reports-drawer-close-btn"),
+    reportsRefreshBtn: document.querySelector("#reports-refresh-btn"),
     reportsList: document.querySelector("#reports-list"),
     reportsEmpty: document.querySelector("#reports-empty"),
     reportScreenshotModal: document.querySelector("#report-screenshot-modal"),
