@@ -497,7 +497,39 @@ window.PhotoAgentApi = (() => {
       err.status = response.status;
       throw err;
     }
-    return data; // { reports: [{ report_id, job_id, user, path, ts, note?, user_prompt?, has_screenshot }] }
+    return data; // { reports: [{ report_id, job_id, user, path, ts, status, note?, user_prompt?, has_screenshot }] }
+  }
+
+  // Admin-only, same is_admin gate the backend applies to getReports above
+  // -- sets a report's triage status ("unread"/"read"/"solved").
+  async function updateReportStatus(user, reportId, status) {
+    const response = await fetchWithRetry(
+      `${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}/${encodeURIComponent(reportId)}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `更新回報狀態失敗：HTTP ${response.status}`);
+    }
+    return data; // { report: {...} }
+  }
+
+  // Admin-only, same is_admin gate the backend applies to getReports above
+  // -- removes just this report entry, not the job/result it points to.
+  async function deleteReport(user, reportId) {
+    const response = await fetchWithRetry(
+      `${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}/${encodeURIComponent(reportId)}`,
+      { method: "DELETE" }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `刪除回報失敗：HTTP ${response.status}`);
+    }
+    return data;
   }
 
   // Same-origin URL for a report's screenshot (see backend/routes/api.py's
@@ -548,6 +580,8 @@ window.PhotoAgentApi = (() => {
     getJobStatusOnce,
     reportJob,
     getReports,
+    updateReportStatus,
+    deleteReport,
     reportScreenshotUrl
   };
 })();

@@ -1882,6 +1882,50 @@
       cursor: pointer;
     }
     .report-item-screenshot-link:hover { text-decoration: underline; }
+    /* Pinned to the row's far right via margin-left: auto (unlike
+       .history-cube-remove's absolute corner overlay -- .report-item is a
+       plain flex row, not a relatively-positioned tile). Always visible,
+       same reasoning as .history-cube-remove: no hover state to reveal it
+       on touch devices. */
+    .report-item-remove {
+      flex-shrink: 0;
+      margin-left: auto;
+      width: 22px;
+      height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(0,0,0,.3);
+      color: var(--text-3);
+      font-size: 14px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      transition: background .15s, color .15s, transform .15s;
+    }
+    .report-item-remove:hover { background: rgba(220,60,60,.85); color: #fff; transform: scale(1.08); }
+    /* Triage state, cycled by its own click (unread -> read -> solved ->
+       unread; see nextReportStatus/setReportStatus, app.js) -- same pill
+       shape as .rc-badge but its own class since colors differ. Sits
+       between .report-item-info and .report-item-remove, not pushed to the
+       far edge like the remove button. */
+    .report-item-status {
+      flex-shrink: 0;
+      border: none;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .report-item-status:hover { opacity: .8; }
+    .report-item-status.status-unread { background: rgba(96,165,250,.22); color: #93c5fd; }
+    .report-item-status.status-read { background: rgba(255,255,255,.12); color: var(--text-3); }
+    .report-item-status.status-solved { background: rgba(1,179,123,.22); color: #6ee7b7; }
 
     /* Centered toast shown while a download zip is being assembled --
        buildZip fetches each result image over the network before zipping,
@@ -2731,6 +2775,15 @@
            moves #analysis-preview into it and adds .showing-analysis here,
            which is what actually drives the slide-in animation (styles.css). -->
       <div class="results-canvas-row" id="results-canvas-row">
+        <!-- Shown only when this record was opened from the admin reports
+             drawer (see viewHistoryRecord's `report` option, app.js) --
+             lets an admin triage a flagged case without reopening the
+             drawer. Same status-cycle pill/behavior as .report-item-status
+             in the drawer itself; see updateResultStatusPill (app.js).
+             Positioned absolute against .results-canvas-row itself (not the
+             photo frame) so it stays pinned to this row's own top-right
+             corner regardless of which panel/frame ends up under it. -->
+        <button id="result-report-status" class="report-item-status result-report-status" type="button" hidden></button>
         <div class="results-canvas-col" id="results-canvas-col">
           <!-- Wraps just .compare-card -- while the inline revise flow is
                open, #ap-options-card-inline (模型/生成張數 settings +

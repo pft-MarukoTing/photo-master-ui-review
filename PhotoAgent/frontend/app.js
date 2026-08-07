@@ -27,6 +27,8 @@
     getJobStatusOnce,
     reportJob,
     getReports,
+    updateReportStatus,
+    deleteReport,
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
@@ -3871,6 +3873,88 @@
     if (els.reportScreenshotModalImg) els.reportScreenshotModalImg.removeAttribute("src");
   }
 
+  // "unread" is never a manual click target -- opening a report (see
+  // renderReportsList's row click below) auto-marks it "read" the moment an
+  // admin looks at it, so the status icon's own click only ever needs to
+  // toggle between the two triage states an admin actually sets by hand:
+  // read <-> solved. An item that's somehow still "unread" when its icon is
+  // clicked directly (without opening the record first) also goes to
+  // "solved" here, same as "read" would -- there's no third click target.
+  const REPORT_STATUS_LABELS = { unread: "未讀", read: "待解決", solved: "已解決" };
+  const REPORT_STATUS_ORDER = ["unread", "read", "solved"];
+  function nextReportStatus(status) {
+    return status === "solved" ? "read" : "solved";
+  }
+  function applyReportStatus(statusBtn, status) {
+    // classList add/remove (not a hard className reassignment) -- callers
+    // other than the drawer's own freshly-created pill (e.g. the result
+    // page's #result-report-status, see updateResultStatusPill) carry an
+    // extra class of their own (positioning) that a plain `className = ...`
+    // would silently wipe out.
+    statusBtn.classList.add("report-item-status");
+    REPORT_STATUS_ORDER.forEach((s) => statusBtn.classList.toggle(`status-${s}`, s === status));
+    statusBtn.textContent = REPORT_STATUS_LABELS[status] || status;
+    statusBtn.setAttribute("aria-label", `回報狀態：${REPORT_STATUS_LABELS[status] || status}（點擊切換）`);
+  }
+
+  // Best-effort, not awaited by callers -- a failed status write here just
+  // means the icon didn't update, never something that should block or
+  // error out whatever the caller was actually doing (opening a report,
+  // clicking the icon itself).
+  async function setReportStatus(r, statusBtn, status) {
+    const user = resolveAdminUser();
+    if (!user) return;
+    // r.status is genuinely undefined (not the string "unread") for any
+    // report fetched before it had a status at all -- falling back here too
+    // (applyReportStatus's initial render already does) keeps a failed PATCH
+    // reverting to the same "unread" pill instead of a literal "undefined" one.
+    const previous = r.status || "unread";
+    r.status = status;
+    applyReportStatus(statusBtn, status);
+    try {
+      await updateReportStatus(user, r.report_id, status);
+    } catch {
+      r.status = previous;
+      applyReportStatus(statusBtn, previous);
+    }
+  }
+
+  // Mirrors the drawer's own status pill onto the result page itself, for a
+  // record opened via viewHistoryRecord's `report` option (renderReportsList's
+  // row click) -- lets an admin triage without reopening the drawer. Shares
+  // the same `report` object reference the drawer list holds, so a click here
+  // updates that list's in-memory state too, same as the drawer's own pill.
+  // report === null hides it -- every other viewHistoryRecord caller (plain
+  // history, not opened from a report) and resetApp() pass/imply that.
+  function updateResultStatusPill(report) {
+    const pill = els.resultReportStatus;
+    if (!pill) return;
+    if (!report) {
+      pill.hidden = true;
+      pill.onclick = null;
+      return;
+    }
+    pill.hidden = false;
+    applyReportStatus(pill, report.status || "unread");
+    pill.onclick = () => setReportStatus(report, pill, nextReportStatus(report.status || "unread"));
+  }
+
+  async function handleDeleteReport(r, li) {
+    const user = resolveAdminUser();
+    if (!user) return;
+    const confirmed = await showConfirmModal("確定要刪除這筆回報嗎？");
+    if (!confirmed) return;
+    try {
+      await deleteReport(user, r.report_id);
+      li.remove();
+      if (els.reportsList && els.reportsEmpty) {
+        els.reportsEmpty.hidden = els.reportsList.children.length > 0;
+      }
+    } catch (err) {
+      showNoticeModal(err.message || "刪除回報失敗，請稍後再試。");
+    }
+  }
+
   // One row per flagged job -- clicking a row reuses viewHistoryRecord
   // (the same history-entry playback the processing-history drawer uses)
   // against a minimal {path, runs} stand-in, since a report only ever
@@ -3948,12 +4032,43 @@
 
       li.appendChild(thumb);
       li.appendChild(info);
+
+      // Click toggles read <-> solved only (see nextReportStatus); opening
+      // the row (see the job_id click handler below) separately marks an
+      // unread report "read" the moment it's opened, so unread never needs
+      // to be a manual click target here.
+      const statusBtn = document.createElement("button");
+      statusBtn.type = "button";
+      applyReportStatus(statusBtn, r.status || "unread");
+      statusBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setReportStatus(r, statusBtn, nextReportStatus(r.status || "unread"));
+      });
+      li.appendChild(statusBtn);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "report-item-remove";
+      removeBtn.setAttribute("aria-label", "刪除回報");
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", (e) => {
+        // Stop this from also bubbling into the row's own click handler
+        // (viewHistoryRecord), attached below for a job-tied report.
+        e.stopPropagation();
+        handleDeleteReport(r, li);
+      });
+      li.appendChild(removeBtn);
+
       // A general report has no job_id -- nothing for the row's own click
       // to open (the screenshot button above is the only thing to look at
       // for one of these), so it stays a plain non-interactive row instead
       // of a dead click target.
       if (r.job_id) {
         li.addEventListener("click", () => {
+          // Fire-and-forget -- opening a still-unread report marks it read,
+          // same as any inbox; never awaited since it must not delay
+          // opening the actual result the admin clicked through for.
+          if ((r.status || "unread") === "unread") setReportStatus(r, statusBtn, "read");
           closeReportsDrawer();
           // revealDetailExtra: true -- an admin checking a flagged case
           // should see the full QA verdict/recipe-adherence/prompts panel,
@@ -3963,7 +4078,7 @@
           // minimal report-derived stand-in has nowhere else to get it
           // from; without this, #prompt would come back empty even though
           // the report captured the original 補充指令.
-          viewHistoryRecord({ path: r.path, runs: [r.job_id], user_prompt: r.user_prompt }, { revealDetailExtra: true });
+          viewHistoryRecord({ path: r.path, runs: [r.job_id], user_prompt: r.user_prompt }, { revealDetailExtra: true, report: r });
         });
       } else {
         li.classList.add("is-static");
@@ -4228,16 +4343,18 @@
   // gateway is the only place that ever had it, and even its in-memory task
   // mapping doesn't survive a restart) -- those fall back to showBatchDoneMain
   // in its read-only (reviewable:false) mode instead.
-  // revealDetailExtra: true only for the admin reports drawer (see
-  // renderReportsList) -- lets an admin checking a flagged case see the
-  // normally debug-only #results-detail-extra panel (QA verdict, recipe
-  // adherence, prompts, ...) for that one record specifically, without
-  // flipping isDebugUiActive (and every other debug-only row/limit that
-  // gates) on for the rest of the session. Not persisted -- the very next
-  // viewHistoryRecord call (a different record) or resetApp() puts
-  // #results-detail-extra's visibility back to whatever isDebugUiActive
-  // alone says.
-  async function viewHistoryRecord(job, { revealDetailExtra = false } = {}) {
+  // revealDetailExtra: true and report: &lt;the report object&gt; only for the
+  // admin reports drawer (see renderReportsList) -- revealDetailExtra lets an
+  // admin checking a flagged case see the normally debug-only
+  // #results-detail-extra panel (QA verdict, recipe adherence, prompts, ...)
+  // for that one record specifically, without flipping isDebugUiActive (and
+  // every other debug-only row/limit that gates) on for the rest of the
+  // session; report drives updateResultStatusPill's own triage pill on the
+  // result page. Neither is persisted -- the very next viewHistoryRecord call
+  // (a different record) or resetApp() puts #results-detail-extra's
+  // visibility back to whatever isDebugUiActive alone says, and hides the
+  // status pill.
+  async function viewHistoryRecord(job, { revealDetailExtra = false, report = null } = {}) {
     historyViewToken += 1;
     const myToken = historyViewToken;
     const runs = await fetchAllHistoryRuns(job);
@@ -4250,6 +4367,7 @@
     // this fetch left a visible gap where neither the drawer nor the result
     // was on screen while the rest of this function awaited.
     if (resultsDetailExtra) resultsDetailExtra.hidden = !(isDebugUiActive || revealDetailExtra);
+    updateResultStatusPill(report);
 
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
@@ -5275,6 +5393,7 @@
     // inherit that one record's forced visibility for the rest of the
     // session; back to whatever isDebugUiActive alone says.
     if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebugUiActive;
+    updateResultStatusPill(null);
     selectedFile = null;
     selectedFileSourceUrl = null;
     lastResult = null;

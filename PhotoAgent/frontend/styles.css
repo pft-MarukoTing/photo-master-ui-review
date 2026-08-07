@@ -810,10 +810,19 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    in app.js), so the canvas quietly occupies the full row until then --
    opening the panel is what visually pushes the canvas to the left. */
 .results-canvas-row {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 0;
   transition: gap .4s cubic-bezier(.4,0,.2,1);
+}
+/* Pinned to .results-canvas-row's own top-right corner (not the photo frame
+   underneath) -- see the button's own comment in index.html. */
+.result-report-status {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
 }
 .results-canvas-row.showing-analysis {
   gap: 24px;

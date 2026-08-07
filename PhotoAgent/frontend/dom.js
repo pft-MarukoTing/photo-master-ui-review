@@ -161,6 +161,7 @@ window.PhotoAgentDom = (() => {
     runSwitchNext: document.querySelector("#run-switch-next"),
     runSwitchLoading: document.querySelector("#run-switch-loading"),
     runCountLabel: document.querySelector("#run-count-label"),
+    resultReportStatus: document.querySelector("#result-report-status"),
     runProgress: document.querySelector("#run-progress"),
     runProgressLabel: document.querySelector("#run-progress-label"),
     runProgressFill: document.querySelector("#run-progress-fill"),

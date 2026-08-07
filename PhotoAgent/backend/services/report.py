@@ -16,6 +16,7 @@ from aiserver_utils.pf_redis import pf_redis_client
 from backend.services.account import normalize_username
 
 REPORTS_KEY = "yce_ai:photoAgent:reports"
+REPORT_STATUSES = ("unread", "read", "solved")
 
 _ADMIN_USERS = {
     name.strip().lower()
@@ -54,7 +55,11 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
     for every report that doesn't use them)."""
     name = normalize_username(username)
     field = f"{job_id}:{name}" if job_id else f"general:{name}:{uuid.uuid4().hex}"
-    entry = {"report_id": field, "job_id": job_id, "path": path, "user": name, "ts": time.time()}
+    # Re-reporting an already-triaged entry (dedup key above) resets status
+    # back to "unread" along with the timestamp -- new activity on a job an
+    # admin already marked read/solved needs a fresh look, not to stay
+    # silently marked as handled.
+    entry = {"report_id": field, "job_id": job_id, "path": path, "user": name, "ts": time.time(), "status": "unread"}
     if note:
         entry["note"] = note
     if user_prompt:
@@ -81,15 +86,47 @@ def get_report_by_id(report_id):
         return None
 
 
+def update_report_status(report_id, status):
+    """Triage state an admin sets from the reports drawer -- unread (default,
+    also what a re-report resets to, see record_report) -> read (opened at
+    least once) -> solved (admin considers it handled). Returns the updated
+    entry (in the same has_screenshot-stripped shape get_reports uses), or
+    None if report_id doesn't exist or status isn't one of REPORT_STATUSES."""
+    if status not in REPORT_STATUSES:
+        return None
+    entry = get_report_by_id(report_id)
+    if entry is None:
+        return None
+    entry["status"] = status
+    pf_redis_client.hset(REPORTS_KEY, report_id, json.dumps(entry))
+    entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
+    return entry
+
+
+def delete_report(report_id):
+    """Removes just this report entry -- the job/result it points to (if
+    any) is a separate lifecycle (see account.py's own history-vs-job
+    split) and is never touched here. Any S3 screenshot the report carried
+    is left in place; it's just no longer reachable via report_screenshot
+    once its entry is gone."""
+    pf_redis_client.hdel(REPORTS_KEY, report_id)
+
+
 def get_reports(limit=200):
     raw_entries = pf_redis_client.hgetall(REPORTS_KEY)
     entries = []
-    for raw in raw_entries.values():
+    for field, raw in raw_entries.items():
         try:
             entry = json.loads(raw)
         except (TypeError, ValueError):
             continue
         entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
+        entry.setdefault("status", "unread")  # entries recorded before this field existed
+        # The hash field IS the report_id (record_report writes entry["report_id"] == field),
+        # but entries recorded before that field existed have no report_id in their JSON --
+        # always deriving it from the hash key itself (rather than trusting the JSON copy)
+        # keeps those old entries addressable by update_report_status/delete_report too.
+        entry["report_id"] = field.decode() if isinstance(field, bytes) else field
         entries.append(entry)
     entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
     return entries[:limit]

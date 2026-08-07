@@ -15,7 +15,7 @@ from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
-from backend.services.report import get_report_by_id, get_reports, is_admin, record_report
+from backend.services.report import delete_report, get_report_by_id, get_reports, is_admin, record_report, update_report_status
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -284,6 +284,39 @@ def reports(user):
     if not is_admin(name):
         return jsonify({"error": "not authorized"}), 403
     return jsonify({"reports": get_reports()})
+
+
+@api_bp.patch("/reports/<user>/<report_id>")
+def update_report_status_entry(user, report_id):
+    """Admin-only, same is_admin gate as reports() above -- sets the
+    triage status (unread/read/solved, backend/services/report.py's
+    REPORT_STATUSES) an admin clicks through in the reports drawer."""
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not is_admin(name):
+        return jsonify({"error": "not authorized"}), 403
+    status = (request.get_json(silent=True) or {}).get("status")
+    entry = update_report_status(report_id, status)
+    if entry is None:
+        return jsonify({"error": "invalid report_id or status"}), 400
+    return jsonify({"report": entry})
+
+
+@api_bp.delete("/reports/<user>/<report_id>")
+def delete_report_entry(user, report_id):
+    """Admin-only, same is_admin gate as reports() above -- removes just the
+    flagged-report entry (backend/services/report.py's delete_report), not
+    the job/result it points to."""
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    if not is_admin(name):
+        return jsonify({"error": "not authorized"}), 403
+    delete_report(report_id)
+    return jsonify({"deleted": report_id})
 
 
 @api_bp.get("/reports/screenshot/<report_id>")
