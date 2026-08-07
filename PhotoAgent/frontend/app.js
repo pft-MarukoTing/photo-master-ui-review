@@ -406,9 +406,9 @@
     });
   }
 
-  // Account bootstrap: ?user=NAME, or ?user_id=<ciphertext> decrypted via a
-  // backend round trip (account.js), identifies who's using the tool when
-  // linked in from elsewhere. Not shown automatically when absent --
+  // Account bootstrap: ?user_id=<ciphertext>, decrypted via a backend round
+  // trip (account.js), identifies who's using the tool when linked in from
+  // elsewhere. Not shown automatically when absent --
   // applyAccountUi() just shows #register-account-btn instead, and clicking
   // it (see the listener below) is what opens #account-modal on demand.
   (async () => {
@@ -3468,7 +3468,7 @@
     });
   }
 
-  // Account creation prompt -- shown at startup whenever ?user= is absent
+  // Account creation prompt -- shown at startup whenever ?user_id= is absent
   // (see the bootstrap call near applyDebugUiVisibility above). Skipping just
   // closes it; the app stays fully usable without an account, just without
   // processing history being recorded/recalled.
@@ -3605,8 +3605,10 @@
   // A full reload (rather than manually resetting every module-level piece
   // of state -- batchRecords, singleFlowState, lastResult, ...) is the
   // simplest way to guarantee none of it survives into the logged-out UI,
-  // same reasoning as clearCurrentUser only owning the ?user= identity
-  // itself, not the rest of the app's state (account.js).
+  // same reasoning as clearCurrentUser only owning the in-memory identity
+  // itself, not the rest of the app's state (account.js). Has no effect if
+  // the page was linked in with ?user_id= -- that identity is re-resolved
+  // from the URL on every load, same as before logout.
   async function handleLogout() {
     const confirmed = await showConfirmModal(
       "登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。確定要登出嗎？",
