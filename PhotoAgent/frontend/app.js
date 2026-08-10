@@ -1536,36 +1536,108 @@
   // than leaking one every time the sheet opens.
   let reportModalScreenshotObjectUrl = null;
 
+  // Whatever captureReportScreenshot last resolved to for the currently
+  // open sheet -- null until the reporter actually presses
+  // #report-modal-screenshot-capture-btn (attaching a screenshot is
+  // optional; nothing is captured just from opening the sheet). Read
+  // directly by handleReportSubmit at send time instead of re-awaiting a
+  // promise, since capture is now a discrete user action rather than
+  // something kicked off automatically on open.
+  let reportModalScreenshotBlob = null;
+
+  // Idle state (no screenshot attached, whether that's because nothing's
+  // been captured yet or because one was just deleted) -- also wired
+  // directly as #report-modal-screenshot-delete-btn's click handler, since
+  // "delete the screenshot" and "reset back to idle" are the same thing.
   function resetReportModalScreenshotPreview() {
+    reportModalScreenshotBlob = null;
     if (reportModalScreenshotObjectUrl) {
       URL.revokeObjectURL(reportModalScreenshotObjectUrl);
       reportModalScreenshotObjectUrl = null;
     }
+    // Idle state has nothing to report yet -- no status line, and
+    // #report-modal-screenshot (the preview box) stays hidden rather than
+    // sitting there empty until the reporter actually presses capture.
     if (els.reportModalScreenshotStatus) {
-      els.reportModalScreenshotStatus.textContent = "擷取畫面中…";
-      els.reportModalScreenshotStatus.hidden = false;
+      els.reportModalScreenshotStatus.textContent = "";
+      els.reportModalScreenshotStatus.hidden = true;
     }
+    if (els.reportModalScreenshot) els.reportModalScreenshot.hidden = true;
     if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = true;
+    if (els.reportModalScreenshotDeleteBtn) els.reportModalScreenshotDeleteBtn.hidden = true;
     if (els.reportModalScreenshotImg) els.reportModalScreenshotImg.removeAttribute("src");
+    // No screenshot attached -- #report-modal-screenshot-capture-btn is the
+    // only way back in, so it has to be visible here (applyReportModalScreenshotPreview's
+    // success branch is what hides it again).
+    if (els.reportModalScreenshotCaptureBtn) {
+      els.reportModalScreenshotCaptureBtn.hidden = false;
+      els.reportModalScreenshotCaptureBtn.disabled = false;
+      els.reportModalScreenshotCaptureBtn.textContent = "擷取目前畫面";
+    }
   }
 
-  // Applies whatever captureReportScreenshot ended up resolving to -- called
-  // once per open, guarded against a stale capture from an already-closed/
+  // Applies whatever captureReportScreenshot resolved to for one on-demand
+  // capture -- guarded against a stale capture from an already-closed/
   // reopened sheet still resolving in the background (myTarget no longer
   // being the live reportModalTarget means the user moved on already).
   function applyReportModalScreenshotPreview(myTarget, blob) {
     if (reportModalTarget !== myTarget) return;
+    reportModalScreenshotBlob = blob;
     if (!blob) {
+      // Capture failed -- nothing to delete, so the capture button (not the
+      // delete button) is still the way to try again.
+      if (els.reportModalScreenshotCaptureBtn) {
+        els.reportModalScreenshotCaptureBtn.hidden = false;
+        els.reportModalScreenshotCaptureBtn.disabled = false;
+        els.reportModalScreenshotCaptureBtn.textContent = "重新擷取";
+      }
       if (els.reportModalScreenshotStatus) {
         els.reportModalScreenshotStatus.textContent = "無法擷取畫面預覽，回報仍可送出。";
         els.reportModalScreenshotStatus.hidden = false;
       }
+      if (els.reportModalScreenshot) els.reportModalScreenshot.hidden = true;
+      if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = true;
       return;
     }
     reportModalScreenshotObjectUrl = URL.createObjectURL(blob);
     if (els.reportModalScreenshotStatus) els.reportModalScreenshotStatus.hidden = true;
     if (els.reportModalScreenshotImg) els.reportModalScreenshotImg.src = reportModalScreenshotObjectUrl;
     if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = false;
+    // Only reveal the preview box once there's actually an image ready to
+    // show in it.
+    if (els.reportModalScreenshot) els.reportModalScreenshot.hidden = false;
+    // A screenshot now exists -- #report-modal-screenshot-delete-btn (hover/
+    // focus-revealed, top-right of the preview) is the only way to get rid
+    // of it, so the capture button steps aside instead of offering a
+    // redundant "重新擷取" alongside it.
+    if (els.reportModalScreenshotCaptureBtn) els.reportModalScreenshotCaptureBtn.hidden = true;
+    if (els.reportModalScreenshotDeleteBtn) els.reportModalScreenshotDeleteBtn.hidden = false;
+  }
+
+  // Wired to #report-modal-screenshot-capture-btn -- the only place
+  // captureReportScreenshot is ever invoked from #report-modal now (see
+  // openReportModal's own comment). #report-modal is already open/visible
+  // by the time this can run, but captureReportScreenshot's ignoreElements
+  // excludes #report-modal/#report-screenshot-modal from the render
+  // regardless, so the sheet itself never leaks into its own screenshot.
+  async function handleReportModalScreenshotCapture() {
+    if (!reportModalTarget) return;
+    const myTarget = reportModalTarget;
+    if (els.reportModalScreenshotCaptureBtn) {
+      els.reportModalScreenshotCaptureBtn.disabled = true;
+      els.reportModalScreenshotCaptureBtn.textContent = "擷取中…";
+    }
+    // No image ready yet for this attempt -- keep the preview box hidden
+    // and surface progress via the status line instead.
+    if (els.reportModalScreenshot) els.reportModalScreenshot.hidden = true;
+    if (els.reportModalScreenshotPreviewBtn) els.reportModalScreenshotPreviewBtn.hidden = true;
+    if (els.reportModalScreenshotDeleteBtn) els.reportModalScreenshotDeleteBtn.hidden = true;
+    if (els.reportModalScreenshotStatus) {
+      els.reportModalScreenshotStatus.textContent = "擷取畫面中…";
+      els.reportModalScreenshotStatus.hidden = false;
+    }
+    const blob = await captureReportScreenshot(myTarget.jobId, myTarget.path, myTarget.runNumber);
+    applyReportModalScreenshotPreview(myTarget, blob);
   }
 
   // Opens the report sheet instead of reporting immediately -- lets the
@@ -1589,22 +1661,19 @@
     const userPrompt = lastResult
       ? (currentBatchRecord ? effectivePrompt(currentBatchRecord) : (lastSingleSelections?.userPrompt || ""))
       : "";
+    // Attaching a screenshot is entirely optional and reporter-triggered
+    // (handleReportModalScreenshotCapture, wired to
+    // #report-modal-screenshot-capture-btn) -- nothing is captured just
+    // from opening the sheet, so this only resets the preview UI to its
+    // idle state.
     resetReportModalScreenshotPreview();
     const target = {
       jobId: lastResult?.jobId || null,
       path: lastResult?.path || "local",
       runNumber: lastResult?.runNumber || null,
-      userPrompt,
-      // Kicked off now (before #report-modal itself is shown below), not at
-      // submit time -- captures whatever the reporter actually saw, not
-      // however it might look after they've been filling in the sheet for
-      // a while. Awaited again in handleReportSubmit (already resolved by
-      // then in the common case), and applied to the preview below as soon
-      // as it resolves.
-      screenshotPromise: captureReportScreenshot(lastResult?.jobId, lastResult?.path, lastResult?.runNumber)
+      userPrompt
     };
     reportModalTarget = target;
-    target.screenshotPromise.then((blob) => applyReportModalScreenshotPreview(target, blob));
     if (els.reportModalTitle) els.reportModalTitle.textContent = lastResult ? "回報此結果" : "回報問題";
     if (els.reportModalNote) {
       els.reportModalNote.placeholder = lastResult ? "請描述這筆結果的問題…" : "請描述遇到的問題…";
@@ -1638,11 +1707,12 @@
     const target = reportModalTarget;
     if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.disabled = true;
     try {
-      // Never lets a slow/failed capture (captureReportScreenshot already
-      // swallows its own errors, resolving null) block or fail the report
-      // itself -- worst case this report just goes without a screenshot.
-      const screenshotBlob = await target.screenshotPromise;
-      await reportJob(name, target.jobId, target.path, note, target.userPrompt, screenshotBlob);
+      // reportModalScreenshotBlob is null whenever the reporter never
+      // pressed #report-modal-screenshot-capture-btn, or a capture attempt
+      // failed (captureReportScreenshot swallows its own errors, resolving
+      // null) -- either way the report still goes through, just without a
+      // screenshot attached.
+      await reportJob(name, target.jobId, target.path, note, target.userPrompt, reportModalScreenshotBlob);
       closeReportModal();
       showNoticeModal("已回報，我們會盡快確認這筆結果。");
     } catch (err) {
@@ -5604,6 +5674,9 @@
   if (els.reportModalClose) els.reportModalClose.addEventListener("click", closeReportModal);
   if (els.reportModalCancelBtn) els.reportModalCancelBtn.addEventListener("click", closeReportModal);
   if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.addEventListener("click", handleReportSubmit);
+  if (els.reportModalScreenshotCaptureBtn) {
+    els.reportModalScreenshotCaptureBtn.addEventListener("click", handleReportModalScreenshotCapture);
+  }
   if (els.reportModalScreenshotPreviewBtn) {
     // Reuses the admin side's own #report-screenshot-modal for the
     // enlarged view -- the local blob: URL works there exactly like the
@@ -5611,6 +5684,12 @@
     els.reportModalScreenshotPreviewBtn.addEventListener("click", () => {
       if (reportModalScreenshotObjectUrl) openReportScreenshotModal(reportModalScreenshotObjectUrl);
     });
+  }
+  if (els.reportModalScreenshotDeleteBtn) {
+    // "Delete the screenshot" and "reset the preview back to idle" are the
+    // same end state, so this reuses resetReportModalScreenshotPreview
+    // directly rather than a separate handler.
+    els.reportModalScreenshotDeleteBtn.addEventListener("click", resetReportModalScreenshotPreview);
   }
   if (els.reportModal) {
     els.reportModal.addEventListener("click", (e) => {

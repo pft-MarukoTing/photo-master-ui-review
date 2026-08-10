@@ -1561,13 +1561,43 @@
       resize: vertical;
     }
     .report-modal-textarea:focus { outline: none; border-color: var(--accent); }
+    /* Houses the screenshot section's own label + its on-demand capture
+       trigger side by side, instead of stacking the button under the label
+       like every other field in this sheet -- the label here doesn't own a
+       form control of its own to sit above. */
+    .report-modal-screenshot-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .report-modal-screenshot-row .report-modal-label { margin-top: 0; }
+    .report-modal-screenshot-capture-btn {
+      flex: none;
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1.5px solid var(--border-2);
+      background: var(--card-2);
+      color: var(--text-2);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .report-modal-screenshot-capture-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .report-modal-screenshot-capture-btn:disabled { opacity: 0.6; cursor: default; }
+    /* Sits between the capture-trigger row and the (normally hidden)
+       preview box below -- covers the "capturing" and "capture failed"
+       states, both of which have no image to show yet. */
+    .report-modal-screenshot-status { margin: 8px 0 0; font-size: 13px; color: var(--text-3); }
     /* Compact preview strip -- #report-modal-box stays the plain 440px
        .error-modal-box (sized for a form, not a photo), so this is a small
        thumbnail rather than the admin side's full-size #report-screenshot-
-       modal-box. A fixed height covers both the loading/failed text state
-       and the eventual image without the sheet's height jumping once the
-       capture resolves. */
+       modal-box. Stays hidden (see its markup) until a captured image is
+       actually ready, rather than reserving this height as an empty
+       placeholder the whole time. */
     .report-modal-screenshot {
+      position: relative;
       margin-top: 12px;
       height: 120px;
       border-radius: var(--radius);
@@ -1578,7 +1608,40 @@
       justify-content: center;
       overflow: hidden;
     }
-    .report-modal-screenshot-status { margin: 0; font-size: 13px; color: var(--text-3); padding: 0 12px; text-align: center; }
+    /* Same floating-glass icon-button language as .canvas-btn (the
+       compare/fullscreen overlays on the results canvas), scaled down to
+       fit this strip's 120px height. Hidden until hovered/focused so it
+       doesn't compete with the preview image at rest -- deleting is the
+       only way back to #report-modal-screenshot-capture-btn once a capture
+       has succeeded (see handleReportModalScreenshotCapture, app.js). */
+    .report-modal-screenshot-delete-btn {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid rgba(255,255,255,.16);
+      border-radius: 50%;
+      background: rgba(9,9,11,.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      color: #fff;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity .15s, background .15s, border-color .15s;
+    }
+    .report-modal-screenshot:hover .report-modal-screenshot-delete-btn,
+    .report-modal-screenshot-delete-btn:focus-visible {
+      opacity: 1;
+    }
+    .report-modal-screenshot-delete-btn:hover {
+      background: rgba(239,68,68,.6);
+      border-color: rgba(239,68,68,.75);
+    }
     .report-modal-screenshot-preview-btn {
       display: block;
       width: 100%;
@@ -3289,17 +3352,29 @@
     <input id="report-modal-name" class="account-modal-input" type="text" placeholder="輸入你的名稱" maxlength="64">
     <label class="report-modal-label" for="report-modal-note">問題描述（選填）</label>
     <textarea id="report-modal-note" class="report-modal-textarea" placeholder="請描述這筆結果的問題…" maxlength="500"></textarea>
-    <!-- Preview of captureReportScreenshot's own capture (app.js) -- lets
-         the reporter see (and confirm) what's about to be attached before
-         送出回報, rather than finding out only after an admin looks it up
-         later. Status text covers the async gap between opening the sheet
-         and the capture actually resolving, and the "capture failed" case
-         (openReportModal/applyReportModalScreenshotPreview, app.js). -->
-    <span class="report-modal-label">畫面截圖預覽</span>
-    <div id="report-modal-screenshot" class="report-modal-screenshot">
-      <p id="report-modal-screenshot-status" class="report-modal-screenshot-status">擷取畫面中…</p>
+    <!-- Screenshot attachment is entirely optional and only ever taken when
+         the reporter presses #report-modal-screenshot-capture-btn --
+         handleReportModalScreenshotCapture (app.js) runs captureReportScreenshot
+         on demand and applyReportModalScreenshotPreview shows the result (or
+         the "capture failed" case, via the status line below) here; nothing
+         is captured just from opening the sheet, and #report-modal-screenshot
+         itself (the preview box) stays hidden until an image actually is
+         ready to show -- no empty placeholder box before then. -->
+    <div class="report-modal-screenshot-row">
+      <span class="report-modal-label">畫面截圖（選填）</span>
+      <button id="report-modal-screenshot-capture-btn" class="report-modal-screenshot-capture-btn" type="button">擷取目前畫面</button>
+    </div>
+    <p id="report-modal-screenshot-status" class="report-modal-screenshot-status" hidden></p>
+    <div id="report-modal-screenshot" class="report-modal-screenshot" hidden>
       <button id="report-modal-screenshot-preview-btn" class="report-modal-screenshot-preview-btn" type="button" hidden aria-label="放大檢視截圖">
         <img id="report-modal-screenshot-img" alt="回報截圖預覽">
+      </button>
+      <!-- Only shown alongside a successfully captured preview -- deleting
+           clears reportModalScreenshotBlob and brings back
+           #report-modal-screenshot-capture-btn (see resetReportModalScreenshotPreview,
+           app.js, which this is wired straight to). -->
+      <button id="report-modal-screenshot-delete-btn" class="report-modal-screenshot-delete-btn" type="button" hidden title="刪除截圖" aria-label="刪除截圖">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
     </div>
     <p id="report-modal-error" class="account-modal-error" hidden></p>
