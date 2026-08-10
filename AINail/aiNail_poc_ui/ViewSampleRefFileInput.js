@@ -64,33 +64,52 @@ export default function ViewSampleRefFileInput(props) {
     return 'template ' + (idx + 1);
   };
 
+  var selectedIds = Array.isArray(selectedSampleFileId)
+    ? selectedSampleFileId.map(String)
+    : (selectedSampleFileId != null ? [String(selectedSampleFileId)] : []);
+
+  var fileOf = function (tpl, idx) {
+    return {
+      id: idOf(tpl, idx),
+      name: labelOf(tpl, idx) + '.jpg',
+      type: 'image/jpeg',
+      size: 0,
+      data: null,
+      url: refUrlOf(tpl),
+    };
+  };
+
   var handleSelect = function (tpl, idx) {
     var refUrl = refUrlOf(tpl);
     if (!refUrl) {
       console.warn('[ViewSampleRefFileInput] no template_ref_image on', tpl);
       return;
     }
+
+    if (!multiple) {
+      onChange([fileOf(tpl, idx)]);
+      return;
+    }
+
+    // multi-select: click toggles, then send back the whole selection
     var id = idOf(tpl, idx);
-    var name = labelOf(tpl, idx) + '.jpg';
-    onChange([
-      {
-        id: id,
-        name: name,
-        type: 'image/jpeg',
-        size: 0,
-        data: null,
-        url: refUrl,
-      },
-    ]);
+    var picked = {};
+    selectedIds.forEach(function (sid) { picked[sid] = true; });
+    if (picked[id]) delete picked[id];
+    else picked[id] = true;
+
+    // emit in template order so click order does not change the result
+    var files = [];
+    templates.forEach(function (t, i) {
+      if (picked[idOf(t, i)] && refUrlOf(t)) files.push(fileOf(t, i));
+    });
+    onChange(files);
   };
 
   var cards = templates.map(function (tpl, idx) {
     var id = idOf(tpl, idx);
     var thumb = thumbUrlOf(tpl) || DUMMY_THUMB;
     var label = labelOf(tpl, idx);
-    var selectedIds = Array.isArray(selectedSampleFileId)
-      ? selectedSampleFileId.map(String)
-      : (selectedSampleFileId != null ? [String(selectedSampleFileId)] : []);
     var isSelected = selectedIds.indexOf(id) !== -1;
     var isHovered = hoveredIdx === idx;
 
