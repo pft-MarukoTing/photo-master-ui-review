@@ -117,22 +117,26 @@ def _extract_output_text(data: dict) -> str:
     return "\n".join(chunks).strip()
 
 
+def _strip_trailing_commas(text: str) -> str:
+    return re.sub(r",(\s*[\}\]])", r"\1", text)
+
+
 def _parse_json_from_text(text: str) -> dict:
-    try:
-        return json.loads(text)
-    except Exception:
-        pass
-    try:
-        return json.loads(text, strict=False)
-    except Exception:
-        pass
+    candidates = [str(text or "")]
     m = re.search(r"\{[\s\S]*\}", str(text or ""))
-    if not m:
-        raise ValueError("AI 回應沒有包含有效 JSON。")
-    try:
-        return json.loads(m.group(0))
-    except Exception:
-        return json.loads(m.group(0), strict=False)
+    if m:
+        candidates.append(m.group(0))
+
+    last_error = None
+    for candidate in candidates:
+        for variant in (candidate, _strip_trailing_commas(candidate)):
+            for strict in (True, False):
+                try:
+                    return json.loads(variant, strict=strict)
+                except Exception as e:
+                    last_error = e
+
+    raise ValueError("AI 回應沒有包含有效 JSON。") from last_error
 
 
 def _responses_payload(model: str, content: list, text_format: dict = None) -> dict:
