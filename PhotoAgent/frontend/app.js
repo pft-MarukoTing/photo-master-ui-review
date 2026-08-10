@@ -2,6 +2,7 @@
   const { els, showSection, showError, hideError, resetSteps, addTiming, getTimings } = window.PhotoAgentDom;
   const { presets } = window.PhotoAgentConfig;
   const {
+    fetchWithRetry,
     submitJob,
     pollJobStatus,
     getJobResult,
@@ -1387,16 +1388,20 @@
     // path only) is its fallback there, and if even that's unavailable
     // (AIPoC-path history) sourceBuf stays null and the zip just omits the
     // source photo entirely (see buildFlatImageFiles/buildNestedImageFiles).
+    // fetchWithRetry (not a bare fetch) -- a burst of many of these firing
+    // at once (multi-select download especially) can trip a transient
+    // net::ERR_HTTP2_PROTOCOL_ERROR against the CDN/backend; retrying once
+    // or twice clears it instead of failing the whole zip over one blip.
     const sourceBuf = file
       ? await file.arrayBuffer()
       : sourceUrl
-        ? await fetch(sourceUrl).then((response) => response.arrayBuffer())
+        ? await fetchWithRetry(sourceUrl).then((response) => response.arrayBuffer())
         : null;
     const runData = await Promise.all(runs.map(async (run) => {
       // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
       // that URL has no CORS headers, so a browser-side fetch() of it is
       // blocked even though the same URL displays fine in an <img> tag.
-      const imageBuf = await fetch(resultImageUrl(run.jobId, { path, run: run.run })).then((response) => response.arrayBuffer());
+      const imageBuf = await fetchWithRetry(resultImageUrl(run.jobId, { path, run: run.run })).then((response) => response.arrayBuffer());
       if (onItemDone) onItemDone();
       return { run, imageBuf };
     }));
@@ -3788,6 +3793,26 @@
     if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = !hasItems;
   }
 
+  // Runs `fn` over `items` with at most `limit` in flight at once, instead
+  // of firing every item's work simultaneously via a bare Promise.all --
+  // buildSelectedHistoryZip's whole-selection fetches (unlike the single-
+  // image download paths above) can multiply into dozens of concurrent
+  // requests to the same origin once several jobs are selected, which is
+  // what was tripping a transient net::ERR_HTTP2_PROTOCOL_ERROR under load.
+  // Order of `results` matches `items`, regardless of finish order.
+  async function mapWithConcurrency(items, limit, fn) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function worker() {
+      while (next < items.length) {
+        const i = next++;
+        results[i] = await fn(items[i], i);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+  }
+
   // History counterpart of buildAllBatchResultsZip: bundles every selected
   // job's done runs into one zip, each under its own "image N/" folder.
   // Reuses fetchAllHistoryRuns (the same per-job_id fetch viewHistoryRecord
@@ -3795,14 +3820,15 @@
   // rather than duplicating that fetch-and-flatten logic here.
   async function buildSelectedHistoryZip(onProgress) {
     const jobs = Array.from(selectedHistoryKeys).map((key) => historyJobsByKey.get(key)).filter(Boolean);
-    const runsPerJob = await Promise.all(jobs.map((job) => fetchAllHistoryRuns(job).catch(() => [])));
+    const CONCURRENCY = 3;
+    const runsPerJob = await mapWithConcurrency(jobs, CONCURRENCY, (job) => fetchAllHistoryRuns(job).catch(() => []));
     const total = runsPerJob.reduce((sum, runs) => sum + runs.length, 0);
     let done = 0;
     const tick = () => {
       done += 1;
       if (onProgress) onProgress(done, total);
     };
-    const groups = await Promise.all(jobs.map((job, i) => {
+    const groups = await mapWithConcurrency(jobs, CONCURRENCY, (job, i) => {
       const runs = runsPerJob[i];
       // sourceImageUrl is local-path only (see its own doc, photo-agent-api.js)
       // -- an AIPoC-path job's zip entry simply omits the source photo, same
@@ -3810,7 +3836,7 @@
       // viewHistoryRecord download.
       const sourceUrl = job.path === "local" && runs.length ? sourceImageUrl(runs[0].jobId) : null;
       return buildImageFiles({ file: null, sourceUrl, path: job.path, prefix: `image ${i + 1}/` }, runs, tick);
-    }));
+    });
     return window.PhotoAgentZip.createZip(groups.flat());
   }
 

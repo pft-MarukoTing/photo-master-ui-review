@@ -554,6 +554,7 @@ window.PhotoAgentApi = (() => {
   }
 
   return {
+    fetchWithRetry,
     submitJob,
     pollJobStatus,
     getJobResult,
