@@ -3441,13 +3441,18 @@
       if (onProgress) onProgress(done, total);
     };
 
-    const groups = await Promise.all(records.map((r, i) =>
+    // mapWithConcurrency (not a bare Promise.all) -- same reasoning as
+    // buildSelectedHistoryZip's own: a large batch firing every image's
+    // fetches at once can overwhelm the browser's connection/TLS handling
+    // (net::ERR_HTTP2_PROTOCOL_ERROR, net::ERR_CERT_VERIFIER_CHANGED),
+    // failing the whole zip over what's really just too much concurrency.
+    const groups = await mapWithConcurrency(records, 3, (r, i) =>
       buildImageFiles(
         { file: r.file, path: batchSettings.path, prefix: `image ${i + 1}/` },
         runsPerRecord[i],
         tick
       )
-    ));
+    );
     return window.PhotoAgentZip.createZip(groups.flat());
   }
 
