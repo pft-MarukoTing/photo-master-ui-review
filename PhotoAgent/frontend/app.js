@@ -198,10 +198,16 @@
   // initial upload-flow processing screen and the results-page "revise"
   // regenerate (backToProcessFromResults), but #processing-section stays
   // hidden the whole time during the latter, so procSub's own updates are
-  // otherwise invisible to a user watching the results page.
+  // otherwise invisible to a user watching the results page. Also mirrors
+  // into #batch-main-loading-text (showBatchMainLoading) -- batch mode
+  // drives the same rotation (see startBatchLoadingRotation below) through
+  // this same setter rather than a parallel one, since only one of these
+  // three targets is ever actually visible at a time (single-image and
+  // batch mode never render simultaneously).
   function setProcSub(text) {
     if (procSub) procSub.textContent = text;
     if (els.canvasLoadingStatus) els.canvasLoadingStatus.textContent = text;
+    if (els.batchMainLoadingText) els.batchMainLoadingText.textContent = text;
   }
 
   // Same mirroring as setProcSub, for the title line -- finishSingleFlow sets
@@ -230,15 +236,31 @@
   let procSubRotateTimer = null;
   let procSubRotateIndex = 0;
   let procSubGetMessages = null;
+  // Which batch record (see showBatchMainLoading) the rotation currently
+  // running, if any, actually belongs to -- null whenever it's either idle
+  // or driving the single-image flow instead. There's only one shared
+  // rotation timer/index for however many batch records may be mid-
+  // analyze/edit at once, so switching the visible record away from this
+  // one pauses (not stops) it: showBatchMainLoading saves procSubRotateIndex
+  // onto the outgoing record's own procSubIndex first, so switching back to
+  // it later resumes from there instead of restarting at message 1. Kept in
+  // sync by stopProcSubRotation/finishProcSubRotation below (both null it
+  // out alongside their own state, the same instant the rotation itself
+  // genuinely stops), so it never points at a rotation that isn't running.
+  let activeBatchRotationRecord = null;
   function procSubIndexFor(messages, rotateIndex) {
     const lastTwoStart = Math.max(0, messages.length - 2);
     return rotateIndex < messages.length
       ? rotateIndex
       : lastTwoStart + ((rotateIndex - messages.length) % 2);
   }
-  function startProcSubRotation(getMessages) {
+  // startIndex resumes a paused batch record's rotation exactly where it
+  // left off (see showBatchMainLoading) -- every single-image call site
+  // omits it and starts fresh at 0, same as before.
+  function startProcSubRotation(getMessages, startIndex = 0) {
     stopProcSubRotation();
     procSubGetMessages = getMessages;
+    procSubRotateIndex = startIndex;
     const show = () => {
       const messages = getMessages();
       if (!messages || !messages.length) return;
@@ -253,6 +275,7 @@
     procSubRotateTimer = null;
     procSubRotateIndex = 0;
     procSubGetMessages = null;
+    activeBatchRotationRecord = null;
   }
   // Re-renders whatever message is currently on screen with fresh data
   // (e.g. an updated "已完成 X/N RUN" count) without advancing or resetting
@@ -283,6 +306,7 @@
       const startIdx = procSubRotateIndex;
       procSubRotateIndex = 0;
       procSubGetMessages = null;
+      activeBatchRotationRecord = null;
       if (!messages || !messages.length || startIdx >= messages.length) {
         resolve();
         return;
@@ -1912,7 +1936,17 @@
       result: null,
       imageUrl: null,
       error: null,
-      timings: []
+      timings: [],
+      // Which `status` procSubIndex below was last saved for, and how far
+      // the rotating processing-sub-text (showBatchMainLoading) had gotten
+      // -- lets switching the sidebar selection away and back resume this
+      // record's own rotation in place instead of restarting it at message
+      // 1, since only one of these can actually be showing/ticking at once.
+      // procSubStage !== status (a genuinely new stage, e.g. analyzing ->
+      // processing) is what tells showBatchMainLoading to start fresh
+      // instead of resuming this stale index.
+      procSubStage: null,
+      procSubIndex: 0
     };
   }
 
@@ -2094,6 +2128,12 @@
   // Drop batch state and restore the results view to its single-image default,
   // so the untouched single flow always starts from a known layout.
   function resetBatchState() {
+    // A record other than whichever one was on screen can still have its
+    // rotation "paused" (see showBatchMainLoading) rather than genuinely
+    // stopped -- its getMessages closure reads batchSettings live on every
+    // tick, so nulling that out below without stopping the timer first would
+    // throw the next time it fires.
+    if (activeBatchRotationRecord) stopProcSubRotation();
     batchRecords.forEach((r) => {
       if (r.previewUrl) URL.revokeObjectURL(r.previewUrl);
       if (r.thumbUrl) URL.revokeObjectURL(r.thumbUrl);
@@ -5250,15 +5290,31 @@
     if (!record) return;
     updateApSubjectTags(record);
     updateBatchSidebarMaxHeight();
-    if (record.status === "analyzed") showBatchAnalyzedMain(record);
+    // Only this record's OWN rotation (if it was the one actively showing)
+    // ever gets the graceful finish -- switching the view to a record that
+    // simply isn't loading, while some OTHER record's rotation is the one
+    // currently running, must leave that other one alone (it hasn't
+    // finished; it's just not on screen), not fast-play it to completion as
+    // if it had. showBatchMainLoading is what pauses/resumes a rotation
+    // that's merely switched away from and back.
+    const wasThisRecordRotating = activeBatchRotationRecord === record;
+    if (record.status === "analyzed") {
+      if (wasThisRecordRotating) await finishProcSubRotation();
+      showBatchAnalyzedMain(record);
     // Guard against the brief window (mid-revise, with N new runs in flight
     // alongside older already-done ones) where syncRecordMirror's aggregate
     // "any run done" check flips record.status to "done" before the specific
     // mirrored run has actually resolved -- record.result would still be
     // null then, so fall through to the loading view instead of crashing.
-    else if (record.status === "done" && record.result) await showBatchDoneMain(record);
-    else if (record.status === "error") showBatchMainError(record);
-    else showBatchMainLoading(record); // "analyzing" / "processing"
+    } else if (record.status === "done" && record.result) {
+      if (wasThisRecordRotating) await finishProcSubRotation();
+      await showBatchDoneMain(record);
+    } else if (record.status === "error") {
+      if (wasThisRecordRotating) await finishProcSubRotation();
+      showBatchMainError(record);
+    } else {
+      showBatchMainLoading(record); // "analyzing" / "processing"
+    }
   }
 
   function hideAllBatchMainViews() {
@@ -5281,10 +5337,43 @@
     if (els.batchMainLoadingTitle) {
       els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在修圖";
     }
-    if (els.batchMainLoadingText) {
-      els.batchMainLoadingText.textContent = analyzing
-        ? "AI 正在分析照片，請稍候…"
-        : "AI 正在修圖，請稍候…";
+    // Same rotating phrasings as the single-image flow (startProcSubRotation
+    // et al.), just targeting #batch-main-loading-text through setProcSub
+    // instead of .proc-sub/#canvas-loading-status. There's only one shared
+    // rotation for however many records may be mid-analyze/edit at once, so:
+    // - Same record, same stage as whatever's already rotating (a re-render
+    //   for some unrelated reason -- another record's background progress,
+    //   a resize) -- leave it running untouched, don't restart it.
+    // - A different record than whatever was rotating -- that other
+    //   record's progress is saved onto its own procSubIndex first (it
+    //   hasn't finished, it's just not on screen anymore), then this one
+    //   starts fresh or resumes below.
+    // - Same record, but its own stage just changed (analyzing ->
+    //   processing) -- always starts fresh at message 1; a genuinely new
+    //   stage shouldn't continue an old stage's rotation position.
+    // - Same record, same stage, resuming after having been switched away
+    //   from earlier -- resumes from its saved procSubIndex instead of
+    //   restarting, which is the whole point of saving it above.
+    // doneCount/runCount stay at 0/1 (no "已完成 X/N RUN" clause) --
+    // record.status flips to "done" the instant any one RUN finishes
+    // (syncRecordMirror), so this loading view never actually has a real,
+    // changing doneCount to show; a permanently-static "0/N" would just be
+    // noise.
+    if (activeBatchRotationRecord !== record || record.procSubStage !== record.status) {
+      if (activeBatchRotationRecord && activeBatchRotationRecord !== record) {
+        activeBatchRotationRecord.procSubIndex = procSubRotateIndex;
+      }
+      const startIndex = record.procSubStage === record.status ? (record.procSubIndex || 0) : 0;
+      record.procSubStage = record.status;
+      startProcSubRotation(analyzing
+        ? analyzeSubMessages
+        : () => editSubMessages({
+            aiPhotoEditing: batchSettings.aiPhotoEditing,
+            imageModel: batchSettings.imageModel,
+            doneCount: 0,
+            runCount: 1
+          }), startIndex);
+      activeBatchRotationRecord = record;
     }
   }
 
