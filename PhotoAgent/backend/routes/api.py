@@ -12,7 +12,7 @@ from aiserver_utils.queue import get_job_info
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import validate_photo_agent_request
 from pipeline import analyze_stage
-from backend.services.account import create_account, clear_history, delete_history_entry, get_history, normalize_username, record_history
+from backend.services.account import create_account, clear_history, delete_history_entry, get_history, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
 from backend.services.report import delete_report, get_report_by_id, get_reports, is_admin, record_report, update_report_status
@@ -205,7 +205,7 @@ def history(user):
         name = normalize_username(user)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"user": name, "jobs": get_history(name)})
+    return jsonify({"user": name, "jobs": get_history(name, limit=HISTORY_MAX_LEN)})
 
 
 @api_bp.delete("/history/<user>")
