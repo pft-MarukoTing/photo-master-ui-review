@@ -1790,6 +1790,10 @@
     } finally {
       hideDownloadProgress(success);
     }
+    // Confirms the zip actually landed -- otherwise the only feedback is the
+    // progress toast quietly fading out, easy to miss for a multi-select
+    // download that took a while to build.
+    if (success) showNoticeModal("已下載完成。");
   }
 
   // Single current-result download: just the generated image itself, not a
@@ -1812,6 +1816,9 @@
       tempLink.click();
       tempLink.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Same completion notice downloadZip shows -- this path bypasses that
+      // shared function (a single PNG needs no zip), so it needs its own.
+      showNoticeModal("已下載完成。");
     } catch (error) {
       showError("下載失敗，請稍後再試。");
     }
