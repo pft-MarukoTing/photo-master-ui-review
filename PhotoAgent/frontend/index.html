@@ -1750,6 +1750,12 @@
       justify-content: space-between;
       gap: 12px;
     }
+    .history-header-actions { display: flex; align-items: center; gap: 8px; }
+    /* Count badge inside #history-download-selected-btn -- empty (no count
+       shown) whenever nothing's selected yet, filled in by
+       updateHistoryDownloadSelectedBtn (app.js). */
+    .history-download-selected-btn { display: inline-flex; align-items: center; gap: 4px; }
+    .history-download-selected-btn:disabled { opacity: .5; cursor: not-allowed; }
     /* Browser-default <h2> sizing (~1.5em+) left too little room next to
        #history-clear-all-btn at the drawer's narrowest width (min(420px,
        90vw)) -- "處理紀錄" wrapped mid-word into two lines instead of
@@ -1771,6 +1777,45 @@
     /* Red hover hint on the trash icon, same "this is destructive" cue as
        .history-cube-remove:hover on each individual tile's own × button. */
     #history-clear-all-btn.btn:hover {
+      color: #fff;
+      background: rgba(178,42,42,.9);
+      border-color: rgba(178,42,42,.9);
+    }
+    /* Same 28px footprint as #history-clear-all-btn above -- icon-only, so
+       it's the same tight square rather than the default .btn-sm's taller,
+       text-oriented sizing. */
+    #history-select-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    /* #history-select-cancel-btn/#history-download-selected-btn carry a text
+       label/count next to their icon, so they keep an auto width -- only the
+       height/padding/font-size are pulled down to match the 28px row the
+       icon-only buttons above set, so all four line up on the same
+       horizontal band regardless of which pair is showing. */
+    #history-select-cancel-btn.btn,
+    #history-download-selected-btn.btn {
+      height: 28px;
+      padding: 0 10px;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    #history-download-selected-btn.btn svg { width: 12px; height: 12px; }
+    /* Icon-only, same 28x28 square as #history-select-btn/
+       #history-clear-all-btn -- and the same destructive red hover as
+       #history-clear-all-btn, since this is the same kind of action just
+       scoped to the current selection. */
+    #history-delete-selected-btn.btn {
+      height: 28px;
+      width: 28px;
+      padding: 0;
+      gap: 0;
+      flex-shrink: 0;
+    }
+    #history-delete-selected-btn.btn:hover:not(:disabled) {
       color: #fff;
       background: rgba(178,42,42,.9);
       border-color: rgba(178,42,42,.9);
@@ -1873,6 +1918,56 @@
       transition: background .15s, transform .15s;
     }
     .history-cube-remove:hover { background: rgba(220,60,60,.85); transform: scale(1.08); }
+    /* Multi-select checkbox overlay (toggleHistorySelection, app.js) -- same
+       always-in-DOM/opacity-toggled checkmark badge as .demo-image-tile-check
+       above, reused here instead of duplicated styling. Only interactive on
+       tiles the list has marked .selectable (i.e. a finished job -- nothing
+       to download yet for a still-processing/failed one), and only visible
+       at all while #history-list carries .select-mode. */
+    .history-cube-check {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9,9,11,.55);
+      border: 1.5px solid rgba(255,255,255,.6);
+      color: #fff;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s, background-color .15s, border-color .15s;
+    }
+    /* The checkmark glyph itself stays invisible until .selected -- an
+       unselected-but-selectable tile shows only the empty circle outline
+       (an unchecked checkbox), not a checkmark that reads as already
+       picked. */
+    .history-cube-check svg { opacity: 0; transition: opacity .15s; }
+    .history-list.select-mode .history-cube.selectable .history-cube-check {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .history-cube.selected .history-cube-check svg { opacity: 1; }
+    .history-cube.selected .history-cube-check {
+      background: var(--mv-grad);
+      border-color: transparent;
+    }
+    .history-cube.selected { box-shadow: 0 0 0 2px var(--accent) inset; }
+    /* .history-cube-remove would otherwise still sit on top of (and can be
+       hit alongside) the checkbox while selecting -- select mode is purely
+       about picking a download subset, not deleting, so the remove button
+       steps aside entirely for the duration. */
+    .history-list.select-mode .history-cube-remove { display: none; }
+    /* Non-selectable tiles (still processing/failed -- no result to
+       download) dim and stop intercepting clicks while selecting, same
+       .processing dim treatment as elsewhere in this drawer. */
+    .history-list.select-mode .history-cube:not(.selectable) {
+      opacity: .5;
+      pointer-events: none;
+    }
     .history-empty { color: var(--text-3); font-size: 15px; }
     /* #reports-drawer's own list -- plain rows (not the day-grouped cube
        grid #history-list uses) since reports have no per-day grouping and
@@ -3218,17 +3313,51 @@
   <div class="history-header">
     <div class="history-header-top">
       <h2>處理紀錄</h2>
-      <!-- Hidden whenever the list is empty (nothing to clear) -- toggled
-           alongside #history-empty in renderHistoryList/
-           removeHistoryCubeFromDom (app.js). Icon-only -- aria-label/title
-           carry the "全部刪除" label since there's no visible text. -->
-      <button id="history-clear-all-btn" class="btn btn-outline btn-sm" type="button" hidden aria-label="全部刪除" title="全部刪除">
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M4 7h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </button>
+      <div class="history-header-actions">
+        <!-- Enters multi-select mode (enterHistorySelectMode, app.js) --
+             swaps out for #history-download-selected-btn/
+             #history-select-cancel-btn below, mutually exclusive via
+             [hidden] the same way #history-clear-all-btn already toggles
+             on its own. Hidden whenever the list is empty. -->
+        <button id="history-select-btn" class="btn btn-outline btn-sm" type="button" hidden aria-label="選取多筆" title="選取多筆">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2"/>
+            <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <!-- Only shown while selecting (enterHistorySelectMode) -- disabled
+             until at least one tile is checked (updateHistoryDownloadSelectedBtn). -->
+        <button id="history-download-selected-btn" class="btn btn-outline btn-sm history-download-selected-btn" type="button" hidden disabled aria-label="下載所選">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="history-download-selected-count"></span>
+        </button>
+        <!-- Also only shown while selecting -- deletes every checked entry
+             (handleDeleteSelectedHistoryClick, app.js), same confirm-first
+             flow as #history-clear-all-btn/the per-tile × button, just
+             scoped to the current selection instead of everything/one. -->
+        <button id="history-delete-selected-btn" class="btn btn-outline btn-sm" type="button" hidden disabled aria-label="刪除所選" title="刪除所選">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M4 7h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="history-select-cancel-btn" class="btn btn-outline btn-sm" type="button" hidden>取消</button>
+        <!-- Hidden whenever the list is empty (nothing to clear) -- toggled
+             alongside #history-empty in renderHistoryList/
+             removeHistoryCubeFromDom (app.js). Icon-only -- aria-label/title
+             carry the "全部刪除" label since there's no visible text. -->
+        <button id="history-clear-all-btn" class="btn btn-outline btn-sm" type="button" hidden aria-label="全部刪除" title="全部刪除">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M4 7h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+            <path d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
     <!-- Subtitle line, not squeezed into the same row as the title anymore
          -- gets the drawer's full width to itself, so a long username

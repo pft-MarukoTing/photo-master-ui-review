@@ -3639,6 +3639,7 @@
       const empty = els.historyList.children.length === 0;
       els.historyEmpty.hidden = !empty;
       if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = empty;
+      if (els.historySelectBtn) els.historySelectBtn.hidden = empty;
     }
   }
 
@@ -3650,6 +3651,8 @@
     try {
       await deleteHistoryEntry(user, job.image_key);
       removeHistoryCubeFromDom(li);
+      historyJobsByKey.delete(job.image_key);
+      historyTileElsByKey.delete(job.image_key);
       // Nothing left to browse -- back out to a fresh upload screen instead
       // of leaving the drawer open over whatever page happened to be
       // showing behind it once its last entry is gone.
@@ -3700,11 +3703,166 @@
     window.location.reload();
   }
 
+  // Multi-select download state for the history drawer -- module-level
+  // like demoSelectedNames (the demo-image picker's own Set-based
+  // selection), reset on every fresh render/drawer close rather than
+  // surviving across them (see exitHistorySelectMode). Keyed by
+  // job.image_key, NOT job.job_id -- a "continue"/multi-run action can
+  // produce several history entries that all point back at the same
+  // underlying job_id (handleDeleteHistoryEntry already relies on
+  // image_key, not job_id, to identify one entry for exactly this reason).
+  // Keying this Set by job_id let two different tiles collide on the same
+  // key, so selecting tile A then clicking tile B looked like it silently
+  // deselected A (really: B's toggle saw the shared key already in the Set
+  // and deleted it). historyJobsByKey maps image_key -> the job object
+  // itself, populated only for finished (.selectable) tiles, since only
+  // those have anything to download.
+  let historySelectMode = false;
+  const selectedHistoryKeys = new Set();
+  const historyJobsByKey = new Map();
+  // image_key -> that tile's <li>, so a bulk delete (handleDeleteSelectedHistoryClick)
+  // can remove exactly the right DOM nodes without having to re-query for
+  // them -- populated/cleared alongside historyJobsByKey.
+  const historyTileElsByKey = new Map();
+
+  function updateHistorySelectionButtons() {
+    const count = selectedHistoryKeys.size;
+    if (els.historyDownloadSelectedBtn) {
+      els.historyDownloadSelectedBtn.disabled = count === 0;
+      const dlHint = count > 0 ? `下載所選（${count} 張）` : "下載所選";
+      els.historyDownloadSelectedBtn.title = dlHint;
+      els.historyDownloadSelectedBtn.setAttribute("aria-label", dlHint);
+    }
+    if (els.historyDownloadSelectedCount) els.historyDownloadSelectedCount.textContent = count > 0 ? String(count) : "";
+    if (els.historyDeleteSelectedBtn) {
+      els.historyDeleteSelectedBtn.disabled = count === 0;
+      const delHint = count > 0 ? `刪除所選（${count} 張）` : "刪除所選";
+      els.historyDeleteSelectedBtn.title = delHint;
+      els.historyDeleteSelectedBtn.setAttribute("aria-label", delHint);
+    }
+  }
+
+  function toggleHistorySelection(imageKey, li) {
+    if (selectedHistoryKeys.has(imageKey)) {
+      selectedHistoryKeys.delete(imageKey);
+      li.classList.remove("selected");
+    } else {
+      selectedHistoryKeys.add(imageKey);
+      li.classList.add("selected");
+    }
+    updateHistorySelectionButtons();
+  }
+
+  function enterHistorySelectMode() {
+    if (!els.historyList) return;
+    historySelectMode = true;
+    els.historyList.classList.add("select-mode");
+    if (els.historySelectBtn) els.historySelectBtn.hidden = true;
+    if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = true;
+    if (els.historySelectCancelBtn) els.historySelectCancelBtn.hidden = false;
+    if (els.historyDownloadSelectedBtn) els.historyDownloadSelectedBtn.hidden = false;
+    if (els.historyDeleteSelectedBtn) els.historyDeleteSelectedBtn.hidden = false;
+    updateHistorySelectionButtons();
+  }
+
+  // Also the reset path used by a fresh renderHistoryList and by
+  // closeHistoryDrawer -- both cases want select mode (and whatever was
+  // checked) to not carry over, same reasoning as demoSelectedNames.clear()
+  // on the demo-image modal's own close.
+  function exitHistorySelectMode() {
+    historySelectMode = false;
+    selectedHistoryKeys.clear();
+    const hasItems = !!(els.historyList && els.historyList.children.length);
+    if (els.historyList) {
+      els.historyList.classList.remove("select-mode");
+      els.historyList.querySelectorAll(".history-cube.selected").forEach((li) => li.classList.remove("selected"));
+    }
+    if (els.historySelectCancelBtn) els.historySelectCancelBtn.hidden = true;
+    if (els.historyDownloadSelectedBtn) els.historyDownloadSelectedBtn.hidden = true;
+    if (els.historyDeleteSelectedBtn) els.historyDeleteSelectedBtn.hidden = true;
+    // Restored here (not just left as renderHistoryList's own initial
+    // hidden=jobs.length===0) so cancelling mid-selection -- without a
+    // fresh render -- also brings these back instead of leaving the header
+    // stuck with neither button pair visible.
+    if (els.historySelectBtn) els.historySelectBtn.hidden = !hasItems;
+    if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = !hasItems;
+  }
+
+  // History counterpart of buildAllBatchResultsZip: bundles every selected
+  // job's done runs into one zip, each under its own "image N/" folder.
+  // Reuses fetchAllHistoryRuns (the same per-job_id fetch viewHistoryRecord
+  // itself calls) to get each job's flattened, run-numbered result list,
+  // rather than duplicating that fetch-and-flatten logic here.
+  async function buildSelectedHistoryZip(onProgress) {
+    const jobs = Array.from(selectedHistoryKeys).map((key) => historyJobsByKey.get(key)).filter(Boolean);
+    const runsPerJob = await Promise.all(jobs.map((job) => fetchAllHistoryRuns(job).catch(() => [])));
+    const total = runsPerJob.reduce((sum, runs) => sum + runs.length, 0);
+    let done = 0;
+    const tick = () => {
+      done += 1;
+      if (onProgress) onProgress(done, total);
+    };
+    const groups = await Promise.all(jobs.map((job, i) => {
+      const runs = runsPerJob[i];
+      // sourceImageUrl is local-path only (see its own doc, photo-agent-api.js)
+      // -- an AIPoC-path job's zip entry simply omits the source photo, same
+      // fallback fetchImageDownloadData already applies to a live
+      // viewHistoryRecord download.
+      const sourceUrl = job.path === "local" && runs.length ? sourceImageUrl(runs[0].jobId) : null;
+      return buildImageFiles({ file: null, sourceUrl, path: job.path, prefix: `image ${i + 1}/` }, runs, tick);
+    }));
+    return window.PhotoAgentZip.createZip(groups.flat());
+  }
+
+  function handleDownloadSelectedHistoryClick() {
+    if (!selectedHistoryKeys.size) return;
+    downloadZip(buildSelectedHistoryZip, buildDownloadZipFilename());
+  }
+
+  // Bulk counterpart of handleDeleteHistoryEntry -- there's no batch delete
+  // endpoint (deleteHistoryEntry only ever takes one image_key), so this
+  // just fires one DELETE per selected entry in parallel and reconciles
+  // whichever ones actually succeeded, rather than failing the whole
+  // operation if one entry errors.
+  async function handleDeleteSelectedHistoryClick() {
+    const keys = Array.from(selectedHistoryKeys);
+    if (!keys.length) return;
+    const user = getCurrentUser();
+    if (!user) return;
+    const confirmed = await showConfirmModal(`確定要刪除這 ${keys.length} 筆處理紀錄嗎？`);
+    if (!confirmed) return;
+    if (els.historyDeleteSelectedBtn) els.historyDeleteSelectedBtn.disabled = true;
+    const results = await Promise.allSettled(keys.map((key) => deleteHistoryEntry(user, key)));
+    let anyFailed = false;
+    keys.forEach((key, i) => {
+      if (results[i].status !== "fulfilled") {
+        anyFailed = true;
+        return;
+      }
+      const li = historyTileElsByKey.get(key);
+      if (li) removeHistoryCubeFromDom(li);
+      historyJobsByKey.delete(key);
+      historyTileElsByKey.delete(key);
+    });
+    exitHistorySelectMode();
+    if (anyFailed) showNoticeModal("部分紀錄刪除失敗，請稍後再試。");
+    // Same "nothing left to browse" reset as handleDeleteHistoryEntry/
+    // handleClearAllHistory once the last entry is gone.
+    if (els.historyList && !els.historyList.children.length) {
+      closeHistoryDrawer();
+      resetApp();
+    }
+  }
+
   async function renderHistoryList(jobs) {
     if (!els.historyList) return;
+    exitHistorySelectMode();
+    historyJobsByKey.clear();
+    historyTileElsByKey.clear();
     els.historyList.innerHTML = "";
     if (els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
     if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = jobs.length === 0;
+    if (els.historySelectBtn) els.historySelectBtn.hidden = jobs.length === 0;
     if (!jobs.length) return;
 
     // One heading + grid per calendar day, cube tiles instead of full-width
@@ -3746,6 +3904,11 @@
         <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
         <span class="rc-badge">處理中</span>
         <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
+        <span class="history-cube-check">
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
       `;
       currentGrid.appendChild(li);
       const removeBtn = li.querySelector(".history-cube-remove");
@@ -3775,6 +3938,18 @@
         const doneIdx = statuses.findIndex((s) => s.status === "success");
         if (doneIdx !== -1) {
           li.className = "history-cube batch-sidebar-item done";
+          // .selectable marks this tile as eligible for multi-select
+          // download (see .history-list.select-mode's CSS) -- a
+          // still-processing/failed job has no result yet to download, so
+          // those never get this class and stay dimmed/unclickable while
+          // selecting. Keyed by job.image_key, same identifier
+          // handleDeleteHistoryEntry uses -- job.job_id is NOT guaranteed
+          // unique per history entry (see selectedHistoryKeys' own doc).
+          li.classList.add("selectable");
+          if (job.image_key) {
+            historyJobsByKey.set(job.image_key, job);
+            historyTileElsByKey.set(job.image_key, li);
+          }
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = jobIds.length > 1 ? `完成（${doneCount}/${jobIds.length}）` : "完成";
           // Thumbnail route only exists for the local path (see
@@ -3797,6 +3972,15 @@
           // click that should stay visible, dimmed, instead of disappearing
           // until the newly-picked one is ready.
           li.addEventListener("click", async () => {
+            if (historySelectMode) {
+              // No image_key -- nothing this tile could be looked back up
+              // by in historyJobsByKey, so there's nothing to actually
+              // select/download; leave the click a no-op rather than
+              // toggling on some other falsy key shared by other such
+              // entries.
+              if (job.image_key) toggleHistorySelection(job.image_key, li);
+              return;
+            }
             if (li.classList.contains("opening")) return;
             li.classList.add("opening");
             const spinner = document.createElement("div");
@@ -3845,6 +4029,7 @@
   }
 
   function closeHistoryDrawer() {
+    exitHistorySelectMode();
     if (els.historyDrawer) els.historyDrawer.classList.remove("drawer-open");
     if (els.historyDrawerBackdrop) {
       els.historyDrawerBackdrop.classList.remove("drawer-open");
@@ -5732,6 +5917,10 @@
   if (els.historyDrawerBackdrop) els.historyDrawerBackdrop.addEventListener("click", closeHistoryDrawer);
   if (els.historyLogoutBtn) els.historyLogoutBtn.addEventListener("click", handleLogout);
   if (els.historyClearAllBtn) els.historyClearAllBtn.addEventListener("click", handleClearAllHistory);
+  if (els.historySelectBtn) els.historySelectBtn.addEventListener("click", enterHistorySelectMode);
+  if (els.historySelectCancelBtn) els.historySelectCancelBtn.addEventListener("click", exitHistorySelectMode);
+  if (els.historyDownloadSelectedBtn) els.historyDownloadSelectedBtn.addEventListener("click", handleDownloadSelectedHistoryClick);
+  if (els.historyDeleteSelectedBtn) els.historyDeleteSelectedBtn.addEventListener("click", handleDeleteSelectedHistoryClick);
   if (els.registerAccountBtn) els.registerAccountBtn.addEventListener("click", openAccountModal);
   if (els.accountModalSkipBtn) els.accountModalSkipBtn.addEventListener("click", closeAccountModal);
   if (els.accountModalCreateBtn) els.accountModalCreateBtn.addEventListener("click", handleCreateAccount);

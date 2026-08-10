@@ -22,6 +22,11 @@ window.PhotoAgentDom = (() => {
     historyList: document.querySelector("#history-list"),
     historyEmpty: document.querySelector("#history-empty"),
     historyClearAllBtn: document.querySelector("#history-clear-all-btn"),
+    historySelectBtn: document.querySelector("#history-select-btn"),
+    historySelectCancelBtn: document.querySelector("#history-select-cancel-btn"),
+    historyDownloadSelectedBtn: document.querySelector("#history-download-selected-btn"),
+    historyDownloadSelectedCount: document.querySelector("#history-download-selected-count"),
+    historyDeleteSelectedBtn: document.querySelector("#history-delete-selected-btn"),
     historyLogoutBtn: document.querySelector("#history-logout-btn"),
     // Admin-only "reported cases" drawer -- #admin-reports-btn only shown
     // once checkAdminAccess (app.js) confirms the current account is an
