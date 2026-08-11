@@ -5110,6 +5110,18 @@
     if (els.settingsModal) els.settingsModal.hidden = true;
   }
 
+  // Advanced settings overlay, opened from within #settings-modal itself --
+  // same open/close shape as openSettingsModal/closeSettingsModal above, just
+  // toggling #advanced-settings-modal's own hidden attribute. Holds the
+  // 眼睛 category (閉眼偵測/眼神對焦 toggles).
+  function openAdvancedSettingsModal() {
+    if (els.advancedSettingsModal) els.advancedSettingsModal.hidden = false;
+  }
+
+  function closeAdvancedSettingsModal() {
+    if (els.advancedSettingsModal) els.advancedSettingsModal.hidden = true;
+  }
+
   // Results/analysis-preview page settings overlay -- same shape as
   // openSettingsModal/closeSettingsModal above, just toggling
   // #ap-settings-modal's own hidden attribute instead. Its 模型/長寬比/生成張數
@@ -6478,6 +6490,13 @@
       if (e.target.dataset.close) closeSettingsModal();
     });
   }
+  if (els.advancedSettingsBtn) els.advancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
+  if (els.advancedSettingsModalClose) els.advancedSettingsModalClose.addEventListener("click", closeAdvancedSettingsModal);
+  if (els.advancedSettingsModal) {
+    els.advancedSettingsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeAdvancedSettingsModal();
+    });
+  }
   if (els.apSettingsBtn) els.apSettingsBtn.addEventListener("click", openApSettingsModal);
   if (els.apSettingsModalClose) els.apSettingsModalClose.addEventListener("click", closeApSettingsModal);
   if (els.apSettingsModal) {
@@ -6518,6 +6537,10 @@
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
+    if (els.advancedSettingsModal && !els.advancedSettingsModal.hidden) {
+      closeAdvancedSettingsModal();
+      return;
+    }
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
