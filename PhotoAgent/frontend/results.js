@@ -1,6 +1,6 @@
 window.PhotoAgentResults = (() => {
   const { els } = window.PhotoAgentDom;
-  const { resolveCropBoxForDisplay } = window.PhotoAgentImageTools;
+  const { resolveCropBoxForDisplay, resolveCropBoxWithReport } = window.PhotoAgentImageTools;
 
   const DEFAULT_OPTION = { value: "default", label: "Auto" };
   const POSE_OPTIONS = [
@@ -87,6 +87,71 @@ window.PhotoAgentResults = (() => {
     debugUiActive = !!active;
     drawAnalysisBoxes();
   }
+
+  // recommended_aspect_ratio on a RESULT is the ratio that result was actually
+  // made at: resolve_output_aspect_ratio (backend) settles it from the user's
+  // 長寬比 choice plus the proposed crop, and writes it onto the analysis
+  // before the edit runs. So rendering a result just reads it.
+  //
+  // previewAspectRatio answers the other question -- what the NEXT run would do
+  // with the choice now selected, without waiting for that run: the ratio, the
+  // crop the edit model would actually be sent, and the report lines quoting
+  // them.
+  //
+  // It mirrors the backend's own decision rather than re-deriving it: "auto"
+  // is whatever analyze_stage measured off the crop rectangle (kept as
+  // auto_aspect_ratio precisely so it survives a "keep original" run), and
+  // "original" is the source frame. resolveCropBoxWithReport then fits the
+  // proposed rectangle to it exactly as resolve_crop_box_with_report does
+  // server-side, so the red box here is the box that will be sent.
+  function aspectRatioForPref(analysis, pref) {
+    if (pref === "original") return "original";
+    // A fixed W:H pick is already the answer; only "auto" has to be looked up.
+    if (pref && pref !== "auto") return pref;
+    return analysis?.auto_aspect_ratio || analysis?.recommended_aspect_ratio || "original";
+  }
+
+  function previewAspectRatio(pref) {
+    if (!lastRender || !pref) return;
+    const { analysis } = lastRender;
+    const label = aspectRatioForPref(analysis, pref);
+    const width = els.originalImg?.naturalWidth;
+    const height = els.originalImg?.naturalHeight;
+    if (!width || !height) return;
+
+    const shown = { ...analysis, recommended_aspect_ratio: label, _aspect_ratio_preview: pref };
+    if (shown.crop_box) shown.crop_box = { ...shown.crop_box, aspect_ratio: label };
+    // The crop the edit model would be handed, recomputed for this ratio --
+    // null when nothing would be cropped, same as the backend's own contract.
+    shown.applied_crop_plan =
+      resolveCropBoxWithReport(shown.crop_box, shown, width, height).cropBox || null;
+
+    renderResult({ ...lastRender, analysis: shown }, { keepView: true });
+  }
+
+  function aspectRatioDisplayValue(value) {
+    const text = String(value || "").trim();
+    return text.toLowerCase() === "original" ? "原圖" : text;
+  }
+
+  // One more recipe-tag pill (debug UI only): the resolved output ratio. Not
+  // quite the ratio finally requested from the edit API -- each provider snaps
+  // it onto its own pixel grid, and that lands in applied_aspect_ratio / the
+  // overlay's "實際送出裁切" box instead. Values
+  // are W:H (width first), so 16:9 is landscape and 9:16 is portrait --
+  // spelled out as 橫/直/方 so it doesn't have to be read off the numbers.
+  function buildAspectRatioTagLabel(analysis) {
+    const value = String(analysis?.recommended_aspect_ratio || "").trim();
+    if (!value) return "";
+    if (value.toLowerCase() === "original") return "比例 原圖";
+    const match = value.match(/(\d+(?:\.\d+)?)\s*:\s*(\d+(?:\.\d+)?)/);
+    if (!match) return `比例 ${value}`;
+    const w = Number(match[1]);
+    const h = Number(match[2]);
+    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return `比例 ${value}`;
+    return `比例 ${value}（${w > h ? "橫" : w < h ? "直" : "方"}）`;
+  }
+
   // fillRecipeAdherenceList's fallback for styleEntries when QA didn't run
   // (or didn't report recipe_adherence.style_items) -- the user's Pose/Angle/
   // Lighting/Size picks (analysis.style_options) were still sent to the edit
@@ -684,9 +749,21 @@ window.PhotoAgentResults = (() => {
     drawAnalysisBoxes();
   }
 
-  function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }) {
+  // Remembered so previewAspectRatio can re-render this same result under a
+  // different aspect-ratio choice without the caller having to hand it all
+  // back. keepView then skips the parts that would fight the user: resetting
+  // Before/After and re-assigning the image src.
+  let lastRender = null;
+
+  function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }, { keepView = false } = {}) {
+    if (!keepView) lastRender = { data, analysis, preset, imageModel, hasOriginal };
     const qa = data.qualityCheck || null;
     const validation = analysis.crop_validation || null;
+    // previewAspectRatio re-rendered this result under an aspect-ratio choice
+    // the photo on screen was NOT made with -- so the ratio, the crop and the
+    // lines quoting them describe the next run, and have to say so.
+    const ratioIsPreview = !!analysis._aspect_ratio_preview
+      && analysis._aspect_ratio_preview !== analysis._aspect_ratio_pref_at_edit;
 
     // hasOriginal is false only for historical playback of a job with no
     // original photo to compare against (see viewHistoryRecord, app.js) --
@@ -701,12 +778,19 @@ window.PhotoAgentResults = (() => {
     // analysis -- switching RUN tabs should redraw the boxes for the run now
     // on screen, not leave the previous one's up.
     boxesAnalysis = analysis;
-    setCompareView(true);
-    els.generatedImg.src = data.image;
-    els.downloadLink.href = data.image;
+    if (!keepView) {
+      setCompareView(true);
+      els.generatedImg.src = data.image;
+      els.downloadLink.href = data.image;
+    } else {
+      drawAnalysisBoxes();
+    }
     els.modelName.textContent = data.model || imageModel;
     if (els.recipeTags) {
-      renderTags(els.recipeTags, buildStyleOptionTagLabels(analysis.style_options));
+      renderTags(els.recipeTags, [
+        ...buildStyleOptionTagLabels(analysis.style_options),
+        debugUiActive ? `${buildAspectRatioTagLabel(analysis)}${ratioIsPreview ? "（預覽）" : ""}` : ""
+      ]);
       fitRecipeTagsRow(els.recipeTags);
     }
     els.resultSummary.textContent = analysis.photo_summary || "已完成影像分析與輸出。";
@@ -759,7 +843,7 @@ window.PhotoAgentResults = (() => {
       analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : "",
       analysis.framing_intent ? sentence("建議取景", analysis.framing_intent) : "",
       analysis.recommended_aspect_ratio
-        ? `建議比例：${analysis.recommended_aspect_ratio}${analysis.aspect_ratio_reason ? `，${stripFieldLabel(analysis.aspect_ratio_reason, ["比例", "建議比例", "比例理由"])}` : ""}。`
+        ? `${ratioIsPreview ? "下次輸出比例（預覽）" : "輸出比例"}：${aspectRatioDisplayValue(analysis.recommended_aspect_ratio)}${!ratioIsPreview && analysis.aspect_ratio_reason ? `，${stripFieldLabel(analysis.aspect_ratio_reason, ["比例", "建議比例", "比例理由"])}` : ""}。`
         : "",
       analysis.layout_method ? sentence("布局方法", analysis.layout_method) : ""
     ]);
@@ -799,14 +883,14 @@ window.PhotoAgentResults = (() => {
       els.originalImg.naturalHeight
     );
     const cropApplied = cropBox
-      ? `已套用裁切${cropBox.aspectRatio ? `，比例 ${cropBox.aspectRatio}` : ""}：x:${cropBox.x.toFixed(2)} y:${cropBox.y.toFixed(2)} w:${cropBox.w.toFixed(2)} h:${cropBox.h.toFixed(2)}。`
+      ? `${ratioIsPreview ? "下次裁切（預覽）" : "已套用裁切"}${cropBox.aspectRatio ? `，比例 ${cropBox.aspectRatio}` : ""}：x:${cropBox.x.toFixed(2)} y:${cropBox.y.toFixed(2)} w:${cropBox.w.toFixed(2)} h:${cropBox.h.toFixed(2)}。`
       : "保留原始構圖。";
     const validationText = validation
       ? `AI 最終選擇：${validation.selected_candidate_label || validation.selected_candidate_id || "最佳候選"}。${validation.reason || ""}`
       : "";
     els.cropText.textContent = joinParts([
       analysis.recommended_aspect_ratio
-        ? `AI 建議輸出比例：${analysis.recommended_aspect_ratio}${analysis.aspect_ratio_reason ? `（${analysis.aspect_ratio_reason}）` : ""}。`
+        ? `${ratioIsPreview ? "下次輸出比例（預覽）" : "輸出比例"}：${aspectRatioDisplayValue(analysis.recommended_aspect_ratio)}${!ratioIsPreview && analysis.aspect_ratio_reason ? `（${analysis.aspect_ratio_reason}）` : ""}。`
         : "",
       analysis.crop_recommendation || "未提供裁切建議。",
       cropApplied,
@@ -945,6 +1029,6 @@ window.PhotoAgentResults = (() => {
   return {
     renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
-    toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi
+    toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi, previewAspectRatio
   };
 })();

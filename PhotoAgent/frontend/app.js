@@ -34,7 +34,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi: setResultsDebugUi } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -392,6 +392,21 @@
     }
   }
 
+  // 長寬比: Auto and 維持原圖比例 are the choices a regular user needs. The fixed
+  // W:H frames are a testbed convenience -- useful for checking how one photo
+  // reframes across shapes, not something to put in front of everyone.
+  const GENERAL_ASPECT_RATIOS = ["auto", "original"];
+
+  function applyAspectRatioOptionLimit(select, isDebug) {
+    if (!select) return;
+    Array.from(select.options).forEach((opt) => {
+      opt.hidden = !isDebug && !GENERAL_ASPECT_RATIOS.includes(opt.value);
+    });
+    if (!isDebug && !GENERAL_ASPECT_RATIOS.includes(select.value)) {
+      select.value = window.PhotoAgentConfig.defaultAspectRatio || GENERAL_ASPECT_RATIOS[0];
+    }
+  }
+
   // Testbed-only UI: some rows/panels are hidden unless the backend was
   // started with `--debug-ui` (or the page URL contains "debug", for quick
   // local checks without a real backend). isDebug=false is the shape a
@@ -408,10 +423,11 @@
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
-    // #boxes-toggle-btn draws the raw analysis geometry over the photo -- a
-    // testbed inspection aid, not something a regular user has any use for.
-    // setResultsDebugUi gates the overlay itself (results.js); this only hides
-    // the button that opens it.
+    // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
+    // the recipe-tags ratio pill reports recommended_aspect_ratio -- both are
+    // testbed inspection aids, not something a regular user has any use for.
+    // setResultsDebugUi gates the overlay + pill themselves (results.js); this
+    // only hides the button that opens the overlay.
     if (els.boxesToggleBtn) els.boxesToggleBtn.hidden = !isDebug;
     setResultsDebugUi(isDebug);
     // Re-running an exported result folder is a testbed workflow; the drop
@@ -443,6 +459,8 @@
     applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.runCountSelect, isDebug);
+    applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebug);
+    applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebug);
   }
 
   if (window.location.href.includes("debug")) {
@@ -640,17 +658,20 @@
       applyModelQualityChange(els.apImageModelQualitySelect.value));
   }
 
-  // Aspect-ratio preference -- "auto" (default) leaves recommended_aspect_ratio
-  // entirely up to the analysis step; "original" tells the analysis model (at
-  // analyze time, via build_analysis_instruction on the backend) and the
-  // edit-model API (size/imageConfig.aspectRatio) to keep the source photo's
-  // own proportions. Upload-page only, read once when analysis starts
-  // (startSubmit/startSubmitBatch) and carried unchanged into singleFlowState/
-  // batchSettings for every later edit -- unlike model/quality/run-count,
-  // this has no analyze-preview counterpart to mirror, since changing it
-  // after analysis already ran would silently desync from what the analysis
-  // step was actually told (see build_edit_prompt's
-  // _aspect_ratio_pref_at_analysis handling on the backend).
+  // Aspect-ratio preference -- "auto" (default) takes the output ratio from
+  // the framing the analysis proposed (measured off its crop rectangle, not
+  // picked by the analysis model); "original" keeps the source photo's own
+  // proportions, fitting that same rectangle into them; a fixed W:H forces
+  // that frame and fits the rectangle into it the same way. Offered on the
+  // upload screen (#image-aspect-ratio) and, mirrored the same way
+  // model/quality is, on the analysis-preview screen (#ap-image-aspect-ratio).
+  //
+  // Changing it never re-analyzes: the analysis is ratio-neutral (it is not
+  // told what the user picked) and the backend settles the ratio per edit in
+  // resolve_output_aspect_ratio. That matters because a second analysis of the
+  // same photo comes back with different subjects, different protected regions
+  // and sometimes the opposite exposure diagnosis -- so re-analyzing to change
+  // a ratio silently changed the retouch too.
   function populateAspectRatioSelect(select) {
     if (!select) return;
     select.innerHTML = "";
@@ -663,8 +684,50 @@
     select.value = window.PhotoAgentConfig.defaultAspectRatio || select.value;
   }
   populateAspectRatioSelect(els.imageAspectRatioSelect);
+  populateAspectRatioSelect(els.apImageAspectRatioSelect);
+  // The options only exist now, after applyDebugUiVisibility already ran, so
+  // apply the gate here too rather than waiting for the next debug-mode change.
+  applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebugUiActive);
+  applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebugUiActive);
   wireOptionPicker(els.imageAspectRatioPicker, els.imageAspectRatioSelect);
+  wireOptionPicker(els.apImageAspectRatioPicker, els.apImageAspectRatioSelect);
   wireOptionPicker(els.imageRunCountPicker, els.imageRunCountSelect);
+
+  // Same mirroring contract as applyModelQualityChange above: keep both
+  // selects and both pickers' visible labels in sync, and push the live value
+  // into whichever flow state is active so finishSingleFlow/editBatchItem
+  // (which read singleFlowState/batchSettings at call time) pick up a change
+  // made on the results screen with no other wiring.
+  function findAspectRatioOption(value) {
+    const options = window.PhotoAgentConfig.aspectRatioOptions || [];
+    return options.find((o) => o.value === value) || options[0] || null;
+  }
+
+  function applyAspectRatioChange(value) {
+    const opt = findAspectRatioOption(value);
+    if (!opt) return;
+    if (els.imageAspectRatioSelect) els.imageAspectRatioSelect.value = opt.value;
+    if (els.apImageAspectRatioSelect) els.apImageAspectRatioSelect.value = opt.value;
+    [els.imageAspectRatioPicker, els.apImageAspectRatioPicker].forEach((picker) => {
+      const valueEl = picker?.querySelector(".ap-style-value");
+      if (valueEl) valueEl.textContent = opt.label;
+    });
+    if (singleFlowState) singleFlowState.aspectRatio = opt.value;
+    if (batchSettings) batchSettings.aspectRatio = opt.value;
+    // Re-fit what's on screen for the newly picked ratio: the crop that would
+    // be sent to the edit model, and the report lines quoting it. The result
+    // photo itself can't change without a re-run, so the preview says so.
+    previewAspectRatio(opt.value);
+  }
+
+  if (els.imageAspectRatioSelect) {
+    els.imageAspectRatioSelect.addEventListener("change", () =>
+      applyAspectRatioChange(els.imageAspectRatioSelect.value));
+  }
+  if (els.apImageAspectRatioSelect) {
+    els.apImageAspectRatioSelect.addEventListener("change", () =>
+      applyAspectRatioChange(els.apImageAspectRatioSelect.value));
+  }
 
   // 生成張數 (single-image RUN count) can now be preset on the upload screen,
   // ahead of analysis -- keep it and the analysis-preview's own #ap-run-count
@@ -5049,7 +5112,10 @@
 
   // Results/analysis-preview page settings overlay -- same shape as
   // openSettingsModal/closeSettingsModal above, just toggling
-  // #ap-settings-modal's own hidden attribute instead.
+  // #ap-settings-modal's own hidden attribute instead. Its 模型/長寬比/生成張數
+  // pickers mirror the upload page's (applyModelQualityChange/
+  // applyAspectRatioChange/applyRunCountChange), so a change made here applies
+  // to the next edit without re-analyzing.
   function openApSettingsModal() {
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
@@ -6199,6 +6265,7 @@
     // Mirrors the picks into both selects (and their picker labels) so the
     // review panel opens showing the model/長寬比 this folder was produced with.
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
+    applyAspectRatioChange(settings.aspectRatio);
     singleFlowState = {
       analysis,
       analyzeJobId: null,            // no prior job -> rerunJob, not continueJob
@@ -6245,6 +6312,7 @@
       path: settings.path
     };
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
+    applyAspectRatioChange(settings.aspectRatio);
 
     batchRecords = [];
     for (const image of images) {

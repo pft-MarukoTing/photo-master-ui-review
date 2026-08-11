@@ -473,18 +473,21 @@
       top: auto;
       bottom: calc(100% + 8px);
     }
-    /* 生成張數 (run count) offers up to 20 options -- unlike every other
-       picker here (a handful of options at most), that list alone is tall
-       enough to run past the viewport/window regardless of open-upward.
-       Cap it to about 4 rows (.step-cb-label's 16.25px/1.5 line-height ~=
-       24px, .step-inline-list's own 10px gap between rows: 4*24 + 3*10 =
-       126px, rounded up) and let it scroll internally instead of resizing
-       the whole picker panel around however many options happen to exist.
-       Scoped to just these two run-count pickers (upload page + analysis-
-       preview page) -- every other .ap-style-panel list stays exactly as
-       tall as its content, unconstrained. */
+    /* 生成張數 (up to 20 options) and 長寬比 (Auto/原圖 plus every fixed W:H)
+       -- unlike every other picker here (a handful of options at most),
+       these lists are tall enough to run past the viewport/window
+       regardless of open-upward. Cap them to about 4 rows
+       (.step-cb-label's 16.25px/1.5 line-height ~= 24px,
+       .step-inline-list's own 10px gap between rows: 4*24 + 3*10 = 126px,
+       rounded up) and let them scroll internally instead of resizing the
+       whole picker panel around however many options happen to exist.
+       Scoped to just these pickers (upload page + analysis-preview page) --
+       every other .ap-style-panel list stays exactly as tall as its
+       content, unconstrained. */
     #image-run-count-picker .step-inline-list,
-    #ap-run-count-picker .step-inline-list {
+    #ap-run-count-picker .step-inline-list,
+    #image-aspect-ratio-picker .step-inline-list,
+    #ap-image-aspect-ratio-picker .step-inline-list {
       max-height: 150px;
       overflow-y: auto;
     }
@@ -3694,11 +3697,11 @@
 <!-- Results/analysis-preview page settings overlay: opened by
      #ap-settings-btn (see openApSettingsModal/closeApSettingsModal in
      app.js) -- same backdrop+box+close pattern as #settings-modal above.
-     Holds the 模型/生成張數 pickers that used to sit inline in
-     #ap-options-card-inline -- no 長寬比 entry here, since aspect ratio is
-     only ever set on the upload page and carried forward unchanged once
-     analysis has run (see build_edit_prompt's _aspect_ratio_pref_at_analysis
-     handling on the backend). -->
+     Holds the 模型/長寬比/生成張數 pickers that used to sit inline in
+     #ap-options-card-inline. 長寬比 mirrors the upload page's own picker
+     (applyAspectRatioChange in app.js) and applies to the edit only -- the
+     analysis is ratio-neutral and is never re-run for it; the backend settles
+     the output ratio per edit in resolve_output_aspect_ratio. -->
 <div id="ap-settings-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-settings-modal-title">
@@ -3723,6 +3726,24 @@
             <ul class="step-inline-list"></ul>
           </div>
           <select id="ap-image-model-quality" class="quality-select model-quality-select" hidden></select>
+        </details>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">長寬比</span>
+        <details class="ap-style-item" name="ap-result-option-picker" id="ap-image-aspect-ratio-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="ap-image-aspect-ratio" class="quality-select aspect-ratio-select" hidden></select>
         </details>
       </div>
       <div id="ap-run-count-wrap" hidden>

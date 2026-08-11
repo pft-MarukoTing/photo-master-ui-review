@@ -115,6 +115,8 @@ window.PhotoAgentDom = (() => {
     imageRunCountPicker: document.querySelector("#image-run-count-picker"),
     apImageModelQualitySelect: document.querySelector("#ap-image-model-quality"),
     apImageModelQualityPicker: document.querySelector("#ap-image-model-quality-picker"),
+    apImageAspectRatioSelect: document.querySelector("#ap-image-aspect-ratio"),
+    apImageAspectRatioPicker: document.querySelector("#ap-image-aspect-ratio-picker"),
     apRunCountWrap: document.querySelector("#ap-run-count-wrap"),
     apRunCountSelect: document.querySelector("#ap-run-count"),
     apRunCountPicker: document.querySelector("#ap-run-count-picker"),

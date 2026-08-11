@@ -28,15 +28,28 @@ window.PhotoAgentConfig = {
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" }
   ],
   defaultImageModelQuality: "gpt-image-2:low",
-  // Two user-facing aspect-ratio choices (upload page + analyze-preview,
-  // above 生成張數) -- "auto" lets the analyze step decide the output ratio
-  // (derived on the backend from the analysis's own crop_box geometry, not
-  // picked by the analysis model); "original" tells the
-  // analysis model (at analyze time) and the edit-model API's own
-  // size/aspectRatio parameter to keep the source photo's own proportions.
+  // User-facing aspect-ratio choices (upload page + analyze-preview, above
+  // 生成張數) -- "auto" takes the output ratio from the framing the analysis
+  // proposed (measured off its crop rectangle on the backend, not picked by
+  // the analysis model); "original" keeps the source photo's own proportions;
+  // a W:H value forces that frame regardless of what the crop measures. All
+  // are applied at edit time, so switching between them never re-runs the
+  // analysis (see resolve_output_aspect_ratio). The W:H values must stay
+  // within param_validation.py's VALID_ASPECT_RATIOS or the job is rejected.
+  // Grouped 方 → 橫 (widening) → 直 (heightening) rather than in the backend's
+  // own list order, so the picker reads as a shape choice.
   aspectRatioOptions: [
     { value: "auto", label: "Auto" },
-    { value: "original", label: "維持原圖比例" }
+    { value: "original", label: "維持原圖比例" },
+    { value: "1:1", label: "1:1（方形）" },
+    { value: "5:4", label: "5:4（橫）" },
+    { value: "4:3", label: "4:3（橫）" },
+    { value: "3:2", label: "3:2（橫）" },
+    { value: "16:9", label: "16:9（橫）" },
+    { value: "4:5", label: "4:5（直）" },
+    { value: "3:4", label: "3:4（直）" },
+    { value: "2:3", label: "2:3（直）" },
+    { value: "9:16", label: "9:16（直）" }
   ],
   defaultAspectRatio: "auto",
   presets: {
