@@ -30,10 +30,11 @@ python detect_and_crop.py \
     --output-control-1 "${OUTPUT_DIR}/sam3_cropped_control_1" \
     --output-control-2 "${OUTPUT_DIR}/sam3_cropped_control_2" \
     --output-target "${OUTPUT_DIR}/sam3_cropped_target" \
+    --output-crop-info "${OUTPUT_DIR}/sam3_crop_info" \
     --checkpoint "${CHECKPOINT}" \
     --text-prompt hand --confidence-threshold 0.2 --max-detections 2 \
     --scale 1.2 --min-area-ratio 0.005 \
     --limit "${LIMIT}"
 
 echo ""
-echo "Output written to ${OUTPUT_DIR}/ (sam3_cropped_control_1/, sam3_cropped_control_2/, sam3_cropped_target/)"
+echo "Output written to ${OUTPUT_DIR}/ (sam3_cropped_control_1/, sam3_cropped_control_2/, sam3_cropped_target/, sam3_crop_info/)"

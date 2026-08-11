@@ -3,7 +3,7 @@ Plain PIL port of the square-crop algorithm in
 custom_nodes/ComfyUI_AINail_utils/nodes/crop_square_by_boxes.py, so it can run
 outside ComfyUI/torch. Method names and behavior mirror that node 1:1.
 """
-from PIL import Image
+from PIL import Image, ImageDraw
 
 
 def pad_to_square(pil_image, output_size=None):
@@ -228,3 +228,37 @@ def apply_crop(pil_image, entry, output_size=None):
         canvas = canvas.resize((output_size, output_size), Image.LANCZOS)
 
     return canvas
+
+
+def compute_content_rect(entry, output_size=None):
+    """Return (x1, y1, x2, y2) of the real (non-black-padding) content area within
+    apply_crop's output, in that output's own pixel coordinates -- i.e. scaled to
+    output_size if apply_crop was called with one."""
+    size = entry["size"]
+    content_w = entry["src_x2"] - entry["src_x1"]
+    content_h = entry["src_y2"] - entry["src_y1"]
+    x1, y1 = entry["pad_left"], entry["pad_top"]
+    x2, y2 = x1 + content_w, y1 + content_h
+
+    if output_size is not None and output_size != size:
+        s = output_size / size
+        x1, y1, x2, y2 = round(x1 * s), round(y1 * s), round(x2 * s), round(y2 * s)
+
+    return x1, y1, x2, y2
+
+
+def restore_padding(original, inpainted, entry, output_size=None):
+    """Paste original's black-padding pixels back over an inpainted version of the same
+    apply_crop output, everywhere outside the content rect from compute_content_rect.
+    Restores those pixels exactly (rather than re-blackening), since a resized canvas's
+    content/padding boundary is anti-aliased, not a hard edge. Both images must be the
+    same size (apply_crop's output for the same entry/output_size)."""
+    if original.size != inpainted.size:
+        raise ValueError(f"Size mismatch: original is {original.size}, inpainted is {inpainted.size}")
+
+    x1, y1, x2, y2 = compute_content_rect(entry, output_size)
+
+    mask = Image.new("L", inpainted.size, 255)
+    ImageDraw.Draw(mask).rectangle([x1, y1, x2 - 1, y2 - 1], fill=0)
+
+    return Image.composite(original, inpainted, mask)

@@ -7,6 +7,7 @@ the same way, then saved under the same per-crop filename so training pair filen
 line up.
 """
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -46,6 +47,7 @@ def main():
     parser.add_argument("--output-control-1", required=True)
     parser.add_argument("--output-control-2", required=True)
     parser.add_argument("--output-target", required=True)
+    parser.add_argument("--output-crop-info", required=True, help="Dir for per-crop crop_info JSON files, used later to restore black padding after inpainting overwrites it (see restore_padding.py)")
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--bpe-path", default=None)
     parser.add_argument("--text-prompt", default="hand")
@@ -63,6 +65,7 @@ def main():
     Path(args.output_control_1).mkdir(parents=True, exist_ok=True)
     Path(args.output_control_2).mkdir(parents=True, exist_ok=True)
     Path(args.output_target).mkdir(parents=True, exist_ok=True)
+    Path(args.output_crop_info).mkdir(parents=True, exist_ok=True)
 
     pairs = find_matching_basenames(args.control_1_dir, args.control_2_dir, args.target_dir)
     if not pairs:
@@ -113,6 +116,10 @@ def main():
             apply_crop(target_img, entry, output_size).save(os.path.join(args.output_target, f"{basename}_{i}.jpg"), quality=95)
             apply_crop(control_1_img, entry, output_size).save(os.path.join(args.output_control_1, f"{basename}_{i}.jpg"), quality=95)
             control_2_padded.save(os.path.join(args.output_control_2, f"{basename}_{i}.jpg"), quality=95)
+
+            with open(os.path.join(args.output_crop_info, f"{basename}_{i}.json"), "w") as f:
+                json.dump({"crop_info": entry, "output_size": output_size}, f)
+
             n_crops += 1
 
         print(f"{basename}: {len(crop_info)} crop(s)")
