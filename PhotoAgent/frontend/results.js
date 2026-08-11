@@ -79,6 +79,14 @@ window.PhotoAgentResults = (() => {
       .filter(Boolean);
   }
 
+  // Set by applyDebugUiVisibility (app.js). Both inspection aids on the result
+  // canvas -- the ratio pill below and the #analysis-boxes overlay -- are
+  // testbed-only; a regular user's result photo shouldn't carry either.
+  let debugUiActive = false;
+  function setDebugUi(active) {
+    debugUiActive = !!active;
+    drawAnalysisBoxes();
+  }
   // fillRecipeAdherenceList's fallback for styleEntries when QA didn't run
   // (or didn't report recipe_adherence.style_items) -- the user's Pose/Angle/
   // Lighting/Size picks (analysis.style_options) were still sent to the edit
@@ -545,6 +553,126 @@ window.PhotoAgentResults = (() => {
       .map(([key, value]) => `${value === true ? "通過" : value === false ? "注意" : "未定"}：${labels[key] || key}`);
   }
 
+  // ── Analysis box overlay (#boxes-toggle-btn, debug UI) ────────────────────
+  // roi_box / subject_extent_box / crop_box are normalized against the
+  // ORIGINAL image, so they're only meaningful drawn over the Before view --
+  // the generated image has already been cropped/reframed and the same
+  // coordinates no longer point at the same content. Hence the overlay hides
+  // itself whenever the canvas is showing the result.
+  //
+  // applied_crop_plan (set by pipeline.finish_stage from the edit client) is
+  // the crop the edit model was actually given, which can differ from the
+  // analysis's own crop_box: framing size close/closer rewrites it, ROI
+  // protection can grow it, the aspect fit moves it, and a disabled crop_box
+  // still yields a full-frame crop when a non-original output ratio is
+  // requested. Drawn alongside so the gap between proposal and request is
+  // visible.
+  const ANALYSIS_BOX_SPECS = [
+    { field: "roi_box", color: "#22c55e", label: "ROI", corner: "tl" },
+    { field: "subject_extent_box", color: "#38bdf8", label: "主體範圍", corner: "tr" },
+    { field: "crop_box", color: "#f59e0b", label: "crop_box（分析建議）", corner: "bl", dashed: true },
+    { field: "applied_crop_plan", color: "#f43f5e", label: "實際送出裁切", corner: "br" }
+  ];
+
+  let boxesAnalysis = null;
+  let boxesVisible = false;
+
+  function analysisBoxList(analysis) {
+    if (!analysis) return [];
+    return ANALYSIS_BOX_SPECS.map((spec) => {
+      const box = analysis[spec.field];
+      if (!box) return null;
+      // Same box, different promise: after a preview it is what WILL be sent.
+      const label = (spec.field === "applied_crop_plan" && analysis._aspect_ratio_preview
+        && analysis._aspect_ratio_preview !== analysis._aspect_ratio_pref_at_edit)
+        ? "將送出裁切（預覽）" : spec.label;
+      // crop_box carries its own on/off switch; an analysis that recommends no
+      // reframe still ships the field with enabled:false.
+      if (spec.field === "crop_box" && box.enabled !== true) return null;
+      const x = Number(box.x);
+      const y = Number(box.y);
+      const w = Number(box.w);
+      const h = Number(box.h);
+      if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
+      return {
+        ...spec,
+        label,
+        x, y, w, h,
+        ratio: box.aspect_ratio || box.aspectRatio || ""
+      };
+    }).filter(Boolean);
+  }
+
+  function drawAnalysisBoxes() {
+    const overlay = els.analysisBoxes;
+    const legend = els.analysisBoxesLegend;
+    if (!overlay) return;
+
+    const showingGenerated = !!els.compareCard?.classList.contains("showing-generated");
+    const boxes = debugUiActive && boxesVisible && !showingGenerated
+      ? analysisBoxList(boxesAnalysis)
+      : [];
+    overlay.hidden = boxes.length === 0;
+    if (legend) legend.hidden = boxes.length === 0;
+    if (!boxes.length) {
+      overlay.innerHTML = "";
+      if (legend) legend.innerHTML = "";
+      return;
+    }
+
+    // The photo is centered inside a fixed-height .photo-frame at its own
+    // aspect ratio (no object-fit stretch), so the overlay has to be sized to
+    // the image's rendered rect rather than the frame's -- then every box is
+    // just a percentage of that rect.
+    const frame = els.originalImg?.parentElement;
+    const frameRect = frame?.getBoundingClientRect();
+    const imgRect = els.originalImg?.getBoundingClientRect();
+    if (!frameRect || !imgRect || !imgRect.width || !imgRect.height) return;
+    overlay.style.left = `${imgRect.left - frameRect.left}px`;
+    overlay.style.top = `${imgRect.top - frameRect.top}px`;
+    overlay.style.width = `${imgRect.width}px`;
+    overlay.style.height = `${imgRect.height}px`;
+
+    overlay.innerHTML = "";
+    boxes.forEach((box) => {
+      const el = document.createElement("div");
+      el.className = `ab-box${box.dashed ? " is-dashed" : ""}`;
+      el.style.borderColor = box.color;
+      el.style.left = `${box.x * 100}%`;
+      el.style.top = `${box.y * 100}%`;
+      el.style.width = `${box.w * 100}%`;
+      el.style.height = `${box.h * 100}%`;
+      const tag = document.createElement("span");
+      tag.className = `ab-box-label ab-${box.corner}`;
+      tag.style.background = box.color;
+      tag.textContent = box.label;
+      el.appendChild(tag);
+      overlay.appendChild(el);
+    });
+
+    if (!legend) return;
+    legend.innerHTML = "";
+    boxes.forEach((box) => {
+      const row = document.createElement("div");
+      row.className = "ab-legend-item";
+      const swatch = document.createElement("span");
+      swatch.className = `ab-swatch${box.dashed ? " is-dashed" : ""}`;
+      swatch.style.borderColor = box.color;
+      const text = document.createElement("span");
+      const coords = `x ${box.x.toFixed(3)} · y ${box.y.toFixed(3)} · w ${box.w.toFixed(3)} · h ${box.h.toFixed(3)}`;
+      text.textContent = `${box.label}　${coords}${box.ratio ? `　(${box.ratio})` : ""}`;
+      row.append(swatch, text);
+      legend.appendChild(row);
+    });
+  }
+
+  // Returns the new visibility so the caller can reflect it on the button.
+  function toggleAnalysisBoxes() {
+    boxesVisible = !boxesVisible;
+    drawAnalysisBoxes();
+    return boxesVisible;
+  }
+
   // Before/After now share one canvas, switched via #compare-toggle-btn --
   // reset to showing the result each time a (re)render brings in a fresh
   // image, so switching photos/runs doesn't leave a stale "original" view up.
@@ -553,6 +681,7 @@ window.PhotoAgentResults = (() => {
     const label = showGenerated ? "查看原始照片" : "查看輸出結果";
     if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
     if (els.compareHint) els.compareHint.textContent = showGenerated ? "After" : "Before";
+    drawAnalysisBoxes();
   }
 
   function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }) {
@@ -568,6 +697,10 @@ window.PhotoAgentResults = (() => {
     if (els.compareToggleBtn) els.compareToggleBtn.hidden = !hasOriginal;
     if (els.compareFullscreenBtn) els.compareFullscreenBtn.hidden = !hasOriginal;
 
+    // Keep whatever the overlay toggle was set to, but bind it to this run's
+    // analysis -- switching RUN tabs should redraw the boxes for the run now
+    // on screen, not leave the previous one's up.
+    boxesAnalysis = analysis;
     setCompareView(true);
     els.generatedImg.src = data.image;
     els.downloadLink.href = data.image;
@@ -809,5 +942,9 @@ window.PhotoAgentResults = (() => {
     [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
   }
 
-  return { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags };
+  return {
+    renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger,
+    updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
+    toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi
+  };
 })();

@@ -33,7 +33,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi: setResultsDebugUi } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -407,6 +407,12 @@
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
+    // #boxes-toggle-btn draws the raw analysis geometry over the photo -- a
+    // testbed inspection aid, not something a regular user has any use for.
+    // setResultsDebugUi gates the overlay itself (results.js); this only hides
+    // the button that opens it.
+    if (els.boxesToggleBtn) els.boxesToggleBtn.hidden = !isDebug;
+    setResultsDebugUi(isDebug);
     if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
     // #analysis-preview's own remaining content (ap-summary-row's subject
     // tags, the 取消 cancel button, 分析結果 detail toggle above) is
@@ -6026,6 +6032,21 @@
       if (e.target.dataset.close) closeReportModal();
     });
   }
+  if (els.boxesToggleBtn) {
+    // The boxes are in original-image coordinates, so turning them on also
+    // flips the canvas back to Before -- drawing them over the result would
+    // point at the wrong content (see drawAnalysisBoxes in results.js).
+    els.boxesToggleBtn.addEventListener("click", () => {
+      const visible = toggleAnalysisBoxes();
+      if (visible) setCompareView(false);
+      els.boxesToggleBtn.classList.toggle("is-active", visible);
+      els.boxesToggleBtn.setAttribute("aria-label", visible ? "隱藏分析框" : "顯示分析框");
+    });
+  }
+  // The overlay is positioned against the photo's rendered rect, which moves
+  // whenever the image or the layout changes.
+  if (els.originalImg) els.originalImg.addEventListener("load", () => drawAnalysisBoxes());
+  window.addEventListener("resize", () => drawAnalysisBoxes());
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadCurrentBtn) els.downloadCurrentBtn.addEventListener("click", handleDownloadCurrentBtnClick);
   if (els.downloadAllRunsBtn) els.downloadAllRunsBtn.addEventListener("click", handleDownloadAllRunsBtnClick);

@@ -1105,6 +1105,11 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   transform: translateY(-1px);
 }
 .canvas-btn:active { transform: scale(.9); }
+/* Sticky "on" look for toggle buttons that stay engaged (#boxes-toggle-btn). */
+.canvas-btn.is-active {
+  background: rgba(168,85,247,.55);
+  border-color: rgba(168,85,247,.7);
+}
 .canvas-btn:disabled {
   opacity: .35;
   cursor: not-allowed;
@@ -1336,6 +1341,81 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   min-height: 0;
   height: auto;
 }
+
+/* Analysis box overlay (#boxes-toggle-btn, debug UI only): roi_box /
+   subject_extent_box / crop_box / the crop actually sent to the edit model,
+   drawn over the ORIGINAL photo. Sized to the image's rendered rect (not the
+   frame's) by drawAnalysisBoxes, so each box is a plain percentage inside it.
+   .photo-frame's overflow:hidden clips anything reaching past the photo. */
+.analysis-boxes {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+}
+.ab-box {
+  position: absolute;
+  border: 2px solid;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.45), inset 0 0 0 1px rgba(0,0,0,.25);
+}
+.ab-box.is-dashed { border-style: dashed; }
+/* Labels sit INSIDE their box (a box flush with the top edge would otherwise
+   have its label clipped away), one per corner so overlapping boxes -- the
+   proposed and the actually-sent crop usually nearly coincide -- don't stack
+   their labels on top of each other. */
+.ab-box-label {
+  position: absolute;
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,.45);
+}
+.ab-box-label.ab-tl { top: 0; left: 0; }
+.ab-box-label.ab-tr { top: 0; right: 0; }
+.ab-box-label.ab-bl { bottom: 0; left: 0; }
+.ab-box-label.ab-br { bottom: 0; right: 0; }
+
+.analysis-boxes-legend {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  /* Below .canvas-loading's 6 so the re-processing dim covers it too. */
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: calc(100% - 20px);
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(20,20,24,.72);
+  border: 1px solid rgba(255,255,255,.12);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 10px 24px rgba(0,0,0,.35);
+}
+.ab-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.ab-swatch {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border: 2px solid;
+  border-radius: 2px;
+}
+.ab-swatch.is-dashed { border-style: dashed; }
+
 /* Verdict + Summary row */
 .verdict-summary-row {
   display: grid;

@@ -2993,6 +2993,12 @@
                 <div id="compare-hint" class="compare-hint">After</div>
                 <div id="run-count-label" class="run-count-label" hidden></div>
                 <div class="canvas-actions">
+                  <button id="boxes-toggle-btn" class="canvas-btn" type="button" aria-label="顯示分析框" title="顯示 ROI / 主體範圍 / 裁切框" hidden>
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                      <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="2" stroke-dasharray="4 3"/>
+                      <rect x="8" y="9" width="8" height="6" rx="1" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                  </button>
                   <button id="compare-toggle-btn" class="canvas-btn" type="button" title="compare" aria-label="查看原始照片">
                     <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
                       <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2"/>
@@ -3036,6 +3042,12 @@
               <div class="photo-frame">
                 <img id="original-img" alt="original" class="compare-img compare-img-original">
                 <img id="generated-img" alt="generated result" class="compare-img compare-img-generated">
+                <!-- Debug-only overlay: analysis roi_box / subject_extent_box /
+                     crop_box (+ the crop actually sent to the edit model)
+                     drawn over the ORIGINAL photo, since those coordinates are
+                     normalized against it. Positioned/filled by
+                     drawAnalysisBoxes in results.js. -->
+                <div id="analysis-boxes" class="analysis-boxes" aria-hidden="true" hidden></div>
               </div>
               <!-- Shown while switching RUN/record/history entry (see
                    app.js's selectAdjacentRun/selectBatchRecord/the history-
@@ -3069,6 +3081,9 @@
                    populated with non-default picks (renderResult), and only
                    visible while showing the generated image, not Original. -->
               <div id="recipe-tags" class="recipe-tags"></div>
+              <!-- Colour key + numeric coords for #analysis-boxes above.
+                   Bottom-right so it doesn't sit on .recipe-tags. -->
+              <div id="analysis-boxes-legend" class="analysis-boxes-legend" hidden></div>
             </div>
             <!-- Shown while re-processing (either flow) runs in the
                  background, since staying on this page means the upload
