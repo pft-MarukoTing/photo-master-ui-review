@@ -125,6 +125,7 @@ window.PhotoAgentDom = (() => {
     compareHint: document.querySelector("#compare-hint"),
     compareFullscreenBtn: document.querySelector("#compare-fullscreen-btn"),
     compareFullscreenBackdrop: document.querySelector("#compare-fullscreen-backdrop"),
+    dzFolderHint: document.querySelector("#dz-folder-hint"),
     boxesToggleBtn: document.querySelector("#boxes-toggle-btn"),
     analysisBoxes: document.querySelector("#analysis-boxes"),
     analysisBoxesLegend: document.querySelector("#analysis-boxes-legend"),

@@ -741,6 +741,57 @@ def continue_job(job_id):
     return jsonify({"job_id": new_job_id}), 202
 
 
+@api_bp.post("/rerun")
+def rerun():
+    """/continue for an analysis that has no prior job behind it.
+
+    Same stage="finish" job as /continue, but the photo is uploaded with the
+    request instead of being reused from an earlier job's srcKeys. That is the
+    only thing /continue cannot do, and the only thing standing between an
+    exported result folder (source photo + run_N/result.json, the debug-UI zip
+    layout) and re-running its edit: everything downstream -- steps 3-6,
+    including a fresh resolve_crop_box_with_report off the supplied analysis's
+    crop_box -- is already identical to a normal re-run.
+
+    The analysis is passed through untouched, so the run reproduces the
+    conditions the folder recorded; only code changes since then move the
+    result.
+    """
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        return jsonify({"error": "image file is required"}), 400
+
+    analysis_raw = request.form.get("analysis")
+    if not analysis_raw:
+        return jsonify({"error": "analysis (an earlier run's result.json) is required"}), 400
+    try:
+        analysis = json.loads(analysis_raw)
+    except json.JSONDecodeError:
+        return jsonify({"error": "analysis must be valid JSON"}), 400
+    if not isinstance(analysis, dict) or "subject_category" not in analysis:
+        return jsonify({"error": "analysis must be the analysis object from a result.json"}), 400
+
+    params, error = _parse_and_validate_params(request.form)
+    if error:
+        return jsonify({"error": error}), 400
+    params["stage"] = "finish"
+    params["analysis"] = analysis
+
+    engine_params = get_engine_params_template()
+    engine_params["acts"][0]["params"] = params
+    job_id = enqueue(engine_params, src_content=[image.read()])
+    # The photo rides along with this request, so enqueue() resolved srcKeys'
+    # "{msg_id}" placeholder into a fresh S3 path of its own -- same as /submit,
+    # and unlike /continue, which reuses the prior job's key and therefore
+    # overwrites that chain's existing entry. A rerun is a new upload, so it
+    # gets its own history entry rather than folding into the one the exported
+    # folder's original run recorded (a different session entirely, quite
+    # possibly a different user's).
+    action_id = request.form.get("action_id") or job_id
+    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], action_id, params=params)
+    return jsonify({"job_id": job_id}), 202
+
+
 @api_bp.post("/aipoc/analyze")
 def aipoc_analyze():
     """Local preview analysis for the AIPoC path.
@@ -785,7 +836,6 @@ def aipoc_analyze_batch():
     if error:
         return jsonify({"error": error}), 400
 
-    aspect_ratio = params.get("aspect_ratio", "auto")
     # Read every file's bytes up front -- request.files' underlying streams
     # belong to this request context and aren't safe to touch from the
     # worker threads below. Each analyze_stage() call is a real OpenAI vision

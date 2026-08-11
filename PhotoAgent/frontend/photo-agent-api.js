@@ -299,6 +299,37 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
+  // continueJob's sibling for an imported result folder: same stage="finish"
+  // job, but the photo rides along with the request because there is no
+  // earlier job holding it.
+  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user, actionId }) {
+    const form = new FormData();
+    form.append("image", file, file.name || "photo.jpg");
+    form.append("analysis", JSON.stringify(analysis));
+    form.append("preset", preset);
+    form.append("image_quality", imageQuality);
+    form.append("image_model", imageModel || "gpt-image-2");
+    form.append("aspect_ratio", aspectRatio || "auto");
+    form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    form.append("run_qa", runQa === false ? "false" : "true");
+    if (userPrompt) form.append("user_prompt", userPrompt);
+    // Same history bookkeeping continueJob does -- a rerun is a real edit and
+    // belongs in the user's history like any other, and actionId groups the N
+    // parallel RUNs of one runCount>1 click into a single entry.
+    form.append("user", user || "");
+    form.append("action_id", actionId || "");
+
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/rerun`, {
+      method: "POST",
+      body: form
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `送出重跑失敗：HTTP ${response.status}`);
+    }
+    return data.job_id;
+  }
+
   async function analyzeAipoc({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, userPrompt }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
@@ -571,6 +602,7 @@ window.PhotoAgentApi = (() => {
     analyzeJobBatch,
     getAnalyzeResult,
     continueJob,
+    rerunJob,
     analyzeAipoc,
     analyzeAipocBatch,
     resolveUserId,

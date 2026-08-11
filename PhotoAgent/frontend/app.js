@@ -19,6 +19,7 @@
     analyzeJobBatch,
     getAnalyzeResult,
     continueJob,
+    rerunJob,
     analyzeAipoc,
     analyzeAipocBatch,
     createAccount,
@@ -413,6 +414,10 @@
     // the button that opens it.
     if (els.boxesToggleBtn) els.boxesToggleBtn.hidden = !isDebug;
     setResultsDebugUi(isDebug);
+    // Re-running an exported result folder is a testbed workflow; the drop
+    // handler is gated on isDebugUiActive too, so this hint and the behavior
+    // it advertises appear together.
+    if (els.dzFolderHint) els.dzFolderHint.hidden = !isDebug;
     if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
     // #analysis-preview's own remaining content (ap-summary-row's subject
     // tags, the 取消 cancel button, 分析結果 detail toggle above) is
@@ -2604,7 +2609,7 @@
       if (processingPath === "aipoc") {
         finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser() });
+        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser() });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -2714,6 +2719,16 @@
   // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --
   // mirrors editBatchItem, but against selectedFile/singleFlowState instead
   // of a batch record.
+  // Local-path stage 2. A normal run has an analyze job holding the uploaded
+  // photo, so /continue can reuse it; an imported result folder has no job
+  // behind it, so /rerun re-uploads the photo alongside the same analysis.
+  // Everything the backend does from there is identical.
+  function submitFinishJob(analyzeJobId, file, payload) {
+    return analyzeJobId
+      ? continueJob(analyzeJobId, payload)
+      : rerunJob({ file, ...payload });
+  }
+
   async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
@@ -2721,7 +2736,7 @@
       if (processingPath === "aipoc") {
         run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await continueJob(analyzeJobId, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser(), actionId });
+        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -3333,7 +3348,7 @@
           path: "aipoc"
         });
       } else {
-        run.jobId = await continueJob(record.analyzeJobId, {
+        run.jobId = await submitFinishJob(record.analyzeJobId, record.file, {
           analysis: effectiveAnalysis,
           preset: batchSettings.presetKey,
           imageQuality: batchSettings.imageQuality,
@@ -5971,6 +5986,299 @@
     }
   }
 
+  // ── Importing an exported result folder ───────────────────────────────────
+  //
+  // Dropping a folder shaped like the debug-UI zip (source photo at the root,
+  // run_N/{result.png,result.json} beneath it) loads that run's report and
+  // image straight into the results view, and wires "重新處理" to re-run the
+  // edit from the SAME analysis. Steps 3-6 then run again exactly as they
+  // would for a live run -- including resolve_crop_box_with_report off the
+  // stored crop_box -- so a geometry or prompt change can be re-tested against
+  // a recorded run without paying for (or re-rolling) the analysis step.
+
+  function resultFolderEntry(dataTransfer) {
+    const items = Array.from(dataTransfer?.items || []);
+    for (const item of items) {
+      const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+      if (entry && entry.isDirectory) return entry;
+    }
+    return null;
+  }
+
+  function readDirEntries(dirEntry) {
+    const reader = dirEntry.createReader();
+    const all = [];
+    return new Promise((resolve, reject) => {
+      // readEntries returns at most ~100 per call and signals the end with an
+      // empty batch, so it has to be drained in a loop.
+      const step = () => reader.readEntries((entries) => {
+        if (!entries.length) { resolve(all); return; }
+        all.push(...entries);
+        step();
+      }, reject);
+      step();
+    });
+  }
+
+  function entryToFile(fileEntry) {
+    return new Promise((resolve, reject) => fileEntry.file(resolve, reject));
+  }
+
+  function runNumberOf(name) {
+    const match = /^run_(\d+)$/i.exec(name);
+    return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+  }
+
+  // Folders exported before analysis.applied_crop_plan existed still recorded
+  // the crop that was sent -- as text, in the "Mandatory crop region"
+  // paragraph of the edit prompt. Recovering it from there is what lets the
+  // box overlay draw 實際送出裁切 for an older folder, instead of silently
+  // omitting the one box the whole comparison is about. Returns null for a
+  // "No crop." prompt, where there genuinely was no crop to draw.
+  function cropPlanFromEditPrompt(promptsJson) {
+    const lines = promptsJson?.image_edit;
+    const text = Array.isArray(lines) ? lines.join("\n") : (typeof lines === "string" ? lines : "");
+    const geometry = /^-\s*x=([\d.]+),\s*y=([\d.]+),\s*w=([\d.]+),\s*h=([\d.]+)/m.exec(text);
+    if (!geometry) return null;
+    const [x, y, w, h] = geometry.slice(1, 5).map(Number);
+    if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
+    const ratio = /^-\s*Target output aspect ratio:\s*([^\n.]+)/m.exec(text);
+    // Printed to 3 decimals in the prompt, so these are the sent values to
+    // within a rounding step -- fine for drawing, not for arithmetic.
+    return { x, y, w, h, aspectRatio: (ratio ? ratio[1] : "").trim() };
+  }
+
+  // One image's worth of exported results: the source photo at `dirEntry`'s
+  // root plus its run_N subfolders. Returns null when the folder isn't that
+  // shape, so the batch walk below can tell "not an image folder" apart from
+  // "a broken one".
+  async function readImageResultFolder(dirEntry) {
+    const root = await readDirEntries(dirEntry);
+    // The source photo is the one root-level image that isn't an annotated
+    // render (debug.*) or a result copy.
+    const sourceEntry = root.find((e) =>
+      e.isFile && /\.(jpe?g|png|webp|heic|heif)$/i.test(e.name) && !/^(debug|result)/i.test(e.name));
+    const runDirs = root
+      .filter((e) => e.isDirectory && /^run_\d+$/i.test(e.name))
+      .sort((a, b) => runNumberOf(a.name) - runNumberOf(b.name));
+    if (!sourceEntry || !runDirs.length) return { root, image: null };
+
+    const runs = [];
+    for (const dir of runDirs) {
+      const entries = await readDirEntries(dir);
+      const jsonEntry = entries.find((e) => e.isFile && e.name === "result.json");
+      if (!jsonEntry) continue;
+      const result = JSON.parse(await (await entryToFile(jsonEntry)).text());
+      if (!result?.analysis?.subject_category) continue;
+
+      const promptsEntry = entries.find((e) => e.isFile && e.name === "prompts.json");
+      if (!result.analysis.applied_crop_plan && promptsEntry) {
+        try {
+          const prompts = JSON.parse(await (await entryToFile(promptsEntry)).text());
+          const recovered = cropPlanFromEditPrompt(prompts);
+          if (recovered) result.analysis.applied_crop_plan = recovered;
+        } catch {
+          // An unreadable prompts.json only costs the one overlay box.
+        }
+      }
+
+      const imageEntry = entries.find((e) => e.isFile && /^result\.(png|jpe?g|webp)$/i.test(e.name));
+      runs.push({
+        run: runNumberOf(dir.name),
+        jobId: null,
+        status: "done",
+        imageUrl: imageEntry ? URL.createObjectURL(await entryToFile(imageEntry)) : null,
+        result,
+        timings: [],
+        error: null
+      });
+    }
+    if (!runs.length) return { root, image: null };
+
+    return { root, image: { name: dirEntry.name, file: await entryToFile(sourceEntry), runs } };
+  }
+
+  // Accepts either export shape: one image's folder (source + run_N/), or a
+  // batch folder whose children are those -- which is what a multi-image
+  // download produces ("image 1/", "image 2/", ... each with its own source
+  // photo and runs). Returns the images in folder order.
+  async function readResultFolder(dirEntry) {
+    const { root, image } = await readImageResultFolder(dirEntry);
+    if (image) return [image];
+
+    const childDirs = root.filter((e) => e.isDirectory).sort((a, b) => collateName(a.name, b.name));
+    if (!childDirs.length) {
+      throw new Error("資料夾裡找不到原圖與 run_N 子資料夾。");
+    }
+
+    const images = [];
+    const skipped = [];
+    for (const child of childDirs) {
+      try {
+        const nested = await readImageResultFolder(child);
+        if (nested.image) images.push(nested.image);
+        else skipped.push(child.name);
+      } catch {
+        skipped.push(child.name);
+      }
+    }
+    if (!images.length) {
+      throw new Error("子資料夾裡都找不到可用的 result.json（需含 analysis）。");
+    }
+    // Say what was left out rather than quietly importing a subset.
+    if (skipped.length) {
+      showError(`已略過 ${skipped.length} 個無法讀取的子資料夾：${skipped.slice(0, 5).join("、")}${skipped.length > 5 ? " …" : ""}`);
+    }
+    return images;
+  }
+
+  // "image 2" before "image 10" -- plain string sort puts them the other way,
+  // and these folders are numbered, not zero-padded.
+  function collateName(a, b) {
+    return String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  // The conditions an imported run was produced under, recovered from its own
+  // result.json so a re-run reproduces them instead of picking up whatever the
+  // UI happens to be set to. Shared by both import paths.
+  function importedRunSettings(result) {
+    const extraInfo = result["extra-info"] || {};
+    // Matched on the option's own model/quality fields rather than a composed
+    // "model:quality" key -- not every option uses that form (nano-banana-2 has
+    // no quality tier), and a miss here would silently swap the model.
+    const options = window.PhotoAgentConfig.imageModelQualityOptions || [];
+    const modelQualityOpt =
+      options.find((o) => o.model === extraInfo.image_model && o.quality === extraInfo.image_quality)
+      || options.find((o) => o.model === extraInfo.image_model)
+      || {};
+    const presetKey = "natural";
+    return {
+      modelQualityOpt,
+      presetKey,
+      preset: presets[presetKey] || presets.natural,
+      imageQuality: modelQualityOpt.quality || extraInfo.image_quality || "medium",
+      imageModel: modelQualityOpt.model || extraInfo.image_model || "gpt-image-2",
+      // The pref this run's EDIT was made under (recorded by finish_stage).
+      // _aspect_ratio_pref_at_analysis is the pre-ratio-neutral-analysis field,
+      // read only so folders exported back then still re-run as they were.
+      aspectRatio: result.analysis?._aspect_ratio_pref_at_edit
+        || result.analysis?._aspect_ratio_pref_at_analysis
+        || "auto",
+      // extra-info.image_model is null exactly when the run was local-only.
+      aiPhotoEditing: Boolean(extraInfo.image_model),
+      // A skipped QA writes an empty `checks` object; a QA that ran (or ran and
+      // failed into the fallback report) always has keys in it.
+      runQa: Object.keys(result.quality_check?.checks || {}).length > 0,
+      path: "local"                  // /rerun is a local-queue route only
+    };
+  }
+
+  async function importResultFolder(dirEntry) {
+    hideError();
+    try {
+      const images = await readResultFolder(dirEntry);
+      resetBatchState();
+      resetSteps();
+      clearContinueWait();
+      if (images.length > 1) await importAsBatch(images);
+      else await importAsSingle(images[0], dirEntry.name);
+    } catch (error) {
+      showError(`無法讀取結果資料夾：${friendlyError(error)}`);
+    }
+  }
+
+  async function importAsSingle(image, folderName) {
+    const analysis = image.runs[0].result.analysis;
+    const settings = importedRunSettings(image.runs[0].result);
+
+    // setSelectedFile rejects an unsupported type by showing its own error
+    // and returning, rather than throwing -- so check it actually took.
+    await setSelectedFile(image.file);
+    if (selectedFile !== image.file) return;
+
+    // Mirrors the picks into both selects (and their picker labels) so the
+    // review panel opens showing the model/長寬比 this folder was produced with.
+    if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
+    singleFlowState = {
+      analysis,
+      analyzeJobId: null,            // no prior job -> rerunJob, not continueJob
+      importedFrom: folderName,
+      presetKey: settings.presetKey,
+      preset: settings.preset,
+      imageQuality: settings.imageQuality,
+      imageModel: settings.imageModel,
+      aspectRatio: settings.aspectRatio,
+      aiPhotoEditing: settings.aiPhotoEditing,
+      runQa: settings.runQa,
+      processingPath: settings.path,
+      analyzeTimings: [],
+      useCombinedJob: false
+    };
+    // Restores the style picks and prompt the imported run was produced with,
+    // so the review panel opens showing them rather than defaults.
+    lastSingleSelections = {
+      userPrompt: analysis.user_instruction?.normalized_user_direction || "",
+      options: analysis.style_options || undefined,
+      recipeChecked: null
+    };
+
+    singleRuns = image.runs;
+    singleMirrorIndex = 0;
+    showSection("results");
+    showSingleResult();
+  }
+
+  // A multi-image export lands in the batch view already finished: one sidebar
+  // record per image, each holding its own runs. From there the per-image
+  // revise panel re-runs it exactly as a live batch would, via /rerun (each
+  // record's analyzeJobId stays null).
+  async function importAsBatch(images) {
+    const settings = importedRunSettings(images[0].runs[0].result);
+    batchSettings = {
+      presetKey: settings.presetKey,
+      preset: settings.preset,
+      imageQuality: settings.imageQuality,
+      imageModel: settings.imageModel,
+      aspectRatio: settings.aspectRatio,
+      aiPhotoEditing: settings.aiPhotoEditing,
+      runQa: settings.runQa,
+      path: settings.path
+    };
+    if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
+
+    batchRecords = [];
+    for (const image of images) {
+      const analysis = image.runs[0].result.analysis;
+      const record = makeBatchRecord(image.file, await previewableBlob(image.file));
+      record.analysis = analysis;
+      record.analyzeJobId = null;    // -> rerunJob
+      // effectiveOptions only reads a record's own options for categories
+      // marked touched -- otherwise it falls back to the batch-level radios
+      // (all "default"), which would drop the picks this run was made with.
+      record.options = analysis.style_options || null;
+      record.optionsTouched = {};
+      Object.entries(analysis.style_options || {}).forEach(([key, value]) => {
+        if (value && value !== "default") record.optionsTouched[key] = true;
+      });
+      record.userPrompt = analysis.user_instruction?.normalized_user_direction || "";
+      record.runs = image.runs;
+      record.mirrorIndex = 0;
+      syncRecordMirror(record);      // fills status/result/imageUrl/jobId from run 1
+      batchRecords.push(record);
+    }
+
+    els.batchSidebar.hidden = false;
+    if (els.resultsBody) els.resultsBody.classList.add("batch-mode");
+    currentBatchRecord = batchRecords[0] || null;
+    // showSection first: renderBatchMain measures the sidebar's real on-page
+    // position to cap its height, which reads as all-zero while the section
+    // is still display:none.
+    showSection("results");
+    renderBatchSidebarList();
+    renderBatchMain(currentBatchRecord);
+    updateBatchDownloadAllVisibility();
+  }
+
   els.fileInput.addEventListener("change", () => routeSelectedFiles(els.fileInput.files));
   // Once a photo (or batch) is selected it replaces the drop-zone label, so
   // clicking the preview re-opens the file picker instead.
@@ -6217,6 +6525,15 @@
     });
   }
   els.dropZone.addEventListener("drop", (event) => {
+    // A dropped DIRECTORY doesn't appear in dataTransfer.files at all, so the
+    // entry API is the only way to see it. An exported result folder goes
+    // down the re-run path; anything else falls through to the normal
+    // photo-selection path.
+    const dirEntry = isDebugUiActive ? resultFolderEntry(event.dataTransfer) : null;
+    if (dirEntry) {
+      importResultFolder(dirEntry);
+      return;
+    }
     routeSelectedFiles(event.dataTransfer.files);
   });
 })();
