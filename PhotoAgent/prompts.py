@@ -1131,6 +1131,7 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
 - If the approved correction plan includes a blink/eye repair item, fix only the named person's eyes. Do not change the person's identity, face shape, age, gaze direction, smile, head pose, glasses, makeup, skin texture, or lighting.
 - Reopen or relax the eyes naturally so they match the person's existing expression and the photo's moment. Avoid making the eyes too large, symmetrical, doll-like, or copied from another person.
+- Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
 - Do not alter people whose eye_blink_issues.should_fix is false or whose eye_state is natural_smiling_squint, intentional_wink, intentional_closed, expressive_closed, downward_gaze, sleeping, occluded_or_unclear, or uncertain.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes.
 - Eye blink issues from analysis: """ + eye_blink_issues_json
