@@ -2309,8 +2309,8 @@
   // still needs the real two-stage analyze->adjust->continue path (and its
   // own per-RUN edit jobs, since each RUN there can carry different
   // per-image style/recipe overrides picked during review).
-  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt = "", runCount = 1, onStage, onRunDone }) {
-    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount, user: getCurrentUser(), path: "local" });
+  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt = "", runCount = 1, onStage, onRunDone }) {
+    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, runCount, user: getCurrentUser(), path: "local" });
     await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
   }
 
@@ -2391,6 +2391,13 @@
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
+    // Advanced Settings toggles (Eyes category, and whatever joins it later)
+    // -- bundled into one object instead of one variable per toggle, so a new
+    // toggle only needs a new key here, not a new argument threaded through
+    // analyzeAipoc/analyzeJob/singleFlowState/runCombinedMultiRun/submitJob.
+    const advancedOptions = {
+      eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
+    };
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
@@ -2432,14 +2439,14 @@
 
       if (!useCombinedJob) {
         if (processingPath === "aipoc") {
-          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing });
+          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, advancedOptions });
           analysis = analyzeData.analysis;
           const t = analysis.timings || {};
           recordAnalyzeTiming("初步分析", Date.now() - stepStart, [
             { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
           ]);
         } else {
-          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing });
+          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, advancedOptions });
           recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
 
           stepStart = Date.now();
@@ -2457,7 +2464,7 @@
         }
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
 
       if (useCombinedJob) {
         await finishSingleFlow();
@@ -2510,7 +2517,7 @@
     // job started from."
     const myHistoryToken = historyViewToken;
     const isCurrent = () => historyViewToken === myHistoryToken;
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
     lastSingleSelections = { userPrompt, ...selections };
@@ -2603,7 +2610,7 @@
       const stepStart = Date.now();
       try {
         await runCombinedMultiRun({
-          file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, runCount,
+          file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
@@ -3006,6 +3013,9 @@
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
+      advancedOptions: {
+        eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
+      },
       path: els.processingPathSelect?.value || "local"
     };
 
@@ -3044,7 +3054,8 @@
       imageQuality: batchSettings.imageQuality,
       imageModel: batchSettings.imageModel,
       aspectRatio: batchSettings.aspectRatio,
-      aiPhotoEditing: batchSettings.aiPhotoEditing
+      aiPhotoEditing: batchSettings.aiPhotoEditing,
+      advancedOptions: batchSettings.advancedOptions
     };
 
     try {
@@ -3181,6 +3192,7 @@
         aspectRatio: batchSettings.aspectRatio,
         aiPhotoEditing: batchSettings.aiPhotoEditing,
         runQa: batchSettings.runQa,
+        advancedOptions: batchSettings.advancedOptions,
         userPrompt,
         runCount,
         onStage: (stage) => {

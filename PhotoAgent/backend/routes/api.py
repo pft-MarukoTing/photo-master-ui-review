@@ -10,7 +10,7 @@ from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
-from photo_agent.param_validation import validate_photo_agent_request
+from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
@@ -30,7 +30,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "run_count")
+            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "run_count", "advanced_options")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
@@ -56,6 +56,16 @@ def _parse_and_validate_params(form):
     user_prompt = form.get("user_prompt")
     if user_prompt:
         params["user_prompt"] = user_prompt
+    # Advanced Settings toggles (Eyes category, and whatever joins it later),
+    # bundled as one JSON field instead of one form field per toggle -- see
+    # normalize_advanced_options for why. Normalized here (not left as the
+    # raw string) since this function's own `params` dict, not the discarded
+    # return value of validate_photo_agent_request below, is what every
+    # caller of this function actually reads.
+    try:
+        params["advanced_options"] = normalize_advanced_options(form.get("advanced_options"))
+    except RuntimeError as exc:
+        return None, (exc.args[0] if exc.args else str(exc))
     # Only the combined ("full" stage) job in job_processor.py actually reads
     # this; a non-numeric value is passed through as None so the shared
     # validator below rejects it with a clean 400 instead of this raising
@@ -811,7 +821,11 @@ def aipoc_analyze():
         return jsonify({"error": error}), 400
 
     try:
-        analysis = analyze_stage(image.read(), aspect_ratio=params.get("aspect_ratio", "auto"))
+        analysis = analyze_stage(
+            image.read(),
+            aspect_ratio=params.get("aspect_ratio", "auto"),
+            advanced_options=params.get("advanced_options", {}),
+        )
     except Exception as exc:
         return jsonify({"error": f"分析失敗：{exc}"}), 502
 
@@ -836,6 +850,8 @@ def aipoc_analyze_batch():
     if error:
         return jsonify({"error": error}), 400
 
+    aspect_ratio = params.get("aspect_ratio", "auto")
+    advanced_options = params.get("advanced_options", {})
     # Read every file's bytes up front -- request.files' underlying streams
     # belong to this request context and aren't safe to touch from the
     # worker threads below. Each analyze_stage() call is a real OpenAI vision
@@ -850,7 +866,7 @@ def aipoc_analyze_batch():
     def _analyze_one(entry):
         filename, data = entry
         try:
-            return {"filename": filename, "analysis": analyze_stage(data, aspect_ratio=aspect_ratio)}
+            return {"filename": filename, "analysis": analyze_stage(data, aspect_ratio=aspect_ratio, advanced_options=advanced_options)}
         except Exception as exc:
             return {"filename": filename, "error": str(exc)}
 
@@ -966,6 +982,7 @@ def aipoc_submit():
         user_prompt=params.get("user_prompt"),
         stage="finish" if analysis else None,
         analysis=analysis,
+        advanced_options=params.get("advanced_options", {}),
     )
     task_id = body.get("result", {}).get("taskId")
     if not task_id:

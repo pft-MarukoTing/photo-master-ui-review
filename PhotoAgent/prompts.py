@@ -406,10 +406,38 @@ Composition decision framework:
 """
 
 
-def build_analysis_instruction(aspect_ratio_pref="auto"):
-    """Build analysis instructions with one authoritative aspect-ratio policy."""
+# Advanced Settings override: the user turned off a detection/repair category
+# up front (Upload page), instead of leaving every proposed fix to be
+# individually unchecked on the review screen after the fact. Appended after
+# ANALYSIS_INSTRUCTION rather than editing the eye-blink rules block itself --
+# analysis quality when the toggle is ON must stay exactly what it is today,
+# and this way the override is one clearly-scoped block instead of a
+# conditional threaded through 100+ lines of judgment rules. The model still
+# fills in eye_blink_issues as usual (kept for the user's own reference /
+# debugging), it just may never turn a judgment into an actual edit.
+CLOSED_EYE_DETECTION_DISABLED_OVERRIDE = """
+Closed-eye / accidental-blink correction has been turned off by the user for this photo:
+- Still inspect and fill in eye_blink_issues as usual -- this is for reference only, not for the edit.
+- Regardless of your own judgement above, set should_fix=false on every eye_blink_issues entry.
+- Do not add an eye-opening or blink-repair item to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
+"""
+
+
+def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
+    """Build analysis instructions with one authoritative aspect-ratio policy.
+
+    advanced_options: the Upload page's Advanced Settings toggles (e.g.
+    {"eye_closed_detection": False}) -- read only here, via .get() with a
+    True default per key, so adding a new toggle later only touches this
+    function plus the ADVANCED_OPTION_DEFAULTS entry in
+    photo_agent/param_validation.py.
+    """
+    advanced_options = advanced_options or {}
+    instruction = ANALYSIS_INSTRUCTION
+    if not advanced_options.get("eye_closed_detection", True):
+        instruction += CLOSED_EYE_DETECTION_DISABLED_OVERRIDE
     if aspect_ratio_pref == "original":
-        return ANALYSIS_INSTRUCTION + """
+        return instruction + """
 User aspect ratio requirement:
 - The user explicitly requested that the final output keep the original photo's aspect ratio.
 - Set recommended_aspect_ratio to "original".
@@ -417,7 +445,7 @@ User aspect ratio requirement:
 - Every crop candidate must preserve the source aspect ratio.
 - Do not select a named ratio that changes the original proportions.
 """
-    return ANALYSIS_INSTRUCTION + """
+    return instruction + """
 Auto aspect ratio requirement:
 - Select recommended_aspect_ratio only from the supported output set declared above.
 - crop_box.aspect_ratio and every crop candidate aspect_ratio must equal recommended_aspect_ratio exactly.

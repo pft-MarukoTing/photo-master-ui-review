@@ -88,7 +88,7 @@ def upload_to_req_url(request_spec, data):
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
                           image_model="gpt-image-2", aspect_ratio="auto", ai_photo_editing=True, run_qa=True,
-                          user_prompt=None, stage=None, analysis=None, req_id=1):
+                          user_prompt=None, stage=None, analysis=None, advanced_options=None, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -113,6 +113,10 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
             job_processor.py unmodified -- if it silently drops or rejects
             them, this falls back to today's from-scratch full-pipeline
             behavior (or errors out, which is easy to spot).
+        advanced_options: the Advanced Settings toggles dict (e.g.
+            {"eye_closed_detection": False}) -- same UNCONFIRMED caveat as
+            stage/analysis: if the remote build hasn't picked this param up
+            yet, it's silently ignored and today's always-on behavior stands.
 
     Returns the parsed JSON body -- caller reads body["result"]["taskId"].
     """
@@ -131,6 +135,8 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         params["stage"] = stage
     if analysis is not None:
         params["analysis"] = analysis
+    if advanced_options:
+        params["advanced_options"] = advanced_options
     payload = {
         "payload": {
             "acts": [{"id": 0, "params": params}],

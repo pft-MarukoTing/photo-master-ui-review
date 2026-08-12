@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TypedDict
 
 from engine_result_code import RESULT_INVALID_PARAMETER
@@ -21,6 +22,48 @@ VALID_ASPECT_RATIOS = (
     "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9",
 )
 MAX_RUN_COUNT = 20
+
+# Advanced Settings toggles (Eyes category on the upload page, and whatever
+# joins it later) -- bundled into one "advanced_options" dict/field instead of
+# each becoming its own named parameter, so a new toggle only needs a new
+# entry here plus a matching check in prompts.py, instead of threading a new
+# argument through every function between the frontend and build_analysis_
+# instruction. Unknown keys are dropped rather than rejected (see
+# normalize_advanced_options), the same tolerant-of-drift stance
+# aipoc_client.py already takes for cross-service param mismatches.
+ADVANCED_OPTION_DEFAULTS = {
+    "eye_closed_detection": True,
+}
+
+
+def normalize_advanced_options(value) -> dict:
+    """Coerce `value` (None / dict / JSON string) into a full advanced_options
+    dict -- every known key present with a bool value, unknown keys dropped."""
+    if value is None or value == "":
+        value = {}
+    elif isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            raise RuntimeError(
+                f"{EFFECT_NAME}: advanced_options must be valid JSON",
+                RESULT_INVALID_PARAMETER,
+            )
+    if not isinstance(value, dict):
+        raise RuntimeError(
+            f"{EFFECT_NAME}: advanced_options must be a JSON object",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized = dict(ADVANCED_OPTION_DEFAULTS)
+    for key in ADVANCED_OPTION_DEFAULTS:
+        if key in value:
+            if not isinstance(value[key], bool):
+                raise RuntimeError(
+                    f"{EFFECT_NAME}: advanced_options.{key} must be a boolean",
+                    RESULT_INVALID_PARAMETER,
+                )
+            normalized[key] = value[key]
+    return normalized
 
 
 class PhotoAgentRequest(TypedDict):
@@ -115,6 +158,8 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["run_qa"] = run_qa
+
+    normalized["advanced_options"] = normalize_advanced_options(normalized.get("advanced_options"))
 
     # How many independent edit variations the combined ("full" stage) job
     # generates from ONE shared analysis, entirely within itself -- lets a

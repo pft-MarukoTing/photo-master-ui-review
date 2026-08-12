@@ -148,12 +148,12 @@ def _responses_payload(model: str, content: list, text_format: dict = None) -> d
 
 # ── Step 2: photo analysis ─────────────────────────────────────────────────────
 
-def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
+def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None) -> dict:
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
 
     payload = _responses_payload(ANALYSIS_MODEL, [
-        {"type": "input_text", "text": build_analysis_instruction(aspect_ratio)},
+        {"type": "input_text", "text": build_analysis_instruction(aspect_ratio, advanced_options)},
         {"type": "input_image", "image_url": data_url},
     ])
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")

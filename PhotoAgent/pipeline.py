@@ -45,13 +45,18 @@ def _quality_check_fallback(error: Exception) -> dict:
     }
 
 
-def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
+def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
     The user's instruction is reviewed in finish_stage instead of here --
     it's collected on the analyze-preview screen, shown to the user only
     after this stage's result comes back, so there's nothing to review yet
     at this point.
+
+    advanced_options: the Advanced Settings toggles dict (e.g.
+    {"eye_closed_detection": False}) -- passed through opaquely to
+    build_analysis_instruction, which is the only place that reads individual
+    keys out of it.
     """
 
     # Step 1 — read
@@ -60,7 +65,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
     # Step 2 — analyze
     t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
-    analysis = analyze_photo(image_bytes, aspect_ratio)
+    analysis = analyze_photo(image_bytes, aspect_ratio, advanced_options)
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
@@ -80,7 +85,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto") -> dict:
         )
 
     analysis["prompts"] = {
-        "photo_analysis": build_analysis_instruction(aspect_ratio),
+        "photo_analysis": build_analysis_instruction(aspect_ratio, advanced_options),
     }
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
