@@ -4,14 +4,15 @@ report.py -- render a benchmark run's per-pair metrics + thumbnails as a
 single self-contained report.html under the run's output directory.
 """
 
+import json
 from pathlib import Path
 
 from PIL import Image
 
-THUMB_MAX = 320
+IMAGE_MAX_DIM = 1600
 
 
-def _thumbnail(src_path: Path, dest_path: Path, max_dim: int = THUMB_MAX) -> None:
+def _resized_copy(src_path: Path, dest_path: Path, max_dim: int) -> None:
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(src_path) as im:
         im = im.convert("RGB")
@@ -53,18 +54,28 @@ def render_report(output_dir: Path, results: list, meta: dict) -> Path:
     sorted_results = sorted(ok, key=lambda r: r["nail_psnr"] if r["nail_psnr"] == r["nail_psnr"] else -float("inf"))
 
     rows = []
+    grid = []  # grid[row_index][col_index] = {"src": ..., "caption": ...}, feeds the lightbox
     for r in sorted_results:
         stem = r["stem"]
         thumbs = []
-        for label, path in (
+        grid_row = []
+        for col, (label, path) in enumerate((
             ("Source", r["source_path"]),
             ("Reference", r["reference_path"]),
             ("Target (GT)", r["target_path"]),
             ("Generated", r["generated_path"]),
-        ):
-            thumb_name = f"{stem}_{label.split()[0].lower()}.jpg"
-            _thumbnail(Path(path), assets_dir / thumb_name)
-            thumbs.append(f'<figure><img src="report_assets/{thumb_name}" loading="lazy"><figcaption>{label}</figcaption></figure>')
+        )):
+            slug = label.split()[0].lower()
+            img_name = f"{stem}_{slug}.jpg"
+            _resized_copy(Path(path), assets_dir / img_name, IMAGE_MAX_DIM)
+            row_idx = len(grid)
+            caption = f"{stem} -- {label}"
+            thumbs.append(
+                f'<figure><img src="report_assets/{img_name}" loading="lazy" '
+                f'onclick="openLightbox({row_idx},{col})"><figcaption>{label}</figcaption></figure>'
+            )
+            grid_row.append({"src": f"report_assets/{img_name}", "caption": caption})
+        grid.append(grid_row)
 
         rows.append(f"""
         <tr>
@@ -104,8 +115,15 @@ def render_report(output_dir: Path, results: list, meta: dict) -> Path:
   tr.error {{ background: #f5f5f5; color: #a00; }}
   .thumbs {{ display: flex; gap: 0.5rem; flex-wrap: wrap; }}
   .thumbs figure {{ margin: 0; text-align: center; }}
-  .thumbs img {{ width: 220px; height: 220px; object-fit: cover; display: block; border-radius: 4px; }}
+  .thumbs img {{ width: 220px; height: 220px; object-fit: cover; display: block; border-radius: 4px; cursor: zoom-in; }}
   .thumbs figcaption {{ font-size: 0.7rem; color: #666; }}
+  #lightbox {{ position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 1000; }}
+  #lightbox.hidden {{ display: none; }}
+  #lightbox img {{ max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; }}
+  #lightbox-caption {{ color: #eee; margin-top: 0.8rem; font-size: 0.95rem; }}
+  #lightbox-hint {{ color: #aaa; margin-top: 0.3rem; font-size: 0.8rem; }}
+  #lightbox-close {{ position: absolute; top: 1rem; right: 1.5rem; color: #eee; font-size: 2rem; cursor: pointer; line-height: 1; }}
 </style>
 <h1>AINail Benchmark Report</h1>
 <dl class="meta">
@@ -128,6 +146,51 @@ def render_report(output_dir: Path, results: list, meta: dict) -> Path:
   <thead><tr><th>pair</th><th>PSNR</th><th>SSIM</th><th>Nail PSNR</th><th>Nail SSIM</th><th>BG PSNR</th><th>BG SSIM</th><th>images</th></tr></thead>
   <tbody>{"".join(rows)}</tbody>
 </table>
+<div id="lightbox" class="hidden">
+  <span id="lightbox-close" onclick="closeLightbox()">&times;</span>
+  <img id="lightbox-img">
+  <div id="lightbox-caption"></div>
+  <div id="lightbox-hint">&larr; &rarr; switch image within pair &middot; &uarr; &darr; switch pair &middot; Esc to close</div>
+</div>
+<script>
+  const GRID = {json.dumps(grid)};
+  let cur = null;
+  const lightbox = document.getElementById("lightbox");
+  const lbImg = document.getElementById("lightbox-img");
+  const lbCaption = document.getElementById("lightbox-caption");
+
+  function renderLightbox() {{
+    const cell = GRID[cur[0]][cur[1]];
+    lbImg.src = cell.src;
+    lbCaption.textContent = cell.caption;
+  }}
+
+  function openLightbox(row, col) {{
+    cur = [row, col];
+    renderLightbox();
+    lightbox.classList.remove("hidden");
+  }}
+
+  function closeLightbox() {{
+    lightbox.classList.add("hidden");
+  }}
+
+  document.addEventListener("keydown", (e) => {{
+    if (lightbox.classList.contains("hidden")) return;
+    if (e.key === "Escape") {{ closeLightbox(); return; }}
+    if (e.key === "ArrowLeft") cur[1] = (cur[1] + 3) % 4;
+    else if (e.key === "ArrowRight") cur[1] = (cur[1] + 1) % 4;
+    else if (e.key === "ArrowUp") cur[0] = (cur[0] - 1 + GRID.length) % GRID.length;
+    else if (e.key === "ArrowDown") cur[0] = (cur[0] + 1) % GRID.length;
+    else return;
+    e.preventDefault();
+    renderLightbox();
+  }});
+
+  lightbox.addEventListener("click", (e) => {{
+    if (e.target === lightbox) closeLightbox();
+  }});
+</script>
 """
     output_dir.mkdir(parents=True, exist_ok=True)
     report_path = output_dir / "report.html"
