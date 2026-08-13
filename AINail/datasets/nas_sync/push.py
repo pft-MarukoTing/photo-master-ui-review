@@ -113,19 +113,23 @@ def main():
         print("\nDry run only. Re-run with --apply to make these changes on the NAS.")
         return
 
-    for rel in to_add:
+    for i, rel in enumerate(to_add, 1):
         dst = os.path.join(args.nas_root, rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(os.path.join(args.local_root, rel), dst)
+        if i % 100 == 0 or i == len(to_add):
+            print(f"  add {i}/{len(to_add)}")
 
-    for old_rel, new_rel in moves.items():
+    for i, (old_rel, new_rel) in enumerate(moves.items(), 1):
         dst = os.path.join(args.nas_root, new_rel)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copy2(os.path.join(args.local_root, new_rel), dst)
         os.remove(os.path.join(args.nas_root, old_rel))
+        if i % 100 == 0 or i == len(moves):
+            print(f"  move {i}/{len(moves)}")
 
     modified = []
-    for rel in to_modify:
+    for i, rel in enumerate(to_modify, 1):
         try:
             lock.acquire(args.nas_root, rel, args.user)
         except lock.LockError as e:
@@ -136,6 +140,8 @@ def main():
             modified.append(rel)
         finally:
             lock.release(args.nas_root, rel, args.user)
+        if i % 100 == 0 or i == len(to_modify):
+            print(f"  modify {i}/{len(to_modify)}")
 
     new_baseline = mf.build_manifest(args.local_root)
     for rel, _ in conflicts:
