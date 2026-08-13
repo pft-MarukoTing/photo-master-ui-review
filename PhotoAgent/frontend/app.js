@@ -434,7 +434,14 @@
     // handler is gated on isDebugUiActive too, so this hint and the behavior
     // it advertises appear together.
     if (els.dzFolderHint) els.dzFolderHint.hidden = !isDebug;
-    if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebug;
+    // #results-detail-extra (QA verdict, recipe adherence, technical
+    // details, prompts, ...) no longer shows on the analyze/results page at
+    // all, debug UI or not -- #show-prompt-btn's modal covers the one part
+    // of it (prompts) a testbed session actually needs day to day. It still
+    // exists in the DOM purely as the data source renderPrompts (results.js)
+    // keeps in sync for that modal to read from, and can still be revealed
+    // for a specific record via viewHistoryRecord's revealDetailExtra (admin
+    // reports drawer) -- untouched here.
     // #analysis-preview's own remaining content (ap-summary-row's subject
     // tags, the 取消 cancel button, 分析結果 detail toggle above) is
     // testbed-only -- but #ap-options-card-inline (修圖建議/風格/模型/生成
@@ -442,20 +449,21 @@
     // into #results-canvas-top as soon as the panel opens
     // (openInlineAnalysisForCurrentContext still auto-opens for every user),
     // so hiding the now-empty-for-general-users wrapper here doesn't touch
-    // it. #back-to-process-btn only toggles that wrapper's own content, so
-    // it stays debug-only too -- general users already get the pill row
-    // without needing to press anything.
-    if (els.backToProcessBtn) els.backToProcessBtn.style.display = isDebug ? "" : "none";
+    // it. #show-prompt-btn opens the GPT-prompts modal (openPromptsModal),
+    // a testbed-only view, so it stays debug-only too.
+    if (els.showPromptBtn) els.showPromptBtn.style.display = isDebug ? "" : "none";
     if (els.analysisPreview) els.analysisPreview.style.display = isDebug ? "" : "none";
-    // #results-analysis-slot only ever hosts #analysis-preview (now hidden
-    // above in general mode), so it'd otherwise sit there as a blank 35%-wide
-    // column once .showing-analysis adds its flex-grow -- hide it and let
-    // #results-canvas-col recenter at a fixed width instead of stretching to
-    // fill the whole freed-up row (900px matches .proc-container, the same
-    // single-column canvas width used pre-results on the processing screen).
-    if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = isDebug ? "" : "none";
-    if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = isDebug ? "" : "center";
-    if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = isDebug ? "" : "900px";
+    // #results-analysis-slot only ever hosts #analysis-preview, which (like
+    // #results-detail-extra above) no longer shows on the analyze/results
+    // page at all -- keep it hidden unconditionally rather than sitting
+    // there as a blank 35%-wide column once .showing-analysis adds its
+    // flex-grow, and let #results-canvas-col recenter at a fixed width
+    // instead of stretching to fill the whole freed-up row (900px matches
+    // .proc-container, the same single-column canvas width used pre-results
+    // on the processing screen).
+    if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = "none";
+    if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = "center";
+    if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = "900px";
     applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.runCountSelect, isDebug);
@@ -2220,7 +2228,7 @@
     // photo (or no longer applies once batch mode starts) -- drop it.
     singleFlowState = null;
     lastSingleSelections = null;
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
+    if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
     if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
     if (els.batchSidebar) els.batchSidebar.hidden = true;
@@ -2577,7 +2585,7 @@
       // Lets any not-yet-shown edit-stage phrasings finish playing (fast-
       // forwarded) before switching away from the processing screen.
       await finishProcSubRotation();
-      if (els.backToProcessBtn) els.backToProcessBtn.hidden = false;
+      if (els.showPromptBtn) els.showPromptBtn.hidden = false;
       showSection("results");
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
@@ -2953,7 +2961,7 @@
     if (action === "cancel") return;
 
     setAnalysisPreviewDisabled(true);
-    if (els.backToProcessBtn) els.backToProcessBtn.disabled = true;
+    if (els.showPromptBtn) els.showPromptBtn.disabled = true;
     // Same thinking-rings animation as the initial upload-flow processing
     // screen (#processing-section's .proc-visual), replacing the photo
     // (hidden outright, not dimmed underneath) instead of navigating away
@@ -2986,7 +2994,7 @@
       await finishProcSubRotation();
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-      if (els.backToProcessBtn) els.backToProcessBtn.disabled = false;
+      if (els.showPromptBtn) els.showPromptBtn.disabled = false;
       stopProcSubRotation();
     }
   }
@@ -4720,9 +4728,8 @@
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
-    // Nothing to review/revise yet, and #back-to-process-btn would otherwise
-    // fall through to backToProcessFromResults' stale singleFlowState.
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = true;
+    // No result -- and so no prompts -- yet for #show-prompt-btn to show.
+    if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     // In case some OTHER record's live revise (finishSingleFlow) left these
     // toggled -- showBatchMainLoading below hides #results-canvas-row
     // entirely (its parent), so this is mostly cheap insurance, not load-
@@ -4877,15 +4884,12 @@
   // in its read-only (reviewable:false) mode instead.
   // revealDetailExtra: true and report: &lt;the report object&gt; only for the
   // admin reports drawer (see renderReportsList) -- revealDetailExtra lets an
-  // admin checking a flagged case see the normally debug-only
-  // #results-detail-extra panel (QA verdict, recipe adherence, prompts, ...)
-  // for that one record specifically, without flipping isDebugUiActive (and
-  // every other debug-only row/limit that gates) on for the rest of the
-  // session; report drives updateResultStatusPill's own triage pill on the
-  // result page. Neither is persisted -- the very next viewHistoryRecord call
-  // (a different record) or resetApp() puts #results-detail-extra's
-  // visibility back to whatever isDebugUiActive alone says, and hides the
-  // status pill.
+  // admin checking a flagged case see the normally-hidden
+  // #results-detail-extra panel (QA verdict, recipe adherence, workflow
+  // steps, ...) for that one record specifically. report drives updateResultStatusPill's
+  // own triage pill on the result page. Neither is persisted -- the very
+  // next viewHistoryRecord call (a different record) or resetApp() hides
+  // #results-detail-extra again and hides the status pill.
   async function viewHistoryRecord(job, { revealDetailExtra = false, report = null } = {}) {
     historyViewToken += 1;
     const myToken = historyViewToken;
@@ -4898,7 +4902,7 @@
     // has actually finished rendering below -- closing it immediately after
     // this fetch left a visible gap where neither the drawer nor the result
     // was on screen while the rest of this function awaited.
-    if (resultsDetailExtra) resultsDetailExtra.hidden = !(isDebugUiActive || revealDetailExtra);
+    if (resultsDetailExtra) resultsDetailExtra.hidden = !revealDetailExtra;
     updateResultStatusPill(report);
 
     // A live batch (if one happened to be running in this same session) has
@@ -5680,7 +5684,7 @@
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
     const reviewable = settings.reviewable !== false;
-    if (els.backToProcessBtn) els.backToProcessBtn.hidden = !reviewable;
+    if (els.showPromptBtn) els.showPromptBtn.hidden = !reviewable;
     renderRunSwitcher(record, settings);
 
     const hasOriginal = !!record.previewUrl;
@@ -5847,17 +5851,58 @@
     }
   }
 
-  function handleViewAnalysisClick() {
-    // Toggle: if the panel is already open, pressing the same button again
-    // closes it -- simulate the cancel button's click instead of duplicating
-    // its logic, since backToProcessFromResults/startInlineBatchReview are
-    // both mid-`await waitForInlineAnalysisAction()` at that point, and only
-    // that click actually resolves their pending promise.
-    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
-      if (els.inlineAnalysisCancelBtn) els.inlineAnalysisCancelBtn.click();
-      return;
+  // #show-prompt-btn (debug UI only): lists every pipeline stage that can
+  // call GPT, reading each one's prompt text straight off the hidden
+  // #prompt-* <pre> elements (renderPrompts, results.js keeps those in sync
+  // with whatever result is on screen, batch or single) -- so this needs no
+  // separate lookup into batchRecords/singleRuns to figure out which result
+  // is currently showing.
+  const PROMPT_MODAL_STAGES = [
+    { label: "照片分析", el: () => els.promptAnalysis },
+    { label: "使用者指令審查", el: () => els.promptReview },
+    { label: "裁切驗證", el: () => els.promptCrop },
+    { label: "修圖", el: () => els.promptEdit },
+    { label: "品質檢查", el: () => els.promptQa }
+  ];
+
+  // One tab per stage; clicking a tab is the only thing that changes
+  // #prompts-modal-content, so exactly one stage's text is ever shown.
+  function renderPromptsModalTabs() {
+    if (!els.promptsModalTabs || !els.promptsModalContent) return;
+    els.promptsModalTabs.innerHTML = "";
+    const stages = PROMPT_MODAL_STAGES.map(({ label, el }) => {
+      const text = el()?.textContent?.trim();
+      const empty = !text || text === "–" || text === "（此步驟未呼叫 GPT）";
+      return { label, text: empty ? "（此步驟未呼叫 GPT）" : text, empty };
+    });
+    const buttons = stages.map((stage) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("role", "tab");
+      btn.className = "prompts-modal-tab" + (stage.empty ? " is-empty" : "");
+      btn.textContent = stage.label;
+      btn.addEventListener("click", () => {
+        buttons.forEach((b) => b.classList.remove("is-active"));
+        btn.classList.add("is-active");
+        els.promptsModalContent.textContent = stage.text;
+      });
+      els.promptsModalTabs.appendChild(btn);
+      return btn;
+    });
+    if (buttons.length) {
+      buttons[0].classList.add("is-active");
+      els.promptsModalContent.textContent = stages[0].text;
     }
-    openInlineAnalysisForCurrentContext();
+  }
+
+  function openPromptsModal() {
+    if (!els.promptsModal) return;
+    renderPromptsModalTabs();
+    els.promptsModal.hidden = false;
+  }
+
+  function closePromptsModal() {
+    if (els.promptsModal) els.promptsModal.hidden = true;
   }
 
   function analyzedBatchRecords() {
@@ -5986,9 +6031,8 @@
     hideError();
     // Undoes viewHistoryRecord's own revealDetailExtra override (admin
     // reviewing a flagged case) -- a fresh upload afterward shouldn't
-    // inherit that one record's forced visibility for the rest of the
-    // session; back to whatever isDebugUiActive alone says.
-    if (resultsDetailExtra) resultsDetailExtra.hidden = !isDebugUiActive;
+    // inherit that one record's forced visibility.
+    if (resultsDetailExtra) resultsDetailExtra.hidden = true;
     updateResultStatusPill(null);
     selectedFile = null;
     selectedFileSourceUrl = null;
@@ -6396,7 +6440,13 @@
   }
   els.startButton.addEventListener("click", startSubmit);
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
-  els.backToProcessBtn.addEventListener("click", handleViewAnalysisClick);
+  els.showPromptBtn.addEventListener("click", openPromptsModal);
+  if (els.promptsModalClose) els.promptsModalClose.addEventListener("click", closePromptsModal);
+  if (els.promptsModal) {
+    els.promptsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closePromptsModal();
+    });
+  }
   els.resetButton.addEventListener("click", resetApp);
   if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
@@ -6558,6 +6608,7 @@
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
+    if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
     if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();

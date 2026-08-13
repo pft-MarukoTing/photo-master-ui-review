@@ -1741,21 +1741,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   line-height: 1.55;
 }
 
-.prompt-text {
-  font-size: 15px;
-  color: var(--text-2);
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  max-height: 220px;
-  overflow-y: auto;
-  margin: 0;
-  padding: 10px;
-  background: var(--card-2);
-  border-radius: 8px;
-}
-
 .detail-list {
   list-style: none;
   display: flex;
