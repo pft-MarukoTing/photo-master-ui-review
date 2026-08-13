@@ -15,6 +15,7 @@ Relative to the last pull/push baseline:
 import argparse
 import os
 import shutil
+import sys
 
 import manifest as mf
 
@@ -24,7 +25,15 @@ def main():
     ap.add_argument("--nas-root", required=True, help="mounted NAS path for AINail/datasets")
     ap.add_argument("--local-root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     ap.add_argument("--apply", action="store_true", help="actually copy/remove files (default: dry run only)")
+    ap.add_argument("--force", action="store_true", help="skip the check that --nas-root is a mounted network drive")
     args = ap.parse_args()
+
+    if not args.force and not mf.is_network_mount(args.nas_root):
+        sys.exit(
+            f"--nas-root {args.nas_root!r} doesn't look like a mounted network drive "
+            f"(mount type: {mf.mount_type_for(args.nas_root)!r}). Refusing to avoid mixing up "
+            f"local and NAS state. Pass --force to override."
+        )
 
     local_manifest = mf.build_manifest(args.local_root)
     remote_manifest = mf.build_manifest(args.nas_root)

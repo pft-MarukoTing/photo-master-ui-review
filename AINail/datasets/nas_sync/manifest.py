@@ -8,9 +8,12 @@ move (see push.py).
 import hashlib
 import json
 import os
+import re
+import subprocess
 
 
 SKIP_DIRNAMES = {"nas_sync", ".nas_sync"}
+NETWORK_FS_TYPES = {"smbfs", "cifs", "nfs", "afpfs", "smb3"}
 
 
 def _iter_files(root):
@@ -65,6 +68,39 @@ def save_baseline(local_root, manifest):
     with open(tmp, "w") as f:
         json.dump(manifest, f)
     os.replace(tmp, path)
+
+
+def mount_type_for(path):
+    """Return the filesystem type `path` is mounted on, or None if it can't be determined.
+
+    Parses `mount` output, which differs slightly by OS:
+      macOS:  //user@host/SHARE on /Volumes/SHARE (smbfs, nodev, nosuid, ...)
+      Linux:  //host/share on /mnt/x type cifs (rw,relatime,...)
+    """
+    abspath = os.path.abspath(path)
+    try:
+        out = subprocess.run(["mount"], capture_output=True, text=True, check=True).stdout
+    except Exception:
+        return None
+    best_mp, best_type = None, None
+    for line in out.splitlines():
+        if " on " not in line:
+            continue
+        _, rest = line.split(" on ", 1)
+        m = re.match(r"^(.*?)(?:\s+type\s+(\S+))?\s*\((.*?)\)\s*$", rest)
+        if not m:
+            continue
+        mp = m.group(1).strip()
+        fstype = m.group(2) or m.group(3).split(",")[0].strip()
+        if abspath == mp or abspath.startswith(mp.rstrip("/") + "/"):
+            if best_mp is None or len(mp) > len(best_mp):
+                best_mp, best_type = mp, fstype
+    return best_type.lower() if best_type else None
+
+
+def is_network_mount(path):
+    fstype = mount_type_for(path)
+    return fstype in NETWORK_FS_TYPES
 
 
 def print_list(prefix, items, limit=10):

@@ -54,7 +54,15 @@ def main():
     ap.add_argument("--local-root", default=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     ap.add_argument("--user", default=getpass.getuser())
     ap.add_argument("--apply", action="store_true", help="actually copy files (default: dry run only)")
+    ap.add_argument("--force", action="store_true", help="skip the check that --nas-root is a mounted network drive")
     args = ap.parse_args()
+
+    if not args.force and not mf.is_network_mount(args.nas_root):
+        sys.exit(
+            f"--nas-root {args.nas_root!r} doesn't look like a mounted network drive "
+            f"(mount type: {mf.mount_type_for(args.nas_root)!r}). Refusing to avoid writing "
+            f"to a local folder by mistake. Pass --force to override."
+        )
 
     os.makedirs(args.nas_root, exist_ok=True)
     local_manifest = mf.build_manifest(args.local_root)

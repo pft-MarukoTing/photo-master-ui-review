@@ -51,6 +51,11 @@ between two people, so `push` locks each such file on the NAS right before
 copying it and releases the lock right after. If a file is already locked
 by someone else, it's skipped and reported instead of being overwritten.
 
+`push`/`pull` refuse to run if `NAS_ROOT` doesn't look like a mounted network
+drive (checked via `mount`), to avoid accidentally writing to a local folder
+that happens to exist at that path. Pass `--force` (on the underlying
+`push.py`/`pull.py`, not through `sync.sh`) to bypass this check.
+
 ## 2. Reading the output
 
 `push`/`pull` apply their changes by default; add `--dry-run` to only print
