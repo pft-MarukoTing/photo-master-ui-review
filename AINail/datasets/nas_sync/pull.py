@@ -63,15 +63,12 @@ def main():
             conflicts.append((rel, "removed from NAS, but you changed it locally — resolve by hand"))
 
     print(f"DOWNLOAD ({len(to_download)}):")
-    for rel in to_download:
-        print(f"  + {rel}")
+    mf.print_list("+", to_download)
     print(f"REMOVE LOCAL ({len(to_remove_local)}):")
-    for rel in to_remove_local:
-        print(f"  - {rel}")
+    mf.print_list("-", to_remove_local)
     if conflicts:
         print(f"CONFLICTS - not touched, resolve manually ({len(conflicts)}):")
-        for rel, reason in conflicts:
-            print(f"  x {rel}: {reason}")
+        mf.print_list("x", [f"{rel}: {reason}" for rel, reason in conflicts])
 
     if not args.apply:
         print("\nDry run only. Re-run with --apply to update your local copy.")

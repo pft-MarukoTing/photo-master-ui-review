@@ -92,22 +92,17 @@ def main():
                 conflicts.append((rel, "modified both locally and on NAS since your last pull"))
 
     print(f"ADD ({len(to_add)}):")
-    for rel in to_add:
-        print(f"  + {rel}")
+    mf.print_list("+", to_add)
     print(f"MOVE ({len(moves)}):")
-    for old_rel, new_rel in moves.items():
-        print(f"  {old_rel} -> {new_rel}")
+    mf.print_list("", [f"{old_rel} -> {new_rel}" for old_rel, new_rel in moves.items()])
     print(f"MODIFY ({len(to_modify)}):")
-    for rel in to_modify:
-        print(f"  * {rel}")
+    mf.print_list("*", to_modify)
     if skipped_locked:
         print(f"SKIPPED - locked by someone else ({len(skipped_locked)}):")
-        for rel, info in skipped_locked:
-            print(f"  ! {rel} (locked by {info['user']} since {info['acquired_at']})")
+        mf.print_list("!", [f"{rel} (locked by {info['user']} since {info['acquired_at']})" for rel, info in skipped_locked])
     if conflicts:
         print(f"CONFLICTS - not touched, resolve manually ({len(conflicts)}):")
-        for rel, reason in conflicts:
-            print(f"  x {rel}: {reason}")
+        mf.print_list("x", [f"{rel}: {reason}" for rel, reason in conflicts])
 
     if not args.apply:
         print("\nDry run only. Re-run with --apply to make these changes on the NAS.")

@@ -65,3 +65,10 @@ def save_baseline(local_root, manifest):
     with open(tmp, "w") as f:
         json.dump(manifest, f)
     os.replace(tmp, path)
+
+
+def print_list(prefix, items, limit=10):
+    for item in items[:limit]:
+        print(f"  {prefix} {item}")
+    if len(items) > limit:
+        print(f"  ... and {len(items) - limit} more")
