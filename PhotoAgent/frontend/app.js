@@ -3799,6 +3799,20 @@
     }
   }
 
+  // Marks one tile as eligible for multi-select (done, failed, or
+  // "couldn't fetch status" -- anything with an image_key to act on)
+  // and registers it in the two by-key lookups the bulk download/delete
+  // handlers read from. job.job_id is NOT used as the key here -- it's not
+  // guaranteed unique per history entry (see selectedHistoryKeys' own doc);
+  // a job with no image_key at all (very old entries) is simply left
+  // unmarked -- there'd be nothing to look it back up by anyway.
+  function markHistoryTileSelectable(li, job) {
+    if (!job.image_key) return;
+    li.classList.add("selectable");
+    historyJobsByKey.set(job.image_key, job);
+    historyTileElsByKey.set(job.image_key, li);
+  }
+
   function toggleHistorySelection(imageKey, li) {
     if (selectedHistoryKeys.has(imageKey)) {
       selectedHistoryKeys.delete(imageKey);
@@ -4016,18 +4030,7 @@
         const doneIdx = statuses.findIndex((s) => s.status === "success");
         if (doneIdx !== -1) {
           li.className = "history-cube batch-sidebar-item done";
-          // .selectable marks this tile as eligible for multi-select
-          // download (see .history-list.select-mode's CSS) -- a
-          // still-processing/failed job has no result yet to download, so
-          // those never get this class and stay dimmed/unclickable while
-          // selecting. Keyed by job.image_key, same identifier
-          // handleDeleteHistoryEntry uses -- job.job_id is NOT guaranteed
-          // unique per history entry (see selectedHistoryKeys' own doc).
-          li.classList.add("selectable");
-          if (job.image_key) {
-            historyJobsByKey.set(job.image_key, job);
-            historyTileElsByKey.set(job.image_key, li);
-          }
+          markHistoryTileSelectable(li, job);
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = jobIds.length > 1 ? `完成（${doneCount}/${jobIds.length}）` : "完成";
           // Thumbnail route only exists for the local path (see
@@ -4081,6 +4084,17 @@
           // tile still shows a recognizable photo instead of going blank; the
           // badge/border already communicate the failure.
           media?.querySelector(".rc-spinner")?.remove();
+          // Nothing to download here, but a failed entry is exactly the kind
+          // of thing a user wants to bulk-clear -- .selectable lets it join
+          // a multi-select same as a done tile (buildSelectedHistoryZip
+          // already skips a job with no successful runs, so an accidental
+          // mixed done+failed download selection stays harmless). No "view"
+          // action exists for a failed tile, so unlike the done branch's own
+          // listener above, this one only ever does the select-mode toggle.
+          markHistoryTileSelectable(li, job);
+          li.addEventListener("click", () => {
+            if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
+          });
         } else {
           if (badge) badge.textContent = "處理中";
           // Still clickable -- otherwise there's no way to come back and
@@ -4091,6 +4105,10 @@
       } catch {
         li.className = "history-cube batch-sidebar-item error";
         if (badge) badge.textContent = "無法取得狀態";
+        markHistoryTileSelectable(li, job);
+        li.addEventListener("click", () => {
+          if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
+        });
       }
     }));
   }
