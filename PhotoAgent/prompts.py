@@ -31,6 +31,7 @@ AXIS_DEFINITIONS = {
     "distraction": "toning down, blurring, or cleaning up scene elements",
     "crop": "reframing, straightening",
     "expression": "facial expression repair, eye openness, accidental blink or half-closed eyes",
+    "hair": "hair tidiness: stray or windblown strands, disturbed bangs, frizz, a standing tuft",
     "other": "anything the list above does not cover",
 }
 
@@ -58,6 +59,9 @@ AXIS_ALIASES = {
     "eyes": "expression", "eye": "expression", "blink": "expression", "blinking": "expression",
     "closed_eyes": "expression", "half_closed_eyes": "expression", "squint": "expression",
     "facial_expression": "expression", "expression": "expression",
+    "hairs": "hair", "hairstyle": "hair", "hair_tidiness": "hair", "messy_hair": "hair",
+    "flyaway": "hair", "flyaways": "hair", "stray_hair": "hair", "stray_hairs": "hair",
+    "bangs": "hair", "fringe": "hair", "frizz": "hair", "frizzy": "hair",
 }
 
 
@@ -149,6 +153,20 @@ Return exactly this JSON shape:
       "blink_failure_confidence": 0.0,
       "should_fix": true,
       "reason": "說明為何判斷是不小心閉眼/半閉眼，或為何閉眼/眨眼其實是表情、情緒或手勢的一部分。"
+    }
+  ],
+  "hair_issues": [
+    {
+      "subject_label": "對應 subjects 裡的人，例如 左二女性 / 抱小孩的男性。",
+      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
+      "hair_state": "tidy / styled_messy / styled_bangs / styled_face_framing / motion / natural_texture / windblown / strands_across_face / bangs_disturbed / bangs_clumped / lock_out_of_place / frizz_halo / tuft_or_flattened / occluded_or_unclear / uncertain",
+      "visible_evidence": ["只寫真的看得見的細節，例如 三四根髮絲橫過右眼 / 瀏海一撮向上翻起露出額頭 / 左側一撮從包頭鬆脫垂在耳前、右側沒有對應的一撮。"],
+      "front_hair": "臉前或額前有頭髮的人一律必填，不分齊瀏海、旁分或長髮前段。none（臉前完全沒有頭髮）/ even（前方髮絲粗細相近、分佈均勻）/ clumped（髮絲粗細不一、有的黏成一束，束間露出光禿皮膚）",
+      "fix_action": "lay_back / remove / settle / redistribute / none",
+      "mess_intent": "intentional_style / accidental_capture / ambiguous",
+      "hair_mess_confidence": 0.0,
+      "should_fix": true,
+      "reason": "說明為何判斷是拍攝當下被風吹亂或壓翹，或為何這個凌亂本來就屬於髮型、髮質或動作。"
     }
   ],
   "roi_box": {
@@ -365,6 +383,22 @@ Mini-model calibration:
 - When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
 - When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
 
+Hair tidiness inspection:
+Intent before repair, as with the eyes, and stricter -- the editing model rebuilds whatever hair you point it at, and a rebuilt hairstyle is a worse failure than untidy hair. One reading decides most cases: disorder that is even and repeated across the head is style or texture, while disorder that is a single local contradiction on an otherwise settled head is an accident. Wind is the exception to that reading, since it can disturb a whole head at once: it displaces hair in one direction and against the hairstyle's own shape, on a body that is otherwise posed or still, and it usually shows elsewhere in the frame too -- clothing, foliage, other people's hair. Read wind as a flaw across the whole area it disturbed, not only where it landed on a face.
+Not a flaw, so should_fix=false, and name which one: styled_messy (deliberate cut, tousle, or product separation), styled_bangs (center-parted, curtain/八字, or see-through fringe -- a designed parting is even on both sides and is not a split to close, and designed wisps are fine, similar in width, and evenly spaced; run the clumping test below before settling on this one), styled_face_framing (strands left out at the temples, as most updos and ponytails have), motion (hair mid-jump, spin, flip, throw, or turn, where the body itself is mid-action so the movement is the moment and tidying it would delete the action -- this is about what the person is doing, not about wind), natural_texture (curly, coily, fluffy, or baby hair -- flattening it changes who they are), occluded_or_unclear (head small in frame, motion-blurred, rim-lit, or dark on dark).
+A flaw across the whole area it covers when the wind reading above fits: windblown (the hairstyle is lifted, opened up, blown sideways, or pushed out of its own shape while the person is posed or still). Treat the whole disturbed area as the work, not only the strands that landed on the face.
+Front-hair check -- do this for every person with hair falling over the forehead or in front of the face, before choosing any state for them, and put the answer in visible_evidence. Whether that hair is a blunt fringe, a side sweep, or the front length of longer hair makes no difference here, and neither does whether skin shows through it or beside it; the question is only how those strands are distributed. Do they run at similar thickness and spacing, or are some stuck together into cords with bare skin between them? Record it in front_hair, required for anyone with hair in front of the face. It is a reading, not a state: never copy its value into hair_state, which only ever takes a value from its own list. front_hair="clumped" means hair_state="bangs_clumped" and fix_action="redistribute" -- not strands_across_face, whatever the strands look like individually, because the front of the hair is what is wrong and what gets worked on. front_hair="even" is not a flaw by itself. Judge the front of the hair as one shape, not by where its tips happen to fall -- hair whose ends reach the brows, eyes, or cheek is still the front of a hairstyle, and reading only those tips is what turns a clumped front into "a few strands near the eyes".
+bangs_clumped: the fringe has separated into uneven clumps with bare gaps showing forehead between them, because the hair is oily, damp, or sweaty rather than because it was cut or styled that way. Confirm it with any two of these, coarsest first: the clumps differ visibly in thickness, with bare gaps beside thick strands; only the fringe changed, while the rest of the head still reads clean and smooth; the scene explains it -- heat, humidity, rain, sweat, a long day or a long outdoor event -- usually with the same sheen on the forehead and nose; the hair separates at the root and clings to the forehead, where styled bangs stay evenly distributed at the root and separate along their length; the fringe carries a hard specular streak and looks darker and slicker than the lengths below it. Two of those make it should_fix=true; the last two need a clear enough view of the strands to be worth reading at all.
+Also a flaw, but only when local and fighting the hair around it: strands_across_face (hair that has left the hairstyle and come to rest on the face -- over an eye, nose, or mouth, or stuck to a lip or cheek. Hair that still belongs to the fringe, lying where the fringe lies, is a fringe state, never "a few loose strands"; this is the label that most often swallows a clumped fringe by mistake), bangs_disturbed (fringe flipped up or pushed against its own direction, exposing forehead it covered), lock_out_of_place (one lock escaped a tie, clip, or hat and hangs by the ear or below the fringe, with no match on the other side), frizz_halo (static outline on an otherwise smooth head), tuft_or_flattened (one tuft standing up or hat/sleep-pressed while its neighbours lie correctly). Set mess_intent="accidental_capture" only at hair_mess_confidence >= 0.75; mixed evidence means "ambiguous" and should_fix=false.
+Hair over an eye, nose, or mouth is the case users most want fixed, so it stays should_fix=true. What being on a feature changes is the wording, not the verdict: moving a strand means whatever it covered has to come from the original photograph, so the item must say so -- reveal the person's own feature as the photograph already shows it on both sides of the strand, with its shape, position, and edges unchanged, rather than letting it be re-rendered. The single case that cannot be done is a section of hair thick enough to bury a whole feature, with nothing visible either side of it to continue from: there is no original left to reveal, so should_fix=false with the reason naming what is buried.
+Forehead-or-cheek lock test, for the case most often misread -- run it before settling on any state above, since a deliberate lock and a fallen one look alike in a still frame. Deliberate: comes as a matched pair, lies along the cheekbone following the hairline's own direction, is combed out from the parting with the hair behind it intact, and stays clear of the eyes. Fallen: one side only, crossing that direction at its own angle, visibly pulled free leaving a gap or kink at the tie it escaped, landing on an eye, brow, or mouth. Two or more cues decide it; one each way means should_fix=false.
+Judge only from strands you can actually resolve: if you cannot see individual strands you cannot see the flaw, so occluded_or_unclear, and require >= 0.9 on blurred, backlit, or small heads. Size and prominence change only how clearly you see the hair, never whether to fix it, and grooming the subject is not a goal of this retouch -- a false positive costs the person their own hair, where a miss costs nothing.
+Every should_fix=true commits to a fix_action: lay_back where adjacent hair runs the same way and can take the strands back, remove where they are isolated on skin, on a feature, or on background with no flow to rejoin -- and remove is only ever for hair that has LEFT the hairstyle, never for hair that the hairstyle puts where it is. Hair lying on the forehead, along the hairline, or at the temples is a fringe or the hairstyle's own edge, so removing it deletes part of the haircut and uncovers forehead the person's hair is meant to cover. That hair takes redistribute or lay_back and never remove, whatever state you assigned it. Strands resting further down -- on a cheek, a jaw, a lip -- have left the hairstyle and are what remove is for. Writing "移除前額的碎髮" is how a fringe gets erased -- settle for a windblown area -- the one action whose scope is a region rather than a single strand, combing the disturbed hair back down into the hairstyle's own shape so the outline reads continuous again -- and redistribute for a clumped fringe, spreading the hair that is already there so the clumps even out and the bare gaps close. For settle, name the reference in the item: the part of the same head the wind did not disturb is what defines the length, parting, volume, direction, and silhouette the disturbed area returns to. Where the wind disturbed the whole head there is less of that reference left to read, so require >= 0.85 there and say that the hairstyle's own evident shape is the target. Never 淡化, 降低對比, 柔化, or 模糊 hair -- toning a strand down leaves a grey ghost of it on the skin, which reads as damage where the strand only read as untidy, and there is no partial version of this repair. Stray hair is never a distraction item for the same reason: that toolkit (tonal control, desaturation, blur) is the wrong instrument on hair and produces exactly that smear. The one tonal instruction that is right on hair is the oily sheen itself: a redistribute item should also say to bring the hard specular streak down to the soft even sheen the rest of that person's hair has, with strand detail recovered inside it -- that is recovering texture in a blown highlight, not fading hair away, and it never means darkening, flattening, or blurring the fringe.
+Then add one correction_plan item per distinct hair problem on that person, tagged correction_axes ["hair"] -- a clumped fringe and strands resting on a cheek are two problems needing two different actions, not one item covering both.
+Write it as the state that hair ends in, not as something to take away: an item that only names hair to be rid of leaves the editing model nothing to render towards, and what it renders instead is the hair it was given. Name them by position, name the strands/tuft/area, state the fix_action, and hold hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color unchanged.
+Write that item as the finished picture, in words that can be rendered. The editing model cannot act on 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續: those name an intention rather than anything visible, and an item written that way comes back unchanged -- which is the most common reason a hair correction has no effect at all. Name the operation and the state it ends in. A clumped fringe needs both halves of the job named: 去油 -- 壓掉瀏海上的油亮反光，讓髮絲恢復霧面質感、不再黏成一束; and 梳整齊 -- 把結成一束一束的瀏海梳散成寬度一致的薄簾，並讓髮絲蓋過束與束之間露出額頭的空隙。Worked example of a whole item: 「把瀏海的油光壓掉、恢復霧面質感，並把結成束的瀏海梳散成寬度一致的薄簾，讓髮絲蓋過中間露出額頭的空隙；瀏海長度、髮際線與髮量不變。」
+correction_inverse keeps that person's hair as captured; retouch_recipe stays short, for example "把瀏海去油、梳整齊。" or "把黏在臉頰上的兩三根碎髮清掉。". Keep should_fix=false entries when they record a decision worth explaining, but write no correction_plan item for them -- tidy hair is not a correction, and hair tidying is never a routine portrait enhancement.
+
 Analysis responsibilities:
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
@@ -374,6 +408,7 @@ Analysis responsibilities:
 - For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
 - For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
+- Hair tidying is not a routine portrait enhancement either. Add a hair item to correction_plan only when the hair inspection above says should_fix=true, and never for styled, moving, or naturally textured hair.
 - Skin should read naturally in the finished photo -- pushed neither toward orange or ruddy red, nor toward yellow or sallow. In particular, do not write a correction_plan item whose goal is warmer, rosier, or healthier-looking skin; if skin does look wrong, name which direction it is off.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
@@ -994,6 +1029,7 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     eye_blink_issues = analysis.get("eye_blink_issues") or []
     eye_blink_issues_json = json.dumps(eye_blink_issues, ensure_ascii=False)
+    hair_issues = analysis.get("hair_issues") or []
     framing_intent_block = _build_framing_intent_block(analysis)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
@@ -1171,6 +1207,46 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 - Do not alter people whose eye_blink_issues.should_fix is false or whose eye_state is natural_smiling_squint, intentional_wink, intentional_closed, expressive_closed, downward_gaze, sleeping, occluded_or_unclear, or uncertain.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes.
 - Eye blink issues from analysis: """ + eye_blink_issues_json
+
+    # Gated on the user's recipe choice as well as on the analysis. hair_issues
+    # still says should_fix=true after the user unchecks the hair item -- it is
+    # analysis output and the review screen never rewrites it -- so without this
+    # the block would hand the edit model hair to tidy while the rejected-
+    # corrections block above tells it to leave that same hair alone.
+    #
+    # Reads the raw axis tags rather than resolve_rejected_axes on purpose: that
+    # function returns an empty list whenever the tags look untrustworthy, which
+    # for a color clause only costs some reinforcement, but here would emit the
+    # contradiction. Being wrong in this direction instead leaves hair untouched,
+    # which is what the unchecked item asked for.
+    hair_rejected = (
+        "hair" in _axis_set(analysis.get("rejected_axes"))
+        and "hair" not in _axis_set(analysis.get("correction_axes"))
+    )
+    # Only the should_fix items are handed over, unlike the blink block's full
+    # list: the "everything else stays as captured" rule below already covers the
+    # people and strands left out, and this json is the one place hair gets named,
+    # so a second copy of it would only give the model more hair to touch.
+    hair_block = ""
+    hair_items_to_fix = [
+        item for item in hair_issues
+        if isinstance(item, dict) and item.get("should_fix")
+    ]
+    if hair_items_to_fix and not hair_rejected:
+        hair_block = """Hair tidying priority:
+- Work only on the hair named below, on the person named below. Every other part of that person's hair, and everyone else's hair, comes through exactly as captured.
+- Each item names its action, and only four exist. Each is a picture of how that hair ends up, and the picture is what you render towards. lay_back: the named strands lie along the flow of the hair beside them, moved rather than drawn. remove: they are gone, and the skin, feature, or background behind them continues unbroken through its own texture, tone and grain. settle: the hair hangs in the hairstyle's own shape, its outline continuous. redistribute: the fringe reads as one even band. Everything below bounds how you reach that picture; none of it is the goal, and a result that breaks none of these limits while leaving the hair as it was has not done this edit.
+- For lay_back and remove, a strand is a thin line, so the work is a thin line: continue what the photograph already shows on either side of it, straight across, and change nothing outside its own footprint. Where a strand crosses an eye, brow, lash line, nostril, or lip, that feature is almost entirely visible around the strand -- every visible part of it stays pixel-faithful and is what defines the sliver underneath. Do not re-render the eye, nose, or mouth region, do not re-place or re-shape the feature, and do not improve it: the same eye shape, the same lash line, the same iris and catchlight position, the same lip edge and volume as the original. A re-rendered feature is a different person, which is far worse than the strand you were asked to move.
+- settle works across a whole disturbed area rather than one strand, and this is the only place that wider scope is licensed. Its target comes from the same head: the part the wind did not disturb shows the length, parting, volume, direction, and silhouette that the lifted, opened, or sideways-blown area is combed back into, so the outline reads continuous again. Lower the raised hair back onto the head and cover the gaps the wind opened with the hair that is already there. Give the area no more length, volume, or coverage than the rest of the head has, and leave the person's hairline where it is. Everything outside the disturbed area, face included, still comes through as captured.
+- redistribute is a clumped fringe combed out, and it is two operations, both required, across the whole fringe rather than on one strand. First, de-grease it: the oily specular streak goes matte, down to the sheen the rest of that person's hair has, with per-strand detail visible again inside where the shine was -- and never by darkening, flattening, or blurring the fringe. Second, comb it out: the thick clumps separate into a curtain of even width, and the strands that formed those clumps now span the bare gaps, so no bald patch of forehead is left between them.
+- Combing hair across a gap is the operation, not a violation of "add no hair". Fringe hair ends up where forehead skin used to show -- that is what closing a gap means, and it is required. What is forbidden is a fringe with MORE hair in it than the original had: no extra density, no greater length, no lowered hairline, no widened fringe, and no second layer invented behind the first. The same hair, spread evenly, covers more area than the same hair bunched into cords; that redistribution is the whole edit.
+- A fringe comes out as one even band, whichever action was named for it. What disappears is the uneven thick-cord-beside-bald-gap pattern, never the fringe's own transparency -- a real fringe shows some forehead through it -- and its length, outer edge, parting, and direction are unchanged. Taking strands out of a fringe builds that same pattern from the other direction and fails the same way.
+- Settled is not sculpted, and neither is an evened-out fringe. Combed-down real hair still shows strand direction, slight separation, its own unevenness, and how it catches light. A settled area that reads as one glossy sheet, a painted block, a wig, or a helmet fails this edit even where every trace of the wind is gone -- that failure is likelier here than anywhere else in this instruction, because a smooth mass is the easiest way to look tidy.
+- remove takes away hair that has left the hairstyle, never hair the hairstyle puts where it is. However an item is worded, taking hair off must not uncover forehead or scalp that this person's hair covers in the original: the hairline stays exactly where it is, a fringe keeps its coverage and its outer edge, and no more forehead is visible at the end than at the start. If carrying out a remove item would expose more forehead, it is the wrong operation on that hair -- lay it back or even it out instead, and if neither is possible leave it. An instruction to clear hair off a forehead is never an instruction to remove the fringe.
+- No action has a partial version. Do not fade, blur, soften, desaturate, or half-erase hair: a ghosted, greyed, or smeared remnant reads as damage, where the same strand cleanly gone reads as a better photograph. What replaces a removed strand leaves no dark trace, no blur patch, and no smoothed plastic area.
+- Identical to the original afterwards: hairstyle shape and silhouette, parting, length, volume, density, hairline position, curl pattern, color, roots, and how the hair meets the scalp and ears -- with individual strands still resolvable and the hair's own irregular texture intact. The amount of hair never increases anywhere. For settle and redistribute, "unchanged" means the hairstyle the settled or un-clumped hair shows, not the wind-blown or corded arrangement it is being brought back from -- both of them move existing hair into places it was not covering, which is their purpose and not an addition.
+- Do not tidy the face/skin/expression along with the hair, tuck a fallen lock back into an updo, ponytail, braid, or clip, or close a parted fringe. Where the named hair cannot be laid back, cleanly taken off, or settled within these limits, leave it exactly as captured -- that is the correct outcome here, not a missed instruction.
+- Hair to work on: """ + json.dumps(hair_items_to_fix, ensure_ascii=False)
 
     skin_block = ""
     if has_person:
@@ -1389,9 +1465,11 @@ User extra direction:
 
 {correction_plan_block}
 
-{negative_block}
-
 {blink_block}
+
+{hair_block}
+
+{negative_block}
 
 {skin_block}
 
@@ -1495,6 +1573,7 @@ Check dimensions:
 - Distraction and scene truth: harmful distractions are reduced, but contextual/neutral elements are preserved unless they still compete strongly. The scene must not be rebuilt, over-simplified, or turned into a different style.
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered.
 - Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyes are naturally corrected while identity, gaze, face shape, glasses, makeup, and expression style remain believable.
+- Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
 
 Strict scoring rubric:
 - 9-10: excellent, faithful, polished, intentional framing, no meaningful preservation/crop issues.
