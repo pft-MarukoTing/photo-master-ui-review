@@ -450,8 +450,13 @@
     // (openInlineAnalysisForCurrentContext still auto-opens for every user),
     // so hiding the now-empty-for-general-users wrapper here doesn't touch
     // it. #show-prompt-btn opens the GPT-prompts modal (openPromptsModal),
-    // a testbed-only view, so it stays debug-only too.
-    if (els.showPromptBtn) els.showPromptBtn.style.display = isDebug ? "" : "none";
+    // a testbed-only view, so it stays debug-only by default here -- this is
+    // just the fallback for whatever's on screen right now (typically the
+    // upload page, nothing to show prompts for yet); showSingleResult/
+    // showBatchDoneMain recompute it per-record whenever a result actually
+    // renders, since a record opened via viewHistoryRecord's revealDetailExtra
+    // (admin reports drawer) must show the button regardless of debug mode.
+    if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebug;
     if (els.analysisPreview) els.analysisPreview.style.display = isDebug ? "" : "none";
     // #results-analysis-slot only ever hosts #analysis-preview, which (like
     // #results-detail-extra above) no longer shows on the analyze/results
@@ -2585,7 +2590,9 @@
       // Lets any not-yet-shown edit-stage phrasings finish playing (fast-
       // forwarded) before switching away from the processing screen.
       await finishProcSubRotation();
-      if (els.showPromptBtn) els.showPromptBtn.hidden = false;
+      // Live session, not a historical revealDetailExtra view -- debug UI
+      // alone decides it here.
+      if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
       showSection("results");
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
@@ -2863,7 +2870,7 @@
   // showSingleResult is also how an entirely unrelated, already-finished
   // record gets its own settings panel shown when the user switches to view
   // it while some *other* record is still mid-revise in the background.
-  async function showSingleResult({ autoOpenPanel = true, forceReopen = false } = {}) {
+  async function showSingleResult({ autoOpenPanel = true, forceReopen = false, revealDetailExtra = false } = {}) {
     const runs = singleRuns || [];
     const pick = (singleMirrorIndex != null && runs[singleMirrorIndex])
       ? runs[singleMirrorIndex]
@@ -2898,6 +2905,10 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
+    // revealDetailExtra: true only for viewHistoryRecord's admin-reports-drawer
+    // call -- shows the prompts button for that one record regardless of
+    // debug mode, same override resultsDetailExtra itself already gets.
+    if (els.showPromptBtn) els.showPromptBtn.hidden = !(isDebugUiActive || revealDetailExtra);
 
     const { preset, aiPhotoEditing } = singleFlowState;
     const result = pick.result;
@@ -4971,7 +4982,7 @@
       // open (see openInlineAnalysisForCurrentContext's own doc on this).
       // showSingleResult itself preloads the RUN's image before painting, so
       // this doesn't return until that's done either.
-      await showSingleResult({ forceReopen: true });
+      await showSingleResult({ forceReopen: true, revealDetailExtra });
       if (historyViewToken === myToken) closeHistoryDrawer();
       return;
     }
@@ -5004,7 +5015,8 @@
       // renderResult's own "本機處理" label does.
       aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
       path: "aipoc",
-      reviewable: false
+      reviewable: false,
+      revealDetailExtra
     });
     if (historyViewToken === myToken) closeHistoryDrawer();
   }
@@ -5684,7 +5696,12 @@
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
     const reviewable = settings.reviewable !== false;
-    if (els.showPromptBtn) els.showPromptBtn.hidden = !reviewable;
+    // settings.revealDetailExtra: true only for viewHistoryRecord's admin-
+    // reports-drawer call -- shows the prompts button for that one record
+    // regardless of debug mode, same override resultsDetailExtra itself
+    // already gets. Deliberately not tied to `reviewable` -- that gates the
+    // separate live-revise-vs-read-only-preview choice below, not this.
+    if (els.showPromptBtn) els.showPromptBtn.hidden = !(isDebugUiActive || settings.revealDetailExtra);
     renderRunSwitcher(record, settings);
 
     const hasOriginal = !!record.previewUrl;
