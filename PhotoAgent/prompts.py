@@ -458,6 +458,17 @@ Closed-eye / accidental-blink correction has been turned off by the user for thi
 - Do not add an eye-opening or blink-repair item to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
 """
 
+# One switch covering every hair flaw state. It lists them by name rather than
+# saying "all hair repair" so that a hair_state added later has to be added here
+# too -- an unlisted state would silently stay on with the switch off.
+HAIR_MESS_DETECTION_DISABLED_OVERRIDE = """
+Hair tidying has been turned off by the user for this photo:
+- Still inspect and fill in hair_issues as usual, front_hair included -- this is for reference only, not for the edit.
+- Regardless of your own judgement above, set should_fix=false on every hair_issues entry whose hair_state is strands_across_face, lock_out_of_place, tuft_or_flattened, frizz_halo, windblown, bangs_clumped, or bangs_disturbed.
+- Do not add any hair item to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
+"""
+
+
 
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
@@ -472,6 +483,8 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     instruction = ANALYSIS_INSTRUCTION
     if not advanced_options.get("eye_closed_detection", True):
         instruction += CLOSED_EYE_DETECTION_DISABLED_OVERRIDE
+    if not advanced_options.get("hair_mess_detection", True):
+        instruction += HAIR_MESS_DETECTION_DISABLED_OVERRIDE
     if aspect_ratio_pref == "original":
         return instruction + """
 User aspect ratio requirement:

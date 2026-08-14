@@ -233,6 +233,7 @@ window.PhotoAgentDom = (() => {
     advancedSettingsModalClose: document.querySelector("#advanced-settings-modal-close"),
     eyeClosedDetectionToggle: document.querySelector("#eye-closed-detection-toggle"),
     eyeGazeFocusToggle: document.querySelector("#eye-gaze-focus-toggle"),
+    hairMessDetectionToggle: document.querySelector("#hair-mess-detection-toggle"),
     apSettingsBtn: document.querySelector("#ap-settings-btn"),
     apSettingsModal: document.querySelector("#ap-settings-modal"),
     apSettingsModalClose: document.querySelector("#ap-settings-modal-close"),

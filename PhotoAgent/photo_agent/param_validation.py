@@ -33,6 +33,7 @@ MAX_RUN_COUNT = 20
 # aipoc_client.py already takes for cross-service param mismatches.
 ADVANCED_OPTION_DEFAULTS = {
     "eye_closed_detection": True,
+    "hair_mess_detection": True,
 }
 
 
