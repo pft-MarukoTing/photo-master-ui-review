@@ -2314,6 +2314,16 @@
       user-select: none;
     }
     .batch-lock-toggle input { margin: 0; }
+
+    /* ── 補充指令 label row: label + "overwrite" checkbox inline ── */
+    .ap-prompt-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .ap-prompt-label-row .prompt-overwrite-toggle { margin-bottom: 0; }
     /* Dim/disable just the option list when locked -- the lock-toggle above
        it must stay clickable so the user can actually unlock it. */
     .ap-style-item.is-locked .step-inline-list { opacity: .45; pointer-events: none; }
@@ -2824,7 +2834,13 @@
                      in styles) forces this onto its own full-width line below
                      the pill row instead of wrapping in among them. -->
                 <div class="form-field ap-options-prompt">
-                  <label class="ap-label" for="prompt">補充指令</label>
+                  <div class="ap-prompt-label-row">
+                    <label class="ap-label" for="prompt">補充指令</label>
+                    <label class="batch-lock-toggle prompt-overwrite-toggle" id="prompt-overwrite-row">
+                      <input type="checkbox" id="prompt-overwrite">
+                      <span>取代最終送給編輯模型的完整指令</span>
+                    </label>
+                  </div>
                   <textarea id="prompt" class="field-ta" rows="4"
                     placeholder="例如：增加亮度，調整成冷色調，模糊背景。"></textarea>
                 </div>

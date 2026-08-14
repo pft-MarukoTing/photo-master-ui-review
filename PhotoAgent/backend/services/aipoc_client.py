@@ -88,7 +88,7 @@ def upload_to_req_url(request_spec, data):
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
                           image_model="gpt-image-2", aspect_ratio="auto", ai_photo_editing=True, run_qa=True,
-                          user_prompt=None, stage=None, analysis=None, advanced_options=None, req_id=1):
+                          user_prompt=None, overwrite_prompt=False, stage=None, analysis=None, advanced_options=None, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -97,8 +97,9 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         access_token: bearer token
         src_files: list with the single uploaded fileId (photoAgent takes one
             source image, no mask), e.g. [file_id]
-        preset/image_quality/image_model/ai_photo_editing/run_qa/user_prompt: same
-            fields as photo_agent/param_validation.py's local validator. run_qa
+        preset/image_quality/image_model/ai_photo_editing/run_qa/user_prompt/
+            overwrite_prompt: same fields as photo_agent/param_validation.py's
+            local validator. run_qa
             is UNVERIFIED against the remote gateway (same caveat as stage/
             analysis below) -- if the remote build hasn't picked up the
             run_qa param yet, it's silently ignored and QA still runs there.
@@ -128,6 +129,7 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         "aspect_ratio": aspect_ratio,
         "ai_photo_editing": ai_photo_editing,
         "run_qa": run_qa,
+        "overwrite_prompt": overwrite_prompt,
     }
     if user_prompt:
         params["user_prompt"] = user_prompt

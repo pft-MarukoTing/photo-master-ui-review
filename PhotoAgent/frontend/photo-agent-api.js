@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis, advancedOptions, runCount, user, actionId, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, advancedOptions, runCount, user, actionId, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -48,6 +48,10 @@ window.PhotoAgentApi = (() => {
     // toggle, so a new toggle never needs a new form.append call here.
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
+    // "取代最終送給編輯模型的完整指令" checkbox beside 補充指令 (index.html) --
+    // tells the backend to send user_prompt verbatim as the whole edit-model
+    // prompt instead of folding it into the normal analysis-driven template.
+    form.append("overwrite_prompt", overwritePrompt ? "true" : "false");
     // AIPoC-only: the analysis already shown on the preview screen, so the
     // remote worker can reuse it (stage="finish") instead of re-analyzing.
     if (analysis) form.append("analysis", JSON.stringify(analysis));
@@ -275,7 +279,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user, actionId }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -288,6 +292,7 @@ window.PhotoAgentApi = (() => {
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
         user_prompt: userPrompt || "",
+        overwrite_prompt: !!overwritePrompt,
         user: user || "",
         // Groups every job submitted from ONE "Run" click (runSingleItem/
         // editBatchItem submitting N separate continueJob calls for a
@@ -308,7 +313,7 @@ window.PhotoAgentApi = (() => {
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
-  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user, actionId }) {
+  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("analysis", JSON.stringify(analysis));
@@ -319,6 +324,7 @@ window.PhotoAgentApi = (() => {
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
     if (userPrompt) form.append("user_prompt", userPrompt);
+    form.append("overwrite_prompt", overwritePrompt ? "true" : "false");
     // Same history bookkeeping continueJob does -- a rerun is a real edit and
     // belongs in the user's history like any other, and actionId groups the N
     // parallel RUNs of one runCount>1 click into a single entry.

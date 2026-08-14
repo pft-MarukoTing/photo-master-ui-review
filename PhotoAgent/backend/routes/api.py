@@ -30,7 +30,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "run_count", "advanced_options")
+            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
@@ -52,6 +52,7 @@ def _parse_and_validate_params(form):
         "aspect_ratio": form.get("aspect_ratio", "auto"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
+        "overwrite_prompt": str(form.get("overwrite_prompt", "false")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
@@ -980,6 +981,7 @@ def aipoc_submit():
         ai_photo_editing=params["ai_photo_editing"],
         run_qa=params["run_qa"],
         user_prompt=params.get("user_prompt"),
+        overwrite_prompt=params.get("overwrite_prompt", False),
         stage="finish" if analysis else None,
         analysis=analysis,
         advanced_options=params.get("advanced_options", {}),

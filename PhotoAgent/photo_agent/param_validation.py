@@ -7,7 +7,7 @@ from typing import TypedDict
 
 from engine_result_code import RESULT_INVALID_PARAMETER
 
-from .utils import optional_text
+from .utils import optional_bool, optional_text
 
 
 EFFECT_NAME = "photoAgent"
@@ -142,6 +142,11 @@ def _validate_params(params: dict) -> dict:
     normalized["aspect_ratio"] = aspect_ratio
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
+
+    # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令) --
+    # when true, user_prompt replaces the whole templated edit/QA prompt
+    # verbatim instead of being folded into it (see prompts.py).
+    normalized["overwrite_prompt"] = optional_bool(normalized.get("overwrite_prompt"), "overwrite_prompt")
 
     ai_photo_editing = normalized.get("ai_photo_editing", True)
     if not isinstance(ai_photo_editing, bool):

@@ -981,6 +981,13 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
         user_instruction.get("normalized_user_direction") or user_direction or ""
     )
 
+    # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令):
+    # send the user's raw text verbatim as the WHOLE edit-model prompt,
+    # bypassing every analysis-derived block built below (style/crop/color-
+    # grade/retouch-priority/...).
+    if user_instruction.get("overwrite_prompt") and effective_user_direction.strip():
+        return effective_user_direction.strip()
+
     detected_issues = "; ".join(analysis.get("detected_issues") or [])
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])

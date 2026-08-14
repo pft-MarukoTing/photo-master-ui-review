@@ -110,6 +110,7 @@ def finish_stage(
     image_model: str = "gpt-image-2",
     run_qa: bool = True,
     aspect_ratio: str = "auto",
+    overwrite_prompt: bool = False,
 ) -> dict:
     """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
 
@@ -130,8 +131,20 @@ def finish_stage(
     # Step 3 — review user instruction (collected on the analyze-preview
     # screen, so it's only available now that this stage has started)
     t0 = time.time()
-    logger.info("Step 3: reviewing user instruction (has_prompt=%s)", bool(user_prompt))
-    user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
+    logger.info("Step 3: reviewing user instruction (has_prompt=%s, overwrite_prompt=%s)", bool(user_prompt), overwrite_prompt)
+    if overwrite_prompt and (user_prompt or "").strip():
+        # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令):
+        # the raw text becomes the WHOLE edit-model prompt verbatim (see
+        # prompts.py's build_edit_prompt), so there is nothing here to
+        # structure into priorities/prohibitions -- skip the LLM review call.
+        user_instruction = {
+            "has_user_direction": True,
+            "normalized_user_direction": user_prompt.strip(),
+            "overwrite_prompt": True,
+        }
+        review_prompt = None
+    else:
+        user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
     analysis = {**analysis, "user_instruction": user_instruction}
     prompts["user_instruction_review"] = review_prompt
     timings["Step 3 - user_instruction_review"] = time.time() - t0
@@ -251,7 +264,8 @@ def run_pipeline(
     image_model: str = "gpt-image-2",
     run_qa: bool = True,
     aspect_ratio: str = "auto",
+    overwrite_prompt: bool = False,
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
     analysis = analyze_stage(image_bytes, aspect_ratio)
-    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model, run_qa, aspect_ratio)
+    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model, run_qa, aspect_ratio, overwrite_prompt)

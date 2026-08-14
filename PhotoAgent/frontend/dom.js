@@ -107,6 +107,7 @@ window.PhotoAgentDom = (() => {
     apSizeList: document.querySelector("#ap-size-list"),
     errorMsg: document.querySelector("#error-msg"),
     promptInput: document.querySelector("#prompt"),
+    promptOverwriteToggle: document.querySelector("#prompt-overwrite"),
     processingPathSelect: document.querySelector("#processing-path"),
     aiEditToggle: document.querySelector("#ai-edit-toggle"),
     runQaRow: document.querySelector("#run-qa-row"),

@@ -2046,6 +2046,7 @@
       optionsTouched: {},   // per-category: did the user actually change this image's own radio (vs. just viewing the batch-inherited default)
       recipeChecked: null,  // per-image recipe checklist state (UI-only)
       userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
+      overwritePrompt: false, // "取代最終送給編輯模型的完整指令" checkbox, alongside userPrompt
       analyzeTimings: [],   // step-1 timing rows, merged into the detail view
       jobId: null,          // step-2 edit job/task id
       result: null,
@@ -2350,8 +2351,8 @@
   // still needs the real two-stage analyze->adjust->continue path (and its
   // own per-RUN edit jobs, since each RUN there can carry different
   // per-image style/recipe overrides picked during review).
-  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt = "", runCount = 1, onStage, onRunDone }) {
-    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, runCount, user: getCurrentUser(), path: "local" });
+  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
+    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
     await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
   }
 
@@ -2561,7 +2562,8 @@
     const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
-    lastSingleSelections = { userPrompt, ...selections };
+    const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
+    lastSingleSelections = { userPrompt, overwritePrompt, ...selections };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
     const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, selections);
@@ -2653,7 +2655,7 @@
       const stepStart = Date.now();
       try {
         await runCombinedMultiRun({
-          file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, runCount,
+          file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
@@ -2720,9 +2722,9 @@
       let finalJobId, imageUrl, result;
 
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser() });
+        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser() });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -2806,7 +2808,7 @@
 
       const actionId = generateActionId();
       await runBatchPool(myRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
         // autoOpenPanel: false -- this fires per-RUN, not just once at the
@@ -2842,14 +2844,14 @@
       : rerunJob({ file, ...payload });
   }
 
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, user: getCurrentUser(), actionId });
+        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -2989,6 +2991,7 @@
     renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset });
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
+      if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyStyleSelections(lastSingleSelections);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
@@ -3229,6 +3232,7 @@
   // populated below once the first RUN lands.
   async function analyzeAndEditBatchRecord(record, runCount) {
     const userPrompt = effectivePrompt(record);
+    const overwritePrompt = effectiveOverwritePrompt(record);
     const stepStart = Date.now();
     try {
       await runCombinedMultiRun({
@@ -3241,6 +3245,7 @@
         runQa: batchSettings.runQa,
         advancedOptions: batchSettings.advancedOptions,
         userPrompt,
+        overwritePrompt,
         runCount,
         onStage: (stage) => {
           // The whole job flips from "analyzing" to "processing" once it
@@ -3334,6 +3339,14 @@
     const own = (record.userPrompt || "").trim();
     if (own) return own;
     return (els.batchPromptInput && els.batchPromptInput.value.trim()) || "";
+  }
+
+  // "取代" checkbox only exists beside the per-image 補充指令 field, not the
+  // batch-shared one -- so it only ever applies when the image's own prompt
+  // (set during its review) is what's actually being sent.
+  function effectiveOverwritePrompt(record) {
+    const own = (record.userPrompt || "").trim();
+    return own ? !!record.overwritePrompt : false;
   }
 
   // Effective per-image style options: same override rule as effectivePrompt,
@@ -3449,6 +3462,7 @@
   async function editBatchItem({ record, run, actionId }) {
     try {
       const userPrompt = effectivePrompt(record);
+      const overwritePrompt = effectiveOverwritePrompt(record);
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked
@@ -3464,6 +3478,7 @@
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           userPrompt,
+          overwritePrompt,
           analysis: effectiveAnalysis,
           user: getCurrentUser(),
           actionId,
@@ -3479,6 +3494,7 @@
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           userPrompt,
+          overwritePrompt,
           user: getCurrentUser(),
           actionId
         });
@@ -4696,7 +4712,7 @@
   // an entry recorded before that field existed, or if none was typed) --
   // passed through as-is rather than read from analysis, since the user's
   // raw typed instruction isn't part of it.
-  function restoreReviseSelections(analysis, userPrompt) {
+  function restoreReviseSelections(analysis, userPrompt, overwritePrompt) {
     const rejectedRecipe = analysis.rejected_retouch_recipe || [];
     const rejectedPlan = analysis.rejected_corrections || [];
     const rejectedAxes = analysis.rejected_axes || [];
@@ -4720,7 +4736,7 @@
       lighting: styleOptions.lighting || "default",
       size: styleOptions.size || "default"
     };
-    return { analysis: restoredAnalysis, selections: { userPrompt: userPrompt || "", options, recipeChecked } };
+    return { analysis: restoredAnalysis, selections: { userPrompt: userPrompt || "", overwritePrompt: !!overwritePrompt, options, recipeChecked } };
   }
 
   // A "Run" click with run_count > 1 (two-stage manual path) submits N
@@ -4821,7 +4837,7 @@
         if (!doneRun) return; // nothing landed yet -- leave the loading placeholder up
         if (!singleFlowState || singleFlowState.analyzeJobId !== doneRun.jobId) {
           const extraInfo = doneRun.result["extra-info"] || {};
-          const { analysis: restoredAnalysis, selections } = restoreReviseSelections(doneRun.result.analysis, job.user_prompt);
+          const { analysis: restoredAnalysis, selections } = restoreReviseSelections(doneRun.result.analysis, job.user_prompt, job.overwrite_prompt);
           singleFlowState = {
             analysis: restoredAnalysis,
             analyzeJobId: doneRun.jobId,
@@ -4977,7 +4993,7 @@
       // when an AI edit actually ran, see pipeline.py's finish_stage) is a
       // more accurate fallback than a blind default for that one specifically.
       const extraInfo = firstDone.result["extra-info"] || {};
-      const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis, job.user_prompt);
+      const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis, job.user_prompt, job.overwrite_prompt);
       singleFlowState = {
         analysis: restoredAnalysis,
         analyzeJobId: firstDone.jobId,
@@ -5834,6 +5850,7 @@
     renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
     applyBatchReviewSelections(record);
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
+    if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!record.overwritePrompt;
     // Pre-fill with this image's own current RUN count (matching whatever was
     // configured when it last ran) instead of hiding the control -- the
     // bulk #run-count in the sidebar only ever applies to a *first* continue,
@@ -6057,6 +6074,7 @@
   function captureBatchReviewSelections(record) {
     if (!record) return;
     if (els.promptInput) record.userPrompt = els.promptInput.value.trim();
+    if (els.promptOverwriteToggle) record.overwritePrompt = els.promptOverwriteToggle.checked;
     const { options, recipeChecked } = readStyleSelectionsFromDom();
     record.options = options;
     if (recipeChecked) record.recipeChecked = recipeChecked;
