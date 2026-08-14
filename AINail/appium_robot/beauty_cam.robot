@@ -25,8 +25,8 @@ Meitu Test Case
 *** Keywords ***
 Beautify Nail Art Photo
     [Arguments]    ${photo_offset}    ${custom_offset}
-    Dismiss Home Page Ad
     Dismiss Unsaved Photo Dialog
+    Dismiss Home Page Ad
     Click Page Element    accessibility_id=Beautify
     Scroll To Bottom Of Photo List    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView
     Click Photo From Bottom By Grid    //XCUIElementTypeOther[@name="CosmesisPhotoContainer"]/XCUIElementTypeCollectionView    ${photo_offset}
