@@ -34,6 +34,10 @@ MAX_RUN_COUNT = 20
 ADVANCED_OPTION_DEFAULTS = {
     "eye_closed_detection": True,
     "hair_mess_detection": True,
+    # Off by default, unlike the two above: those gate a repair the analysis
+    # proposes only when it finds a defect, while this one is a transformation
+    # the user elects and is applied whether or not the wind reads as a flaw.
+    "calm_hair": False,
 }
 
 

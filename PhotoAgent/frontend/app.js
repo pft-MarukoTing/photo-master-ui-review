@@ -2440,6 +2440,7 @@
     const advancedOptions = {
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
+      calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
     };
     const processingPath = els.processingPathSelect?.value || "local";
 
@@ -3067,6 +3068,7 @@
       advancedOptions: {
         eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
         hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
+        calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
       },
       path: els.processingPathSelect?.value || "local"
     };

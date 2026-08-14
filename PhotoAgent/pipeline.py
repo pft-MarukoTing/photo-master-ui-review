@@ -97,6 +97,12 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # forced by that earlier choice, not a genuine model judgment -- see
     # build_edit_prompt's use of this field.
     analysis["_aspect_ratio_pref_at_analysis"] = aspect_ratio
+    # Same trick for the Advanced Settings toggles: build_edit_prompt needs the
+    # calm-hair switch at step 5, and carrying it on the analysis rather than as
+    # a finish_stage argument means the two-stage flow and the debug-UI /rerun
+    # both hand it back automatically, with the stored analysis recording which
+    # toggles that run actually used.
+    analysis["_advanced_options"] = dict(advanced_options or {})
     return analysis
 
 

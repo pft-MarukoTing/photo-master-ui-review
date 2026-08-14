@@ -469,6 +469,14 @@ Hair tidying has been turned off by the user for this photo:
 """
 
 
+CALM_HAIR_ENABLED_OVERRIDE = """
+The user has asked for this person's hair to be laid down as if there were no wind:
+- This is a request, not a defect you have to find. Wind in the hair does not need to reach any confidence threshold, and it does not matter whether the disorder would otherwise read as intentional.
+- For every person whose hair is lifted, opened, or blown sideways by wind, add a hair_issues entry with hair_state="windblown", fix_action="settle", should_fix=true, and a reason naming the user request.
+- Write the matching correction_plan item as laying that person's hair down into the hairstyle's own shape so it reads as a still day, tagged correction_axes ["hair"]. Keep retouch_recipe short, for example "把被風吹起的頭髮自然放下。"
+- This does not extend to hair moving because the person is moving. A jump, spin, hair flip, or run still keeps its motion; laying that hair flat would contradict the body in the same photograph. Only wind-displaced hair is settled.
+"""
+
 
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
@@ -485,6 +493,8 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
         instruction += CLOSED_EYE_DETECTION_DISABLED_OVERRIDE
     if not advanced_options.get("hair_mess_detection", True):
         instruction += HAIR_MESS_DETECTION_DISABLED_OVERRIDE
+    if advanced_options.get("calm_hair", False):
+        instruction += CALM_HAIR_ENABLED_OVERRIDE
     if aspect_ratio_pref == "original":
         return instruction + """
 User aspect ratio requirement:
@@ -1261,6 +1271,20 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 - Do not tidy the face/skin/expression along with the hair, tuck a fallen lock back into an updo, ponytail, braid, or clip, or close a parted fringe. Where the named hair cannot be laid back, cleanly taken off, or settled within these limits, leave it exactly as captured -- that is the correct outcome here, not a missed instruction.
 - Hair to work on: """ + json.dumps(hair_items_to_fix, ensure_ascii=False)
 
+    # A user-elected transformation, so it is written with the same force as a
+    # style override rather than as a defect repair: unconditional, and stated as
+    # the outcome to reach instead of as a permission to tidy. The detection
+    # blocks above hedge on purpose -- an unrequested hair edit is a risk -- but
+    # hedging is wrong here, since the user asked for exactly this.
+    calm_hair_block = ""
+    if (analysis.get("_advanced_options") or {}).get("calm_hair") and not hair_rejected:
+        calm_hair_block = """Still-air hair (user-selected, mandatory):
+- The user asked for this photograph to look as though there were no wind. Every person's hair hangs down under its own weight, in the shape their haircut gives it, as it would on a still day indoors.
+- Bring lifted, fanned, streaming, and sideways-blown hair back down onto the head and shoulders. Close the gaps the wind opened, using the hair that is already in the photograph. The outline of each hairstyle reads continuous and settled rather than caught mid-gust.
+- Same person, same haircut: length, volume, density, parting, hairline, curl pattern, and color are unchanged, no hair is added, and the face is untouched. Hair falls, but its owner does not change.
+- Settled is not sculpted. Hair hanging still keeps strand separation, its own unevenness, and the way it catches light. A smooth glossy sheet, a painted block, or a wig fails this even though the wind is gone.
+- Everything else in the photograph stays exactly as captured -- the same clothing, the same flags, leaves, water, and other people, still showing whatever the weather was doing to them. This settles hair only; it does not calm the scene."""
+
     skin_block = ""
     if has_person:
         skin_block = """Skin-tone priority (this photo contains people):
@@ -1481,6 +1505,8 @@ User extra direction:
 {blink_block}
 
 {hair_block}
+
+{calm_hair_block}
 
 {negative_block}
 

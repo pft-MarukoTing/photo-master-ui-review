@@ -8,6 +8,7 @@ Imports only prompts.py, so it runs without PIL/numpy/cv2:
 import re
 import unittest
 
+from photo_agent.param_validation import normalize_advanced_options
 from prompts import (
     AXIS_DEFINITIONS,
     HAIR_MESS_DETECTION_DISABLED_OVERRIDE,
@@ -412,6 +413,62 @@ class HairAxis(unittest.TestCase):
                 self.assertEqual(rejected, [])
 
 
+class CalmHair(unittest.TestCase):
+    """The 頭髮自然放下 switch: a user-elected transformation, not a defect repair."""
+
+    def _prompt(self, calm, **overrides):
+        analysis = {**ANALYSIS, "_advanced_options": {"calm_hair": calm}, **overrides}
+        return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
+
+    def test_off_by_default(self):
+        self.assertEqual(normalize_advanced_options(None)["calm_hair"], False)
+        self.assertNotIn("Still-air hair", self._prompt(False))
+        self.assertNotIn("Still-air hair", build_edit_prompt(ANALYSIS, PRESET, "自然風格", "", CROP_PLAN))
+
+    def test_on_reaches_the_edit_prompt(self):
+        self.assertIn("Still-air hair (user-selected, mandatory)", self._prompt(True))
+
+    def test_it_does_not_wait_for_the_analysis_to_find_a_defect(self):
+        # The point of the switch: the user asked for it, so no hair_issues entry
+        # and no confidence threshold gates it.
+        prompt = self._prompt(True, hair_issues=[])
+        self.assertIn("Still-air hair", prompt)
+        self.assertNotIn("Hair tidying priority", prompt)
+
+    def test_unchecking_the_hair_item_still_switches_it_off(self):
+        # Otherwise the rejected-corrections block and this one contradict.
+        prompt = self._prompt(
+            True,
+            correction_plan=[], correction_axes=[],
+            rejected_corrections=["把被風吹起的頭髮自然放下"], rejected_axes=[["hair"]],
+        )
+        self.assertNotIn("Still-air hair", prompt)
+
+    def test_the_scene_keeps_its_weather(self):
+        # "No wind" applied to the whole frame would rebuild the scene; only hair
+        # settles, and the flags and foliage still blow.
+        self.assertIn("This settles hair only; it does not calm the scene", self._prompt(True))
+
+    def test_a_moving_body_keeps_its_moving_hair(self):
+        # Hair flat against a mid-jump body is physically incoherent, so the
+        # analysis override carves motion out even with the switch on.
+        instruction = build_analysis_instruction("auto", {"calm_hair": True})
+        self.assertIn("This does not extend to hair moving because the person is moving", instruction)
+
+    def test_items_are_written_as_a_finished_state(self):
+        # The two real sentences from the controlled pair, as the contrast example.
+        i = build_analysis_instruction("auto")
+        self.assertIn("Write it as the state that hair ends in", i)
+        self.assertIn("nothing to render towards", i)
+
+    def test_the_analysis_still_routes_it_through_the_reviewable_recipe(self):
+        # It goes into correction_plan like everything else, so the review screen
+        # can uncheck it and QA can score it.
+        instruction = build_analysis_instruction("auto", {"calm_hair": True})
+        self.assertIn("Write the matching correction_plan item", instruction)
+        self.assertIn('correction_axes ["hair"]', instruction)
+
+
 class AdvancedSettingsToggle(unittest.TestCase):
     """The upload page's 人像進階設定 hair switch, as it reaches the analysis."""
 
@@ -451,6 +508,16 @@ class AdvancedSettingsToggle(unittest.TestCase):
             "styled_bangs", "styled_face_framing", "motion", "natural_texture",
         }
         self.assertEqual(ungoverned, set(), f"hair_state(s) the switch cannot turn off: {ungoverned}")
+
+    def test_the_hair_toggle_survives_normalization(self):
+        self.assertEqual(
+            normalize_advanced_options('{"hair_mess_detection": false}'),
+            {"eye_closed_detection": True, "hair_mess_detection": False, "calm_hair": False},
+        )
+
+    def test_a_non_boolean_toggle_is_rejected(self):
+        with self.assertRaises(RuntimeError):
+            normalize_advanced_options('{"hair_mess_detection": "no"}')
 
 
 if __name__ == "__main__":
