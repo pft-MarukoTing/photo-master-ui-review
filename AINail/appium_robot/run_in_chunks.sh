@@ -8,7 +8,7 @@
 # invocation so WDA itself gets torn down and relaunched fresh every chunk.
 #
 # Usage: ./run_in_chunks.sh [--source-offset N] [--reference-offset N]
-#                            [--start N] [--end N] [--chunk-size N]
+#                            [--start N] [--end N] [--chunk-size N] [--debug-logs]
 #   --source-offset     base offset for the source photo (default 0)
 #   --reference-offset  base offset for the reference/custom photo (default 200)
 #   --start             iteration to (re)start from - use this to resume after
@@ -16,6 +16,9 @@
 #   --end               exclusive upper bound to run up to, i.e. iterations run
 #                        are [start, end) (default 500)
 #   --chunk-size        iterations per WDA/Appium session (default 50)
+#   --debug-logs        keep the per-chunk WDA/Appium log files under
+#                        /tmp/nail_test_chunks instead of discarding them
+#                        (default off - turn on only when actively debugging)
 #
 # If the run is interrupted partway (Ctrl+C, crash, phone locked, etc), note
 # the last "=== Chunk N: iterations X..Y ===" line that completed and re-run
@@ -41,6 +44,7 @@ REFERENCE_OFFSET=200
 START_ITERATION=0
 END_ITERATION=500
 CHUNK=50
+DEBUG_LOGS=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -49,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --start) START_ITERATION="$2"; shift 2 ;;
         --end) END_ITERATION="$2"; shift 2 ;;
         --chunk-size) CHUNK="$2"; shift 2 ;;
+        --debug-logs) DEBUG_LOGS=true; shift ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -82,7 +87,7 @@ start_wda() {
         -scheme "$WDA_SCHEME" \
         -destination "id=${UDID}" \
         -allowProvisioningUpdates \
-        < /dev/null &
+        < /dev/null > /dev/null 2>&1 &
     WDA_PID=$!
     echo "Started WDA build/test (pid=$WDA_PID), waiting for it to be ready (make sure the phone is unlocked)..."
     # 127.0.0.1:8100 is only reachable once Appium sets up its own USB
@@ -158,7 +163,7 @@ while (( start < END_ITERATION )); do
     start_appium "$appium_log"
 
     # Filter the console-only noise from AppiumLibrary's deprecation warning
-    # for "Element Should Be Visible" (still fully logged in log.html/output.xml).
+    # for "Element Should Be Visible".
     # set +e/-e brackets the pipeline so `set -e`/pipefail can't act on its
     # collective exit status (which would reflect grep, not robot) - grep -v can
     # legitimately exit 1 if it filters out every line, which would otherwise be
@@ -166,6 +171,9 @@ while (( start < END_ITERATION )); do
     # captured unconditionally and checked explicitly instead.
     set +e
     conda run -n "$CONDA_ENV" robot \
+        --output NONE \
+        --log NONE \
+        --report NONE \
         --variable "START_ITERATION:${start}" \
         --variable "END_ITERATION:${end}" \
         --variable "SOURCE_PHOTO_START_OFFSET:${SOURCE_OFFSET}" \
@@ -175,17 +183,24 @@ while (( start < END_ITERATION )); do
     robot_exit=${PIPESTATUS[0]}
     set -e
     if [[ $robot_exit -ne 0 ]]; then
-        echo "Chunk ${chunk_num} failed (robot exit ${robot_exit}), see $wda_log / $appium_log if still present" >&2
+        if [[ "$DEBUG_LOGS" == true ]]; then
+            echo "Chunk ${chunk_num} failed (robot exit ${robot_exit}), see $wda_log / $appium_log" >&2
+        else
+            rm -f "$wda_log" "$appium_log"
+            echo "Chunk ${chunk_num} failed (robot exit ${robot_exit}); re-run with --debug-logs to keep the WDA/Appium logs for inspection" >&2
+        fi
         exit "$robot_exit"
     fi
 
     stop_appium
     stop_wda
 
-    # Chunk succeeded (the `if` above would have already exited the script on
-    # failure) - the logs are only useful for debugging a crash, so drop them
-    # now instead of letting them pile up on disk across many chunks.
-    rm -f "$wda_log" "$appium_log"
+    # The logs are only useful for debugging a crash, so drop them by default
+    # instead of letting them pile up on disk across many chunks; pass
+    # --debug-logs to keep them around instead.
+    if [[ "$DEBUG_LOGS" != true ]]; then
+        rm -f "$wda_log" "$appium_log"
+    fi
 
     sleep 3
 
