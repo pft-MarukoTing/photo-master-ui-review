@@ -625,6 +625,17 @@
     return options.find((o) => o.value === value) || options[0] || null;
   }
 
+  // Matched on the option's own model/quality fields rather than a composed
+  // "model:quality" key -- not every option uses that form (nano-banana-2 has
+  // no quality tier), and a miss here would silently swap the model. Same
+  // matching rule as importedRunSettings' inline lookup below.
+  function findModelQualityOptionByPair(model, quality) {
+    const options = window.PhotoAgentConfig.imageModelQualityOptions || [];
+    return options.find((o) => o.model === model && o.quality === quality)
+      || options.find((o) => o.model === model)
+      || options[0] || null;
+  }
+
   function populateModelQualitySelect(select) {
     if (!select) return;
     select.innerHTML = "";
@@ -642,22 +653,31 @@
   wireOptionPicker(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
   wireOptionPicker(els.apRunCountPicker, els.apRunCountSelect);
 
-  function applyModelQualityChange(value) {
-    const opt = findModelQualityOption(value);
+  // wireOptionPicker only refreshes a picker's own visible label
+  // (.ap-style-value) when THAT picker itself is opened (rebuild runs on
+  // its "toggle") -- so picking a model on the upload page kept the
+  // underlying <select>s in sync (above) but left #ap-image-model-quality-
+  // picker's label showing the old pick on the results page until the user
+  // happened to open it there too. Sync both selects and both pickers'
+  // visible labels here directly instead of waiting for that. Split out
+  // from applyModelQualityChange so a historical record (viewHistoryRecord)
+  // can sync the pickers to what it actually used without also pushing that
+  // onto singleFlowState/batchSettings, which may not be (or may be the
+  // wrong) live session's state at that point.
+  function applyModelQualityOption(opt) {
     if (!opt) return;
     if (els.imageModelQualitySelect) els.imageModelQualitySelect.value = opt.value;
     if (els.apImageModelQualitySelect) els.apImageModelQualitySelect.value = opt.value;
-    // wireOptionPicker only refreshes a picker's own visible label
-    // (.ap-style-value) when THAT picker itself is opened (rebuild runs on
-    // its "toggle") -- so picking a model on the upload page kept the
-    // underlying <select>s in sync (above) but left #ap-image-model-quality-
-    // picker's label showing the old pick on the results page until the user
-    // happened to open it there too. Sync both pickers' visible labels here
-    // directly instead of waiting for that.
     [els.imageModelQualityPicker, els.apImageModelQualityPicker].forEach((picker) => {
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.label;
     });
+  }
+
+  function applyModelQualityChange(value) {
+    const opt = findModelQualityOption(value);
+    if (!opt) return;
+    applyModelQualityOption(opt);
     if (singleFlowState) { singleFlowState.imageModel = opt.model; singleFlowState.imageQuality = opt.quality; }
     if (batchSettings) { batchSettings.imageModel = opt.model; batchSettings.imageQuality = opt.quality; }
   }
@@ -716,8 +736,10 @@
     return options.find((o) => o.value === value) || options[0] || null;
   }
 
-  function applyAspectRatioChange(value) {
-    const opt = findAspectRatioOption(value);
+  // Split out for the same reason as applyModelQualityOption above -- a
+  // historical record just needs the pickers to show what it actually used,
+  // not a state push or a live re-fit against whatever's on screen.
+  function applyAspectRatioOption(opt) {
     if (!opt) return;
     if (els.imageAspectRatioSelect) els.imageAspectRatioSelect.value = opt.value;
     if (els.apImageAspectRatioSelect) els.apImageAspectRatioSelect.value = opt.value;
@@ -725,6 +747,12 @@
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.label;
     });
+  }
+
+  function applyAspectRatioChange(value) {
+    const opt = findAspectRatioOption(value);
+    if (!opt) return;
+    applyAspectRatioOption(opt);
     if (singleFlowState) singleFlowState.aspectRatio = opt.value;
     if (batchSettings) batchSettings.aspectRatio = opt.value;
     // Re-fit what's on screen for the newly picked ratio: the crop that would
@@ -4983,6 +5011,15 @@
       // showSingleResult itself preloads the RUN's image before painting, so
       // this doesn't return until that's done either.
       await showSingleResult({ forceReopen: true, revealDetailExtra });
+      // #ap-options-card-inline's model/quality and aspect-ratio pickers are
+      // otherwise left showing whatever a previous record (or the upload
+      // page) had picked -- sync them to what THIS record actually used.
+      // Only the picker, not applyModelQualityChange/applyAspectRatioChange's
+      // full side effects (pushing onto singleFlowState -- already correct,
+      // just set above -- and, for aspect ratio, re-fitting the preview,
+      // which needs to run after showSingleResult's own render regardless).
+      applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+      applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
       if (historyViewToken === myToken) closeHistoryDrawer();
       return;
     }
@@ -5018,6 +5055,15 @@
       reviewable: false,
       revealDetailExtra
     });
+    // #ap-options-card-inline's pickers are shown (and, despite reviewable:
+    // false, not actually inert -- see applyModelQualityOption's own doc) for
+    // this read-only view too, and need the same sync as the local-path
+    // branch above.
+    applyModelQualityOption(findModelQualityOptionByPair(
+      job.image_model || extraInfo.image_model || "gpt-image-2",
+      job.image_quality || extraInfo.image_quality || "medium"
+    ));
+    applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
     if (historyViewToken === myToken) closeHistoryDrawer();
   }
 
