@@ -71,7 +71,9 @@ export default function ViewSampleRefFileInput(props) {
   var fileOf = function (tpl, idx) {
     return {
       id: idOf(tpl, idx),
-      name: labelOf(tpl, idx) + '.jpg',
+      // The name is the only field that survives to RefFileInOutputs, and
+      // template titles are not unique, so it carries the id as a prefix.
+      name: idOf(tpl, idx) + '__' + labelOf(tpl, idx) + '.jpg',
       type: 'image/jpeg',
       size: 0,
       data: null,
@@ -86,12 +88,8 @@ export default function ViewSampleRefFileInput(props) {
       return;
     }
 
-    if (!multiple) {
-      onChange([fileOf(tpl, idx)]);
-      return;
-    }
-
-    // multi-select: click toggles, then send back the whole selection
+    // Always multi-select, regardless of the configui `multiple` flag: click
+    // toggles, then send back the whole selection.
     var id = idOf(tpl, idx);
     var picked = {};
     selectedIds.forEach(function (sid) { picked[sid] = true; });
