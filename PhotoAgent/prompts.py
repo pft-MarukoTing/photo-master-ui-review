@@ -1644,11 +1644,17 @@ Approved-repair override:
     has_person = analysis.get("subject_category") == "人物" or any(
         isinstance(s, dict) and s.get("is_person") for s in subjects
     )
+    # Gated the same way as gaze_contact_detection (pipeline._run_gaze_repair_pass):
+    # not just trusting that the analysis model complied with
+    # CLOSED_EYE_DETECTION_DISABLED_OVERRIDE's "set should_fix=false on every
+    # eye_blink_issues entry" instruction. A plain dict lookup here means the
+    # toggle holds even on the run where the analysis model doesn't comply.
+    eye_closed_detection_enabled = (analysis.get("_advanced_options") or {}).get("eye_closed_detection", True)
     blink_block = ""
     blink_items_to_fix = [
         item for item in eye_blink_issues
         if isinstance(item, dict) and item.get("should_fix")
-    ]
+    ] if eye_closed_detection_enabled else []
     if blink_items_to_fix:
         blink_block = """Accidental blink repair priority:
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
