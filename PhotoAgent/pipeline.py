@@ -81,7 +81,18 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     Returns (image_b64, prompt_text) -- prompt_text is None when there was no
     approved gaze repair to run, matching every other stage's "no GPT call
     made" convention (see finish_stage's prompts dict).
+
+    Gated a second time here on advanced_options["gaze_contact_detection"],
+    not just left to the analysis prompt's own disabled-override (prompts.py's
+    GAZE_CONTACT_DETECTION_DISABLED_OVERRIDE, which asks the analysis model to
+    set should_fix=false on every item when the toggle is off). That is a
+    request to an LLM, not a guarantee -- the whole rest of this file exists
+    because analysis output doesn't always follow the rules it's given. A
+    plain dict lookup here means the toggle holds even on the run where the
+    analysis model doesn't comply.
     """
+    if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
+        return image_b64, None
     gaze_items = [
         item for item in (analysis.get("gaze_contact_issues") or [])
         if isinstance(item, dict) and item.get("should_fix")

@@ -512,7 +512,12 @@ class AdvancedSettingsToggle(unittest.TestCase):
     def test_the_hair_toggle_survives_normalization(self):
         self.assertEqual(
             normalize_advanced_options('{"hair_mess_detection": false}'),
-            {"eye_closed_detection": True, "hair_mess_detection": False, "calm_hair": False},
+            {
+                "eye_closed_detection": True,
+                "gaze_contact_detection": True,
+                "hair_mess_detection": False,
+                "calm_hair": False,
+            },
         )
 
     def test_a_non_boolean_toggle_is_rejected(self):

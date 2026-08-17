@@ -33,6 +33,11 @@ MAX_RUN_COUNT = 20
 # aipoc_client.py already takes for cross-service param mismatches.
 ADVANCED_OPTION_DEFAULTS = {
     "eye_closed_detection": True,
+    # "眼神對焦" on the upload page. Read by build_analysis_instruction (gates
+    # the analysis's own gaze_contact_issues judgment) and, a second time and
+    # independently, by pipeline._run_gaze_repair_pass (gates Step 5b) -- the
+    # latter does not just trust should_fix coming back false from the former.
+    "gaze_contact_detection": True,
     "hair_mess_detection": True,
     # Off by default, unlike the two above: those gate a repair the analysis
     # proposes only when it finds a defect, while this one is a transformation

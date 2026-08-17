@@ -2473,6 +2473,7 @@
     // analyzeAipoc/analyzeJob/singleFlowState/runCombinedMultiRun/submitJob.
     const advancedOptions = {
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
+gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
       calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
     };
@@ -3101,6 +3102,7 @@
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       advancedOptions: {
         eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
+gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
         hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
         calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
       },
