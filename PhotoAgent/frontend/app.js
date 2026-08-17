@@ -679,7 +679,21 @@
     if (!opt) return;
     applyModelQualityOption(opt);
     if (singleFlowState) { singleFlowState.imageModel = opt.model; singleFlowState.imageQuality = opt.quality; }
-    if (batchSettings) { batchSettings.imageModel = opt.model; batchSettings.imageQuality = opt.quality; }
+    // A change made from #ap-image-model-quality while one batch case's
+    // revise panel is open belongs to that case alone -- write it onto the
+    // record being revised, not the batch-wide `batchSettings` every other
+    // case also reads (see makeBatchRecord's imageModel/imageQuality doc).
+    // currentDetailBatchRecord() is null pre-submission (upload screen's own
+    // #image-model-quality shares this handler), so that path still falls
+    // through to batchSettings exactly as before.
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) {
+      batchRecord.imageModel = opt.model;
+      batchRecord.imageQuality = opt.quality;
+    } else if (batchSettings) {
+      batchSettings.imageModel = opt.model;
+      batchSettings.imageQuality = opt.quality;
+    }
   }
 
   if (els.imageModelQualitySelect) {
@@ -754,7 +768,16 @@
     if (!opt) return;
     applyAspectRatioOption(opt);
     if (singleFlowState) singleFlowState.aspectRatio = opt.value;
-    if (batchSettings) batchSettings.aspectRatio = opt.value;
+    // Same per-case routing as applyModelQualityChange above -- a change from
+    // #ap-image-aspect-ratio while one batch case's revise panel is open
+    // belongs to that case alone, not every other case reading the shared
+    // batchSettings.
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) {
+      batchRecord.aspectRatio = opt.value;
+    } else if (batchSettings) {
+      batchSettings.aspectRatio = opt.value;
+    }
     // Re-fit what's on screen for the newly picked ratio: the crop that would
     // be sent to the edit model, and the report lines quoting it. The result
     // photo itself can't change without a re-run, so the preview says so.
@@ -1036,6 +1059,7 @@
       options: { ...options },
       recipeChecked: Array.isArray(recipeChecked) ? [...recipeChecked] : recipeChecked,
       prompt: els.promptInput ? els.promptInput.value.trim() : "",
+      overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
       runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null
     };
@@ -2062,7 +2086,17 @@
       // processing) is what tells showBatchMainLoading to start fresh
       // instead of resuming this stale index.
       procSubStage: null,
-      procSubIndex: 0
+      procSubIndex: 0,
+      // Per-image 模型/畫質 + 長寬比 overrides (UI-only), set only once this
+      // image's own revise panel is used to change them -- null means
+      // "still inherits the batch-level default", same override rule as
+      // options/optionsTouched above (see effectiveModelQuality/
+      // effectiveAspectRatio). Without their own slot here, every case's
+      // revise panel wrote straight into the single shared `batchSettings`,
+      // so picking a model on case 1 silently carried over to case 2.
+      imageModel: null,
+      imageQuality: null,
+      aspectRatio: null
     };
   }
 
@@ -3373,6 +3407,20 @@
     return merged;
   }
 
+  // Effective per-image 模型/畫質 + 長寬比: this case's own pick (set only
+  // once its revise panel is used to change one) if it has one, else the
+  // batch-level default -- same override rule as effectiveOptions above.
+  function effectiveModelQuality(record) {
+    if (record.imageModel && record.imageQuality) {
+      return { model: record.imageModel, quality: record.imageQuality };
+    }
+    return { model: batchSettings.imageModel, quality: batchSettings.imageQuality };
+  }
+
+  function effectiveAspectRatio(record) {
+    return record.aspectRatio || batchSettings.aspectRatio;
+  }
+
   // Reads the batch-level Pose/Angle/Lighting/Size radios straight from the DOM.
   function readBatchStyleOptionsFromDom() {
     const checked = (name) => document.querySelector(`input[name="${name}"]:checked`);
@@ -3471,14 +3519,16 @@
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked
       });
+      const modelQuality = effectiveModelQuality(record);
+      const aspectRatio = effectiveAspectRatio(record);
       let stepStart = Date.now();
       if (batchSettings.path === "aipoc") {
         run.jobId = await submitJob({
           file: record.file,
           preset: batchSettings.presetKey,
-          imageQuality: batchSettings.imageQuality,
-          imageModel: batchSettings.imageModel,
-          aspectRatio: batchSettings.aspectRatio,
+          imageQuality: modelQuality.quality,
+          imageModel: modelQuality.model,
+          aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           userPrompt,
@@ -3492,9 +3542,9 @@
         run.jobId = await submitFinishJob(record.analyzeJobId, record.file, {
           analysis: effectiveAnalysis,
           preset: batchSettings.presetKey,
-          imageQuality: batchSettings.imageQuality,
-          imageModel: batchSettings.imageModel,
-          aspectRatio: batchSettings.aspectRatio,
+          imageQuality: modelQuality.quality,
+          imageModel: modelQuality.model,
+          aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
           userPrompt,
@@ -5853,6 +5903,13 @@
 
     renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
     applyBatchReviewSelections(record);
+    // Sync (display-only, no state push -- same as viewHistoryRecord below)
+    // #ap-image-model-quality/#ap-image-aspect-ratio to THIS case's own
+    // effective pick, not whatever another case's revise panel last left
+    // them showing.
+    const effMq = effectiveModelQuality(record);
+    applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
+    applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!record.overwritePrompt;
     // Pre-fill with this image's own current RUN count (matching whatever was
