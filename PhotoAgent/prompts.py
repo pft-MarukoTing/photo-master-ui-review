@@ -748,6 +748,7 @@ Analysis responsibilities:
 - For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
 - For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
+- Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing eye_blink_issues entry at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Hair tidying is not a routine portrait enhancement either. Add a hair item to correction_plan only when the hair inspection above says should_fix=true, and never for styled, moving, or naturally textured hair.
 - Skin should read naturally in the finished photo -- pushed neither toward orange or ruddy red, nor toward yellow or sallow. In particular, do not write a correction_plan item whose goal is warmer, rosier, or healthier-looking skin; if skin does look wrong, name which direction it is off.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
@@ -1400,7 +1401,6 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     eye_blink_issues = analysis.get("eye_blink_issues") or []
-    eye_blink_issues_json = json.dumps(eye_blink_issues, ensure_ascii=False)
     hair_issues = analysis.get("hair_issues") or []
     gaze_contact_issues = analysis.get("gaze_contact_issues") or []
     gaze_contact_issues_json = json.dumps(gaze_contact_issues, ensure_ascii=False)
@@ -1581,12 +1581,11 @@ Approved-repair override:
     if blink_items_to_fix:
         blink_block = """Accidental blink repair priority:
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
-- If the approved correction plan includes a blink/eye repair item, fix only the named person's eyes. Do not change the person's identity, face shape, age, gaze direction, smile, head pose, glasses, makeup, skin texture, or lighting.
+- Work only on the eyes named below, on the person named below. Every other visible person's eyes, and everything else about the named person, come through exactly as captured.
 - Reopen or relax the eyes naturally so they match the person's existing expression and the photo's moment. Avoid making the eyes too large, symmetrical, doll-like, or copied from another person.
 - Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
-- Do not alter people whose eye_blink_issues.should_fix is false or whose eye_state is natural_smiling_squint, intentional_wink, intentional_closed, expressive_closed, downward_gaze, sleeping, occluded_or_unclear, or uncertain.
-- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes.
-- Eye blink issues from analysis: """ + eye_blink_issues_json
+- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
+- Eyes to work on: """ + json.dumps(blink_items_to_fix, ensure_ascii=False)
 
     # Gated on the user's recipe choice as well as on the analysis. hair_issues
     # still says should_fix=true after the user unchecks the hair item -- it is
@@ -1902,7 +1901,6 @@ Crop instruction:
 - Alignment strategy: {analysis.get("alignment_strategy") or ""}
 - Distraction strategy: {analysis.get("distraction_strategy") or ""}
 - Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
-- Eye blink / half-closed-eye issues: {eye_blink_issues_json}
 - Recommended aspect ratio: {rec_aspect}
 - Aspect ratio reason: {aspect_ratio_reason}
 - Tool strategy: {analysis.get("tool_strategy") or ""}
