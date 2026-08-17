@@ -636,36 +636,47 @@ window.PhotoAgentResults = (() => {
     { field: "roi_box", color: "#22c55e", label: "ROI", corner: "tl" },
     { field: "subject_extent_box", color: "#38bdf8", label: "主體範圍", corner: "tr" },
     { field: "crop_box", color: "#f59e0b", label: "crop_box（分析建議）", corner: "bl", dashed: true },
-    { field: "applied_crop_plan", color: "#f43f5e", label: "實際送出裁切", corner: "br" }
+    { field: "applied_crop_plan", color: "#f43f5e", label: "實際送出裁切", corner: "br" },
+    // detect_face_crops (openai_client.analyze_photo) -- zero, one, or several
+    // boxes, unlike every other spec above which is a single box. Same
+    // normalized-against-original-image convention as roi_box, so it slots
+    // into the same overlay with no separate coordinate handling.
+    { field: "_face_crop_boxes", color: "#a855f7", label: "臉部裁切", corner: "tl", list: true }
   ];
 
   let boxesAnalysis = null;
   let boxesVisible = false;
 
+  function boxEntryFromRect(spec, label, box) {
+    const x = Number(box.x);
+    const y = Number(box.y);
+    const w = Number(box.w);
+    const h = Number(box.h);
+    if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
+    return { ...spec, label, x, y, w, h, ratio: box.aspect_ratio || box.aspectRatio || "" };
+  }
+
   function analysisBoxList(analysis) {
     if (!analysis) return [];
-    return ANALYSIS_BOX_SPECS.map((spec) => {
+    return ANALYSIS_BOX_SPECS.flatMap((spec) => {
+      if (spec.list) {
+        const boxes = Array.isArray(analysis[spec.field]) ? analysis[spec.field] : [];
+        return boxes
+          .map((box, i) => box && boxEntryFromRect(spec, boxes.length > 1 ? `${spec.label} ${i + 1}` : spec.label, box))
+          .filter(Boolean);
+      }
       const box = analysis[spec.field];
-      if (!box) return null;
+      if (!box) return [];
       // Same box, different promise: after a preview it is what WILL be sent.
       const label = (spec.field === "applied_crop_plan" && analysis._aspect_ratio_preview
         && analysis._aspect_ratio_preview !== analysis._aspect_ratio_pref_at_edit)
         ? "將送出裁切（預覽）" : spec.label;
       // crop_box carries its own on/off switch; an analysis that recommends no
       // reframe still ships the field with enabled:false.
-      if (spec.field === "crop_box" && box.enabled !== true) return null;
-      const x = Number(box.x);
-      const y = Number(box.y);
-      const w = Number(box.w);
-      const h = Number(box.h);
-      if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
-      return {
-        ...spec,
-        label,
-        x, y, w, h,
-        ratio: box.aspect_ratio || box.aspectRatio || ""
-      };
-    }).filter(Boolean);
+      if (spec.field === "crop_box" && box.enabled !== true) return [];
+      const entry = boxEntryFromRect(spec, label, box);
+      return entry ? [entry] : [];
+    });
   }
 
   function drawAnalysisBoxes() {
@@ -959,6 +970,7 @@ window.PhotoAgentResults = (() => {
     setPrompt(els.promptReview, prompts.user_instruction_review);
     setPrompt(els.promptCrop, prompts.crop_validation);
     setPrompt(els.promptEdit, prompts.image_edit);
+    setPrompt(els.promptGazeRepair, prompts.gaze_repair_pass);
     setPrompt(els.promptQa, prompts.quality_check);
   }
 

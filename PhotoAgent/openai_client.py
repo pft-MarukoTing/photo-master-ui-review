@@ -1,3 +1,4 @@
+import base64
 import copy
 import json
 import os
@@ -11,6 +12,7 @@ from config import MODELS, PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import (
     create_preview_bytes,
+    detect_face_crops,
     image_to_data_url,
     get_image_dimensions,
     resolve_crop_box_with_report,
@@ -27,6 +29,7 @@ from prompts import (
     build_analysis_instruction,
     build_user_instruction_review_prompt,
     build_edit_prompt,
+    build_gaze_only_edit_prompt,
     build_quality_check_prompt,
     style_option_entries,
 )
@@ -152,12 +155,43 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
 
-    payload = _responses_payload(ANALYSIS_MODEL, [
+    content = [
         {"type": "input_text", "text": build_analysis_instruction(aspect_ratio, advanced_options)},
         {"type": "input_image", "image_url": data_url},
-    ])
+    ]
+
+    # The whole-photo preview gets resampled by the vision API to its own
+    # canonical resolution regardless of how large a preview we send (measured
+    # empirically -- see detect_face_crops' docstring), so on anything but a
+    # tight face close-up each eye ends up too few pixels to read pupil/iris
+    # direction. A zoomed face crop gets its own resolution budget spent
+    # entirely on that face, which is what actually helps. Only worth the
+    # extra image tokens when the user hasn't turned off both detectors that
+    # would use it.
+    face_crops = []
+    options = advanced_options or {}
+    if options.get("eye_closed_detection", True) or options.get("gaze_contact_detection", True):
+        face_crops = detect_face_crops(image_bytes)
+        for i, crop in enumerate(face_crops, start=1):
+            content.append({
+                "type": "input_text",
+                "text": (
+                    f"Face crop {i} (zoomed, for judging eye state, blink, and gaze/pupil direction only "
+                    "-- match it to the corresponding person in the full photo above by appearance; it is "
+                    "not a separate photo):"
+                ),
+            })
+            content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
+
+    payload = _responses_payload(ANALYSIS_MODEL, content)
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
-    return _parse_json_from_text(_extract_output_text(data))
+    result = _parse_json_from_text(_extract_output_text(data))
+    # Debug-UI overlay only (frontend's #boxes-toggle-btn) -- lets a reviewer
+    # see exactly what the model was shown, since a missed or misplaced crop
+    # is itself useful information when a gaze/blink call still looks wrong.
+    if face_crops:
+        result["_face_crop_boxes"] = [c["box"] for c in face_crops]
+    return result
 
 
 # ── Step 3: user instruction review ───────────────────────────────────────────
@@ -272,6 +306,31 @@ def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str
             raise _RetryableApiError(f"Image edit failed: {msg}")
         raise RuntimeError(f"Image edit failed: {msg}")
     return data
+
+
+# ── Step 5b: gaze-only repair pass (OpenAI) ────────────────────────────────────
+
+def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", model: str = IMAGE_MODEL):
+    """Runs the approved gaze repair(s) as a second, isolated full-image edit
+    on top of Step 5's own output (see pipeline._run_gaze_repair_pass for why
+    this is a second whole-image call rather than a crop-and-paste). OpenAI
+    counterpart to gemini_client.edit_gaze_only -- which of the two runs is
+    picked by config.MODELS["gaze_repair"], independent of whichever model
+    ran Step 5 itself.
+
+    Returns (image_bytes, prompt_text) -- same shape as the Gemini version,
+    so pipeline.py can surface this stage's prompt in the "Sent to GPT" debug
+    view regardless of which provider actually ran it.
+    """
+    prompt_text = build_gaze_only_edit_prompt(gaze_items)
+    img_w, img_h = get_image_dimensions(image_bytes)
+    size_param = openai_edit_size_for_ratio(img_w, img_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(img_w, img_h)
+    png_bytes = ensure_png_bytes(image_bytes)
+    data = _post_image_edit(model, prompt_text, quality, size_param, png_bytes)
+    b64 = (data.get("data") or [{}])[0].get("b64_json")
+    if not b64:
+        raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
+    return base64.b64decode(b64), prompt_text
 
 
 # ── Step 6: quality check ──────────────────────────────────────────────────────

@@ -7,6 +7,10 @@ EFFECT_NAME = 'photoAgent'
 MODELS = {
     "image": "gpt-image-2",
     "analysis": "gpt-4.1-mini",
+    # Step 5b (pipeline._run_gaze_repair_pass) -- which model runs the
+    # second, gaze-only edit pass, independent of "image" above (Step 5's
+    # own model choice, itself overridable per request via image_model).
+    "gaze_repair": "gpt-image-2",
 }
 
 # UI-selectable image-edit models (Step 5). "gpt-image-2"/"gpt-image-1.5" call

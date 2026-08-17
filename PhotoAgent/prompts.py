@@ -62,6 +62,9 @@ AXIS_ALIASES = {
     "hairs": "hair", "hairstyle": "hair", "hair_tidiness": "hair", "messy_hair": "hair",
     "flyaway": "hair", "flyaways": "hair", "stray_hair": "hair", "stray_hairs": "hair",
     "bangs": "hair", "fringe": "hair", "frizz": "hair", "frizzy": "hair",
+    "gaze": "expression", "eye_contact": "expression", "camera_gaze": "expression",
+    "off_camera_gaze": "expression", "unfocused_gaze": "expression", "eye_focus": "expression",
+    "gaze_contact": "expression", "looking_direction": "expression",
 }
 
 
@@ -169,6 +172,34 @@ Return exactly this JSON shape:
       "reason": "說明為何判斷是拍攝當下被風吹亂或壓翹，或為何這個凌亂本來就屬於髮型、髮質或動作。"
     }
   ],
+  "gaze_contact_issues": [
+    {
+      "subject_label": "對應 subjects 裡的人，例如 中間男性 / 左側女性。",
+      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
+      "gaze_state": "direct_camera / near_camera / off_camera / downward / upward_side / unfocused_camera / cross_focused / ambiguous / unclear",
+      "eye_focus_quality": "sharp_engaged / slightly_unfocused / clearly_unfocused / unclear",
+      "gaze_context": "posed_camera_contact / candid_or_documentary / speaking_or_performing / product_demo / action_or_movement / intentional_gaze_away / ambiguous。這只是描述性標籤，不能用來推翻 lens_contact_decision、gaze_state、confidence 或 should_fix。",
+      "lens_contact_decision": "looking_at_lens / not_looking_at_lens / unclear",
+      "lens_contact_confidence": 0.0,
+      "not_looking_at_lens_confidence": 0.0,
+      "gaze_correction_reasonableness": 0.0,
+      "gaze_repair_strategy": {
+        "strategy_type": "eyes_only / eyes_plus_head_face_alignment / not_safe_to_repair",
+        "original_gaze_read": "用具體視覺語言描述原本眼神，例如 pupils/irises point camera-left and slightly above the lens / gaze passes beside the lens。",
+        "target_gaze_read": "修完後的具體視覺目標，例如 both pupils/irises aimed at the camera lens; viewer reads direct eye contact。",
+        "eye_adjustment": "描述瞳孔/虹膜應如何移動，例如 move pupils/irises toward camera center / slightly downward toward lens / slightly left toward lens。不可只寫 improve eye contact。",
+        "sclera_catchlight_adjustment": "描述眼白與眼神光如何配合，例如 rebalance sclera so iris sits naturally for the new direction; keep catchlights consistent。",
+        "head_face_adjustment": "描述是否需要頭臉方向配合，例如 none / slight yaw toward camera / moderate yaw toward camera / slight pitch adjustment。若 strategy_type=eyes_plus_head_face_alignment 不可寫 none。",
+        "repair_strength": "subtle / moderate / strong",
+        "edit_instruction": "一到兩句可直接給 edit model 執行的英文命令，必須包含 subject、eyes_only 或 eyes_plus_head_face_alignment、pupil/iris movement、必要的 head/face alignment、以及 final direct-lens-contact endpoint。",
+        "success_condition": "這張圖修完後應該如何判斷成功，例如 兩眼明確直視鏡頭，不停在 near-camera。",
+        "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "scene"],
+        "failure_to_avoid": ["near-camera only", "sharpen-only", "uncomfortable side-eye"]
+      },
+      "should_fix": true,
+      "reason": "依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
+    }
+  ],
   "roi_box": {
     "x": 0.25,
     "y": 0.20,
@@ -266,6 +297,12 @@ This is the only thing standing between an unchecked item and the editing model 
 
 """ + f"""correction_axes[i] is the machine-readable tag set for correction_plan[i]: which properties of the photograph that item changes. Pick every axis the item actually moves, from exactly this vocabulary, and nothing else: {_AXIS_VOCABULARY}. Most items need one or two axes; use the narrowest set that is true. The example above shows an item that raises overall brightness and recovers the bright end, hence ["exposure", "highlight"]. These tags let the user's recipe choices switch the corresponding instructions off precisely, so an inaccurate tag causes the wrong part of the edit to be suppressed.
 """ + """
+Zoomed face-crop images:
+- After the main photo, you may be given one or more additional images labeled "Face crop N (zoomed, for judging eye state, blink, and gaze/pupil direction only)". Each one is a cropped, zoomed-in view of one visible person's face from the SAME photo above, not a different photo or a different moment.
+- Match each face crop to the corresponding person in the main photo by appearance (position, clothing, hair, expression) and use it as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, and pupil/iris direction -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo.
+- Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
+- Face-crop detection is best-effort: it can miss a visible person (non-frontal angle, occlusion, small size) or occasionally crop something that is not a face. If a visible person has no matching crop, or a crop clearly does not show a usable face, fall back to judging that person's eyes directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
+
 Eye blink / half-closed-eye inspection:
 This is an expression-intent classification task before it is a repair task. Do not judge only from eyelid openness. Judge whether the eye closure belongs to the person's expression, emotion, gesture, or moment.
 
@@ -371,6 +408,26 @@ Output rules:
 - The matching retouch_recipe item should be user-facing and concise, for example: "修正右側男生不小心半閉眼的表情。"
 - If no accidental blink or half-blink needs correction, keep correction_plan free of eye-opening items.
 
+Edit-model execution guardrail:
+- When gaze_contact_issues.should_fix=true, do not leave the gaze unchanged.
+- A no-op gaze edit is a failure.
+- Apply the smallest visible gaze-alignment change that fully satisfies the per-subject gaze_repair_strategy and turns the named subject's gaze into natural camera-facing eye contact.
+- Start with the analysis model's strategy_type. If it says eyes_only, use iris/pupil direction and sclera balance. If it says eyes_plus_head_face_alignment, use iris/pupil direction plus the specified head/face alignment; do not stop with eye-only repair.
+- This is not a full pose change: preserve identity, facial structure, expression, body pose, shoulders, hands, clothing, scene, and camera viewpoint.
+
+Analyze-to-edit alignment guardrail:
+Low-capacity image-model wording rule:
+- When instructing gaze repair, prefer concrete physical wording over abstract labels.
+- Interpret "camera-facing gaze" as: both pupils/irises visibly point at the camera, and the subject clearly looks at the camera.
+- Do not rely only on terms like direct_camera, lens-locked, or eye contact without also saying how the pupils/irises should move.
+
+- For edit execution, camera-facing gaze is a physical eye-direction target: iris/pupil placement and both eyes' visual axes should aim at the camera lens, not merely look sharper or more intense.
+- Approved gaze repair has higher edit priority than generic preservation for the listed subject's local eye-direction change.
+- gaze_contact_issues.should_fix=true is not merely a recommendation; it authorizes the edit model to perform gaze redirection.
+- For every approved gaze repair, the analysis must produce the same instruction in three places: gaze_contact_issues, correction_plan, and retouch_recipe.
+- Do not rely on the edit model to infer gaze repair from JSON alone.
+- Do not let a preservation instruction cancel an approved gaze repair. Preservation should protect all unrelated facial traits while allowing local gaze redirection.
+
 Mini-model calibration:
 - Do not reason as: "eyes closed means accidental blink."
 - Do not reason as: "one eye closed means half-blink."
@@ -399,12 +456,295 @@ Write it as the state that hair ends in, not as something to take away: an item 
 Write that item as the finished picture, in words that can be rendered. The editing model cannot act on 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續: those name an intention rather than anything visible, and an item written that way comes back unchanged -- which is the most common reason a hair correction has no effect at all. Name the operation and the state it ends in. A clumped fringe needs both halves of the job named: 去油 -- 壓掉瀏海上的油亮反光，讓髮絲恢復霧面質感、不再黏成一束; and 梳整齊 -- 把結成一束一束的瀏海梳散成寬度一致的薄簾，並讓髮絲蓋過束與束之間露出額頭的空隙。Worked example of a whole item: 「把瀏海的油光壓掉、恢復霧面質感，並把結成束的瀏海梳散成寬度一致的薄簾，讓髮絲蓋過中間露出額頭的空隙；瀏海長度、髮際線與髮量不變。」
 correction_inverse keeps that person's hair as captured; retouch_recipe stays short, for example "把瀏海去油、梳整齊。" or "把黏在臉頰上的兩三根碎髮清掉。". Keep should_fix=false entries when they record a decision worth explaining, but write no correction_plan item for them -- tidy hair is not a correction, and hair tidying is never a routine portrait enhancement.
 
+Gaze contact / eye-focus inspection:
+This is a strict lens-contact detection task first, and an edit-feasibility task second. The main question is not whether the face points toward the camera. The main question is whether the person's pupils/irises are actually focused on the camera lens/viewer.
+
+Core policy:
+- Judge camera gaze by the eyes only: pupil/iris direction, binocular convergence, eye-focus feeling, and whether the eyes feel lens-locked.
+- Face direction, body direction, pose, scene type, and subject importance are supporting context only. They must never be used as proof of direct eye contact.
+- A forward-facing face with pupils looking slightly above, beside, past, or through the camera is NOT direct_camera.
+- near_camera is NOT direct_camera.
+- Direct_camera is a strict positive label, not a default. Use it only when lens contact is visually obvious.
+- Recall priority: when gaze_contact_detection is ON, missing a readable non-lens-looking subject is worse than flagging a borderline near-camera subject for review.
+- If the eyes are visible and not unmistakably lens-locked, choose lens_contact_decision=not_looking_at_lens rather than looking_at_lens.
+- Do not set not_looking_at_lens_confidence to zero because the off-camera gaze looks natural, candid, documentary, performative, or contextually appropriate.
+- Do not reject gaze detection merely because the original gaze has a plausible reason.
+- If the person is not looking at the lens and the eyes are readable, should_fix=true -- regardless of how natural, candid, or anatomically demanding the correction would be. How demanding the correction is only changes strategy_type and repair_strength (see the gaze_repair_strategy rules below), never whether to fix it.
+
+Strict direct-camera criteria:
+Assign direct_camera / looking_at_lens only when ALL are true:
+1. both visible eyes, or the only visible eye, appear aimed at the camera lens/viewer;
+2. the pupils/irises are centered or oriented consistently with camera-facing gaze;
+3. the eyes feel engaged with the viewer rather than looking past, above, beside, downward, or through the lens;
+4. there is no clear evidence of sideward, upward, downward, cross-focused, or unfocused gaze;
+5. an ordinary viewer would immediately say "this person is looking into the camera," not merely "the face is turned toward me."
+
+If any of these are not true and the eyes are still readable, do NOT label direct_camera. Use near_camera, off_camera, upward_side, downward, unfocused_camera, cross_focused, or ambiguous.
+Borderline readable cases should not be promoted to direct_camera. If unsure between direct_camera and near_camera, choose near_camera / not_looking_at_lens.
+
+Pupil / iris position checklist:
+Before assigning direct_camera, inspect the pupil/iris position inside each visible eye opening.
+- For a camera-facing face, the pupils/irises should appear positioned and aimed consistently with looking into the camera lens/viewer.
+- If both pupils/irises are shifted toward the same side of their eye openings, the subject is looking sideways, not at the camera.
+- If both pupils/irises are shifted upward within the eye openings, the subject is looking upward, not at the camera.
+- If both pupils/irises are shifted downward within the eye openings, the subject is looking downward, not at the camera.
+- If the pupils/irises are aimed toward upper-left, upper-right, lower-left, or lower-right relative to the camera, do not label direct_camera.
+- If the face is centered or frontal but the pupils/irises are side-shifted, classify the gaze as near_camera, off_camera, upward_side, downward, or ambiguous based on the eye direction. Do not classify it as direct_camera.
+- Do not use facial orientation, portrait-like framing, smile, centered composition, or product-demo posing to override visible pupil/iris displacement.
+
+Readable-eye forced choice rule:
+- If the eyes are readable, do not use unclear merely because the scene context is ambiguous.
+- For readable eyes, choose one of these:
+  1. looking_at_lens only if the eyes are unmistakably lens-locked;
+  2. not_looking_at_lens if the eyes point even slightly beside, above, below, past, through, or near but not into the lens;
+  3. unclear only when blur, occlusion, reflection, shadow, compression, face size, or closed eyes make the eye direction visually unsafe to judge.
+- If the eyes are readable and lens contact is not obvious, the correct decision is not_looking_at_lens.
+
+Direct-camera veto rule:
+Do NOT assign direct_camera or lens_contact_decision=looking_at_lens if any of the following are visible:
+- the pupils/irises are displaced toward the same side of both eye openings;
+- the pupils/irises are visibly higher or lower than expected for lens contact;
+- the eyes appear to look above, beside, below, or past the camera even when the face is frontal;
+- the gaze direction could reasonably be described as up-left, up-right, side-left, side-right, down-left, down-right, above-camera, beside-camera, or past-camera;
+- the eye focus appears engaged but directed at someone/something near the camera rather than at the lens.
+
+If a direct-camera veto is triggered and the eyes are readable:
+- set lens_contact_decision=not_looking_at_lens;
+- set gaze_state to near_camera, off_camera, upward_side, downward, unfocused_camera, cross_focused, or ambiguous;
+- keep lens_contact_confidence below 0.60;
+- set not_looking_at_lens_confidence to at least 0.60 unless the eye direction is visually unclear.
+
+Binary lens-contact gate:
+- First output lens_contact_decision before scoring:
+  - looking_at_lens: the eyes are clearly and unmistakably focused on the camera lens/viewer.
+  - not_looking_at_lens: the eyes are visibly not focused on the camera lens/viewer, including near-camera, slightly-beside-lens, above-lens, below-lens, past-camera, or unfocused gaze.
+  - unclear: the eyes are too blurry, occluded, tiny, shadowed, reflected, compressed, closed, or ambiguous to judge safely.
+- The decision must be based on the eyes, not the face.
+- Do not infer looking_at_lens from a centered face, frontal head pose, smile, portrait framing, or product-demo pose.
+- If the pupil / iris position checklist or direct-camera veto indicates non-camera gaze, lens_contact_decision must be not_looking_at_lens, not looking_at_lens.
+- If the eyes are readable and direct lens contact is not obvious, lens_contact_decision must be not_looking_at_lens.
+
+Score mapping:
+- If lens_contact_decision=looking_at_lens:
+  - gaze_state should be direct_camera.
+  - lens_contact_confidence should be >= 0.75.
+  - not_looking_at_lens_confidence should be <= 0.25.
+  - should_fix=false.
+- If lens_contact_decision=not_looking_at_lens:
+  - gaze_state must NOT be direct_camera.
+  - lens_contact_confidence should usually be <= 0.40.
+  - not_looking_at_lens_confidence should usually be >= 0.70 for readable eyes, and at least 0.60 for borderline-but-readable eyes.
+  - should_fix=true whenever the eyes are readable (see Hard should_fix rule below); gaze_correction_reasonableness only shapes the repair strategy, not whether to fix.
+- If lens_contact_decision=unclear:
+  - gaze_state should be ambiguous or unclear.
+  - both lens_contact_confidence and not_looking_at_lens_confidence should stay low or moderate.
+  - should_fix=false unless the eye direction is still clear enough to edit safely.
+
+Stage 1 -- Lens-contact detection:
+- lens_contact_confidence measures only whether the eyes are actually focused on the camera lens.
+- not_looking_at_lens_confidence measures only whether the eyes are not focused on the camera lens.
+- Judge lens contact independently from scene context, pose, body action, gesture, product interaction, speaking/performance status, candidness, documentary feeling, or whether direct eye contact would "make sense" in the photo.
+- The decision boundary is visual and eye-based only: look at pupil/iris direction, binocular alignment, and whether the visual axes appear to meet the lens.
+- Context must not reduce not_looking_at_lens_confidence. Context affects only whether the gaze redirection is anatomically feasible and visually natural when applied, not whether the person is currently looking at the lens.
+- A speaker, performer, athlete, demonstrator, or candid subject can still be not_looking_at_lens if the eyes do not visually meet the lens. Conversely, a posed portrait subject is not looking_at_lens unless the eyes visually meet the lens.
+- Output lens_contact_confidence:
+  - 0.90-1.00: unmistakable direct lens contact; eyes are locked onto the camera/viewer.
+  - 0.65-0.89: probably looking at the camera, but not perfectly locked.
+  - 0.35-0.64: near-camera or ambiguous; face may point forward but eye focus is not clearly on the lens.
+  - 0.10-0.34: probably not looking at the lens; eyes look past, above, beside, downward, or unfocused.
+  - 0.00-0.09: clearly not looking at the lens.
+- Output not_looking_at_lens_confidence as the evidence strength that the person is NOT lens-locked. This should be high for near_camera, off_camera, upward_side, downward, unfocused_camera, or cross_focused states when the eye direction is visually clear.
+- Do not collapse not_looking_at_lens_confidence to 0 just because the original gaze is contextually natural.
+
+Stage 2 -- Anatomical gaze-redirection feasibility:
+- Decide whether changing the subject's gaze to look at the camera would remain physically natural and anatomically plausible.
+- gaze_correction_reasonableness measures whether redirecting the eyes, with a bounded moderate head/face orientation refinement if needed, would remain ergonomically and anatomically natural.
+- It does NOT measure whether the corrected gaze preserves the original narrative, story, candidness, documentary realism, speech direction, or scene intent.
+- This score feeds strategy_type, repair_strength, and how the repair should be carried out. It never feeds should_fix: a low score means "repair carefully and conservatively," never "leave the gaze unchanged."
+
+Stage 3 -- Per-subject gaze repair strategy:
+For every gaze_contact_issues item, write gaze_repair_strategy as a concrete edit guide for this exact image, not a generic reminder. The edit model will follow this strategy literally, so vague or overly conservative wording will cause a weak edit.
+
+Required strategy fields:
+- original_gaze_read: describe what the eyes are doing NOW using visible pupil/iris evidence. Mention direction and failure type, e.g. "pupils/irises point slightly camera-right, so the gaze passes beside the lens" or "eyes aim above the lens".
+- target_gaze_read: describe the ENDPOINT, not just improvement. Use wording like "both pupils/irises aimed at the camera lens; viewer reads unmistakable direct eye contact."
+- eye_adjustment: say the practical direction of the pupil/iris correction for this subject, not just "improve eye contact". Example: "move both pupils/irises leftward and slightly downward toward camera-lens center."
+- sclera_catchlight_adjustment: say how to keep eye whites and catchlights natural after the gaze change.
+- head_face_adjustment: say whether to keep the head angle, slightly align it, or moderately align it toward the camera. If strategy_type=eyes_plus_head_face_alignment, this must not be "none".
+- edit_instruction: write one or two direct English commands for the edit model. This is the most important handoff field. It must be executable without reading the rest of the gaze rules. Write it in clean, grammatical English only -- do not mix in a word or phrase from any other language (e.g. Chinese, Spanish). A single foreign word dropped into an otherwise-English sentence makes the instruction unparseable as a command.
+
+Strategy type decision:
+- eyes_only: choose this only when moving the pupils/irises and rebalancing sclera can naturally create unmistakable direct lens contact while keeping the current head/face angle. Use this mainly for near_camera or very mild off-camera gaze.
+- eyes_plus_head_face_alignment: choose this when eye-only repair would still look like side-eye, near-camera gaze, looking past the lens, or an uncomfortable eye rotation. This authorizes the edit model to turn/tilt the face toward the camera within the bounded preservation rules.
+- not_safe_to_repair: choose this only when gaze repair would genuinely require a large pose/head change, new face structure, changed expression, or unclear/invented eyes -- a physical/visibility constraint, never a narrative or contextual one. "The gaze looks natural/candid/intentional here" is not a valid reason to choose not_safe_to_repair. should_fix still stays true when this strategy_type is chosen: describe the safest partial adjustment that moves the gaze visibly closer to the lens (repair_strength=subtle), rather than describing no change at all.
+
+Strategy strength consistency rules:
+- If gaze_state is off_camera, upward_side, downward, unfocused_camera, or cross_focused and not_looking_at_lens_confidence >= 0.75, do NOT choose repair_strength=subtle unless the eyes are already extremely close to the lens and original_gaze_read explains why.
+- If gaze_state=off_camera and failure_to_avoid includes "near-camera only", do NOT choose eyes_only unless eye_adjustment can clearly reach direct lens contact without side-eye.
+- If the original face/head angle is a reason the subject still reads as looking away, choose eyes_plus_head_face_alignment and specify slight or moderate head_face_adjustment.
+- If head_face_adjustment="none" while gaze_state=off_camera, the reason must explain why eyes_only is sufficient and why it will not stop at near-camera.
+- If strategy_type=eyes_only, failure_to_avoid should normally include "pupil shift without direct lens contact"; if the subject is clearly off-camera, consider eyes_plus_head_face_alignment instead.
+- If the target is "unmistakable direct eye contact", repair_strength should usually be moderate for off_camera cases.
+
+Wording requirements:
+- Do not write "將瞳孔輕微調整向鏡頭中心" for clear off_camera cases unless the gaze is already nearly direct. That wording is too weak.
+- Prefer concrete commands such as: "Move both pupils/irises toward the camera-lens center and moderately turn the face toward camera until the viewer reads direct eye contact."
+- success_condition must be stricter than "improved": it should state the final viewer read, for example "subject clearly looks straight at the camera lens" or "do not stop at near-camera gaze".
+- preserve_during_repair should list what must stay unchanged for this image, such as body pose, shoulder direction, hands, clothing, mouth expression, identity, background, and object interaction.
+- failure_to_avoid should name likely failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "changed body pose".
+
+Example strategy for a clear off-camera seated portrait:
+{
+  "strategy_type": "eyes_plus_head_face_alignment",
+  "original_gaze_read": "The face is slightly angled and the pupils/irises read off-camera rather than lens-locked.",
+  "target_gaze_read": "Both pupils/irises aim at the camera lens; viewer reads direct eye contact.",
+  "eye_adjustment": "Move both pupils/irises toward the camera-lens center, not merely closer to it.",
+  "sclera_catchlight_adjustment": "Rebalance sclera naturally around the new iris position and keep catchlights consistent with the original lighting.",
+  "head_face_adjustment": "moderate yaw toward camera while preserving body pose and shoulders",
+  "repair_strength": "moderate",
+  "edit_instruction": "Redirect the named subject's gaze to the camera lens using pupil/iris repositioning plus a moderate face yaw toward camera. Do not stop at near-camera; the final viewer read must be direct eye contact.",
+  "success_condition": "Subject clearly looks straight at the camera lens.",
+  "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "clothing", "scene"],
+  "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "changed body pose"]
+}
+- Judge this score by:
+  - whether the required eye rotation is small enough to look natural;
+  - whether the head direction and corrected eye direction are compatible;
+  - whether the corrected gaze would preserve natural binocular alignment;
+  - whether the corrected gaze would avoid a cross-eyed, divergent, strained, or anatomically awkward appearance;
+  - whether the eyelids, eye opening, eye corners, and surrounding facial tension would still look natural after the gaze shift;
+  - whether the eye region is visible and detailed enough to edit safely.
+- Output gaze_correction_reasonableness:
+  - 0.80-1.00: redirecting the gaze to the camera would be physically natural and require only a subtle, believable eye adjustment.
+  - 0.60-0.79: redirecting the gaze to the camera would still be anatomically plausible and visually natural.
+  - 0.35-0.59: redirecting the gaze may be possible, but the required eye rotation or head-eye relationship may start to look slightly awkward.
+  - 0.00-0.34: redirecting the gaze would likely look anatomically implausible, overly strained, cross-focused, divergent, or inconsistent with the head pose.
+- A gaze can be natural in the original story but still reasonable to correct if the corrected result would remain physically believable.
+
+Decision labels:
+- direct_camera: the eyes appear locked onto the lens/viewer. Use this only for clear, unmistakable lens contact.
+- near_camera: the eyes are close to camera direction but not clearly lens-locked. near_camera does NOT count as direct camera gaze.
+- off_camera: the eyes clearly look to the side or toward someone/something outside the camera.
+- downward: the eyes look downward; this is gaze direction, not blink.
+- upward_side: the eyes look upward and/or to the side.
+- unfocused_camera: the face is oriented toward camera, but the eyes look vacant, past the lens, not converged on the lens, or mentally disengaged.
+- cross_focused: eye alignment or convergence looks unintentionally mismatched, creating a crossed or divergent focus impression.
+- ambiguous: hard to decide whether the gaze is intentional or missed, but the eyes are somewhat visible.
+- unclear: eye direction cannot be judged due to blur, shadow, glasses/reflection, occlusion, compression, or low resolution.
+
+Context labels:
+- posed_camera_contact: formal portrait, profile-style portrait, ID-like portrait, beauty portrait, family portrait, social portrait, or a posed photo where direct eye contact is likely expected.
+- candid_or_documentary: candid, event, travel, street, memory, or documentary moment.
+- speaking_or_performing: podium, interview, stage, presentation, performance, fan-service, or public speech context.
+- product_demo: person demonstrating or posing with an object/product where camera gaze may still be anatomically feasible unless head/eye geometry prevents it.
+- action_or_movement: motion, sports, dance, child play, gesture, interaction, or transitional moment.
+- intentional_gaze_away: gaze away from camera is part of the original pose, mood, story, or composition, but this label alone does not make should_fix=false.
+- ambiguous: context does not clearly say whether direct gaze is expected.
+- These context labels are descriptive only. They must never be used as evidence for looking_at_lens, never be used to soften not_looking_at_lens, and never override pupil/iris evidence.
+
+Near-camera calibration:
+- near_camera is not direct_camera.
+- If the eyes are close to the lens direction but not clearly lens-locked, treat this as not fully looking at the camera.
+- For near_camera, lens_contact_confidence should usually stay below 0.60.
+- For near_camera, not_looking_at_lens_confidence should usually be at least 0.60 when the eyes are visible enough to judge.
+- Do not use a forward-facing head or centered face as proof of direct_camera.
+
+Hard should_fix rule:
+- Compute should_fix from the scores, not from overall intuition.
+- Set gaze_contact_issues.should_fix=true if and only if all of these are true:
+  1. lens_contact_decision=not_looking_at_lens;
+  2. not_looking_at_lens_confidence >= 0.55;
+  3. the eye direction is visually clear enough to correct safely.
+- gaze_correction_reasonableness is NOT part of this rule. A low reasonableness score changes strategy_type and repair_strength (see Stage 2/3 above), never should_fix. There is no reasonableness floor below which should_fix flips to false.
+- For readable near-camera or slightly-beside-lens gaze, do not suppress should_fix merely because the miss is small. A small but clear lens miss is still a valid gaze-contact issue.
+- Otherwise set gaze_contact_issues.should_fix=false.
+- Do not override this rule just because the original gaze is natural, candid, acceptable, documentary, contextually appropriate, intentional, or important to the original story. None of those are valid grounds for should_fix=false when the eyes are readably not on the lens.
+- Natural original gaze and anatomically feasible gaze correction are different questions.
+- Do not use subject size, main-subject status, foreground/background status, pose naturalness, action type, or narrative preservation as a deciding factor. Those factors affect only uncertainty or repair feasibility, not whether the eyes are looking at the lens.
+
+Score-first reasoning order:
+1. Determine lens_contact_decision from the eyes only. Do not use scene context, pose, action, or whether lens contact would be narratively appropriate.
+2. Determine gaze_state from the eyes, not from face direction.
+3. Assign lens_contact_confidence.
+4. Assign not_looking_at_lens_confidence.
+5. Assign gaze_correction_reasonableness based on anatomical / ergonomic feasibility only.
+6. Derive should_fix strictly from the hard should_fix rule.
+- Do not decide should_fix first and then back-fill the scores.
+- The reason field must explicitly say whether the eyes are lens-locked or not lens-locked and explain how the scores lead to should_fix.
+
+Strong evidence for not looking at the lens:
+- Pupils/irises point slightly left/right/up/down relative to the camera even though the face points forward.
+- The eyes appear to look past the lens, above the lens, beside the lens, at a person nearby, toward an audience, toward an object, or into the distance.
+- The eyes look vacant, disengaged, cross-focused, or not converged on the viewer.
+- One or both eyes lack the sense of contact even though the face is otherwise camera-facing.
+
+Strong evidence that gaze redirection is anatomically feasible:
+- The head pose is already close to camera-facing, or can become camera-facing with a bounded moderate natural yaw/pitch refinement.
+- The required pupil/iris shift is small or moderate, not extreme.
+- The corrected eyes would keep normal left/right eye alignment and convergence.
+- The eyelids and eye opening can remain the same; the gaze change can be achieved through eye direction plus bounded head/face alignment.
+- The expression can be preserved while changing the eye direction and aligning the face more directly toward the camera.
+- The eye and face region are clear enough to edit without inventing new eye shape or facial structure.
+
+Strong evidence that gaze redirection is NOT anatomically feasible:
+- The head is turned so far away that camera gaze would require an unnatural eye rotation.
+- Redirecting the gaze would create a strained side-eye, cross-eyed, divergent, or visually awkward look.
+- The corrected gaze would conflict with the eyelid shape or surrounding facial tension in a way that looks physically unnatural.
+- The eyes are too blurry, occluded, shadowed, reflected by glasses, low-resolution, or too small to adjust safely.
+- The required correction would need changing head pose, face structure, eyelid openness, or expression, rather than only subtly redirecting the eyes.
+
+Output rules:
+- Inspect gaze_contact_issues independently for each visible person when gaze is relevant.
+- Include a gaze_contact_issues entry for any visible person whose gaze is readable and not clearly direct_camera, even if should_fix=false.
+- If a visible person's eyes are readable and the person is not unmistakably looking into the lens, do not omit them from gaze_contact_issues.
+- Include should_fix=false entries only for lens_contact_decision=looking_at_lens or lens_contact_decision=unclear (eyes too blurry/occluded/small to judge safely). A readable off-camera, near-camera, or unfocused-looking gaze is should_fix=true; do not use should_fix=false to mean "correctable but better left as-is."
+- When any gaze_contact_issues item has should_fix=true, gaze repair is an approved edit request. It must not remain analysis-only.
+- For every gaze_contact_issues item with should_fix=true, fill gaze_repair_strategy with a concrete, per-image guide. This is mandatory, not optional.
+- Add a correction_plan item for every gaze_contact_issues item with should_fix=true. This is mandatory, not optional.
+- Add a matching retouch_recipe item for every gaze_contact_issues item with should_fix=true. This is mandatory, not optional.
+- Add a matching correction_axes entry including ["expression"] for every gaze_contact_issues item with should_fix=true.
+- Add a matching correction_inverse entry that protects unrelated properties while explicitly allowing the named subject's pupil/iris direction, eye-focus direction, sclera balance, gaze-consistent catchlight placement, and, when needed, the exact head/face alignment change approved by the analysis.
+- Treat the analysis output as the full repair specification. The edit model should not need to invent its own gaze-repair method.
+- Therefore, for every approved gaze repair, the analysis must make the intended execution explicit in four places that all agree: gaze_contact_issues.gaze_repair_strategy, correction_plan, correction_inverse, and retouch_recipe.
+- The correction_plan item must be self-sufficient: name the subject, state that the gaze should be redirected toward the camera lens / direct_camera, state the exact allowed method (for example, eyes only, or eyes plus slight/moderate head-face alignment), and include the same concrete method as gaze_repair_strategy.edit_instruction.
+- The correction_inverse item must explicitly say what to preserve and what is allowed to change for that subject. Do not leave these allowances implicit. It should mirror preserve_during_repair and the allowed local changes in gaze_repair_strategy.
+- The retouch_recipe item must stay concise and user-facing, but still clearly indicate that this is a gaze-to-camera correction for the named subject and whether face/head alignment may be involved.
+- Phrase the gaze correction action as a concrete repair instruction, not as opening eyes and not as a vague "make eye contact better" suggestion.
+- Do not describe gaze repair only as "improve eye contact" or "enhance gaze"; state that the named subject's gaze should be redirected toward direct_camera / the camera lens and whether head/face alignment is part of the approved method.
+- Preserve identity, overall eye shape, eyelid openness, eye color, glasses/reflections, mouth expression, brow expression, facial structure, skin texture, and lighting, except where the approved analysis explicitly allows a local change.
+- Never use blink repair wording for gaze repair.
+
+Analysis-to-edit handoff guardrail:
+- When gaze_contact_issues.should_fix=true, the analysis must hand off a fully actionable repair, not just a diagnosis.
+- A no-op or underspecified handoff is a failure.
+- Make the approved change strong enough, specific enough, and concrete enough that the edit model can execute it without inventing extra gaze logic.
+
+Mini-model calibration:
+- Default away from direct_camera unless the eyes are unmistakably lens-locked.
+- False-negative guardrail: many failures come from calling near-camera or contextually natural off-camera gaze "direct_camera." Do not do that.
+- Visible pupil/iris displacement overrides frontal face direction: if the face is frontal but both pupils/irises point up/side/down, do not call it direct_camera.
+- A centered face with side-shifted or upward-shifted pupils is a not_looking_at_lens case.
+- A face that looks portrait-like, formal, smiling, or centered is still not_looking_at_lens if the eyes are not lens-locked.
+- Do not use broad scene context to zero out not_looking_at_lens_confidence.
+- Do not treat face-forward as proof of direct eye contact.
+- Do not reject gaze correction just because it changes the original story, speech direction, documentary feeling, or candidness.
+- Do not decide should_fix by intuition.
+- First judge whether the eyes are lens-locked.
+- Then judge whether redirecting the gaze to the lens would be anatomically and ergonomically natural -- this only shapes strategy_type and repair_strength, never should_fix.
+- Then compute should_fix strictly from the lens-contact thresholds (readable + not_looking_at_lens), independent of the anatomical feasibility score.
+- The default output for any readable, not-lens-locked gaze is should_fix=true, even when the required adjustment is large or the strategy ends up being a conservative partial one.
+- If the person is not looking at the lens, recommend the correction; use the anatomical feasibility score only to decide how boldly to describe the fix.
+
 Analysis responsibilities:
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
 - Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
 - Eye-opening is not a routine portrait enhancement. Add eye or blink repair to correction_plan only when the expression-intent rules above say should_fix=true.
+- Eye-contact repair is separate from blink repair. Analyze whether the eyes are truly lens-locked, not merely whether the face points forward. Derive gaze_contact_issues.should_fix from the hard gaze rule, then add gaze/contact correction only when should_fix=true; do not use blink repair to solve off-camera, near-camera, cross-focused, or unfocused gaze.
+- Gaze detection recall check: before finalizing analysis, revisit every visible person's eyes. If any readable eyes are not unmistakably lens-locked and no gaze_contact_issues entry exists for that person, add one.
+- Gaze analyze-to-edit consistency check: before finalizing analysis, verify that every gaze_contact_issues item with should_fix=true has a complete gaze_repair_strategy plus a matching correction_plan item and a matching retouch_recipe item using the same subject_label and the same goal: redirect gaze toward the camera lens / direct_camera. If any matching item or strategy detail is missing, add it.
+- gaze_contact_issues.should_fix=true authorizes the edit model to perform local gaze redirection. Do not leave approved gaze repair only inside analysis JSON.
 - For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
 - For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
@@ -477,6 +817,13 @@ The user has asked for this person's hair to be laid down as if there were no wi
 - This does not extend to hair moving because the person is moving. A jump, spin, hair flip, or run still keeps its motion; laying that hair flat would contradict the body in the same photograph. Only wind-displaced hair is settled.
 """
 
+GAZE_CONTACT_DETECTION_DISABLED_OVERRIDE = """
+Gaze-contact / eye-focus correction has been turned off by the user for this photo:
+- Still inspect and fill in gaze_contact_issues as usual -- this is for reference only, not for the edit.
+- Regardless of your own judgement above, set should_fix=false on every gaze_contact_issues entry.
+- Do not add gaze-contact, eye-direction, eye-focus, or camera-contact repair items to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
+"""
+
 
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
@@ -495,6 +842,8 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
         instruction += HAIR_MESS_DETECTION_DISABLED_OVERRIDE
     if advanced_options.get("calm_hair", False):
         instruction += CALM_HAIR_ENABLED_OVERRIDE
+    if not advanced_options.get("gaze_contact_detection", True):
+        instruction += GAZE_CONTACT_DETECTION_DISABLED_OVERRIDE
     if aspect_ratio_pref == "original":
         return instruction + """
 User aspect ratio requirement:
@@ -1053,6 +1402,8 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     eye_blink_issues = analysis.get("eye_blink_issues") or []
     eye_blink_issues_json = json.dumps(eye_blink_issues, ensure_ascii=False)
     hair_issues = analysis.get("hair_issues") or []
+    gaze_contact_issues = analysis.get("gaze_contact_issues") or []
+    gaze_contact_issues_json = json.dumps(gaze_contact_issues, ensure_ascii=False)
     framing_intent_block = _build_framing_intent_block(analysis)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
@@ -1178,7 +1529,13 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     correction_plan_block = ""
     if analysis.get("correction_plan"):
         correction_plan_block = f"""User-approved correction plan (highest priority -- this list has already been reviewed and confirmed by the user; apply every item below and do not add corrective or stylistic changes beyond this list, the style overrides above, and the user's extra direction, even if other analysis notes above suggest more):
-{correction_plan}"""
+{correction_plan}
+
+Approved-repair override:
+- Items in this correction plan are commands, not optional suggestions.
+- Generic preservation, faithful-retouch, and minimal-change instructions must not cancel any item in this correction plan.
+- For an approved gaze repair, the editing method is defined by the analysis output itself: the matching correction_plan item, correction_inverse item, retouch_recipe item, and any per-subject gaze_repair_strategy.
+- Do not substitute a different generic gaze-repair method here. If the analysis explicitly allows local eye-direction change and/or local head/face alignment for a named subject, that allowance wins for that subject only."""
 
     rejected_corrections = analysis.get("rejected_corrections") or []
     negative_block = ""
@@ -1284,6 +1641,74 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 - Same person, same haircut: length, volume, density, parting, hairline, curl pattern, and color are unchanged, no hair is added, and the face is untouched. Hair falls, but its owner does not change.
 - Settled is not sculpted. Hair hanging still keeps strand separation, its own unevenness, and the way it catches light. A smooth glossy sheet, a painted block, or a wig fails this even though the wind is gone.
 - Everything else in the photograph stays exactly as captured -- the same clothing, the same flags, leaves, water, and other people, still showing whatever the weather was doing to them. This settles hair only; it does not calm the scene."""
+
+    gaze_items_to_fix = [
+        item for item in gaze_contact_issues
+        if isinstance(item, dict) and item.get("should_fix")
+    ]
+    gaze_block = ""
+    if gaze_items_to_fix:
+        gaze_targets = []
+        for item in gaze_items_to_fix:
+            label = item.get("subject_label", "unnamed subject")
+            box = item.get("box") or {}
+            gaze_state = item.get("gaze_state", "unknown")
+            lens_decision = item.get("lens_contact_decision", "not_looking_at_lens")
+            strategy = item.get("gaze_repair_strategy") or {}
+            edit_instruction = strategy.get("edit_instruction") if isinstance(strategy, dict) else ""
+            strategy_type = strategy.get("strategy_type", "") if isinstance(strategy, dict) else ""
+            repair_strength = strategy.get("repair_strength", "") if isinstance(strategy, dict) else ""
+            preserve = strategy.get("preserve_during_repair") if isinstance(strategy, dict) else None
+            avoid = strategy.get("failure_to_avoid") if isinstance(strategy, dict) else None
+            head_face = strategy.get("head_face_adjustment", "") if isinstance(strategy, dict) else ""
+            eye_adjustment = strategy.get("eye_adjustment", "") if isinstance(strategy, dict) else ""
+            sclera_catchlight = strategy.get("sclera_catchlight_adjustment", "") if isinstance(strategy, dict) else ""
+            target_read = strategy.get("target_gaze_read", "") if isinstance(strategy, dict) else ""
+            gaze_targets.append(
+                f'- Subject: {label}\n'
+                f'  Subject box: {json.dumps(box, ensure_ascii=False)}\n'
+                f'  Required endpoint: redirect gaze from {gaze_state} to direct_camera.\n'
+                f'  Analysis edit instruction: {edit_instruction or "Use the matching correction_plan item as the authoritative gaze repair instruction."}\n'
+                f'  Strategy type: {strategy_type or "specified in correction_plan"}\n'
+                f'  Repair strength: {repair_strength or "specified in correction_plan"}\n'
+                f'  Eye adjustment: {eye_adjustment or "specified in correction_plan"}\n'
+                f'  Head/face adjustment: {head_face or "specified in correction_plan"}\n'
+                f'  Sclera/catchlight adjustment: {sclera_catchlight or "preserve naturally unless correction_plan says otherwise"}\n'
+                f'  Target viewer read: {target_read or "direct camera-lens contact"}\n'
+                f'  Preserve during repair: {json.dumps(preserve or [], ensure_ascii=False)}\n'
+                f'  Avoid during repair: {json.dumps(avoid or [], ensure_ascii=False)}'
+            )
+        gaze_targets_block = "\n".join(gaze_targets)
+
+        gaze_block = """Approved gaze repair execution instructions:
+- Approved gaze repair exists for the subjects listed below.
+- Do not diagnose gaze again in the edit stage.
+- Do not read confidence scores, reasons, or analysis records to decide whether to be more conservative.
+- Execute the approved repair using only the execution instructions below plus the matching correction_plan and correction_inverse.
+- Generic preservation, faithful-retouch, and minimal-change instructions must not block any local eye-direction, eye-focus, sclera-balance, catchlight, or head/face-alignment changes that the execution instructions explicitly approve for the named subject.
+- Do not broaden the edit beyond what is approved below. Apply only the subject-local changes explicitly described there, while preserving all unrelated identity, expression, body pose, clothing, object interaction, scene, and background details.
+- If a named subject has an approved gaze repair, that repair is required; do not leave the original gaze unchanged.
+
+Execution instructions:
+""" + gaze_targets_block + """
+
+Execution rule:
+- Follow the Analysis edit instruction for each subject literally.
+- If Strategy type is eyes_only, keep the head/face angle unchanged.
+- If Strategy type is eyes_plus_head_face_alignment, allow the exact level of head/face adjustment described in Head/face adjustment.
+- Use the listed Repair strength for the named subject.
+- Preserve everything listed in Preserve during repair and in the matching correction_inverse item.
+- Avoid every failure mode listed in Avoid during repair.
+- Do not weaken a moderate or strong instruction into a subtle eye nudge.
+"""
+    else:
+        gaze_block = """Gaze preservation instruction:
+- No gaze correction is approved for this image.
+- Do not redirect anyone's gaze toward the camera.
+- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, eyelid openness, and expression.
+- If a subject is looking off-camera, near-camera, upward, downward, unfocused, or away from the lens, keep that original gaze unchanged unless a future approved gaze repair item explicitly requests a change.
+- Do not invent any gaze-repair method unless the analysis explicitly approved one.
+"""
 
     skin_block = ""
     if has_person:
@@ -1397,7 +1822,7 @@ STYLE OVERRIDE MODE. The user selected one or more pose/angle/lighting/framing o
 Priority order:
 1. Preserve safety, identity, same subject, same location, same environment, same clothing, same props, and photographic realism.
 2. Apply user-selected style overrides visibly and deliberately for the selected aspects.
-3. Apply the user-approved correction plan and user's extra direction.
+3. Apply the user-approved correction plan and user's extra direction. If the analysis approved a gaze repair, follow the analysis-defined repair method and allowances for that named subject. Generic preservation rules must yield only where the analysis explicitly permits the local change.
 4. Use the preset style as a supporting finish.
 5. Apply default preservation rules only to aspects not selected by the user."""
         retouch_priorities = f"""Retouch priorities:
@@ -1416,7 +1841,7 @@ Priority order:
             "facial structure, body shape, and important details."
         )
         edit_mode_block = """Edit mode:
-FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction."""
+FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction. If an approved gaze repair exists, follow the analysis-defined repair method and allowances for that named subject; this is not permission for unrelated pose or viewpoint changes."""
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
@@ -1510,6 +1935,8 @@ User extra direction:
 
 {negative_block}
 
+{gaze_block}
+
 {skin_block}
 
 {revision_block}
@@ -1517,6 +1944,67 @@ User extra direction:
 {retouch_priorities}
 
 {color_grade_check}
+"""
+
+
+def build_gaze_only_edit_prompt(gaze_items):
+    """Prompt for the Step 5b gaze-only repair pass (pipeline._run_gaze_repair_pass):
+    a second, full-image edit call on Step 5's own output, asking for nothing
+    but the approved gaze fix(es).
+
+    Step 5 bundles every gaze fix into one call together with exposure/crop/
+    skin/style/etc, and at low image quality that call reliably applies the
+    coarse, whole-frame changes but often no-ops the fine, localized iris/
+    pupil movement -- confirmed by comparing several before/after test photos
+    where the analysis's edit_instruction was just as clear and specific in
+    the cases that failed as in the ones that worked. A second call whose
+    prompt contains nothing but the gaze fix gives the same quality tier's
+    budget and the model's full attention to just this one change, for every
+    approved subject at once.
+
+    An earlier version of this pass cropped to each face and pasted the
+    edited crop back in. Workable in principle, but the crop's own edit call
+    also regenerates its background (hair, collar, whatever the padding
+    captured), and that regeneration didn't reliably match the base image
+    closely enough to paste back invisibly -- it produced a doubled face and
+    a warped background pattern on real test photos, even after restricting
+    the paste to a re-detected eye region. A second whole-image call has no
+    seam to paste and nothing separate to keep consistent: the model edits
+    and returns the entire photo itself.
+    """
+    targets = []
+    for item in gaze_items:
+        label = item.get("subject_label") or "the subject"
+        box = item.get("box") or {}
+        strategy = item.get("gaze_repair_strategy") or {}
+        edit_instruction = strategy.get("edit_instruction") or "Redirect this person's gaze to the camera lens using pupil/iris repositioning."
+        eye_adjustment = strategy.get("eye_adjustment") or "as needed to reach direct lens contact"
+        head_face_adjustment = strategy.get("head_face_adjustment") or "none"
+        sclera_catchlight_adjustment = strategy.get("sclera_catchlight_adjustment") or "rebalance naturally around the new eye position"
+        target_gaze_read = strategy.get("target_gaze_read") or "both eyes clearly and directly looking at the camera lens"
+        strategy_type = strategy.get("strategy_type") or "eyes_only"
+        repair_strength = strategy.get("repair_strength") or "moderate"
+        targets.append(
+            f"- Subject: {label}\n"
+            f"  Approximate location in frame: {json.dumps(box, ensure_ascii=False)}\n"
+            f"  Required change: {edit_instruction}\n"
+            f"  Eye/pupil adjustment: {eye_adjustment}\n"
+            f"  Head/face adjustment: {head_face_adjustment}\n"
+            f"  Sclera/catchlight adjustment: {sclera_catchlight_adjustment}\n"
+            f"  Target result: {target_gaze_read}\n"
+            f"  Approved repair method: {strategy_type} at {repair_strength} strength."
+        )
+    targets_block = "\n".join(targets)
+
+    return f"""You are editing the supplied image, which is already a finished, fully-graded photograph. Do not treat it as a draft.
+
+This is the ONLY task for this edit: redirect the named subject's or subjects' gaze so they clearly and directly look at the camera lens. Nothing else about this image should change -- not exposure, color, crop, framing, background, clothing, pose, or expression.
+
+{targets_block}
+
+Go all the way to direct lens contact, not partway there. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils have moved far enough, move them further rather than settling for a subtle, ambiguous shift; a slightly bold correction that unmistakably reads as direct eye contact is the right outcome, a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.
+
+Preserve everything else in the photograph exactly as supplied: identity, face shape, skin texture, skin tone, hairstyle, expression, mouth, eyebrows, glasses, makeup, lighting, clothing, pose, background, and composition. Do not add text, logos, watermarks, or new people. Do not crop, reframe, resize, or change the composition -- the output must be the same framing as the input, at the same size.
 """
 
 
@@ -1613,6 +2101,7 @@ Check dimensions:
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered.
 - Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyes are naturally corrected while identity, gaze, face shape, glasses, makeup, and expression style remain believable.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
+- Approved gaze-contact repair: if gaze_contact_issues.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
 
 Strict scoring rubric:
 - 9-10: excellent, faithful, polished, intentional framing, no meaningful preservation/crop issues.

@@ -18,7 +18,7 @@ from image_tools import (
     output_geometry_warnings,
     ensure_png_bytes,
 )
-from prompts import build_edit_prompt
+from prompts import build_edit_prompt, build_gaze_only_edit_prompt
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -70,6 +70,13 @@ def _ratio_dimensions(label: str) -> Tuple[int, int]:
     return int(left), int(right)
 
 
+def _nearest_ratio_label(target: float) -> str:
+    return min(
+        _AUTO_ASPECT_RATIOS,
+        key=lambda label: abs(math.log(target / (_ratio_dimensions(label)[0] / _ratio_dimensions(label)[1]))),
+    )
+
+
 def _effective_aspect_ratio_label(analysis: dict, image_width: int, image_height: int) -> str:
     """Return one concrete, model-supported output ratio.
 
@@ -89,10 +96,7 @@ def _effective_aspect_ratio_label(analysis: dict, image_width: int, image_height
         ratio_width, ratio_height = _ratio_dimensions(requested)
         target = ratio_width / ratio_height
 
-    return min(
-        supported,
-        key=lambda label: abs(math.log(target / (_ratio_dimensions(label)[0] / _ratio_dimensions(label)[1]))),
-    )
+    return _nearest_ratio_label(target)
 
 
 def _image_size_for_model(quality: str, model: str) -> str:
@@ -215,6 +219,50 @@ def edit_photo(
         # physical ratio is what the output can actually be held to.
         "geometry_warnings": output_geometry_warnings(b64, geometry_ratio_label, crop_plan, img_w, img_h),
     }, prompt_text
+
+
+# ── Step 5b: gaze-only repair pass (Gemini / "Nano Banana") ────────────────────
+
+def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", model: str = NANO_BANANA_2_MODEL):
+    """Runs the approved gaze repair(s) as a second, isolated full-image edit
+    on top of Step 5's own output (see pipeline._run_gaze_repair_pass for why
+    this is a second whole-image call rather than a crop-and-paste). Gemini
+    counterpart to openai_client's OpenAI-only Step 5 pipeline -- used as the
+    Step 5b model regardless of which model ran Step 5, since gpt-image-2 low
+    was the one observed to no-op or under-apply this specific fix.
+
+    Requests the same aspect ratio as the input (nearest Gemini-supported
+    label) rather than anything analysis-recommended: this call must not
+    re-crop or reframe what Step 5 already finished.
+
+    Returns (image_bytes, prompt_text) -- same (result, prompt) shape as
+    every other edit_photo/edit_gaze_* call, so pipeline.py can surface this
+    stage's prompt in the "Sent to GPT" debug view alongside every other one.
+    """
+    prompt_text = build_gaze_only_edit_prompt(gaze_items)
+    img_w, img_h = get_image_dimensions(image_bytes)
+    api_ratio_label = _nearest_ratio_label(img_w / img_h if img_w and img_h else 1.0)
+    image_config = {"imageSize": _image_size_for_model(quality, model), "aspectRatio": api_ratio_label}
+
+    png_b64 = base64.b64encode(ensure_png_bytes(image_bytes)).decode()
+    payload = {
+        "contents": [{
+            "parts": [
+                {"text": prompt_text},
+                {"inlineData": {"mimeType": "image/png", "data": png_b64}},
+            ],
+        }],
+        "generationConfig": {
+            "responseModalities": ["IMAGE"],
+            "imageConfig": image_config,
+        },
+    }
+
+    data = _post_generate_content(model, payload)
+    b64 = _extract_inline_image(data)
+    if not b64:
+        raise RuntimeError("Gemini 回應沒有包含圖片資料。")
+    return base64.b64decode(b64), prompt_text
 
 
 @backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)

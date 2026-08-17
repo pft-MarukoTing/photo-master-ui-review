@@ -1512,7 +1512,7 @@
     return `photoMuse-${dateStr}-${timeStr}.png`;
   }
 
-  const PROMPT_KEYS = ["photo_analysis", "user_instruction_review", "crop_validation", "image_edit", "quality_check"];
+  const PROMPT_KEYS = ["photo_analysis", "user_instruction_review", "crop_validation", "image_edit", "gaze_repair_pass", "quality_check"];
 
   function buildPromptsJson(prompts) {
     const ordered = {};
@@ -6003,6 +6003,7 @@
     { label: "使用者指令審查", el: () => els.promptReview },
     { label: "裁切驗證", el: () => els.promptCrop },
     { label: "修圖", el: () => els.promptEdit },
+    { label: "眼神修正（第二段）", el: () => els.promptGazeRepair },
     { label: "品質檢查", el: () => els.promptQa }
   ];
 

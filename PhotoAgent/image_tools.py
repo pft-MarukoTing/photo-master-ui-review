@@ -1,10 +1,15 @@
 import io
+import logging
 import math
 import base64
 import re
 
+import cv2
+import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 import pillow_heif
+
+logger = logging.getLogger(__name__)
 
 # Pillow has no built-in HEIC/HEIF decoder (patent-encumbered codec, not
 # bundled by default) -- this registers a PIL-compatible plugin so every
@@ -31,6 +36,92 @@ def create_preview_bytes(image_bytes: bytes, max_side: int = VISION_PREVIEW_MAX_
     scale = max_side / longest
     img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
     return _to_jpeg_bytes(img)
+
+
+_FACE_CASCADE = None
+_FACE_CROP_MAX_SIDE = 768
+_FACE_CROP_MAX_COUNT = 3
+
+
+def _face_cascade() -> "cv2.CascadeClassifier":
+    global _FACE_CASCADE
+    if _FACE_CASCADE is None:
+        _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    return _FACE_CASCADE
+
+
+def detect_face_crops(image_bytes: bytes) -> list:
+    """Zoomed-in JPEG crops of the most confidently detected faces, for
+    handing to the analysis model alongside the full-frame preview.
+
+    Vision APIs resample any input image down to their own fixed canonical
+    resolution before tiling it for the model (measured empirically: sending
+    a 1024px vs. 1536px preview produced the same image_tokens), so on a
+    half-body/full-body/group photo each eye ends up a handful of pixels
+    regardless of how large a preview we send -- raising VISION_PREVIEW_MAX_SIDE
+    does not help. A face crop gets its own canonical-resolution budget spent
+    entirely on that one face, which is the only way to give the model more
+    effective eye resolution to judge blink state and gaze/pupil direction.
+
+    Best-effort only: Haar cascade misses non-frontal or occluded faces and
+    occasionally false-positives on background clutter, so an empty list is
+    the expected outcome for plenty of photos, not an error -- callers must
+    keep working from the full photo alone when this returns nothing.
+
+    Returns a list of {"box": {x, y, w, h}, "bytes": jpeg_bytes} -- box is
+    normalized against the original (EXIF-transposed) image, same convention
+    as roi_box/protected_regions, so callers can hand it straight to the
+    frontend's analysis-box overlay without a separate coordinate space.
+    """
+    img = _open_rgb(image_bytes)
+    # Below its own minSize, OpenCV's cascade classifier can throw a native
+    # assertion (getScaleData: 0 <= scaleIdx < scaleData->size()) instead of
+    # returning zero detections -- a long-standing OpenCV bug, not something
+    # tied to any particular photo, so it's cheaper to dodge the known trigger
+    # than to special-case a version.
+    if min(img.width, img.height) < 60:
+        return []
+    gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
+    try:
+        boxes = _face_cascade().detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+    except cv2.error:
+        # Same underlying OpenCV flakiness, triggered by some other image
+        # shape/size combination the minSize guard above doesn't cover. Best-
+        # effort detection: no crop is a normal, handled outcome (see
+        # docstring), never worth failing the whole analysis over.
+        logger.warning("detect_face_crops: OpenCV cascade detection failed, continuing without face crops", exc_info=True)
+        return []
+    if len(boxes) == 0:
+        return []
+
+    boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
+    largest_area = boxes[0][2] * boxes[0][3]
+    # A real face's false-positive companions from background texture/pattern
+    # are usually far smaller than the real thing in the same frame; this
+    # drops those without needing a second model to tell them apart.
+    kept = [b for b in boxes if b[2] * b[3] >= largest_area * 0.4][:_FACE_CROP_MAX_COUNT]
+
+    crops = []
+    for x, y, w, h in kept:
+        left = max(0, x - round(w * 0.6))
+        top = max(0, y - round(h * 0.6))
+        right = min(img.width, x + w + round(w * 0.6))
+        bottom = min(img.height, y + h + round(h * 0.4))
+        crop = img.crop((left, top, right, bottom))
+        longest = max(crop.width, crop.height)
+        if longest < _FACE_CROP_MAX_SIDE:
+            scale = _FACE_CROP_MAX_SIDE / longest
+            crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
+        crops.append({
+            "box": {
+                "x": left / img.width,
+                "y": top / img.height,
+                "w": (right - left) / img.width,
+                "h": (bottom - top) / img.height,
+            },
+            "bytes": _to_jpeg_bytes(crop),
+        })
+    return crops
 
 
 def ensure_png_bytes(image_bytes: bytes) -> bytes:

@@ -3,17 +3,23 @@ import logging
 import time
 from functools import partial
 
+from config import MODELS
 from image_tools import (
     apply_derived_aspect_ratio,
     create_local_enhanced_bytes,
     get_image_dimensions,
     image_to_data_url,
 )
-from gemini_client import edit_photo as edit_photo_gemini, NANO_BANANA_LITE_MODEL
+from gemini_client import (
+    edit_photo as edit_photo_gemini,
+    edit_gaze_only as edit_gaze_only_gemini,
+    NANO_BANANA_LITE_MODEL,
+)
 from openai_client import (
     analyze_photo,
     review_user_instruction,
     edit_photo,
+    edit_gaze_only as edit_gaze_only_openai,
     quality_check_photo,
 )
 from prompts import build_analysis_instruction
@@ -25,7 +31,68 @@ EDIT_PHOTO_BY_MODEL = {
     "nano-banana-lite": partial(edit_photo_gemini, model=NANO_BANANA_LITE_MODEL),
 }
 
+# Step 5b's model is a separate choice from Step 5's (config.MODELS["gaze_repair"],
+# not image_model) -- picking gpt-image-2 low for Step 5 doesn't have to mean
+# gpt-image-2 low also runs the gaze-only pass. Keyed the same way as
+# EDIT_PHOTO_BY_MODEL for the same reason: a one-line config swap between
+# providers while comparing which one repairs gaze more reliably.
+GAZE_REPAIR_BY_MODEL = {
+    "gpt-image-2": edit_gaze_only_openai,
+    "gpt-image-1.5": partial(edit_gaze_only_openai, model="gpt-image-1.5"),
+    "nano-banana-2": edit_gaze_only_gemini,
+    "nano-banana-lite": partial(edit_gaze_only_gemini, model=NANO_BANANA_LITE_MODEL),
+}
+
 logger = logging.getLogger(__name__)
+
+
+def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
+    """Step 5b: redo the approved gaze repair(s) as a second, isolated
+    whole-image edit on top of Step 5's own output.
+
+    Runs on whichever model config.MODELS["gaze_repair"] names (see
+    GAZE_REPAIR_BY_MODEL above), independent of whichever model Step 5 itself
+    used: Step 5 bundles every gaze fix into one call together with
+    exposure/crop/skin/style/etc, and on gpt-image-2 low specifically that
+    call reliably applies the coarse, whole-frame changes but often no-ops
+    the fine, localized iris/pupil movement -- confirmed by comparing several
+    before/after test photos where the analysis's edit_instruction was just
+    as clear and specific in the cases that failed as in the ones that
+    worked. A second, isolated call whose prompt contains nothing but the
+    gaze fix gives the model's full attention to just this one change, for
+    every approved subject at once -- which also sidesteps the multi-person
+    matching problem a crop-based approach would have (no need to figure out
+    which detected face is which named subject; the model sees the whole
+    photo and every name at once, same as Step 5 does today).
+
+    An earlier version of this pass cropped to each face and pasted the
+    edited crop back in. Workable in principle, but the crop's own edit call
+    also regenerates its background (hair, collar, whatever the padding
+    captured), and that regeneration didn't reliably match the base image
+    closely enough to paste back invisibly -- it produced a doubled face and
+    a warped background pattern on real test photos, even after restricting
+    the paste to a re-detected eye region. A second whole-image call has no
+    seam to paste and nothing separate to keep consistent: the model edits
+    and returns the entire photo itself.
+
+    Best-effort: the caller's try/except keeps the Step 5 image untouched if
+    this fails, so it can only help, never regress a job.
+
+    Returns (image_b64, prompt_text) -- prompt_text is None when there was no
+    approved gaze repair to run, matching every other stage's "no GPT call
+    made" convention (see finish_stage's prompts dict).
+    """
+    gaze_items = [
+        item for item in (analysis.get("gaze_contact_issues") or [])
+        if isinstance(item, dict) and item.get("should_fix")
+    ]
+    if not gaze_items:
+        return image_b64, None
+
+    run_edit_gaze_only = GAZE_REPAIR_BY_MODEL.get(MODELS["gaze_repair"], edit_gaze_only_gemini)
+    result_bytes = base64.b64decode(image_b64)
+    edited_bytes, prompt_text = run_edit_gaze_only(result_bytes, gaze_items, quality=quality)
+    return base64.b64encode(edited_bytes).decode(), prompt_text
 
 
 def _quality_check_fallback(error: Exception) -> dict:
@@ -170,6 +237,20 @@ def finish_stage(
         image_b64 = edit_result["image_b64"]
         logger.info("Step 5 done in %.2fs: image returned", timings["Step 5 - image_edit"])
 
+        # Step 5b — gaze-only repair pass (best-effort; see
+        # _run_gaze_repair_pass for scope and why it exists). Never allowed to
+        # fail the job -- worst case is the Step 5 image passes through as-is.
+        t0 = time.time()
+        try:
+            image_b64, gaze_repair_prompt = _run_gaze_repair_pass(image_b64, analysis, quality)
+            prompts["gaze_repair_pass"] = gaze_repair_prompt
+            timings["Step 5b - gaze_repair_pass"] = time.time() - t0
+            logger.info("Step 5b done in %.2fs", timings["Step 5b - gaze_repair_pass"])
+        except Exception as exc:
+            prompts["gaze_repair_pass"] = None
+            timings["Step 5b - gaze_repair_pass"] = time.time() - t0
+            logger.warning("Step 5b gaze repair pass failed in %.2fs, keeping Step 5 output: %s", timings["Step 5b - gaze_repair_pass"], exc)
+
         # Step 6 — quality check (debug-ui escape hatch: skip the QA call
         # entirely when run_qa=False, e.g. to save time/cost while iterating
         # on the edit step alone)
@@ -222,6 +303,8 @@ def finish_stage(
         timings["Step 5 - image_edit"] = time.time() - t0
         logger.info("Step 5 done in %.2fs: local enhancement applied", timings["Step 5 - image_edit"])
         prompts["image_edit"] = None
+        prompts["gaze_repair_pass"] = None
+        timings["Step 5b - gaze_repair_pass"] = None
 
         # Step 6 — skip QA
         qa = {
