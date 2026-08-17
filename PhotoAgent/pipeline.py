@@ -181,6 +181,12 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # both hand it back automatically, with the stored analysis recording which
     # toggles that run actually used.
     analysis["_advanced_options"] = dict(advanced_options or {})
+    # Same leak strip_disabled_topic_items guards against in build_edit_prompt
+    # (a gaze/blink correction_plan item the analysis model added despite the
+    # matching toggle being off), applied here too so the review screen the
+    # user actually sees never shows a recommendation that toggle already said
+    # should not exist -- not just the edit model's own prompt.
+    analysis = strip_disabled_topic_items(analysis)
     return analysis
 
 
