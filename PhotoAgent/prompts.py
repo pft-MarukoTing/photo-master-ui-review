@@ -1381,7 +1381,77 @@ def _build_framing_intent_block(analysis):
     )
 
 
+# "鏡頭"/camera-lens language is a reliable gaze-repair signal on its own --
+# blink-repair items ask to reopen/relax eyes and never reference the camera
+# lens or gaze direction, so this does not need to be more clever than that.
+_GAZE_LEAK_KEYWORDS = ("鏡頭", "眼神", "視線", "目光", "eye contact", "gaze", "camera lens", "looking at the camera", "look at the camera")
+_BLINK_LEAK_KEYWORDS = ("睜開", "張開眼", "半閉", "閉眼", "眼皮", "reopen", "half-closed", "half closed", "blink")
+
+
+def strip_disabled_topic_items(analysis):
+    """Drops correction_plan items (and their correction_axes/correction_inverse/
+    retouch_recipe counterparts at the same index) that describe gaze or blink
+    repair when the matching Advanced Settings toggle is off.
+
+    Exists because should_fix=false on the structured gaze_contact_issues/
+    eye_blink_issues entries, and even an explicit "do not add this to
+    correction_plan for any reason" instruction in the disabled-toggle prompt
+    override, have both been observed not to stop the analysis model from
+    writing a free-text correction_plan item anyway -- a real run with
+    gaze_contact_detection off still produced three gaze-redirection
+    correction_plan items, none backed by an approved gaze_contact_issues
+    entry because there wasn't supposed to be one.
+
+    There is no structured field to check here -- correction_plan is free
+    text with no subject/kind tag -- so this is a keyword match, deliberately
+    scoped to run only when the corresponding toggle is off: with the toggle
+    off, a matching item is never legitimate, so the usual false-positive
+    risk of keyword matching (harmless here even if a match is coincidental,
+    since there is nothing legitimate for it to be a false positive against)
+    does not apply the way it would if this ran unconditionally.
+    """
+    advanced_options = analysis.get("_advanced_options") or {}
+    gaze_enabled = advanced_options.get("gaze_contact_detection", True)
+    blink_enabled = advanced_options.get("eye_closed_detection", True)
+    if gaze_enabled and blink_enabled:
+        return analysis
+
+    plan = list(analysis.get("correction_plan") or [])
+    if not plan:
+        return analysis
+
+    def _is_disabled_topic(text):
+        lowered = str(text or "").lower()
+        if not gaze_enabled and any(kw.lower() in lowered for kw in _GAZE_LEAK_KEYWORDS):
+            return True
+        if not blink_enabled and any(kw.lower() in lowered for kw in _BLINK_LEAK_KEYWORDS):
+            return True
+        return False
+
+    keep_indices = [i for i, item in enumerate(plan) if not _is_disabled_topic(item)]
+    if len(keep_indices) == len(plan):
+        return analysis
+
+    logger.warning(
+        "correction_plan contained %d gaze/blink item(s) despite the matching Advanced "
+        "Settings toggle being off; removing them",
+        len(plan) - len(keep_indices),
+    )
+    cleaned = dict(analysis)
+    cleaned["correction_plan"] = [plan[i] for i in keep_indices]
+    # Positionally aligned with correction_plan but not guaranteed the same
+    # length -- an untrustworthy analysis output already falls back gracefully
+    # elsewhere (see _axes_aligned) -- so only reindex a list that actually
+    # has an entry at every kept position.
+    for key in ("correction_axes", "correction_inverse", "retouch_recipe"):
+        values = analysis.get(key) or []
+        if len(values) == len(plan):
+            cleaned[key] = [values[i] for i in keep_indices]
+    return cleaned
+
+
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None):
+    analysis = strip_disabled_topic_items(analysis)
     rejected_axes = resolve_rejected_axes(analysis)
     color_craft_direction = build_color_craft_direction(rejected_axes)
     color_grade_check = build_color_grade_check(rejected_axes)

@@ -22,7 +22,7 @@ from openai_client import (
     edit_gaze_only as edit_gaze_only_openai,
     quality_check_photo,
 )
-from prompts import build_analysis_instruction
+from prompts import build_analysis_instruction, strip_disabled_topic_items
 
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
