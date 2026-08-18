@@ -5,13 +5,11 @@ Imports only prompts.py, so it runs without PIL/numpy/cv2:
     python3 -m unittest test_hair_repair -v
 """
 
-import re
 import unittest
 
 from photo_agent.param_validation import normalize_advanced_options
 from prompts import (
     AXIS_DEFINITIONS,
-    HAIR_MESS_DETECTION_DISABLED_OVERRIDE,
     build_analysis_instruction,
     build_edit_prompt,
     resolve_rejected_axes,
@@ -470,44 +468,14 @@ class CalmHair(unittest.TestCase):
 
 
 class AdvancedSettingsToggle(unittest.TestCase):
-    """The upload page's 人像進階設定 hair switch, as it reaches the analysis."""
+    """The upload page's 人像進階設定 hair switch.
 
-    FLAW_STATES = {
-        "strands_across_face", "lock_out_of_place", "tuft_or_flattened",
-        "frizz_halo", "windblown", "bangs_clumped", "bangs_disturbed",
-    }
-
-    def test_default_is_on(self):
-        self.assertNotIn("turned off by the user", build_analysis_instruction("auto"))
-        self.assertNotIn("turned off by the user", build_analysis_instruction("auto", {}))
-
-    def test_turning_it_off_silences_the_hair_repair_only(self):
-        off = build_analysis_instruction("auto", {"hair_mess_detection": False})
-        self.assertIn("Hair tidying has been turned off", off)
-        # The eye feature shares the advanced_options dict and must be untouched.
-        self.assertNotIn("Closed-eye / accidental-blink correction has been turned off", off)
-
-    def test_the_analysis_still_records_what_it_saw(self):
-        # Off means "do not act on it", not "do not look": the report still shows
-        # the judgement, which is what makes the switch debuggable.
-        off = build_analysis_instruction("auto", {"hair_mess_detection": False})
-        self.assertIn("Still inspect and fill in hair_issues as usual, front_hair included", off)
-
-    def test_every_flaw_state_is_named_by_the_override(self):
-        # The override lists states by name, so one added later stays ON with the
-        # switch off unless it is added here too. This is that tripwire.
-        for state in self.FLAW_STATES:
-            with self.subTest(state=state):
-                self.assertIn(state, HAIR_MESS_DETECTION_DISABLED_OVERRIDE)
-
-    def test_the_schema_declares_no_flaw_state_the_override_forgot(self):
-        instruction = build_analysis_instruction("auto")
-        declared = set(re.search(r'"hair_state": "([^"]+)"', instruction).group(1).split(" / "))
-        ungoverned = declared - self.FLAW_STATES - {
-            "tidy", "uncertain", "occluded_or_unclear", "styled_messy",
-            "styled_bangs", "styled_face_framing", "motion", "natural_texture",
-        }
-        self.assertEqual(ungoverned, set(), f"hair_state(s) the switch cannot turn off: {ungoverned}")
+    No longer reaches the analysis instruction at all -- eye_closed_detection/
+    hair_mess_detection/gaze_contact_detection now only gate the edit stage
+    (build_edit_prompt's strip_disabled_topic_items), so analysis always runs
+    full detection regardless of these three. These tests just cover that the
+    toggle itself still normalizes correctly.
+    """
 
     def test_the_hair_toggle_survives_normalization(self):
         self.assertEqual(
