@@ -1810,9 +1810,10 @@ Approved-repair override:
     if blink_items_to_fix:
         blink_block = """Accidental blink repair priority:
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
-- Work only on the eyes named below, on the person named below. Every other visible person's eyes, and everything else about the named person, come through exactly as captured.
+- Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
+- Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
 - Reopen or relax the eyes naturally so they match the person's existing expression and the photo's moment. Avoid making the eyes too large, symmetrical, doll-like, or copied from another person.
-- Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
+- Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting -- unless a separately approved gaze repair for this same person specifies a different target direction, in which case follow that instead. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
 - Eyes to work on: """ + json.dumps(blink_items_to_fix, ensure_ascii=False)
     else:
@@ -1829,8 +1830,9 @@ Approved-repair override:
         blink_block = """Eye-state preservation instruction (highest priority):
 - No accidental-blink or closed-eye repair is approved for this image.
 - This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復閉眼問題" / "repair the closed eyes") rather than a diagnosis.
-- Do not reopen, relax, enlarge, or otherwise change any person's eyelids, iris, pupil, or eye focus on the strength of any of that text alone.
-- Preserve every visible person's eye state and expression exactly as captured, unless a person is explicitly named above under "Eyes to work on"."""
+- Scope: this instruction governs eyelid state only -- whether an eye reads open, closed, or half-closed. It does not govern where an open eye's pupil/iris points; that is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt, which may still approve moving a person's pupils/iris even though no blink repair is approved for anyone.
+- Do not reopen, relax, or enlarge any person's closed or half-closed eyelids on the strength of any of that text alone.
+- Preserve every visible person's eyelid state and expression exactly as captured, unless a person is explicitly named above under "Eyes to work on"."""
 
     # Gated on the user's recipe choice as well as on the analysis. hair_issues
     # still says should_fix=true after the user unchecks the hair item -- it is
@@ -1976,8 +1978,9 @@ Execution rule:
         gaze_block = """Gaze preservation instruction (highest priority):
 - No gaze correction is approved for this image.
 - This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復眼神" / "fix the gaze") rather than a diagnosis.
+- Scope: this instruction governs where an open eye's pupil/iris points -- eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights. It does not govern whether an eye is open or closed; that is a different property, governed separately by the blink-repair instructions elsewhere in this prompt, which may still approve reopening a person's closed or half-closed eyelids even though no gaze correction is approved for anyone.
 - Do not redirect anyone's gaze toward the camera.
-- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, eyelid openness, and expression.
+- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, and expression.
 - If a subject is looking off-camera, near-camera, upward, downward, unfocused, or away from the lens, keep that original gaze unchanged unless a future approved gaze repair item explicitly requests a change.
 - Do not invent any gaze-repair method unless the analysis explicitly approved one.
 """
