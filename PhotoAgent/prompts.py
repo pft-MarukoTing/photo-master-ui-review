@@ -763,8 +763,11 @@ Analysis responsibilities:
 - For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
 - For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
+- Blink analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every eye_blink_issues item with should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["expression"], a matching correction_inverse entry, and a matching retouch_recipe item, all using the same subject_label. If any matching item is missing, add it now, following the wording rules above.
 - Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing eye_blink_issues entry at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Hair tidying is not a routine portrait enhancement either. Add a hair item to correction_plan only when the hair inspection above says should_fix=true, and never for styled, moving, or naturally textured hair.
+- Hair analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every hair_issues item with should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["hair"], a matching correction_inverse entry, and a matching retouch_recipe item, all using the same subject_label. If any matching item is missing, add it now, following the fix_action-specific wording rules above (lay_back / remove / settle / redistribute, the forehead lock test, never 淡化/降低對比/柔化/模糊 on hair).
+- Reverse hair consistency check, same reasoning as the gaze one above: if any correction_plan item describes tidying, settling, redistributing, or removing hair with no backing hair_issues entry at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
@@ -798,33 +801,13 @@ Composition decision framework:
 """
 
 
-# Advanced Settings override: the user turned off a detection/repair category
-# up front (Upload page), instead of leaving every proposed fix to be
-# individually unchecked on the review screen after the fact. Appended after
-# ANALYSIS_INSTRUCTION rather than editing the eye-blink rules block itself --
-# analysis quality when the toggle is ON must stay exactly what it is today,
-# and this way the override is one clearly-scoped block instead of a
-# conditional threaded through 100+ lines of judgment rules. The model still
-# fills in eye_blink_issues as usual (kept for the user's own reference /
-# debugging), it just may never turn a judgment into an actual edit.
-CLOSED_EYE_DETECTION_DISABLED_OVERRIDE = """
-Closed-eye / accidental-blink correction has been turned off by the user for this photo:
-- Still inspect and fill in eye_blink_issues as usual -- this is for reference only, not for the edit.
-- Regardless of your own judgement above, set should_fix=false on every eye_blink_issues entry.
-- Do not add an eye-opening or blink-repair item to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
-"""
-
-# One switch covering every hair flaw state. It lists them by name rather than
-# saying "all hair repair" so that a hair_state added later has to be added here
-# too -- an unlisted state would silently stay on with the switch off.
-HAIR_MESS_DETECTION_DISABLED_OVERRIDE = """
-Hair tidying has been turned off by the user for this photo:
-- Still inspect and fill in hair_issues as usual, front_hair included -- this is for reference only, not for the edit.
-- Regardless of your own judgement above, set should_fix=false on every hair_issues entry whose hair_state is strands_across_face, lock_out_of_place, tuft_or_flattened, frizz_halo, windblown, bangs_clumped, or bangs_disturbed.
-- Do not add any hair item to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
-"""
-
-
+# calm_hair is a request, not a detection toggle -- unlike eye_closed_detection/
+# hair_mess_detection/gaze_contact_detection (which only gate the EDIT stage
+# now, via strip_disabled_topic_items in build_edit_prompt; analysis itself
+# always runs full detection so a later revise can turn one back on without
+# re-analyzing), there is no "always detect" baseline for a user-elected style
+# change to fall back to when the switch is off. So this one still only
+# reaches the analysis model when the user actually asked for it.
 CALM_HAIR_ENABLED_OVERRIDE = """
 The user has asked for this person's hair to be laid down as if there were no wind:
 - This is a request, not a defect you have to find. Wind in the hair does not need to reach any confidence threshold, and it does not matter whether the disorder would otherwise read as intentional.
@@ -833,33 +816,22 @@ The user has asked for this person's hair to be laid down as if there were no wi
 - This does not extend to hair moving because the person is moving. A jump, spin, hair flip, or run still keeps its motion; laying that hair flat would contradict the body in the same photograph. Only wind-displaced hair is settled.
 """
 
-GAZE_CONTACT_DETECTION_DISABLED_OVERRIDE = """
-Gaze-contact / eye-focus correction has been turned off by the user for this photo:
-- Still inspect and fill in gaze_contact_issues as usual -- this is for reference only, not for the edit.
-- Regardless of your own judgement above, set should_fix=false on every gaze_contact_issues entry.
-- Do not add gaze-contact, eye-direction, eye-focus, or camera-contact repair items to correction_plan, correction_axes, correction_inverse, or retouch_recipe, for any reason.
-"""
-
 
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
 
     advanced_options: the Upload page's Advanced Settings toggles (e.g.
-    {"eye_closed_detection": False}) -- read only here, via .get() with a
-    True default per key, so adding a new toggle later only touches this
-    function plus the ADVANCED_OPTION_DEFAULTS entry in
-    photo_agent/param_validation.py.
+    {"eye_closed_detection": False}). Only calm_hair is read here -- the
+    detection/repair toggles (eye_closed_detection, hair_mess_detection,
+    gaze_contact_detection) no longer affect analysis at all, so eye_blink_issues/
+    hair_issues/gaze_contact_issues/correction_plan always reflect the model's
+    genuine judgement; strip_disabled_topic_items (build_edit_prompt, prompts.py)
+    is what actually applies those three at edit time.
     """
     advanced_options = advanced_options or {}
     instruction = ANALYSIS_INSTRUCTION
-    if not advanced_options.get("eye_closed_detection", True):
-        instruction += CLOSED_EYE_DETECTION_DISABLED_OVERRIDE
-    if not advanced_options.get("hair_mess_detection", True):
-        instruction += HAIR_MESS_DETECTION_DISABLED_OVERRIDE
     if advanced_options.get("calm_hair", False):
         instruction += CALM_HAIR_ENABLED_OVERRIDE
-    if not advanced_options.get("gaze_contact_detection", True):
-        instruction += GAZE_CONTACT_DETECTION_DISABLED_OVERRIDE
     if aspect_ratio_pref == "original":
         return instruction + """
 User aspect ratio requirement:
@@ -1484,6 +1456,118 @@ def strip_disabled_topic_items(analysis):
         values = analysis.get(key) or []
         if len(values) == len(plan):
             cleaned[key] = [values[i] for i in keep_indices]
+    return cleaned
+
+
+def _subject_labels(issues):
+    """De-duplicated, ordered subject_label list from a *_issues array, with
+    a fallback for a missing/blank label -- never blocks a backfill just
+    because the analysis omitted this one descriptive field."""
+    return list(dict.fromkeys((i.get("subject_label") or "").strip() or "畫面中的人" for i in issues))
+
+
+def backfill_missing_correction_items(analysis):
+    """The mirror image of strip_disabled_topic_items: analysis is asked (the
+    *_analyze-to-edit consistency check lines in ANALYSIS_INSTRUCTION) to keep
+    hair_issues/eye_blink_issues/gaze_contact_issues in sync with
+    correction_plan/correction_axes/correction_inverse/retouch_recipe, but
+    that is a request to an LLM, not a guarantee -- observed in practice to
+    set should_fix=true on an issue while never adding the matching
+    correction_plan entry at all.
+
+    Deliberately coarse: for a given topic, only backfills when correction_plan
+    has ZERO items mentioning it at all, despite should_fix=true issues
+    existing. Telling which correction_plan item (if any) already covers
+    WHICH specific should_fix=true person, from free text alone, isn't
+    reliable -- and duplicating a fix the model already wrote, just under
+    different wording than subject_label, would be worse than occasionally
+    missing a second person who shares a first person's already-covered
+    topic. One combined item per topic (naming every affected subject) is
+    the safe middle ground.
+
+    Called unconditionally at analyze time (pipeline.analyze_stage), same as
+    the toggle-independent detection it backstops -- advanced_options plays
+    no part here; whether a backfilled item survives to the edit stage is
+    entirely strip_disabled_topic_items's job in build_edit_prompt.
+    """
+    plan = list(analysis.get("correction_plan") or [])
+    recipe = list(analysis.get("retouch_recipe") or [])
+    axes = list(analysis.get("correction_axes") or [])
+    inverse = list(analysis.get("correction_inverse") or [])
+    # Already inconsistent in a way strip_disabled_topic_items's own re-index
+    # guard also declines to touch -- appending here would only compound it.
+    if not (len(recipe) == len(plan) and len(axes) == len(plan) and len(inverse) == len(plan)):
+        return analysis
+
+    backfilled = []
+
+    def add(topic, plan_item, recipe_item, axis_tags, inverse_item):
+        plan.append(plan_item)
+        recipe.append(recipe_item)
+        axes.append(list(axis_tags))
+        inverse.append(inverse_item)
+        backfilled.append(topic)
+
+    hair_hits = [i for i in (analysis.get("hair_issues") or []) if isinstance(i, dict) and i.get("should_fix")]
+    if hair_hits and not any(_is_disabled_topic_text(item, True, True, False) for item in plan):
+        subjects = "、".join(_subject_labels(hair_hits))
+        add(
+            "hair",
+            f"Tidy the disturbed hair for {subjects}: settle, redistribute, or remove only the strands the "
+            "hair analysis flagged, following each person's own fix_action and hairstyle shape. Never fade, "
+            "flatten, or blur hair; touch only the hair itself, not the face, skin, or lighting.",
+            f"整理{subjects}被風吹亂、翹起或散落的頭髮。",
+            ["hair"],
+            f"保留{subjects}原本的頭髮狀態，不做調整。",
+        )
+
+    blink_hits = [i for i in (analysis.get("eye_blink_issues") or []) if isinstance(i, dict) and i.get("should_fix")]
+    if blink_hits and not any(_is_disabled_topic_text(item, True, False, True) for item in plan):
+        subjects = "、".join(_subject_labels(blink_hits))
+        add(
+            "blink",
+            f"Naturally reopen or relax the closed/half-closed eyes for {subjects}, preserving identity, gaze "
+            "direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.",
+            f"修正{subjects}不小心閉眼或半閉眼的表情。",
+            ["expression"],
+            f"保留{subjects}原本的眼部狀態與表情，不做調整。",
+        )
+
+    gaze_hits = [i for i in (analysis.get("gaze_contact_issues") or []) if isinstance(i, dict) and i.get("should_fix")]
+    if gaze_hits and not any(_is_disabled_topic_text(item, False, True, True) for item in plan):
+        subjects = "、".join(_subject_labels(gaze_hits))
+        # gaze_repair_strategy.edit_instruction is written by the analysis
+        # model specifically to be "1-2 sentences directly executable by the
+        # edit model" (see the gaze_contact_issues schema) -- reuse it
+        # verbatim per person instead of re-deriving a weaker instruction
+        # from just subject_label.
+        instructions = " ".join(
+            (i.get("gaze_repair_strategy") or {}).get("edit_instruction")
+            or f"Redirect {i.get('subject_label') or 'the subject'}'s gaze toward the camera lens, moving "
+               "pupils/irises toward camera center, while preserving identity, facial structure, and expression."
+            for i in gaze_hits
+        )
+        add(
+            "gaze",
+            instructions,
+            f"修正{subjects}的眼神，讓視線望向鏡頭。",
+            ["expression"],
+            f"保留{subjects}原本的臉部結構、表情與場景，只調整眼神方向。",
+        )
+
+    if not backfilled:
+        return analysis
+
+    logger.warning(
+        "should_fix=true on %s issue(s) with no matching correction_plan item at all; backfilling one "
+        "combined item per topic",
+        ", ".join(backfilled),
+    )
+    cleaned = dict(analysis)
+    cleaned["correction_plan"] = plan
+    cleaned["retouch_recipe"] = recipe
+    cleaned["correction_axes"] = axes
+    cleaned["correction_inverse"] = inverse
     return cleaned
 
 

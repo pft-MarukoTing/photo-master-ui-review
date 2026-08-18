@@ -22,7 +22,7 @@ from openai_client import (
     edit_gaze_only as edit_gaze_only_openai,
     quality_check_photo,
 )
-from prompts import build_analysis_instruction, strip_disabled_topic_items
+from prompts import build_analysis_instruction, backfill_missing_correction_items
 
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
@@ -82,14 +82,12 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     approved gaze repair to run, matching every other stage's "no GPT call
     made" convention (see finish_stage's prompts dict).
 
-    Gated a second time here on advanced_options["gaze_contact_detection"],
-    not just left to the analysis prompt's own disabled-override (prompts.py's
-    GAZE_CONTACT_DETECTION_DISABLED_OVERRIDE, which asks the analysis model to
-    set should_fix=false on every item when the toggle is off). That is a
-    request to an LLM, not a guarantee -- the whole rest of this file exists
-    because analysis output doesn't always follow the rules it's given. A
-    plain dict lookup here means the toggle holds even on the run where the
-    analysis model doesn't comply.
+    Gated here on advanced_options["gaze_contact_detection"] -- the analysis
+    stage itself no longer reads this toggle at all (it always runs full gaze
+    detection, so gaze_contact_issues reflects genuine judgement regardless of
+    the toggle); this plain dict lookup, plus build_edit_prompt's own
+    strip_disabled_topic_items call on correction_plan, are the only two
+    places the toggle is actually enforced, both at edit time.
     """
     if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
         return image_b64, None
@@ -132,9 +130,15 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     at this point.
 
     advanced_options: the Advanced Settings toggles dict (e.g.
-    {"eye_closed_detection": False}) -- passed through opaquely to
-    build_analysis_instruction, which is the only place that reads individual
-    keys out of it.
+    {"eye_closed_detection": False}). Only build_analysis_instruction reads it
+    here, and only for calm_hair (an opt-in style request) -- the detection/
+    repair toggles (eye_closed_detection, hair_mess_detection,
+    gaze_contact_detection) no longer affect analysis at all; they're only
+    enforced later, at edit time (see _run_gaze_repair_pass and
+    build_edit_prompt's strip_disabled_topic_items). Still stamped onto
+    analysis["_advanced_options"] below regardless, since those edit-time
+    consumers read it off the analysis object rather than as their own
+    argument.
     """
 
     # Step 1 — read
@@ -180,13 +184,19 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # a finish_stage argument means the two-stage flow and the debug-UI /rerun
     # both hand it back automatically, with the stored analysis recording which
     # toggles that run actually used.
+    # Recorded, not applied here: eye_closed_detection/hair_mess_detection/
+    # gaze_contact_detection now only gate the EDIT stage (build_edit_prompt's
+    # own strip_disabled_topic_items call) -- analysis always runs full
+    # detection regardless of these three, so the review screen shows every
+    # genuine finding and a later revise can turn a toggle back on without
+    # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
-    # Same leak strip_disabled_topic_items guards against in build_edit_prompt
-    # (a gaze/blink correction_plan item the analysis model added despite the
-    # matching toggle being off), applied here too so the review screen the
-    # user actually sees never shows a recommendation that toggle already said
-    # should not exist -- not just the edit model's own prompt.
-    analysis = strip_disabled_topic_items(analysis)
+    # The ANALYSIS_INSTRUCTION consistency-check lines ask the model to keep
+    # hair_issues/eye_blink_issues/gaze_contact_issues in sync with
+    # correction_plan itself, but that alone isn't reliable -- backfill
+    # deterministically here so the review screen (and a later revise) always
+    # has something to show for a genuine should_fix=true finding.
+    analysis = backfill_missing_correction_items(analysis)
     return analysis
 
 

@@ -165,23 +165,21 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # empirically -- see detect_face_crops' docstring), so on anything but a
     # tight face close-up each eye ends up too few pixels to read pupil/iris
     # direction. A zoomed face crop gets its own resolution budget spent
-    # entirely on that face, which is what actually helps. Only worth the
-    # extra image tokens when the user hasn't turned off both detectors that
-    # would use it.
-    face_crops = []
-    options = advanced_options or {}
-    if options.get("eye_closed_detection", True) or options.get("gaze_contact_detection", True):
-        face_crops = detect_face_crops(image_bytes)
-        for i, crop in enumerate(face_crops, start=1):
-            content.append({
-                "type": "input_text",
-                "text": (
-                    f"Face crop {i} (zoomed, for judging eye state, blink, and gaze/pupil direction only "
-                    "-- match it to the corresponding person in the full photo above by appearance; it is "
-                    "not a separate photo):"
-                ),
-            })
-            content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
+    # entirely on that face, which is what actually helps. Always fetched now
+    # (not gated on eye_closed_detection/gaze_contact_detection) since analysis
+    # always runs full eye/gaze detection regardless of those toggles -- they
+    # only gate the edit stage (build_edit_prompt's strip_disabled_topic_items).
+    face_crops = detect_face_crops(image_bytes)
+    for i, crop in enumerate(face_crops, start=1):
+        content.append({
+            "type": "input_text",
+            "text": (
+                f"Face crop {i} (zoomed, for judging eye state, blink, and gaze/pupil direction only "
+                "-- match it to the corresponding person in the full photo above by appearance; it is "
+                "not a separate photo):"
+            ),
+        })
+        content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
 
     payload = _responses_payload(ANALYSIS_MODEL, content)
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
