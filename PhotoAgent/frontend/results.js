@@ -1026,6 +1026,16 @@ window.PhotoAgentResults = (() => {
     if (els.apGroupAngle) els.apGroupAngle.hidden = false;
   }
 
+  // Narrow re-fill of just #ap-recipe-list -- for when the panel is already
+  // open and only the recipe items need to change (flipping a 人像進階設定
+  // toggle re-filters correction_plan/retouch_recipe, see
+  // refreshInlineRecipeList in app.js), without re-running the rest of
+  // renderAnalysisPreview and disturbing whatever Pose/Angle/Lighting/Size
+  // pick the user already made.
+  function refreshRecipeList(analysis) {
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
+  }
+
   // Fills the batch-level Pose/Angle/Lighting/Size radio groups with the same
   // option lists as the single-image review screen. Called once at startup --
   // unlike renderAnalysisPreview, this isn't re-run per image, since it holds
@@ -1039,7 +1049,7 @@ window.PhotoAgentResults = (() => {
   }
 
   return {
-    renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger,
+    renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi, previewAspectRatio
   };

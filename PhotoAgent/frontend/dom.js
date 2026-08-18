@@ -238,6 +238,7 @@ window.PhotoAgentDom = (() => {
     apSettingsBtn: document.querySelector("#ap-settings-btn"),
     apSettingsModal: document.querySelector("#ap-settings-modal"),
     apSettingsModalClose: document.querySelector("#ap-settings-modal-close"),
+    apAdvancedSettingsBtn: document.querySelector("#ap-advanced-settings-btn"),
     downloadProgressToast: document.querySelector("#download-progress-toast"),
     downloadProgressLabel: document.querySelector("#download-progress-label"),
     downloadProgressFill: document.querySelector("#download-progress-fill"),

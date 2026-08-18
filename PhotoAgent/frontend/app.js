@@ -34,7 +34,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio } = window.PhotoAgentResults;
   renderBatchStyleOptions();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -829,6 +829,136 @@
       applyRunCountChange(els.runCountSelect.value));
   }
 
+  // Advanced Settings (人像進階設定) toggles live in ONE shared modal
+  // (#advanced-settings-modal), opened from either the upload page's
+  // #settings-modal or the results page's #ap-settings-modal -- reading them
+  // here (instead of inlining the same object literal at every call site)
+  // keeps the initial-submit read (startSubmit/startSubmitBatch) and a later
+  // revise's re-read (applyAdvancedOptionsChange below) sharing one source
+  // of truth.
+  function readAdvancedOptionsFromDom() {
+    return {
+      eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
+      gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
+      hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
+      calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
+    };
+  }
+
+  // Mirrors prompts.py's _GAZE_LEAK_KEYWORDS/_BLINK_LEAK_KEYWORDS/
+  // _HAIR_LEAK_KEYWORDS + _is_disabled_topic_text exactly (keep both in sync
+  // if either changes). The backend force-strips any correction_plan item
+  // matching these once the corresponding toggle is off -- both at analyze
+  // time (pipeline.py's analyze_stage) and again defensively in
+  // build_edit_prompt -- so without the same filter here, 修圖建議 would show
+  // (and let the user leave checked) items the backend has already silently
+  // dropped, or is about to.
+  const GAZE_LEAK_KEYWORDS = ["鏡頭", "眼神", "視線", "目光", "eye contact", "gaze", "camera lens", "looking at the camera", "look at the camera"];
+  const BLINK_LEAK_KEYWORDS = ["睜開", "張開眼", "半閉", "閉眼", "眼皮", "reopen", "half-closed", "half closed", "blink"];
+  const HAIR_LEAK_KEYWORDS = ["髮", "hair"];
+
+  function isDisabledTopicText(text, advancedOptions) {
+    // Historical/imported singleFlowState reconstructions (viewHistoryRecord,
+    // importAsSingle) never set .advancedOptions -- undefined here defaults
+    // to "everything enabled" (same as the Python side's `analysis.get(...)
+    // or {}`), a safe no-op since those records' analysis already had its
+    // disabled-topic items stripped once, backend-side, at their own analyze
+    // time.
+    const options = advancedOptions || {};
+    const lowered = String(text || "").toLowerCase();
+    const gazeEnabled = options.gaze_contact_detection !== false;
+    const blinkEnabled = options.eye_closed_detection !== false;
+    const hairEnabled = options.hair_mess_detection !== false;
+    if (!gazeEnabled && GAZE_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
+    if (!blinkEnabled && BLINK_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
+    if (!hairEnabled && HAIR_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
+    return false;
+  }
+
+  // Client-side mirror of prompts.py's strip_disabled_topic_items: drops any
+  // correction_plan item whose text names a topic the current toggles have
+  // disabled, and re-indexes retouch_recipe/correction_axes/correction_inverse
+  // (aligned 1:1 with correction_plan) to match -- same guard as the Python
+  // version, only touching an array if its length still matches plan's own
+  // (skips anything already out of sync rather than mis-aligning it further).
+  // Called with the SAME advancedOptions both when rendering 修圖建議
+  // (renderAnalysisPreview's callers, refreshInlineRecipeList) and when
+  // building the submitted analysis (buildEffectiveAnalysis) -- so
+  // recipeChecked (read straight off however many checkboxes actually got
+  // rendered) always lines up with correction_plan's post-strip length on
+  // both ends, with no separate index-remapping needed.
+  function stripDisabledTopicItems(analysis, advancedOptions) {
+    const plan = (analysis && analysis.correction_plan) || [];
+    if (!plan.length) return analysis;
+    const keepIndices = [];
+    plan.forEach((item, i) => { if (!isDisabledTopicText(item, advancedOptions)) keepIndices.push(i); });
+    if (keepIndices.length === plan.length) return analysis;
+    const pick = (arr) => (Array.isArray(arr) && arr.length === plan.length) ? keepIndices.map((i) => arr[i]) : arr;
+    return {
+      ...analysis,
+      correction_plan: pick(analysis.correction_plan),
+      retouch_recipe: pick(analysis.retouch_recipe),
+      correction_axes: pick(analysis.correction_axes),
+      correction_inverse: pick(analysis.correction_inverse)
+    };
+  }
+
+  // Syncs the toggles' displayed checked state to `advancedOptions` without
+  // pushing it onto any state -- same split as applyModelQualityOption vs.
+  // applyModelQualityChange, so switching which batch record's revise panel
+  // is open (startInlineBatchReview) can show that record's own effective
+  // settings without also overwriting them.
+  function applyAdvancedOptionsOption(advancedOptions) {
+    if (!advancedOptions) return;
+    if (els.eyeClosedDetectionToggle) els.eyeClosedDetectionToggle.checked = !!advancedOptions.eye_closed_detection;
+    if (els.eyeGazeFocusToggle) els.eyeGazeFocusToggle.checked = !!advancedOptions.gaze_contact_detection;
+    if (els.hairMessDetectionToggle) els.hairMessDetectionToggle.checked = !!advancedOptions.hair_mess_detection;
+    if (els.calmHairToggle) els.calmHairToggle.checked = !!advancedOptions.calm_hair;
+  }
+
+  // Lets a revise on the results page change these toggles and have it
+  // actually apply to the next edit -- same override rule as
+  // applyModelQualityChange: writes onto whichever batch record's revise
+  // panel is currently open, else the batch-wide default, else the
+  // single-image flow's own state. A no-op before any submit, same as
+  // applyModelQualityChange in that window (singleFlowState/batchSettings
+  // are both still null).
+  function applyAdvancedOptionsChange() {
+    const advancedOptions = readAdvancedOptionsFromDom();
+    if (singleFlowState) singleFlowState.advancedOptions = advancedOptions;
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) {
+      batchRecord.advancedOptions = advancedOptions;
+    } else if (batchSettings) {
+      batchSettings.advancedOptions = advancedOptions;
+    }
+    refreshInlineRecipeList();
+  }
+
+  // Re-filters whichever analysis the (currently open) inline revise panel
+  // is showing against the JUST-changed toggles, and re-fills #ap-recipe-list
+  // from that -- so turning e.g. 亂髮偵測 off immediately drops any hair-mess
+  // items from 修圖建議 instead of leaving them checked and showing as if
+  // they'll still be applied, when build_edit_prompt is actually about to
+  // strip them server-side regardless (see stripDisabledTopicItems's own
+  // doc). A no-op if the panel isn't open or there's no analysis yet -- same
+  // "harmless before/without a live session" shape as applyAdvancedOptionsChange
+  // itself. Same "always resets to checked" behavior as every other
+  // renderAnalysisPreview/refreshRecipeList call in the app -- any recipe
+  // items the user had unchecked by hand are re-checked along with this, same
+  // trade-off as switching batch records or revisiting history already makes.
+  function refreshInlineRecipeList() {
+    if (!els.analysisPreview || els.analysisPreview.hidden) return;
+    const batchRecord = currentDetailBatchRecord();
+    const analysis = batchRecord ? batchRecord.analysis : (singleFlowState && singleFlowState.analysis);
+    if (!analysis) return;
+    refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom()));
+  }
+
+  [els.eyeClosedDetectionToggle, els.eyeGazeFocusToggle, els.hairMessDetectionToggle, els.calmHairToggle].forEach((toggle) => {
+    if (toggle) toggle.addEventListener("change", applyAdvancedOptionsChange);
+  });
+
   // Backend step timings are seconds (float) or null (step skipped);
   // addTiming/appendTimingRow expect ms or a non-number sentinel.
   function secToMs(seconds) {
@@ -1061,7 +1191,11 @@
       prompt: els.promptInput ? els.promptInput.value.trim() : "",
       overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
-      runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null
+      runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null,
+      // 人像進階設定 (#advanced-settings-modal, reopenable from #ap-settings-btn
+      // now too) -- just as real an edit as the picks above, so it needs the
+      // same before/after snapshot to unblock the Run button.
+      advancedOptions: readAdvancedOptionsFromDom()
     };
   }
 
@@ -1087,7 +1221,10 @@
     const samePrompt = prompt === inlineReviseSnapshot.prompt;
     const sameModelQuality = modelQuality === inlineReviseSnapshot.modelQuality;
     const sameRunCount = runCount === inlineReviseSnapshot.runCount;
-    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount;
+    const advancedOptions = readAdvancedOptionsFromDom();
+    const sameAdvancedOptions = Object.keys(advancedOptions).every(
+      (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
+    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAdvancedOptions;
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
@@ -1116,7 +1253,11 @@
 
   async function showAnalysisPreview(analysis, preset) {
     restoreAnalysisPreviewHome();
-    renderAnalysisPreview({ analysis, preset });
+    // singleFlowState is already set (with this same `analysis`) by the time
+    // startSubmit calls this -- stripping disabled-topic items here keeps
+    // 修圖建議 matching what the backend already stripped from correction_plan
+    // (analyze_stage ran strip_disabled_topic_items with these exact toggles).
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
     if (els.analysisPreview) els.analysisPreview.hidden = false;
     if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
     // RUN count only applies to the single-image flow -- batch mode never
@@ -2471,12 +2612,7 @@
     // -- bundled into one object instead of one variable per toggle, so a new
     // toggle only needs a new key here, not a new argument threaded through
     // analyzeAipoc/analyzeJob/singleFlowState/runCombinedMultiRun/submitJob.
-    const advancedOptions = {
-      eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
-      gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
-      hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
-      calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
-    };
+    const advancedOptions = readAdvancedOptionsFromDom();
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
@@ -2551,7 +2687,7 @@
         // Straight through, no stop: still populate the analysis-preview DOM
         // (finishSingleFlow reads its recipe checkboxes/style picks/prompt
         // straight from there) but never show the panel or wait for a click.
-        renderAnalysisPreview({ analysis, preset });
+        renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
         await finishSingleFlow();
       } else {
         showAnalysisPreview(analysis, preset);
@@ -2603,7 +2739,7 @@
     lastSingleSelections = { userPrompt, overwritePrompt, ...selections };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
-    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, selections);
+    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, { ...selections, advancedOptions });
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -3028,7 +3164,7 @@
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
 
-    renderAnalysisPreview({ analysis: singleFlowState.analysis, preset: singleFlowState.preset });
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset });
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
@@ -3103,12 +3239,7 @@
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
-      advancedOptions: {
-        eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
-        gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
-        hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
-        calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
-      },
+      advancedOptions: readAdvancedOptionsFromDom(),
       path: els.processingPathSelect?.value || "local"
     };
 
@@ -3427,6 +3558,10 @@
     return record.aspectRatio || batchSettings.aspectRatio;
   }
 
+  function effectiveAdvancedOptions(record) {
+    return record.advancedOptions || batchSettings.advancedOptions;
+  }
+
   // Reads the batch-level Pose/Angle/Lighting/Size radios straight from the DOM.
   function readBatchStyleOptionsFromDom() {
     const checked = (name) => document.querySelector(`input[name="${name}"]:checked`);
@@ -3523,7 +3658,8 @@
       const overwritePrompt = effectiveOverwritePrompt(record);
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
         options: effectiveOptions(record),
-        recipeChecked: record.recipeChecked
+        recipeChecked: record.recipeChecked,
+        advancedOptions: effectiveAdvancedOptions(record)
       });
       const modelQuality = effectiveModelQuality(record);
       const aspectRatio = effectiveAspectRatio(record);
@@ -5097,6 +5233,12 @@
       // which needs to run after showSingleResult's own render regardless).
       applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
       applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+      // singleFlowState.advancedOptions itself is left unset by the historical
+      // reconstruction above (unlike imageModel/aspectRatio) -- reading off
+      // singleFlowState.analysis._advanced_options directly, the same key a
+      // later revise's buildEffectiveAnalysis falls back to, keeps this in
+      // sync with what a revise would actually use if left untouched.
+      applyAdvancedOptionsOption(singleFlowState.analysis?._advanced_options);
       if (historyViewToken === myToken) closeHistoryDrawer();
       return;
     }
@@ -5141,6 +5283,7 @@
       job.image_quality || extraInfo.image_quality || "medium"
     ));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
+    applyAdvancedOptionsOption(record.result.analysis?._advanced_options);
     if (historyViewToken === myToken) closeHistoryDrawer();
   }
 
@@ -5908,7 +6051,7 @@
     hideError();
     clearInlineAnalysisWait();
 
-    renderAnalysisPreview({ analysis: record.analysis, preset: batchSettings.preset });
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(record.analysis, effectiveAdvancedOptions(record)), preset: batchSettings.preset });
     applyBatchReviewSelections(record);
     // Sync (display-only, no state push -- same as viewHistoryRecord below)
     // #ap-image-model-quality/#ap-image-aspect-ratio to THIS case's own
@@ -5917,6 +6060,7 @@
     const effMq = effectiveModelQuality(record);
     applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
     applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
+    applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!record.overwritePrompt;
     // Pre-fill with this image's own current RUN count (matching whatever was
@@ -6110,17 +6254,34 @@
   // aesthetic_diagnosis, lighting_strategy) could still lead the model to make
   // the same change anyway. Any non-default pose/angle/lighting/size pick is
   // attached as style_options for the edit prompt.
-  function buildEffectiveAnalysis(analysis, { options, recipeChecked } = {}) {
-    const effective = { ...analysis };
+  function buildEffectiveAnalysis(analysis, { options, recipeChecked, advancedOptions } = {}) {
+    // Applied BEFORE the recipeChecked split below, and on the same
+    // `advancedOptions` #ap-recipe-list was just rendered/refreshed with
+    // (renderAnalysisPreview's callers, refreshInlineRecipeList) -- so
+    // recipeChecked (read straight off however many checkboxes actually got
+    // rendered) lines up positionally with `base`'s correction_plan, same as
+    // it always has with the raw `analysis` before this existed.
+    const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
+    const effective = { ...base };
+
+    // `analysis` already carries its own _advanced_options, baked in at
+    // analyze time (pipeline.py's analyze_stage) -- overwrite it with
+    // whatever the toggles in #advanced-settings-modal currently read as, so
+    // a revise from the results page (where these can now be reopened and
+    // changed, see #ap-advanced-settings-btn) actually reaches build_edit_prompt's
+    // detected_issues filtering and the gaze-repair pass, both of which read
+    // this key off the analysis object at finish time rather than off a
+    // fresh request field.
+    if (advancedOptions) effective._advanced_options = advancedOptions;
 
     if (Array.isArray(recipeChecked) && recipeChecked.length) {
       const keepChecked = (arr) =>
         Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] !== false) : arr;
       const dropChecked = (arr) =>
         Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] === false) : [];
-      effective.correction_plan = keepChecked(analysis.correction_plan);
-      effective.retouch_recipe = keepChecked(analysis.retouch_recipe);
-      effective.rejected_corrections = dropChecked(analysis.correction_plan);
+      effective.correction_plan = keepChecked(base.correction_plan);
+      effective.retouch_recipe = keepChecked(base.retouch_recipe);
+      effective.rejected_corrections = dropChecked(base.correction_plan);
       // retouch_recipe's own dropped text (correction_plan's is the internal/
       // technical description build_edit_prompt reads; this is the
       // human-readable one fillCheckList actually displays) -- without this,
@@ -6128,7 +6289,7 @@
       // viewHistoryRecord revisiting a job whose last revise unchecked
       // something -- has no way to show that item again at all, checked or
       // not; it's just gone.
-      effective.rejected_retouch_recipe = dropChecked(analysis.retouch_recipe);
+      effective.rejected_retouch_recipe = dropChecked(base.retouch_recipe);
       // Same index split for the axis tags (correction_axes[i] pairs with
       // correction_plan[i]). These are what let build_edit_prompt strip the
       // matching "do X" clauses out of its own light/color direction and add a
@@ -6138,14 +6299,14 @@
       // doesn't lock contrast for an approved "darken the busy background" that
       // shares the tag. It also validates the alignment and flattens the
       // nesting, so nothing here needs to inspect the values.
-      effective.correction_axes = keepChecked(analysis.correction_axes);
-      effective.rejected_axes = dropChecked(analysis.correction_axes);
+      effective.correction_axes = keepChecked(base.correction_axes);
+      effective.rejected_axes = dropChecked(base.correction_axes);
       // The analysis model also wrote, per item, what to preserve instead if
       // that item gets unchecked (correction_inverse). Only the dropped ones
       // are of any use, and they carry the item's own scope -- "brighten the
       // subject" inverts to pinning the subject, where the generic per-axis
       // rule pins the whole frame and over-suppresses.
-      effective.rejected_preserve = dropChecked(analysis.correction_inverse);
+      effective.rejected_preserve = dropChecked(base.correction_inverse);
     }
 
     const styleOptions = {};
@@ -6742,6 +6903,7 @@
       if (e.target.dataset.close) closeApSettingsModal();
     });
   }
+  if (els.apAdvancedSettingsBtn) els.apAdvancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
   if (els.apRecipePicker) els.apRecipePicker.addEventListener("click", openRecipeModal);
   if (els.apRecipeModalClose) els.apRecipeModalClose.addEventListener("click", closeRecipeModal);
   if (els.apRecipeModal) {

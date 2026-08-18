@@ -1140,6 +1140,16 @@
     @keyframes rc-spin { to { transform: rotate(360deg); } }
     .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .error-modal[hidden] { display: none; }
+    /* Opened from inside #settings-modal (upload page, #advanced-settings-btn)
+       or #ap-settings-modal (results page, #ap-advanced-settings-btn) -- both
+       triggers sit inside another already-open .error-modal at the plain base
+       z-index of 1000, so without its own higher one this would land BEHIND
+       whichever one opened it: equal z-indexes fall back to DOM order, and
+       this modal is declared earlier in the document than #ap-settings-modal.
+       1003, not 1001/1002 -- kept clear of .history-drawer/#confirm-modal's
+       own values just below even though neither is ever open at the same
+       time as this one, so this block reads as its own independent case. */
+    #advanced-settings-modal { z-index: 1003; }
     /* #confirm-modal can be triggered from inside the history drawer (its
        delete button) -- the drawer itself sits at z-index 1001 (see
        .history-drawer below), above every other .error-modal-based popup, so
@@ -3931,6 +3941,14 @@
           </details>
         </div>
       </div>
+      <!-- Opens the SAME #advanced-settings-modal as #advanced-settings-btn
+           in #settings-modal above -- one shared modal, not a second copy of
+           its markup, since it's just toggling that modal's own hidden
+           attribute regardless of which settings panel it was opened from
+           (see openAdvancedSettingsModal in app.js). -->
+      <button id="ap-advanced-settings-btn" class="btn btn-secondary" type="button">
+        <span class="btn-label">人像進階設定</span>
+      </button>
     </div>
   </div>
 </div>
