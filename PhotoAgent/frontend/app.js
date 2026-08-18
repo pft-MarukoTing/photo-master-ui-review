@@ -2473,7 +2473,7 @@
     // analyzeAipoc/analyzeJob/singleFlowState/runCombinedMultiRun/submitJob.
     const advancedOptions = {
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
-gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
+      gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
       calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
     };
@@ -2708,6 +2708,7 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
                 { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
                 { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
                 { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+                { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
                 { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
               ] }
             ];
@@ -2776,6 +2777,7 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
         { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
         { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
         { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+        { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
         { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
       ]);
       addTiming("取得結果", Date.now() - stepStart);
@@ -2911,6 +2913,7 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
           { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
         { label: "取得結果", duration: fetchMs }
@@ -3102,7 +3105,7 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       advancedOptions: {
         eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
-gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
+        gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
         hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
         calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
       },
@@ -3311,6 +3314,7 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
               { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
               { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
               { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+              { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
               { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
             ] }
           ];
@@ -3577,6 +3581,7 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
           { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
         { label: "取得結果", duration: fetchMs }
@@ -5994,19 +5999,44 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
     }
   }
 
+  // Turns whatever populateTimingSection last rendered into #timing-list
+  // (kept in sync the same way as the #prompt-* elements below, regardless
+  // of #timing-details' own hidden state) into plain aligned lines, since
+  // #prompts-modal-content is a <pre> -- padEnd keeps the seconds column
+  // lined up the same way appendTimingRow's flex row does visually. The
+  // total row gets its own blank-line gap in place of appendTimingRow's
+  // border-top separator.
+  function timingListAsText() {
+    if (!timingList) return "";
+    const rows = Array.from(timingList.querySelectorAll(".timing-row"));
+    if (!rows.length) return "";
+    const lineFor = (row) => {
+      const [nameEl, valEl] = row.querySelectorAll("span");
+      return `${(nameEl?.textContent || "").padEnd(24)}${valEl?.textContent || ""}`;
+    };
+    const totalRow = rows.find((r) => r.classList.contains("timing-total"));
+    const lines = rows.filter((r) => r !== totalRow).map(lineFor);
+    if (totalRow) lines.push("", lineFor(totalRow));
+    return lines.join("\n");
+  }
+
   // #show-prompt-btn (debug UI only): lists every pipeline stage that can
   // call GPT, reading each one's prompt text straight off the hidden
   // #prompt-* <pre> elements (renderPrompts, results.js keeps those in sync
   // with whatever result is on screen, batch or single) -- so this needs no
   // separate lookup into batchRecords/singleRuns to figure out which result
-  // is currently showing.
+  // is currently showing. The trailing 處理時間 tab piggybacks on the very
+  // same #timing-list element populateTimingSection keeps in sync instead of
+  // its own prompt element, hence `text` instead of `el` -- see
+  // timingListAsText above.
   const PROMPT_MODAL_STAGES = [
     { label: "照片分析", el: () => els.promptAnalysis },
     { label: "使用者指令審查", el: () => els.promptReview },
     { label: "裁切驗證", el: () => els.promptCrop },
     { label: "修圖", el: () => els.promptEdit },
     { label: "眼神修正（第二段）", el: () => els.promptGazeRepair },
-    { label: "品質檢查", el: () => els.promptQa }
+    { label: "品質檢查", el: () => els.promptQa },
+    { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" }
   ];
 
   // One tab per stage; clicking a tab is the only thing that changes
@@ -6014,10 +6044,11 @@ gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked 
   function renderPromptsModalTabs() {
     if (!els.promptsModalTabs || !els.promptsModalContent) return;
     els.promptsModalTabs.innerHTML = "";
-    const stages = PROMPT_MODAL_STAGES.map(({ label, el }) => {
-      const text = el()?.textContent?.trim();
-      const empty = !text || text === "–" || text === "（此步驟未呼叫 GPT）";
-      return { label, text: empty ? "（此步驟未呼叫 GPT）" : text, empty };
+    const stages = PROMPT_MODAL_STAGES.map(({ label, el, text: getText, emptyText }) => {
+      const fallback = emptyText || "（此步驟未呼叫 GPT）";
+      const text = (getText ? getText() : el()?.textContent)?.trim();
+      const empty = !text || text === "–" || text === fallback;
+      return { label, text: empty ? fallback : text, empty };
     });
     const buttons = stages.map((stage) => {
       const btn = document.createElement("button");
