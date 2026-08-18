@@ -180,7 +180,7 @@ class BlockOrder(unittest.TestCase):
         prompt = _prompt([CLUMPED])
         plan = prompt.index("User-approved correction plan")
         hair = prompt.index("Hair tidying priority")
-        rejected_or_skin = prompt.index("Skin-tone priority")
+        rejected_or_skin = prompt.index("Skin in the finished photograph")
         self.assertLess(plan, hair)
         self.assertLess(hair, rejected_or_skin)
 

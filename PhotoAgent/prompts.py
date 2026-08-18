@@ -141,6 +141,7 @@ Return exactly this JSON shape:
       "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
       "prominence": 1,
       "is_person": true,
+      "skin": "is_person=true 時必填，否則寫「不適用」。依序寫：原生膚色身分（在受光平均處判讀深淺與底調，不讀高光或陰影）；場景光色（臉上實際受光的方向與色性，以及是否為應保留的情境光）；非預期偏色（僅限無法由場景光解釋，或與頸、耳、手不連貫的偏黃、偏綠、偏紅、偏洋紅、偏灰；沒有則寫無）。原生膚色身分不可改變。不可把背景、草地、服裝或其他高飽和物體的主色當成膚色受光；只有可見光源或反射確實落在皮膚上才算情境光。夕陽、鎢絲燈、舞台燈、霓虹與反射色等合理光色不可被中性化。",
       "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。"
     }
   ],
@@ -241,7 +242,7 @@ Return exactly this JSON shape:
   },
   "tool_strategy": "哪些由本機裁切、曝光、白平衡、對比處理，哪些才交給 AI。",
   "lighting_strategy": "光線與明暗層次調整方向。",
-  "memory_color_strategy": "膚色、天空、綠色、食物、材質等記憶色策略。膚色以還原真實為目標，不要以「更暖、更紅潤、更健康」為方向。",
+  "memory_color_strategy": "記憶色（膚色、天空、綠色、食物、材質）在這張照片的光線下應該呈現的狀態。有人物時先說明人物受光的方向與色性；整體白平衡、色相與飽和度可以調整畫面調性，但膚色須獨立保護，維持人物原生膚色與合理情境光，只移除非預期偏色。",
   "restoration_needs": ["可由傳統影像處理改善的項目。"],
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
@@ -764,7 +765,7 @@ Analysis responsibilities:
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
 - Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing eye_blink_issues entry at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Hair tidying is not a routine portrait enhancement either. Add a hair item to correction_plan only when the hair inspection above says should_fix=true, and never for styled, moving, or naturally textured hair.
-- Skin should read naturally in the finished photo -- pushed neither toward orange or ruddy red, nor toward yellow or sallow. In particular, do not write a correction_plan item whose goal is warmer, rosier, or healthier-looking skin; if skin does look wrong, name which direction it is off.
+- Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 
@@ -888,8 +889,9 @@ COLOR_CRAFT_DIRECTION = (
     "detail without flattening them, hold the highlights so they roll off instead of clipping, and build "
     "depth through tonal separation between subject, midground, and background. Draw the image's presence "
     "primarily from light -- exposure, contrast placement, micro-contrast -- and only secondarily from "
-    "color; a modest saturation or warmth adjustment is welcome where it helps, but it should refine the "
-    "palette the photograph already has rather than impose a new one."
+    "color; a modest saturation or warmth adjustment may refine the non-skin palette without imposing a new "
+    "look. Grade the overall palette and skin separately: preserve each person's complexion and skin chroma, "
+    "and correct only an unwanted skin cast."
 )
 
 # Stopping condition, not a priority -- hence its own block at the very end of
@@ -905,11 +907,11 @@ COLOR_CRAFT_DIRECTION = (
 # color it will edit toward that instead of toward a better rendering of this
 # photograph. One comparative rule covers those cases without having to enumerate
 # the subject matter they involve.
-COLOR_GRADE_CHECK = """Before finishing, compare your result against the original. The original defines what the colors are meant to be; your job is to render them better, not to change what they are:
+COLOR_GRADE_CHECK = """Before finishing, compare your result against the original. The original defines the intended lighting and palette, not every unwanted color contamination; render the photograph better without changing its color intent:
 - a cool or warm character that was clearly deliberate is still there, pointing the same way;
-- what was vividly colored is at least as vivid; what was neutral is still neutral;
-- skin keeps each person's own depth and undertone, neither lightened nor flattened.
-Improving exposure, cleanliness, and separation is the work. Shifting the photograph's color character is not -- that reads as a filter rather than a finish."""
+- what was vividly colored is still as vivid and what was moderate is still moderate; what was neutral is still neutral;
+- skin keeps each person's depth, undertone, and chroma while retaining plausible scene light; never increase skin saturation or push it toward yellow, orange, or red. Correct only a distracting cast that the illumination does not explain.
+Improving exposure, cleanliness, separation, and approved color correction is the work. Shifting the photograph's intentional color character is not -- that reads as a filter rather than a finish."""
 
 
 # ── Rejected-axis gating ──────────────────────────────────────────────────────
@@ -952,8 +954,9 @@ _CRAFT_LIGHT_FIRST = (
     "and only secondarily from color"
 )
 _CRAFT_COLOR_TAIL = (
-    "a modest {allowed} adjustment is welcome where it helps, but it should refine the "
-    "palette the photograph already has rather than impose a new one."
+    "a modest {allowed} adjustment may refine the non-skin palette without imposing a new look. Grade the "
+    "overall palette and skin separately: preserve each person's complexion and skin chroma, and correct only "
+    "an unwanted skin cast."
 )
 
 
@@ -1484,6 +1487,21 @@ def strip_disabled_topic_items(analysis):
     return cleaned
 
 
+def _build_skin_identity_lines(analysis):
+    """Whose skin each face is, one line per person, from subjects[].skin."""
+    lines = []
+    for subject in analysis.get("subjects") or []:
+        if not isinstance(subject, dict) or not subject.get("is_person"):
+            continue
+        skin = (subject.get("skin") or "").strip()
+        label = (subject.get("label") or "").strip()
+        if skin and label and skin not in {"不適用", "N/A"}:
+            lines.append(f"- {label}: {skin}")
+    if not lines:
+        return "- Whose skin each face is, you read from the photograph itself: the depth and undertone a face already has are what it keeps."
+    return "\n".join(lines)
+
+
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None):
     analysis = strip_disabled_topic_items(analysis)
     rejected_axes = resolve_rejected_axes(analysis)
@@ -1880,14 +1898,35 @@ Execution rule:
 - Do not invent any gaze-repair method unless the analysis explicitly approved one.
 """
 
+    # The skin block's opening rule points at these; without them it names an
+    # identity the edit model was never told, so the generic line stands in.
     skin_block = ""
     if has_person:
-        skin_block = """Skin-tone priority (this photo contains people):
-- Skin is the reference point for every color decision in this edit. Judge white balance, saturation, warmth, and contrast by how the skin reads, not by how the background reads.
-- Preserve the original hue relationship between skin and the scene's neutral surfaces (white walls, white clothing, paper, teeth, eye whites). Do not shift skin hue away from the rest of the frame.
-- Veto rule: if a global color, warmth, or saturation adjustment improves the background but pushes skin toward orange, sallow yellow, sunburnt red, grey/lifeless, or magenta, abandon that global adjustment and treat the background locally instead.
-- Keep natural tonal variation within skin. Forehead, cheeks, nose, and shadowed areas must not flatten into one uniform tone.
-- This bounds the color portion of every instruction above, including the correction plan, the preset style direction, and any lighting override. A result whose overall grade looks appealing but whose skin looks unnatural is a failure, even if every other instruction was followed."""
+        # As with hair, use the raw axis tags: when the user rejects the only
+        # skin correction, the generic skin guidance must not recreate it.
+        skin_rejected = (
+            "skin" in _axis_set(analysis.get("rejected_axes"))
+            and "skin" not in _axis_set(analysis.get("correction_axes"))
+        )
+        skin_adjustment_rule = (
+            "- Skin-specific color correction was rejected by the user. Preserve each person's skin color as captured; "
+            "only let skin change insofar as an approved global lighting or color adjustment naturally changes the whole scene. "
+            "Do not locally neutralize, retint, or balance skin."
+            if skin_rejected else
+            "- Natural skin is not necessarily neutral. Retain coherent warm, cool, or colored illumination from sunset, tungsten, "
+            "stage light, neon, or reflected light on skin, teeth, and eye whites. Correct only a distracting hue cast that the "
+            "scene light does not explain, or a mismatch across face, neck, ears, and hands. Skin chroma is protected: do not "
+            "increase its saturation or push it warmer, yellower, redder, rosier, healthier-looking, or more neutral by default."
+        )
+        skin_block = f"""Skin in the finished photograph (this photo contains people):
+{_build_skin_identity_lines(analysis)}
+- Treat skin separately from the overall grade. Global white balance, hue, and saturation may refine the non-skin palette, but they do not redefine complexion or increase skin chroma. Each face keeps the recorded depth, undertone, and chroma while showing the light that plausibly falls on it.
+{skin_adjustment_rule}
+- Do not infer skin color from nearby grass, foliage, clothing, signs, or other saturated objects. Their color may remain vivid in the grade, but affects skin only when it is visibly cast onto the person as actual illumination.
+- Color is the whole of what changes on a face. Everything on it stays where the photograph put it -- the same eye shape and lash line, the same iris and catchlight position, the same nostril, lip edge, and brow -- and the skin's own texture, pores and lines and all, is still resolvable afterwards. A re-rendered feature, or a face smoothed into an even surface, is a different person, which is a worse outcome than any color it corrected.
+- A face is one surface: its tone changes only as light changes across a face, continuously and following the form, and nowhere on it do two colors meet at an edge. No part of a face is worked on apart from the rest -- skin corrected in one region carries that region's boundary with it, and a patch or seam on a face reads as damage where the color it replaced only read as unflattering. The same skin runs into the neck, ears, and hands, which match it.
+- A deep skin tone brightens by showing more of itself: texture and modelling rise out of the shadowed side and the lit side reads bright through its own sheen, while the tone stays as deep as it was. Brightness reached by moving it toward a paler complexion is an identity change, not a retouch.
+- A lighting override changes the scene light, and skin responds to that light like every other surface; it is never independently tinted to look healthier."""
 
     revision_block = ""
     if revision_feedback:
@@ -2267,7 +2306,7 @@ Check dimensions:
 - Composition: aspect ratio, layout method, subject placement, empty space, breathing room, context, and visual balance feel intentional for the subject type and scene intent.
 - Alignment and edges: credible horizontals/verticals feel stable unless slant has a clear purpose; output edges are fully photographic with no blank, transparent, checkerboard, or artificial canvas areas.
 - Distraction and scene truth: harmful distractions are reduced, but contextual/neutral elements are preserved unless they still compete strongly. The scene must not be rebuilt, over-simplified, or turned into a different style.
-- Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered.
+- Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
 - Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyes are naturally corrected while identity, gaze, face shape, glasses, makeup, and expression style remain believable.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
 - Approved gaze-contact repair: if gaze_contact_issues.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
@@ -2289,6 +2328,7 @@ Score caps:
 - If the original scene is visibly rebuilt, replaced, over-simplified, or converted into a different environment/style, score must be 3 or lower.
 - If contextual or neutral elements are removed/rebuilt just for cleanliness and this changes scene truth, score must be 3 or lower; if scene truth remains but context is weakened, score must be 5 or lower.
 - If composition method, aspect ratio, empty space, alignment, or context choice visibly weakens the image, score must be 6 or lower; if it also harms required subject completeness or scene intent, score must be 3 or lower.
+- If a person's complexion identity is lost -- lightened toward a paler complexion, flattened, made more saturated, pushed toward yellow, orange, or red without scene-light justification, or broken by a patch or band -- score must be 3 or lower. Coherent warm, cool, or colored light from the scene is not a failure.
 - If output is not safe to show as a demo result, pass must be false and overall_status must be "需人工複查" or "失敗".
 - Preservation failures dominate the score. Do not give a generous middle score just because color or background improved.
 - The numeric score, pass value, overall_status, summary, warnings, and recommendation must be internally consistent.

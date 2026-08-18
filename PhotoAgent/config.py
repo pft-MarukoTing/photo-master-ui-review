@@ -133,8 +133,9 @@ STYLE_OPTION_INSTRUCTIONS = {
             "Transform the image with a clearly visible warm gold-tone lighting style, not just a slight white-balance shift. "
             "Create a warmer golden atmosphere with amber highlights, richer warm midtones, gentle contrast, and a sunlit or warm practical-light feeling that suits the original scene. "
             "For outdoor scenes, this can feel like late-afternoon or golden-hour sunlight with softly glowing highlights and warm background bokeh. "
-            "For indoor or night scenes, this can feel like warm lamp, candle, restaurant, or practical-light ambience with richer skin/object warmth and deeper surrounding shadows. "
-            "Keep the same subject, location, props, and scene structure, and preserve believable material colors and skin tones. "
+            "For indoor or night scenes, this can feel like warm lamp, candle, restaurant, or practical-light ambience with deeper surrounding shadows. "
+            "The warmth belongs to the light rather than to the surfaces: it arrives as a warm source falling across the scene, so each surface shows it the way that surface would -- strongest where the light lands, unchanged where it does not reach. Skin takes this light like any other surface, warmed by what falls on it and never tinted on its own, so a face under warm light still reads as that person's own skin. "
+            "Keep the same subject, location, props, and scene structure, and preserve believable material colors. "
             "Avoid fake sunset backgrounds, heavy orange casts, overexposed yellow haze, or changing the original location."
         ),
         "soft": (
@@ -251,8 +252,9 @@ PRESET_PROMPTS = {
     ),
     "portrait": (
         "A humane portrait retouch: preserve identity, expression, facial geometry, skin tone, hair, clothing, "
-        "and body shape. Improve light, complexion, catchlights, texture, and overall presence without "
-        "beauty-filter smoothing."
+        "and body shape. Improve light, catchlights, texture, and the evenness and clarity of the skin "
+        "without beauty-filter smoothing. Presence comes from the light on the face rather than from "
+        "added color."
     ),
     "custom": "",
 }
