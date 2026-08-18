@@ -179,6 +179,11 @@ Return exactly this JSON shape:
       "gaze_state": "direct_camera / near_camera / off_camera / downward / upward_side / unfocused_camera / cross_focused / ambiguous / unclear",
       "eye_focus_quality": "sharp_engaged / slightly_unfocused / clearly_unfocused / unclear",
       "gaze_context": "posed_camera_contact / candid_or_documentary / speaking_or_performing / product_demo / action_or_movement / intentional_gaze_away / ambiguous。這只是描述性標籤，不能用來推翻 lens_contact_decision、gaze_state、confidence 或 should_fix。",
+      "gaze_target_in_frame": {
+        "present": false,
+        "description": "只有在畫面中存在一個具體、可指認、看得見的物體或人，而且這個人的視線明確朝向它匯聚時才填寫，例如「舉在畫面裡的自拍裝置」、「手中拿著、正在看的產品」、「畫面裡另一位正在對話的人物」。不可寫『遠方』、『某處』、『看向旁邊』、『畫面外』這種無法指認具體位置的說法；那些情況 present 必須是 false。",
+        "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1}
+      },
       "lens_contact_decision": "looking_at_lens / not_looking_at_lens / unclear",
       "lens_contact_confidence": 0.0,
       "not_looking_at_lens_confidence": 0.0,
@@ -197,7 +202,7 @@ Return exactly this JSON shape:
         "failure_to_avoid": ["near-camera only", "sharpen-only", "uncomfortable side-eye"]
       },
       "should_fix": true,
-      "reason": "依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
+      "reason": "依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_target_in_frame 是否成立（若成立，說明畫面中那個具體可指認的目標物是什麼）、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
     }
   ],
   "roi_box": {
@@ -654,13 +659,20 @@ Hard should_fix rule:
 - Set gaze_contact_issues.should_fix=true if and only if all of these are true:
   1. lens_contact_decision=not_looking_at_lens;
   2. not_looking_at_lens_confidence >= 0.55;
-  3. the eye direction is visually clear enough to correct safely.
+  3. the eye direction is visually clear enough to correct safely;
+  4. the visible-target exception below does not apply.
 - gaze_correction_reasonableness is NOT part of this rule. A low reasonableness score changes strategy_type and repair_strength (see Stage 2/3 above), never should_fix. There is no reasonableness floor below which should_fix flips to false.
 - For readable near-camera or slightly-beside-lens gaze, do not suppress should_fix merely because the miss is small. A small but clear lens miss is still a valid gaze-contact issue.
 - Otherwise set gaze_contact_issues.should_fix=false.
 - Do not override this rule just because the original gaze is natural, candid, acceptable, documentary, contextually appropriate, intentional, or important to the original story. None of those are valid grounds for should_fix=false when the eyes are readably not on the lens.
 - Natural original gaze and anatomically feasible gaze correction are different questions.
 - Do not use subject size, main-subject status, foreground/background status, pose naturalness, action type, or narrative preservation as a deciding factor. Those factors affect only uncertainty or repair feasibility, not whether the eyes are looking at the lens.
+
+Visible-target exception (the ONLY exception to the rule above):
+- If, and only if, the eyes are demonstrably converging on a specific object or person that is actually visible inside this photograph's own frame -- for example a phone or camera someone in the shot is holding up to take this very picture, a product the subject is looking at in their own hands, or another visible person they are looking at and interacting with -- set gaze_target_in_frame.present=true, name and box that target, and set should_fix=false.
+- This exception requires a nameable, boxable, visible target the gaze plausibly aims at. It does NOT cover looking down, looking to the side, looking into the distance, looking "away" or "off-camera" in general, or any case where you cannot point to a specific box in this frame the eyes are aimed at -- those stay should_fix=true under the hard rule above. An unnamed, unboxed "this gaze looks intentional/natural" is exactly the excuse this exception must never become; gaze_target_in_frame.present must not be set to true without a real box.
+- The most common legitimate case: a selfie or group photo where a phone/camera held up by someone in the shot is visible in frame. The true camera for that shot is that visible device, not an implied external viewpoint at eye level. When other subjects in the same photo are credibly looking at that same visible device, a subject whose eyes converge on it too is already looking at the actual camera for this shot -- forcing their gaze toward an abstract "face the viewer" direction instead would make them look at a different point than everyone else in the same photo, which is the failure here, not the fix.
+- The exception changes should_fix only. Still judge lens_contact_decision, gaze_state, and the confidence scores honestly from the eyes first, exactly as the rules above describe.
 
 Score-first reasoning order:
 1. Determine lens_contact_decision from the eyes only. Do not use scene context, pose, action, or whether lens contact would be narratively appropriate.
@@ -713,6 +725,7 @@ Output rules:
 - Do not describe gaze repair only as "improve eye contact" or "enhance gaze"; state that the named subject's gaze should be redirected toward direct_camera / the camera lens and whether head/face alignment is part of the approved method.
 - Preserve identity, overall eye shape, eyelid openness, eye color, glasses/reflections, mouth expression, brow expression, facial structure, skin texture, and lighting, except where the approved analysis explicitly allows a local change.
 - Never use blink repair wording for gaze repair.
+- If the reason the eye direction cannot be judged is that the eyes may be closed or half-closed -- original_gaze_read says something like "eyes closed" or "gaze direction not observable" -- that is lens_contact_decision=unclear, not not_looking_at_lens, and should_fix must be false on gaze_contact_issues for that person no matter how confident the rest of the photo's gaze judgments are. Do not write a gaze_repair_strategy that reopens the eyes and redirects them in the same instruction; eyelid state is eye_blink_issues' question, not this one, and "the eyes might be closed" is never evidence that they are pointed away from the lens.
 
 Analysis-to-edit handoff guardrail:
 - When gaze_contact_issues.should_fix=true, the analysis must hand off a fully actionable repair, not just a diagnosis.
