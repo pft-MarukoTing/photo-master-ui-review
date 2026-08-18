@@ -1399,19 +1399,44 @@ def _build_framing_intent_block(analysis):
 # lens or gaze direction, so this does not need to be more clever than that.
 _GAZE_LEAK_KEYWORDS = ("鏡頭", "眼神", "視線", "目光", "eye contact", "gaze", "camera lens", "looking at the camera", "look at the camera")
 _BLINK_LEAK_KEYWORDS = ("睜開", "張開眼", "半閉", "閉眼", "眼皮", "reopen", "half-closed", "half closed", "blink")
+# "髮"/"hair" alone, rather than enumerating 瀏海/髮絲/碎髮/髮型/... -- every
+# hair-tidying correction_plan item names the hair itself somewhere, and the
+# same "nothing legitimate to false-positive against" reasoning below applies
+# here too, so the broad match costs nothing extra.
+_HAIR_LEAK_KEYWORDS = ("髮", "hair")
+
+
+def _is_disabled_topic_text(text, gaze_enabled, blink_enabled, hair_enabled):
+    """True if `text` names a topic whose Advanced Settings toggle is off.
+
+    Factored out of strip_disabled_topic_items so build_edit_prompt can apply
+    the same keyword match to detected_issues -- free-text analysis notes
+    that, unlike correction_plan, strip_disabled_topic_items never touches,
+    but that still argue for the disabled repair just as loudly (see the
+    "aesthetic_diagnosis, detected_issues, ..." comment above
+    build_color_craft_direction).
+    """
+    lowered = str(text or "").lower()
+    if not gaze_enabled and any(kw.lower() in lowered for kw in _GAZE_LEAK_KEYWORDS):
+        return True
+    if not blink_enabled and any(kw.lower() in lowered for kw in _BLINK_LEAK_KEYWORDS):
+        return True
+    if not hair_enabled and any(kw.lower() in lowered for kw in _HAIR_LEAK_KEYWORDS):
+        return True
+    return False
 
 
 def strip_disabled_topic_items(analysis):
     """Drops correction_plan items (and their correction_axes/correction_inverse/
-    retouch_recipe counterparts at the same index) that describe gaze or blink
-    repair when the matching Advanced Settings toggle is off.
+    retouch_recipe counterparts at the same index) that describe gaze, blink,
+    or hair repair when the matching Advanced Settings toggle is off.
 
     Exists because should_fix=false on the structured gaze_contact_issues/
-    eye_blink_issues entries, and even an explicit "do not add this to
-    correction_plan for any reason" instruction in the disabled-toggle prompt
-    override, have both been observed not to stop the analysis model from
-    writing a free-text correction_plan item anyway -- a real run with
-    gaze_contact_detection off still produced three gaze-redirection
+    eye_blink_issues/hair_issues entries, and even an explicit "do not add
+    this to correction_plan for any reason" instruction in the disabled-
+    toggle prompt override, have both been observed not to stop the analysis
+    model from writing a free-text correction_plan item anyway -- a real run
+    with gaze_contact_detection off still produced three gaze-redirection
     correction_plan items, none backed by an approved gaze_contact_issues
     entry because there wasn't supposed to be one.
 
@@ -1426,27 +1451,23 @@ def strip_disabled_topic_items(analysis):
     advanced_options = analysis.get("_advanced_options") or {}
     gaze_enabled = advanced_options.get("gaze_contact_detection", True)
     blink_enabled = advanced_options.get("eye_closed_detection", True)
-    if gaze_enabled and blink_enabled:
+    hair_enabled = advanced_options.get("hair_mess_detection", True)
+    if gaze_enabled and blink_enabled and hair_enabled:
         return analysis
 
     plan = list(analysis.get("correction_plan") or [])
     if not plan:
         return analysis
 
-    def _is_disabled_topic(text):
-        lowered = str(text or "").lower()
-        if not gaze_enabled and any(kw.lower() in lowered for kw in _GAZE_LEAK_KEYWORDS):
-            return True
-        if not blink_enabled and any(kw.lower() in lowered for kw in _BLINK_LEAK_KEYWORDS):
-            return True
-        return False
-
-    keep_indices = [i for i, item in enumerate(plan) if not _is_disabled_topic(item)]
+    keep_indices = [
+        i for i, item in enumerate(plan)
+        if not _is_disabled_topic_text(item, gaze_enabled, blink_enabled, hair_enabled)
+    ]
     if len(keep_indices) == len(plan):
         return analysis
 
     logger.warning(
-        "correction_plan contained %d gaze/blink item(s) despite the matching Advanced "
+        "correction_plan contained %d gaze/blink/hair item(s) despite the matching Advanced "
         "Settings toggle being off; removing them",
         len(plan) - len(keep_indices),
     )
@@ -1469,6 +1490,17 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     color_craft_direction = build_color_craft_direction(rejected_axes)
     color_grade_check = build_color_grade_check(rejected_axes)
 
+    # Computed once, here, rather than separately next to each of the
+    # blink/hair/gaze blocks below: detected_issues (just below) needs all
+    # three just as much as those blocks do, since a toggle being off does
+    # not stop the analysis model from still describing that problem in its
+    # free-text notes -- should_fix=false and the "don't add a correction_plan
+    # item" instruction only ever governed the structured issue arrays.
+    advanced_options = analysis.get("_advanced_options") or {}
+    gaze_contact_detection_enabled = advanced_options.get("gaze_contact_detection", True)
+    eye_closed_detection_enabled = advanced_options.get("eye_closed_detection", True)
+    hair_mess_detection_enabled = advanced_options.get("hair_mess_detection", True)
+
     user_instruction = analysis.get("user_instruction") or {}
     effective_user_direction = (
         user_instruction.get("normalized_user_direction") or user_direction or ""
@@ -1481,7 +1513,18 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     if user_instruction.get("overwrite_prompt") and effective_user_direction.strip():
         return effective_user_direction.strip()
 
-    detected_issues = "; ".join(analysis.get("detected_issues") or [])
+    # Same leak strip_disabled_topic_items guards against in correction_plan,
+    # applied here too: detected_issues is free text the analysis model writes
+    # regardless of any toggle, so "右側男性雙眼閉合未鏡頭對焦" or "眼神皆未對鏡頭"
+    # can and does show up here even when the matching toggle is off. Filtered
+    # only for this edit-prompt string -- the analysis dict itself (and
+    # whatever review screen reads it) keeps the full list, since the
+    # disabled-toggle overrides explicitly ask for these fields to still be
+    # filled in "for reference only".
+    detected_issues = "; ".join(
+        item for item in (analysis.get("detected_issues") or [])
+        if not _is_disabled_topic_text(item, gaze_contact_detection_enabled, eye_closed_detection_enabled, hair_mess_detection_enabled)
+    )
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     eye_blink_issues = analysis.get("eye_blink_issues") or []
@@ -1657,12 +1700,6 @@ Approved-repair override:
     has_person = analysis.get("subject_category") == "人物" or any(
         isinstance(s, dict) and s.get("is_person") for s in subjects
     )
-    # Gated the same way as gaze_contact_detection (pipeline._run_gaze_repair_pass):
-    # not just trusting that the analysis model complied with
-    # CLOSED_EYE_DETECTION_DISABLED_OVERRIDE's "set should_fix=false on every
-    # eye_blink_issues entry" instruction. A plain dict lookup here means the
-    # toggle holds even on the run where the analysis model doesn't comply.
-    eye_closed_detection_enabled = (analysis.get("_advanced_options") or {}).get("eye_closed_detection", True)
     blink_block = ""
     blink_items_to_fix = [
         item for item in eye_blink_issues
@@ -1676,6 +1713,22 @@ Approved-repair override:
 - Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
 - Eyes to work on: """ + json.dumps(blink_items_to_fix, ensure_ascii=False)
+    else:
+        # Mirrors gaze_block's own empty-case fallback below: the notes above
+        # (aesthetic_diagnosis, detected_issues, edit_philosophy, edit_intent)
+        # can still say a subject's eyes are closed or half-closed -- and can
+        # phrase it as an instruction already decided ("修復閉眼問題" / "repair
+        # the closed-eye issue"), not just a diagnosis -- even when there is
+        # no approved repair, whether because eye_closed_detection is off or
+        # because nothing here needed fixing. "highest priority" and the named
+        # fields match negative_block's own phrasing below on purpose: this is
+        # the same kind of override, so it needs the same declared weight to
+        # outargue directive-sounding prose instead of merely descriptive prose.
+        blink_block = """Eye-state preservation instruction (highest priority):
+- No accidental-blink or closed-eye repair is approved for this image.
+- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復閉眼問題" / "repair the closed eyes") rather than a diagnosis.
+- Do not reopen, relax, enlarge, or otherwise change any person's eyelids, iris, pupil, or eye focus on the strength of any of that text alone.
+- Preserve every visible person's eye state and expression exactly as captured, unless a person is explicitly named above under "Eyes to work on"."""
 
     # Gated on the user's recipe choice as well as on the analysis. hair_issues
     # still says should_fix=true after the user unchecks the hair item -- it is
@@ -1692,6 +1745,11 @@ Approved-repair override:
         "hair" in _axis_set(analysis.get("rejected_axes"))
         and "hair" not in _axis_set(analysis.get("correction_axes"))
     )
+    # calm_hair (see calm_hair_block below) is its own opt-in hair transformation,
+    # unrelated to whether hair_mess_detection found anything -- computed here so
+    # hair_block's own empty-case fallback just below can defer to it instead of
+    # contradicting it with a blanket "leave hair untouched" instruction.
+    calm_hair_active = bool(advanced_options.get("calm_hair")) and not hair_rejected
     # Only the should_fix items are handed over, unlike the blink block's full
     # list: the "everything else stays as captured" rule below already covers the
     # people and strands left out, and this json is the one place hair gets named,
@@ -1700,7 +1758,7 @@ Approved-repair override:
     hair_items_to_fix = [
         item for item in hair_issues
         if isinstance(item, dict) and item.get("should_fix")
-    ]
+    ] if hair_mess_detection_enabled else []
     if hair_items_to_fix and not hair_rejected:
         hair_block = """Hair tidying priority:
 - Work only on the hair named below, on the person named below. Every other part of that person's hair, and everyone else's hair, comes through exactly as captured.
@@ -1716,6 +1774,21 @@ Approved-repair override:
 - Identical to the original afterwards: hairstyle shape and silhouette, parting, length, volume, density, hairline position, curl pattern, color, roots, and how the hair meets the scalp and ears -- with individual strands still resolvable and the hair's own irregular texture intact. The amount of hair never increases anywhere. For settle and redistribute, "unchanged" means the hairstyle the settled or un-clumped hair shows, not the wind-blown or corded arrangement it is being brought back from -- both of them move existing hair into places it was not covering, which is their purpose and not an addition.
 - Do not tidy the face/skin/expression along with the hair, tuck a fallen lock back into an updo, ponytail, braid, or clip, or close a parted fringe. Where the named hair cannot be laid back, cleanly taken off, or settled within these limits, leave it exactly as captured -- that is the correct outcome here, not a missed instruction.
 - Hair to work on: """ + json.dumps(hair_items_to_fix, ensure_ascii=False)
+    elif not calm_hair_active:
+        # Mirrors gaze_block's own empty-case fallback below: the notes above
+        # (aesthetic_diagnosis, detected_issues, edit_philosophy, edit_intent)
+        # can still call a subject's hair messy, windblown, or clumped -- and
+        # can phrase it as an instruction already decided ("修復髮絲" / "fix the
+        # hair"), not just a diagnosis -- even when there is no approved
+        # repair, whether because hair_mess_detection is off, the user
+        # rejected the item on review, or nothing here needed fixing.
+        # "highest priority" and the named fields match negative_block's own
+        # phrasing below on purpose: same kind of override, same declared weight.
+        hair_block = """Hair preservation instruction (highest priority):
+- No hair tidying is approved for this image.
+- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復髮絲" / "fix the hair") rather than a diagnosis.
+- Do not lay back, remove, settle, or redistribute any strand of hair on the strength of any of that text alone.
+- Preserve every visible person's hair exactly as captured: style, strands, flyaways, and all, unless hair is explicitly named above under "Hair to work on"."""
 
     # A user-elected transformation, so it is written with the same force as a
     # style override rather than as a defect repair: unconditional, and stated as
@@ -1723,7 +1796,7 @@ Approved-repair override:
     # blocks above hedge on purpose -- an unrequested hair edit is a risk -- but
     # hedging is wrong here, since the user asked for exactly this.
     calm_hair_block = ""
-    if (analysis.get("_advanced_options") or {}).get("calm_hair") and not hair_rejected:
+    if calm_hair_active:
         calm_hair_block = """Still-air hair (user-selected, mandatory):
 - The user asked for this photograph to look as though there were no wind. Every person's hair hangs down under its own weight, in the shape their haircut gives it, as it would on a still day indoors.
 - Bring lifted, fanned, streaming, and sideways-blown hair back down onto the head and shoulders. Close the gaps the wind opened, using the hair that is already in the photograph. The outline of each hairstyle reads continuous and settled rather than caught mid-gust.
@@ -1734,7 +1807,7 @@ Approved-repair override:
     gaze_items_to_fix = [
         item for item in gaze_contact_issues
         if isinstance(item, dict) and item.get("should_fix")
-    ]
+    ] if gaze_contact_detection_enabled else []
     gaze_block = ""
     if gaze_items_to_fix:
         gaze_targets = []
@@ -1791,8 +1864,16 @@ Execution rule:
 - Do not weaken a moderate or strong instruction into a subtle eye nudge.
 """
     else:
-        gaze_block = """Gaze preservation instruction:
+        # Same "highest priority" + named-fields treatment as blink_block's
+        # and hair_block's own empty-case fallbacks above, for the same
+        # reason: aesthetic_diagnosis/detected_issues/edit_philosophy/
+        # edit_intent can phrase an unapproved gaze fix as a decision already
+        # made ("修復眼神" / "fix the gaze"), which needs to be named and
+        # outranked here rather than left for a bare "not approved" to out-
+        # argue.
+        gaze_block = """Gaze preservation instruction (highest priority):
 - No gaze correction is approved for this image.
+- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復眼神" / "fix the gaze") rather than a diagnosis.
 - Do not redirect anyone's gaze toward the camera.
 - Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, eyelid openness, and expression.
 - If a subject is looking off-camera, near-camera, upward, downward, unfocused, or away from the lens, keep that original gaze unchanged unless a future approved gaze repair item explicitly requests a change.
