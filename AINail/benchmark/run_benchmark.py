@@ -6,7 +6,9 @@ Sends every (source, reference) pair in a benchmark folder through a running
 ComfyUI server with a given checkpoint (LoRA) + workflow api json, scores the
 result against the ground-truth target with PSNR/SSIM (whole image and
 nail-region vs. background), and writes report.html + results.json
-into a timestamped output directory.
+into a timestamped output directory. Pass --no-report to skip report_assets/
+and report.html and get only results.json + a summary.txt of averaged
+metrics -- useful for quick automated checks after training.
 
 Meant to be re-run after every new LoRA training run against a fixed
 benchmark set, to catch regressions (hand/background broken by the new
@@ -63,6 +65,48 @@ def png_bytes_to_jpeg(raw: bytes) -> bytes:
         buf = io.BytesIO()
         im.convert("RGB").save(buf, format="JPEG", quality=JPEG_QUALITY)
         return buf.getvalue()
+
+
+def _mean(values):
+    finite = [v for v in values if v == v and v != float("inf")]  # drop NaN/inf
+    return sum(finite) / len(finite) if finite else float("nan")
+
+
+def _worst(results, key):
+    """Lowest (worst) value for a PSNR/SSIM metric, plus which pair it came
+    from -- the mean alone can hide a single badly-broken case."""
+    finite = [(r[key], r["stem"]) for r in results if r[key] == r[key] and r[key] != float("inf")]
+    if not finite:
+        return float("nan"), None
+    return min(finite, key=lambda pair: pair[0])
+
+
+def write_summary(output_dir: Path, results: list, meta: dict) -> Path:
+    ok = [r for r in results if r.get("error") is None]
+    failed = [r for r in results if r.get("error") is not None]
+
+    def metric_line(label: str, key: str, unit: str = "") -> str:
+        mean_val = _mean([r[key] for r in ok])
+        worst_val, worst_stem = _worst(ok, key)
+        worst_part = f"(worst {worst_val:.4f}{unit} @ {worst_stem})" if worst_stem is not None else "(worst: n/a)"
+        return f"{label}: {mean_val:.4f}{unit} {worst_part}"
+
+    lines = [
+        f"run_id: {meta['run_id']}",
+        f"checkpoint: {meta['checkpoint']}",
+        f"workflow: {meta['workflow']}",
+        f"benchmark_dir: {meta['benchmark_dir']}",
+        f"pairs: {len(ok)} ok / {len(failed)} failed / {len(results)} total",
+        metric_line("psnr", "psnr", " dB"),
+        metric_line("ssim", "ssim"),
+        metric_line("nail_psnr", "nail_psnr", " dB"),
+        metric_line("nail_ssim", "nail_ssim"),
+        metric_line("background_psnr", "background_psnr", " dB"),
+        metric_line("background_ssim", "background_ssim"),
+    ]
+    summary_path = output_dir / "summary.txt"
+    summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return summary_path
 
 
 def find_pairs(benchmark_dir: Path, source_name: str, reference_name: str, target_name: str):
@@ -125,6 +169,10 @@ def main():
     parser.add_argument("--output-dir", type=Path, default=None,
                          help="base output dir; a _YYYYMMDD_hhmmss (UTC+8) suffix is appended. "
                               "Defaults to ./output_<benchmark-dir-name>_YYYYMMDD_hhmmss in the current directory.")
+    parser.add_argument("--no-report", action="store_true",
+                         help="skip report_assets/ and report.html; only write results.json and a "
+                              "summary.txt with averaged metrics. Useful for quick automated checks "
+                              "after training where you don't need to eyeball images.")
     parser.add_argument("--comfyui-host", default="127.0.0.1")
     parser.add_argument("--comfyui-port", type=int, default=8188, help="matches ComfyUI's --port at launch")
     parser.add_argument("--seed", type=int, default=42, help="fixed seed for reproducible cross-checkpoint comparison")
@@ -203,8 +251,12 @@ def main():
         "workflow": str(args.workflow),
         "benchmark_dir": str(args.benchmark_dir),
     }
-    report_path = report.render_report(output_dir, results, meta)
-    print(f"[done] report: {report_path}")
+    if args.no_report:
+        summary_path = write_summary(output_dir, results, meta)
+        print(f"[done] summary: {summary_path}")
+    else:
+        report_path = report.render_report(output_dir, results, meta)
+        print(f"[done] report: {report_path}")
 
 
 if __name__ == "__main__":
