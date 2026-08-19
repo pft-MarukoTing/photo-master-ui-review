@@ -6189,8 +6189,21 @@
     { label: "修圖", el: () => els.promptEdit },
     { label: "眼神修正（第二段）", el: () => els.promptGazeRepair },
     { label: "品質檢查", el: () => els.promptQa },
-    { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" }
+    { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" },
+    { label: "分析原始 JSON", text: analyzeRawJsonText, emptyText: "（尚無分析結果）" }
   ];
+
+  // Raw analyze-stage JSON, exactly as the backend returned it (including
+  // internal _advanced_options/_aspect_ratio_pref_at_analysis fields) -- for
+  // checking what the analysis actually produced, as opposed to the derived
+  // prompt text the other tabs show. Same batch-record/single-flow lookup as
+  // currentDetailBatchRecord's other callers, since analysis lives on either
+  // depending on which flow is active.
+  function analyzeRawJsonText() {
+    const batchRecord = currentDetailBatchRecord();
+    const analysis = batchRecord ? batchRecord.analysis : (singleFlowState && singleFlowState.analysis);
+    return analysis ? JSON.stringify(analysis, null, 2) : "";
+  }
 
   // One tab per stage; clicking a tab is the only thing that changes
   // #prompts-modal-content, so exactly one stage's text is ever shown.
