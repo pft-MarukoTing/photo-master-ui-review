@@ -213,7 +213,7 @@ def edit_photo(
 
     return {
         "image_b64": b64,
-        "usage": data.get("usageMetadata"),
+        "usage": {"model": model, "usage": data.get("usageMetadata")},
         # geometry_ratio_label, not api_ratio_label: Gemini's named ratios are
         # approximate on its own pixel grid (4:3 rasters as 1200x896), so the
         # physical ratio is what the output can actually be held to.
@@ -235,9 +235,10 @@ def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", m
     label) rather than anything analysis-recommended: this call must not
     re-crop or reframe what Step 5 already finished.
 
-    Returns (image_bytes, prompt_text) -- same (result, prompt) shape as
-    every other edit_photo/edit_gaze_* call, so pipeline.py can surface this
-    stage's prompt in the "Sent to GPT" debug view alongside every other one.
+    Returns (image_bytes, prompt_text, usage) -- usage is {"model", "usage"};
+    same shape as openai_client.edit_gaze_only, so pipeline.py can surface
+    this stage's prompt in the "Sent to GPT" debug view alongside every other
+    one.
     """
     prompt_text = build_gaze_only_edit_prompt(gaze_items)
     img_w, img_h = get_image_dimensions(image_bytes)
@@ -262,7 +263,7 @@ def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", m
     b64 = _extract_inline_image(data)
     if not b64:
         raise RuntimeError("Gemini 回應沒有包含圖片資料。")
-    return base64.b64decode(b64), prompt_text
+    return base64.b64decode(b64), prompt_text, {"model": model, "usage": data.get("usageMetadata")}
 
 
 @backoff.on_exception(backoff.expo, _RETRYABLE_EXCEPTIONS, max_tries=3, jitter=backoff.full_jitter)

@@ -1668,6 +1668,10 @@
     return JSON.stringify(ordered, null, 2);
   }
 
+  function buildTokenUsageJson(tokenUsage) {
+    return JSON.stringify(tokenUsage || {}, null, 2);
+  }
+
   // File names for one RUN's result inside a download zip -- numbered by the
   // RUN's own .run index (not its position within whatever subset is being
   // zipped), so the same RUN always gets the same file name whether it's
@@ -1723,19 +1727,24 @@
   }
 
   // --debug-ui mode: source at `prefix`, each RUN under its own `run_N/`
-  // subfolder alongside the raw result.json/prompts.json -- the original
-  // nested layout, kept for the internal analysis/QA data this mode exists
-  // to expose.
+  // subfolder alongside the raw result.json/prompts.json/token-usage.json --
+  // the original nested layout, kept for the internal analysis/QA data this
+  // mode exists to expose.
   function buildNestedImageFiles({ file, prefix }, sourceBuf, runData) {
     const files = sourceBuf ? [{ name: prefix + (file?.name || "source.jpg"), data: new Uint8Array(sourceBuf) }] : [];
     runData.forEach(({ run, imageBuf }) => {
       const runPrefix = `${prefix}run_${run.run || 1}/`;
-      const jsonBytes = new TextEncoder().encode(JSON.stringify(run.result, null, 2));
+      // token_usage gets its own file (token-usage.json) instead of sitting
+      // in result.json, so pull it out of the copy written there.
+      const { token_usage: tokenUsage, ...resultForFile } = run.result;
+      const jsonBytes = new TextEncoder().encode(JSON.stringify(resultForFile, null, 2));
       const promptsBytes = new TextEncoder().encode(buildPromptsJson(run.result.analysis?.prompts || {}));
+      const tokenUsageBytes = new TextEncoder().encode(buildTokenUsageJson(tokenUsage));
       files.push(
         { name: runPrefix + "result.png", data: new Uint8Array(imageBuf) },
         { name: runPrefix + "result.json", data: jsonBytes },
-        { name: runPrefix + "prompts.json", data: promptsBytes }
+        { name: runPrefix + "prompts.json", data: promptsBytes },
+        { name: runPrefix + "token-usage.json", data: tokenUsageBytes }
       );
     });
     return files;
@@ -2929,7 +2938,7 @@
       const data = {
         image: imageUrl,
         model: usedModelLabel,
-        usage: result.usage,
+        usage: result.token_usage,
         qualityCheck: result.quality_check,
         localOnly: !aiPhotoEditing,
         retryCount: 0
@@ -3129,7 +3138,7 @@
     const data = {
       image: pick.imageUrl,
       model: usedModelLabel,
-      usage: result.usage,
+      usage: result.token_usage,
       qualityCheck: result.quality_check,
       localOnly: !aiPhotoEditing,
       retryCount: 0
@@ -5986,7 +5995,7 @@
       const data = {
         image: record.imageUrl,
         model: usedModelLabel,
-        usage: record.result.usage,
+        usage: record.result.token_usage,
         qualityCheck: record.result.quality_check,
         localOnly: !settings.aiPhotoEditing,
         retryCount: 0

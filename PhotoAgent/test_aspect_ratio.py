@@ -387,8 +387,8 @@ class GeometryWarningWiringTests(unittest.TestCase):
             return {"image_b64": "x", "usage": None, "geometry_warnings": ["測試用幾何警告"]}, "prompt"
 
         with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": _fake_edit}), \
-                patch.object(pipeline, "review_user_instruction", return_value=({}, None)), \
-                patch.object(pipeline, "quality_check_photo", return_value=({"pass": True, "warnings": ["既有警告"]}, "qa prompt")):
+                patch.object(pipeline, "review_user_instruction", return_value=({}, None, None)), \
+                patch.object(pipeline, "quality_check_photo", return_value=({"pass": True, "warnings": ["既有警告"]}, "qa prompt", None)):
             out = pipeline.finish_stage(_image_bytes(), _analysis("4:5"), "", "natural", "medium")
 
         self.assertEqual(out["result_text"]["quality_check"]["warnings"], ["既有警告", "測試用幾何警告"])
@@ -400,7 +400,7 @@ class GeometryWarningWiringTests(unittest.TestCase):
             return {"image_b64": "x", "usage": None, "geometry_warnings": ["測試用幾何警告"]}, "prompt"
 
         with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": _fake_edit}), \
-                patch.object(pipeline, "review_user_instruction", return_value=({}, None)):
+                patch.object(pipeline, "review_user_instruction", return_value=({}, None, None)):
             out = pipeline.finish_stage(
                 _image_bytes(), _analysis("4:5"), "", "natural", "medium", run_qa=False
             )

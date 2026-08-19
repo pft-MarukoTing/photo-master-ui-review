@@ -189,14 +189,15 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # is itself useful information when a gaze/blink call still looks wrong.
     if face_crops:
         result["_face_crop_boxes"] = [c["box"] for c in face_crops]
-    return result
+    return result, {"model": ANALYSIS_MODEL, "usage": data.get("usage")}
 
 
 # ── Step 3: user instruction review ───────────────────────────────────────────
 
 def review_user_instruction(user_direction: str, analysis: dict):
-    """Returns (result, prompt) -- prompt is None when no GPT call was made
-    (no user direction to review)."""
+    """Returns (result, prompt, usage) -- usage is {"model", "usage"}, both
+    usage and prompt are None when no GPT call was made (no user direction to
+    review)."""
     trimmed = (user_direction or "").strip()
     if not trimmed:
         return {
@@ -211,14 +212,14 @@ def review_user_instruction(user_direction: str, analysis: dict):
             "qa_focus": [],
             "conflicts": [],
             "warning": "",
-        }, None
+        }, None, None
 
     prompt = build_user_instruction_review_prompt(trimmed, analysis)
     payload = _responses_payload(ANALYSIS_MODEL, [{"type": "input_text", "text": prompt}])
     data = _post_json(OPENAI_RESPONSES_URL, payload, "User instruction review failed")
     result = _parse_json_from_text(_extract_output_text(data))
     result["has_user_direction"] = True
-    return result, prompt
+    return result, prompt, {"model": ANALYSIS_MODEL, "usage": data.get("usage")}
 
 
 # ── Step 5: image edit ─────────────────────────────────────────────────────────
@@ -283,7 +284,7 @@ def edit_photo(
 
     return {
         "image_b64": b64,
-        "usage": data.get("usage"),
+        "usage": {"model": model, "usage": data.get("usage")},
         "geometry_warnings": output_geometry_warnings(b64, effective_ratio_label, crop_plan, img_w, img_h),
     }, prompt_text
 
@@ -316,9 +317,10 @@ def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", m
     picked by config.MODELS["gaze_repair"], independent of whichever model
     ran Step 5 itself.
 
-    Returns (image_bytes, prompt_text) -- same shape as the Gemini version,
-    so pipeline.py can surface this stage's prompt in the "Sent to GPT" debug
-    view regardless of which provider actually ran it.
+    Returns (image_bytes, prompt_text, usage) -- usage is {"model", "usage"};
+    same shape as the Gemini version, so pipeline.py can surface this stage's
+    prompt in the "Sent to GPT" debug view regardless of which provider
+    actually ran it.
     """
     prompt_text = build_gaze_only_edit_prompt(gaze_items)
     img_w, img_h = get_image_dimensions(image_bytes)
@@ -328,7 +330,7 @@ def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", m
     b64 = (data.get("data") or [{}])[0].get("b64_json")
     if not b64:
         raise RuntimeError("OpenAI 回應沒有包含圖片資料。")
-    return base64.b64decode(b64), prompt_text
+    return base64.b64decode(b64), prompt_text, {"model": model, "usage": data.get("usage")}
 
 
 # ── Step 6: quality check ──────────────────────────────────────────────────────
@@ -441,7 +443,7 @@ def _relabel_style_items(result: dict, analysis: dict) -> None:
 
 
 def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
-    """Returns (result, prompt)."""
+    """Returns (result, prompt, usage) -- usage is {"model", "usage"}."""
     preview = create_preview_bytes(image_bytes)
     original_data_url = image_to_data_url(preview, "image/jpeg")
     output_data_url = f"data:image/png;base64,{output_b64}"
@@ -461,4 +463,4 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
     result = _parse_json_from_text(_extract_output_text(data))
     _relabel_style_items(result, analysis)
-    return result, qa_prompt
+    return result, qa_prompt, {"model": ANALYSIS_MODEL, "usage": data.get("usage")}

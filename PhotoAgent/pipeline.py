@@ -78,9 +78,9 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     Best-effort: the caller's try/except keeps the Step 5 image untouched if
     this fails, so it can only help, never regress a job.
 
-    Returns (image_b64, prompt_text) -- prompt_text is None when there was no
-    approved gaze repair to run, matching every other stage's "no GPT call
-    made" convention (see finish_stage's prompts dict).
+    Returns (image_b64, prompt_text, usage) -- prompt_text and usage are None
+    when there was no approved gaze repair to run, matching every other
+    stage's "no GPT call made" convention (see finish_stage's prompts dict).
 
     Gated here on advanced_options["gaze_contact_detection"] -- the analysis
     stage itself no longer reads this toggle at all (it always runs full gaze
@@ -90,18 +90,18 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     places the toggle is actually enforced, both at edit time.
     """
     if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
-        return image_b64, None
+        return image_b64, None, None
     gaze_items = [
         item for item in (analysis.get("gaze_contact_issues") or [])
         if isinstance(item, dict) and item.get("should_fix")
     ]
     if not gaze_items:
-        return image_b64, None
+        return image_b64, None, None
 
     run_edit_gaze_only = GAZE_REPAIR_BY_MODEL.get(MODELS["gaze_repair"], edit_gaze_only_gemini)
     result_bytes = base64.b64decode(image_b64)
-    edited_bytes, prompt_text = run_edit_gaze_only(result_bytes, gaze_items, quality=quality)
-    return base64.b64encode(edited_bytes).decode(), prompt_text
+    edited_bytes, prompt_text, usage = run_edit_gaze_only(result_bytes, gaze_items, quality=quality)
+    return base64.b64encode(edited_bytes).decode(), prompt_text, usage
 
 
 def _quality_check_fallback(error: Exception) -> dict:
@@ -147,7 +147,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # Step 2 — analyze
     t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
-    analysis = analyze_photo(image_bytes, aspect_ratio, advanced_options)
+    analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options)
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
@@ -171,6 +171,9 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     }
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
+    }
+    analysis["usage"] = {
+        "Step 2 - photo_analysis": step2_usage,
     }
     # Records which aspect-ratio preference was active when this analysis ran,
     # so a later edit under a *different* preference (e.g. user picked "keep
@@ -222,11 +225,12 @@ def finish_stage(
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
         result_image_data_url: str, # data:image/png;base64,...
-        result_text: dict           # analysis + quality_check + usage
+        result_text: dict           # analysis + quality_check + token_usage
     }
     """
     prompts = dict(analysis.get("prompts") or {})
     timings = dict(analysis.get("timings") or {})
+    usage = dict(analysis.get("usage") or {})
 
     # Step 3 — review user instruction (collected on the analyze-preview
     # screen, so it's only available now that this stage has started)
@@ -243,10 +247,12 @@ def finish_stage(
             "overwrite_prompt": True,
         }
         review_prompt = None
+        step3_usage = None
     else:
-        user_instruction, review_prompt = review_user_instruction(user_prompt, analysis)
+        user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis)
     analysis = {**analysis, "user_instruction": user_instruction}
     prompts["user_instruction_review"] = review_prompt
+    usage["Step 3 - user_instruction_review"] = step3_usage
     timings["Step 3 - user_instruction_review"] = time.time() - t0
     logger.info("Step 3 done in %.2fs: has_direction=%s", timings["Step 3 - user_instruction_review"], user_instruction.get("has_user_direction"))
 
@@ -260,6 +266,7 @@ def finish_stage(
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
         edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key, aspect_ratio=aspect_ratio)
         prompts["image_edit"] = edit_prompt
+        usage["Step 5 - image_edit"] = edit_result.get("usage")
         timings["Step 5 - image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]
         logger.info("Step 5 done in %.2fs: image returned", timings["Step 5 - image_edit"])
@@ -269,12 +276,14 @@ def finish_stage(
         # fail the job -- worst case is the Step 5 image passes through as-is.
         t0 = time.time()
         try:
-            image_b64, gaze_repair_prompt = _run_gaze_repair_pass(image_b64, analysis, quality)
+            image_b64, gaze_repair_prompt, gaze_repair_usage = _run_gaze_repair_pass(image_b64, analysis, quality)
             prompts["gaze_repair_pass"] = gaze_repair_prompt
+            usage["Step 5b - gaze_repair_pass"] = gaze_repair_usage
             timings["Step 5b - gaze_repair_pass"] = time.time() - t0
             logger.info("Step 5b done in %.2fs", timings["Step 5b - gaze_repair_pass"])
         except Exception as exc:
             prompts["gaze_repair_pass"] = None
+            usage["Step 5b - gaze_repair_pass"] = None
             timings["Step 5b - gaze_repair_pass"] = time.time() - t0
             logger.warning("Step 5b gaze repair pass failed in %.2fs, keeping Step 5 output: %s", timings["Step 5b - gaze_repair_pass"], exc)
 
@@ -285,8 +294,9 @@ def finish_stage(
         if run_qa:
             logger.info("Step 6: running quality check")
             try:
-                qa, qa_prompt = quality_check_photo(image_bytes, image_b64, analysis)
+                qa, qa_prompt, qa_usage = quality_check_photo(image_bytes, image_b64, analysis)
                 prompts["quality_check"] = qa_prompt
+                usage["Step 6 - quality_check"] = qa_usage
                 timings["Step 6 - quality_check"] = time.time() - t0
                 logger.info("Step 6 done in %.2fs: score=%s pass=%s", timings["Step 6 - quality_check"], qa.get("score"), qa.get("pass"))
             except Exception as exc:
@@ -294,6 +304,7 @@ def finish_stage(
                 logger.warning("Step 6 QA failed in %.2fs: %s", timings["Step 6 - quality_check"], exc)
                 qa = _quality_check_fallback(exc)
                 prompts["quality_check"] = None
+                usage["Step 6 - quality_check"] = None
         else:
             logger.info("Step 6: skipping quality check (run_qa=False)")
             qa = {
@@ -306,6 +317,7 @@ def finish_stage(
                 "recommendation": "",
             }
             prompts["quality_check"] = None
+            usage["Step 6 - quality_check"] = None
             timings["Step 6 - quality_check"] = None
 
         # Deterministic geometry verification (see
@@ -319,8 +331,6 @@ def finish_stage(
             logger.warning("Output geometry check: %s", warning)
         if geometry_warnings:
             qa["warnings"] = list(qa.get("warnings") or []) + geometry_warnings
-
-        usage = edit_result.get("usage")
     else:
         # Step 5 — local crop + basic enhancement (no AI API call)
         t0 = time.time()
@@ -331,6 +341,8 @@ def finish_stage(
         logger.info("Step 5 done in %.2fs: local enhancement applied", timings["Step 5 - image_edit"])
         prompts["image_edit"] = None
         prompts["gaze_repair_pass"] = None
+        usage["Step 5 - image_edit"] = None
+        usage["Step 5b - gaze_repair_pass"] = None
         timings["Step 5b - gaze_repair_pass"] = None
 
         # Step 6 — skip QA
@@ -348,12 +360,13 @@ def finish_stage(
             "warnings": [],
             "recommendation": "若要檢查生成式修圖品質，請開啟 AI 修圖。",
         }
-        usage = None
         prompts["quality_check"] = None
+        usage["Step 6 - quality_check"] = None
         timings["Step 6 - quality_check"] = None
 
     analysis = {**analysis, "prompts": prompts}
     analysis.pop("timings", None)
+    analysis.pop("usage", None)
 
     return {
         "result_image": image_b64,
@@ -361,7 +374,7 @@ def finish_stage(
         "result_text": {
             "analysis": analysis,
             "quality_check": qa,
-            "usage": usage,
+            "token_usage": usage,
             "extra-info": {
                 "image_model": image_model if ai_photo_editing else None,
                 "image_quality": quality,
