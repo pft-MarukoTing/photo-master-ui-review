@@ -4,6 +4,7 @@ a username is just a namespace to group a person's own job history under.
 """
 
 import json
+import os
 import re
 import time
 
@@ -11,12 +12,17 @@ from aiserver_utils.pf_redis import pf_redis_client
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-USERS_SET_KEY = "yce_ai:photoAgent:users"
+# Namespaced per deployment (like REDIS_MSG_QUEUE/REDIS_MSG_INFO_FORMAT in
+# put_job.py) so dev and poc, which otherwise share the same Redis cluster,
+# don't collide on the same username's account/history entries.
+USERS_SET_KEY = os.getenv("REDIS_USERS_SET_KEY", "yce_ai:photoAgent:users")
 # ":v2" -- a HASH now (one field per distinct uploaded image), not the LIST
 # (one field per submission) the same key name used before. Redis enforces
 # one type per key, so reusing the old name would throw WRONGTYPE against any
 # key created under the previous schema.
-USER_HISTORY_KEY_FORMAT = "yce_ai:photoAgent:user:{user}:history:v2"
+USER_HISTORY_KEY_FORMAT = os.getenv(
+    "REDIS_USER_HISTORY_KEY_FORMAT", "yce_ai:photoAgent:user:{user}:history:v2"
+)
 
 # No TTL/eviction exists anywhere else in this codebase's Redis usage --
 # capping entry count here is the only bound on unlimited growth. Now that

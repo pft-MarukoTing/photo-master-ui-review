@@ -10,7 +10,7 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv(".env.default")
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env.default"), override=True)
 load_dotenv(os.path.join(os.path.dirname(__file__), "backend", ".env.backend"), override=True)
 
 from backend.app import create_app  # noqa: E402  (must import after env is loaded)
