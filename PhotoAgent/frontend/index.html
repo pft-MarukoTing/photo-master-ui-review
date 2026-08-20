@@ -3713,7 +3713,25 @@
     </div>
     <div class="settings-modal-body">
       <div class="option-pill-group">
-        <span class="option-pill-label">模型</span>
+        <span class="option-pill-label">分析模型</span>
+        <details class="ap-style-item" name="upload-option-picker" id="analysis-model-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                  stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="analysis-model" class="quality-select" hidden></select>
+        </details>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">生成模型</span>
         <details class="ap-style-item" name="upload-option-picker" id="image-model-quality-picker">
           <summary class="ap-style-trigger">
             <span class="option-pill-icon">
@@ -3850,7 +3868,7 @@
 <!-- Results/analysis-preview page settings overlay: opened by
      #ap-settings-btn (see openApSettingsModal/closeApSettingsModal in
      app.js) -- same backdrop+box+close pattern as #settings-modal above.
-     Holds the 模型/長寬比/生成張數 pickers that used to sit inline in
+     Holds the 分析模型/生成模型/長寬比/生成張數 pickers that used to sit inline in
      #ap-options-card-inline. 長寬比 mirrors the upload page's own picker
      (applyAspectRatioChange in app.js) and applies to the edit only -- the
      analysis is ratio-neutral and is never re-run for it; the backend settles
@@ -3864,7 +3882,25 @@
     </div>
     <div class="settings-modal-body">
       <div class="option-pill-group">
-        <span class="option-pill-label">模型</span>
+        <span class="option-pill-label">分析模型</span>
+        <details class="ap-style-item" name="ap-result-option-picker" id="ap-analysis-model-picker">
+          <summary class="ap-style-trigger">
+            <span class="option-pill-icon">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                  stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="ap-style-value"></span>
+          </summary>
+          <div class="step-list-frame ap-style-panel">
+            <ul class="step-inline-list"></ul>
+          </div>
+          <select id="ap-analysis-model" class="quality-select" hidden></select>
+        </details>
+      </div>
+      <div class="option-pill-group">
+        <span class="option-pill-label">生成模型</span>
         <details class="ap-style-item" name="ap-result-option-picker" id="ap-image-model-quality-picker">
           <summary class="ap-style-trigger">
             <span class="option-pill-icon">

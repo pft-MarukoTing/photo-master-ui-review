@@ -4,9 +4,23 @@ window.PhotoAgentConfig = {
   // /mt-testbed-PhotoAgent reverse-proxy prefix in prod). Set explicitly only
   // to override.
   apiBaseUrl: "",
-  // Mirrors config.py's MODELS["analysis"] / IMAGE_MODEL_LABELS -- shown on
-  // the result page's "輸出結果" card to report which models actually ran.
+  // Mirrors config.py's MODELS["analysis"] -- fallback label for the result
+  // page's "輸出結果" card when a job predates extra-info.analysis_model.
   analysisModel: "gpt-4.1-mini",
+  // Mirrors config.py's ANALYSIS_MODEL_LABELS -- the "輸出結果" card's
+  // actually-ran label (keyed off extra-info.analysis_model) reads from here.
+  analysisModels: {
+    "gpt-4.1-mini": "GPT 4.1 Mini",
+    "gpt-5.6-luna": "GPT 5.6 Luna"
+  },
+  // Single source of truth for the 分析模型 selector (upload page +
+  // analyze-preview), same array-of-options shape as imageModelQualityOptions
+  // above and aspectRatioOptions below.
+  analysisModelOptions: [
+    { value: "gpt-4.1-mini", label: "GPT 4.1 Mini" },
+    { value: "gpt-5.6-luna", label: "GPT 5.6 Luna" }
+  ],
+  defaultAnalysisModel: "gpt-4.1-mini",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
     "nano-banana-2": "Nano Banana 2"

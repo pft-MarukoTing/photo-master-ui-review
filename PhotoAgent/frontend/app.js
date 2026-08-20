@@ -705,6 +705,69 @@
       applyModelQualityChange(els.apImageModelQualitySelect.value));
   }
 
+  // 分析模型 selector (Steps 2/3/6's shared model) -- same mirroring contract
+  // as applyModelQualityChange/applyAspectRatioChange above: keep both
+  // selects and both pickers' visible labels in sync, and push the live value
+  // into whichever flow state is active. Unlike image_model, this only takes
+  // effect from the upload screen (before analyze_stage runs) -- changing it
+  // on the analyze-preview screen after Step 2 already ran would not
+  // re-analyze, so #ap-analysis-model exists for display/revise-batch parity
+  // with the other pickers but a mid-flow change here only affects a still-
+  // pending batch case's own finish call (Steps 3/6), not the analysis it
+  // already has.
+  function findAnalysisModelOption(value) {
+    const options = window.PhotoAgentConfig.analysisModelOptions || [];
+    return options.find((o) => o.value === value) || options[0] || null;
+  }
+
+  function populateAnalysisModelSelect(select) {
+    if (!select) return;
+    select.innerHTML = "";
+    (window.PhotoAgentConfig.analysisModelOptions || []).forEach((opt) => {
+      const optionEl = document.createElement("option");
+      optionEl.value = opt.value;
+      optionEl.textContent = opt.label;
+      select.appendChild(optionEl);
+    });
+    select.value = window.PhotoAgentConfig.defaultAnalysisModel || select.value;
+  }
+  populateAnalysisModelSelect(els.analysisModelSelect);
+  populateAnalysisModelSelect(els.apAnalysisModelSelect);
+  wireOptionPicker(els.analysisModelPicker, els.analysisModelSelect);
+  wireOptionPicker(els.apAnalysisModelPicker, els.apAnalysisModelSelect);
+
+  function applyAnalysisModelOption(opt) {
+    if (!opt) return;
+    if (els.analysisModelSelect) els.analysisModelSelect.value = opt.value;
+    if (els.apAnalysisModelSelect) els.apAnalysisModelSelect.value = opt.value;
+    [els.analysisModelPicker, els.apAnalysisModelPicker].forEach((picker) => {
+      const valueEl = picker?.querySelector(".ap-style-value");
+      if (valueEl) valueEl.textContent = opt.label;
+    });
+  }
+
+  function applyAnalysisModelChange(value) {
+    const opt = findAnalysisModelOption(value);
+    if (!opt) return;
+    applyAnalysisModelOption(opt);
+    if (singleFlowState) singleFlowState.analysisModel = opt.value;
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) {
+      batchRecord.analysisModel = opt.value;
+    } else if (batchSettings) {
+      batchSettings.analysisModel = opt.value;
+    }
+  }
+
+  if (els.analysisModelSelect) {
+    els.analysisModelSelect.addEventListener("change", () =>
+      applyAnalysisModelChange(els.analysisModelSelect.value));
+  }
+  if (els.apAnalysisModelSelect) {
+    els.apAnalysisModelSelect.addEventListener("change", () =>
+      applyAnalysisModelChange(els.apAnalysisModelSelect.value));
+  }
+
   // Aspect-ratio preference -- "auto" (default) takes the output ratio from
   // the framing the analysis proposed (measured off its crop rectangle, not
   // picked by the analysis model); "original" keeps the source photo's own
@@ -2535,8 +2598,8 @@
   // still needs the real two-stage analyze->adjust->continue path (and its
   // own per-RUN edit jobs, since each RUN there can carry different
   // per-image style/recipe overrides picked during review).
-  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
-    const jobId = await submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
+  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
+    const jobId = await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
     await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
   }
 
@@ -2614,6 +2677,7 @@
     const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
     const imageQuality = modelQualityOpt.quality || "medium";
     const imageModel = modelQualityOpt.model || "gpt-image-2";
+    const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-4.1-mini";
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
@@ -2663,14 +2727,14 @@
 
       if (!useCombinedJob) {
         if (processingPath === "aipoc") {
-          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, advancedOptions });
+          const analyzeData = await analyzeAipoc({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, advancedOptions });
           analysis = analyzeData.analysis;
           const t = analysis.timings || {};
           recordAnalyzeTiming("初步分析", Date.now() - stepStart, [
             { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
           ]);
         } else {
-          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, advancedOptions });
+          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, advancedOptions });
           recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
 
           stepStart = Date.now();
@@ -2688,7 +2752,7 @@
         }
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
 
       if (useCombinedJob) {
         await finishSingleFlow();
@@ -2741,7 +2805,7 @@
     // job started from."
     const myHistoryToken = historyViewToken;
     const isCurrent = () => historyViewToken === myHistoryToken;
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
     const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
@@ -2837,7 +2901,7 @@
       const stepStart = Date.now();
       try {
         await runCombinedMultiRun({
-          file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount,
+          file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
@@ -2905,9 +2969,9 @@
       let finalJobId, imageUrl, result;
 
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser() });
+        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser() });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -2931,8 +2995,11 @@
       const usedImageModelLabel = extraInfo.image_model
         ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
         : "本機處理";
+      const usedAnalysisModelLabel = extraInfo.analysis_model
+        ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
+        : window.PhotoAgentConfig.analysisModel;
       const usedModelLabel = isDebugUiActive
-      ? `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`
+      ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
       : "AI 智能修圖";
 
       const data = {
@@ -2992,7 +3059,7 @@
 
       const actionId = generateActionId();
       await runBatchPool(myRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
         // autoOpenPanel: false -- this fires per-RUN, not just once at the
@@ -3028,14 +3095,14 @@
       : rerunJob({ file, ...payload });
   }
 
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
+        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -3131,8 +3198,11 @@
     const usedImageModelLabel = extraInfo.image_model
       ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
       : "本機處理";
+    const usedAnalysisModelLabel = extraInfo.analysis_model
+      ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
+      : window.PhotoAgentConfig.analysisModel;
     const usedModelLabel = isDebugUiActive
-      ? `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`
+      ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
       : "AI 智能修圖";
 
     const data = {
@@ -3245,6 +3315,7 @@
       // Prompt is entered per-image (or batch-level) at step 2, not at upload.
       imageQuality: modelQualityOpt.quality || "medium",
       imageModel: modelQualityOpt.model || "gpt-image-2",
+      analysisModel: els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-4.1-mini",
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
@@ -3286,6 +3357,7 @@
       preset: presetKey,
       imageQuality: batchSettings.imageQuality,
       imageModel: batchSettings.imageModel,
+      analysisModel: batchSettings.analysisModel,
       aspectRatio: batchSettings.aspectRatio,
       aiPhotoEditing: batchSettings.aiPhotoEditing,
       advancedOptions: batchSettings.advancedOptions
@@ -3423,6 +3495,7 @@
         preset: batchSettings.presetKey,
         imageQuality: batchSettings.imageQuality,
         imageModel: batchSettings.imageModel,
+        analysisModel: batchSettings.analysisModel,
         aspectRatio: batchSettings.aspectRatio,
         aiPhotoEditing: batchSettings.aiPhotoEditing,
         runQa: batchSettings.runQa,
@@ -3563,6 +3636,12 @@
     return { model: batchSettings.imageModel, quality: batchSettings.imageQuality };
   }
 
+  // Same override rule as effectiveModelQuality above, for the analysis
+  // model (Steps 2/3/6) instead of the edit model (Step 5).
+  function effectiveAnalysisModel(record) {
+    return record.analysisModel || batchSettings.analysisModel;
+  }
+
   function effectiveAspectRatio(record) {
     return record.aspectRatio || batchSettings.aspectRatio;
   }
@@ -3671,6 +3750,7 @@
         advancedOptions: effectiveAdvancedOptions(record)
       });
       const modelQuality = effectiveModelQuality(record);
+      const analysisModel = effectiveAnalysisModel(record);
       const aspectRatio = effectiveAspectRatio(record);
       let stepStart = Date.now();
       if (batchSettings.path === "aipoc") {
@@ -3679,6 +3759,7 @@
           preset: batchSettings.presetKey,
           imageQuality: modelQuality.quality,
           imageModel: modelQuality.model,
+          analysisModel,
           aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
@@ -3695,6 +3776,7 @@
           preset: batchSettings.presetKey,
           imageQuality: modelQuality.quality,
           imageModel: modelQuality.model,
+          analysisModel,
           aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
@@ -5051,6 +5133,7 @@
             preset: presets[job.preset] || presets.natural,
             imageQuality: job.image_quality || extraInfo.image_quality || "medium",
             imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
+            analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-4.1-mini",
             aspectRatio: job.aspect_ratio || "auto",
             aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
             runQa: job.run_qa != null ? job.run_qa : true,
@@ -5207,6 +5290,7 @@
         preset: presets[job.preset] || presets.natural,
         imageQuality: job.image_quality || extraInfo.image_quality || "medium",
         imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
+        analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-4.1-mini",
         aspectRatio: job.aspect_ratio || "auto",
         aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
         runQa: job.run_qa != null ? job.run_qa : true,
@@ -5241,6 +5325,7 @@
       // just set above -- and, for aspect ratio, re-fitting the preview,
       // which needs to run after showSingleResult's own render regardless).
       applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+      applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
       applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
       // singleFlowState.advancedOptions itself is left unset by the historical
       // reconstruction above (unlike imageModel/aspectRatio) -- reading off
@@ -5291,6 +5376,7 @@
       job.image_model || extraInfo.image_model || "gpt-image-2",
       job.image_quality || extraInfo.image_quality || "medium"
     ));
+    applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-4.1-mini"));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
     applyAdvancedOptionsOption(record.result.analysis?._advanced_options);
     if (historyViewToken === myToken) closeHistoryDrawer();
@@ -5989,8 +6075,11 @@
       const usedImageModelLabel = extraInfo.image_model
         ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
         : "本機處理";
+      const usedAnalysisModelLabel = extraInfo.analysis_model
+        ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
+        : window.PhotoAgentConfig.analysisModel;
       const usedModelLabel = isDebugUiActive
-      ? `${window.PhotoAgentConfig.analysisModel} + ${usedImageModelLabel}`
+      ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
       : "AI 智能修圖";
       const data = {
         image: record.imageUrl,
@@ -6068,6 +6157,7 @@
     // them showing.
     const effMq = effectiveModelQuality(record);
     applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
+    applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
     applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
     applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
@@ -6651,6 +6741,7 @@
       preset: presets[presetKey] || presets.natural,
       imageQuality: modelQualityOpt.quality || extraInfo.image_quality || "medium",
       imageModel: modelQualityOpt.model || extraInfo.image_model || "gpt-image-2",
+      analysisModel: extraInfo.analysis_model || "gpt-4.1-mini",
       // The pref this run's EDIT was made under (recorded by finish_stage).
       // _aspect_ratio_pref_at_analysis is the pre-ratio-neutral-analysis field,
       // read only so folders exported back then still re-run as they were.
@@ -6692,6 +6783,7 @@
     // Mirrors the picks into both selects (and their picker labels) so the
     // review panel opens showing the model/長寬比 this folder was produced with.
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
+    applyAnalysisModelChange(settings.analysisModel);
     applyAspectRatioChange(settings.aspectRatio);
     singleFlowState = {
       analysis,
@@ -6701,6 +6793,7 @@
       preset: settings.preset,
       imageQuality: settings.imageQuality,
       imageModel: settings.imageModel,
+      analysisModel: settings.analysisModel,
       aspectRatio: settings.aspectRatio,
       aiPhotoEditing: settings.aiPhotoEditing,
       runQa: settings.runQa,
@@ -6733,6 +6826,7 @@
       preset: settings.preset,
       imageQuality: settings.imageQuality,
       imageModel: settings.imageModel,
+      analysisModel: settings.analysisModel,
       aspectRatio: settings.aspectRatio,
       aiPhotoEditing: settings.aiPhotoEditing,
       runQa: settings.runQa,

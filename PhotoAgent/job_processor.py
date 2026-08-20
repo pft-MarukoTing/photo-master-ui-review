@@ -111,7 +111,7 @@ class PhotoAgentJobProcessor:
 
         params = request["params"]
         self.logger.info(task_id, f'[{EFFECT_NAME}] Start job: src={len(request["src_keys"])}, dst_key={request["dst_key"]}')
-        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} overwrite_prompt={params.get("overwrite_prompt", False)} advanced_options={params.get("advanced_options", {})} has_prompt={bool(params.get("user_prompt"))}')
+        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} analysis_model={params["analysis_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} overwrite_prompt={params.get("overwrite_prompt", False)} advanced_options={params.get("advanced_options", {})} has_prompt={bool(params.get("user_prompt"))}')
         if (bool(params.get("user_prompt"))):
             self.logger.info(task_id, f'[{EFFECT_NAME}] User prompt: {params.get("user_prompt")}')
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
@@ -131,6 +131,7 @@ class PhotoAgentJobProcessor:
                     image_bytes,
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                     advanced_options=params.get("advanced_options", {}),
+                    analysis_model=params["analysis_model"],
                 )
 
                 analysis_path = os.path.join(work_dir, 'analysis.json')
@@ -155,6 +156,7 @@ class PhotoAgentJobProcessor:
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],
                     image_model=params["image_model"],
+                    analysis_model=params["analysis_model"],
                     run_qa=params.get("run_qa", True),
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                     overwrite_prompt=params.get("overwrite_prompt", False),
@@ -203,6 +205,7 @@ class PhotoAgentJobProcessor:
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],
                     image_model=params["image_model"],
+                    analysis_model=params["analysis_model"],
                     run_qa=params.get("run_qa", True),
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                     overwrite_prompt=params.get("overwrite_prompt", False),

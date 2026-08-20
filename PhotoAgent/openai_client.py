@@ -8,7 +8,7 @@ from typing import Tuple
 import backoff
 import requests
 
-from config import MODELS, PRESETS, PRESET_PROMPTS
+from config import MODELS, ANALYSIS_MODEL_REASONING_EFFORT, PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import (
     create_preview_bytes,
@@ -143,16 +143,18 @@ def _parse_json_from_text(text: str) -> dict:
     raise ValueError("AI 回應沒有包含有效 JSON。") from last_error
 
 
-def _responses_payload(model: str, content: list, text_format: dict = None) -> dict:
+def _responses_payload(model: str, content: list, text_format: dict = None, reasoning_effort: str = None) -> dict:
     payload = {"model": model, "input": [{"role": "user", "content": content}]}
     if text_format:
         payload["text"] = {"format": text_format}
+    if reasoning_effort:
+        payload["reasoning"] = {"effort": reasoning_effort}
     return payload
 
 
 # ── Step 2: photo analysis ─────────────────────────────────────────────────────
 
-def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None) -> dict:
+def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL) -> dict:
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
 
@@ -191,7 +193,10 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # keys, no extra keys), not the enum-like fields' documented value sets,
     # so a judgement call outside those sets still comes through instead of
     # the API hard-rejecting the request.
-    payload = _responses_payload(ANALYSIS_MODEL, content, text_format=ANALYSIS_RESPONSE_SCHEMA)
+    payload = _responses_payload(
+        analysis_model, content, text_format=ANALYSIS_RESPONSE_SCHEMA,
+        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    )
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
     result = _parse_json_from_text(_extract_output_text(data))
     # Debug-UI overlay only (frontend's #boxes-toggle-btn) -- lets a reviewer
@@ -199,12 +204,12 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # is itself useful information when a gaze/blink call still looks wrong.
     if face_crops:
         result["_face_crop_boxes"] = [c["box"] for c in face_crops]
-    return result, {"model": ANALYSIS_MODEL, "usage": data.get("usage")}
+    return result, {"model": analysis_model, "usage": data.get("usage")}
 
 
 # ── Step 3: user instruction review ───────────────────────────────────────────
 
-def review_user_instruction(user_direction: str, analysis: dict):
+def review_user_instruction(user_direction: str, analysis: dict, analysis_model: str = ANALYSIS_MODEL):
     """Returns (result, prompt, usage) -- usage is {"model", "usage"}, both
     usage and prompt are None when no GPT call was made (no user direction to
     review)."""
@@ -225,11 +230,14 @@ def review_user_instruction(user_direction: str, analysis: dict):
         }, None, None
 
     prompt = build_user_instruction_review_prompt(trimmed, analysis)
-    payload = _responses_payload(ANALYSIS_MODEL, [{"type": "input_text", "text": prompt}])
+    payload = _responses_payload(
+        analysis_model, [{"type": "input_text", "text": prompt}],
+        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    )
     data = _post_json(OPENAI_RESPONSES_URL, payload, "User instruction review failed")
     result = _parse_json_from_text(_extract_output_text(data))
     result["has_user_direction"] = True
-    return result, prompt, {"model": ANALYSIS_MODEL, "usage": data.get("usage")}
+    return result, prompt, {"model": analysis_model, "usage": data.get("usage")}
 
 
 # ── Step 5: image edit ─────────────────────────────────────────────────────────
@@ -452,7 +460,7 @@ def _relabel_style_items(result: dict, analysis: dict) -> None:
         item["item"] = short_label
 
 
-def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
+def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict, analysis_model: str = ANALYSIS_MODEL):
     """Returns (result, prompt, usage) -- usage is {"model", "usage"}."""
     preview = create_preview_bytes(image_bytes)
     original_data_url = image_to_data_url(preview, "image/jpeg")
@@ -463,14 +471,14 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict):
     # penalized as missing content.
     size = (analysis.get("style_options") or {}).get("size")
     qa_prompt = build_quality_check_prompt(apply_framing_size(analysis, size))
-    payload = _responses_payload(ANALYSIS_MODEL, [
+    payload = _responses_payload(analysis_model, [
         {"type": "input_text", "text": qa_prompt},
         {"type": "input_text", "text": "Original photo"},
         {"type": "input_image", "image_url": original_data_url},
         {"type": "input_text", "text": "Edited output"},
         {"type": "input_image", "image_url": output_data_url},
-    ], text_format=QUALITY_CHECK_SCHEMA)
+    ], text_format=QUALITY_CHECK_SCHEMA, reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model))
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
     result = _parse_json_from_text(_extract_output_text(data))
     _relabel_style_items(result, analysis)
-    return result, qa_prompt, {"model": ANALYSIS_MODEL, "usage": data.get("usage")}
+    return result, qa_prompt, {"model": analysis_model, "usage": data.get("usage")}

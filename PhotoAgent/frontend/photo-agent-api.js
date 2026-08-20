@@ -34,12 +34,13 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, advancedOptions, runCount, user, actionId, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, advancedOptions, runCount, user, actionId, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
+    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
@@ -225,12 +226,13 @@ window.PhotoAgentApi = (() => {
   // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
   // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
 
-  async function analyzeJob({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
+    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
@@ -247,12 +249,13 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
-  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
+    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
@@ -279,7 +282,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -288,6 +291,7 @@ window.PhotoAgentApi = (() => {
         preset,
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
+        analysis_model: analysisModel || "gpt-4.1-mini",
         aspect_ratio: aspectRatio || "auto",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
@@ -313,13 +317,14 @@ window.PhotoAgentApi = (() => {
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
-  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
+  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("analysis", JSON.stringify(analysis));
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
+    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
@@ -342,12 +347,13 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
-  async function analyzeAipoc({ file, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeAipoc({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
+    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
@@ -364,12 +370,13 @@ window.PhotoAgentApi = (() => {
     return data; // { status, analysis }
   }
 
-  async function analyzeAipocBatch({ files, preset, imageQuality, imageModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeAipocBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
+    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));

@@ -13,6 +13,24 @@ MODELS = {
     "gaze_repair": "nano-banana-2",
 }
 
+# UI-selectable analysis models (Steps 2/3/6 -- analyze_photo,
+# review_user_instruction, quality_check_photo all share whichever model a
+# request picks), overridable per request via analysis_model the same way
+# image_model overrides "image" above. Each maps to the reasoning.effort sent
+# with its Responses API calls: None omits the "reasoning" field entirely,
+# required for non-reasoning models since the API rejects that field on
+# models that don't support it; a reasoning model needs an explicit effort
+# level instead -- "none" runs gpt-5.6-luna reasoning-free.
+ANALYSIS_MODEL_REASONING_EFFORT = {
+    "gpt-4.1-mini": None,
+    "gpt-5.6-luna": "none",
+}
+
+ANALYSIS_MODEL_LABELS = {
+    "gpt-4.1-mini": "GPT 4.1 Mini",
+    "gpt-5.6-luna": "GPT 5.6 Luna",
+}
+
 # UI-selectable image-edit models (Step 5). "gpt-image-2"/"gpt-image-1.5" call
 # OpenAI's images/edits API (openai_client.edit_photo); "nano-banana-2"/
 # "nano-banana-lite" call Gemini's generateContent API (gemini_client.edit_photo)

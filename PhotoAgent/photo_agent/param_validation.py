@@ -14,6 +14,7 @@ EFFECT_NAME = "photoAgent"
 VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
 VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "nano-banana-2", "nano-banana-lite")
+VALID_ANALYSIS_MODELS = ("gpt-4.1-mini", "gpt-5.6-luna")
 # "auto" (from the proposed crop) / "original" (the source frame) / one fixed
 # W:H frame. The label list mirrors image_tools.USER_SELECTABLE_ASPECT_RATIO_LABELS,
 # kept literal so this validator does not pull in that module's Pillow import.
@@ -142,6 +143,14 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["image_model"] = image_model
+
+    analysis_model = normalized.get("analysis_model", "gpt-4.1-mini")
+    if not isinstance(analysis_model, str) or analysis_model not in VALID_ANALYSIS_MODELS:
+        raise RuntimeError(
+            f"{EFFECT_NAME}: analysis_model must be one of {VALID_ANALYSIS_MODELS}",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["analysis_model"] = analysis_model
 
     aspect_ratio = normalized.get("aspect_ratio", "auto")
     if not isinstance(aspect_ratio, str) or aspect_ratio not in VALID_ASPECT_RATIOS:

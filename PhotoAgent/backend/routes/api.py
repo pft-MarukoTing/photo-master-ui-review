@@ -30,7 +30,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options")
+            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
@@ -49,6 +49,7 @@ def _parse_and_validate_params(form):
         "preset": form.get("preset", "natural"),
         "image_quality": form.get("image_quality", "medium"),
         "image_model": form.get("image_model", "gpt-image-2"),
+        "analysis_model": form.get("analysis_model", "gpt-4.1-mini"),
         "aspect_ratio": form.get("aspect_ratio", "auto"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",

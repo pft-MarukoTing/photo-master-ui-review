@@ -121,7 +121,7 @@ def _quality_check_fallback(error: Exception) -> dict:
     }
 
 
-def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None) -> dict:
+def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"]) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
     The user's instruction is reviewed in finish_stage instead of here --
@@ -147,7 +147,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # Step 2 — analyze
     t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
-    analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options)
+    analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model)
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
@@ -211,6 +211,7 @@ def finish_stage(
     quality: str,
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
+    analysis_model: str = MODELS["analysis"],
     run_qa: bool = True,
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
@@ -249,7 +250,7 @@ def finish_stage(
         review_prompt = None
         step3_usage = None
     else:
-        user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis)
+        user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis, analysis_model=analysis_model)
     analysis = {**analysis, "user_instruction": user_instruction}
     prompts["user_instruction_review"] = review_prompt
     usage["Step 3 - user_instruction_review"] = step3_usage
@@ -294,7 +295,7 @@ def finish_stage(
         if run_qa:
             logger.info("Step 6: running quality check")
             try:
-                qa, qa_prompt, qa_usage = quality_check_photo(image_bytes, image_b64, analysis)
+                qa, qa_prompt, qa_usage = quality_check_photo(image_bytes, image_b64, analysis, analysis_model=analysis_model)
                 prompts["quality_check"] = qa_prompt
                 usage["Step 6 - quality_check"] = qa_usage
                 timings["Step 6 - quality_check"] = time.time() - t0
@@ -378,6 +379,7 @@ def finish_stage(
             "extra-info": {
                 "image_model": image_model if ai_photo_editing else None,
                 "image_quality": quality,
+                "analysis_model": analysis_model,
                 "timings": timings,
             },
         },
@@ -391,10 +393,14 @@ def run_pipeline(
     quality: str,
     ai_photo_editing: bool = True,
     image_model: str = "gpt-image-2",
+    analysis_model: str = MODELS["analysis"],
     run_qa: bool = True,
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
-    analysis = analyze_stage(image_bytes, aspect_ratio)
-    return finish_stage(image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing, image_model, run_qa, aspect_ratio, overwrite_prompt)
+    analysis = analyze_stage(image_bytes, aspect_ratio, analysis_model=analysis_model)
+    return finish_stage(
+        image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing,
+        image_model, analysis_model, run_qa, aspect_ratio, overwrite_prompt,
+    )
