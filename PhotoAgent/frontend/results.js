@@ -1027,7 +1027,7 @@ window.PhotoAgentResults = (() => {
   }
 
   // Narrow re-fill of just #ap-recipe-list -- for when the panel is already
-  // open and only the recipe items need to change (flipping a 人像進階設定
+  // open and only the recipe items need to change (flipping a 人像設定
   // toggle re-filters correction_plan/retouch_recipe, see
   // refreshInlineRecipeList in app.js), without re-running the rest of
   // renderAnalysisPreview and disturbing whatever Pose/Angle/Lighting/Size

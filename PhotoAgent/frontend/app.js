@@ -886,7 +886,7 @@
       applyRunCountChange(els.runCountSelect.value));
   }
 
-  // Advanced Settings (人像進階設定) toggles live in ONE shared modal
+  // Advanced Settings (人像設定) toggles live in ONE shared modal
   // (#advanced-settings-modal), opened from either the upload page's
   // #settings-modal or the results page's #ap-settings-modal -- reading them
   // here (instead of inlining the same object literal at every call site)
@@ -1249,7 +1249,7 @@
       overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
       runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null,
-      // 人像進階設定 (#advanced-settings-modal, reopenable from #ap-settings-btn
+      // 人像設定 (#advanced-settings-modal, reopenable from #ap-settings-btn
       // now too) -- just as real an edit as the picks above, so it needs the
       // same before/after snapshot to unblock the Run button.
       advancedOptions: readAdvancedOptionsFromDom()

@@ -1975,7 +1975,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     min-height: 0;
     margin-top: 0;
   }
-  /* 修圖建議/修圖風格選項/人像進階設定 (.ap-style-trigger) and Run
+  /* 修圖建議/修圖風格選項/人像設定 (.ap-style-trigger) and Run
      (.analysis-preview-action) kept their normal full size above -- on a
      short viewport that reads oversized next to the rest of the compacted
      UI, and pushes more of this card past the fold than necessary. Shrink
