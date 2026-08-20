@@ -1864,39 +1864,108 @@
     els.downloadLink.setAttribute("aria-label", hint);
   }
 
-  // #report-btn is position:fixed (see its own markup comment, index.html)
-  // so it keeps winning against modals/drawers, which also takes it out of
-  // .header-actions' own flex flow -- #report-btn-spacer is a same-sized,
-  // invisible stand-in left in that flow instead, purely to reserve the
-  // slot #reset-btn/#admin-reports-btn/#account-badge lay out around. This
-  // copies the spacer's live position onto the real button, so it always
-  // renders exactly where that reserved slot actually is. Called whenever
-  // anything in that row could have changed size (account/admin state,
-  // window resize) -- see its own call sites.
-  function syncReportBtnPosition() {
-    if (!els.reportBtn || !els.reportBtnSpacer) return;
-    const rect = els.reportBtnSpacer.getBoundingClientRect();
-    // .header-inner has no flex-wrap, and neither .logo nor .header-actions'
-    // own children shrink below their content size -- on a narrow enough
-    // phone, .logo + up to four header buttons (#reset-btn,
-    // #report-btn-spacer, #admin-reports-btn, #account-badge) can still add
-    // up to more than the viewport's width despite the 560px tightening,
-    // pushing the spacer itself (and therefore #report-btn, which just
-    // copies its position) partway or fully off-screen. Clamping here
-    // guarantees #report-btn always stays fully inside the viewport
-    // regardless -- at the cost of no longer lining up with the spacer
-    // exactly in that overflow case, which only matters visually, not
-    // functionally (nothing else is positioned relative to #report-btn).
+  // ── Floating, draggable #report-btn ──────────────────────────────────────
+  // #report-btn (index.html) is a free-floating position:fixed button --
+  // CSS gives it a top-right default (just below .site-header), and the
+  // user can drag it anywhere else for the rest of this page view so it's
+  // not permanently blocking whatever's underneath it. Deliberately NOT
+  // persisted anywhere (no localStorage) -- a page refresh always resets it
+  // back to the top-right default, on the theory that "always reachable in
+  // a known spot after a reload" beats "remembers a spot that might now be
+  // sitting over completely different content." Dragging is clamped
+  // (clampReportBtnPosition) so it can never be moved up into .site-header's
+  // own band, or past either side/the bottom of the viewport. Also owns
+  // #report-btn's click -> openReportModal wiring (rather than a plain
+  // addEventListener elsewhere), since it needs to suppress the click that
+  // still fires right after a real drag's pointerup -- without that, every
+  // drag would pop the report sheet open the moment the user let go.
+  function clampReportBtnPosition(left, top) {
     const margin = 8;
-    const maxLeft = window.innerWidth - els.reportBtn.offsetWidth - margin;
-    const clampedLeft = Math.min(Math.max(rect.left, margin), Math.max(margin, maxLeft));
-    els.reportBtn.style.top = `${rect.top}px`;
-    els.reportBtn.style.left = `${clampedLeft}px`;
-    // Starts visibility:hidden (index.html <style>) so it never flashes at
-    // its own static-flow position (flush left, right after </header>)
-    // before this function's first call places it correctly -- reveal it
-    // now that top/left are actually set.
-    els.reportBtn.style.visibility = "visible";
+    const headerBottom = els.siteHeader ? els.siteHeader.getBoundingClientRect().bottom : 0;
+    const minTop = headerBottom + margin;
+    const maxTop = Math.max(minTop, window.innerHeight - els.reportBtn.offsetHeight - margin);
+    const maxLeft = Math.max(margin, window.innerWidth - els.reportBtn.offsetWidth - margin);
+    return {
+      left: Math.min(Math.max(left, margin), maxLeft),
+      top: Math.min(Math.max(top, minTop), maxTop)
+    };
+  }
+
+  function applyReportBtnPosition(left, top) {
+    const clamped = clampReportBtnPosition(left, top);
+    els.reportBtn.style.left = `${clamped.left}px`;
+    els.reportBtn.style.top = `${clamped.top}px`;
+    els.reportBtn.style.right = "auto";
+    els.reportBtn.style.bottom = "auto";
+  }
+
+  function initReportBtnDrag() {
+    if (!els.reportBtn) return;
+    let dragging = false;
+    let justDragged = false;
+    let startX = 0;
+    let startY = 0;
+    let startLeft = 0;
+    let startTop = 0;
+
+    els.reportBtn.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      dragging = false;
+      const rect = els.reportBtn.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      els.reportBtn.setPointerCapture(e.pointerId);
+    });
+
+    els.reportBtn.addEventListener("pointermove", (e) => {
+      if (!els.reportBtn.hasPointerCapture(e.pointerId)) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      // A few px of slack before this counts as a drag -- otherwise a plain
+      // click (pointerdown+pointerup with no real movement) would still
+      // reposition the button by whatever sub-pixel jitter the pointer had.
+      if (!dragging && Math.hypot(dx, dy) < 4) return;
+      dragging = true;
+      applyReportBtnPosition(startLeft + dx, startTop + dy);
+    });
+
+    const endDrag = (e) => {
+      if (!els.reportBtn.hasPointerCapture(e.pointerId)) return;
+      els.reportBtn.releasePointerCapture(e.pointerId);
+      if (dragging) {
+        // Consumed by the click listener below -- pointerup still fires a
+        // native click right after this, which must NOT reopen/toggle
+        // anything just because the drag happened to end over the button.
+        justDragged = true;
+      }
+      dragging = false;
+    };
+    els.reportBtn.addEventListener("pointerup", endDrag);
+    els.reportBtn.addEventListener("pointercancel", endDrag);
+
+    els.reportBtn.addEventListener("click", (e) => {
+      if (justDragged) {
+        justDragged = false;
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      openReportModal();
+    });
+
+    // Re-clamp on resize -- only matters once it's been moved off the CSS
+    // top/right default (that default already tracks --header-h and the
+    // viewport on its own, needs no help). Without this, a dragged position
+    // could otherwise end up stranded under a taller .site-header after a
+    // breakpoint change, or past the new viewport edge after a resize.
+    window.addEventListener("resize", () => {
+      if (els.reportBtn.style.left && els.reportBtn.style.left !== "auto") {
+        const rect = els.reportBtn.getBoundingClientRect();
+        applyReportBtnPosition(rect.left, rect.top);
+      }
+    });
   }
 
   // Captured when #report-modal opens (not re-read from lastResult at
@@ -4084,7 +4153,6 @@
       els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
     }
     if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
-    syncReportBtnPosition();
   }
 
   async function handleCreateAccount() {
@@ -4618,10 +4686,7 @@
     stopReportsPolling();
     setNewReportsAlert(false);
     const user = resolveAdminUser();
-    if (!user) {
-      syncReportBtnPosition();
-      return;
-    }
+    if (!user) return;
     try {
       const { reports } = await getReports(user);
       if (els.adminReportsBtn) els.adminReportsBtn.hidden = false;
@@ -4632,8 +4697,6 @@
       startReportsPolling();
     } catch {
       // 403 (not an admin) or a request failure -- either way, stay hidden.
-    } finally {
-      syncReportBtnPosition();
     }
   }
 
@@ -5519,6 +5582,21 @@
     if (els.apSettingsModal) els.apSettingsModal.hidden = true;
   }
 
+  // #header-settings-btn (index.html) is the single, always-visible entry
+  // point into 設定 now -- picks #settings-modal or #ap-settings-modal based
+  // on which section is actually showing, since the two pages' pickers
+  // (模型/長寬比/生成張數) are independent state, not a shared modal like
+  // #advanced-settings-modal. Falls back to the results-page modal for
+  // "processing" too, on the assumption the results modal is the closer
+  // match once analysis is running/done than the upload modal.
+  function openContextSettingsModal() {
+    if (els.sections.upload?.classList.contains("visible")) {
+      openSettingsModal();
+    } else {
+      openApSettingsModal();
+    }
+  }
+
   // 修圖建議 overlay -- same open/close shape as the error modal above,
   // just toggling #ap-recipe-modal's own hidden attribute. #ap-recipe-list
   // is already populated by fillCheckList (results.js) whenever analysis
@@ -5786,10 +5864,6 @@
     els.analysisPreview.style.maxHeight = `${maxHeight}px`;
   }
   window.addEventListener("resize", updateAnalysisPreviewMaxHeight);
-  // #report-btn-spacer's position/size can shift with viewport width (the
-  // 560px icon-only breakpoint, .logo's own clamp()) even with no account/
-  // admin-state change -- keep #report-btn following it.
-  window.addEventListener("resize", syncReportBtnPosition);
 
   async function renderBatchMain(record) {
     if (!record) return;
@@ -6903,7 +6977,7 @@
   }
   if (els.compareFullscreenBtn) els.compareFullscreenBtn.addEventListener("click", toggleCompareFullscreen);
   if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.addEventListener("click", closeCompareFullscreen);
-  if (els.reportBtn) els.reportBtn.addEventListener("click", openReportModal);
+  initReportBtnDrag();
   if (els.reportModalClose) els.reportModalClose.addEventListener("click", closeReportModal);
   if (els.reportModalCancelBtn) els.reportModalCancelBtn.addEventListener("click", closeReportModal);
   if (els.reportModalSubmitBtn) els.reportModalSubmitBtn.addEventListener("click", handleReportSubmit);
@@ -6992,7 +7066,7 @@
       if (e.target.dataset.close) closeAccountModal();
     });
   }
-  if (els.settingsBtn) els.settingsBtn.addEventListener("click", openSettingsModal);
+  if (els.headerSettingsBtn) els.headerSettingsBtn.addEventListener("click", openContextSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
   if (els.settingsModal) {
     els.settingsModal.addEventListener("click", (e) => {
@@ -7006,7 +7080,6 @@
       if (e.target.dataset.close) closeAdvancedSettingsModal();
     });
   }
-  if (els.apSettingsBtn) els.apSettingsBtn.addEventListener("click", openApSettingsModal);
   if (els.apSettingsModalClose) els.apSettingsModalClose.addEventListener("click", closeApSettingsModal);
   if (els.apSettingsModal) {
     els.apSettingsModal.addEventListener("click", (e) => {

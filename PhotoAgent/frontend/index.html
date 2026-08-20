@@ -289,14 +289,14 @@
       color: #fff;
       box-shadow: var(--shadow-accent);
     }
-    /* Pushes .ap-settings-run-row (#ap-settings-btn + Run) to the far right
-       of .options-card-inline's otherwise plain flex-start pill row, both as
-       one unit -- same pattern as #settings-btn/#start-direct-btn on the
-       upload page's .upload-actions-row. margin-left:auto lives on the
-       wrapper rather than on #ap-settings-btn alone so the pair moves
-       *together* to whichever line has room and stays right-aligned there,
-       instead of only #ap-settings-btn getting pushed right while Run wraps
-       to its own line flush left.
+    /* Pushes .ap-settings-run-row (#ap-advanced-settings-btn + Run) to the
+       far right of .options-card-inline's otherwise plain flex-start pill
+       row, both as one unit -- same pattern as #advanced-settings-btn/
+       #start-direct-btn on the upload page's .upload-actions-row.
+       margin-left:auto lives on the wrapper rather than on either child
+       alone so the pair moves *together* to whichever line has room and
+       stays right-aligned there, instead of one getting pushed right while
+       the other wraps to its own line flush left.
        order:6 puts this wrapper on its own line *after* .ap-style-picked's
        chip line (order:5, below) even though this wrapper comes before
        .ap-style-picked in the DOM -- see the comment there. When there are
@@ -504,13 +504,13 @@
        (修圖建議/修圖風格選項, default order:0) and .ap-settings-run-row
        (order:6, see its own comment above) -- flex-basis:100% forces the
        fresh line, and sorting *before* that wrapper (despite coming before
-       it in the DOM too) means #ap-settings-btn/Run only ever drop down one
-       line when a chip appears, not two. Hidden entirely while there are no
-       picks (see updateStyleTriggerLabel), at which point it takes up no
-       flex space at all and #ap-settings-btn/Run sit right after
-       #ap-style-picker as before. The indent + left border reads as
-       "sub-items of #ap-style-picker" (the line directly above), not a
-       disconnected floating row. */
+       it in the DOM too) means #ap-advanced-settings-btn/Run only ever drop
+       down one line when a chip appears, not two. Hidden entirely while
+       there are no picks (see updateStyleTriggerLabel), at which point it
+       takes up no flex space at all and #ap-advanced-settings-btn/Run sit
+       right after #ap-style-picker as before. The indent + left border
+       reads as "sub-items of #ap-style-picker" (the line directly above),
+       not a disconnected floating row. */
     .options-card-inline > .ap-style-picked {
       order: 5;
       flex-basis: 100%;
@@ -521,26 +521,6 @@
       margin-top: 2px;
       padding-left: 10px;
       border-left: 2px solid var(--border-2);
-    }
-    /* #ap-settings-btn is icon-only (label dropped) -- square it up and drop
-       .ap-style-trigger's own text-oriented 0 16px padding so the gear icon
-       fills the button instead of floating in a wide pill. justify-content
-       (unset on .ap-style-trigger, which relies on auto-width content
-       hugging its own padding instead) is needed now that this button has a
-       fixed width wider than its icon -- without it the icon sat flush left
-       instead of centered in the extra space. */
-    .ap-settings-run-row > #ap-settings-btn {
-      width: 41px;
-      padding: 0;
-      justify-content: center;
-    }
-    /* .option-pill-icon (styles.css) defaults to var(--accent), the same
-       purple as 修圖建議/修圖風格選項's icons -- #settings-btn on the upload
-       page instead inherits .btn-secondary's neutral var(--text-4), so
-       override here to match that, now that this is icon-only and the color
-       is all that's left to read. */
-    #ap-settings-btn .option-pill-icon {
-      color: var(--text-4);
     }
     .ap-style-picked-chip {
       display: inline-flex;
@@ -1477,57 +1457,58 @@
     /* #report-btn uses .btn-grad (see its markup) instead of the neutral
        .btn-secondary its header siblings use, so it stands out as worth a
        second look -- compact-pill sizing override, same reasons as
-       #reset-btn above. #report-btn-spacer (index.html) shares this rule so
-       it always renders at exactly the same size as the real button it's
-       standing in for. */
-    #report-btn.btn,
-    #report-btn-spacer.btn {
+       #reset-btn above. */
+    #report-btn.btn {
       height: 32px;
       padding: 0 14px;
       gap: 6px;
       font-size: 13px;
       border-radius: 999px;
     }
-    /* Invisible but still fully laid out (visibility:hidden, not
-       display:none/hidden) -- #report-btn-spacer's only job is to occupy
-       its flex slot in .header-actions exactly as if the real button were
-       still there, so #reset-btn/#admin-reports-btn/#account-badge line up
-       the same way regardless of whether #report-btn itself is now a
-       fixed-position element elsewhere. syncReportBtnPosition (app.js)
-       reads its live position every time this row's own content could have
-       changed. */
-    #report-btn-spacer { visibility: hidden; pointer-events: none; }
     /* Pinned to the viewport at a z-index above every modal/drawer in this
        file (highest otherwise is 1002, #confirm-modal/#report-screenshot-
-       modal). Its markup lives as a sibling of <header>, not a descendant
-       (see index.html) -- .site-header has its own backdrop-filter, and
-       per spec that makes it the CONTAINING BLOCK for any position:fixed
-       descendant instead of the viewport, which traps that descendant
-       inside .site-header's own stacking context (z-index:100) regardless
-       of its own z-index here. Escaping <header> entirely is what makes
-       z-index:2000 actually win against a modal appended as a true
-       body-level sibling (e.g. a dynamically-launched one like
-       #demo-images-modal), and also means #history-drawer/#reports-drawer
-       opening (both start below the header) never reaches it either.
+       modal) -- it must stay reachable (and draggable) even while something
+       else is open. Its markup lives as a sibling of <header>, not a
+       descendant (see index.html) -- .site-header has its own
+       backdrop-filter, and per spec that makes it the CONTAINING BLOCK for
+       any position:fixed descendant instead of the viewport, which traps
+       that descendant inside .site-header's own stacking context
+       (z-index:100) regardless of its own z-index here. Escaping <header>
+       entirely is what makes z-index:2000 actually win against a modal
+       appended as a true body-level sibling (e.g. a dynamically-launched
+       one like #demo-images-modal), and also means #history-drawer/
+       #reports-drawer opening (both start below the header) never reaches
+       it either.
 
-       top/left aren't set here -- being outside .header-actions' own flex
-       flow now (fixed elements never participate in layout, wherever they
-       sit in the DOM), this button has no natural position of its own
-       anymore. syncReportBtnPosition (app.js) copies #report-btn-spacer's
-       live getBoundingClientRect() onto these as inline styles instead, so
-       it always renders exactly where that reserved slot is.
-
-       visibility starts hidden for the same reason -- with no top/left set
-       yet, a position:fixed element with no offsets renders at its own
-       static-flow position (here, flush against the left edge, right after
-       <header> in the DOM) until JS runs, so it would otherwise flash
-       there first and visibly jump to the right corner once
-       syncReportBtnPosition's first call lands. That same function flips
-       this back to visible once it's actually positioned correctly. */
+       top/right give it a sensible default position (top-right corner,
+       just below .site-header) purely in CSS, no JS needed for that case --
+       calc(var(--header-h) + 16px) rather than a bare offset so it tracks
+       --header-h's own breakpoint changes (styles.css) automatically,
+       same as every other "just below the header" fixed element in this
+       file. initReportBtnDrag (app.js) overrides this with inline top/left
+       instead, the moment there's a saved drag position to restore or the
+       user starts dragging -- see its own comment for why the two
+       positioning modes don't fight each other. touch-action:none stops
+       the browser's own scroll/pinch gestures from hijacking a touch-drag
+       before pointer events get a chance to. */
     #report-btn {
       position: fixed;
       z-index: 2000;
-      visibility: hidden;
+      top: calc(var(--header-h) + 16px);
+      right: 24px;
+      cursor: grab;
+      touch-action: none;
+    }
+    #report-btn:active { cursor: grabbing; }
+    /* #header-settings-btn sits in the same row (right after #account-badge,
+       the row's last child) -- same compact-pill override as #reset-btn
+       above, same reasons. */
+    #header-settings-btn.btn {
+      height: 32px;
+      padding: 0 14px;
+      gap: 6px;
+      font-size: 13px;
+      border-radius: 999px;
     }
     /* #admin-reports-btn sits in the same row (right before #account-badge)
        -- same compact-pill override as #reset-btn just above, same reasons. */
@@ -1567,7 +1548,7 @@
        #dz-preview's own comment on this same gotcha). At a fixed 32px
        height, 7px of side padding around the 14px icon keeps it a circle
        instead of an oval once the username label disappears.
-       #reset-btn/#report-btn-spacer/#admin-reports-btn are real .btn
+       #reset-btn/#header-settings-btn/#admin-reports-btn are real .btn
        elements, so ".header-actions .btn-label {display:none}" already
        drops their label text at this width -- but their own #x.btn
        overrides above keep the label's 14px/6px side padding/gap, leaving
@@ -1575,19 +1556,17 @@
        #account-badge becomes. Same fix, same reason -- 7px rather than the
        plain .header-actions .btn fallback's 12px (styles.css) since up to
        four of these can share the row at once (#reset-btn,
-       #report-btn-spacer, #admin-reports-btn, #account-badge), and every px
-       saved per button is what keeps that row from crowding .logo or
-       spilling past the viewport edge on a 320-360px phone. #report-btn.btn
-       itself gets the exact same override (not just its spacer) so the
-       real fixed-position button matches the reserved slot's size at every
-       width -- syncReportBtnPosition (app.js) only copies position, not
-       size, so the two have to already agree via this shared CSS. */
+       #header-settings-btn, #admin-reports-btn, #account-badge), and every
+       px saved per button is what keeps that row from crowding .logo or
+       spilling past the viewport edge on a 320-360px phone. #report-btn
+       isn't included here -- it's a free-floating button now, not a member
+       of this row, so it keeps its normal size regardless of header
+       width. */
     @media (max-width: 560px) {
       #account-badge-label { display: none; }
       .account-badge,
       #reset-btn.btn,
-      #report-btn.btn,
-      #report-btn-spacer.btn,
+      #header-settings-btn.btn,
       #admin-reports-btn.btn {
         padding: 0 7px;
         gap: 0;
@@ -2413,23 +2392,25 @@
         </svg>
         <span id="account-badge-label"></span>
       </button>
-      <!-- Invisible, non-interactive stand-in for #report-btn (a real
-           position:fixed element living outside <header> -- see its own
-           markup comment further down) -- reserves this exact flex slot so
-           #reset-btn/#admin-reports-btn/#account-badge lay out as if the
-           button were still here, while syncReportBtnPosition (app.js)
-           copies this element's live position onto the real button. Same
-           #report-btn.btn sizing rule also applies to this id (styles.css/
-           index.html <style>) so it always matches the real button's
-           dimensions exactly, at every breakpoint. -->
-      <span id="report-btn-spacer" class="btn btn-grad btn-sm" aria-hidden="true">
+      <!-- Global settings entry point -- used to be two separate per-page
+           gear buttons (#settings-btn in .upload-actions-row, #ap-settings-btn
+           in .ap-settings-run-row); consolidated here as a single always-
+           visible header button so it's reachable regardless of which
+           section is showing. openContextSettingsModal (app.js) picks
+           #settings-modal or #ap-settings-modal based on which section
+           currently has .visible (see showSection/els.sections, dom.js).
+           A normal flex child of .header-actions -- unlike #report-btn below,
+           it has no need to out-live modals while one is open, so it doesn't
+           need that button's position:fixed escape from .site-header's
+           backdrop-filter containing-block trap. -->
+      <button id="header-settings-btn" class="btn btn-secondary btn-sm" type="button">
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-          <path d="M12 15.01h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
-        <span class="btn-label">回報</span>
-      </span>
+        <span class="btn-label">設定</span>
+      </button>
     </div>
   </div>
 </header>
@@ -2442,6 +2423,15 @@
      its own style never changes based on report state either (no
      "already reported" tint), even right after a submission.
 
+     A free-floating, user-draggable button (initReportBtnDrag, app.js) --
+     defaults to the top-right corner just below the header (CSS top/right
+     below) and stays wherever the user drags it for the rest of this page
+     view, so it's not permanently blocking whatever's underneath it. Not
+     persisted anywhere -- a reload always resets it back to that default.
+     Dragging is clamped to stay below .site-header at all times (see
+     clampReportBtnPosition, app.js) -- it must never cover the header's
+     own controls.
+
      Deliberately placed OUTSIDE <header> (a sibling, not a descendant) --
      it's position:fixed with a z-index above every modal/drawer, but
      .site-header has its own backdrop-filter (styles.css), and per spec a
@@ -2452,22 +2442,9 @@
      context (z-index:100) same as everything else in the header -- a
      dynamically-launched modal (e.g. #demo-images-modal, appended as a true
      body-level sibling) would still paint over it regardless of this
-     button's own z-index.
-
-     Living outside <header> is what makes it actually fixed to the
-     viewport, but that also takes it out of .header-actions' flex flow
-     entirely (fixed elements never participate in layout, wherever they
-     sit in the DOM), so it can no longer just fall into place next to
-     #reset-btn/#admin-reports-btn/#account-badge the way a normal flex
-     child would. #report-btn-spacer (a same-sized, invisible stand-in
-     actually left inside .header-actions, right where this button used to
-     sit) reserves that slot instead -- syncReportBtnPosition (app.js) reads
-     its live position (getBoundingClientRect) and copies it onto this
-     button's own inline top/left, so it renders exactly where the spacer
-     would have, but as a real fixed element that still wins against every
-     modal and isn't covered by #history-drawer/#reports-drawer opening
-     either (both start below the header, so they never reach up into
-     .header-actions' own row in the first place). -->
+     button's own z-index. Living outside <header> also means it needs no
+     equivalent of #header-settings-btn's flex layout -- it was never meant
+     to look like a header child in the first place. -->
 <button id="report-btn" class="btn btn-grad btn-sm" type="button" title="回報此結果" aria-label="回報此結果">
   <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -2601,16 +2578,11 @@
             </label>
           </div>
 
-          <!-- #settings-btn sits inline with the Run button(s) here, both
-               right-aligned as one group -- it used to be its own row inside
-               #upload-options-card above, but that left it stranded on the
-               left with nothing else in that row once the 模型/長寬比/
-               生成張數 pickers moved into #settings-modal. #demo-images-btn
-               (see openDemoImagesModal, app.js) joins the same row but stays
-               pinned to its left edge (margin-right:auto, styles.css) while
-               #settings-btn/Run stay grouped at the right; its own label
-               drops to icon-only under 560px, same squeeze #settings-btn
-               already gets. -->
+          <!-- #demo-images-btn (see openDemoImagesModal, app.js) stays
+               pinned to this row's left edge (margin-right:auto, styles.css)
+               while #advanced-settings-btn/Run stay grouped at the right.
+               設定 itself now lives in the header (#header-settings-btn,
+               openContextSettingsModal in app.js) rather than in this row. -->
           <div class="upload-actions-row">
             <button id="demo-images-btn" class="btn btn-secondary" type="button">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
@@ -2619,13 +2591,6 @@
                 <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
               <span class="btn-label">範例照片</span>
-            </button>
-            <button id="settings-btn" class="btn btn-secondary" type="button" aria-label="設定">
-              <svg width="24" height="24" fill="none" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
-                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
             </button>
             <!-- Moved out of #settings-modal (used to be the last item in
                  .settings-modal-body) -- sits here so 人像進階設定 is
@@ -2802,7 +2767,7 @@
                      .ap-options-prompt below) puts this on its own full-width
                      line under the pill row instead of sitting inline after
                      #ap-style-picker -- inline, a growing/shrinking chip list
-                     shoved #ap-settings-btn/#inline-analysis-continue-btn
+                     shoved #ap-advanced-settings-btn/#inline-analysis-continue-btn
                      sideways (or onto a wrapped second line) every time a
                      pick changed. Hidden entirely while everything's still
                      Default/Auto. updateStyleTriggerLabel (results.js) keeps
@@ -2817,32 +2782,19 @@
                      showAnalysisPreview/startInlineBatchReview etc still
                      toggle it directly to show/hide 生成張數 for flows
                      where it doesn't apply, unchanged. -->
-                <!-- Groups #ap-settings-btn + #inline-analysis-continue-btn
+                <!-- Groups #ap-advanced-settings-btn + #inline-analysis-continue-btn
                      as one flex item (.ap-settings-run-row) so they always
                      wrap together and stay right-aligned as a pair -- before
                      this they were two independent items in
                      .options-card-inline's flex-wrap row, so a narrow
-                     container could split them: #ap-settings-btn staying up
-                     on line 1 (pushed right by its own margin-left:auto)
-                     while Run alone wrapped to line 2, flush left instead of
-                     following it right. margin-left:auto now lives on this
-                     wrapper (see styles below) so the *pair* moves as a unit
-                     to whichever line has room, still right-aligned there. -->
+                     container could split them across lines. margin-left:auto
+                     lives on this wrapper (see styles below) so the *pair*
+                     moves as a unit to whichever line has room, still
+                     right-aligned there. 設定 itself no longer has a trigger
+                     in this row -- it now lives in the header
+                     (#header-settings-btn, openContextSettingsModal in
+                     app.js). -->
                 <div class="ap-settings-run-row">
-                  <!-- Icon-only -- label dropped in favor of aria-label
-                       since #ap-settings-btn/#inline-analysis-continue-btn
-                       sit right next to each other as one group; the gear
-                       icon alone reads clearly enough beside the "Run"
-                       button. -->
-                  <button id="ap-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger" aria-label="設定">
-                    <span class="option-pill-icon">
-                      <svg width="22" height="22" fill="none" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/>
-                        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
-                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                      </svg>
-                    </span>
-                  </button>
                   <!-- Moved out of #ap-settings-modal (used to be the last
                        item in .settings-modal-body) -- sits here so
                        人像進階設定 is reachable without opening 設定 first.
@@ -3690,7 +3642,8 @@
   </div>
 </div>
 
-<!-- Upload-page settings overlay: opened by #settings-btn (see
+<!-- Upload-page settings overlay: opened by #header-settings-btn while the
+     upload section is showing (see openContextSettingsModal/
      openSettingsModal/closeSettingsModal in app.js) -- same backdrop+box+
      close pattern as #error-modal above. Holds the 模型/長寬比/生成張數
      pickers that used to sit inline under the drop zone; moving them here
@@ -3899,7 +3852,8 @@
 </div>
 
 <!-- Results/analysis-preview page settings overlay: opened by
-     #ap-settings-btn (see openApSettingsModal/closeApSettingsModal in
+     #header-settings-btn while the upload section isn't showing (see
+     openContextSettingsModal/openApSettingsModal/closeApSettingsModal in
      app.js) -- same backdrop+box+close pattern as #settings-modal above.
      Holds the 分析模型/生成模型/長寬比/生成張數 pickers that used to sit inline in
      #ap-options-card-inline. 長寬比 mirrors the upload page's own picker

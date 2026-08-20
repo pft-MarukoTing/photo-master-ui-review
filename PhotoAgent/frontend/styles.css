@@ -266,9 +266,9 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -.17px;
 }
 
-/* Run buttons (+ #settings-btn) sit inline below the drop zone (see
-   .upload-below-zone), not stacked full-width in a side column anymore --
-   right-aligned as a group instead of hugging the row's left edge. */
+/* Run buttons sit inline below the drop zone (see .upload-below-zone), not
+   stacked full-width in a side column anymore -- right-aligned as a group
+   instead of hugging the row's left edge. */
 .upload-actions-row {
   display: flex;
   flex-wrap: wrap;
@@ -277,21 +277,14 @@ a { text-decoration: none; color: inherit; }
   /* Grow to fill whatever the row has left (#upload-options-card is 0-width
      outside debug mode) -- #demo-images-btn's own margin-right:auto below
      needs real slack in this box to push against, or it just sits flush
-     next to #settings-btn with nothing to separate them. */
+     next to #advanced-settings-btn with nothing to separate them. */
   flex: 1 1 auto;
 }
-/* #settings-btn is icon-only (label dropped, see index.html) -- square it up
-   and drop .btn's own text-oriented 0 20px padding so the gear icon fills
-   the button instead of floating in a wide pill built for icon+label. */
-.upload-actions-row #settings-btn {
-  width: 44px;
-  padding: 0;
-}
-/* #demo-images-btn shares this row with #settings-btn/Run (index.html) but
-   reads as a separate, lower-priority action from them -- margin-right:auto
-   soaks up the row's own flex-end-driven extra space, pinning this one
-   button to the row's left edge while #settings-btn/Run stay grouped and
-   right-aligned as before. */
+/* #demo-images-btn shares this row with #advanced-settings-btn/Run
+   (index.html) but reads as a separate, lower-priority action from them --
+   margin-right:auto soaks up the row's own flex-end-driven extra space,
+   pinning this one button to the row's left edge while
+   #advanced-settings-btn/Run stay grouped and right-aligned as before. */
 .upload-actions-row #demo-images-btn {
   margin-right: auto;
 }
@@ -1854,21 +1847,21 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      mode) don't reliably fit side by side down at 320-390px widths.
      #report-btn (index.html) is a body-level sibling of <header> now, not
      a descendant of .header-actions -- this selector alone can't reach it,
-     so it's added explicitly, or its label would stay full-width forever
-     while #report-btn-spacer (still a real .header-actions child) shrinks
-     to match it, leaving #report-btn wider than the slot it's supposed to
-     sit in and spilling into whatever's next to it (#reset-btn). */
+     so it's added explicitly. Its label is always hidden regardless of
+     width (styles.css, own rule further down), so this is really just a
+     defensive belt-and-braces entry in case that ever changes. */
   .header-actions .btn-label,
   #report-btn .btn-label { display: none; }
   .header-actions .btn { padding: 0 12px; gap: 0; }
   /* Up to four icon-only pills can share this row at once now (#reset-btn,
-     #report-btn, #admin-reports-btn, #account-badge) -- the row's own
-     12px gap (fine for the 1-2 buttons this was originally sized for) adds
-     up fast across four, pushing the row wide enough to crowd .logo or spill
-     past the viewport edge on a 320-360px phone. Tighter gap here, on top of
-     #reset-btn/#report-btn/#admin-reports-btn/.account-badge's own further-
-     reduced padding (index.html, same breakpoint), keeps all four fitting
-     comfortably beside even .logo's un-shrunk clamp() floor. */
+     #admin-reports-btn, #account-badge, #header-settings-btn) -- the row's
+     own 12px gap (fine for the 1-2 buttons this was originally sized for)
+     adds up fast across four, pushing the row wide enough to crowd .logo or
+     spill past the viewport edge on a 320-360px phone. Tighter gap here, on
+     top of #reset-btn/#admin-reports-btn/#header-settings-btn/
+     .account-badge's own further-reduced padding (index.html, same
+     breakpoint), keeps all four fitting comfortably beside even .logo's
+     un-shrunk clamp() floor. */
   .header-actions { gap: 6px; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
@@ -1878,15 +1871,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      breathing room. */
   .upload-container { padding-top: 16px; padding-bottom: 16px; }
 
-  /* #settings-btn + Run sit side by side (.upload-actions-row is a row, not
-     a stack) all the way down -- shrink each button's own padding/font
-     instead of ever going full-width, so both keep fitting the row as the
-     viewport narrows. */
+  /* Run/#advanced-settings-btn/#demo-images-btn sit side by side
+     (.upload-actions-row is a row, not a stack) all the way down -- shrink
+     each button's own padding/font instead of ever going full-width, so
+     they keep fitting the row as the viewport narrows (it also wraps if
+     they still don't fit, see .upload-actions-row's own flex-wrap). */
   .upload-actions-row { gap: 8px; }
   .upload-actions-row .btn { height: 40px; padding: 0 14px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 18px; height: 18px; }
-  .upload-actions-row #settings-btn { width: 40px; padding: 0; }
-  .upload-actions-row #settings-btn svg { width: 22px; height: 22px; }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
   .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
@@ -1904,13 +1896,11 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
 }
 
-/* One notch narrower still (320-380px phones) -- #settings-btn + Run were
-   still crowding the row's available width at 560px's sizing. */
+/* One notch narrower still (320-380px phones) -- the row's buttons were
+   still crowding its available width at 560px's sizing. */
 @media (max-width: 380px) {
   .upload-actions-row .btn { height: 36px; padding: 0 10px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 16px; height: 16px; }
-  .upload-actions-row #settings-btn { width: 36px; padding: 0; }
-  .upload-actions-row #settings-btn svg { width: 20px; height: 20px; }
 }
 
 /* Short viewports (small/un-maximized browser windows, not just narrow
@@ -1939,8 +1929,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      doesn't also shrink unrelated buttons elsewhere in the app. */
   .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 18px; height: 18px; }
-  .upload-actions-row #settings-btn { width: 36px; padding: 0; }
-  .upload-actions-row #settings-btn svg { width: 20px; height: 20px; }
 
   /* Results page, inline revise flow: .compare-card's photo-frame is a
      fixed 480px (see styles.css above) so once #ap-options-card-inline is
@@ -1987,7 +1975,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     min-height: 0;
     margin-top: 0;
   }
-  /* 修圖建議/修圖風格選項/設定 (.ap-style-trigger) and Run
+  /* 修圖建議/修圖風格選項/人像進階設定 (.ap-style-trigger) and Run
      (.analysis-preview-action) kept their normal full size above -- on a
      short viewport that reads oversized next to the rest of the compacted
      UI, and pushes more of this card past the fold than necessary. Shrink
@@ -2002,15 +1990,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .option-pill-icon svg {
     width: 17px;
     height: 17px;
-  }
-  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline #ap-settings-btn {
-    width: 34px;
-    padding: 0;
-    justify-content: center;
-  }
-  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline #ap-settings-btn .option-pill-icon svg {
-    width: 19px;
-    height: 19px;
   }
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .analysis-preview-action {
     height: 30px;
@@ -2048,8 +2027,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   #dz-preview { min-height: 130px; }
   .upload-actions-row .btn { height: 30px; padding: 0 12px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 15px; height: 15px; }
-  .upload-actions-row #settings-btn { width: 30px; padding: 0; }
-  .upload-actions-row #settings-btn svg { width: 17px; height: 17px; }
 }
 
 /* Landscape phones/small tablets (narrow width *and* short height at once):
@@ -2082,6 +2059,4 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   #dz-preview { min-height: 50px; }
   .upload-actions-row .btn { height: 24px; padding: 0 10px; font-size: 12px; gap: 3px; }
   .upload-actions-row .btn svg { width: 14px; height: 14px; }
-  .upload-actions-row #settings-btn { width: 24px; padding: 0; }
-  .upload-actions-row #settings-btn svg { width: 14px; height: 14px; }
 }
