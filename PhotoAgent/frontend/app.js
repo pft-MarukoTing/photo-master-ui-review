@@ -705,16 +705,15 @@
       applyModelQualityChange(els.apImageModelQualitySelect.value));
   }
 
-  // 分析模型 selector (Steps 2/3/6's shared model) -- same mirroring contract
-  // as applyModelQualityChange/applyAspectRatioChange above: keep both
-  // selects and both pickers' visible labels in sync, and push the live value
-  // into whichever flow state is active. Unlike image_model, this only takes
-  // effect from the upload screen (before analyze_stage runs) -- changing it
-  // on the analyze-preview screen after Step 2 already ran would not
-  // re-analyze, so #ap-analysis-model exists for display/revise-batch parity
-  // with the other pickers but a mid-flow change here only affects a still-
-  // pending batch case's own finish call (Steps 3/6), not the analysis it
-  // already has.
+  // 分析模型 selector (Steps 2/3/6's shared model) -- only #analysis-model
+  // (upload page) is actually selectable; #ap-analysis-model (analyze-preview
+  // page) is shown read-only (`is-locked` in its own HTML, no unlock toggle)
+  // since Step 2 has already run by the time that page is reachable and
+  // changing the analysis model there would not re-analyze. Still populated/
+  // synced like a normal picker (mirrors applyModelQualityOption's own "shown
+  // but not actually inert" pattern for read-only history views) so it always
+  // displays whichever model actually ran -- it just never drives a change of
+  // its own, since nothing wires a "change" listener on it below.
   function findAnalysisModelOption(value) {
     const options = window.PhotoAgentConfig.analysisModelOptions || [];
     return options.find((o) => o.value === value) || options[0] || null;
@@ -751,21 +750,16 @@
     if (!opt) return;
     applyAnalysisModelOption(opt);
     if (singleFlowState) singleFlowState.analysisModel = opt.value;
-    const batchRecord = currentDetailBatchRecord();
-    if (batchRecord) {
-      batchRecord.analysisModel = opt.value;
-    } else if (batchSettings) {
-      batchSettings.analysisModel = opt.value;
-    }
+    if (batchSettings) batchSettings.analysisModel = opt.value;
   }
 
+  // Only #analysis-model (upload page) gets a "change" listener --
+  // #ap-analysis-model has no radio inputs a user can actually click
+  // (`is-locked` blocks pointer events on its option list), so it never
+  // fires one.
   if (els.analysisModelSelect) {
     els.analysisModelSelect.addEventListener("change", () =>
       applyAnalysisModelChange(els.analysisModelSelect.value));
-  }
-  if (els.apAnalysisModelSelect) {
-    els.apAnalysisModelSelect.addEventListener("change", () =>
-      applyAnalysisModelChange(els.apAnalysisModelSelect.value));
   }
 
   // Aspect-ratio preference -- "auto" (default) takes the output ratio from

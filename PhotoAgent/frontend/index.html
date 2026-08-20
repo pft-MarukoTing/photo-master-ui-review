@@ -3872,7 +3872,12 @@
      #ap-options-card-inline. 長寬比 mirrors the upload page's own picker
      (applyAspectRatioChange in app.js) and applies to the edit only -- the
      analysis is ratio-neutral and is never re-run for it; the backend settles
-     the output ratio per edit in resolve_output_aspect_ratio. -->
+     the output ratio per edit in resolve_output_aspect_ratio. 分析模型 is shown
+     read-only here (`is-locked`, no unlock toggle -- see the inline
+     `.ap-style-item.is-locked` rules above) since Step 2 has already run by
+     the time this modal is reachable; changing it would not re-analyze, so
+     only the upload page's own #analysis-model picker is actually
+     selectable. -->
 <div id="ap-settings-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-settings-modal-title">
@@ -3883,7 +3888,7 @@
     <div class="settings-modal-body">
       <div class="option-pill-group">
         <span class="option-pill-label">分析模型</span>
-        <details class="ap-style-item" name="ap-result-option-picker" id="ap-analysis-model-picker">
+        <details class="ap-style-item is-locked" name="ap-result-option-picker" id="ap-analysis-model-picker">
           <summary class="ap-style-trigger">
             <span class="option-pill-icon">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
@@ -3896,7 +3901,7 @@
           <div class="step-list-frame ap-style-panel">
             <ul class="step-inline-list"></ul>
           </div>
-          <select id="ap-analysis-model" class="quality-select" hidden></select>
+          <select id="ap-analysis-model" class="quality-select" hidden disabled></select>
         </details>
       </div>
       <div class="option-pill-group">
