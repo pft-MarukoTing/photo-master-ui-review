@@ -26,6 +26,7 @@ from image_tools import (
 )
 from prompts import (
     ANALYSIS_INSTRUCTION,
+    ANALYSIS_RESPONSE_SCHEMA,
     build_analysis_instruction,
     build_user_instruction_review_prompt,
     build_edit_prompt,
@@ -181,7 +182,16 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         })
         content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
 
-    payload = _responses_payload(ANALYSIS_MODEL, content)
+    # Constrains decoding to ANALYSIS_RESPONSE_SCHEMA's shape (Responses API
+    # strict structured output) rather than relying on the prompt's "return
+    # exactly this JSON shape" wording alone -- added after a production
+    # gpt-5-mini call returned a long response with one object closed by `]`
+    # instead of `}`, which _parse_json_from_text correctly rejected as
+    # invalid JSON. The schema only constrains structure (types, required
+    # keys, no extra keys), not the enum-like fields' documented value sets,
+    # so a judgement call outside those sets still comes through instead of
+    # the API hard-rejecting the request.
+    payload = _responses_payload(ANALYSIS_MODEL, content, text_format=ANALYSIS_RESPONSE_SCHEMA)
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
     result = _parse_json_from_text(_extract_output_text(data))
     # Debug-UI overlay only (frontend's #boxes-toggle-btn) -- lets a reviewer

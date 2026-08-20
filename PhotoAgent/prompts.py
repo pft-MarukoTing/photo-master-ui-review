@@ -849,6 +849,261 @@ Auto aspect ratio requirement:
 - Downstream deterministic geometry will fit the crop rectangle to this selected ratio, so protect the ROI, subject extent, and protected regions with enough breathing room.
 """
 
+
+# ── Structured output schema for Step 2 (photo analysis) ──────────────────────
+#
+# Mirrors the "Return exactly this JSON shape" block in ANALYSIS_INSTRUCTION
+# above field-for-field. Passed as the Responses API's text.format
+# (type=json_schema, strict=true) so the model's output is constrained at
+# decode time to valid JSON matching this shape -- added after a production
+# gpt-5-mini call returned syntactically-broken JSON (an object closed with
+# `]` instead of `}` partway through a long, deeply-nested response), which
+# prompt wording alone can ask for but not guarantee. Deliberately does NOT
+# constrain the enum-like fields (eye_state, hair_state, gaze_state, ...) to
+# their documented value sets: those are guidance in the prompt, not
+# contract, and a value this schema didn't anticipate should surface as a
+# judgement question, not a hard 400 from the API on every future call.
+# Values our own code actually branches on (should_fix) are still literal
+# structural fields here regardless.
+#
+# additionalProperties: false and every property listed in required are both
+# mandatory for OpenAI's strict structured-output mode, not just style --
+# the API rejects a schema that omits either.
+
+
+def _schema_string():
+    return {"type": "string"}
+
+
+def _schema_number():
+    return {"type": "number"}
+
+
+def _schema_integer():
+    return {"type": "integer"}
+
+
+def _schema_boolean():
+    return {"type": "boolean"}
+
+
+def _schema_string_array():
+    return {"type": "array", "items": _schema_string()}
+
+
+def _schema_object(properties, required=None):
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties) if required is None else required,
+        "additionalProperties": False,
+    }
+
+
+def _schema_array_of(item_schema):
+    return {"type": "array", "items": item_schema}
+
+
+# {"x","y","w","h"} normalized box, reused verbatim by subjects/
+# eye_blink_issues/hair_issues/gaze_contact_issues/gaze_target_in_frame.
+_BOX_SCHEMA = _schema_object({
+    "x": _schema_number(), "y": _schema_number(),
+    "w": _schema_number(), "h": _schema_number(),
+})
+
+# Same four fields plus "reason" -- roi_box/subject_extent_box's shape.
+_BOX_WITH_REASON_SCHEMA = _schema_object({
+    "x": _schema_number(), "y": _schema_number(),
+    "w": _schema_number(), "h": _schema_number(),
+    "reason": _schema_string(),
+})
+
+_SUBJECT_SCHEMA = _schema_object({
+    "label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "prominence": _schema_integer(),
+    "is_person": _schema_boolean(),
+    "skin": _schema_string(),
+    "reason": _schema_string(),
+})
+
+_EYE_BLINK_ISSUE_SCHEMA = _schema_object({
+    "subject_label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "eye_state": _schema_string(),
+    "severity": _schema_string(),
+    "intent_cues": _schema_string_array(),
+    "closure_intent": _schema_string(),
+    "expression_coherence": _schema_string(),
+    "blink_failure_confidence": _schema_number(),
+    "should_fix": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+_HAIR_ISSUE_SCHEMA = _schema_object({
+    "subject_label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "hair_state": _schema_string(),
+    "visible_evidence": _schema_string_array(),
+    "front_hair": _schema_string(),
+    "fix_action": _schema_string(),
+    "mess_intent": _schema_string(),
+    "hair_mess_confidence": _schema_number(),
+    "should_fix": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+_GAZE_TARGET_IN_FRAME_SCHEMA = _schema_object({
+    "present": _schema_boolean(),
+    "description": _schema_string(),
+    "box": _BOX_SCHEMA,
+})
+
+_GAZE_REPAIR_STRATEGY_SCHEMA = _schema_object({
+    "strategy_type": _schema_string(),
+    "original_gaze_read": _schema_string(),
+    "target_gaze_read": _schema_string(),
+    "eye_adjustment": _schema_string(),
+    "sclera_catchlight_adjustment": _schema_string(),
+    "head_face_adjustment": _schema_string(),
+    "repair_strength": _schema_string(),
+    "edit_instruction": _schema_string(),
+    "success_condition": _schema_string(),
+    "preserve_during_repair": _schema_string_array(),
+    "failure_to_avoid": _schema_string_array(),
+})
+
+_GAZE_CONTACT_ISSUE_SCHEMA = _schema_object({
+    "subject_label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "gaze_state": _schema_string(),
+    "eye_focus_quality": _schema_string(),
+    "gaze_context": _schema_string(),
+    "gaze_target_in_frame": _GAZE_TARGET_IN_FRAME_SCHEMA,
+    "lens_contact_decision": _schema_string(),
+    "lens_contact_confidence": _schema_number(),
+    "not_looking_at_lens_confidence": _schema_number(),
+    "gaze_correction_reasonableness": _schema_number(),
+    "gaze_repair_strategy": _GAZE_REPAIR_STRATEGY_SCHEMA,
+    "should_fix": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+# Flat x/y/w/h (no nested "box"), unlike the four schemas above.
+_PROTECTED_REGION_SCHEMA = _schema_object({
+    "label": _schema_string(),
+    "x": _schema_number(), "y": _schema_number(),
+    "w": _schema_number(), "h": _schema_number(),
+    "reason": _schema_string(),
+})
+
+_PERCEPTION_SCORES_SCHEMA = _schema_object({
+    "clarity": _schema_integer(),
+    "noise": _schema_integer(),
+    "exposure": _schema_integer(),
+    "color_temperature": _schema_integer(),
+    "layout": _schema_integer(),
+    "lighting": _schema_integer(),
+    "color_harmony": _schema_integer(),
+    "aesthetic_finish": _schema_integer(),
+})
+
+# Top-level crop_box has "reason"; the copy nested in each crop_candidates[]
+# entry does not -- two distinct shapes, not one reused across both.
+_CROP_BOX_SCHEMA = _schema_object({
+    "enabled": _schema_boolean(),
+    "x": _schema_number(), "y": _schema_number(),
+    "w": _schema_number(), "h": _schema_number(),
+    "aspect_ratio": _schema_string(),
+    "reason": _schema_string(),
+})
+
+_CROP_CANDIDATE_CROP_BOX_SCHEMA = _schema_object({
+    "enabled": _schema_boolean(),
+    "x": _schema_number(), "y": _schema_number(),
+    "w": _schema_number(), "h": _schema_number(),
+    "aspect_ratio": _schema_string(),
+})
+
+_CROP_CANDIDATE_SCHEMA = _schema_object({
+    "id": _schema_string(),
+    "label": _schema_string(),
+    "crop_box": _CROP_CANDIDATE_CROP_BOX_SCHEMA,
+    "composition_intent": _schema_string(),
+    "tradeoffs": _schema_string(),
+})
+
+_CROP_INTENT_SCHEMA = _schema_object({
+    "trim_left": _schema_boolean(),
+    "trim_right": _schema_boolean(),
+    "trim_top": _schema_boolean(),
+    "trim_bottom": _schema_boolean(),
+    "subject_anchor": _schema_string(),
+    "looking_direction": _schema_string(),
+    "remove_edge_distractions": _schema_string_array(),
+})
+
+_CROP_RISK_SCHEMA = _schema_object({
+    "needs_validation": _schema_boolean(),
+    "risk_level": _schema_string(),
+    "reasons": _schema_string_array(),
+})
+
+ANALYSIS_RESPONSE_SCHEMA = {
+    "type": "json_schema",
+    "name": "photo_analysis",
+    "strict": True,
+    "schema": _schema_object({
+        "photo_summary": _schema_string(),
+        "subject_category": _schema_string(),
+        "scene_category": _schema_string(),
+        "main_subject": _schema_string(),
+        "scene_type": _schema_string(),
+        "aesthetic_diagnosis": _schema_string(),
+        "detected_issues": _schema_string_array(),
+        "edit_philosophy": _schema_string(),
+        "edit_intent": _schema_string(),
+        "composition_mood": _schema_string(),
+        "composition_intent": _schema_string(),
+        "framing_intent": _schema_string(),
+        "layout_method": _schema_string(),
+        "portrait_framing": _schema_string(),
+        "composition_strategy": _schema_string(),
+        "visual_balance_strategy": _schema_string(),
+        "empty_space_strategy": _schema_string(),
+        "alignment_strategy": _schema_string(),
+        "distraction_strategy": _schema_string(),
+        "scene_preservation_strategy": _schema_string(),
+        "roi_anchor": _schema_string(),
+        "recommended_aspect_ratio": _schema_string(),
+        "aspect_ratio_reason": _schema_string(),
+        "subjects": _schema_array_of(_SUBJECT_SCHEMA),
+        "eye_blink_issues": _schema_array_of(_EYE_BLINK_ISSUE_SCHEMA),
+        "hair_issues": _schema_array_of(_HAIR_ISSUE_SCHEMA),
+        "gaze_contact_issues": _schema_array_of(_GAZE_CONTACT_ISSUE_SCHEMA),
+        "roi_box": _BOX_WITH_REASON_SCHEMA,
+        "subject_extent_box": _BOX_WITH_REASON_SCHEMA,
+        "protected_regions": _schema_array_of(_PROTECTED_REGION_SCHEMA),
+        "perception_scores": _PERCEPTION_SCORES_SCHEMA,
+        "tool_strategy": _schema_string(),
+        "lighting_strategy": _schema_string(),
+        "memory_color_strategy": _schema_string(),
+        "restoration_needs": _schema_string_array(),
+        "evaluation_criteria": _schema_string_array(),
+        "crop_recommendation": _schema_string(),
+        "crop_box": _CROP_BOX_SCHEMA,
+        "crop_candidates": _schema_array_of(_CROP_CANDIDATE_SCHEMA),
+        "crop_intent": _CROP_INTENT_SCHEMA,
+        "crop_risk": _CROP_RISK_SCHEMA,
+        "correction_plan": _schema_string_array(),
+        "correction_axes": _schema_array_of(_schema_string_array()),
+        "correction_inverse": _schema_string_array(),
+        "retouch_recipe": _schema_string_array(),
+        "preserve_rules": _schema_string_array(),
+    }),
+}
+
+
 # The light/color direction shared by both retouch modes. The sentence this
 # replaced ("Improve the existing photograph through light, contrast, color
 # harmony, ...") was too abstract to steer an image model: with no definition of
