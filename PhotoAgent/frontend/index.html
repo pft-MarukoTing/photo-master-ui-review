@@ -857,10 +857,23 @@
       align-content: flex-start;
       gap: 12px;
       padding: 20px;
+      /* flex:1 with no max-height matches #dz-preview/.upload-zone's own
+         "grow/shrink to fill .upload-grid's remaining space" behavior --
+         this and those two are mutually-exclusive views of the same slot
+         (empty drop zone / single preview / this grid), so a flat
+         max-height here (used to be 420px) made this one visibly shorter
+         than the other two even when .upload-left had plenty of room left
+         below it, packing photos into an internal scrollbar that didn't
+         need to be there. overflow:auto stays regardless, as the fallback
+         for whenever the grid's real content (many photo rows) still needs
+         more height than the space it was actually given. min-height:360px
+         (taller than #dz-preview/.upload-zone's 280px floor, see their own
+         comments) is its own floor for short viewports, same idea as
+         those two, just taller since a usable grid needs more than a
+         centered icon/single photo does. */
       overflow: auto;
       flex: 1;
       min-height: 360px;
-      max-height: 420px;
       background: var(--card);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
@@ -1486,10 +1499,10 @@
        --header-h's own breakpoint changes (styles.css) automatically,
        same as every other "just below the header" fixed element in this
        file. initReportBtnDrag (app.js) overrides this with inline top/left
-       instead, the moment there's a saved drag position to restore or the
-       user starts dragging -- see its own comment for why the two
-       positioning modes don't fight each other. touch-action:none stops
-       the browser's own scroll/pinch gestures from hijacking a touch-drag
+       instead, the moment the user starts dragging -- see its own comment
+       for why the two positioning modes don't fight each other and why
+       that override doesn't survive a reload. touch-action:none stops the
+       browser's own scroll/pinch gestures from hijacking a touch-drag
        before pointer events get a chance to. */
     #report-btn {
       position: fixed;
