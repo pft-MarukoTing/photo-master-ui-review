@@ -1,6 +1,7 @@
 import io
 import logging
 import math
+import os
 import base64
 import re
 
@@ -38,16 +39,28 @@ def create_preview_bytes(image_bytes: bytes, max_side: int = VISION_PREVIEW_MAX_
     return _to_jpeg_bytes(img)
 
 
-_FACE_CASCADE = None
+_FACE_DETECTOR = None
+_FACE_DETECTOR_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "face_detection_yunet_2023mar.onnx")
+_FACE_DETECT_SCORE_THRESHOLD = 0.6
+# Detection runs on a downscaled copy at this size, not the original photo --
+# on a native 5000px+ photo YuNet's confidence collapses (a real face measured
+# 0.6 at full resolution vs. 0.94 once shrunk to 1024px), since its backbone
+# was trained at ordinary photo resolutions. Boxes are scaled back up to the
+# original image afterward, same as VISION_PREVIEW_MAX_SIDE's role for the
+# analysis preview but kept separate since these two resizes serve different
+# consumers (the detector vs. the analysis model).
+_FACE_DETECT_MAX_SIDE = 1024
 _FACE_CROP_MAX_SIDE = 768
 _FACE_CROP_MAX_COUNT = 3
 
 
-def _face_cascade() -> "cv2.CascadeClassifier":
-    global _FACE_CASCADE
-    if _FACE_CASCADE is None:
-        _FACE_CASCADE = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-    return _FACE_CASCADE
+def _face_detector() -> "cv2.FaceDetectorYN":
+    global _FACE_DETECTOR
+    if _FACE_DETECTOR is None:
+        _FACE_DETECTOR = cv2.FaceDetectorYN.create(
+            _FACE_DETECTOR_MODEL_PATH, "", (320, 320), score_threshold=_FACE_DETECT_SCORE_THRESHOLD
+        )
+    return _FACE_DETECTOR
 
 
 def detect_face_crops(image_bytes: bytes) -> list:
@@ -63,10 +76,11 @@ def detect_face_crops(image_bytes: bytes) -> list:
     entirely on that one face, which is the only way to give the model more
     effective eye resolution to judge blink state and gaze/pupil direction.
 
-    Best-effort only: Haar cascade misses non-frontal or occluded faces and
-    occasionally false-positives on background clutter, so an empty list is
-    the expected outcome for plenty of photos, not an error -- callers must
-    keep working from the full photo alone when this returns nothing.
+    Best-effort only: even YuNet (a small DNN detector, well past Haar cascade
+    in handling non-frontal/occluded faces and background-clutter false
+    positives) can still miss a face, so an empty list is the expected outcome
+    for plenty of photos, not an error -- callers must keep working from the
+    full photo alone when this returns nothing.
 
     Returns a list of {"box": {x, y, w, h}, "bytes": jpeg_bytes} -- box is
     normalized against the original (EXIF-transposed) image, same convention
@@ -74,26 +88,30 @@ def detect_face_crops(image_bytes: bytes) -> list:
     frontend's analysis-box overlay without a separate coordinate space.
     """
     img = _open_rgb(image_bytes)
-    # Below its own minSize, OpenCV's cascade classifier can throw a native
-    # assertion (getScaleData: 0 <= scaleIdx < scaleData->size()) instead of
-    # returning zero detections -- a long-standing OpenCV bug, not something
-    # tied to any particular photo, so it's cheaper to dodge the known trigger
-    # than to special-case a version.
-    if min(img.width, img.height) < 60:
-        return []
-    gray = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2GRAY)
-    try:
-        boxes = _face_cascade().detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
-    except cv2.error:
-        # Same underlying OpenCV flakiness, triggered by some other image
-        # shape/size combination the minSize guard above doesn't cover. Best-
-        # effort detection: no crop is a normal, handled outcome (see
-        # docstring), never worth failing the whole analysis over.
-        logger.warning("detect_face_crops: OpenCV cascade detection failed, continuing without face crops", exc_info=True)
-        return []
-    if len(boxes) == 0:
+    if img.width < 1 or img.height < 1:
         return []
 
+    longest = max(img.width, img.height)
+    scale = _FACE_DETECT_MAX_SIDE / longest if longest > _FACE_DETECT_MAX_SIDE else 1.0
+    detect_img = img if scale == 1.0 else img.resize(
+        (round(img.width * scale), round(img.height * scale)), Image.LANCZOS
+    )
+    bgr = cv2.cvtColor(np.array(detect_img), cv2.COLOR_RGB2BGR)
+    try:
+        detector = _face_detector()
+        detector.setInputSize((detect_img.width, detect_img.height))
+        _, faces = detector.detect(bgr)
+    except cv2.error:
+        # Best-effort detection: no crop is a normal, handled outcome (see
+        # docstring), never worth failing the whole analysis over.
+        logger.warning("detect_face_crops: OpenCV face detector failed, continuing without face crops", exc_info=True)
+        return []
+    if faces is None or len(faces) == 0:
+        return []
+
+    # faces columns are [x, y, w, h, <5 landmark points>, score]; only the box
+    # is needed here. Scale back from detect_img's resolution to img's.
+    boxes = [tuple(round(v / scale) for v in f[:4]) for f in faces]
     boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
     largest_area = boxes[0][2] * boxes[0][3]
     # A real face's false-positive companions from background texture/pattern
