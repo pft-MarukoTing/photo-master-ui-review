@@ -584,9 +584,9 @@
       flex-direction: column;
       gap: 12px;
       /* One border too many alongside .ap-style-modal-box's own border and
-         the pill/card borders inside -- the modal-header divider below
-         (.ap-style-modal-box .error-modal-hdr) now marks the boundary
-         between the header and everything under it instead. */
+         the pill/card borders inside -- the shared .error-modal-hdr divider
+         (index.html, further up) already marks the boundary between the
+         header and everything under it. */
       border: none;
     }
     /* Header row for #ap-style-options-frame: category name top-left (set
@@ -1169,13 +1169,17 @@
       background: var(--card); border: 1px solid var(--border-2);
       border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
     }
-    .error-modal-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-    /* Divider between the header and everything below it, scoped to the
-       style modal only -- #ap-style-options-frame's own border was removed
-       (too many nested borders alongside .ap-style-modal-box's own), so this
-       hairline is what now separates the header from the pills/option grid
-       underneath instead. */
-    .ap-style-modal-box .error-modal-hdr {
+    /* Divider between the header and everything below it -- originally
+       scoped to just #ap-style-modal (its own inner frame border had been
+       removed, too many nested borders alongside .ap-style-modal-box's own,
+       so this hairline took over as the separator there), now promoted onto
+       the shared class so every .error-modal-hdr gets the same divider
+       under its title regardless of which modal it's in. */
+    .error-modal-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
       padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
