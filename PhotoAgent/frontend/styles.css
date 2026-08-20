@@ -271,6 +271,7 @@ a { text-decoration: none; color: inherit; }
    right-aligned as a group instead of hugging the row's left edge. */
 .upload-actions-row {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
   /* Grow to fill whatever the row has left (#upload-options-card is 0-width
