@@ -3106,6 +3106,22 @@
     revealResultsIfNeeded();
   }
 
+  // Mirrors the backend's own per-request HTTP timeouts (openai_client.py /
+  // gemini_client.py: Step 3 review and Step 6 QA use a 120s socket timeout,
+  // Step 5 edit and Step 5b gaze repair use 300s) so a single-RUN poll
+  // budget scales with which steps a job's own flags will actually execute,
+  // instead of one flat number that's too tight when every optional step
+  // fires and wastefully loose when none do.
+  const STEP_TIMEOUT_MS = { instructionReview: 120000, imageEdit: 300000, gazeRepair: 300000, qualityCheck: 120000 };
+  function editJobTimeoutMs({ aiPhotoEditing, runQa, runCount = 1 }) {
+    let perRunMs = STEP_TIMEOUT_MS.instructionReview;
+    if (aiPhotoEditing) {
+      perRunMs += STEP_TIMEOUT_MS.imageEdit + STEP_TIMEOUT_MS.gazeRepair;
+      if (runQa) perRunMs += STEP_TIMEOUT_MS.qualityCheck;
+    }
+    return perRunMs * runCount;
+  }
+
   // One RUN of steps 3-6 for the single-image flow's RUN-count > 1 path --
   // mirrors editBatchItem, but against selectedFile/singleFlowState instead
   // of a batch record.
@@ -3131,7 +3147,7 @@
       const submitMs = Date.now() - stepStart;
 
       stepStart = Date.now();
-      await pollJobStatus(run.jobId, { path: processingPath });
+      await pollJobStatus(run.jobId, { path: processingPath, timeoutMs: editJobTimeoutMs({ aiPhotoEditing, runQa }) });
       const pollMs = Date.now() - stepStart;
 
       stepStart = Date.now();
@@ -3813,7 +3829,7 @@
       const submitMs = Date.now() - stepStart;
 
       stepStart = Date.now();
-      await pollJobStatus(run.jobId, { path: batchSettings.path });
+      await pollJobStatus(run.jobId, { path: batchSettings.path, timeoutMs: editJobTimeoutMs({ aiPhotoEditing: batchSettings.aiPhotoEditing, runQa: batchSettings.runQa }) });
       const pollMs = Date.now() - stepStart;
 
       stepStart = Date.now();

@@ -88,7 +88,7 @@ window.PhotoAgentApi = (() => {
   // jobId (only ever held in an in-memory JS variable) with no way to
   // recover the result, so an update banner found mid-job waits for this to
   // clear rather than showing immediately.
-  async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000, finalCheckMs = 1 * 60 * 1000, onStatus } = {}) {
+  async function pollJobStatus(jobId, { path = "local", intervalMs = 1500, timeoutMs = 5 * 60 * 1000, finalCheckMs = 90 * 1000, onStatus } = {}) {
     window.PhotoAgentUpdateCheck?.beginJob();
     try {
       return await pollJobStatusInner(jobId, { path, intervalMs, timeoutMs, finalCheckMs, onStatus });
