@@ -1526,10 +1526,10 @@
     /* Invisible but still fully laid out (visibility:hidden, not
        display:none/hidden) -- #report-btn-spacer's only job is to occupy
        its flex slot in .header-actions exactly as if the real button were
-       still there, so #header-menu-btn lines up the same way regardless of
-       #report-btn itself being a fixed-position element elsewhere.
-       syncReportBtnPosition (app.js) reads its live position on load and on
-       resize. */
+       still there, so #reset-btn/#header-settings-btn/#admin-reports-btn/
+       #account-badge line up the same way regardless of #report-btn itself
+       being a fixed-position element elsewhere. syncReportBtnPosition
+       (app.js) reads its live position on load and on resize. */
     #report-btn-spacer { visibility: hidden; pointer-events: none; }
     /* Pinned to the viewport at a z-index above every modal/drawer in this
        file (highest otherwise is 1002, #confirm-modal/#report-screenshot-
@@ -1601,6 +1601,40 @@
     .account-badge svg { flex-shrink: 0; }
     .account-badge:hover { background: var(--card); border-color: var(--border); }
     .account-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    /* Icon-only under 560px, same breakpoint styles.css's own
+       ".header-actions .btn-label {display:none}" uses for the other header
+       buttons -- #account-badge isn't a .btn so that rule doesn't reach it.
+       Has to live here (not in styles.css) since this inline block loads
+       after styles.css and its own unconditional .account-badge padding
+       above would otherwise keep winning over an equal-specificity override
+       placed only in styles.css, regardless of the media query (see
+       #dz-preview's own comment on this same gotcha). At a fixed 32px
+       height, 7px of side padding around the 14px icon keeps it a circle
+       instead of an oval once the username label disappears.
+       #reset-btn/#header-settings-btn/#admin-reports-btn are real .btn
+       elements, so ".header-actions .btn-label {display:none}" already
+       drops their label text at this width -- but their own #x.btn
+       overrides above keep the label's 14px/6px side padding/gap, leaving
+       an icon stranded in a wide oval instead of the same tight circle
+       #account-badge becomes. Same fix, same reason -- 7px rather than the
+       plain .header-actions .btn fallback's 12px (styles.css) since up to
+       four of these can share the row at once (#reset-btn,
+       #header-settings-btn, #admin-reports-btn, #account-badge), and every
+       px saved per button is what keeps that row from crowding .logo or
+       spilling past the viewport edge on a 320-360px phone. #report-btn
+       isn't included here -- it's a position:fixed element tracking
+       #report-btn-spacer, not a real member of this row, so it keeps its
+       normal size regardless of header width. */
+    @media (max-width: 560px) {
+      #account-badge-label { display: none; }
+      .account-badge,
+      #reset-btn.btn,
+      #header-settings-btn.btn,
+      #admin-reports-btn.btn {
+        padding: 0 7px;
+        gap: 0;
+      }
+    }
     .account-modal-actions {
       display: flex;
       justify-content: flex-end;
@@ -1787,11 +1821,6 @@
       transition: transform .25s ease;
     }
     .history-drawer.drawer-open { transform: translateX(0); }
-    /* Narrower than the shared 420px -- #header-actions-drawer only ever
-       holds a short vertical list of icon+label buttons (see
-       .header-actions-drawer-list below), nowhere near as wide as
-       #history-drawer/#reports-drawer's own thumbnail grids/lists need. */
-    #header-actions-drawer { width: min(280px, 85vw); }
     /* Anchored to .history-drawer's own box (its nearest positioned
        ancestor, itself position:fixed) rather than scrolling with
        #history-list/#history-empty -- stays pinned at the drawer's visual
@@ -1926,30 +1955,6 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    /* Divider under #header-actions-drawer-title -- .history-header itself
-       has no such line by default (#history-drawer/#reports-drawer don't
-       use one), so this is scoped to just this drawer rather than added to
-       the shared class. Same hairline treatment as the shared
-       .error-modal-hdr divider elsewhere in this file. */
-    #header-actions-drawer .history-header {
-      padding-bottom: 12px;
-      border-bottom: 1px solid var(--border);
-    }
-    /* #header-actions-drawer's body -- stacks its buttons as full-width,
-       left-aligned rows instead of the compact centered pills they were as
-       direct children of .header-actions. Plenty of width to work with here
-       (.history-drawer is min(420px, 90vw)) so unlike that old row, none of
-       these ever need to drop their label/shrink at any width. */
-    .header-actions-drawer-list {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .header-actions-drawer-list .btn,
-    .header-actions-drawer-list .account-badge {
-      width: 100%;
-      justify-content: flex-start;
     }
     /* One heading + grid per calendar day (see formatHistoryDayLabel/
        renderHistoryList, app.js) -- .history-list itself just stacks the
@@ -2396,10 +2401,80 @@
   <div class="header-inner">
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
+      <button id="reload-batch-btn" class="btn btn-secondary" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M4.5 15a8 8 0 0014.5 3M19.5 9A8 8 0 005 6" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">重新分析</span>
+      </button>
+      <button id="reset-btn" class="btn btn-secondary btn-sm" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M12 15V3M12 3L7 8M12 3l5 5" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3 19h18" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="btn-label">上傳照片</span>
+      </button>
+      <!-- Global settings entry point -- used to be two separate per-page
+           gear buttons (#settings-btn in .upload-actions-row, #ap-settings-btn
+           in .ap-settings-run-row); consolidated here as a single always-
+           visible header button so it's reachable regardless of which
+           section is showing. openContextSettingsModal (app.js) picks
+           #settings-modal or #ap-settings-modal based on which section
+           currently has .visible (see showSection/els.sections, dom.js). -->
+      <button id="header-settings-btn" class="btn btn-secondary btn-sm" type="button">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2.5"/>
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
+            stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">設定</span>
+      </button>
+      <!-- Admin-only entry into #reports-drawer -- shown only once
+           checkAdminAccess (app.js) confirms the current account is an admin
+           (backend/services/report.py's is_admin); hidden for everyone else,
+           same as #account-badge is hidden until an account exists. -->
+      <button id="admin-reports-btn" class="btn btn-secondary btn-sm" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M12 15.01h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <span class="btn-label">回報清單</span>
+      </button>
+      <!-- Shown whenever there's no current account -- the only entry point
+           into #account-modal, which is never opened automatically. Mutually
+           exclusive with #account-badge (see applyAccountUi, app.js). -->
+      <button id="register-account-btn" class="btn btn-secondary btn-sm" type="button">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14 8l5 4-5 4M19 12H9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">登入</span>
+      </button>
+      <!-- Doubles as the entry point into the history drawer (see
+           applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
+           button exists; the clock icon (same one that button used to use)
+           signals "this opens your processing history" alongside the
+           username text, set separately into #account-badge-label so
+           applyAccountUi's textContent write doesn't clobber this icon. -->
+      <button id="account-badge" class="account-badge" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span id="account-badge-label"></span>
+      </button>
       <!-- Invisible, non-interactive stand-in for #report-btn (a real
-           position:fixed element living outside <header>, see its own
+           position:fixed element living outside <header> -- see its own
            markup comment further down) -- reserves this exact flex slot so
-           #header-menu-btn lays out as if the button were still here, while
+           #reset-btn/#header-settings-btn/#admin-reports-btn/
+           #account-badge lay out as if the button were still here, while
            syncReportBtnPosition (app.js) copies this element's live
            position onto the real button. Same #report-btn.btn sizing rule
            also applies to this id (index.html <style>) so it always
@@ -2413,19 +2488,6 @@
         </svg>
         <span class="btn-label">回報</span>
       </span>
-      <!-- Opens #header-actions-drawer (see openHeaderActionsDrawer/
-           closeHeaderActionsDrawer, app.js), which holds the six buttons
-           that used to sit directly in this row (登入/重新分析/上傳照片/
-           回報清單/帳號/設定). Collapsing them behind one icon keeps this
-           row's width from swinging around (and needing ever-tighter
-           breakpoint squeezes, see styles.css) as account/admin/batch state
-           changes -- #report-btn above is the one exception, since it's
-           always visible/enabled regardless of that state anyway. -->
-      <button id="header-menu-btn" class="header-menu-btn" type="button" aria-label="選單" title="選單">
-        <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-          <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        </svg>
-      </button>
     </div>
   </div>
 </header>
@@ -2450,15 +2512,15 @@
      body-level sibling) would still paint over it regardless of this
      button's own z-index. It must always stay reachable even then (that's
      the whole point of a report button), so it can't just live inside
-     .header-actions like #header-menu-btn does -- no z-index chosen there
-     could ever beat a modal escaping <header>'s own capped stacking
-     context.
+     .header-actions like #header-settings-btn/#account-badge do -- no
+     z-index chosen there could ever beat a modal escaping <header>'s own
+     capped stacking context.
 
      Living outside <header> is what makes it actually fixed to the
      viewport, but that also takes it out of .header-actions' flex flow
      entirely (fixed elements never participate in layout, wherever they
      sit in the DOM), so it can no longer just fall into place next to
-     #header-menu-btn the way a normal flex child would. #report-btn-spacer
+     those other buttons the way a normal flex child would. #report-btn-spacer
      (a same-sized, invisible stand-in actually left inside .header-actions,
      right where this button used to sit) reserves that slot instead --
      syncReportBtnPosition (app.js) reads its live position
@@ -3533,106 +3595,6 @@
   <p id="reports-empty" class="history-empty" hidden>目前尚無回報案件。</p>
 </aside>
 
-<!-- Everything that used to sit directly in .header-actions (see the
-     comment on #header-menu-btn there), now tucked behind it here instead.
-     Same slide-in-drawer shape as #history-drawer/#reports-drawer above,
-     reusing their .history-drawer/.history-drawer-backdrop/
-     .history-drawer-close-btn/.history-header classes. #account-badge and
-     #admin-reports-btn below still open #history-drawer/#reports-drawer the
-     same as before (openHistoryPage/openReportsPage, app.js) -- both now
-     close this drawer first (closeHeaderActionsDrawer) so the two never end
-     up stacked open at once. -->
-<div class="history-drawer-backdrop" id="header-actions-drawer-backdrop" hidden></div>
-<aside class="history-drawer" id="header-actions-drawer">
-  <button class="history-drawer-close-btn" id="header-actions-drawer-close-btn" type="button" aria-label="關閉">
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-      <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </button>
-  <div class="history-header">
-    <div class="history-header-top">
-      <!-- Account name (or 訪客 while logged out) instead of a generic
-           "選單" label -- set in applyAccountUi (app.js), same place that
-           already tracks login state for #register-account-btn/
-           #account-badge below. -->
-      <h2 id="header-actions-drawer-title">訪客</h2>
-    </div>
-  </div>
-  <div class="header-actions-drawer-list">
-    <!-- Shown whenever there's no current account -- the only entry point
-         into #account-modal, which is never opened automatically. Mutually
-         exclusive with #account-badge (see applyAccountUi, app.js). -->
-    <button id="register-account-btn" class="btn btn-secondary btn-sm" type="button">
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-        <path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M14 8l5 4-5 4M19 12H9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <span class="btn-label">登入</span>
-    </button>
-    <button id="reload-batch-btn" class="btn btn-secondary" type="button" hidden>
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-        <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor"
-          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M4.5 15a8 8 0 0014.5 3M19.5 9A8 8 0 005 6" stroke="currentColor"
-          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <span class="btn-label">重新分析</span>
-    </button>
-    <button id="reset-btn" class="btn btn-secondary btn-sm" type="button" hidden>
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-        <path d="M12 15V3M12 3L7 8M12 3l5 5" stroke="currentColor"
-          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3 19h18" stroke="currentColor"
-          stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      <span class="btn-label">上傳照片</span>
-    </button>
-    <!-- Doubles as the entry point into the history drawer (see
-         openHistoryPage, app.js) -- no separate history-nav button exists;
-         the clock icon signals "this opens your processing history"
-         alongside the static "處理紀錄" label (#account-badge-label). -->
-    <button id="account-badge" class="account-badge" type="button" hidden>
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-        <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <!-- Static now -- the drawer's own title (#header-actions-drawer-title,
-           applyAccountUi in app.js) already shows the account name, so this
-           button just needs to say what clicking it does instead of
-           repeating who's logged in. -->
-      <span id="account-badge-label">處理紀錄</span>
-    </button>
-    <!-- Admin-only entry into #reports-drawer -- shown only once
-         checkAdminAccess (app.js) confirms the current account is an admin
-         (backend/services/report.py's is_admin); hidden for everyone else,
-         same as #account-badge is hidden until an account exists. -->
-    <button id="admin-reports-btn" class="btn btn-secondary btn-sm" type="button" hidden>
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-        <path d="M12 15.01h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
-      </svg>
-      <span class="btn-label">回報清單</span>
-    </button>
-    <!-- Global settings entry point -- used to be two separate per-page
-         gear buttons (#settings-btn in .upload-actions-row, #ap-settings-btn
-         in .ap-settings-run-row); consolidated here as a single always-
-         visible entry point so it's reachable regardless of which section
-         is showing. openContextSettingsModal (app.js) picks #settings-modal
-         or #ap-settings-modal based on which section currently has
-         .visible (see showSection/els.sections, dom.js). -->
-    <button id="header-settings-btn" class="btn btn-secondary btn-sm" type="button">
-      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-        <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2.5"/>
-        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09a1.65 1.65 0 001.51-1.08 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51h.08a1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"
-          stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <span class="btn-label">設定</span>
-    </button>
-  </div>
-</aside>
-
 <!-- Error detail popup: opened when a failed batch card is clicked -->
 <div id="error-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
@@ -3796,31 +3758,21 @@
   </div>
 </div>
 
-<!-- Upload-page settings drawer: opened by #header-settings-btn (inside
-     #header-actions-drawer) while the upload section is showing (see
+<!-- Upload-page settings overlay: opened by #header-settings-btn (see
      openContextSettingsModal/openSettingsModal/closeSettingsModal in
-     app.js) -- same slide-in-drawer shape as #history-drawer above, reusing
-     its .history-drawer/.history-drawer-backdrop/.history-drawer-close-btn/
-     .history-header classes instead of a centered #error-modal-style
-     overlay, so opening 設定 from the menu drawer doesn't leave a drawer and
-     a separate centered modal on screen at once. Holds the 模型/長寬比/生成
-     張數 pickers that used to sit inline under the drop zone; moving them
-     here didn't require any changes to wireOptionPicker/
+     app.js) -- same backdrop+box+close pattern as #error-modal above. Holds
+     the 模型/長寬比/生成張數 pickers that used to sit inline under the drop
+     zone; moving them here didn't require any changes to wireOptionPicker/
      populateModelQualitySelect/populateAspectRatioSelect/applyRunCountChange
      in app.js since those all look elements up by id via dom.js. -->
-<div class="history-drawer-backdrop" id="settings-modal-backdrop" hidden></div>
-<aside class="history-drawer" id="settings-modal">
-  <button class="history-drawer-close-btn" id="settings-modal-close" type="button" aria-label="關閉">
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-      <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </button>
-  <div class="history-header">
-    <div class="history-header-top">
+<div id="settings-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div class="error-modal-hdr">
       <span id="settings-modal-title" class="settings-modal-title">設定</span>
+      <button id="settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
-  </div>
-  <div class="settings-modal-body">
+    <div class="settings-modal-body">
     <div class="option-pill-group">
       <span class="option-pill-label">分析模型</span>
       <details class="ap-style-item" name="upload-option-picker" id="analysis-model-picker">
@@ -3916,7 +3868,9 @@
       </details>
     </div>
   </div>
-</aside>
+  </div>
+</div>
+
 <!-- Demo photo picker: opened by #demo-images-btn (see openDemoImagesModal/
      closeDemoImagesModal in app.js) -- same backdrop+box+close pattern as
      #settings-modal below. Grid is populated lazily on first open from
@@ -4016,36 +3970,27 @@
   </div>
 </div>
 
-<!-- Results/analysis-preview page settings drawer: opened by
-     #header-settings-btn (inside #header-actions-drawer) while the upload
-     section isn't showing (see openContextSettingsModal/
-     openApSettingsModal/closeApSettingsModal in app.js) -- same slide-in-
-     drawer shape as #settings-modal above, same reasoning (reuses
-     #header-actions-drawer's closeHeaderActionsDrawer-first pattern so this
-     never ends up stacked on top of that one either). Holds the 分析模型/
-     生成模型/長寬比/生成張數 pickers that used to sit inline in
-     #ap-options-card-inline. 長寬比 mirrors the upload page's own picker
-     (applyAspectRatioChange in app.js) and applies to the edit only -- the
-     analysis is ratio-neutral and is never re-run for it; the backend settles
-     the output ratio per edit in resolve_output_aspect_ratio. 分析模型 is shown
-     read-only here (`is-locked`, no unlock toggle -- see the inline
-     `.ap-style-item.is-locked` rules above) since Step 2 has already run by
-     the time this modal is reachable; changing it would not re-analyze, so
-     only the upload page's own #analysis-model picker is actually
-     selectable. -->
-<div class="history-drawer-backdrop" id="ap-settings-modal-backdrop" hidden></div>
-<aside class="history-drawer" id="ap-settings-modal">
-  <button class="history-drawer-close-btn" id="ap-settings-modal-close" type="button" aria-label="關閉">
-    <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-      <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </button>
-  <div class="history-header">
-    <div class="history-header-top">
+<!-- Results/analysis-preview page settings overlay: opened by
+     #header-settings-btn (see openContextSettingsModal/openApSettingsModal/
+     closeApSettingsModal in app.js) -- same backdrop+box+close pattern as
+     #settings-modal above. Holds the 分析模型/生成模型/長寬比/生成張數 pickers
+     that used to sit inline in #ap-options-card-inline. 長寬比 mirrors the
+     upload page's own picker (applyAspectRatioChange in app.js) and applies
+     to the edit only -- the analysis is ratio-neutral and is never re-run
+     for it; the backend settles the output ratio per edit in
+     resolve_output_aspect_ratio. 分析模型 is shown read-only here
+     (`is-locked`, no unlock toggle -- see the inline `.ap-style-item.is-locked`
+     rules above) since Step 2 has already run by the time this modal is
+     reachable; changing it would not re-analyze, so only the upload page's
+     own #analysis-model picker is actually selectable. -->
+<div id="ap-settings-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-settings-modal-title">
+    <div class="error-modal-hdr">
       <span id="ap-settings-modal-title" class="settings-modal-title">設定</span>
+      <button id="ap-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
-  </div>
-  <div class="settings-modal-body">
+    <div class="settings-modal-body">
     <div class="option-pill-group">
       <span class="option-pill-label">分析模型</span>
       <details class="ap-style-item is-locked" name="ap-result-option-picker" id="ap-analysis-model-picker">
@@ -4143,7 +4088,8 @@
       </div>
     </div>
   </div>
-</aside>
+  </div>
+</div>
 
 <!-- 修圖建議 overlay: opened by #ap-recipe-picker (see openRecipeModal/
      closeRecipeModal in app.js) -- same backdrop+box+close pattern as

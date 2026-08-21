@@ -1897,25 +1897,25 @@
   // so it keeps winning against modals/drawers, which also takes it out of
   // .header-actions' own flex flow -- #report-btn-spacer is a same-sized,
   // invisible stand-in left in that flow instead, purely to reserve the
-  // slot #header-menu-btn lays out next to. This copies the spacer's live
-  // position onto the real button, so it always renders exactly where that
-  // reserved slot actually is. Called once on load and again on every
-  // resize (see call sites) -- .header-actions itself never changes
-  // composition at runtime anymore (#header-menu-btn is its only other,
-  // always-visible member), so unlike the old syncReportBtnPosition this
-  // doesn't need to be re-run from applyAccountUi/checkAdminAccess too.
+  // slot #reset-btn/#header-settings-btn/#admin-reports-btn/#account-badge
+  // lay out around. This copies the spacer's live position onto the real
+  // button, so it always renders exactly where that reserved slot actually
+  // is. Called whenever anything in that row could have changed size
+  // (account/admin state, window resize) -- see its own call sites.
   function syncReportBtnPosition() {
     if (!els.reportBtn || !els.reportBtnSpacer) return;
     const rect = els.reportBtnSpacer.getBoundingClientRect();
-    // .header-inner has no flex-wrap, and .logo doesn't shrink below its own
-    // clamp() floor -- on a narrow enough phone, .logo + #report-btn-spacer +
-    // #header-menu-btn can still add up to more than the viewport's width
-    // despite the 560px tightening, pushing the spacer itself (and therefore
-    // #report-btn, which just copies its position) partway or fully
-    // off-screen. Clamping here guarantees #report-btn always stays fully
-    // inside the viewport regardless -- at the cost of no longer lining up
-    // with the spacer exactly in that overflow case, which only matters
-    // visually, not functionally (nothing else is positioned relative to
+    // .header-inner has no flex-wrap, and neither .logo nor .header-actions'
+    // own children shrink below their content size -- on a narrow enough
+    // phone, .logo + up to four header buttons (#reset-btn,
+    // #header-settings-btn, #admin-reports-btn, #account-badge) can still
+    // add up to more than the viewport's width despite the 560px
+    // tightening, pushing the spacer itself (and therefore #report-btn,
+    // which just copies its position) partway or fully off-screen.
+    // Clamping here guarantees #report-btn always stays fully inside the
+    // viewport regardless -- at the cost of no longer lining up with the
+    // spacer exactly in that overflow case, which only matters visually,
+    // not functionally (nothing else is positioned relative to
     // #report-btn).
     const margin = 8;
     const maxLeft = window.innerWidth - els.reportBtn.offsetWidth - margin;
@@ -4105,16 +4105,16 @@
   // (no account yet) and hides once one exists.
   function applyAccountUi() {
     const user = getCurrentUser();
-    // #header-actions-drawer's own title -- account name while logged in,
-    // 訪客 otherwise, so the drawer identifies who you are without having
-    // to read #account-badge's now-static "處理紀錄" label for it.
-    if (els.headerActionsDrawerTitle) els.headerActionsDrawerTitle.textContent = user || "訪客";
     if (els.accountBadge) {
+      // .textContent (not on accountBadge itself) so the clock icon markup
+      // beside #account-badge-label survives every call to this.
+      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user || "";
       els.accountBadge.hidden = !user;
       els.accountBadge.title = user ? "查看處理紀錄" : "";
       els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
     }
     if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
+    syncReportBtnPosition();
   }
 
   async function handleCreateAccount() {
@@ -4584,30 +4584,6 @@
     }));
   }
 
-  // Collapses every button that used to sit directly in .header-actions
-  // (登入/重新分析/上傳照片/回報清單/帳號/設定) behind #header-menu-btn --
-  // same open/close shape as openHistoryDrawer/closeHistoryDrawer just
-  // below (#header-actions-drawer reuses that same .history-drawer/
-  // .history-drawer-backdrop CSS). #account-badge/#admin-reports-btn inside
-  // it each open a further drawer of their own (#history-drawer/
-  // #reports-drawer) -- openHistoryPage/openReportsPage both close this one
-  // first, so the two never end up open/stacked at the same time.
-  function openHeaderActionsDrawer() {
-    if (els.headerActionsDrawer) els.headerActionsDrawer.classList.add("drawer-open");
-    if (els.headerActionsDrawerBackdrop) {
-      els.headerActionsDrawerBackdrop.hidden = false;
-      els.headerActionsDrawerBackdrop.classList.add("drawer-open");
-    }
-  }
-
-  function closeHeaderActionsDrawer() {
-    if (els.headerActionsDrawer) els.headerActionsDrawer.classList.remove("drawer-open");
-    if (els.headerActionsDrawerBackdrop) {
-      els.headerActionsDrawerBackdrop.classList.remove("drawer-open");
-      els.headerActionsDrawerBackdrop.hidden = true;
-    }
-  }
-
   // Opens the drawer over whatever's currently showing -- not a
   // showSection() screen, since History is a panel the user glances at and
   // dismisses, not a destination that replaces the whole page.
@@ -4636,7 +4612,6 @@
     // instant the user so much as glances at the drawer, even if they close
     // it again without selecting anything -- silently preventing that job's
     // own completion from ever revealing the results page.
-    closeHeaderActionsDrawer();
     openHistoryDrawer();
     const user = getCurrentUser();
     if (els.historyCurrentUser) els.historyCurrentUser.textContent = user || "";
@@ -4673,7 +4648,10 @@
     stopReportsPolling();
     setNewReportsAlert(false);
     const user = resolveAdminUser();
-    if (!user) return;
+    if (!user) {
+      syncReportBtnPosition();
+      return;
+    }
     try {
       const { reports } = await getReports(user);
       if (els.adminReportsBtn) els.adminReportsBtn.hidden = false;
@@ -4684,6 +4662,8 @@
       startReportsPolling();
     } catch {
       // 403 (not an admin) or a request failure -- either way, stay hidden.
+    } finally {
+      syncReportBtnPosition();
     }
   }
 
@@ -4996,7 +4976,6 @@
   async function openReportsPage() {
     const user = resolveAdminUser();
     if (!user) return;
-    closeHeaderActionsDrawer();
     openReportsDrawer();
     try {
       const { reports } = await getReports(user);
@@ -5582,30 +5561,17 @@
     }
   }
 
-  // Upload-page settings drawer -- same open/close shape as
-  // openHeaderActionsDrawer/closeHeaderActionsDrawer above, just toggling
-  // #settings-modal/#settings-modal-backdrop instead. Holds the 模型/長寬比/
-  // 生成張數 pickers (already populated/wired above via
+  // Upload-page settings overlay -- same open/close shape as the error modal
+  // above, just toggling #settings-modal's own hidden attribute. Holds the
+  // 模型/長寬比/生成張數 pickers (already populated/wired above via
   // populateModelQualitySelect/populateAspectRatioSelect/wireOptionPicker),
   // so opening it doesn't need to re-render anything itself either.
-  // closeHeaderActionsDrawer runs first (openContextSettingsModal is the
-  // only caller) so the menu drawer this was opened from doesn't stay
-  // sitting open underneath it.
   function openSettingsModal() {
-    closeHeaderActionsDrawer();
-    if (els.settingsModal) els.settingsModal.classList.add("drawer-open");
-    if (els.settingsModalBackdrop) {
-      els.settingsModalBackdrop.hidden = false;
-      els.settingsModalBackdrop.classList.add("drawer-open");
-    }
+    if (els.settingsModal) els.settingsModal.hidden = false;
   }
 
   function closeSettingsModal() {
-    if (els.settingsModal) els.settingsModal.classList.remove("drawer-open");
-    if (els.settingsModalBackdrop) {
-      els.settingsModalBackdrop.classList.remove("drawer-open");
-      els.settingsModalBackdrop.hidden = true;
-    }
+    if (els.settingsModal) els.settingsModal.hidden = true;
   }
 
   // Advanced settings overlay, opened from within #settings-modal itself --
@@ -5620,36 +5586,27 @@
     if (els.advancedSettingsModal) els.advancedSettingsModal.hidden = true;
   }
 
-  // Results/analysis-preview page settings drawer -- same shape as
+  // Results/analysis-preview page settings overlay -- same shape as
   // openSettingsModal/closeSettingsModal above, just toggling
-  // #ap-settings-modal/#ap-settings-modal-backdrop instead. Its 模型/長寬比/
-  // 生成張數 pickers mirror the upload page's (applyModelQualityChange/
+  // #ap-settings-modal's own hidden attribute instead. Its 模型/長寬比/生成張數
+  // pickers mirror the upload page's (applyModelQualityChange/
   // applyAspectRatioChange/applyRunCountChange), so a change made here applies
   // to the next edit without re-analyzing.
   function openApSettingsModal() {
-    closeHeaderActionsDrawer();
-    if (els.apSettingsModal) els.apSettingsModal.classList.add("drawer-open");
-    if (els.apSettingsModalBackdrop) {
-      els.apSettingsModalBackdrop.hidden = false;
-      els.apSettingsModalBackdrop.classList.add("drawer-open");
-    }
+    if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
 
   function closeApSettingsModal() {
-    if (els.apSettingsModal) els.apSettingsModal.classList.remove("drawer-open");
-    if (els.apSettingsModalBackdrop) {
-      els.apSettingsModalBackdrop.classList.remove("drawer-open");
-      els.apSettingsModalBackdrop.hidden = true;
-    }
+    if (els.apSettingsModal) els.apSettingsModal.hidden = true;
   }
 
-  // #header-settings-btn (index.html, inside #header-actions-drawer) is the
-  // single entry point into 設定 now -- picks #settings-modal or
-  // #ap-settings-modal based on which section is actually showing, since
-  // the two pages' pickers (模型/長寬比/生成張數) are independent state, not
-  // a shared modal like #advanced-settings-modal. Falls back to the
-  // results-page drawer for "processing" too, on the assumption it's the
-  // closer match once analysis is running/done than the upload one.
+  // #header-settings-btn (index.html) is the single, always-visible entry
+  // point into 設定 now -- picks #settings-modal or #ap-settings-modal based
+  // on which section is actually showing, since the two pages' pickers
+  // (模型/長寬比/生成張數) are independent state, not a shared modal like
+  // #advanced-settings-modal. Falls back to the results-page modal for
+  // "processing" too, on the assumption the results modal is the closer
+  // match once analysis is running/done than the upload modal.
   function openContextSettingsModal() {
     if (els.sections.upload?.classList.contains("visible")) {
       openSettingsModal();
@@ -7112,9 +7069,6 @@
       if (e.target.dataset.close) confirmModalHandlers?.cancel();
     });
   }
-  if (els.headerMenuBtn) els.headerMenuBtn.addEventListener("click", openHeaderActionsDrawer);
-  if (els.headerActionsDrawerCloseBtn) els.headerActionsDrawerCloseBtn.addEventListener("click", closeHeaderActionsDrawer);
-  if (els.headerActionsDrawerBackdrop) els.headerActionsDrawerBackdrop.addEventListener("click", closeHeaderActionsDrawer);
   if (els.accountBadge) els.accountBadge.addEventListener("click", openHistoryPage);
   if (els.adminReportsBtn) els.adminReportsBtn.addEventListener("click", openReportsPage);
   if (els.reportsRefreshBtn) els.reportsRefreshBtn.addEventListener("click", refreshReportsList);
@@ -7144,7 +7098,11 @@
   }
   if (els.headerSettingsBtn) els.headerSettingsBtn.addEventListener("click", openContextSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
-  if (els.settingsModalBackdrop) els.settingsModalBackdrop.addEventListener("click", closeSettingsModal);
+  if (els.settingsModal) {
+    els.settingsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeSettingsModal();
+    });
+  }
   if (els.advancedSettingsBtn) els.advancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
   if (els.advancedSettingsModalClose) els.advancedSettingsModalClose.addEventListener("click", closeAdvancedSettingsModal);
   if (els.advancedSettingsModal) {
@@ -7153,7 +7111,11 @@
     });
   }
   if (els.apSettingsModalClose) els.apSettingsModalClose.addEventListener("click", closeApSettingsModal);
-  if (els.apSettingsModalBackdrop) els.apSettingsModalBackdrop.addEventListener("click", closeApSettingsModal);
+  if (els.apSettingsModal) {
+    els.apSettingsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeApSettingsModal();
+    });
+  }
   if (els.apAdvancedSettingsBtn) els.apAdvancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
   if (els.apRecipePicker) els.apRecipePicker.addEventListener("click", openRecipeModal);
   if (els.apRecipeModalClose) els.apRecipeModalClose.addEventListener("click", closeRecipeModal);
@@ -7192,9 +7154,9 @@
       closeAdvancedSettingsModal();
       return;
     }
-    if (els.settingsModal && els.settingsModal.classList.contains("drawer-open")) closeSettingsModal();
+    if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
-    if (els.apSettingsModal && els.apSettingsModal.classList.contains("drawer-open")) closeApSettingsModal();
+    if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
@@ -7203,7 +7165,6 @@
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
     if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();
     if (els.reportsDrawer && els.reportsDrawer.classList.contains("drawer-open")) closeReportsDrawer();
-    if (els.headerActionsDrawer && els.headerActionsDrawer.classList.contains("drawer-open")) closeHeaderActionsDrawer();
   });
   if (els.batchContinueAllBtn) els.batchContinueAllBtn.addEventListener("click", batchContinueAll);
   if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.addEventListener("click", handleDownloadAllBatchClick);

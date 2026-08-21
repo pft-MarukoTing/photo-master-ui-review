@@ -6,19 +6,13 @@ window.PhotoAgentDom = (() => {
       results: document.querySelector("#results-section")
     },
     accountBadge: document.querySelector("#account-badge"),
+    accountBadgeLabel: document.querySelector("#account-badge-label"),
     registerAccountBtn: document.querySelector("#register-account-btn"),
     accountModal: document.querySelector("#account-modal"),
     accountModalInput: document.querySelector("#account-modal-input"),
     accountModalError: document.querySelector("#account-modal-error"),
     accountModalSkipBtn: document.querySelector("#account-modal-skip-btn"),
     accountModalCreateBtn: document.querySelector("#account-modal-create-btn"),
-    // Drawer, not a section.toggle screen -- see openHeaderActionsDrawer/
-    // closeHeaderActionsDrawer (app.js).
-    headerMenuBtn: document.querySelector("#header-menu-btn"),
-    headerActionsDrawer: document.querySelector("#header-actions-drawer"),
-    headerActionsDrawerBackdrop: document.querySelector("#header-actions-drawer-backdrop"),
-    headerActionsDrawerCloseBtn: document.querySelector("#header-actions-drawer-close-btn"),
-    headerActionsDrawerTitle: document.querySelector("#header-actions-drawer-title"),
     // Drawer, not a section.toggle screen -- see openHistoryDrawer/
     // closeHistoryDrawer (app.js).
     historyDrawer: document.querySelector("#history-drawer"),
@@ -242,7 +236,6 @@ window.PhotoAgentDom = (() => {
     confirmModalOkBtn: document.querySelector("#confirm-modal-ok-btn"),
     headerSettingsBtn: document.querySelector("#header-settings-btn"),
     settingsModal: document.querySelector("#settings-modal"),
-    settingsModalBackdrop: document.querySelector("#settings-modal-backdrop"),
     settingsModalClose: document.querySelector("#settings-modal-close"),
     advancedSettingsBtn: document.querySelector("#advanced-settings-btn"),
     advancedSettingsModal: document.querySelector("#advanced-settings-modal"),
@@ -255,7 +248,6 @@ window.PhotoAgentDom = (() => {
     hairTidinessDesc: document.querySelector("#hair-tidiness-desc"),
     calmHairToggle: document.querySelector("#calm-hair-toggle"),
     apSettingsModal: document.querySelector("#ap-settings-modal"),
-    apSettingsModalBackdrop: document.querySelector("#ap-settings-modal-backdrop"),
     apSettingsModalClose: document.querySelector("#ap-settings-modal-close"),
     apAdvancedSettingsBtn: document.querySelector("#ap-advanced-settings-btn"),
     downloadProgressToast: document.querySelector("#download-progress-toast"),
