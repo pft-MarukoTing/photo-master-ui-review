@@ -9,8 +9,10 @@ static_bp = Blueprint("static_bp", __name__)
 
 # Matches server.py's WORKER_VERSION_KEY -- the worker container publishes its
 # version here on startup, since it's a separate process/container from this
-# Flask app with no other shared state.
-WORKER_VERSION_KEY = "photoagent:version:worker"
+# Flask app with no other shared state. Namespaced per deployment (like
+# REDIS_USERS_SET_KEY in account.py) since dev/poc share the same Redis
+# cluster and would otherwise clobber each other's published version.
+WORKER_VERSION_KEY = os.getenv("REDIS_WORKER_VERSION_KEY", "photoagent:version:worker")
 
 
 def _frontend_version(frontend_dir):

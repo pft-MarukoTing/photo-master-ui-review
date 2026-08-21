@@ -31,7 +31,7 @@ MSG_ID_QUEUE = os.environ['REDIS_MSG_QUEUE'].split(",")[0]
 # containers with no shared memory -- Redis is the only channel between them.
 # Falls back to a per-process-start value so a plain container restart (no
 # code change) still surfaces as "updated" without requiring a manual bump.
-WORKER_VERSION_KEY = 'photoagent:version:worker'
+WORKER_VERSION_KEY = os.getenv('REDIS_WORKER_VERSION_KEY', 'photoagent:version:worker')
 WORKER_VERSION = os.getenv('WORKER_VERSION') or '%s-%d' % (ENGINE_VERSION, int(time.time()))
 
 MONITOR_DST_DIR = './tmp'
