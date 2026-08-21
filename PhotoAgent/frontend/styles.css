@@ -238,10 +238,27 @@ a { text-decoration: none; color: inherit; }
 }
 
 .upload-hero {
+  position: relative;
   flex: 0 0 10%;
   /* Floor so the heading/sub-copy never get squeezed unreadable on a very
      short viewport -- 10% only wins once it's actually taller than this. */
   /* min-height: 100px; */
+}
+/* #changelog-btn (index.html) -- pinned to this section's own top-right
+   corner rather than flowing inline with .upload-headline/.upload-sub, so
+   it stays put regardless of how many lines either wraps to. A secondary,
+   easy-to-ignore utility action (same as #report-btn/#header-settings-btn
+   in the header), so it gets their same compact-pill size instead of
+   .btn-sm's larger default. */
+#changelog-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 32px;
+  padding: 0 14px;
+  gap: 6px;
+  font-size: 13px;
+  border-radius: 999px;
 }
 
 .eyebrow-label {

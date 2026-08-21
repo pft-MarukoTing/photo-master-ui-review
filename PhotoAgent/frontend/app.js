@@ -5503,6 +5503,57 @@
     if (els.demoImagesModal) els.demoImagesModal.hidden = true;
   }
 
+  // Version history -- lazily fetched once from changelog.json (a static
+  // file shipped alongside index.html, not a backend endpoint) and cached
+  // here, same reasoning as demoImagesCache above: content that can't
+  // change mid-session, no need to re-fetch on every open.
+  let changelogCache = null;
+
+  function renderChangelog(entries) {
+    if (!els.changelogModalBody) return;
+    els.changelogModalBody.innerHTML = "";
+    entries.forEach((entry) => {
+      const block = document.createElement("div");
+      block.className = "changelog-entry";
+      const date = document.createElement("div");
+      date.className = "changelog-entry-date";
+      date.textContent = entry.date || "";
+      block.appendChild(date);
+      const list = document.createElement("ul");
+      list.className = "changelog-entry-list";
+      (entry.changes || []).forEach((change) => {
+        const li = document.createElement("li");
+        li.textContent = change;
+        list.appendChild(li);
+      });
+      block.appendChild(list);
+      els.changelogModalBody.appendChild(block);
+    });
+  }
+
+  function openChangelogModal() {
+    if (!els.changelogModal) return;
+    els.changelogModal.hidden = false;
+    if (changelogCache) {
+      renderChangelog(changelogCache);
+      return;
+    }
+    fetch("changelog.json")
+      .then((res) => res.json())
+      .then((entries) => {
+        changelogCache = entries;
+        // The modal may have been closed again before this resolves.
+        if (!els.changelogModal.hidden) renderChangelog(entries);
+      })
+      .catch(() => {
+        if (els.changelogModalBody) els.changelogModalBody.textContent = "無法載入版本紀錄。";
+      });
+  }
+
+  function closeChangelogModal() {
+    if (els.changelogModal) els.changelogModal.hidden = true;
+  }
+
   // Fetches every currently-selected demo photo's bytes and hands them all
   // to the same routeSelectedFiles path a real file-picker selection goes
   // through, so it gets the exact same single-vs-batch handling, HEIC
@@ -6981,6 +7032,13 @@
       if (e.target.dataset.close) closePromptsModal();
     });
   }
+  if (els.changelogBtn) els.changelogBtn.addEventListener("click", openChangelogModal);
+  if (els.changelogModalClose) els.changelogModalClose.addEventListener("click", closeChangelogModal);
+  if (els.changelogModal) {
+    els.changelogModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeChangelogModal();
+    });
+  }
   els.resetButton.addEventListener("click", resetApp);
   if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", resetApp);
   if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
@@ -7139,6 +7197,7 @@
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
+    if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
     if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();

@@ -1232,6 +1232,35 @@
        (history-drawer), just without its status badge/remove button since a
        demo photo has neither. */
     .demo-images-modal-box { width: min(560px, calc(100vw - 40px)); }
+    /* #changelog-modal -- a plain scrollable list of dated entries (see
+       renderChangelog, app.js), nowhere near as wide as #prompts-modal's
+       tab+content layout needs. max-height instead of a fixed one (unlike
+       .prompts-modal-box) since entry count/length varies and there's no
+       second pane fighting it for a stable height. */
+    .changelog-modal-box { width: min(480px, calc(100vw - 40px)); }
+    .changelog-modal-body {
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
+    }
+    .changelog-entry + .changelog-entry {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .changelog-entry-date {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+    .changelog-entry-list {
+      margin: 0;
+      padding-left: 1.2em;
+      font-size: 14.5px;
+      line-height: 1.7;
+      color: var(--text-2);
+    }
+    .changelog-entry-list li + li { margin-top: 4px; }
     /* #prompts-modal (see index.html comment above it) -- a left-hand tab
        strip (one tab per pipeline stage) plus a single content pane that
        only ever shows whichever one tab is currently selected. */
@@ -2456,6 +2485,19 @@
   <section id="upload-section" class="section visible">
     <div class="container upload-container">
       <div class="upload-hero">
+        <!-- Opens #changelog-modal (see openChangelogModal, app.js), which
+             fetches changelog.json lazily on first open and caches it the
+             same way openDemoImagesModal does for demo photos. Absolutely
+             positioned against .upload-hero itself (position:relative,
+             styles.css) so it sits in this section's own top-right corner
+             regardless of how tall the headline/sub-copy render. -->
+        <button id="changelog-btn" class="btn btn-secondary btn-sm" type="button">
+          <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M6 4h9l3 3v13a1 1 0 01-1 1H6a1 1 0 01-1-1V5a1 1 0 011-1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M9 10h6M9 14h6M9 18h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="btn-label">版本紀錄</span>
+        </button>
         <h1 class="upload-headline">讓每張照片<br>都有專屬修圖師</h1>
         <div class="upload-sub-row">
           <p class="upload-sub">上傳照片，AI調整光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
@@ -3733,6 +3775,24 @@
       <div id="prompts-modal-tabs" class="prompts-modal-tabs" role="tablist"></div>
       <pre id="prompts-modal-content" class="prompts-modal-content"></pre>
     </div>
+  </div>
+</div>
+
+<!-- Opened by #changelog-btn (.upload-hero, upload page) -- see
+     openChangelogModal/closeChangelogModal in app.js. Content isn't baked
+     into this markup: it's fetched once from changelog.json (a static file
+     shipped alongside index.html, not a backend endpoint) and cached the
+     same way openDemoImagesModal caches ./demo_images' listing, so editing
+     the changelog is just editing that JSON file, no code change needed.
+     Same shared backdrop+box modal shape as #prompts-modal above. -->
+<div id="changelog-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box changelog-modal-box" role="dialog" aria-modal="true" aria-labelledby="changelog-modal-title">
+    <div class="error-modal-hdr">
+      <span id="changelog-modal-title" class="notice-modal-title">版本紀錄</span>
+      <button id="changelog-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div id="changelog-modal-body" class="changelog-modal-body"></div>
   </div>
 </div>
 
