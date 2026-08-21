@@ -4076,10 +4076,11 @@
   // (no account yet) and hides once one exists.
   function applyAccountUi() {
     const user = getCurrentUser();
+    // #header-actions-drawer's own title -- account name while logged in,
+    // 訪客 otherwise, so the drawer identifies who you are without having
+    // to read #account-badge's now-static "處理紀錄" label for it.
+    if (els.headerActionsDrawerTitle) els.headerActionsDrawerTitle.textContent = user || "訪客";
     if (els.accountBadge) {
-      // .textContent (not on accountBadge itself) so the clock icon markup
-      // beside #account-badge-label survives every call to this.
-      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user || "";
       els.accountBadge.hidden = !user;
       els.accountBadge.title = user ? "查看處理紀錄" : "";
       els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");

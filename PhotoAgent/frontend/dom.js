@@ -6,7 +6,6 @@ window.PhotoAgentDom = (() => {
       results: document.querySelector("#results-section")
     },
     accountBadge: document.querySelector("#account-badge"),
-    accountBadgeLabel: document.querySelector("#account-badge-label"),
     registerAccountBtn: document.querySelector("#register-account-btn"),
     accountModal: document.querySelector("#account-modal"),
     accountModalInput: document.querySelector("#account-modal-input"),
@@ -19,6 +18,7 @@ window.PhotoAgentDom = (() => {
     headerActionsDrawer: document.querySelector("#header-actions-drawer"),
     headerActionsDrawerBackdrop: document.querySelector("#header-actions-drawer-backdrop"),
     headerActionsDrawerCloseBtn: document.querySelector("#header-actions-drawer-close-btn"),
+    headerActionsDrawerTitle: document.querySelector("#header-actions-drawer-title"),
     // Drawer, not a section.toggle screen -- see openHistoryDrawer/
     // closeHistoryDrawer (app.js).
     historyDrawer: document.querySelector("#history-drawer"),

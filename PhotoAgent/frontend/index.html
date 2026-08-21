@@ -1898,6 +1898,15 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    /* Divider under #header-actions-drawer-title -- .history-header itself
+       has no such line by default (#history-drawer/#reports-drawer don't
+       use one), so this is scoped to just this drawer rather than added to
+       the shared class. Same hairline treatment as the shared
+       .error-modal-hdr divider elsewhere in this file. */
+    #header-actions-drawer .history-header {
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
     /* #header-actions-drawer's body -- stacks its buttons as full-width,
        left-aligned rows instead of the compact centered pills they were as
        direct children of .header-actions. Plenty of width to work with here
@@ -3500,7 +3509,11 @@
   </button>
   <div class="history-header">
     <div class="history-header-top">
-      <h2>選單</h2>
+      <!-- Account name (or 訪客 while logged out) instead of a generic
+           "選單" label -- set in applyAccountUi (app.js), same place that
+           already tracks login state for #register-account-btn/
+           #account-badge below. -->
+      <h2 id="header-actions-drawer-title">訪客</h2>
     </div>
   </div>
   <div class="header-actions-drawer-list">
@@ -3533,18 +3546,20 @@
       <span class="btn-label">上傳照片</span>
     </button>
     <!-- Doubles as the entry point into the history drawer (see
-         applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
-         button exists; the clock icon (same one that button used to use)
-         signals "this opens your processing history" alongside the
-         username text, set separately into #account-badge-label so
-         applyAccountUi's textContent write doesn't clobber this icon. -->
+         openHistoryPage, app.js) -- no separate history-nav button exists;
+         the clock icon signals "this opens your processing history"
+         alongside the static "處理紀錄" label (#account-badge-label). -->
     <button id="account-badge" class="account-badge" type="button" hidden>
       <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
         <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       </svg>
-      <span id="account-badge-label"></span>
+      <!-- Static now -- the drawer's own title (#header-actions-drawer-title,
+           applyAccountUi in app.js) already shows the account name, so this
+           button just needs to say what clicking it does instead of
+           repeating who's logged in. -->
+      <span id="account-badge-label">處理紀錄</span>
     </button>
     <!-- Admin-only entry into #reports-drawer -- shown only once
          checkAdminAccess (app.js) confirms the current account is an admin
