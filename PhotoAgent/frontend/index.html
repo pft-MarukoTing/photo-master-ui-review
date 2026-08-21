@@ -3938,16 +3938,20 @@
           <span class="ios-track"><span class="ios-thumb"></span></span>
         </label>
       </label>
-      <label class="option-row">
-        <div class="option-text">
-          <span class="option-label">頭髮自然放下</span>
-          <span class="option-desc">把被風吹起的頭髮放下，呈現沒有風的樣子。</span>
+      <fieldset id="hair-tidiness-level" class="option-segment-group">
+        <legend class="option-pill-label">整理程度</legend>
+        <div class="option-segments">
+          <label class="option-segment">
+            <input id="hair-level-dynamic" type="radio" name="hair-tidiness-level" value="dynamic" checked>
+            <span>保留髮絲動態</span>
+          </label>
+          <label class="option-segment">
+            <input id="calm-hair-toggle" type="radio" name="hair-tidiness-level" value="tidy">
+            <span>梳整俐落</span>
+          </label>
         </div>
-        <label class="ios-switch">
-          <input id="calm-hair-toggle" type="checkbox">
-          <span class="ios-track"><span class="ios-thumb"></span></span>
-        </label>
-      </label>
+        <span id="hair-tidiness-desc" class="option-desc">保留髮絲被風吹動或人物移動時的自然飄動感。</span>
+      </fieldset>
     </div>
   </div>
 </div>

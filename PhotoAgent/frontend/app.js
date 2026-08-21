@@ -886,7 +886,7 @@
       applyRunCountChange(els.runCountSelect.value));
   }
 
-  // Advanced Settings (人像設定) toggles live in ONE shared modal
+  // Advanced Settings (人像設定) live in ONE shared modal
   // (#advanced-settings-modal), opened from either the upload page's
   // #settings-modal or the results page's #ap-settings-modal -- reading them
   // here (instead of inlining the same object literal at every call site)
@@ -898,8 +898,28 @@
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
       gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
-      calm_hair: els.calmHairToggle ? els.calmHairToggle.checked : false,
+      calm_hair: !!(els.hairMessDetectionToggle?.checked && els.calmHairToggle?.checked),
     };
+  }
+
+  // 整理程度 only means anything while 亂髮偵測 is on, so it collapses with
+  // that switch instead of silently accepting a level nothing will apply.
+  function syncHairTidinessLevelLock() {
+    if (!els.hairTidinessLevel) return;
+    const enabled = !els.hairMessDetectionToggle || els.hairMessDetectionToggle.checked;
+    els.hairTidinessLevel.classList.toggle("is-collapsed", !enabled);
+  }
+
+  const HAIR_TIDINESS_DESCRIPTIONS = {
+    dynamic: "保留髮絲被風吹動或人物移動時的自然飄動感。",
+    tidy: "將被風吹動的頭髮完整梳整、自然放下。",
+  };
+
+  function syncAdvancedOptionDescriptions() {
+    const hairLevel = els.calmHairToggle?.checked ? "tidy" : "dynamic";
+    if (els.hairTidinessDesc) {
+      els.hairTidinessDesc.textContent = HAIR_TIDINESS_DESCRIPTIONS[hairLevel];
+    }
   }
 
   // Mirrors prompts.py's _GAZE_LEAK_KEYWORDS/_BLINK_LEAK_KEYWORDS/
@@ -971,6 +991,9 @@
     if (els.eyeGazeFocusToggle) els.eyeGazeFocusToggle.checked = !!advancedOptions.gaze_contact_detection;
     if (els.hairMessDetectionToggle) els.hairMessDetectionToggle.checked = !!advancedOptions.hair_mess_detection;
     if (els.calmHairToggle) els.calmHairToggle.checked = !!advancedOptions.calm_hair;
+    if (els.hairLevelDynamic) els.hairLevelDynamic.checked = !advancedOptions.calm_hair;
+    syncHairTidinessLevelLock();
+    syncAdvancedOptionDescriptions();
   }
 
   // Lets a revise on the results page change these toggles and have it
@@ -981,6 +1004,8 @@
   // applyModelQualityChange in that window (singleFlowState/batchSettings
   // are both still null).
   function applyAdvancedOptionsChange() {
+    syncHairTidinessLevelLock();
+    syncAdvancedOptionDescriptions();
     const advancedOptions = readAdvancedOptionsFromDom();
     if (singleFlowState) singleFlowState.advancedOptions = advancedOptions;
     const batchRecord = currentDetailBatchRecord();
@@ -1012,9 +1037,12 @@
     refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom()));
   }
 
-  [els.eyeClosedDetectionToggle, els.eyeGazeFocusToggle, els.hairMessDetectionToggle, els.calmHairToggle].forEach((toggle) => {
-    if (toggle) toggle.addEventListener("change", applyAdvancedOptionsChange);
+  [els.eyeClosedDetectionToggle, els.eyeGazeFocusToggle, els.hairMessDetectionToggle,
+   els.hairLevelDynamic, els.calmHairToggle].forEach((control) => {
+    if (control) control.addEventListener("change", applyAdvancedOptionsChange);
   });
+  syncHairTidinessLevelLock();
+  syncAdvancedOptionDescriptions();
 
   // Backend step timings are seconds (float) or null (step skipped);
   // addTiming/appendTimingRow expect ms or a non-number sentinel.
