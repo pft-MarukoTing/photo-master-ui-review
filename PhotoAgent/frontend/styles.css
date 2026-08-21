@@ -165,15 +165,35 @@ a { text-decoration: none; color: inherit; }
   color: transparent;
 }
 
-/* Reset/reload-batch buttons: shown across every screen (not just results),
-   since .header-inner itself is global -- .header-inner's own
-   justify-content:space-between is what actually pins this to the right,
+/* Holds just #header-menu-btn now (index.html) -- shown across every screen
+   (not just results), since .header-inner itself is global -- .header-inner's
+   own justify-content:space-between is what actually pins this to the right,
    right at .logo's own vertical center. */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 12px;
 }
+/* Circular icon button, same look/size as #history-drawer-close-btn
+   (index.html) -- opens #header-actions-drawer (openHeaderActionsDrawer,
+   app.js), which now holds every button that used to sit directly in
+   .header-actions (登入/重新分析/上傳照片/回報清單/帳號/設定). */
+.header-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--card-2);
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+.header-menu-btn:hover { background: var(--card); border-color: var(--border); color: var(--text); }
+.header-menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .mvp-badge {
   display: inline-flex;
@@ -1842,27 +1862,12 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .container { padding: 0 18px; }
   .header-inner { padding: 0 18px; }
 
-  /* Icon-only on narrow phones -- even a shrunk .logo (see above) plus two
-     full-label buttons (重新分析/上傳照片, both can show at once in batch
-     mode) don't reliably fit side by side down at 320-390px widths.
-     #report-btn (index.html) is a body-level sibling of <header> now, not
-     a descendant of .header-actions -- this selector alone can't reach it,
-     so it's added explicitly. Its label is always hidden regardless of
-     width (styles.css, own rule further down), so this is really just a
-     defensive belt-and-braces entry in case that ever changes. */
-  .header-actions .btn-label,
+  /* #report-btn (index.html) is a body-level sibling of <header>, not a
+     descendant of .header-actions -- kept icon-only down here regardless of
+     what .header-actions itself now holds (just #header-menu-btn, which
+     never needed a squeeze rule of its own -- it's always been a single
+     fixed-size icon button, in or out of this breakpoint). */
   #report-btn .btn-label { display: none; }
-  .header-actions .btn { padding: 0 12px; gap: 0; }
-  /* Up to four icon-only pills can share this row at once now (#reset-btn,
-     #admin-reports-btn, #account-badge, #header-settings-btn) -- the row's
-     own 12px gap (fine for the 1-2 buttons this was originally sized for)
-     adds up fast across four, pushing the row wide enough to crowd .logo or
-     spill past the viewport edge on a 320-360px phone. Tighter gap here, on
-     top of #reset-btn/#admin-reports-btn/#header-settings-btn/
-     .account-badge's own further-reduced padding (index.html, same
-     breakpoint), keeps all four fitting comfortably beside even .logo's
-     un-shrunk clamp() floor. */
-  .header-actions { gap: 6px; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
      height (see the base rule above), so that padding was eating straight
