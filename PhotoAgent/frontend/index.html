@@ -1369,8 +1369,15 @@
     /* position:absolute + inset:0, not width/height:100% in normal flow --
        same pattern .history-cube .rc-media already relies on, and required
        here anyway since the tile's own "content box" is deliberately
-       height:0 above. */
-    .demo-image-tile img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+       height:0 above. .demo-image-tile-bg is the same photo again, blurred
+       and scaled up behind it, so a non-square photo's letterbox bars fill
+       with a soft glow of the image itself instead of flat --card-2. */
+    .demo-image-tile-bg {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; filter: blur(18px) brightness(.65);
+      transform: scale(1.15); display: block;
+    }
+    .demo-image-tile img:not(.demo-image-tile-bg) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
     .demo-image-tile:hover { border-color: var(--accent); transform: translateY(-2px); }
     /* Multi-select state (toggleDemoImageSelection, app.js) -- accent border
        + a translucent tint over the photo itself, same accent-colored

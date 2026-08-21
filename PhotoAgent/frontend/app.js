@@ -5429,8 +5429,18 @@
       // through the same Pillow/pillow-heif decode ensure_jpeg_bytes uses
       // elsewhere) -- unlike a plain <img> pointed straight at the original
       // file, this renders fine even for the HEIC demo photos.
+      const thumbUrl = demoImageThumbnailUrl(name);
+      // Blurred backdrop copy of the same photo (see .demo-image-tile-bg,
+      // styles inline in index.html) so a non-square photo's letterbox bars
+      // fill with the image itself instead of flat empty space.
+      const bg = document.createElement("img");
+      bg.className = "demo-image-tile-bg";
+      bg.src = thumbUrl;
+      bg.alt = "";
+      bg.loading = "lazy";
+      tile.appendChild(bg);
       const img = document.createElement("img");
-      img.src = demoImageThumbnailUrl(name);
+      img.src = thumbUrl;
       img.alt = name;
       img.loading = "lazy";
       tile.appendChild(img);
