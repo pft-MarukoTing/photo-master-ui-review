@@ -422,6 +422,7 @@
     if (processingPathRow) processingPathRow.style.display = isDebug ? "" : "none";
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
+    if (els.promptOverwriteRow) els.promptOverwriteRow.style.display = isDebug ? "" : "none";
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
     // the recipe-tags ratio pill reports recommended_aspect_ratio -- both are

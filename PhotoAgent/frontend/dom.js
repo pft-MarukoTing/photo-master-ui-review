@@ -118,6 +118,7 @@ window.PhotoAgentDom = (() => {
     errorMsg: document.querySelector("#error-msg"),
     promptInput: document.querySelector("#prompt"),
     promptOverwriteToggle: document.querySelector("#prompt-overwrite"),
+    promptOverwriteRow: document.querySelector("#prompt-overwrite-row"),
     processingPathSelect: document.querySelector("#processing-path"),
     aiEditToggle: document.querySelector("#ai-edit-toggle"),
     runQaRow: document.querySelector("#run-qa-row"),
