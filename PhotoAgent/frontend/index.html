@@ -1471,52 +1471,69 @@
       font-size: 13px;
       border-radius: 999px;
     }
-    /* #report-btn uses .btn-grad (see its markup) instead of the neutral
-       .btn-secondary its header siblings use, so it stands out as worth a
-       second look -- compact-pill sizing override, same reasons as
-       #reset-btn above. */
-    #report-btn.btn {
+    /* #report-btn skips both .btn-grad (too loud a treatment for a
+       secondary utility action, not the primary CTA it was designed for)
+       and plain .btn-secondary (would blend in with every other neutral
+       header button) -- a tinted outline instead, worth a second look
+       without shouting. Compact-pill sizing override, same reasons as
+       #reset-btn above. #report-btn-spacer (index.html) shares this rule so
+       it always renders at exactly the same size as the real button it's
+       standing in for. */
+    #report-btn.btn,
+    #report-btn-spacer.btn {
       height: 32px;
       padding: 0 14px;
       gap: 6px;
       font-size: 13px;
       border-radius: 999px;
+      background: var(--card-2);
+      color: var(--accent);
+      border: 1px solid rgba(168,85,247,.4);
     }
+    #report-btn:hover {
+      background: rgba(168,85,247,.12);
+      border-color: rgba(168,85,247,.6);
+    }
+    /* Invisible but still fully laid out (visibility:hidden, not
+       display:none/hidden) -- #report-btn-spacer's only job is to occupy
+       its flex slot in .header-actions exactly as if the real button were
+       still there, so #header-menu-btn lines up the same way regardless of
+       #report-btn itself being a fixed-position element elsewhere.
+       syncReportBtnPosition (app.js) reads its live position on load and on
+       resize. */
+    #report-btn-spacer { visibility: hidden; pointer-events: none; }
     /* Pinned to the viewport at a z-index above every modal/drawer in this
        file (highest otherwise is 1002, #confirm-modal/#report-screenshot-
-       modal) -- it must stay reachable (and draggable) even while something
-       else is open. Its markup lives as a sibling of <header>, not a
-       descendant (see index.html) -- .site-header has its own
-       backdrop-filter, and per spec that makes it the CONTAINING BLOCK for
-       any position:fixed descendant instead of the viewport, which traps
-       that descendant inside .site-header's own stacking context
-       (z-index:100) regardless of its own z-index here. Escaping <header>
-       entirely is what makes z-index:2000 actually win against a modal
-       appended as a true body-level sibling (e.g. a dynamically-launched
-       one like #demo-images-modal), and also means #history-drawer/
-       #reports-drawer opening (both start below the header) never reaches
-       it either.
+       modal). Its markup lives as a sibling of <header>, not a descendant
+       (see index.html) -- .site-header has its own backdrop-filter, and
+       per spec that makes it the CONTAINING BLOCK for any position:fixed
+       descendant instead of the viewport, which traps that descendant
+       inside .site-header's own stacking context (z-index:100) regardless
+       of its own z-index here. Escaping <header> entirely is what makes
+       z-index:2000 actually win against a modal appended as a true
+       body-level sibling (e.g. a dynamically-launched one like
+       #demo-images-modal), and also means #history-drawer/#reports-drawer
+       opening (both start below the header) never reaches it either.
 
-       top/right give it a sensible default position (top-right corner,
-       just below .site-header) purely in CSS, no JS needed for that case --
-       calc(var(--header-h) + 16px) rather than a bare offset so it tracks
-       --header-h's own breakpoint changes (styles.css) automatically,
-       same as every other "just below the header" fixed element in this
-       file. initReportBtnDrag (app.js) overrides this with inline top/left
-       instead, the moment the user starts dragging -- see its own comment
-       for why the two positioning modes don't fight each other and why
-       that override doesn't survive a reload. touch-action:none stops the
-       browser's own scroll/pinch gestures from hijacking a touch-drag
-       before pointer events get a chance to. */
+       top/left aren't set here -- being outside .header-actions' own flex
+       flow now (fixed elements never participate in layout, wherever they
+       sit in the DOM), this button has no natural position of its own
+       anymore. syncReportBtnPosition (app.js) copies #report-btn-spacer's
+       live getBoundingClientRect() onto these as inline styles instead, so
+       it always renders exactly where that reserved slot is.
+
+       visibility starts hidden for the same reason -- with no top/left set
+       yet, a position:fixed element with no offsets renders at its own
+       static-flow position (here, flush against the left edge, right after
+       <header> in the DOM) until JS runs, so it would otherwise flash
+       there first and visibly jump to the right corner once
+       syncReportBtnPosition's first call lands. That same function flips
+       this back to visible once it's actually positioned correctly. */
     #report-btn {
       position: fixed;
       z-index: 2000;
-      top: calc(var(--header-h) + 16px);
-      right: 24px;
-      cursor: grab;
-      touch-action: none;
+      visibility: hidden;
     }
-    #report-btn:active { cursor: grabbing; }
     /* #header-settings-btn sits in the same row (right after #account-badge,
        the row's last child) -- same compact-pill override as #reset-btn
        above, same reasons. */
@@ -2341,14 +2358,31 @@
   <div class="header-inner">
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
-      <!-- Sole visible header-actions member now -- opens #header-actions-drawer
-           (see openHeaderActionsDrawer/closeHeaderActionsDrawer, app.js),
-           which holds the six buttons that used to sit directly in this row
-           (登入/重新分析/上傳照片/回報清單/帳號/設定). Collapsing them behind
-           one icon keeps this row a constant width regardless of how many of
-           those six are currently shown/hidden, instead of the row visibly
-           growing/shrinking (and needing ever-tighter breakpoint squeezes,
-           see styles.css) as account/admin/batch state changes. -->
+      <!-- Invisible, non-interactive stand-in for #report-btn (a real
+           position:fixed element living outside <header>, see its own
+           markup comment further down) -- reserves this exact flex slot so
+           #header-menu-btn lays out as if the button were still here, while
+           syncReportBtnPosition (app.js) copies this element's live
+           position onto the real button. Same #report-btn.btn sizing rule
+           also applies to this id (index.html <style>) so it always
+           matches the real button's dimensions exactly, at every
+           breakpoint. -->
+      <span id="report-btn-spacer" class="btn btn-sm" aria-hidden="true">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M12 15.01h.01" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <span class="btn-label">回報</span>
+      </span>
+      <!-- Opens #header-actions-drawer (see openHeaderActionsDrawer/
+           closeHeaderActionsDrawer, app.js), which holds the six buttons
+           that used to sit directly in this row (登入/重新分析/上傳照片/
+           回報清單/帳號/設定). Collapsing them behind one icon keeps this
+           row's width from swinging around (and needing ever-tighter
+           breakpoint squeezes, see styles.css) as account/admin/batch state
+           changes -- #report-btn above is the one exception, since it's
+           always visible/enabled regardless of that state anyway. -->
       <button id="header-menu-btn" class="header-menu-btn" type="button" aria-label="選單" title="選單">
         <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
           <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
@@ -2363,17 +2397,8 @@
      "something's wrong" report instead (openReportModal, app.js;
      backend/services/report.py). Always visible/enabled, unlike
      #reset-btn/#account-badge which hide until there's a result/account --
-     its own style never changes based on report state either (no
-     "already reported" tint), even right after a submission.
-
-     A free-floating, user-draggable button (initReportBtnDrag, app.js) --
-     defaults to the top-right corner just below the header (CSS top/right
-     below) and stays wherever the user drags it for the rest of this page
-     view, so it's not permanently blocking whatever's underneath it. Not
-     persisted anywhere -- a reload always resets it back to that default.
-     Dragging is clamped to stay below .site-header at all times (see
-     clampReportBtnPosition, app.js) -- it must never cover the header's
-     own controls.
+     its own style never changes based on report state either (no "already
+     reported" tint), even right after a submission.
 
      Deliberately placed OUTSIDE <header> (a sibling, not a descendant) --
      it's position:fixed with a z-index above every modal/drawer, but
@@ -2385,10 +2410,27 @@
      context (z-index:100) same as everything else in the header -- a
      dynamically-launched modal (e.g. #demo-images-modal, appended as a true
      body-level sibling) would still paint over it regardless of this
-     button's own z-index. Living outside <header> also means it needs no
-     equivalent of #header-settings-btn's flex layout -- it was never meant
-     to look like a header child in the first place. -->
-<button id="report-btn" class="btn btn-grad btn-sm" type="button" title="回報此結果" aria-label="回報此結果">
+     button's own z-index. It must always stay reachable even then (that's
+     the whole point of a report button), so it can't just live inside
+     .header-actions like #header-menu-btn does -- no z-index chosen there
+     could ever beat a modal escaping <header>'s own capped stacking
+     context.
+
+     Living outside <header> is what makes it actually fixed to the
+     viewport, but that also takes it out of .header-actions' flex flow
+     entirely (fixed elements never participate in layout, wherever they
+     sit in the DOM), so it can no longer just fall into place next to
+     #header-menu-btn the way a normal flex child would. #report-btn-spacer
+     (a same-sized, invisible stand-in actually left inside .header-actions,
+     right where this button used to sit) reserves that slot instead --
+     syncReportBtnPosition (app.js) reads its live position
+     (getBoundingClientRect) and copies it onto this button's own inline
+     top/left, so it renders exactly where the spacer would have, but as a
+     real fixed element that still wins against every modal and isn't
+     covered by #history-drawer/#reports-drawer opening either (both start
+     below the header, so they never reach up into .header-actions' own row
+     in the first place). -->
+<button id="report-btn" class="btn btn-sm" type="button" title="回報此結果" aria-label="回報此結果">
   <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
     <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M12 7.5v4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>

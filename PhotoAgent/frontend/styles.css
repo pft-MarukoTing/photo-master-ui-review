@@ -1862,11 +1862,15 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .container { padding: 0 18px; }
   .header-inner { padding: 0 18px; }
 
-  /* #report-btn (index.html) is a body-level sibling of <header>, not a
-     descendant of .header-actions -- kept icon-only down here regardless of
-     what .header-actions itself now holds (just #header-menu-btn, which
-     never needed a squeeze rule of its own -- it's always been a single
-     fixed-size icon button, in or out of this breakpoint). */
+  /* Icon-only on narrow phones -- #report-btn (index.html) is a body-level
+     sibling of <header> now, not a descendant of .header-actions -- this
+     selector alone can't reach it, so it's added explicitly, or its label
+     would stay full-width forever while #report-btn-spacer (still a real
+     .header-actions child) shrinks to match it, leaving #report-btn wider
+     than the slot it's supposed to sit in. #header-menu-btn never needed a
+     squeeze rule of its own -- it's always been a single fixed-size icon
+     button regardless of width. */
+  .header-actions .btn-label,
   #report-btn .btn-label { display: none; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
