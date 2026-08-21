@@ -359,6 +359,12 @@ Emotional closed-eye guardrail:
 - Do not open eyes when opening them would erase the emotional meaning of the photo.
 - Counterfactual test: If opening the eyes would make the expression less truthful, less funny, less cute, less emotional, or less like the captured moment, then should_fix=false.
 
+Smile-squint vs. full-closure guardrail:
+- A genuine smile-driven squint narrows the eyes; it does not require them to be fully sealed shut. Before classifying closed eyes during a smile as natural_smiling_squint or intentional_closed, check whether the eyelids are only narrowed (a visible eyelash line, a slight eye-corner crease, still some sliver of the eye showing) versus fully and completely shut with no eye visible at all.
+- Full, complete eyelid closure during an otherwise ordinary smile or casual pose is not, by itself, evidence of natural_smiling_squint or intentional_closed -- a blink can happen at the exact camera-click moment independent of what the mouth is doing at that instant. Only classify fully-shut eyes as natural_smiling_squint/intentional_closed when there is supporting evidence beyond "the person is smiling": an active laugh (visible teeth, raised cheeks compressing the eyes shut), a deliberate pose context (prayer, savoring food, resting, a repeated stylistic expression across other photos of the same shoot), or an intentional_wink/performance context.
+- intentional_closed's own qualifying contexts are specific -- a held pose, prayer/rest, savoring food, a calm moment. An ordinary candid or posed smile in a casual or group photo does not by itself qualify; let it fall through to the Stage 2 accidental-capture test instead of defaulting to intentional_closed.
+- In a group photo, one person with fully shut eyes while everyone else's eyes are open and the shot otherwise looks photo-ready is strong evidence for accidental capture (see "Strong evidence for accidental capture" above) -- that person's own smile, on its own, does not override this signal.
+
 Sleeping guardrail:
 - Before concluding accidental_blink or accidental_half_blink, check whether the person is genuinely asleep rather than mid-blink while awake.
 - Evidence of genuine sleep: both eyelids are fully and evenly closed (not droopy, uneven, or half-open); the face and jaw are relaxed/slack rather than tensed for a shot; the head/body is in a resting posture -- tilted onto a pillow, shoulder, arm, car seat, stroller, or someone's lap, reclined, or lying down; the eyes are closed for the entire visible moment, not caught transitioning between open and closed. This applies to babies, children, and adults alike, and to candid or posed photos of someone napping.
@@ -406,6 +412,8 @@ Subject-size neutrality:
 
 Output rules:
 - For every visible person, inspect eye state independently.
+- Include an eye_blink_issues entry for every visible person whose eyes are legible enough to judge, not only the ones with something to explain -- an ordinary open-eyed person with nothing unusual still gets a should_fix=false entry, the same as a wink or laugh does.
+- Do not omit a visible person from eye_blink_issues just because their eyes look fine; the array should cover every legible face in the photo, not only the flagged or noteworthy ones.
 - In eye_blink_issues, include should_fix=false entries when they explain why a closed-eye case is intentionally left unchanged, especially for winks, laughter, crying/emotional expressions, child expressions, or ambiguous cases.
 - Add an eye-related correction_plan item only when should_fix=true.
 - If should_fix=true, add a correction_plan item that names the exact person by position/role and asks the edit model to naturally reopen or relax only that person's eyes while preserving identity, gaze direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.
