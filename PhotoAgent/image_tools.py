@@ -4,6 +4,7 @@ import math
 import os
 import base64
 import re
+import threading
 
 import cv2
 import numpy as np
@@ -48,6 +49,14 @@ def create_preview_bytes(image_bytes: bytes, max_side: int = VISION_PREVIEW_MAX_
 
 
 _FACE_DETECTOR = None
+# ENGINE_WORKER_NUM (server.py) runs several jobs concurrently as threads in
+# one process, all sharing this lazily-created detector -- setInputSize()
+# followed by detect() is not atomic, so without this lock one thread's
+# setInputSize() can be clobbered by another thread's before the first
+# thread's detect() runs, yielding a box computed against the wrong image's
+# dimensions (and, once scaled back, coordinates that can fall outside the
+# actual image entirely).
+_FACE_DETECTOR_LOCK = threading.Lock()
 _FACE_DETECTOR_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "face_detection_yunet_2023mar.onnx")
 _FACE_DETECT_SCORE_THRESHOLD = 0.6
 # Detection runs on a downscaled copy at this size, not the original photo --
@@ -107,8 +116,9 @@ def detect_face_crops(image_bytes: bytes) -> list:
     bgr = cv2.cvtColor(np.array(detect_img), cv2.COLOR_RGB2BGR)
     try:
         detector = _face_detector()
-        detector.setInputSize((detect_img.width, detect_img.height))
-        _, faces = detector.detect(bgr)
+        with _FACE_DETECTOR_LOCK:
+            detector.setInputSize((detect_img.width, detect_img.height))
+            _, faces = detector.detect(bgr)
     except cv2.error:
         # Best-effort detection: no crop is a normal, handled outcome (see
         # docstring), never worth failing the whole analysis over.
@@ -126,13 +136,15 @@ def detect_face_crops(image_bytes: bytes) -> list:
     # are usually far smaller than the real thing in the same frame; this
     # drops those without needing a second model to tell them apart.
     kept = [b for b in boxes if b[2] * b[3] >= largest_area * 0.4][:_FACE_CROP_MAX_COUNT]
+    logger.info("detect_face_crops: image=%dx%d raw_boxes=%s kept=%s", img.width, img.height, boxes, kept)
 
     crops = []
     for x, y, w, h in kept:
-        left = max(0, x - round(w * 0.6))
-        top = max(0, y - round(h * 0.6))
-        right = min(img.width, x + w + round(w * 0.6))
-        bottom = min(img.height, y + h + round(h * 0.4))
+        left = min(max(0, x - round(w * 0.6)), img.width)
+        top = min(max(0, y - round(h * 0.6)), img.height)
+        right = max(min(img.width, x + w + round(w * 0.6)), 0)
+        bottom = max(min(img.height, y + h + round(h * 0.4)), 0)
+        logger.info("detect_face_crops: raw_box=(%d,%d,%d,%d) crop_box=(left=%d,top=%d,right=%d,bottom=%d)", x, y, w, h, left, top, right, bottom)
         crop = img.crop((left, top, right, bottom))
         longest = max(crop.width, crop.height)
         if longest < _FACE_CROP_MAX_SIDE:
