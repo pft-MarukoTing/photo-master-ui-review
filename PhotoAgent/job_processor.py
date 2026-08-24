@@ -192,6 +192,7 @@ class PhotoAgentJobProcessor:
                 image_bytes,
                 aspect_ratio=params.get("aspect_ratio", "auto"),
                 advanced_options=params.get("advanced_options", {}),
+                analysis_model=params["analysis_model"],
             )
             set_job_info(job_id=task_id, results={"stage": "edit", "run_count": run_count, "runs_done": 0})
 
