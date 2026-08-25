@@ -485,6 +485,8 @@ class AdvancedSettingsToggle(unittest.TestCase):
                 "gaze_contact_detection": True,
                 "hair_mess_detection": False,
                 "calm_hair": False,
+                "smile_adjustment": True,
+                "smile_level": "auto",
             },
         )
 

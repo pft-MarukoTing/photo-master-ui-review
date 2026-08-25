@@ -24,14 +24,14 @@ VALID_ASPECT_RATIOS = (
 )
 MAX_RUN_COUNT = 20
 
-# Advanced Settings toggles (Eyes category on the upload page, and whatever
-# joins it later) -- bundled into one "advanced_options" dict/field instead of
-# each becoming its own named parameter, so a new toggle only needs a new
-# entry here plus a matching check in prompts.py, instead of threading a new
-# argument through every function between the frontend and build_analysis_
-# instruction. Unknown keys are dropped rather than rejected (see
-# normalize_advanced_options), the same tolerant-of-drift stance
-# aipoc_client.py already takes for cross-service param mismatches.
+# Advanced Settings (人像設定 on the upload page) -- bundled into one
+# "advanced_options" dict/field instead of each becoming its own named
+# parameter, so a new setting only needs a new entry here plus a matching
+# check in prompts.py, instead of threading a new argument through every
+# function between the frontend and build_analysis_instruction. Unknown keys
+# are dropped rather than rejected (see normalize_advanced_options), the same
+# tolerant-of-drift stance aipoc_client.py already takes for cross-service
+# param mismatches.
 ADVANCED_OPTION_DEFAULTS = {
     "eye_closed_detection": True,
     # "眼神對焦" on the upload page. Read by build_analysis_instruction (gates
@@ -44,12 +44,40 @@ ADVANCED_OPTION_DEFAULTS = {
     # proposes only when it finds a defect, while this one is a transformation
     # the user elects and is applied whether or not the wind reads as a flaw.
     "calm_hair": False,
+    # "笑容調整" on the upload page. On by default and paired with the
+    # smile_level choice below -- the toggle only says whether the level is
+    # applied at all. Read at edit time only (prompts.resolve_smile_targets);
+    # the analysis always reads every face's current smile so the level can
+    # still be changed on the results page without re-analyzing.
+    "smile_adjustment": True,
+}
+
+# Advanced options whose value is one of a fixed set of strings rather than a
+# bool. Kept in their own dict so ADVANCED_OPTION_DEFAULTS stays the "every
+# value is a bool" contract the toggles rely on.
+SMILE_LEVELS = ("auto", "neutral", "gentle", "broad", "laughing")
+SMILE_LEVEL_ALIASES = {
+    "no_smile": "neutral",
+    "closed_smile": "gentle",
+    "toothy_smile": "broad",
+    "bright_smile": "broad",
+}
+ADVANCED_OPTION_CHOICES = {
+    # "auto" = give a non-smiling face a natural closed-lip smile and leave an
+    # already-smiling one alone; the other levels are the level every readable
+    # face is taken to.
+    "smile_level": SMILE_LEVELS,
+}
+ADVANCED_OPTION_CHOICE_DEFAULTS = {
+    "smile_level": "auto",
 }
 
 
 def normalize_advanced_options(value) -> dict:
     """Coerce `value` (None / dict / JSON string) into a full advanced_options
-    dict -- every known key present with a bool value, unknown keys dropped."""
+    dict -- every known key present, holding a bool (ADVANCED_OPTION_DEFAULTS)
+    or one of its allowed strings (ADVANCED_OPTION_CHOICES), unknown keys
+    dropped."""
     if value is None or value == "":
         value = {}
     elif isinstance(value, str):
@@ -66,6 +94,7 @@ def normalize_advanced_options(value) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized = dict(ADVANCED_OPTION_DEFAULTS)
+    normalized.update(ADVANCED_OPTION_CHOICE_DEFAULTS)
     for key in ADVANCED_OPTION_DEFAULTS:
         if key in value:
             if not isinstance(value[key], bool):
@@ -74,6 +103,15 @@ def normalize_advanced_options(value) -> dict:
                     RESULT_INVALID_PARAMETER,
                 )
             normalized[key] = value[key]
+    for key, allowed in ADVANCED_OPTION_CHOICES.items():
+        if key in value:
+            choice = SMILE_LEVEL_ALIASES.get(value[key], value[key]) if key == "smile_level" else value[key]
+            if choice not in allowed:
+                raise RuntimeError(
+                    f"{EFFECT_NAME}: advanced_options.{key} must be one of {allowed}",
+                    RESULT_INVALID_PARAMETER,
+                )
+            normalized[key] = choice
     return normalized
 
 

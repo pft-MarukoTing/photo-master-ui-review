@@ -206,6 +206,15 @@ Return exactly this JSON shape:
       "reason": "依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_target_in_frame 是否成立（若成立，說明畫面中那個具體可指認的目標物是什麼）、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
     }
   ],
+  "smile_states": [
+    {
+      "subject_label": "對應 subjects 裡的人，例如 中間男性 / 左側女性。",
+      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
+      "smile_intensity": "neutral / gentle / broad / laughing / unclear",
+      "adjust_safe": true,
+      "reason": "簡短說明是否有明確可見的笑容證據、是否更可能是說話或其他表情動作，以及 adjust_safe 的依據。"
+    }
+  ],
   "roi_box": {
     "x": 0.25,
     "y": 0.20,
@@ -758,6 +767,20 @@ Mini-model calibration:
 - The default output for any readable, not-lens-locked gaze is should_fix=true, even when the required adjustment is large or the strategy ends up being a conservative partial one.
 - If the person is not looking at the lens, recommend the correction; use the anatomical feasibility score only to decide how boldly to describe the fix.
 
+Smile reading:
+Classify each visible face as neutral, gentle, broad, or laughing. A smile is never a defect, so do not add it to correction_plan, detected_issues, or retouch_recipe.
+Default to neutral. Only use gentle or above when a smile is clearly and unmistakably present.
+- neutral: no clear smile; includes speaking, posing, winking, pouting, parted lips, visible teeth, or pleasant/friendly expressions without definite smile structure.
+- gentle: clear but restrained smile.
+- broad: strong cheerful smile.
+- laughing: unmistakable laughter or intense joy.
+Judge smile presence before smile intensity.
+If the expression could reasonably be caused by speaking, pronunciation, posing, or another facial action, classify it as neutral.
+Visible teeth, mouth openness, slight mouth-corner elevation, narrowed eyes, or raised cheeks do not establish a smile by themselves.
+Require a coherent smile pattern, especially coordinated mouth-corner retraction/elevation that clearly reads as smiling rather than speaking or posing.
+Prefer precision over recall: when uncertain between neutral and gentle, choose neutral.
+Use unclear only when the expression cannot be seen reliably. Set adjust_safe=false only when editing could overwrite distinctive dental features or when the face is obscured, too small, or turned too far away to render a reliable expression. adjust_safe measures technical edit feasibility, not whether the captured emotion should be preserved. Speaking, laughter, strong emotion, or another visible facial action does not by itself make smile adjustment unsafe.
+
 Analysis responsibilities:
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
@@ -829,13 +852,15 @@ The user has asked for this person's hair to be laid down as if there were no wi
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
 
-    advanced_options: the Upload page's Advanced Settings toggles (e.g.
+    advanced_options: the Upload page's Advanced Settings (e.g.
     {"eye_closed_detection": False}). Only calm_hair is read here -- the
     detection/repair toggles (eye_closed_detection, hair_mess_detection,
     gaze_contact_detection) no longer affect analysis at all, so eye_blink_issues/
     hair_issues/gaze_contact_issues/correction_plan always reflect the model's
     genuine judgement; strip_disabled_topic_items (build_edit_prompt, prompts.py)
-    is what actually applies those three at edit time.
+    is what actually applies those three at edit time. smile_adjustment/
+    smile_level are edit-only for the same reason, applied by build_smile_block
+    against the smile_states the analysis always reads.
     """
     advanced_options = advanced_options or {}
     instruction = ANALYSIS_INSTRUCTION
@@ -914,7 +939,8 @@ def _schema_array_of(item_schema):
 
 
 # {"x","y","w","h"} normalized box, reused verbatim by subjects/
-# eye_blink_issues/hair_issues/gaze_contact_issues/gaze_target_in_frame.
+# eye_blink_issues/hair_issues/gaze_contact_issues/gaze_target_in_frame/
+# smile_states.
 _BOX_SCHEMA = _schema_object({
     "x": _schema_number(), "y": _schema_number(),
     "w": _schema_number(), "h": _schema_number(),
@@ -998,7 +1024,15 @@ _GAZE_CONTACT_ISSUE_SCHEMA = _schema_object({
     "reason": _schema_string(),
 })
 
-# Flat x/y/w/h (no nested "box"), unlike the four schemas above.
+_SMILE_STATE_SCHEMA = _schema_object({
+    "subject_label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "smile_intensity": _schema_string(),
+    "adjust_safe": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+# Flat x/y/w/h (no nested "box"), unlike the five schemas above.
 _PROTECTED_REGION_SCHEMA = _schema_object({
     "label": _schema_string(),
     "x": _schema_number(), "y": _schema_number(),
@@ -1090,6 +1124,7 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "eye_blink_issues": _schema_array_of(_EYE_BLINK_ISSUE_SCHEMA),
         "hair_issues": _schema_array_of(_HAIR_ISSUE_SCHEMA),
         "gaze_contact_issues": _schema_array_of(_GAZE_CONTACT_ISSUE_SCHEMA),
+        "smile_states": _schema_array_of(_SMILE_STATE_SCHEMA),
         "roi_box": _BOX_WITH_REASON_SCHEMA,
         "subject_extent_box": _BOX_WITH_REASON_SCHEMA,
         "protected_regions": _schema_array_of(_PROTECTED_REGION_SCHEMA),
@@ -1643,9 +1678,14 @@ _BLINK_LEAK_KEYWORDS = ("睜開", "張開眼", "半閉", "閉眼", "眼皮", "re
 # same "nothing legitimate to false-positive against" reasoning below applies
 # here too, so the broad match costs nothing extra.
 _HAIR_LEAK_KEYWORDS = ("髮", "hair")
+# 笑容調整 is the only thing in this prompt that touches a mouth's expression,
+# so with it off there is nothing legitimate for these to match against --
+# see strip_disabled_topic_items on why that is what makes a keyword test
+# safe enough here.
+_SMILE_LEAK_KEYWORDS = ("笑", "嘴角", "smile", "grin")
 
 
-def _is_disabled_topic_text(text, gaze_enabled, blink_enabled, hair_enabled):
+def _is_disabled_topic_text(text, gaze_enabled, blink_enabled, hair_enabled, smile_enabled=True):
     """True if `text` names a topic whose Advanced Settings toggle is off.
 
     Factored out of strip_disabled_topic_items so build_edit_prompt can apply
@@ -1662,13 +1702,15 @@ def _is_disabled_topic_text(text, gaze_enabled, blink_enabled, hair_enabled):
         return True
     if not hair_enabled and any(kw.lower() in lowered for kw in _HAIR_LEAK_KEYWORDS):
         return True
+    if not smile_enabled and any(kw.lower() in lowered for kw in _SMILE_LEAK_KEYWORDS):
+        return True
     return False
 
 
 def strip_disabled_topic_items(analysis):
     """Drops correction_plan items (and their correction_axes/correction_inverse/
     retouch_recipe counterparts at the same index) that describe gaze, blink,
-    or hair repair when the matching Advanced Settings toggle is off.
+    hair, or smile work when the matching Advanced Settings toggle is off.
 
     Exists because should_fix=false on the structured gaze_contact_issues/
     eye_blink_issues/hair_issues entries, and even an explicit "do not add
@@ -1691,7 +1733,8 @@ def strip_disabled_topic_items(analysis):
     gaze_enabled = advanced_options.get("gaze_contact_detection", True)
     blink_enabled = advanced_options.get("eye_closed_detection", True)
     hair_enabled = advanced_options.get("hair_mess_detection", True)
-    if gaze_enabled and blink_enabled and hair_enabled:
+    smile_enabled = advanced_options.get("smile_adjustment", True)
+    if gaze_enabled and blink_enabled and hair_enabled and smile_enabled:
         return analysis
 
     plan = list(analysis.get("correction_plan") or [])
@@ -1700,13 +1743,13 @@ def strip_disabled_topic_items(analysis):
 
     keep_indices = [
         i for i, item in enumerate(plan)
-        if not _is_disabled_topic_text(item, gaze_enabled, blink_enabled, hair_enabled)
+        if not _is_disabled_topic_text(item, gaze_enabled, blink_enabled, hair_enabled, smile_enabled)
     ]
     if len(keep_indices) == len(plan):
         return analysis
 
     logger.warning(
-        "correction_plan contained %d gaze/blink/hair item(s) despite the matching Advanced "
+        "correction_plan contained %d gaze/blink/hair/smile item(s) despite the matching Advanced "
         "Settings toggle being off; removing them",
         len(plan) - len(keep_indices),
     )
@@ -1850,6 +1893,268 @@ def _build_skin_identity_lines(analysis):
     return "\n".join(lines)
 
 
+# Trigger on is_person too, not just subject_category: a 生活紀錄 / 旅行 /
+# 街拍 photo still has faces, and both the skin rules and the smile block are
+# about faces rather than about what the photo is nominally of.
+def _has_person(analysis):
+    subjects = analysis.get("subjects") or []
+    return analysis.get("subject_category") == "人物" or any(
+        isinstance(s, dict) and s.get("is_person") for s in subjects
+    )
+
+
+# ── Smile adjustment (人像設定「笑容調整」) ─────────────────────────────────────
+#
+# The user picks the level; the analysis only records where each face's mouth
+# already sits (smile_states). Keeping those two apart is what lets the level
+# be changed on the results page without re-analyzing -- a target resolved at
+# analyze time would go stale the moment the user picked a different level,
+# and the readings themselves stay valid whatever the level becomes.
+SMILE_LEVEL_LABELS = {
+    "auto": "自動（不笑的人加上自然笑容，已經在笑的人維持原樣）",
+    "neutral": "不笑",
+    "gentle": "微笑",
+    "broad": "開朗笑",
+    "laughing": "大笑",
+}
+
+SMILE_TARGET_DESCRIPTIONS = {
+    "neutral": "a neutral or relaxed expression with no apparent smile",
+    "gentle": "a small, clearly readable natural smile achieved with minimal anatomically plausible change while preserving the person's original mouth shape, proportions, and natural asymmetry",
+    "broad": "a strong, cheerful, composed smile that clearly remains below laughter intensity",
+    "laughing": "an intense, joyful expression of laughter",
+}
+
+_SMILE_INTENSITIES = ("neutral", "gentle", "broad", "laughing")
+_SMILE_INTENSITY_RANK = {level: rank for rank, level in enumerate(_SMILE_INTENSITIES)}
+_SMILING_INTENSITIES = ("gentle", "broad", "laughing")
+_SMILE_INTENSITY_ALIASES = {
+    "none": "neutral", "no_smile": "neutral", "no smile": "neutral",
+    "not_smiling": "neutral", "unsmiling": "neutral", "resting": "neutral",
+    "serious": "neutral", "neutral_expression": "neutral",
+    "faint_smile": "gentle", "slight_smile": "gentle", "subtle_smile": "gentle",
+    "soft_smile": "gentle", "mild_smile": "gentle", "closed_smile": "gentle",
+    "closed_lip_smile": "gentle", "smiling": "gentle", "smile": "gentle",
+    "bright_smile": "broad", "toothy_smile": "broad", "open_smile": "broad",
+    "grin": "broad", "grinning": "broad", "wide_smile": "broad", "big_smile": "broad",
+    "laugh": "laughing", "laughter": "laughing", "laughing_smile": "laughing",
+}
+
+
+def _normalize_smile_intensity(value):
+    """One of the four intensity levels, or None when no usable reading exists."""
+    state = str(value or "").strip().lower().replace("-", "_")
+    if state in _SMILE_INTENSITIES:
+        return state
+    resolved = _SMILE_INTENSITY_ALIASES.get(state) or _SMILE_INTENSITY_ALIASES.get(state.replace("_", " "))
+    if resolved:
+        return resolved
+    if state and "unclear" not in state and "occluded" not in state and "uncertain" not in state:
+        logger.warning("smile_states carried an unrecognized smile_intensity %r; ignoring that face", value)
+    return None
+
+
+def _smile_target_state(level, current):
+    """The target intensity for one face, or None to leave it as captured."""
+    if level == "auto":
+        return "gentle" if current == "neutral" else None
+    return level if level in _SMILE_INTENSITIES and current != level else None
+
+
+def smile_level(analysis):
+    """The user's chosen level, or None when 笑容調整 is off for this edit."""
+    advanced_options = analysis.get("_advanced_options") or {}
+    if not advanced_options.get("smile_adjustment", True):
+        return None
+    level = advanced_options.get("smile_level") or "auto"
+    level = {
+        "no_smile": "neutral", "closed_smile": "gentle",
+        "toothy_smile": "broad", "bright_smile": "broad",
+    }.get(level, level)
+    return level if level in SMILE_LEVEL_LABELS else "auto"
+
+
+def resolve_smile_targets(analysis):
+    """Per-person {label, box, current, target} for the faces
+    the chosen level actually moves -- empty when the switch is off, when no
+    face was read, or when every face that was read already sits at that
+    level.
+
+    Auto leaves faces marked adjust_safe=false unchanged. An explicit level is
+    a user override and targets every readable face, including a face the
+    analyzer conservatively marked unsafe; unreadable/unclear faces never
+    enter this list because _read_smile_states filters them out.
+    """
+    level = smile_level(analysis)
+    if level is None:
+        return []
+    targets = []
+    for item in _read_smile_states(analysis):
+        if level == "auto" and item["adjust_safe"] is False:
+            continue
+        target = _smile_target_state(level, item["current"])
+        if not target:
+            continue
+        targets.append({**item, "target": target})
+    return targets
+
+
+def _smile_craft_rules(target_levels=()):
+    """Short execution rules, adding level-specific craft only when relevant."""
+    rules = [
+        "- Render each named target as a natural, coordinated expression.",
+        "- Preserve identity, facial anatomy and proportions, gaze direction, head pose, skin texture, lighting, "
+        "and all unrelated image content.",
+    ]
+    if "gentle" in target_levels:
+        rules.append(
+            "- For gentle, use the minimum anatomically plausible change for a small but clearly readable smile. "
+            "Preserve mouth anatomy, proportions, and natural asymmetry—not the captured neutral or transitional "
+            "expression. Allow enough movement to reach gentle; keep curvature smooth, corner movement modest, and "
+            "the surrounding expression coordinated. When the source is caught in speech or has incidentally parted "
+            "lips, resolve that transitional state into a stable smile rather than retaining the separation and merely "
+            "reshaping its edges. Settle the lips as appropriate for this face and let the surrounding expression "
+            "respond subtly, so the result reads as an intentional gentle smile rather than speech, surprise, or a "
+            "vacant pose. Modify the existing mouth, not a generic smile shape."
+        )
+    if "laughing" in target_levels:
+        rules.append(
+            "- For laughing, make joy coherent across the whole face. Relax brow tension only when it conflicts with "
+            "laughter; preserve brow anatomy, natural asymmetry, and compatible movement. Do not leave a worried, "
+            "stern, or angry brow."
+        )
+    rules.extend([
+        "- Keep facial texture continuous and expression folds soft and proportional to the person's anatomy and "
+        "target intensity; do not add or deepen lines to signal the smile.",
+    ])
+    rules.append(
+        "- Reach the exact target. This block overrides generic instructions to preserve the original expression or "
+        "mouth for named subjects; preserve everyone and everything else."
+    )
+    return "\n".join(rules)
+
+
+SMILE_PRESERVATION_BLOCK = """Smile preservation instruction (highest priority):
+- No smile change is approved for this image. Preserve every person's smile intensity and expression as captured.
+- Approved blink or gaze repair may still change only the eye properties authorized elsewhere in this prompt."""
+
+
+def _read_smile_states(analysis):
+    """Readable faces as {label, box, current, adjust_safe}.
+
+    Legacy smile_state values are accepted so previously analyzed photos can
+    use the new intensity controls without being analyzed again.
+    """
+    read = []
+    for item in analysis.get("smile_states") or []:
+        if not isinstance(item, dict):
+            continue
+        current = _normalize_smile_intensity(
+            item.get("smile_intensity") or item.get("smile_state")
+        )
+        if not current:
+            continue
+        read.append({
+            "label": (item.get("subject_label") or "").strip() or "畫面中的人",
+            "box": item.get("box") or {},
+            "current": current,
+            "adjust_safe": item.get("adjust_safe"),
+        })
+    return read
+
+
+def smile_qa_expectation(analysis):
+    """What this edit's smile setting was asked to produce, in one line, or ""
+    when it asked for no change -- the same three branches build_smile_block
+    emits, so QA is never sent looking for a change the edit prompt did not
+    request."""
+    if not _has_person(analysis):
+        return ""
+    level = smile_level(analysis)
+    if level is None:
+        return ""
+    targets = resolve_smile_targets(analysis)
+    if targets:
+        return "; ".join(f'{t["label"]}: {t["current"]} -> {t["target"]}' for t in targets)
+    if _read_smile_states(analysis):
+        return ""
+    if level == "auto":
+        return "every person at neutral -> gentle; anyone already smiling is unchanged"
+    return f"every person whose expression is readable -> {level}"
+
+
+def _smile_target_line(target):
+    """One person's current and target intensity for the edit model."""
+    where = json.dumps(target["box"], ensure_ascii=False)
+    current = target["current"]
+    target_level = target["target"]
+    if current == "neutral" and target_level == "gentle":
+        direction = (
+            "Make the minimum natural change that clearly reads as gentle rather than neutral at normal viewing "
+            "size; an ambiguous pleasant or neutral result is a failed no-op."
+        )
+    elif current == "laughing" and target_level == "broad":
+        direction = (
+            "Settle active laughter into a strong, composed cheerful smile. Reduce laughter-specific intensity "
+            "across the whole expression while preserving clear joy; the result must read as broad, not laughing."
+        )
+    elif _SMILE_INTENSITY_RANK[target_level] < _SMILE_INTENSITY_RANK[current]:
+        direction = (
+            f'Reduce the smile until it clearly reads as {target_level}, not {current}; do not preserve the higher '
+            f'intensity.'
+        )
+    else:
+        direction = (
+            f'Increase the smile until it clearly reads as {target_level}, not {current}.'
+        )
+    return (
+        f'- {target["label"]} (approximately at {where}): '
+        f'current_smile: {current}; target_smile: {target_level} '
+        f'({SMILE_TARGET_DESCRIPTIONS[target_level]}). Direction: {direction}'
+    )
+
+
+def build_smile_block(analysis):
+    """The 笑容調整 instruction for one edit, or "" for a photo with no people.
+
+    Three shapes: the named-person execution block when the chosen level moves
+    someone's mouth; the level stated for the photograph as a whole when the
+    analysis reported on no mouth at all, so a missing reading cannot silently
+    drop a setting the user chose; and the preservation block when the switch
+    is off or no face the analysis did read has anywhere left to move.
+    """
+    if not _has_person(analysis):
+        return ""
+    level = smile_level(analysis)
+    if level is None:
+        return SMILE_PRESERVATION_BLOCK
+
+    targets = resolve_smile_targets(analysis)
+    if targets:
+        lines = "\n".join(_smile_target_line(t) for t in targets)
+        return f"""Smile adjustment (user-selected, mandatory). Requested level: {SMILE_LEVEL_LABELS[level]}
+- Apply the requested smile intensity to each person named below.
+{lines}
+{_smile_craft_rules({t['target'] for t in targets})}"""
+
+    if _read_smile_states(analysis):
+        return SMILE_PRESERVATION_BLOCK
+
+    if level == "auto":
+        goal = (
+            f'- Infer each readable person\'s current overall smile intensity. Change neutral to gentle '
+            f'({SMILE_TARGET_DESCRIPTIONS["gentle"]}); preserve anyone already smiling.'
+        )
+    else:
+        goal = (
+            f'- For every person whose expression is readable: target_smile: {level} '
+            f'({SMILE_TARGET_DESCRIPTIONS[level]}).'
+        )
+    return f"""Smile adjustment (user-selected, mandatory). Requested level: {SMILE_LEVEL_LABELS[level]}
+{goal}
+{_smile_craft_rules({'gentle' if level == 'auto' else level})}"""
+
+
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None):
     analysis = strip_disabled_topic_items(analysis)
     rejected_axes = resolve_rejected_axes(analysis)
@@ -1857,8 +2162,8 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     color_grade_check = build_color_grade_check(rejected_axes)
 
     # Computed once, here, rather than separately next to each of the
-    # blink/hair/gaze blocks below: detected_issues (just below) needs all
-    # three just as much as those blocks do, since a toggle being off does
+    # blink/hair/gaze/smile blocks below: detected_issues (just below) needs
+    # them just as much as those blocks do, since a toggle being off does
     # not stop the analysis model from still describing that problem in its
     # free-text notes -- should_fix=false and the "don't add a correction_plan
     # item" instruction only ever governed the structured issue arrays.
@@ -1866,6 +2171,7 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     gaze_contact_detection_enabled = advanced_options.get("gaze_contact_detection", True)
     eye_closed_detection_enabled = advanced_options.get("eye_closed_detection", True)
     hair_mess_detection_enabled = advanced_options.get("hair_mess_detection", True)
+    smile_adjustment_enabled = advanced_options.get("smile_adjustment", True)
 
     user_instruction = analysis.get("user_instruction") or {}
     effective_user_direction = (
@@ -1889,7 +2195,7 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     # filled in "for reference only".
     detected_issues = "; ".join(
         item for item in (analysis.get("detected_issues") or [])
-        if not _is_disabled_topic_text(item, gaze_contact_detection_enabled, eye_closed_detection_enabled, hair_mess_detection_enabled)
+        if not _is_disabled_topic_text(item, gaze_contact_detection_enabled, eye_closed_detection_enabled, hair_mess_detection_enabled, smile_adjustment_enabled)
     )
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
@@ -2060,12 +2366,8 @@ Approved-repair override:
 
     # Skin is the one color in a photo that viewers have an absolute reference
     # for, so a global grade that reads fine on the background can still fail on
-    # skin. Trigger on is_person too, not just subject_category: a 生活紀錄 /
-    # 旅行 / 街拍 photo still has faces that need protecting.
-    subjects = analysis.get("subjects") or []
-    has_person = analysis.get("subject_category") == "人物" or any(
-        isinstance(s, dict) and s.get("is_person") for s in subjects
-    )
+    # skin.
+    has_person = _has_person(analysis)
     blink_block = ""
     blink_items_to_fix = [
         item for item in eye_blink_issues
@@ -2096,7 +2398,7 @@ Approved-repair override:
 - This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復閉眼問題" / "repair the closed eyes") rather than a diagnosis.
 - Scope: this instruction governs eyelid state only -- whether an eye reads open, closed, or half-closed. It does not govern where an open eye's pupil/iris points; that is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt, which may still approve moving a person's pupils/iris even though no blink repair is approved for anyone.
 - Do not reopen, relax, or enlarge any person's closed or half-closed eyelids on the strength of any of that text alone.
-- Preserve every visible person's eyelid state and expression exactly as captured, unless a person is explicitly named above under "Eyes to work on"."""
+- Preserve every visible person's eyelid state exactly as captured, unless a person is explicitly named above under "Eyes to work on"."""
 
     # Gated on the user's recipe choice as well as on the analysis. hair_issues
     # still says should_fix=true after the user unchecks the hair item -- it is
@@ -2244,10 +2546,12 @@ Execution rule:
 - This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復眼神" / "fix the gaze") rather than a diagnosis.
 - Scope: this instruction governs where an open eye's pupil/iris points -- eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights. It does not govern whether an eye is open or closed; that is a different property, governed separately by the blink-repair instructions elsewhere in this prompt, which may still approve reopening a person's closed or half-closed eyelids even though no gaze correction is approved for anyone.
 - Do not redirect anyone's gaze toward the camera.
-- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, and expression.
+- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights.
 - If a subject is looking off-camera, near-camera, upward, downward, unfocused, or away from the lens, keep that original gaze unchanged unless a future approved gaze repair item explicitly requests a change.
 - Do not invent any gaze-repair method unless the analysis explicitly approved one.
 """
+
+    smile_block = build_smile_block(analysis)
 
     # The skin block's opening rule points at these; without them it names an
     # identity the edit model was never told, so the generic line stands in.
@@ -2496,6 +2800,8 @@ User extra direction:
 
 {gaze_block}
 
+{smile_block}
+
 {skin_block}
 
 {revision_block}
@@ -2629,6 +2935,21 @@ Judge each rejected item independently and put the result in recipe_adherence.re
     else:
         rejected_block = "\nThe user did not reject any corrections for this photo. Return recipe_adherence.rejected_items as an empty array -- do not invent rejected items."
 
+    # 笑容調整 has no recipe item to score against (the level is a 人像設定
+    # choice applied at edit time, not a correction the analysis proposed), so
+    # QA is told the expected endpoint here or it reads the new expression as
+    # an unrequested change to the moment and caps the score for it.
+    smile_expectations = smile_qa_expectation(analysis)
+    smile_qa_line = ""
+    if smile_expectations:
+        smile_qa_line = (
+            "- User-selected smile adjustment: the user asked for these people's smiles to be changed, so the new "
+            f"expression is requested, not a lost moment -- {smile_expectations}. Check that each named person "
+            "reached that overall intensity through a natural, coordinated facial expression. Identity, facial "
+            "anatomy, skin texture, gaze direction, head pose, and all unrelated image content remain faithful "
+            "to the original. A changed expression on anyone not named fails this check.\n"
+        )
+
     framing_focus = analysis.get("_framing_focus") or {}
     closer_block = ""
     if framing_focus.get("size") == "closer":
@@ -2660,7 +2981,7 @@ Check dimensions:
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
 - Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyes are naturally corrected while identity, gaze, face shape, glasses, makeup, and expression style remain believable.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
-- Approved gaze-contact repair: if gaze_contact_issues.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
+{smile_qa_line}- Approved gaze-contact repair: if gaze_contact_issues.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
 
 Strict scoring rubric:
 - 9-10: excellent, faithful, polished, intentional framing, no meaningful preservation/crop issues.

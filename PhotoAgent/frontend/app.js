@@ -900,11 +900,20 @@
       gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
       calm_hair: !!(els.hairMessDetectionToggle?.checked && els.calmHairToggle?.checked),
+      smile_adjustment: els.smileAdjustmentToggle ? els.smileAdjustmentToggle.checked : true,
+      smile_level: (els.smileLevelSelect && els.smileLevelSelect.value) || "auto",
     };
   }
 
-  // 整理程度 only means anything while 亂髮偵測 is on, so it collapses with
-  // that switch instead of silently accepting a level nothing will apply.
+  // 笑容程度 only means anything while 笑容調整 is on, so it dims with the
+  // switch (same .is-locked treatment the results page's read-only 分析模型
+  // picker uses) instead of silently accepting a level nothing will apply.
+  function syncSmileLevelLock() {
+    if (!els.smileLevelPicker) return;
+    const enabled = !els.smileAdjustmentToggle || els.smileAdjustmentToggle.checked;
+    els.smileLevelPicker.classList.toggle("is-collapsed", !enabled);
+  }
+
   function syncHairTidinessLevelLock() {
     if (!els.hairTidinessLevel) return;
     const enabled = !els.hairMessDetectionToggle || els.hairMessDetectionToggle.checked;
@@ -915,16 +924,44 @@
     dynamic: "保留髮絲被風吹動或人物移動時的自然飄動感。",
     tidy: "將被風吹動的頭髮完整梳整、自然放下。",
   };
+  const SMILE_LEVEL_DESCRIPTIONS = {
+    auto: "為沒有笑的人加上自然笑容，已經在笑的人維持原樣。",
+    neutral: "調整為自然、放鬆且沒有明顯笑意的表情。",
+    gentle: "調整為清楚、柔和而自然的微笑。",
+    broad: "調整為強烈、愉快而自然的開朗笑。",
+    laughing: "調整為強度最高的自然大笑。",
+  };
 
   function syncAdvancedOptionDescriptions() {
     const hairLevel = els.calmHairToggle?.checked ? "tidy" : "dynamic";
     if (els.hairTidinessDesc) {
       els.hairTidinessDesc.textContent = HAIR_TIDINESS_DESCRIPTIONS[hairLevel];
     }
+    const smileLevel = els.smileLevelSelect?.value || "auto";
+    if (els.smileLevelDesc) {
+      els.smileLevelDesc.textContent = SMILE_LEVEL_DESCRIPTIONS[smileLevel];
+    }
+  }
+
+  // Mirrors applyModelQualityOption: sets the select AND the popover's own
+  // visible label, which wireOptionPicker otherwise only refreshes when the
+  // user opens that picker themselves.
+  function applySmileLevelOption(value) {
+    if (!els.smileLevelSelect) return;
+    value = ({
+      no_smile: "neutral",
+      closed_smile: "gentle",
+      toothy_smile: "broad",
+      bright_smile: "broad",
+    })[value] || value;
+    els.smileLevelSelect.value = value || "auto";
+    const radio = els.smileLevelPicker?.querySelector(`input[value="${els.smileLevelSelect.value}"]`);
+    if (radio) radio.checked = true;
   }
 
   // Mirrors prompts.py's _GAZE_LEAK_KEYWORDS/_BLINK_LEAK_KEYWORDS/
-  // _HAIR_LEAK_KEYWORDS + _is_disabled_topic_text exactly (keep both in sync
+  // _HAIR_LEAK_KEYWORDS/_SMILE_LEAK_KEYWORDS + _is_disabled_topic_text
+  // exactly (keep both in sync
   // if either changes). The backend force-strips any correction_plan item
   // matching these once the corresponding toggle is off -- both at analyze
   // time (pipeline.py's analyze_stage) and again defensively in
@@ -934,6 +971,7 @@
   const GAZE_LEAK_KEYWORDS = ["鏡頭", "眼神", "視線", "目光", "eye contact", "gaze", "camera lens", "looking at the camera", "look at the camera"];
   const BLINK_LEAK_KEYWORDS = ["睜開", "張開眼", "半閉", "閉眼", "眼皮", "reopen", "half-closed", "half closed", "blink"];
   const HAIR_LEAK_KEYWORDS = ["髮", "hair"];
+  const SMILE_LEAK_KEYWORDS = ["笑", "嘴角", "smile", "grin"];
 
   function isDisabledTopicText(text, advancedOptions) {
     // Historical/imported singleFlowState reconstructions (viewHistoryRecord,
@@ -947,9 +985,11 @@
     const gazeEnabled = options.gaze_contact_detection !== false;
     const blinkEnabled = options.eye_closed_detection !== false;
     const hairEnabled = options.hair_mess_detection !== false;
+    const smileEnabled = options.smile_adjustment !== false;
     if (!gazeEnabled && GAZE_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
     if (!blinkEnabled && BLINK_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
     if (!hairEnabled && HAIR_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
+    if (!smileEnabled && SMILE_LEAK_KEYWORDS.some((kw) => lowered.includes(kw.toLowerCase()))) return true;
     return false;
   }
 
@@ -993,7 +1033,14 @@
     if (els.hairMessDetectionToggle) els.hairMessDetectionToggle.checked = !!advancedOptions.hair_mess_detection;
     if (els.calmHairToggle) els.calmHairToggle.checked = !!advancedOptions.calm_hair;
     if (els.hairLevelDynamic) els.hairLevelDynamic.checked = !advancedOptions.calm_hair;
+    // Defaulted the way the backend defaults it (`.get(key, True)`) rather
+    // than with !!: a record analyzed before 笑容調整 existed carries no such
+    // key, and showing the switch off there would misreport what a revise of
+    // it would actually do.
+    if (els.smileAdjustmentToggle) els.smileAdjustmentToggle.checked = advancedOptions.smile_adjustment !== false;
+    applySmileLevelOption(advancedOptions.smile_level);
     syncHairTidinessLevelLock();
+    syncSmileLevelLock();
     syncAdvancedOptionDescriptions();
   }
 
@@ -1006,6 +1053,7 @@
   // are both still null).
   function applyAdvancedOptionsChange() {
     syncHairTidinessLevelLock();
+    syncSmileLevelLock();
     syncAdvancedOptionDescriptions();
     const advancedOptions = readAdvancedOptionsFromDom();
     if (singleFlowState) singleFlowState.advancedOptions = advancedOptions;
@@ -1039,10 +1087,19 @@
   }
 
   [els.eyeClosedDetectionToggle, els.eyeGazeFocusToggle, els.hairMessDetectionToggle,
-   els.hairLevelDynamic, els.calmHairToggle].forEach((control) => {
+   els.hairLevelDynamic, els.calmHairToggle,
+   els.smileAdjustmentToggle, els.smileLevelSelect].forEach((control) => {
     if (control) control.addEventListener("change", applyAdvancedOptionsChange);
   });
+  els.smileLevelPicker?.querySelectorAll('input[type="radio"]').forEach((radio) => {
+    radio.addEventListener("change", () => {
+      if (!radio.checked || !els.smileLevelSelect) return;
+      els.smileLevelSelect.value = radio.value;
+      els.smileLevelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
   syncHairTidinessLevelLock();
+  syncSmileLevelLock();
   syncAdvancedOptionDescriptions();
 
   // Backend step timings are seconds (float) or null (step skipped);

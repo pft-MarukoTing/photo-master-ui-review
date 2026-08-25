@@ -91,7 +91,8 @@ def detect_face_crops(image_bytes: bytes) -> list:
     regardless of how large a preview we send -- raising VISION_PREVIEW_MAX_SIDE
     does not help. A face crop gets its own canonical-resolution budget spent
     entirely on that one face, which is the only way to give the model more
-    effective eye resolution to judge blink state and gaze/pupil direction.
+    effective eye resolution to judge blink state, gaze/pupil direction, and
+    the lip and teeth detail a smile reading needs.
 
     Best-effort only: even YuNet (a small DNN detector, well past Haar cascade
     in handling non-frontal/occluded faces and background-clutter false

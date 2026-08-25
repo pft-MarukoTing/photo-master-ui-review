@@ -3973,6 +3973,34 @@
         </div>
         <span id="hair-tidiness-desc" class="option-desc">保留髮絲被風吹動或人物移動時的自然飄動感。</span>
       </fieldset>
+      <label class="option-row">
+        <div class="option-text">
+          <span class="option-label">笑容調整</span>
+          <span class="option-desc">依所選程度調整每個人的笑容。</span>
+        </div>
+        <label class="ios-switch">
+          <input id="smile-adjustment-toggle" type="checkbox" checked>
+          <span class="ios-track"><span class="ios-thumb"></span></span>
+        </label>
+      </label>
+      <fieldset id="smile-level-picker" class="option-segment-group option-segment-group--five">
+        <legend class="option-pill-label">笑容程度</legend>
+        <div class="option-segments">
+          <label class="option-segment"><input type="radio" name="smile-level-choice" value="auto" checked><span>自動</span></label>
+          <label class="option-segment"><input type="radio" name="smile-level-choice" value="neutral"><span>不笑</span></label>
+          <label class="option-segment"><input type="radio" name="smile-level-choice" value="gentle"><span>微笑</span></label>
+          <label class="option-segment"><input type="radio" name="smile-level-choice" value="broad"><span>開朗笑</span></label>
+          <label class="option-segment"><input type="radio" name="smile-level-choice" value="laughing"><span>大笑</span></label>
+        </div>
+        <span id="smile-level-desc" class="option-desc">為沒有笑的人加上自然笑容，已經在笑的人維持原樣。</span>
+        <select id="smile-level" hidden>
+          <option value="auto" selected>自動</option>
+          <option value="neutral">不笑</option>
+          <option value="gentle">微笑</option>
+          <option value="broad">開朗笑</option>
+          <option value="laughing">大笑</option>
+        </select>
+      </fieldset>
     </div>
   </div>
 </div>
