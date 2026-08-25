@@ -324,7 +324,7 @@ Two-stage decision process:
 Stage 1 -- Expression coherence test:
 - Ask whether the eye state supports the visible expression. Look at mouth shape, eyebrows, cheeks, head pose, hand gesture, body language, gaze direction, social context, and scene type.
 - If the closed/narrowed/winked eye supports the person's expression or emotion, classify it as intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, or sleeping. Set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
-- Examples of expression-coherent eye closure: wink with smile/smirk/greeting; crying face with squeezed eyes; laughing with eyes closed; cute child expression; playful selfie/video gesture; stage/fan-service expression; pain/sadness/embarrassment face; looking down or away.
+- Examples of expression-coherent eye closure: wink with smile/smirk/greeting; crying face with squeezed eyes; laughing with eyes closed; cute child expression; playful selfie/video gesture; stage/fan-service expression; pain/sadness/embarrassment face; looking down at a specific, visible in-frame target.
 
 Stage 2 -- Accidental capture test:
 - Only if the eye state does NOT support the expression, ask whether it looks like a shutter-timing mistake.
@@ -344,7 +344,7 @@ Decision labels:
 - intentional_wink: one eye is closed or nearly closed while the other eye is open, and the face/body/context reads as a deliberate wink, greeting, pose, playful expression, performance, selfie gesture, video moment, or social-media interaction; this is not a failure.
 - intentional_closed: eyes are deliberately closed as part of a pose, prayer/resting expression, savoring food, calm moment, or other intentional moment; this is not a failure.
 - expressive_closed: eyes are closed as part of a strong emotional or expressive face, such as crying, exaggerated sadness, pain, embarrassment, cute reaction, dramatic performance, or meme-like reaction face; this is not a failure.
-- downward_gaze: eyes appear closed or narrowed mostly because the person is looking downward or away; this is not a blink failure unless the rest of the face clearly looks mistimed.
+- downward_gaze: eyes appear closed or narrowed because the person is looking down at a specific, nameable, visible target inside this same frame and the gaze is anatomically consistent with looking at it; this is not a blink failure. Looking down or away with no identifiable in-frame target does not qualify for this label; see the downward-gaze guardrail below.
 - sleeping: the person is genuinely asleep or napping -- both eyes fully and evenly closed, face and jaw relaxed/slack, and a resting posture (head tilted onto a pillow/shoulder/arm, reclined or lying down, eyes closed for the whole visible moment rather than mid-transition); this is not a failure, regardless of how neutral the mouth looks.
 - occluded_or_unclear: eyes are hard to judge because of glasses, hair, motion blur, shadow, hand/object occlusion, low resolution, compression, or face size. Do not fix unless the accidental blink is visually clear.
 - accidental_blink: eyes are caught closed in an unintentionally mistimed shutter moment.
@@ -381,11 +381,16 @@ Sleeping guardrail:
 - When genuine sleep is indicated, classify as eye_state=sleeping, closure_intent=intentional_expression, expression_coherence=supports_expression, blink_failure_confidence 0.0-0.25, should_fix=false. Never add an eye-opening correction_plan item for a sleeping subject.
 - Only override this and treat it as accidental capture if the eyelids themselves look droopy, uneven, or mid-transition (evidence the person is awake and drifting/struggling to keep eyes open) rather than fully and evenly at rest.
 
+Downward-gaze guardrail:
+- downward_gaze requires a nameable, boxable, visible target inside this same frame that the person is plausibly looking at or interacting with. This is the ONLY thing that qualifies narrowed/closed eyes as downward_gaze.
+- It does NOT cover looking down at the ground/floor with nothing there, looking away into empty space or the distance, or any case where you cannot point to a specific in-frame object the eyes are aimed at. A vague "they're just looking down/away" is not evidence of this label.
+- When narrowed or closed eyes have no qualifying in-frame target, do not classify as downward_gaze and do not default to should_fix=false on that basis alone -- run the Stage 2 accidental-capture test normally; this is typically accidental_half_blink or accidental_blink, should_fix=true, unless another guardrail (wink, emotional, sleeping) independently applies.
+
 Balanced should_fix rule:
 - Set should_fix=true only when blink_failure_confidence >= 0.65 AND the eye issue visibly looks like accidental capture timing on someone who is awake.
 - Moderate accidental half-blinks should be fixed when they make a person who is awake and otherwise posed/ready look unintentionally droopy, distracted, unprepared, or mid-blink, and there is no strong intentional-expression cue and no sleeping-guardrail evidence.
 - For blurry, occluded, compressed, shadowed, glasses-reflected, or unclear eyes, require stronger confidence around 0.85 before fixing. This is about visual ambiguity, not subject size or prominence.
-- If there is strong evidence of intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, sleeping, or playful/performance/emotional expression, should_fix=false even if one or both eyes are closed.
+- If there is strong evidence of intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze (with a genuine in-frame target -- see the downward-gaze guardrail), sleeping, or playful/performance/emotional expression, should_fix=false even if one or both eyes are closed.
 
 Strong evidence for accidental capture:
 - The person otherwise looks normally posed or photo-ready.
@@ -397,7 +402,7 @@ Strong evidence for accidental capture:
 Strong evidence against accidental capture:
 - The closed eye matches the mouth expression, brow tension, cheek lift, hand gesture, head pose, or emotional tone.
 - One eye is closed and the other eye is open in a controlled way, with a wink-like expression, smirk, greeting, salute, wave, playful mouth shape, or camera interaction.
-- Both eyes are closed because of laughter, smile-squint, crying, pain, sadness, embarrassment, cute expression, prayer/rest, eating/savoring, dramatic reaction, or downward gaze.
+- Both eyes are closed because of laughter, smile-squint, crying, pain, sadness, embarrassment, cute expression, prayer/rest, eating/savoring, dramatic reaction, or downward gaze at a specific visible in-frame target.
 - The image is a selfie, video screenshot, stage/performance moment, fan-service moment, close-up social-media capture, or playful social snapshot where expressive eyes are normal.
 - The person is genuinely asleep: eyes fully and evenly closed, face relaxed, head/body in a resting posture (pillow, shoulder, reclined, lying down) -- see the sleeping guardrail above.
 
@@ -410,7 +415,8 @@ Practical examples:
 - Group photo where one person has a sleepy half-blink while the mouth/brows are otherwise neutral and everyone else is ready: accidental_half_blink, closure_intent=accidental_capture, should_fix=true.
 - A baby or adult napping with eyes fully and evenly closed, relaxed face, and head resting on a pillow/shoulder/arm or lying down, even if the mouth is neutral: sleeping, closure_intent=intentional_expression, should_fix=false.
 - Formal or ordinary portrait where the subject's eyelids are accidentally half-closed and the expression otherwise looks neutral/photo-ready: accidental_half_blink, should_fix=true.
-- Person looking down or away: downward_gaze, should_fix=false unless the eye state clearly conflicts with the rest of the face.
+- Person looking down at a specific, visible in-frame target: downward_gaze, should_fix=false unless the eye state clearly conflicts with the rest of the face.
+- Person looking down or away with no identifiable in-frame target (staring at the ground/floor, gazing off into empty space or the distance): does not qualify as downward_gaze; run the accidental-capture test -- typically accidental_half_blink/accidental_blink, should_fix=true, unless another guardrail (wink, emotional, sleeping) applies.
 - Blurry, compressed, shadowed, or unclear eyes: should_fix=false unless the accidental capture is visually clear.
 
 Subject-size neutrality:
@@ -455,10 +461,12 @@ Mini-model calibration:
 - Do not reason as: "one eye closed means half-blink."
 - Do not reason as: "emotional closed eyes should be opened."
 - Do not reason as: "neutral mouth plus closed eyes means accidental blink" -- a genuinely sleeping person also has a neutral, relaxed mouth; check the sleeping guardrail's posture and eyelid cues before assuming a mistake.
+- Do not reason as: "the person is looking down/away so it's fine" -- that is only true when there is a specific, visible, nameable target in this frame that the gaze is aimed at; check the downward-gaze guardrail before assuming a mistake.
 - Always ask first: "Does the eye state support the visible mouth/brow/gesture/emotion?" If yes, do not fix.
 - For one-eye-closed faces, run the wink guardrail before any blink-failure reasoning.
 - For strong emotional faces, run the emotional closed-eye guardrail before any blink-failure reasoning.
 - For any fully-closed-eyes case, run the sleeping guardrail before any blink-failure reasoning.
+- For any downward/averted-gaze case, run the downward-gaze guardrail before any blink-failure reasoning.
 - When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
 - When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
 
