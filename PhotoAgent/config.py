@@ -24,11 +24,13 @@ MODELS = {
 ANALYSIS_MODEL_REASONING_EFFORT = {
     "gpt-4.1-mini": None,
     "gpt-5.6-luna": "none",
+    "gpt-5.6-sol": "none",
 }
 
 ANALYSIS_MODEL_LABELS = {
     "gpt-4.1-mini": "GPT 4.1 Mini",
     "gpt-5.6-luna": "GPT 5.6 Luna",
+    "gpt-5.6-sol": "GPT 5.6 Sol",
 }
 
 # UI-selectable image-edit models (Step 5). "gpt-image-2"/"gpt-image-1.5" call

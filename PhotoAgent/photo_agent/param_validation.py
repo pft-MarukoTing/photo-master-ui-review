@@ -14,7 +14,7 @@ EFFECT_NAME = "photoAgent"
 VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
 VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "nano-banana-2", "nano-banana-lite")
-VALID_ANALYSIS_MODELS = ("gpt-4.1-mini", "gpt-5.6-luna")
+VALID_ANALYSIS_MODELS = ("gpt-4.1-mini", "gpt-5.6-luna", "gpt-5.6-sol")
 # "auto" (from the proposed crop) / "original" (the source frame) / one fixed
 # W:H frame. The label list mirrors image_tools.USER_SELECTABLE_ASPECT_RATIO_LABELS,
 # kept literal so this validator does not pull in that module's Pillow import.

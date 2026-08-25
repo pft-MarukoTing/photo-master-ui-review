@@ -11,14 +11,16 @@ window.PhotoAgentConfig = {
   // actually-ran label (keyed off extra-info.analysis_model) reads from here.
   analysisModels: {
     "gpt-4.1-mini": "GPT 4.1 Mini",
-    "gpt-5.6-luna": "GPT 5.6 Luna"
+    "gpt-5.6-luna": "GPT 5.6 Luna",
+    "gpt-5.6-sol": "GPT 5.6 Sol"
   },
   // Single source of truth for the 分析模型 selector (upload page +
   // analyze-preview), same array-of-options shape as imageModelQualityOptions
   // above and aspectRatioOptions below.
   analysisModelOptions: [
     { value: "gpt-4.1-mini", label: "GPT 4.1 Mini" },
-    { value: "gpt-5.6-luna", label: "GPT 5.6 Luna" }
+    { value: "gpt-5.6-luna", label: "GPT 5.6 Luna" },
+    { value: "gpt-5.6-sol", label: "GPT 5.6 Sol" }
   ],
   defaultAnalysisModel: "gpt-5.6-luna",
   imageModels: {

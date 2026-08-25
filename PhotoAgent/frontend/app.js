@@ -407,6 +407,20 @@
     }
   }
 
+  // GPT 5.6 Sol is a testbed-only analysis-model variant, not yet vetted for
+  // general use -- keep it out of the 分析模型 picker outside debug mode.
+  const DEBUG_ONLY_ANALYSIS_MODELS = ["gpt-5.6-sol"];
+
+  function applyAnalysisModelOptionLimit(select, isDebug) {
+    if (!select) return;
+    Array.from(select.options).forEach((opt) => {
+      opt.hidden = !isDebug && DEBUG_ONLY_ANALYSIS_MODELS.includes(opt.value);
+    });
+    if (!isDebug && DEBUG_ONLY_ANALYSIS_MODELS.includes(select.value)) {
+      select.value = window.PhotoAgentConfig.defaultAnalysisModel || select.value;
+    }
+  }
+
   // Testbed-only UI: some rows/panels are hidden unless the backend was
   // started with `--debug-ui` (or the page URL contains "debug", for quick
   // local checks without a real backend). isDebug=false is the shape a
@@ -475,6 +489,8 @@
     applyRunCountOptionLimit(els.runCountSelect, isDebug);
     applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebug);
     applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebug);
+    applyAnalysisModelOptionLimit(els.analysisModelSelect, isDebug);
+    applyAnalysisModelOptionLimit(els.apAnalysisModelSelect, isDebug);
   }
 
   if (window.location.href.includes("debug")) {
