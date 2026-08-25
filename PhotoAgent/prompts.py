@@ -342,7 +342,7 @@ Decision labels:
 - open: both eyes are naturally open.
 - natural_smiling_squint: eyes are narrowed because the person is smiling, laughing, reacting, or showing joy; this is not a failure.
 - intentional_wink: one eye is closed or nearly closed while the other eye is open, and the face/body/context reads as a deliberate wink, greeting, pose, playful expression, performance, selfie gesture, video moment, or social-media interaction; this is not a failure.
-- intentional_closed: eyes are deliberately closed as part of a pose, prayer/resting expression, savoring food, calm moment, or other intentional moment; this is not a failure.
+- intentional_closed: eyes are deliberately closed as part of a pose, prayer/resting expression, savoring food, calm moment, or other intentional moment; this is not a failure. Requires the eyelids themselves to be fully and cleanly shut (no visible sclera or pupil) -- see the pose-does-not-imply-eyelid-state guardrail below.
 - expressive_closed: eyes are closed as part of a strong emotional or expressive face, such as crying, exaggerated sadness, pain, embarrassment, cute reaction, dramatic performance, or meme-like reaction face; this is not a failure.
 - downward_gaze: eyes appear closed or narrowed because the person is looking down at a specific, nameable, visible target inside this same frame and the gaze is anatomically consistent with looking at it; this is not a blink failure. Looking down or away with no identifiable in-frame target does not qualify for this label; see the downward-gaze guardrail below.
 - sleeping: the person is genuinely asleep or napping -- both eyes fully and evenly closed, face and jaw relaxed/slack, and a resting posture (head tilted onto a pillow/shoulder/arm, reclined or lying down, eyes closed for the whole visible moment rather than mid-transition); this is not a failure, regardless of how neutral the mouth looks.
@@ -372,6 +372,11 @@ Smile-squint vs. full-closure guardrail:
 - Full, complete eyelid closure during an otherwise ordinary smile or casual pose is not, by itself, evidence of natural_smiling_squint or intentional_closed -- a blink can happen at the exact camera-click moment independent of what the mouth is doing at that instant. Only classify fully-shut eyes as natural_smiling_squint/intentional_closed when there is supporting evidence beyond "the person is smiling": an active laugh (visible teeth, raised cheeks compressing the eyes shut), a deliberate pose context (prayer, savoring food, resting, a repeated stylistic expression across other photos of the same shoot), or an intentional_wink/performance context.
 - intentional_closed's own qualifying contexts are specific -- a held pose, prayer/rest, savoring food, a calm moment. An ordinary candid or posed smile in a casual or group photo does not by itself qualify; let it fall through to the Stage 2 accidental-capture test instead of defaulting to intentional_closed.
 - In a group photo, one person with fully shut eyes while everyone else's eyes are open and the shot otherwise looks photo-ready is strong evidence for accidental capture (see "Strong evidence for accidental capture" above) -- that person's own smile, on its own, does not override this signal.
+
+Pose-does-not-imply-eyelid-state guardrail:
+- A deliberate held pose -- hands framing the chin/cheek, head tilted back or to the side, a styled selfie/portrait setup -- proves the pose is intentional. It does NOT by itself prove the eyelids are also fully and deliberately closed at that same instant; a blink can happen involuntarily even while every other part of a held pose is exactly as intended.
+- Before classifying eyes as intentional_closed, expressive_closed, or natural_smiling_squint on the strength of a deliberate pose, check the eyelids themselves: are they cleanly, fully, and evenly shut with no sclera or pupil visible? If any sliver of white or the pupil/iris is visible, the eyes are not fully closed -- treat it as a half-open, transitional state and run the Stage 2 accidental-capture test instead of defaulting to intentional_closed just because the pose looks deliberate.
+- A symmetric hand-on-face / head-tilt pose paired with half-open, glassy, unfocused eyes and no visible in-frame gaze target is a common signature of an accidental blink caught mid-transition during an otherwise well-executed pose -- it is not, by itself, evidence that the eye closure was intentional.
 
 Sleeping guardrail:
 - Before concluding accidental_blink or accidental_half_blink, check whether the person is genuinely asleep rather than mid-blink while awake.
@@ -462,11 +467,13 @@ Mini-model calibration:
 - Do not reason as: "emotional closed eyes should be opened."
 - Do not reason as: "neutral mouth plus closed eyes means accidental blink" -- a genuinely sleeping person also has a neutral, relaxed mouth; check the sleeping guardrail's posture and eyelid cues before assuming a mistake.
 - Do not reason as: "the person is looking down/away so it's fine" -- that is only true when there is a specific, visible, nameable target in this frame that the gaze is aimed at; check the downward-gaze guardrail before assuming a mistake.
+- Do not reason as: "the pose is clearly deliberate (hands on face, head tilt, styled shot), so the closed eyes must be deliberate too" -- a held pose does not guarantee the eyelids were fully closed on purpose; check whether sclera or pupil is visible before assuming intentional_closed. See the pose-does-not-imply-eyelid-state guardrail.
 - Always ask first: "Does the eye state support the visible mouth/brow/gesture/emotion?" If yes, do not fix.
 - For one-eye-closed faces, run the wink guardrail before any blink-failure reasoning.
 - For strong emotional faces, run the emotional closed-eye guardrail before any blink-failure reasoning.
 - For any fully-closed-eyes case, run the sleeping guardrail before any blink-failure reasoning.
 - For any downward/averted-gaze case, run the downward-gaze guardrail before any blink-failure reasoning.
+- For any deliberately posed shot (hands on face, held head tilt, styled portrait/selfie), run the pose-does-not-imply-eyelid-state guardrail before any blink-failure reasoning.
 - When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
 - When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
 
