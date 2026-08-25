@@ -202,7 +202,7 @@ Return exactly this JSON shape:
         "failure_to_avoid": ["near-camera only", "sharpen-only", "uncomfortable side-eye"]
       },
       "should_fix": true,
-      "reason": "依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_target_in_frame 是否成立（若成立，說明畫面中那個具體可指認的目標物是什麼）、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
+      "reason": "第一句先說明 no-eyes-visible rule 或 half-face rule 是否適用（單眼可見、側臉、背對鏡頭等），若適用就直接 unclear/should_fix=false 並停在這裡；若都不適用才繼續依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_target_in_frame 是否成立（若成立，說明畫面中那個具體可指認的目標物是什麼）、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
     }
   ],
   "smile_states": [
@@ -652,17 +652,7 @@ Decision labels:
 - unfocused_camera: the face is oriented toward camera, but the eyes look vacant, past the lens, not converged on the lens, or mentally disengaged.
 - cross_focused: eye alignment or convergence looks unintentionally mismatched, creating a crossed or divergent focus impression.
 - ambiguous: hard to decide whether the gaze is intentional or missed, but the eyes are somewhat visible.
-- unclear: eye direction cannot be judged due to blur, shadow, glasses/reflection, occlusion, compression, or low resolution -- or because no eye is visible at all (back of head, rear/near-rear view, face turned away from the camera, silhouette, hat/hair/mask fully covering both eyes).
-
-Context labels:
-- posed_camera_contact: formal portrait, profile-style portrait, ID-like portrait, beauty portrait, family portrait, social portrait, or a posed photo where direct eye contact is likely expected.
-- candid_or_documentary: candid, event, travel, street, memory, or documentary moment.
-- speaking_or_performing: podium, interview, stage, presentation, performance, fan-service, or public speech context.
-- product_demo: person demonstrating or posing with an object/product where camera gaze may still be anatomically feasible unless head/eye geometry prevents it.
-- action_or_movement: motion, sports, dance, child play, gesture, interaction, or transitional moment.
-- intentional_gaze_away: gaze away from camera is part of the original pose, mood, story, or composition, but this label alone does not make should_fix=false.
-- ambiguous: context does not clearly say whether direct gaze is expected.
-- These context labels are descriptive only. They must never be used as evidence for looking_at_lens, never be used to soften not_looking_at_lens, and never override pupil/iris evidence.
+- unclear: eye direction cannot be judged due to blur, shadow, glasses/reflection, occlusion, compression, or low resolution -- or because no eye is visible at all (back of head, rear/near-rear view, face turned away from the camera, silhouette, hat/hair/mask fully covering both eyes) -- or because only about half the face and a single eye are visible (side/profile view, or the other half occluded by a person, object, hand, or hair), even if that one visible eye's direction looks clear.
 
 Near-camera calibration:
 - near_camera is not direct_camera.
@@ -685,6 +675,7 @@ Hard should_fix rule:
 - Natural original gaze and anatomically feasible gaze correction are different questions.
 - Do not use subject size, main-subject status, foreground/background status, pose naturalness, action type, or narrative preservation as a deciding factor. Those factors affect only uncertainty or repair feasibility, not whether the eyes are looking at the lens.
 - No-eyes-visible rule: when a person's face is turned away from the camera far enough that neither eye is actually visible -- back of head, near-total rear view, a passerby seen only from behind, or a silhouette -- lens_contact_decision must be unclear and should_fix must be false, even if the head/shoulder/body orientation makes it obvious they are not facing the camera. Body or head orientation is never a substitute for seeing the eyes; do not infer, guess, or extrapolate a gaze direction for eyes you cannot actually see. This is most common with incidental bystanders in landscape, street, or documentary photos who are not the photo's subject -- they still get a gaze_contact_issues entry (per the output rules below), just with lens_contact_decision=unclear and should_fix=false, not a guessed not_looking_at_lens.
+- Half-face rule: when only about half of a person's face is visible -- a side/profile view showing a single eye, or the other half of the face occluded by another person, an object, a hand, or hair -- lens_contact_decision must be unclear and should_fix must be false for that person, even when the one visible eye's direction looks clear. This applies to every person regardless of role, including the photo's main subject or anyone in an intentional group/portrait, not only incidental background people. A single visible eye is not enough evidence to safely judge or correct lens contact; do not extrapolate the hidden half of the face from the one eye you can see.
 
 Visible-target exception (the ONLY exception to the rule above):
 - If, and only if, the eyes are demonstrably converging on a specific object or person that is actually visible inside this photograph's own frame -- for example a phone or camera someone in the shot is holding up to take this very picture, a product the subject is looking at in their own hands, or another visible person they are looking at and interacting with -- set gaze_target_in_frame.present=true, name and box that target, and set should_fix=false.
@@ -693,6 +684,7 @@ Visible-target exception (the ONLY exception to the rule above):
 - The exception changes should_fix only. Still judge lens_contact_decision, gaze_state, and the confidence scores honestly from the eyes first, exactly as the rules above describe.
 
 Score-first reasoning order:
+0. First check the no-eyes-visible rule and the half-face rule above, before anything else. If either applies -- neither eye visible, or only about half the face / a single eye visible (side-profile, occlusion) -- set lens_contact_decision=unclear and should_fix=false immediately and skip steps 1-6 for this person. A single visible eye that reads sharp, clear, or confidently-directed is exactly the case the half-face rule covers, not evidence against it; eye_focus_quality looking "sharp_engaged" on that one eye is never a reason to treat the half-face rule as not applying.
 1. Determine lens_contact_decision from the eyes only. Do not use scene context, pose, action, or whether lens contact would be narratively appropriate.
 2. Determine gaze_state from the eyes, not from face direction.
 3. Assign lens_contact_confidence.
@@ -700,7 +692,7 @@ Score-first reasoning order:
 5. Assign gaze_correction_reasonableness based on anatomical / ergonomic feasibility only.
 6. Derive should_fix strictly from the hard should_fix rule.
 - Do not decide should_fix first and then back-fill the scores.
-- The reason field must explicitly say whether the eyes are lens-locked or not lens-locked and explain how the scores lead to should_fix.
+- The reason field must state first, before anything else, whether the no-eyes-visible or half-face rule applies to this person and why. Only if neither applies should the reason field go on to say whether the eyes are lens-locked or not lens-locked and explain how the scores lead to should_fix.
 
 Strong evidence for not looking at the lens:
 - Pupils/irises point slightly left/right/up/down relative to the camera even though the face points forward.
@@ -725,9 +717,10 @@ Strong evidence that gaze redirection is NOT anatomically feasible:
 
 Output rules:
 - Inspect gaze_contact_issues independently for each visible person when gaze is relevant.
+- Incidental background person exception: skip gaze_contact_issues entirely (no entry at all, regardless of whether eyes are visible) for a visible person who is clearly not the photo's main subject and not one of its intentional subjects -- a passerby, bystander, or background figure who just happens to be caught in a landscape, street, architecture, product, food, or scenery shot, and who is not part of what the photo (per subject_category/main_subject/subjects above) is actually about. This exception does NOT apply to the main subject, a secondary posed subject, or anyone in an intentional group/portrait (family, friends, couple, event group), even if that person is smaller, softer-focus, or standing further back -- those still get full gaze_contact_issues treatment. When it is unclear whether a visible person is incidental background or an intentional subject, default to still including them in gaze_contact_issues rather than skipping them.
 - Include a gaze_contact_issues entry for any visible person whose gaze is readable and not clearly direct_camera, even if should_fix=false.
 - If a visible person's eyes are readable and the person is not unmistakably looking into the lens, do not omit them from gaze_contact_issues.
-- Include should_fix=false entries only for lens_contact_decision=looking_at_lens or lens_contact_decision=unclear (eyes too blurry/occluded/small to judge safely, or not visible at all because the person faces away from the camera). A readable off-camera, near-camera, or unfocused-looking gaze is should_fix=true; do not use should_fix=false to mean "correctable but better left as-is."
+- Include should_fix=false entries only for lens_contact_decision=looking_at_lens or lens_contact_decision=unclear (eyes too blurry/occluded/small to judge safely, not visible at all because the person faces away from the camera, or only about half the face/a single eye is visible). A readable off-camera, near-camera, or unfocused-looking gaze is should_fix=true; do not use should_fix=false to mean "correctable but better left as-is."
 - When any gaze_contact_issues item has should_fix=true, gaze repair is an approved edit request. It must not remain analysis-only.
 - For every gaze_contact_issues item with should_fix=true, fill gaze_repair_strategy with a concrete, per-image guide. This is mandatory, not optional.
 - Add a correction_plan item for every gaze_contact_issues item with should_fix=true. This is mandatory, not optional.
