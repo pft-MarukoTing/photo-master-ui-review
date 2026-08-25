@@ -2517,7 +2517,7 @@ Approved-repair override:
 - Do not read confidence scores, reasons, or analysis records to decide whether to be more conservative.
 - Execute the approved repair using only the execution instructions below plus the matching correction_plan and correction_inverse.
 - Generic preservation, faithful-retouch, and minimal-change instructions must not block any local eye-direction, eye-focus, sclera-balance, catchlight, or head/face-alignment changes that the execution instructions explicitly approve for the named subject.
-- Do not broaden the edit beyond what is approved below. Apply only the subject-local changes explicitly described there, while preserving all unrelated identity, expression, body pose, clothing, object interaction, scene, and background details.
+- Do not broaden the edit beyond what is approved below. Apply only the subject-local changes explicitly described there, while preserving all unrelated identity, expression, body pose, clothing, object interaction, scene, and background details. Any person in the frame who is not named in the execution instructions below is completely out of scope: do not touch their eyes, gaze, expression, pose, or anything else about them.
 - If a named subject has an approved gaze repair, that repair is required; do not leave the original gaze unchanged.
 
 Execution instructions:
@@ -2862,13 +2862,15 @@ def build_gaze_only_edit_prompt(gaze_items):
 
     return f"""You are editing the supplied image, which is already a finished, fully-graded photograph. Do not treat it as a draft.
 
-This is the ONLY task for this edit: redirect the named subject's or subjects' gaze so they clearly and directly look at the camera lens. Nothing else about this image should change -- not exposure, color, crop, framing, background, clothing, pose, or expression.
+This is the ONLY task for this edit: redirect the named subject's or subjects' gaze so they clearly and directly look at the camera lens. Nothing else about this image should change -- not exposure, color, crop, framing, background, clothing, pose, expression, or any person other than the ones named below.
 
 {targets_block}
 
+Scope is limited to the eye/pupil region of the named subject(s) above, and nothing else. If the photo contains other people who are not named above, they are completely out of scope: do not touch their eyes, gaze, expression, pose, hair, or anything else about them, even if their gaze also looks imperfect -- only the subject(s) explicitly listed are being fixed here. For the named subject(s) themselves, do not let the eye/pupil movement drag along any other change to their face: eyebrows, eyelid crease shape, mouth, and overall expression must read exactly as they did before this edit, except for the direction the eyes are now pointing.
+
 Go all the way to direct lens contact, not partway there. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils have moved far enough, move them further rather than settling for a subtle, ambiguous shift; a slightly bold correction that unmistakably reads as direct eye contact is the right outcome, a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.
 
-Preserve everything else in the photograph exactly as supplied: identity, face shape, skin texture, skin tone, hairstyle, expression, mouth, eyebrows, glasses, makeup, lighting, clothing, pose, background, and composition. Do not add text, logos, watermarks, or new people. Do not crop, reframe, resize, or change the composition -- the output must be the same framing as the input, at the same size.
+Preserve everything else in the photograph exactly as supplied, especially: every other person in the frame, in full and completely unmodified; the named subject's expression, mouth, and eyebrows; and the entire background. Also preserve identity, face shape, skin texture, skin tone, hairstyle, glasses, makeup, lighting, clothing, pose, and composition. Do not add text, logos, watermarks, or new people. Do not crop, reframe, resize, or change the composition -- the output must be the same framing as the input, at the same size.
 """
 
 
