@@ -179,7 +179,6 @@ Return exactly this JSON shape:
       "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
       "gaze_state": "direct_camera / near_camera / off_camera / downward / upward_side / unfocused_camera / cross_focused / ambiguous / unclear",
       "eye_focus_quality": "sharp_engaged / slightly_unfocused / clearly_unfocused / unclear",
-      "gaze_context": "posed_camera_contact / candid_or_documentary / speaking_or_performing / product_demo / action_or_movement / intentional_gaze_away / ambiguous。這只是描述性標籤，不能用來推翻 lens_contact_decision、gaze_state、confidence 或 should_fix。",
       "gaze_target_in_frame": {
         "present": false,
         "description": "只有在畫面中存在一個具體、可指認、看得見的物體或人，而且這個人的視線明確朝向它匯聚時才填寫，例如「舉在畫面裡的自拍裝置」、「手中拿著、正在看的產品」、「畫面裡另一位正在對話的人物」。不可寫『遠方』、『某處』、『看向旁邊』、『畫面外』這種無法指認具體位置的說法；那些情況 present 必須是 false。",
@@ -1013,7 +1012,6 @@ _GAZE_CONTACT_ISSUE_SCHEMA = _schema_object({
     "box": _BOX_SCHEMA,
     "gaze_state": _schema_string(),
     "eye_focus_quality": _schema_string(),
-    "gaze_context": _schema_string(),
     "gaze_target_in_frame": _GAZE_TARGET_IN_FRAME_SCHEMA,
     "lens_contact_decision": _schema_string(),
     "lens_contact_confidence": _schema_number(),
