@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 # off an iPhone) the same as JPEG/PNG/WebP, with no call-site changes needed.
 pillow_heif.register_heif_opener()
 
+# cv2's DNN inference (used below by FaceDetectorYN/YuNet) defaults to
+# fanning a single detect() call out across every logical core on the box.
+# Detection is already serialized process-wide by _FACE_DETECTOR_LOCK, so
+# that parallelism buys no extra throughput -- it just means each request
+# briefly saturates all cores. Capped here instead; tunable via env for perf
+# testing.
+cv2.setNumThreads(max(int(os.getenv("PHOTOAGENT_CV2_NUM_THREADS", "1")), 1))
+
 
 VISION_PREVIEW_MAX_SIDE = 1024
 
