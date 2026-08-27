@@ -514,6 +514,41 @@ def result_image(job_id):
     return Response(image_bytes, mimetype="image/png")
 
 
+@api_bp.get("/result/<job_id>/pre_edit_image")
+def result_pre_edit_image(job_id):
+    """Step 5's own output, before Step 5b's gaze-repair pass overwrites it
+    (see pipeline.py's finish_stage) -- a debug-UI-only "stage 1" view,
+    fetched lazily only when #show-prompt-btn's modal's corresponding tab is
+    opened (see loadPromptsModalImageTab, app.js), unlike result_image()
+    which every result display needs eagerly.
+
+    Not every job has one: single_pass_edit skips Step 5b entirely, and
+    ai_photo_editing=False never calls it either, so result_keys[2] is
+    simply absent in both cases -- a 404 here, not an error, and the caller
+    is expected to treat it that way. Local-path only, same as
+    source_image() below: this key only exists in our own worker's S3
+    layout (job_processor.py), not in AIPoC's separate deployment of this
+    pipeline.
+    """
+    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    if info is None:
+        return jsonify({"error": "Job not found"}), 404
+    if info.get("status") != "success":
+        return jsonify({"error": info.get("error") or "job not successful"}), 400
+
+    result_keys, error = _resolve_result_keys(info)
+    if error:
+        return error
+    if len(result_keys) < 3:
+        return jsonify({"error": "no stage-1 image for this job"}), 404
+
+    image_bytes, download_error = download_bytes(result_keys[2], job_id)
+    if download_error or image_bytes is None:
+        return jsonify({"error": f"failed to download stage-1 image: {download_error}"}), 502
+
+    return Response(image_bytes, mimetype="image/png")
+
+
 def _immutable_image_response(image_bytes, mimetype):
     """Same Response(bytes, mimetype) every image route already returns, plus
     a long-lived Cache-Control -- used only where the bytes for a given URL

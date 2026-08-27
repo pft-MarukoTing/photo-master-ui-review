@@ -28,12 +28,20 @@ def safe_task_folder(task_id):
     return str(task_id).replace('/', '_')
 
 
-def derive_dst_keys(dst_key):
+def derive_dst_keys(dst_key, include_pre_edit=False):
     prefix = dst_key.rsplit('/', 1)[0] + '/' if '/' in dst_key else ''
-    return [
+    keys = [
         prefix + '0_res0_thumb_0.png',   # result image
         prefix + '0_res0_thumb_1.json',  # result text (analysis + QA)
     ]
+    if include_pre_edit:
+        # Step 5's own output before Step 5b's gaze-repair pass overwrites
+        # it (pipeline.py's finish_stage) -- only present when that pass
+        # actually ran, so this key is appended, not fixed-position, and
+        # callers must pass the same include_pre_edit they used when writing
+        # local artifacts (_write_result_artifacts) so keys/paths line up.
+        keys.append(prefix + '0_res0_thumb_2.png')
+    return keys
 
 
 def derive_analysis_key(dst_key):
@@ -41,15 +49,18 @@ def derive_analysis_key(dst_key):
     return prefix + '0_res0_analysis.json'
 
 
-def derive_run_dst_keys(dst_key, run_index):
+def derive_run_dst_keys(dst_key, run_index, include_pre_edit=False):
     """Per-RUN artifact keys for a combined job's run_count > 1 loop -- each
     RUN needs its own image/json pair so they don't overwrite each other in
     the artifact store, unlike derive_dst_keys' fixed single-result names."""
     prefix = dst_key.rsplit('/', 1)[0] + '/' if '/' in dst_key else ''
-    return [
+    keys = [
         prefix + f'0_res0_thumb_0_run{run_index}.png',
         prefix + f'0_res0_thumb_1_run{run_index}.json',
     ]
+    if include_pre_edit:
+        keys.append(prefix + f'0_res0_thumb_2_run{run_index}.png')
+    return keys
 
 
 def _write_result_artifacts(work_dir, result, suffix=''):
@@ -72,7 +83,16 @@ def _write_result_artifacts(work_dir, result, suffix=''):
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(result["result_text"], f, ensure_ascii=False, indent=2)
 
-    return [image_path, json_path]
+    paths = [image_path, json_path]
+
+    pre_edit_b64 = result.get("pre_edit_image")
+    if pre_edit_b64:
+        pre_edit_path = os.path.join(work_dir, f'0_res0_thumb_2{suffix}.png')
+        with open(pre_edit_path, 'wb') as f:
+            f.write(base64.b64decode(pre_edit_b64))
+        paths.append(pre_edit_path)
+
+    return paths
 
 
 class PhotoAgentJobProcessor:
@@ -163,7 +183,7 @@ class PhotoAgentJobProcessor:
                     single_pass_edit=params.get("single_pass_edit", False),
                 )
 
-                derived_dst_keys = derive_dst_keys(request["dst_key"])
+                derived_dst_keys = derive_dst_keys(request["dst_key"], include_pre_edit=bool(result.get("pre_edit_image")))
                 local_paths = _write_result_artifacts(work_dir, result)
 
                 self.logger.info(task_id, f'[{EFFECT_NAME}] Pipeline done, uploading artifacts')
@@ -214,7 +234,7 @@ class PhotoAgentJobProcessor:
                     single_pass_edit=params.get("single_pass_edit", False),
                 )
 
-                run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index)
+                run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index, include_pre_edit=bool(result.get("pre_edit_image")))
                 local_paths = _write_result_artifacts(work_dir, result, suffix=f'_run{run_index}')
 
                 self.logger.info(task_id, f'[{EFFECT_NAME}] RUN {run_index + 1}/{run_count} done, uploading artifacts')

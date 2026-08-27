@@ -8,6 +8,7 @@
     getJobResult,
     getJobRuns,
     resultImageUrl,
+    preEditImageUrl,
     resultThumbnailUrl,
     sourceImageUrl,
     sourceThumbnailUrl,
@@ -6517,10 +6518,90 @@
     { label: "裁切驗證", el: () => els.promptCrop },
     { label: "修圖", el: () => els.promptEdit },
     { label: "眼神修正（第二段）", el: () => els.promptGazeRepair },
+    // Unlike every stage above, this one has no #prompt-* element to read --
+    // it's a same-origin image lazy-fetched on click (see
+    // loadPromptsModalImageTab below) from whichever job/run `lastResult`
+    // currently points at, same target reportJob's target uses. Only exists
+    // when Step 5b actually ran (pipeline.py's finish_stage), so a missing
+    // image is a normal 404, handled by loadPromptsModalImageTab itself
+    // rather than the empty-tab styling the text stages use.
+    { label: "第一階段中間圖（眼神修正前）", image: true },
     { label: "品質檢查", el: () => els.promptQa },
     { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" },
     { label: "分析原始 JSON", text: analyzeRawJsonText, emptyText: "（尚無分析結果）" }
   ];
+
+  // Revoked whenever a new image loads or the modal closes, so switching
+  // jobs or reopening the modal never leaks the previous blob URL.
+  let promptsModalImageObjectUrl = null;
+
+  function showPromptsModalText(text) {
+    if (els.promptsModalImageWrap) els.promptsModalImageWrap.hidden = true;
+    if (els.promptsModalContent) {
+      els.promptsModalContent.hidden = false;
+      els.promptsModalContent.textContent = text;
+    }
+  }
+
+  // Resets the compare toggle back to "stage 1" (not "original") and drops
+  // the original layer's src every time a fresh stage-1 image loads --
+  // otherwise switching jobs while the tab is showing "original" would
+  // carry the PREVIOUS job's original photo over, or leave a stale
+  // showing-original class active for the new one.
+  function showPromptsModalImage(objectUrl) {
+    if (promptsModalImageObjectUrl) URL.revokeObjectURL(promptsModalImageObjectUrl);
+    promptsModalImageObjectUrl = objectUrl;
+    if (els.promptsModalContent) els.promptsModalContent.hidden = true;
+    if (els.promptsModalImageWrap) {
+      els.promptsModalImageWrap.hidden = false;
+      els.promptsModalImageWrap.classList.remove("showing-original");
+    }
+    if (els.promptsModalImage) els.promptsModalImage.src = objectUrl;
+    if (els.promptsModalImageOriginal) els.promptsModalImageOriginal.removeAttribute("src");
+    if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.textContent = "與原圖比較";
+  }
+
+  // #prompts-modal-image-compare-btn: same stacked-<img>-pair toggle as
+  // #compare-toggle-btn on the results page, just scoped to this modal.
+  // sourceImageUrl is local-path only (like preEditImageUrl above), but
+  // this button only ever exists while a stage-1 image is already showing,
+  // which itself already ruled out the aipoc case -- no separate check
+  // needed here.
+  function togglePromptsModalImageCompare() {
+    if (!els.promptsModalImageWrap || !lastResult?.jobId) return;
+    const showingOriginal = els.promptsModalImageWrap.classList.toggle("showing-original");
+    if (showingOriginal && els.promptsModalImageOriginal && !els.promptsModalImageOriginal.getAttribute("src")) {
+      els.promptsModalImageOriginal.src = sourceImageUrl(lastResult.jobId);
+    }
+    if (els.promptsModalImageCompareBtn) {
+      els.promptsModalImageCompareBtn.textContent = showingOriginal ? "顯示第一階段圖" : "與原圖比較";
+    }
+  }
+
+  // preEditImageUrl is local-path only (AIPoC's separate deployment of this
+  // pipeline doesn't expose this key) -- an aipoc lastResult short-circuits
+  // to a fixed message instead of firing a fetch() that can only 404.
+  async function loadPromptsModalImageTab() {
+    showPromptsModalText("載入中…");
+    if (!lastResult?.jobId) {
+      showPromptsModalText("（尚無結果可查看）");
+      return;
+    }
+    if (lastResult.path === "aipoc") {
+      showPromptsModalText("（AIPoC 尚不支援查看第一階段中間圖）");
+      return;
+    }
+    try {
+      const response = await fetch(preEditImageUrl(lastResult.jobId, { path: lastResult.path, run: lastResult.runNumber }));
+      if (!response.ok) {
+        showPromptsModalText("（此結果沒有第一階段中間圖，可能是單階段模式或未啟用 AI 修圖）");
+        return;
+      }
+      showPromptsModalImage(URL.createObjectURL(await response.blob()));
+    } catch (err) {
+      showPromptsModalText("（載入第一階段中間圖時發生錯誤）");
+    }
+  }
 
   // Raw analyze-stage JSON, exactly as the backend returned it (including
   // internal _advanced_options/_aspect_ratio_pref_at_analysis fields) -- for
@@ -6539,7 +6620,9 @@
   function renderPromptsModalTabs() {
     if (!els.promptsModalTabs || !els.promptsModalContent) return;
     els.promptsModalTabs.innerHTML = "";
-    const stages = PROMPT_MODAL_STAGES.map(({ label, el, text: getText, emptyText }) => {
+    const stages = PROMPT_MODAL_STAGES.map((stage) => {
+      if (stage.image) return { label: stage.label, image: true, empty: !lastResult?.jobId };
+      const { label, el, text: getText, emptyText } = stage;
       const fallback = emptyText || "（此步驟未呼叫 GPT）";
       const text = (getText ? getText() : el()?.textContent)?.trim();
       const empty = !text || text === "–" || text === fallback;
@@ -6554,14 +6637,16 @@
       btn.addEventListener("click", () => {
         buttons.forEach((b) => b.classList.remove("is-active"));
         btn.classList.add("is-active");
-        els.promptsModalContent.textContent = stage.text;
+        if (stage.image) loadPromptsModalImageTab();
+        else showPromptsModalText(stage.text);
       });
       els.promptsModalTabs.appendChild(btn);
       return btn;
     });
     if (buttons.length) {
       buttons[0].classList.add("is-active");
-      els.promptsModalContent.textContent = stages[0].text;
+      if (stages[0].image) loadPromptsModalImageTab();
+      else showPromptsModalText(stages[0].text);
     }
   }
 
@@ -6573,6 +6658,10 @@
 
   function closePromptsModal() {
     if (els.promptsModal) els.promptsModal.hidden = true;
+    if (promptsModalImageObjectUrl) {
+      URL.revokeObjectURL(promptsModalImageObjectUrl);
+      promptsModalImageObjectUrl = null;
+    }
   }
 
   function analyzedBatchRecords() {
@@ -7142,6 +7231,7 @@
   if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.showPromptBtn.addEventListener("click", openPromptsModal);
   if (els.promptsModalClose) els.promptsModalClose.addEventListener("click", closePromptsModal);
+  if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.addEventListener("click", togglePromptsModalImageCompare);
   if (els.promptsModal) {
     els.promptsModal.addEventListener("click", (e) => {
       if (e.target.dataset.close) closePromptsModal();

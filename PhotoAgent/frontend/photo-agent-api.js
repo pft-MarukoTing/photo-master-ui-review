@@ -203,6 +203,17 @@ window.PhotoAgentApi = (() => {
     return run ? `${base}?run=${encodeURIComponent(run)}` : base;
   }
 
+  // Debug-UI-only same-origin fetch for Step 5's own output before Step 5b's
+  // gaze-repair pass overwrites it (see pipeline.py's finish_stage and
+  // backend/routes/api.py's result_pre_edit_image()). Local-path only --
+  // AIPoC's separate deployment of this pipeline doesn't expose this key.
+  // 404s for a job that ran single_pass_edit or ai_photo_editing=False,
+  // since neither ever produces a stage-1 image distinct from the final one.
+  function preEditImageUrl(jobId, { path = "local", run } = {}) {
+    const base = `${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}/pre_edit_image`;
+    return run ? `${base}?run=${encodeURIComponent(run)}` : base;
+  }
+
   // Small JPEG counterpart of resultImageUrl -- local-path only (see
   // backend/routes/api.py's result_thumbnail()). Used for the history grid,
   // which only ever renders this at a few dozen CSS pixels and shouldn't pay
@@ -617,6 +628,7 @@ window.PhotoAgentApi = (() => {
     getJobResult,
     getJobRuns,
     resultImageUrl,
+    preEditImageUrl,
     resultThumbnailUrl,
     sourceImageUrl,
     sourceThumbnailUrl,

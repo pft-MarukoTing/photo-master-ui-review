@@ -1327,6 +1327,40 @@
       overflow-wrap: anywhere;
       font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     }
+    /* #prompts-modal-image-wrap: the one tab (stage 1 image) that isn't
+       text -- shares .prompts-modal-content's flex slot, toggled via
+       [hidden] instead of sitting side by side with it (see
+       loadPromptsModalImageTab, app.js). position:relative so the two
+       stacked <img> layers and the compare button can lay on top of each
+       other, same idea as .compare-card/.compare-img on the results page. */
+    .prompts-modal-image-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      background: var(--card-2);
+    }
+    /* object-fit: contain since the source photo's aspect ratio varies per
+       job. Only one layer is ever visible -- .showing-original on the wrap
+       (toggled by #prompts-modal-image-compare-btn) swaps which. */
+    .prompts-modal-image-layer {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .prompts-modal-image-original { display: none; }
+    .prompts-modal-image-wrap.showing-original .prompts-modal-image-layer:not(.prompts-modal-image-original) { display: none; }
+    .prompts-modal-image-wrap.showing-original .prompts-modal-image-original { display: block; }
+    .prompts-modal-image-compare-btn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      z-index: 2;
+      height: 30px;
+      padding: 0 12px;
+      font-size: 13px;
+    }
     .demo-images-grid {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3732,6 +3766,16 @@
      read straight from the hidden #prompt-* <pre> elements (see renderPrompts,
      results.js), so it always matches whatever result is currently on
      screen, batch or single, without needing its own copy of that state.
+     One tab is different: the "stage 1" image tab has no #prompt-* element
+     to read -- it lazy-fetches result_pre_edit_image (backend/routes/api.py)
+     on click and swaps in #prompts-modal-image-wrap instead of the <pre>
+     (see loadPromptsModalImageTab, app.js). Inside that wrap,
+     #prompts-modal-image-compare-btn toggles #prompts-modal-image (the
+     stage-1 photo, already fetched) against #prompts-modal-image-original
+     (the untouched source photo, lazy-set to sourceImageUrl on first
+     toggle) -- same stacked-<img>-pair toggle as #compare-toggle-btn/
+     #original-img/#generated-img on the results page, just scoped to this
+     modal instead of styles.css's .compare-card.
      Same shared backdrop+box modal shape as #confirm-modal above. -->
 <div id="prompts-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
@@ -3743,6 +3787,11 @@
     <div class="prompts-modal-body">
       <div id="prompts-modal-tabs" class="prompts-modal-tabs" role="tablist"></div>
       <pre id="prompts-modal-content" class="prompts-modal-content"></pre>
+      <div id="prompts-modal-image-wrap" class="prompts-modal-image-wrap" hidden>
+        <button id="prompts-modal-image-compare-btn" type="button" class="btn btn-secondary btn-sm prompts-modal-image-compare-btn">與原圖比較</button>
+        <img id="prompts-modal-image" class="prompts-modal-image-layer" alt="第一階段中間圖">
+        <img id="prompts-modal-image-original" class="prompts-modal-image-layer prompts-modal-image-original" alt="原始照片">
+      </div>
     </div>
   </div>
 </div>

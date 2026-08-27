@@ -249,7 +249,10 @@ def finish_stage(
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
         result_image_data_url: str, # data:image/png;base64,...
-        result_text: dict           # analysis + quality_check + token_usage
+        result_text: dict,          # analysis + quality_check + token_usage
+        pre_edit_image: str | None, # base64 PNG, Step 5 output before Step 5b
+                                     # overwrites it -- None unless Step 5b
+                                     # actually ran (see pre_edit_image_b64 below)
     }
     """
     prompts = dict(analysis.get("prompts") or {})
@@ -283,6 +286,13 @@ def finish_stage(
     prompts["crop_validation"] = None
     timings["Step 4 - crop_validation"] = None
 
+    # Populated only when Step 5b actually runs (below) -- Step 5's own
+    # output before that pass overwrites it, kept around so callers can
+    # surface it as a debug-UI "stage 1" image distinct from the final
+    # result. Stays None under single_pass_edit or ai_photo_editing=False,
+    # where there is no second stage to distinguish it from.
+    pre_edit_image_b64 = None
+
     if ai_photo_editing:
         # Step 5 — AI edit
         t0 = time.time()
@@ -307,6 +317,7 @@ def finish_stage(
             timings["Step 5b - gaze_repair_pass"] = time.time() - t0
             logger.info("Step 5b skipped (single_pass_edit=True)")
         else:
+            pre_edit_image_b64 = image_b64
             try:
                 image_b64, gaze_repair_prompt, gaze_repair_usage = _run_gaze_repair_pass(image_b64, analysis, quality)
                 prompts["gaze_repair_pass"] = gaze_repair_prompt
@@ -403,6 +414,7 @@ def finish_stage(
     return {
         "result_image": image_b64,
         "result_image_data_url": f"data:image/png;base64,{image_b64}",
+        "pre_edit_image": pre_edit_image_b64,
         "result_text": {
             "analysis": analysis,
             "quality_check": qa,
