@@ -30,7 +30,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options")
+            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
@@ -54,6 +54,10 @@ def _parse_and_validate_params(form):
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
         "overwrite_prompt": str(form.get("overwrite_prompt", "false")).lower() == "true",
+        # One-shot alternative to the default two-call edit (Step 5 + Step 5b
+        # gaze repair) -- see photo_agent.param_validation._validate_params
+        # for the accompanying image_quality bump.
+        "single_pass_edit": str(form.get("single_pass_edit", "false")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
@@ -986,6 +990,7 @@ def aipoc_submit():
         stage="finish" if analysis else None,
         analysis=analysis,
         advanced_options=params.get("advanced_options", {}),
+        single_pass_edit=params.get("single_pass_edit", False),
     )
     task_id = body.get("result", {}).get("taskId")
     if not task_id:

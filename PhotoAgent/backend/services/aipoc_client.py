@@ -88,7 +88,8 @@ def upload_to_req_url(request_spec, data):
 
 def run_photo_agent_task(access_token, src_files, preset="natural", image_quality="medium",
                           image_model="gpt-image-2", aspect_ratio="auto", ai_photo_editing=True, run_qa=True,
-                          user_prompt=None, overwrite_prompt=False, stage=None, analysis=None, advanced_options=None, req_id=1):
+                          user_prompt=None, overwrite_prompt=False, stage=None, analysis=None, advanced_options=None,
+                          single_pass_edit=False, req_id=1):
     """POST /task/run.action with the photoAgent payload shape.
 
     UNVERIFIED against the real AIPoC service -- see module docstring.
@@ -118,6 +119,10 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
             {"eye_closed_detection": False}) -- same UNCONFIRMED caveat as
             stage/analysis: if the remote build hasn't picked this param up
             yet, it's silently ignored and today's always-on behavior stands.
+        single_pass_edit: skip Step 5b's isolated gaze-repair re-pass and rely
+            on Step 5's own bundled edit call -- same UNCONFIRMED caveat as
+            advanced_options: silently ignored (today's two-call behavior
+            stands) if the remote build hasn't picked this param up yet.
 
     Returns the parsed JSON body -- caller reads body["result"]["taskId"].
     """
@@ -139,6 +144,8 @@ def run_photo_agent_task(access_token, src_files, preset="natural", image_qualit
         params["analysis"] = analysis
     if advanced_options:
         params["advanced_options"] = advanced_options
+    if single_pass_edit:
+        params["single_pass_edit"] = single_pass_edit
     payload = {
         "payload": {
             "acts": [{"id": 0, "params": params}],

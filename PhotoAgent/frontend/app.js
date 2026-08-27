@@ -436,6 +436,7 @@
     if (processingPathRow) processingPathRow.style.display = isDebug ? "" : "none";
     if (isDebug && els.processingPathSelect) els.processingPathSelect.value = "local";
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
+    if (els.twoStageEditRow) els.twoStageEditRow.style.display = isDebug ? "" : "none";
     if (els.promptOverwriteRow) els.promptOverwriteRow.style.display = isDebug ? "" : "none";
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
@@ -720,6 +721,48 @@
   if (els.apImageModelQualitySelect) {
     els.apImageModelQualitySelect.addEventListener("change", () =>
       applyModelQualityChange(els.apImageModelQualitySelect.value));
+  }
+
+  // Unchecking 兩階段修圖 (i.e. enabling single_pass_edit) skips Step 5b's
+  // isolated gaze-repair re-pass -- see pipeline.finish_stage's docstring --
+  // which is only trusted to be handled reliably by Step 5's own bundled
+  // call at gpt-image-2 medium+, not gpt-image-2 low. Bump the picker to
+  // medium the moment single-pass is switched on if it's currently sitting
+  // on gpt-image-2 low, same way the backend itself defends this
+  // combination (see photo_agent/param_validation.py's own single_pass_edit
+  // bump) -- this just keeps what's displayed in sync with what will
+  // actually run instead of silently diverging from it. Never downgrades a
+  // HIGHER quality/model choice the user already made. Re-checking 兩階段
+  // 修圖 reverses this: gpt-image-2 medium is only needed for the single-call
+  // path's own gaze fix, so switch back down to low, the cheaper tier that's
+  // sufficient once Step 5b's own dedicated pass is doing the gaze repair
+  // again -- same "only touch the exact combo the other side would have set"
+  // rule, mirrored. Step 5b itself always runs on a separate, fixed model
+  // (config.MODELS["gaze_repair"], currently nano-banana-2) regardless of
+  // what Step 5's own model/quality picker says -- untouched by this toggle
+  // either way.
+  // #two-stage-edit-desc describes the two-stage split (Step 5's model +
+  // Step 5b's fixed nano-banana-2 pass) -- meaningless once single_pass_edit
+  // collapses that into one call, so it only makes sense to show while the
+  // toggle is actually checked.
+  function applyTwoStageEditDescVisibility() {
+    if (els.twoStageEditDesc) els.twoStageEditDesc.hidden = !els.twoStageEditToggle?.checked;
+  }
+
+  if (els.twoStageEditToggle) {
+    applyTwoStageEditDescVisibility();
+    els.twoStageEditToggle.addEventListener("change", () => {
+      applyTwoStageEditDescVisibility();
+      const current = findModelQualityOption(els.imageModelQualitySelect?.value);
+      if (!current || current.model !== "gpt-image-2") return;
+      if (!els.twoStageEditToggle.checked && current.quality === "low") {
+        const medium = findModelQualityOptionByPair("gpt-image-2", "medium");
+        if (medium) applyModelQualityChange(medium.value);
+      } else if (els.twoStageEditToggle.checked && current.quality === "medium") {
+        const low = findModelQualityOptionByPair("gpt-image-2", "low");
+        if (low) applyModelQualityChange(low.value);
+      }
+    });
   }
 
   // 分析模型 selector (Steps 2/3/6's shared model) -- only #analysis-model
@@ -2695,8 +2738,8 @@
   // still needs the real two-stage analyze->adjust->continue path (and its
   // own per-RUN edit jobs, since each RUN there can carry different
   // per-image style/recipe overrides picked during review).
-  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
-    const jobId = await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
+  async function runCombinedMultiRun({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt = "", overwritePrompt = false, runCount = 1, onStage, onRunDone }) {
+    const jobId = await submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount, user: getCurrentUser(), path: "local" });
     await watchCombinedJobRuns(jobId, runCount, { onStage, onRunDone });
   }
 
@@ -2778,6 +2821,7 @@
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
+    const singlePassEdit = els.twoStageEditToggle ? !els.twoStageEditToggle.checked : false;
     // Advanced Settings toggles (Eyes category, and whatever joins it later)
     // -- bundled into one object instead of one variable per toggle, so a new
     // toggle only needs a new key here, not a new argument threaded through
@@ -2849,7 +2893,7 @@
         }
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
 
       if (useCombinedJob) {
         await finishSingleFlow();
@@ -2902,7 +2946,7 @@
     // job started from."
     const myHistoryToken = historyViewToken;
     const isCurrent = () => historyViewToken === myHistoryToken;
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
     const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
@@ -2998,7 +3042,7 @@
       const stepStart = Date.now();
       try {
         await runCombinedMultiRun({
-          file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, userPrompt, overwritePrompt, runCount,
+          file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, userPrompt, overwritePrompt, runCount,
           onStage: onCombinedStage,
           onRunDone: async (runData) => {
             const run = myRuns[runData.run - 1];
@@ -3066,9 +3110,9 @@
       let finalJobId, imageUrl, result;
 
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser() });
+        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser() });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -3156,7 +3200,7 @@
 
       const actionId = generateActionId();
       await runBatchPool(myRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId });
+        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
         // autoOpenPanel: false -- this fires per-RUN, not just once at the
@@ -3208,14 +3252,14 @@
       : rerunJob({ file, ...payload });
   }
 
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, processingPath, analyzeTimings, actionId }) {
+  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
+        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -3432,6 +3476,7 @@
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
+      singlePassEdit: els.twoStageEditToggle ? !els.twoStageEditToggle.checked : false,
       advancedOptions: readAdvancedOptionsFromDom(),
       path: els.processingPathSelect?.value || "local"
     };
@@ -3612,6 +3657,7 @@
         aspectRatio: batchSettings.aspectRatio,
         aiPhotoEditing: batchSettings.aiPhotoEditing,
         runQa: batchSettings.runQa,
+        singlePassEdit: batchSettings.singlePassEdit,
         advancedOptions: batchSettings.advancedOptions,
         userPrompt,
         overwritePrompt,
@@ -3876,6 +3922,7 @@
           aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
+          singlePassEdit: batchSettings.singlePassEdit,
           userPrompt,
           overwritePrompt,
           analysis: effectiveAnalysis,
@@ -3893,6 +3940,7 @@
           aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
+          singlePassEdit: batchSettings.singlePassEdit,
           userPrompt,
           overwritePrompt,
           user: getCurrentUser(),
@@ -5250,6 +5298,7 @@
             aspectRatio: job.aspect_ratio || "auto",
             aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
             runQa: job.run_qa != null ? job.run_qa : true,
+            singlePassEdit: !!job.single_pass_edit,
             processingPath: "local",
             analyzeTimings: [],
             useCombinedJob: false
@@ -5407,6 +5456,7 @@
         aspectRatio: job.aspect_ratio || "auto",
         aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
         runQa: job.run_qa != null ? job.run_qa : true,
+        singlePassEdit: !!job.single_pass_edit,
         processingPath: "local",
         analyzeTimings: [],
         useCombinedJob: false
@@ -6942,6 +6992,12 @@
       // A skipped QA writes an empty `checks` object; a QA that ran (or ran and
       // failed into the fallback report) always has keys in it.
       runQa: Object.keys(result.quality_check?.checks || {}).length > 0,
+      // Not recoverable from the export: a null Step 5b usage entry means
+      // either single_pass_edit was on OR there was simply no approved gaze
+      // fix to repair, and result.json can't tell those apart. Always
+      // re-runs an imported folder through the (safer) two-call default
+      // rather than guessing.
+      singlePassEdit: false,
       path: "local"                  // /rerun is a local-queue route only
     };
   }
@@ -6986,6 +7042,7 @@
       aspectRatio: settings.aspectRatio,
       aiPhotoEditing: settings.aiPhotoEditing,
       runQa: settings.runQa,
+      singlePassEdit: settings.singlePassEdit,
       processingPath: settings.path,
       analyzeTimings: [],
       useCombinedJob: false
@@ -7019,6 +7076,7 @@
       aspectRatio: settings.aspectRatio,
       aiPhotoEditing: settings.aiPhotoEditing,
       runQa: settings.runQa,
+      singlePassEdit: settings.singlePassEdit,
       path: settings.path
     };
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);

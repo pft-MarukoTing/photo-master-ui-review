@@ -47,23 +47,33 @@ logger = logging.getLogger(__name__)
 
 
 def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
-    """Step 5b: redo the approved gaze repair(s) as a second, isolated
+    """Step 5b: perform the approved gaze repair(s) as a second, isolated
     whole-image edit on top of Step 5's own output.
 
     Runs on whichever model config.MODELS["gaze_repair"] names (see
     GAZE_REPAIR_BY_MODEL above), independent of whichever model Step 5 itself
-    used: Step 5 bundles every gaze fix into one call together with
-    exposure/crop/skin/style/etc, and on gpt-image-2 low specifically that
-    call reliably applies the coarse, whole-frame changes but often no-ops
-    the fine, localized iris/pupil movement -- confirmed by comparing several
-    before/after test photos where the analysis's edit_instruction was just
-    as clear and specific in the cases that failed as in the ones that
-    worked. A second, isolated call whose prompt contains nothing but the
-    gaze fix gives the model's full attention to just this one change, for
-    every approved subject at once -- which also sidesteps the multi-person
-    matching problem a crop-based approach would have (no need to figure out
-    which detected face is which named subject; the model sees the whole
-    photo and every name at once, same as Step 5 does today).
+    used. Under the two-call default (single_pass_edit=False), Step 5 is
+    told to leave gaze completely untouched even when a fix is approved (see
+    build_edit_prompt's single_pass_edit-gated gaze_block in prompts.py) --
+    this pass is the ONLY place any approved gaze redirection happens, not a
+    touch-up on top of a partial Step 5 attempt. That split exists because
+    on gpt-image-2 low specifically, a single call bundling the gaze fix
+    together with exposure/crop/skin/style/etc reliably applies the coarse,
+    whole-frame changes but often no-ops the fine, localized iris/pupil
+    movement -- confirmed by comparing several before/after test photos
+    where the analysis's edit_instruction was just as clear and specific in
+    the cases that failed as in the ones that worked. A second, isolated
+    call whose prompt contains nothing but the gaze fix gives the model's
+    full attention to just this one change, for every approved subject at
+    once -- which also sidesteps the multi-person matching problem a
+    crop-based approach would have (no need to figure out which detected
+    face is which named subject; the model sees the whole photo and every
+    name at once, same as Step 5 does today).
+
+    Under single_pass_edit=True this pass never runs at all (see
+    finish_stage), so build_edit_prompt keeps the older bundled-attempt
+    behavior for that path instead -- Step 5 is the only edit call, so it
+    has to be the one that at least attempts the fix.
 
     An earlier version of this pass cropped to each face and pasted the
     edited crop back in. Workable in principle, but the crop's own edit call
@@ -215,6 +225,7 @@ def finish_stage(
     run_qa: bool = True,
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
+    single_pass_edit: bool = False,
 ) -> dict:
     """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
 
@@ -222,6 +233,18 @@ def finish_stage(
     analyze_stage (crop_box, roi_box, protected_regions, ...) is passed
     straight to the edit model, which is instructed to perform that crop
     itself as part of the edit.
+
+    single_pass_edit: skip Step 5b (see _run_gaze_repair_pass) and fall back
+    to having Step 5's own edit call bundle any approved gaze fix in with
+    everything else (build_edit_prompt's single_pass_edit-gated gaze_block,
+    prompts.py). Under the two-call default (single_pass_edit=False), Step 5
+    is instead told to leave gaze completely untouched and Step 5b performs
+    100% of any approved gaze redirection as an isolated second pass -- so
+    single_pass_edit trades that dedicated pass's reliability for a single
+    edit-model round trip; callers picking this path should use an
+    image_model/quality combination trusted to apply the bundled fix
+    reliably on its own (gpt-image-2 medium by default -- see
+    photo_agent/param_validation.py).
 
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
@@ -265,7 +288,7 @@ def finish_stage(
         t0 = time.time()
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
-        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key, aspect_ratio=aspect_ratio)
+        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key, aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit)
         prompts["image_edit"] = edit_prompt
         usage["Step 5 - image_edit"] = edit_result.get("usage")
         timings["Step 5 - image_edit"] = time.time() - t0
@@ -275,18 +298,26 @@ def finish_stage(
         # Step 5b — gaze-only repair pass (best-effort; see
         # _run_gaze_repair_pass for scope and why it exists). Never allowed to
         # fail the job -- worst case is the Step 5 image passes through as-is.
+        # Skipped entirely under single_pass_edit -- see finish_stage's own
+        # docstring for that tradeoff.
         t0 = time.time()
-        try:
-            image_b64, gaze_repair_prompt, gaze_repair_usage = _run_gaze_repair_pass(image_b64, analysis, quality)
-            prompts["gaze_repair_pass"] = gaze_repair_prompt
-            usage["Step 5b - gaze_repair_pass"] = gaze_repair_usage
-            timings["Step 5b - gaze_repair_pass"] = time.time() - t0
-            logger.info("Step 5b done in %.2fs", timings["Step 5b - gaze_repair_pass"])
-        except Exception as exc:
+        if single_pass_edit:
             prompts["gaze_repair_pass"] = None
             usage["Step 5b - gaze_repair_pass"] = None
             timings["Step 5b - gaze_repair_pass"] = time.time() - t0
-            logger.warning("Step 5b gaze repair pass failed in %.2fs, keeping Step 5 output: %s", timings["Step 5b - gaze_repair_pass"], exc)
+            logger.info("Step 5b skipped (single_pass_edit=True)")
+        else:
+            try:
+                image_b64, gaze_repair_prompt, gaze_repair_usage = _run_gaze_repair_pass(image_b64, analysis, quality)
+                prompts["gaze_repair_pass"] = gaze_repair_prompt
+                usage["Step 5b - gaze_repair_pass"] = gaze_repair_usage
+                timings["Step 5b - gaze_repair_pass"] = time.time() - t0
+                logger.info("Step 5b done in %.2fs", timings["Step 5b - gaze_repair_pass"])
+            except Exception as exc:
+                prompts["gaze_repair_pass"] = None
+                usage["Step 5b - gaze_repair_pass"] = None
+                timings["Step 5b - gaze_repair_pass"] = time.time() - t0
+                logger.warning("Step 5b gaze repair pass failed in %.2fs, keeping Step 5 output: %s", timings["Step 5b - gaze_repair_pass"], exc)
 
         # Step 6 — quality check (debug-ui escape hatch: skip the QA call
         # entirely when run_qa=False, e.g. to save time/cost while iterating
@@ -397,10 +428,12 @@ def run_pipeline(
     run_qa: bool = True,
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
+    single_pass_edit: bool = False,
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
     analysis = analyze_stage(image_bytes, aspect_ratio, analysis_model=analysis_model)
     return finish_stage(
         image_bytes, analysis, user_prompt, preset_key, quality, ai_photo_editing,
         image_model, analysis_model, run_qa, aspect_ratio, overwrite_prompt,
+        single_pass_edit,
     )

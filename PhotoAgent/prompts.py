@@ -2161,7 +2161,7 @@ def build_smile_block(analysis):
 {_smile_craft_rules({'gentle' if level == 'auto' else level})}"""
 
 
-def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None):
+def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False):
     analysis = strip_disabled_topic_items(analysis)
     rejected_axes = resolve_rejected_axes(analysis)
     color_craft_direction = build_color_craft_direction(rejected_axes)
@@ -2485,7 +2485,25 @@ Approved-repair override:
         if isinstance(item, dict) and item.get("should_fix")
     ] if gaze_contact_detection_enabled else []
     gaze_block = ""
-    if gaze_items_to_fix:
+    # Two-stage flow (single_pass_edit=False, the default): any approved gaze
+    # repair is 100% Step 5b's job (pipeline._run_gaze_repair_pass calls
+    # build_gaze_only_edit_prompt as an isolated second pass on this call's own
+    # output), so this call must leave gaze untouched even when a fix is
+    # approved -- attempting it here too would let this pass's own no-op or
+    # partial attempt slip through as the final result if Step 5b is ever
+    # skipped/best-effort-fails, and gives no benefit since Step 5b always
+    # re-examines and re-edits the whole image regardless of what this pass
+    # did. single_pass_edit=True has no Step 5b to defer to, so it keeps the
+    # original bundled-attempt behavior below.
+    if gaze_items_to_fix and not single_pass_edit:
+        gaze_block = """Gaze preservation instruction (highest priority):
+- Do not perform any gaze/eye-direction correction in this pass, even though the analysis approved one for a named subject below -- that repair is deliberately deferred to a separate, later edit pass and is completely out of scope for this pass.
+- This overrides every place above that still argues for a gaze change now -- the aesthetic diagnosis, the detected issues, the edit philosophy, the edit intent, and correction_plan were all written to describe the approved fix, not to authorize performing it in this pass.
+- Scope: this instruction governs where an open eye's pupil/iris points -- eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights. It does not govern whether an eye is open or closed; that is a different property, governed separately by the blink-repair instructions elsewhere in this prompt, which may still approve reopening a person's closed or half-closed eyelids even though gaze redirection is out of scope for this pass.
+- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, and expression exactly as captured, for every subject, including the one(s) named below.
+- Do not redirect anyone's gaze toward or away from the camera in this pass.
+"""
+    elif gaze_items_to_fix:
         gaze_targets = []
         for item in gaze_items_to_fix:
             label = item.get("subject_label", "unnamed subject")

@@ -221,6 +221,26 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["run_qa"] = run_qa
 
+    # Skips pipeline.finish_stage's Step 5b (the isolated gaze-repair re-pass)
+    # and relies on Step 5's own bundled edit call instead -- one edit-model
+    # round trip instead of two, at the cost of Step 5b's insurance against a
+    # bundled call under-applying the gaze fix. Only trustworthy on its own at
+    # gpt-image-2 medium+ (see pipeline.finish_stage's docstring), so this is
+    # the one flag that reaches into image_quality/image_model's own defaults
+    # above -- "medium"/"gpt-image-2" already match this path's needs, but a
+    # caller enabling single_pass_edit while explicitly requesting "low"
+    # elsewhere still gets bumped to "medium" here rather than silently
+    # keeping a combination known not to apply the fix reliably in one call.
+    single_pass_edit = normalized.get("single_pass_edit", False)
+    if not isinstance(single_pass_edit, bool):
+        raise RuntimeError(
+            f"{EFFECT_NAME}: single_pass_edit must be a boolean",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["single_pass_edit"] = single_pass_edit
+    if single_pass_edit and normalized["image_model"] == "gpt-image-2" and normalized["image_quality"] == "low":
+        normalized["image_quality"] = "medium"
+
     normalized["advanced_options"] = normalize_advanced_options(normalized.get("advanced_options"))
 
     # How many independent edit variations the combined ("full" stage) job

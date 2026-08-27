@@ -159,6 +159,7 @@ def edit_photo(
     revision_feedback: str = None,
     model: str = NANO_BANANA_2_MODEL,
     aspect_ratio: str = "auto",
+    single_pass_edit: bool = False,
 ):
     """Returns (result, prompt) -- same contract as openai_client.edit_photo."""
     preset = PRESETS.get(preset_key) or PRESETS["natural"]
@@ -186,7 +187,7 @@ def edit_photo(
     if framed_analysis.get("crop_box"):
         framed_analysis["crop_box"]["aspect_ratio"] = geometry_ratio_label
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio, source_size=(img_w, img_h))
+    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio, source_size=(img_w, img_h), single_pass_edit=single_pass_edit)
     image_config["aspectRatio"] = api_ratio_label
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't

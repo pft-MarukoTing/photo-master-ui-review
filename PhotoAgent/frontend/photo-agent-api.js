@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, advancedOptions, runCount, user, actionId, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, advancedOptions, runCount, user, actionId, singlePassEdit, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -44,6 +44,9 @@ window.PhotoAgentApi = (() => {
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
+    // One-shot alternative to the default two-call edit (Step 5 + Step 5b
+    // gaze repair) -- see pipeline.finish_stage's single_pass_edit docstring.
+    form.append("single_pass_edit", singlePassEdit ? "true" : "false");
     // Upload page's Advanced Settings toggles (Eyes category, and whatever
     // joins it later) -- sent as one JSON field instead of one form field per
     // toggle, so a new toggle never needs a new form.append call here.
@@ -282,7 +285,7 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
+  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -297,6 +300,7 @@ window.PhotoAgentApi = (() => {
         run_qa: runQa === false ? "false" : "true",
         user_prompt: userPrompt || "",
         overwrite_prompt: !!overwritePrompt,
+        single_pass_edit: !!singlePassEdit,
         user: user || "",
         // Groups every job submitted from ONE "Run" click (runSingleItem/
         // editBatchItem submitting N separate continueJob calls for a
@@ -317,7 +321,7 @@ window.PhotoAgentApi = (() => {
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
-  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId }) {
+  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("analysis", JSON.stringify(analysis));
@@ -330,6 +334,7 @@ window.PhotoAgentApi = (() => {
     form.append("run_qa", runQa === false ? "false" : "true");
     if (userPrompt) form.append("user_prompt", userPrompt);
     form.append("overwrite_prompt", overwritePrompt ? "true" : "false");
+    form.append("single_pass_edit", singlePassEdit ? "true" : "false");
     // Same history bookkeeping continueJob does -- a rerun is a real edit and
     // belongs in the user's history like any other, and actionId groups the N
     // parallel RUNs of one runCount>1 click into a single entry.
