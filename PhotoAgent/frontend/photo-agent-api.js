@@ -129,7 +129,18 @@ window.PhotoAgentApi = (() => {
         throw new Error(`${data.error || `查詢狀態失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
       }
       if (data.status === "success") return true;
-      if (data.status === "error") throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+      if (data.status === "error") {
+        // error_message is the raw upstream failure text (e.g. an OpenAI
+        // safety-system rejection with its safety_violations=[...] detail,
+        // or a requests.Timeout's message) -- prefer it over error, which is
+        // just a short machine code (unknown_internal_error, etc). code is
+        // kept on the Error itself so friendlyError() (app.js) can key a
+        // canned message off it even when error_message is too technical to
+        // show as-is (e.g. ai_service_timeout).
+        const err = new Error(`${data.error_message || data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+        err.code = data.error;
+        throw err;
+      }
       // "stage" is only present for a combined analyze+edit job (see
       // job_processor.py) -- lets a single-job submission still show
       // "analyzing" -> "editing" progress instead of one flat message.
@@ -170,7 +181,9 @@ window.PhotoAgentApi = (() => {
     const response = await fetchWithRetry(`${BASE_URL}${pathPrefix(path)}/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok || data.status !== "success") {
-      throw new Error(`${data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+      const err = new Error(`${data.error_message || data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
+      err.code = data.error;
+      throw err;
     }
     return data; // { status, image_url, result: { analysis, quality_check, usage } }
   }
@@ -187,7 +200,9 @@ window.PhotoAgentApi = (() => {
       throw new Error(`${data.error || `取得結果失敗：HTTP ${response.status}`}（Job ID: ${jobId}）`);
     }
     if (data.status === "error") {
-      throw new Error(`${data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+      const err = new Error(`${data.error_message || data.error || "AI 修圖失敗。"}（Job ID: ${jobId}）`);
+      err.code = data.error;
+      throw err;
     }
     return data; // { status, runs: [{ run, image_url, result }], run_count }
   }

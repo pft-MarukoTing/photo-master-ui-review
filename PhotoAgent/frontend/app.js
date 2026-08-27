@@ -2693,6 +2693,14 @@
     if (error.message === "Failed to fetch") {
       return "無法連線到 Photo Master 伺服器，請確認後端服務是否已啟動。";
     }
+    // error.code is the backend's short error code (see server.py's
+    // process_for_api except block); ai_service_timeout means the AI
+    // service itself (OpenAI/Gemini) didn't respond in time after retries
+    // -- error.message for this case is a raw requests.Timeout string,
+    // too technical to show as-is.
+    if (error.code === "ai_service_timeout") {
+      return "AI 服務回應逾時，請稍後再試一次。";
+    }
     const msg = error.message || "";
     // OpenAI's images/edits API rejects requests its safety system flags --
     // a platform content policy we can't bypass, not a transient failure

@@ -384,7 +384,7 @@ def status(job_id):
     # until the worker has actually started the combined job. runs_done lets
     # the frontend notice a new RUN has landed (and go fetch it via /result)
     # without having to re-download every RUN's data on every poll tick.
-    info = get_job_info(job_id, keyToGet=["status", "error", "stage", "run_count", "runs_done"])
+    info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "stage", "run_count", "runs_done"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     return jsonify(info)
@@ -414,7 +414,7 @@ def _runs_from_meta(runs_meta, job_id):
 
 @api_bp.get("/result/<job_id>")
 def result(job_id):
-    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0", "run_count"])
+    info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "0_res0", "run_count"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
 
@@ -435,12 +435,13 @@ def result(job_id):
         }
         if info.get("status") == "error":
             out["error"] = info.get("error")
+            out["error_message"] = info.get("error_message")
         return jsonify(out)
 
     # Single-run job (two-stage finish-only, or an older combined job from
     # before run_count existed) -- unchanged behavior.
     if info.get("status") != "success":
-        return jsonify({"status": info.get("status"), "error": info.get("error")})
+        return jsonify({"status": info.get("status"), "error": info.get("error"), "error_message": info.get("error_message")})
 
     result_keys = res0.get("cusKeys") or []
     if len(result_keys) < 2:

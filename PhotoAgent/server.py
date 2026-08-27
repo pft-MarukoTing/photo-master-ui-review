@@ -6,6 +6,8 @@ import threading
 import time
 import traceback
 
+import requests
+
 from server_logger import ServerLogger
 
 from aiserver_utils.queue import fetch_job, set_job_info, set_job_error, set_job_progress
@@ -17,7 +19,7 @@ from aiserver_utils.health_checker import HeartBeatV2
 
 from photo_agent import EFFECT_NAME
 from artifact_store import S3ArtifactStore
-from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
+from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR, RESULT_AI_SERVICE_TIMEOUT
 from job_processor import PhotoAgentJobProcessor
 
 
@@ -154,7 +156,12 @@ def check_queue():
             set_job_progress(task_id, 100, status="success", results=results, task_id=tsk_id, effect=effect, fetch_job_ts=task_info.get('ts'))
         except Exception as e:
             error_message = str(e)
-            error_code = e.args[1] if len(e.args) > 1 else RESULT_UNKNOWN_INTERNAL_ERROR
+            if len(e.args) > 1:
+                error_code = e.args[1]
+            elif isinstance(e, requests.exceptions.Timeout):
+                error_code = RESULT_AI_SERVICE_TIMEOUT
+            else:
+                error_code = RESULT_UNKNOWN_INTERNAL_ERROR
             logger.error(task_id, f'[Worker] process with error: {error_message}')
             set_job_error(task_id, error=error_code, error_code=error_code, task_id=tsk_id, effect=effect, fetch_job_ts=task_info.get('ts'), error_message=error_message)
             set_job_progress(task_id, 100, status="error", task_id=tsk_id, effect=effect, fetch_job_ts=task_info.get('ts'))
