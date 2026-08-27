@@ -50,6 +50,7 @@ COPY artifact_store.py   /app/
 COPY config.py           /app/
 COPY prompts.py          /app/
 COPY image_tools.py      /app/
+COPY sdl_face_detector.py /app/
 COPY models              /app/models
 COPY openai_client.py    /app/
 COPY gemini_client.py   /app/

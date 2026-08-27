@@ -5,11 +5,15 @@ import os
 import base64
 import re
 import threading
+import time
 
 import cv2
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 import pillow_heif
+
+from aiserver_utils.logger import logger as aiutils_logger
+from sdl_face_detector import SDLFaceDetector
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +23,14 @@ logger = logging.getLogger(__name__)
 # off an iPhone) the same as JPEG/PNG/WebP, with no call-site changes needed.
 pillow_heif.register_heif_opener()
 
-# cv2's DNN inference (used below by FaceDetectorYN/YuNet) defaults to
-# fanning a single detect() call out across every logical core on the box.
-# Detection is already serialized process-wide by _FACE_DETECTOR_LOCK, so
-# that parallelism buys no extra throughput -- it just means each request
-# briefly saturates all cores. Capped here instead; tunable via env for perf
-# testing.
-cv2.setNumThreads(max(int(os.getenv("PHOTOAGENT_CV2_NUM_THREADS", "1")), 1))
+# Both cv2's DNN inference and onnxruntime's CPUExecutionProvider (used below
+# by the sdl face detector) default to fanning a single inference call out
+# across every logical core on the box. Detection is already serialized
+# process-wide by _FACE_DETECTOR_LOCK, so that parallelism buys no extra
+# throughput -- it just means each request briefly saturates all cores.
+# Capped here instead; tunable via env for perf testing.
+_INFERENCE_NUM_THREADS = max(int(os.getenv("PHOTOAGENT_CV2_NUM_THREADS", "1")), 1)
+cv2.setNumThreads(_INFERENCE_NUM_THREADS)
 
 
 VISION_PREVIEW_MAX_SIDE = 1024
@@ -35,48 +40,54 @@ VISION_PREVIEW_MAX_SIDE = 1024
 # rendered at a few dozen CSS pixels, not analyzed by a model.
 HISTORY_THUMBNAIL_MAX_SIDE = 320
 
+# Debug-only escape hatch for comparing analysis quality with vs. without the
+# preview downscale -- set PHOTOAGENT_SKIP_PREVIEW_RESIZE=1 in the worker's
+# environment to send the model the full-resolution photo instead. Only
+# applies to the VISION_PREVIEW_MAX_SIDE (analysis) call sites below, never to
+# an explicit smaller max_side like HISTORY_THUMBNAIL_MAX_SIDE.
+_SKIP_VISION_PREVIEW_RESIZE = False
+
 
 # ── Bytes / encoding helpers ───────────────────────────────────────────────────
 
 def create_preview_bytes(image_bytes: bytes, max_side: int = VISION_PREVIEW_MAX_SIDE) -> bytes:
+    t0 = time.perf_counter()
     img = _open_rgb(image_bytes)
-    longest = max(img.width, img.height)
-    if longest <= max_side:
-        return _to_jpeg_bytes(img)
-    scale = max_side / longest
-    img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
-    return _to_jpeg_bytes(img)
+    resized = False
+    if max_side == VISION_PREVIEW_MAX_SIDE and _SKIP_VISION_PREVIEW_RESIZE:
+        result = _to_jpeg_bytes(img)
+    else:
+        longest = max(img.width, img.height)
+        if longest <= max_side:
+            result = _to_jpeg_bytes(img)
+        else:
+            scale = max_side / longest
+            img = img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
+            result = _to_jpeg_bytes(img)
+            resized = True
+    aiutils_logger.log('[create_preview_bytes] timing', total_ms=round((time.perf_counter() - t0) * 1000, 1),
+                        resized=resized, src_dims=f"{img.width}x{img.height}")
+    return result
 
 
 _FACE_DETECTOR = None
 # ENGINE_WORKER_NUM (server.py) runs several jobs concurrently as threads in
-# one process, all sharing this lazily-created detector -- setInputSize()
-# followed by detect() is not atomic, so without this lock one thread's
-# setInputSize() can be clobbered by another thread's before the first
-# thread's detect() runs, yielding a box computed against the wrong image's
-# dimensions (and, once scaled back, coordinates that can fall outside the
-# actual image entirely).
+# one process, all sharing this lazily-created detector. onnxruntime sessions
+# are safe to call concurrently, but the lock is kept anyway so detection
+# stays single-flight per the _INFERENCE_NUM_THREADS reasoning above, and to
+# avoid re-litigating thread-safety if the model is swapped again later.
 _FACE_DETECTOR_LOCK = threading.Lock()
-_FACE_DETECTOR_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "face_detection_yunet_2023mar.onnx")
-_FACE_DETECT_SCORE_THRESHOLD = 0.6
-# Detection runs on a downscaled copy at this size, not the original photo --
-# on a native 5000px+ photo YuNet's confidence collapses (a real face measured
-# 0.6 at full resolution vs. 0.94 once shrunk to 1024px), since its backbone
-# was trained at ordinary photo resolutions. Boxes are scaled back up to the
-# original image afterward, same as VISION_PREVIEW_MAX_SIDE's role for the
-# analysis preview but kept separate since these two resizes serve different
-# consumers (the detector vs. the analysis model).
-_FACE_DETECT_MAX_SIDE = 1024
+_FACE_DETECTOR_MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "face_detector_sdl.onnx")
+_FACE_DETECT_CONFIDENCE_THRESHOLD = 0.739
+_FACE_DETECT_NMS_THRESHOLD = 0.4
 _FACE_CROP_MAX_SIDE = 768
 _FACE_CROP_MAX_COUNT = 3
 
 
-def _face_detector() -> "cv2.FaceDetectorYN":
+def _face_detector() -> SDLFaceDetector:
     global _FACE_DETECTOR
     if _FACE_DETECTOR is None:
-        _FACE_DETECTOR = cv2.FaceDetectorYN.create(
-            _FACE_DETECTOR_MODEL_PATH, "", (320, 320), score_threshold=_FACE_DETECT_SCORE_THRESHOLD
-        )
+        _FACE_DETECTOR = SDLFaceDetector(_FACE_DETECTOR_MODEL_PATH, intra_op_num_threads=_INFERENCE_NUM_THREADS)
     return _FACE_DETECTOR
 
 
@@ -94,7 +105,7 @@ def detect_face_crops(image_bytes: bytes) -> list:
     effective eye resolution to judge blink state, gaze/pupil direction, and
     the lip and teeth detail a smile reading needs.
 
-    Best-effort only: even YuNet (a small DNN detector, well past Haar cascade
+    Best-effort only: even this detector (a small DNN, well past Haar cascade
     in handling non-frontal/occluded faces and background-clutter false
     positives) can still miss a face, so an empty list is the expected outcome
     for plenty of photos, not an error -- callers must keep working from the
@@ -109,28 +120,29 @@ def detect_face_crops(image_bytes: bytes) -> list:
     if img.width < 1 or img.height < 1:
         return []
 
-    longest = max(img.width, img.height)
-    scale = _FACE_DETECT_MAX_SIDE / longest if longest > _FACE_DETECT_MAX_SIDE else 1.0
-    detect_img = img if scale == 1.0 else img.resize(
-        (round(img.width * scale), round(img.height * scale)), Image.LANCZOS
-    )
-    bgr = cv2.cvtColor(np.array(detect_img), cv2.COLOR_RGB2BGR)
+    t_cvt0 = time.perf_counter()
+    # The detector letterboxes to its own 640px input internally, so it's fed
+    # the full-resolution image directly rather than pre-downscaled here.
+    bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+    t_detect0 = time.perf_counter()
     try:
         detector = _face_detector()
         with _FACE_DETECTOR_LOCK:
-            detector.setInputSize((detect_img.width, detect_img.height))
-            _, faces = detector.detect(bgr)
-    except cv2.error:
+            faces = detector.detect(bgr, _FACE_DETECT_CONFIDENCE_THRESHOLD, _FACE_DETECT_NMS_THRESHOLD)
+    except Exception:
         # Best-effort detection: no crop is a normal, handled outcome (see
         # docstring), never worth failing the whole analysis over.
-        logger.warning("detect_face_crops: OpenCV face detector failed, continuing without face crops", exc_info=True)
+        logger.warning("detect_face_crops: face detector failed, continuing without face crops", exc_info=True)
         return []
-    if faces is None or len(faces) == 0:
+    t_detect1 = time.perf_counter()
+    aiutils_logger.log('[detect_face_crops] timing', src_dims=f"{img.width}x{img.height}",
+                        cvtcolor_ms=round((t_detect0 - t_cvt0) * 1000, 1),
+                        detect_ms=round((t_detect1 - t_detect0) * 1000, 1))
+    if not faces:
         return []
 
-    # faces columns are [x, y, w, h, <5 landmark points>, score]; only the box
-    # is needed here. Scale back from detect_img's resolution to img's.
-    boxes = [tuple(round(v / scale) for v in f[:4]) for f in faces]
+    # bbox is [x1, y1, x2, y2] in the original image's pixel space already.
+    boxes = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in (f["bbox"] for f in faces)]
     boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
     largest_area = boxes[0][2] * boxes[0][3]
     # A real face's false-positive companions from background texture/pattern
@@ -139,6 +151,7 @@ def detect_face_crops(image_bytes: bytes) -> list:
     kept = [b for b in boxes if b[2] * b[3] >= largest_area * 0.4][:_FACE_CROP_MAX_COUNT]
     logger.info("detect_face_crops: image=%dx%d raw_boxes=%s kept=%s", img.width, img.height, boxes, kept)
 
+    t_crop0 = time.perf_counter()
     crops = []
     for x, y, w, h in kept:
         left = min(max(0, x - round(w * 0.6)), img.width)
@@ -160,6 +173,8 @@ def detect_face_crops(image_bytes: bytes) -> list:
             },
             "bytes": _to_jpeg_bytes(crop),
         })
+    aiutils_logger.log('[detect_face_crops] crop timing', crop_count=len(kept),
+                        crop_total_ms=round((time.perf_counter() - t_crop0) * 1000, 1))
     return crops
 
 
