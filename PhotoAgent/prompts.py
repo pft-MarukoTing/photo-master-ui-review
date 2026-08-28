@@ -96,11 +96,10 @@ ANALYSIS_INSTRUCTION = """
 You are a senior photography director, colorist, and high-end retoucher.
 Analyze the uploaded photo and return only valid JSON. Keep the JSON keys in English. Every user-visible string value must be Traditional Chinese.
 
-Demo goal:
+Analysis goal:
 - Help a user understand how their photo can be improved.
 - Recommend a tasteful retouch that preserves the same subject, same scene, and same moment.
 - Decide whether a simple crop/reframe is useful.
-- Separate local deterministic corrections from AI image editing needs.
 
 Hard limits:
 - Do not change the subject into something else.
@@ -222,20 +221,8 @@ Return exactly this JSON shape:
       "reason": "此區域是主體語意或構圖平衡的一部分，不應被裁掉或貼邊。"
     }
   ],
-  "perception_scores": {
-    "clarity": 7,
-    "noise": 3,
-    "exposure": 6,
-    "color_temperature": 6,
-    "layout": 6,
-    "lighting": 6,
-    "color_harmony": 6,
-    "aesthetic_finish": 6
-  },
-  "tool_strategy": "哪些由本機裁切、曝光、白平衡、對比處理，哪些才交給 AI。",
   "lighting_strategy": "光線與明暗層次調整方向。",
   "memory_color_strategy": "記憶色（膚色、天空、綠色、食物、材質）在這張照片的光線下應該呈現的狀態。有人物時先說明人物受光的方向與色性；整體白平衡、色相與飽和度可以調整畫面調性，但膚色須獨立保護，維持人物原生膚色與合理情境光，只移除非預期偏色。",
-  "restoration_needs": ["可由傳統影像處理改善的項目。"],
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
   "crop_box": {
@@ -1034,17 +1021,6 @@ _PROTECTED_REGION_SCHEMA = _schema_object({
     "reason": _schema_string(),
 })
 
-_PERCEPTION_SCORES_SCHEMA = _schema_object({
-    "clarity": _schema_integer(),
-    "noise": _schema_integer(),
-    "exposure": _schema_integer(),
-    "color_temperature": _schema_integer(),
-    "layout": _schema_integer(),
-    "lighting": _schema_integer(),
-    "color_harmony": _schema_integer(),
-    "aesthetic_finish": _schema_integer(),
-})
-
 # Top-level crop_box has "reason"; the copy nested in each crop_candidates[]
 # entry does not -- two distinct shapes, not one reused across both.
 _CROP_BOX_SCHEMA = _schema_object({
@@ -1118,11 +1094,8 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "roi_box": _BOX_WITH_REASON_SCHEMA,
         "subject_extent_box": _BOX_WITH_REASON_SCHEMA,
         "protected_regions": _schema_array_of(_PROTECTED_REGION_SCHEMA),
-        "perception_scores": _PERCEPTION_SCORES_SCHEMA,
-        "tool_strategy": _schema_string(),
         "lighting_strategy": _schema_string(),
         "memory_color_strategy": _schema_string(),
-        "restoration_needs": _schema_string_array(),
         "evaluation_criteria": _schema_string_array(),
         "crop_recommendation": _schema_string(),
         "crop_box": _CROP_BOX_SCHEMA,
@@ -2919,7 +2892,6 @@ Crop instruction:
 - Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
 - Recommended aspect ratio: {rec_aspect}
 - Aspect ratio reason: {aspect_ratio_reason}
-- Tool strategy: {analysis.get("tool_strategy") or ""}
 - Lighting strategy: {analysis.get("lighting_strategy") or ""}
 - Memory color strategy: {analysis.get("memory_color_strategy") or ""}
 - Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}

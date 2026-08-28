@@ -1348,7 +1348,6 @@ window.PhotoAgentResults = (() => {
       Array.isArray(analysis.protected_regions) && analysis.protected_regions.length
         ? `保護區域：${analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || "重要區域").join("、")}。`
         : "",
-      analysis.tool_strategy ? `工具分工：${analysis.tool_strategy}` : "",
       pending ? "尚未執行修圖，確認後將開始 AI 影像修圖。" : (data.localOnly ? "目前使用本機處理，未執行 AI 影像生成。" : "目前已執行 AI 影像修圖。")
     ]);
 
