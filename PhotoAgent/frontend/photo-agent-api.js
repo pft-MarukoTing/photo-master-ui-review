@@ -255,7 +255,7 @@ window.PhotoAgentApi = (() => {
   // (AIPoC's own two-stage equivalent is analyzeAipoc() below + the existing
   // submitJob/pollJobStatus/getJobResult with path="aipoc" for stage 2.)
 
-  async function analyzeJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, advancedOptions, user }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -264,8 +264,14 @@ window.PhotoAgentApi = (() => {
     form.append("analysis_model", analysisModel || "gpt-4.1-mini");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
+    form.append("run_qa", runQa === false ? "false" : "true");
+    form.append("single_pass_edit", singlePassEdit ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
+    // Lets the backend record this analyze-only job into history (see
+    // api.py's /analyze) -- without it, a manual-review upload had no history
+    // row at all until the user got past review and clicked 開始.
+    if (user) form.append("user", user);
 
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze`, {
       method: "POST",

@@ -1366,6 +1366,35 @@
     });
   }
 
+  // Shared pause-for-review tail: show the panel, wait for the user's
+  // continue/back click, then either leave the flow or run finishSingleFlow.
+  // Used both by startSubmit's own manual path and by resuming an "awaiting
+  // review" history record (viewAnalyzeHistoryRecord) -- the two reach this
+  // exact same paused state by different routes.
+  async function runPendingReviewFlow(analysis, preset) {
+    await showPendingResults(analysis, preset);
+    const action = await waitForPendingResultsAction();
+    if (action === "back") {
+      resetApp();
+      return;
+    }
+    closePendingResults();
+    // Same "editing" loading overlay backToProcessFromResults' revise flow
+    // uses -- swaps the photo for the thinking-rings animation instead of
+    // navigating away from the results page.
+    setAnalysisPreviewDisabled(true);
+    if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
+    if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
+    if (els.canvasLoading) els.canvasLoading.hidden = false;
+    try {
+      await finishSingleFlow();
+    } finally {
+      if (els.canvasLoading) els.canvasLoading.hidden = true;
+      if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+      setAnalysisPreviewDisabled(false);
+    }
+  }
+
   // readOnly (used for historical playback, viewHistoryRecord) shows the same
   // panel purely as information -- no revise/re-run controls, since that
   // doesn't apply to a past job. Must disable (or re-enable) BEFORE
@@ -2910,6 +2939,18 @@
 
   async function startSubmit({ skipReview = false } = {}) {
     hideError();
+    // Snapshot of historyViewToken as of when this upload started -- the
+    // manual (two-stage, non-skip-review) path below awaits a real analyze
+    // job that's now recorded into history the instant it's submitted (see
+    // api.py's /analyze), so the user can navigate to a different history
+    // record and then resume THIS SAME one via viewAnalyzeHistoryRecord
+    // while this original call is still in flight. Without this guard, this
+    // orphaned call would clobber whatever viewAnalyzeHistoryRecord already
+    // rendered once its own analyze wait finished -- same isCurrent()
+    // pattern finishSingleFlow already uses, just checked before this
+    // function's OWN direct showPendingResults/renderAnalysisPreview calls,
+    // which aren't behind finishSingleFlow's guard at all.
+    const myHistoryToken = historyViewToken;
     if (batchRecords.length > 1) {
       await startSubmitBatch(skipReview);
       return;
@@ -2981,7 +3022,7 @@
             { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) }
           ]);
         } else {
-          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, advancedOptions });
+          analyzeJobId = await analyzeJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, user: getCurrentUser() });
           recordAnalyzeTiming("送出分析任務", Date.now() - stepStart);
 
           stepStart = Date.now();
@@ -3000,6 +3041,7 @@
       }
 
       singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
+      if (historyViewToken !== myHistoryToken) return; // navigated away meanwhile (see this function's own comment above)
 
       if (useCombinedJob) {
         await finishSingleFlow();
@@ -3010,27 +3052,7 @@
         renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
         await finishSingleFlow();
       } else {
-        await showPendingResults(analysis, preset);
-        const action = await waitForPendingResultsAction();
-        if (action === "back") {
-          resetApp();
-          return;
-        }
-        closePendingResults();
-        // Same "editing" loading overlay backToProcessFromResults' revise
-        // flow uses -- swaps the photo for the thinking-rings animation
-        // instead of navigating away from the results page.
-        setAnalysisPreviewDisabled(true);
-        if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
-        if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
-        if (els.canvasLoading) els.canvasLoading.hidden = false;
-        try {
-          await finishSingleFlow();
-        } finally {
-          if (els.canvasLoading) els.canvasLoading.hidden = true;
-          if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-          setAnalysisPreviewDisabled(false);
-        }
+        await runPendingReviewFlow(analysis, preset);
       }
     } catch (error) {
       // Lets any not-yet-shown phrasings finish playing (fast-forwarded)
@@ -4778,6 +4800,42 @@
         const statuses = await Promise.all(
           jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch(() => ({ status: "error" })))
         );
+        // job.stage === "analyze" (see api.py's /analyze, account.py's
+        // record_history) -- a manual-review (Run (Manual)) upload that
+        // hasn't been continued past yet. Its one job_id's own "success"
+        // means "analysis ready", not "edit done", so it needs its own
+        // badge/handler instead of falling into the done/processing checks
+        // below, which assume a real generated result.
+        if (job.stage === "analyze") {
+          const analyzed = statuses[0]?.status === "success";
+          const failed = statuses[0]?.status === "error";
+          if (failed) {
+            li.className = "history-cube batch-sidebar-item error";
+            if (badge) badge.textContent = "失敗";
+            media?.querySelector(".rc-spinner")?.remove();
+            markHistoryTileSelectable(li, job);
+            li.addEventListener("click", () => {
+              if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
+            });
+          } else {
+            if (analyzed) {
+              li.className = "history-cube batch-sidebar-item done";
+              if (badge) badge.textContent = "待審核";
+            } else if (badge) {
+              badge.textContent = "分析中";
+            }
+            li.addEventListener("click", async () => {
+              if (li.classList.contains("opening")) return;
+              li.classList.add("opening");
+              try {
+                await viewAnalyzeHistoryRecord(job);
+              } finally {
+                li.classList.remove("opening");
+              }
+            });
+          }
+          return;
+        }
         const doneIdx = statuses.findIndex((s) => s.status === "success");
         if (doneIdx !== -1) {
           li.className = "history-cube batch-sidebar-item done";
@@ -5368,6 +5426,98 @@
     // numbering -- these may come from entirely separate job_ids that each
     // think of themselves as "RUN 1".
     return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
+  }
+
+  // Resumes a manual-review upload (the "Run (Manual)" button) that had only
+  // reached /analyze last time the history list was fetched -- job.stage ===
+  // "analyze" flags this (see api.py's /analyze, account.py's
+  // record_history). Shows the same "正在分析照片" placeholder if analysis
+  // hasn't finished yet, then reconstructs singleFlowState from the entry's
+  // stored params and re-opens the review panel exactly where startSubmit's
+  // own manual path would have left it, via the same runPendingReviewFlow
+  // both now share. historyViewToken guards this the same way
+  // viewProcessingHistoryRecord does -- see its own comment.
+  async function viewAnalyzeHistoryRecord(job) {
+    const myToken = ++historyViewToken;
+    const analyzeJobId = Array.isArray(job.runs) && job.runs.length ? job.runs[0] : job.job_id;
+    const previewUrl = sourceImageUrl(analyzeJobId);
+    showSection("results");
+    if (els.batchSidebar) els.batchSidebar.hidden = true;
+    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
+    currentBatchRecord = null;
+    if (els.showPromptBtn) els.showPromptBtn.hidden = true;
+    if (els.canvasLoading) els.canvasLoading.hidden = true;
+    if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+    showBatchMainLoading({
+      previewUrl,
+      status: "analyzing",
+      aiPhotoEditing: job.ai_photo_editing,
+      imageModel: job.image_model
+    });
+
+    try {
+      await pollJobStatus(analyzeJobId, { path: "local" });
+    } catch (error) {
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+      showBatchMainError({ previewUrl, error: friendlyError(error) });
+      return;
+    }
+    if (historyViewToken !== myToken) return; // navigated away meanwhile
+
+    let analysis;
+    try {
+      analysis = (await getAnalyzeResult(analyzeJobId)).result.analysis;
+    } catch (error) {
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+      showBatchMainError({ previewUrl, error: friendlyError(error) });
+      return;
+    }
+    if (historyViewToken !== myToken) return; // navigated away meanwhile
+
+    const presetKey = job.preset || "natural";
+    const preset = presets[presetKey] || presets.natural;
+    selectedFile = null;
+    selectedFileSourceUrl = previewUrl;
+    originalImgThumbUrl = sourceThumbnailUrl(analyzeJobId);
+    singleFlowState = {
+      analysis,
+      analyzeJobId,
+      presetKey,
+      preset,
+      imageQuality: job.image_quality || "medium",
+      imageModel: job.image_model || "gpt-image-2",
+      analysisModel: job.analysis_model || "gpt-4.1-mini",
+      aspectRatio: job.aspect_ratio || "auto",
+      aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : true,
+      runQa: job.run_qa != null ? job.run_qa : true,
+      singlePassEdit: !!job.single_pass_edit,
+      advancedOptions: job.advanced_options || {},
+      processingPath: "local",
+      analyzeTimings: [],
+      useCombinedJob: false
+    };
+
+    await setImgSrcPreloaded(els.originalImg, selectedFileSourceUrl);
+    if (historyViewToken !== myToken) return; // navigated away meanwhile
+    els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
+    // Undoes what showBatchMainLoading (above) itself did: hid
+    // #results-canvas-row (via hideAllBatchMainViews) and left
+    // #batch-main-loading showing. showPendingResults -- unlike
+    // showSingleResult -- never touches either of these itself (it was never
+    // previously called after that placeholder had been shown; startSubmit's
+    // own manual path reaches showPendingResults straight from
+    // #processing-section, not from here), so without this the review panel
+    // it's about to render stays hidden underneath the still-visible
+    // placeholder.
+    if (els.batchMainLoading) els.batchMainLoading.hidden = true;
+    if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
+    closeHistoryDrawer();
+    try {
+      await runPendingReviewFlow(analysis, preset);
+    } catch (error) {
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+      showBatchMainError({ previewUrl, error: friendlyError(error) });
+    }
   }
 
   // Lets the user come back and check on a history record that was still

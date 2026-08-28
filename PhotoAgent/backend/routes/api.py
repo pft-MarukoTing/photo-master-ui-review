@@ -30,7 +30,7 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
     try:
         history_params = {
             key: (params or {}).get(key)
-            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit")
+            for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit", "stage")
         }
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
@@ -696,6 +696,12 @@ def analyze():
     engine_params = get_engine_params_template()
     engine_params["acts"][0]["params"] = params
     job_id = enqueue(engine_params, src_content=[image.read()])
+    # action_id=job_id, same as /submit -- an analyze-only job has no prior
+    # action to group under. Without this, the two-stage manual flow (Run
+    # (Manual)) had no history row at all until /continue's later call, so
+    # navigating to a different history record before then made this photo
+    # unrecoverable -- there was nothing in the list to click back into.
+    _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], job_id, params=params)
     return jsonify({"job_id": job_id}), 202
 
 
