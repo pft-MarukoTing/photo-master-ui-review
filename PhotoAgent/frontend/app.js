@@ -35,8 +35,9 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio } = window.PhotoAgentResults;
   renderBatchStyleOptions();
+  renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
   // entry (backend/services/account.py's action_id) -- needed only where a
@@ -452,6 +453,7 @@
     // setResultsDebugUi gates the overlay + pill themselves (results.js); this
     // only hides the button that opens the overlay.
     if (els.boxesToggleBtn) els.boxesToggleBtn.hidden = !isDebug;
+    if (!isDebug) closeBoxesTypeMenu();
     setResultsDebugUi(isDebug);
     // Re-running an exported result folder is a testbed workflow; the drop
     // handler is gated on isDebugUiActive too, so this hint and the behavior
@@ -2465,6 +2467,31 @@
 
   function handleDownloadMenuOutsideClick(event) {
     if (els.downloadMenuWrap && !els.downloadMenuWrap.contains(event.target)) closeDownloadMenu();
+  }
+
+  // #boxes-toggle-btn's type-picker popover -- same open/close/outside-click
+  // shape as #download-menu above.
+  function openBoxesTypeMenu() {
+    if (!els.boxesTypeMenu) return;
+    els.boxesTypeMenu.hidden = false;
+    if (els.boxesToggleBtn) els.boxesToggleBtn.setAttribute("aria-expanded", "true");
+    document.addEventListener("click", handleBoxesTypeMenuOutsideClick);
+  }
+
+  function closeBoxesTypeMenu() {
+    if (!els.boxesTypeMenu || els.boxesTypeMenu.hidden) return;
+    els.boxesTypeMenu.hidden = true;
+    if (els.boxesToggleBtn) els.boxesToggleBtn.setAttribute("aria-expanded", "false");
+    document.removeEventListener("click", handleBoxesTypeMenuOutsideClick);
+  }
+
+  function toggleBoxesTypeMenu() {
+    if (!els.boxesTypeMenu) return;
+    if (els.boxesTypeMenu.hidden) openBoxesTypeMenu(); else closeBoxesTypeMenu();
+  }
+
+  function handleBoxesTypeMenuOutsideClick(event) {
+    if (els.boxesTypeMenuWrap && !els.boxesTypeMenuWrap.contains(event.target)) closeBoxesTypeMenu();
   }
 
   // Shared record shape for both a fresh batch (setSelectedFileBatch) and
@@ -7416,14 +7443,14 @@
     });
   }
   if (els.boxesToggleBtn) {
-    // The boxes are in original-image coordinates, so turning them on also
-    // flips the canvas back to Before -- drawing them over the result would
-    // point at the wrong content (see drawAnalysisBoxes in results.js).
+    // Opens #boxes-type-menu (a checkbox per box type) instead of directly
+    // toggling a single on/off flag -- the boxes are in original-image
+    // coordinates, so opening it also flips the canvas back to Before,
+    // same reasoning as before (drawing them over the result would point at
+    // the wrong content, see drawAnalysisBoxes in results.js).
     els.boxesToggleBtn.addEventListener("click", () => {
-      const visible = toggleAnalysisBoxes();
-      if (visible) setCompareView(false);
-      els.boxesToggleBtn.classList.toggle("is-active", visible);
-      els.boxesToggleBtn.setAttribute("aria-label", visible ? "隱藏分析框" : "顯示分析框");
+      toggleBoxesTypeMenu();
+      setCompareView(false);
     });
   }
   // The overlay is positioned against the photo's rendered rect, which moves

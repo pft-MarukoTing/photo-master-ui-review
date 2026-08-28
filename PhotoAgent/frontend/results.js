@@ -641,11 +641,37 @@ window.PhotoAgentResults = (() => {
     // boxes, unlike every other spec above which is a single box. Same
     // normalized-against-original-image convention as roi_box, so it slots
     // into the same overlay with no separate coordinate handling.
-    { field: "_face_crop_boxes", color: "#a855f7", label: "臉部裁切", corner: "tl", list: true }
+    { field: "_face_crop_boxes", color: "#a855f7", label: "臉部裁切", corner: "tl", list: true },
+    // These four are lists of {subject_label, box, <flagField>, ...} --
+    // itemBox tells analysisBoxList to read box.box instead of treating the
+    // array entry itself as the box (unlike _face_crop_boxes above, whose
+    // entries already ARE plain {x,y,w,h}). box here is that PERSON's own
+    // bounding box (subjects[].box, "reused verbatim" per prompts.py), not a
+    // face crop -- drawn alongside 臉部裁切 so it's visible on the original
+    // photo which analysis-reported person box renderFaceThumbnails'
+    // box-overlap matching (below) is actually comparing each face thumbnail
+    // against. flagField/flagWhen/flagText control the per-person "worth
+    // flagging" suffix: the first three use should_fix (true = needs fixing),
+    // but smile_states has no should_fix at all -- its equivalent field is
+    // adjust_safe, and there the notable value is false (unsafe to adjust),
+    // the opposite polarity, hence a per-spec flagWhen instead of a hardcoded
+    // should_fix check.
+    { field: "eye_blink_issues", color: "#eab308", label: "閉眼偵測", corner: "tl", list: true, itemBox: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
+    { field: "gaze_contact_issues", color: "#ec4899", label: "眼神對焦", corner: "tr", list: true, itemBox: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
+    { field: "hair_issues", color: "#14b8a6", label: "亂髮偵測", corner: "bl", list: true, itemBox: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
+    { field: "smile_states", color: "#84cc16", label: "笑容調整", corner: "br", list: true, itemBox: true, flagField: "adjust_safe", flagWhen: false, flagText: "（不建議調整）" }
   ];
 
   let boxesAnalysis = null;
-  let boxesVisible = false;
+
+  // Which box types (#boxes-type-menu, one checkbox per ANALYSIS_BOX_SPECS
+  // entry) are currently drawn -- starts all-off, same as the old single
+  // boxesVisible flag defaulted to false, so nothing appears until the user
+  // actually opens the menu and picks something (renderBoxTypeMenu/
+  // toggleBoxesTypeMenu in app.js). Persists across renders/photos on
+  // purpose (a debug preference, not per-result state), same lifetime as
+  // debugUiActive below.
+  const boxTypeVisibility = Object.fromEntries(ANALYSIS_BOX_SPECS.map((spec) => [spec.field, false]));
 
   function boxEntryFromRect(spec, label, box) {
     const x = Number(box.x);
@@ -653,16 +679,29 @@ window.PhotoAgentResults = (() => {
     const w = Number(box.w);
     const h = Number(box.h);
     if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
-    return { ...spec, label, x, y, w, h, ratio: box.aspect_ratio || box.aspectRatio || "" };
+    // specLabel keeps the plain category name (e.g. "閉眼偵測") around even
+    // though `label` below overrides it with a per-person one for itemBox
+    // specs (subject_label + should_fix) -- the legend collapses those back
+    // down to one row per category and needs the un-suffixed version.
+    return { ...spec, label, specLabel: spec.label, x, y, w, h, ratio: box.aspect_ratio || box.aspectRatio || "" };
   }
 
   function analysisBoxList(analysis) {
     if (!analysis) return [];
     return ANALYSIS_BOX_SPECS.flatMap((spec) => {
+      if (!boxTypeVisibility[spec.field]) return [];
       if (spec.list) {
-        const boxes = Array.isArray(analysis[spec.field]) ? analysis[spec.field] : [];
-        return boxes
-          .map((box, i) => box && boxEntryFromRect(spec, boxes.length > 1 ? `${spec.label} ${i + 1}` : spec.label, box))
+        const items = Array.isArray(analysis[spec.field]) ? analysis[spec.field] : [];
+        return items
+          .map((item, i) => {
+            const box = spec.itemBox ? item?.box : item;
+            if (!box) return null;
+            const flagged = spec.flagField && item[spec.flagField] === spec.flagWhen;
+            const label = spec.itemBox
+              ? `${spec.label}${item.subject_label ? ` · ${item.subject_label}` : ""}${flagged ? spec.flagText : ""}`
+              : (items.length > 1 ? `${spec.label} ${i + 1}` : spec.label);
+            return boxEntryFromRect(spec, label, box);
+          })
           .filter(Boolean);
       }
       const box = analysis[spec.field];
@@ -685,7 +724,7 @@ window.PhotoAgentResults = (() => {
     if (!overlay) return;
 
     const showingGenerated = !!els.compareCard?.classList.contains("showing-generated");
-    const boxes = debugUiActive && boxesVisible && !showingGenerated
+    const boxes = debugUiActive && !showingGenerated
       ? analysisBoxList(boxesAnalysis)
       : [];
     overlay.hidden = boxes.length === 0;
@@ -728,25 +767,68 @@ window.PhotoAgentResults = (() => {
 
     if (!legend) return;
     legend.innerHTML = "";
+    // itemBox categories (eye_blink_issues/gaze_contact_issues/hair_issues)
+    // can draw one box per detected person -- the legend just needs to say
+    // "this color is 閉眼偵測", not repeat that line once per person, so only
+    // the first box seen per itemBox field gets a legend row.
+    const seenItemBoxFields = new Set();
     boxes.forEach((box) => {
+      if (box.itemBox) {
+        if (seenItemBoxFields.has(box.field)) return;
+        seenItemBoxFields.add(box.field);
+      }
       const row = document.createElement("div");
       row.className = "ab-legend-item";
       const swatch = document.createElement("span");
       swatch.className = `ab-swatch${box.dashed ? " is-dashed" : ""}`;
       swatch.style.borderColor = box.color;
       const text = document.createElement("span");
-      const coords = `x ${box.x.toFixed(3)} · y ${box.y.toFixed(3)} · w ${box.w.toFixed(3)} · h ${box.h.toFixed(3)}`;
-      text.textContent = `${box.label}　${coords}${box.ratio ? `　(${box.ratio})` : ""}`;
+      // itemBox entries carry that PERSON's box, not a crop/ROI decision --
+      // the coordinates aren't something a reviewer needs to read off, unlike
+      // roi_box/crop_box/applied_crop_plan where the exact numbers are the
+      // point, and specLabel (not the per-person label) keeps this row a
+      // plain category name instead of one specific person's verdict.
+      const label = box.itemBox ? box.specLabel : box.label;
+      const coords = box.itemBox
+        ? ""
+        : `　x ${box.x.toFixed(3)} · y ${box.y.toFixed(3)} · w ${box.w.toFixed(3)} · h ${box.h.toFixed(3)}`;
+      text.textContent = `${label}${coords}${box.ratio ? `　(${box.ratio})` : ""}`;
       row.append(swatch, text);
       legend.appendChild(row);
     });
   }
 
-  // Returns the new visibility so the caller can reflect it on the button.
-  function toggleAnalysisBoxes() {
-    boxesVisible = !boxesVisible;
-    drawAnalysisBoxes();
-    return boxesVisible;
+  // Fills #boxes-type-list with one checkbox row per ANALYSIS_BOX_SPECS
+  // entry -- called once at startup (app.js), not per-render, since the spec
+  // list is static and boxTypeVisibility already persists on its own.
+  function renderBoxTypeMenu() {
+    const list = els.boxesTypeList;
+    if (!list) return;
+    list.innerHTML = "";
+    ANALYSIS_BOX_SPECS.forEach((spec) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+      label.className = "box-type-row";
+
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = boxTypeVisibility[spec.field];
+      input.addEventListener("change", () => {
+        boxTypeVisibility[spec.field] = input.checked;
+        drawAnalysisBoxes();
+      });
+
+      const swatch = document.createElement("span");
+      swatch.className = `box-type-swatch${spec.dashed ? " is-dashed" : ""}`;
+      swatch.style.borderColor = spec.color;
+
+      const text = document.createElement("span");
+      text.textContent = spec.label;
+
+      label.append(input, swatch, text);
+      li.appendChild(label);
+      list.appendChild(li);
+    });
   }
 
   // Before/After now share one canvas, switched via #compare-toggle-btn --
@@ -1064,6 +1146,6 @@ window.PhotoAgentResults = (() => {
   return {
     renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
-    toggleAnalysisBoxes, drawAnalysisBoxes, setDebugUi, previewAspectRatio
+    renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio
   };
 })();
