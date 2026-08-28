@@ -3995,6 +3995,17 @@
   }
 
   function batchContinueAll() {
+    // Same close-directly-not-via-cancel-click reasoning as selectBatchRecord:
+    // if the currently selected "analyzed" record's own inline Run panel is
+    // open (auto-opened by showBatchAnalyzedMain), its still-pending
+    // waitForInlineAnalysisAction() promise would otherwise race against
+    // continueBatchRecords already marking this same record "processing" and
+    // submitting it below -- close it out first so every not-yet-edited case
+    // (including whichever one is currently open) goes through this one path.
+    if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+      clearInlineAnalysisWait();
+      closeInlineAnalysisPanel();
+    }
     continueBatchRecords(analyzedBatchRecords());
   }
 
