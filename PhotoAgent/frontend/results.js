@@ -618,6 +618,210 @@ window.PhotoAgentResults = (() => {
       .map(([key, value]) => `${value === true ? "通過" : value === false ? "注意" : "未定"}：${labels[key] || key}`);
   }
 
+  // ── Face thumbnails (#ap-face-thumb-row) + should_fix modal (#ap-face-modal) ──
+  // detect_face_crops (openai_client.analyze_photo) hands back up to 3 boxes
+  // in analysis._face_crop_boxes, normalized against the original image --
+  // same convention as roi_box and each *_issues[].box below (prompts.py's
+  // shared _BOX_SCHEMA, "reused verbatim by subjects/eye_blink_issues/
+  // hair_issues/gaze_contact_issues/..."). subjects[].box (and so every
+  // *_issues[].box) is required to "tightly frame EXACTLY ONE individual
+  // person" -- i.e. that person's own bounding box, not necessarily just
+  // their face -- while a face crop's box is padded only ~60%/40% around the
+  // detected face itself (image_tools.py's detect_face_crops), so the two
+  // conventions describe different-sized regions of the same person. No
+  // face/person id is ever shared between the two (openai_client never
+  // correlates them -- see pipeline.py's own note on why gaze repair
+  // deliberately avoids that same cross-referencing problem), so overlap is
+  // the only signal available: this is a best-effort match, same spirit as
+  // detect_face_crops itself, and can misfire in a tightly packed group
+  // photo where people's boxes overlap each other.
+  // flagField/flagWhen/flagText/okText mirror ANALYSIS_BOX_SPECS's own
+  // per-category flag handling below: the first three flag on should_fix
+  // (true = needs fixing), but smile_states has no should_fix at all -- its
+  // equivalent field is adjust_safe, flagged at false (unsafe to adjust),
+  // the opposite polarity.
+  const FACE_ISSUE_CATEGORIES = [
+    { field: "eye_blink_issues", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
+    { field: "gaze_contact_issues", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
+    { field: "hair_issues", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
+    { field: "smile_states", label: "笑容調整", flagField: "adjust_safe", flagWhen: false, flagText: "不建議調整", okText: "可以調整" }
+  ];
+
+  // Intersection over the SMALLER of the two boxes' own area (the
+  // Szymkiewicz-Simpson overlap coefficient), not plain IoU -- faceBox and
+  // an issue's person box are rarely similar in size (see the comment
+  // above), so requiring most of the *larger* box to be covered would almost
+  // never trigger. This instead asks "does nearly all of whichever box is
+  // smaller sit inside the other one", which holds whichever way the size
+  // difference actually goes.
+  function boxOverlapCoefficient(a, b) {
+    const ix = Math.max(a.x, b.x);
+    const iy = Math.max(a.y, b.y);
+    const ix2 = Math.min(a.x + a.w, b.x + b.w);
+    const iy2 = Math.min(a.y + a.h, b.y + b.h);
+    const iw = ix2 - ix;
+    const ih = iy2 - iy;
+    if (iw <= 0 || ih <= 0) return 0;
+    const smallerArea = Math.min(a.w * a.h, b.w * b.h);
+    return smallerArea > 0 ? (iw * ih) / smallerArea : 0;
+  }
+
+  function bestIssueMatch(items, faceBox) {
+    let best = null;
+    let bestScore = 0.5; // most of the smaller of the two boxes has to fall inside the other
+    (Array.isArray(items) ? items : []).forEach((item) => {
+      const box = item && item.box;
+      if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;
+      const score = boxOverlapCoefficient(faceBox, box);
+      if (score > bestScore) { bestScore = score; best = item; }
+    });
+    return best;
+  }
+
+  function faceIssueEntries(analysis, faceBox) {
+    return FACE_ISSUE_CATEGORIES.map((category) => {
+      const match = bestIssueMatch(analysis?.[category.field], faceBox);
+      if (!match) return null;
+      return {
+        label: category.label,
+        flagged: match[category.flagField] === category.flagWhen,
+        flagText: category.flagText,
+        okText: category.okText,
+        reason: match.reason || ""
+      };
+    }).filter(Boolean);
+  }
+
+  function cropFaceThumbnail(img, box) {
+    const nw = img?.naturalWidth;
+    const nh = img?.naturalHeight;
+    if (!nw || !nh) return "";
+    const sx = Math.max(0, Math.round(box.x * nw));
+    const sy = Math.max(0, Math.round(box.y * nh));
+    const sw = Math.min(nw - sx, Math.max(1, Math.round(box.w * nw)));
+    const sh = Math.min(nh - sy, Math.max(1, Math.round(box.h * nh)));
+    const canvas = document.createElement("canvas");
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext("2d");
+    try {
+      ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+      return canvas.toDataURL("image/jpeg", 0.85);
+    } catch (err) {
+      // Tainted canvas (a cross-origin image with no CORS headers) --
+      // best-effort thumbnail only, never worth failing the whole render.
+      return "";
+    }
+  }
+
+  // { box, issues }[] for the face row currently on screen -- read by
+  // fillFaceIssueList when a thumbnail button is clicked (app.js passes just
+  // the clicked button's index, not the data itself).
+  let faceThumbEntries = [];
+
+  function renderFaceThumbnails(analysis) {
+    const row = els.apFaceThumbRow;
+    if (!row) return;
+    const boxes = Array.isArray(analysis?._face_crop_boxes) ? analysis._face_crop_boxes : [];
+    if (!boxes.length) {
+      row.hidden = true;
+      row.innerHTML = "";
+      faceThumbEntries = [];
+      return;
+    }
+    const img = els.originalImg;
+    // #original-img's src is swapped in independently of this render (see
+    // renderResult/showPendingResults in app.js) -- if it hasn't finished
+    // loading yet, naturalWidth/Height (needed to crop in real pixels) isn't
+    // available yet either. Re-render once it is, against whichever
+    // analysis is current at that point.
+    if (img && !img.complete) {
+      img.addEventListener("load", () => renderFaceThumbnails(analysis), { once: true });
+      return;
+    }
+    faceThumbEntries = boxes
+      .filter((box) => box && [box.x, box.y, box.w, box.h].every(Number.isFinite))
+      .map((box) => ({ box, issues: faceIssueEntries(analysis, box) }));
+    row.innerHTML = "";
+    faceThumbEntries.forEach((entry, index) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ap-face-thumb-btn";
+      btn.dataset.faceIndex = String(index);
+      btn.setAttribute("aria-label", `人物 ${index + 1}`);
+      const dataUrl = img ? cropFaceThumbnail(img, entry.box) : "";
+      entry.thumbUrl = dataUrl;
+      if (dataUrl) {
+        const thumb = document.createElement("img");
+        thumb.className = "ap-face-thumb-img";
+        thumb.src = dataUrl;
+        thumb.alt = `人物 ${index + 1}`;
+        btn.appendChild(thumb);
+      }
+      row.appendChild(btn);
+    });
+    row.hidden = faceThumbEntries.length === 0;
+  }
+
+  // Called by app.js's #ap-face-thumb-row click handler right before it
+  // shows #ap-face-modal -- mirrors that face's own thumbnail into
+  // #ap-face-modal-thumb (so the modal doesn't rely on the user remembering
+  // which small row button they clicked) and fills #ap-face-issue-list with
+  // that face's should_fix/adjust_safe verdicts, matched at
+  // renderFaceThumbnails time above.
+  function fillFaceIssueList(index) {
+    const entry = faceThumbEntries[index];
+    if (els.apFaceModalThumb) {
+      if (entry?.thumbUrl) {
+        els.apFaceModalThumb.src = entry.thumbUrl;
+        els.apFaceModalThumb.hidden = false;
+      } else {
+        els.apFaceModalThumb.hidden = true;
+        els.apFaceModalThumb.removeAttribute("src");
+      }
+    }
+    const element = els.apFaceIssueList;
+    if (!element) return;
+    element.innerHTML = "";
+    const issues = entry?.issues || [];
+    if (!issues.length) {
+      const li = document.createElement("li");
+      li.textContent = "此人像沒有可顯示的分析結果。";
+      element.appendChild(li);
+      return;
+    }
+    issues.forEach((issue) => {
+      const li = document.createElement("li");
+      const label = document.createElement("label");
+
+      const icon = document.createElement("span");
+      icon.className = `adherence-icon ${issue.flagged ? "is-pending" : "is-done"}`;
+      icon.textContent = issue.flagged ? "!" : "✓";
+
+      const text = document.createElement("span");
+      text.className = "step-cb-label";
+      text.textContent = issue.flagged
+        ? `${issue.label}：${issue.flagText}`
+        : `${issue.label}：${issue.okText}`;
+
+      label.appendChild(icon);
+      label.appendChild(text);
+      li.appendChild(label);
+
+      // The model's own reasoning is debug-only detail (same gate as the
+      // box overlay's legend) -- a regular user just needs the verdict, not
+      // the analysis model's internal justification for it.
+      if (issue.flagged && issue.reason && debugUiActive) {
+        const reason = document.createElement("div");
+        reason.className = "ap-face-issue-reason";
+        reason.textContent = issue.reason;
+        li.appendChild(reason);
+      }
+
+      element.appendChild(li);
+    });
+  }
+
   // ── Analysis box overlay (#boxes-toggle-btn, debug UI) ────────────────────
   // roi_box / subject_extent_box / crop_box are normalized against the
   // ORIGINAL image, so they're only meaningful drawn over the Before view --
@@ -1100,6 +1304,7 @@ window.PhotoAgentResults = (() => {
     }
 
     fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
+    renderFaceThumbnails(analysis);
 
     // Rebuild the style-option groups each run (defaults to "Default
     // (analyzed)"), and re-evaluate which apply. Pose only makes sense for a
@@ -1146,6 +1351,7 @@ window.PhotoAgentResults = (() => {
   return {
     renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
-    renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio
+    renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
+    fillFaceIssueList
   };
 })();

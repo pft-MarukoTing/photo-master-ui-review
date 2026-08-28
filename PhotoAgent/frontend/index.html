@@ -418,6 +418,66 @@
       box-shadow: 0 0 0 3px rgba(168,85,247,.14);
     }
     .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
+    /* flex-basis:100% (same trick as .ap-style-picked/.ap-options-prompt
+       below) forces this onto its own full-width line above the
+       #ap-recipe-picker/#ap-style-picker pill row, instead of its
+       .ap-face-thumb-btn children wrapping in among those pills -- default
+       order (0) plus being first in the DOM (see renderFaceThumbnails,
+       results.js) puts that line first. */
+    .ap-face-thumb-row {
+      flex-basis: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .ap-face-thumb-row[hidden] { display: none; }
+    .ap-face-thumb-btn {
+      width: 41px;
+      height: 41px;
+      padding: 0;
+      border: 1.5px solid var(--border-2);
+      border-radius: 50%;
+      background: var(--card-2);
+      cursor: pointer;
+      overflow: hidden;
+      transition: border-color .15s, transform .15s;
+    }
+    .ap-face-thumb-btn:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
+    .ap-face-thumb-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    /* Wider than the shared .error-modal-box's own 440px (see
+       .ap-style-modal-box above for the same override pattern) -- gives
+       #ap-face-modal-thumb below room to be a real portrait, not a tiny
+       icon crammed into a message-sized box. */
+    .ap-face-modal-box { width: min(520px, calc(100vw - 40px)); }
+    /* #ap-face-modal's own larger echo of whichever #ap-face-thumb-row
+       button was clicked (fillFaceIssueList, results.js) -- bigger than the
+       41px row button so it reads as "here's who this list is about", not
+       just a repeat of the same tiny icon. */
+    .ap-face-modal-thumb {
+      display: block;
+      width: 140px;
+      height: 140px;
+      object-fit: cover;
+      border-radius: 50%;
+      border: 1.5px solid var(--border-2);
+      margin: 0 auto 14px;
+    }
+    .ap-face-modal-thumb[hidden] { display: none; }
+    /* Debug-only: the analysis model's own reasoning for a flagged item
+       (fillFaceIssueList, results.js) -- its own line under the verdict
+       label, smaller/muted so it reads as supporting detail, not another
+       checklist row. */
+    .ap-face-issue-reason {
+      margin: 4px 0 0 30px;
+      font-size: 12.5px;
+      line-height: 1.4;
+      color: var(--text-2);
+    }
     .ap-style-name {
       font-weight: 700;
       color: var(--text-2);
@@ -2814,6 +2874,21 @@
                  whole element, instead of being left behind inside
                  #analysis-preview. -->
             <div class="options-card-inline" id="ap-options-card-inline">
+                <!-- One thumbnail button per detect_face_crops() box
+                     (analysis._face_crop_boxes -- same normalized-against-
+                     original-image convention as roi_box, already drawn by
+                     the #boxes-toggle-btn debug overlay). Populated by
+                     renderFaceThumbnails (results.js), which crops each
+                     thumbnail from #original-img via canvas and matches this
+                     face's box against eye_blink_issues/gaze_contact_issues/
+                     hair_issues by box overlap to find that person's
+                     should_fix verdicts. Hidden entirely when no faces were
+                     detected. flex-basis:100% (see the CSS above) puts this
+                     on its own full-width line above the
+                     #ap-recipe-picker/#ap-style-picker pill row instead of
+                     wrapping in among those pills (see openFaceModal in
+                     app.js for the click handler). -->
+                <div class="ap-face-thumb-row" id="ap-face-thumb-row" hidden></div>
                 <!-- Was a plain always-visible .ap-row (label + checklist),
                      then briefly a popover pill -- now opens #ap-recipe-modal
                      instead (see openRecipeModal/closeRecipeModal in app.js),
@@ -4180,6 +4255,33 @@
     </div>
     <div class="step-list-frame">
       <ul id="ap-recipe-list" class="step-inline-list"></ul>
+    </div>
+  </div>
+</div>
+
+<!-- Opened by clicking one of #ap-face-thumb-row's per-face thumbnail
+     buttons (openFaceModal in app.js) -- lists that person's should_fix/
+     adjust_safe verdict from every 人像設定 analysis category (閉眼偵測/眼神對焦/
+     亂髮偵測/笑容調整, i.e. eye_blink_issues/gaze_contact_issues/hair_issues/
+     smile_states) matched to this face by box overlap (fillFaceIssueList,
+     results.js). Same backdrop+box+close shape as #ap-recipe-modal above;
+     the list itself is read-only (step-inline-list--readonly, same look as
+     #recipe-score-list's ✓/✕ adherence icons) since these are analysis
+     findings, not user-toggleable choices. #ap-face-modal-thumb mirrors the
+     same crop shown on the row button that was clicked (fillFaceIssueList
+     sets its src), hidden attribute added/removed instead of a CSS default
+     so a canvas-tainted (no thumbnail) face doesn't leave a broken-image
+     icon in the modal. -->
+<div id="ap-face-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box ap-face-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-face-modal-title">
+    <div class="error-modal-hdr">
+      <span id="ap-face-modal-title">人像分析結果</span>
+      <button id="ap-face-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <img id="ap-face-modal-thumb" class="ap-face-modal-thumb" alt="人物縮圖" hidden>
+    <div class="step-list-frame">
+      <ul id="ap-face-issue-list" class="step-inline-list step-inline-list--readonly"></ul>
     </div>
   </div>
 </div>

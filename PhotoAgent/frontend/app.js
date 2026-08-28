@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, fillFaceIssueList } = window.PhotoAgentResults;
   renderBatchStyleOptions();
   renderBoxTypeMenu();
 
@@ -5975,6 +5975,22 @@
     if (els.apRecipeModal) els.apRecipeModal.hidden = true;
   }
 
+  // Per-face should_fix overlay -- one #ap-face-thumb-row button per detected
+  // face (renderFaceThumbnails, results.js). fillFaceIssueList does the
+  // actual list population (it owns the box-overlap matching against
+  // eye_blink_issues/gaze_contact_issues/hair_issues); this just sets the
+  // title to which face was clicked and toggles the shared modal shell.
+  function openFaceModal(index) {
+    if (!els.apFaceModal) return;
+    if (els.apFaceModalTitle) els.apFaceModalTitle.textContent = `人物 ${index + 1} 分析結果`;
+    fillFaceIssueList(index);
+    els.apFaceModal.hidden = false;
+  }
+
+  function closeFaceModal() {
+    if (els.apFaceModal) els.apFaceModal.hidden = true;
+  }
+
   // 修圖風格選項 overlay: two-step picker inside #ap-style-modal -- a row of
   // Pose/Angle/Lighting/Size buttons (ids ap-group-pose/-angle/-lighting/
   // -size), then that type's #ap-*-list image-option grid underneath.
@@ -7600,6 +7616,19 @@
       if (e.target.dataset.close) closeRecipeModal();
     });
   }
+  if (els.apFaceThumbRow) {
+    els.apFaceThumbRow.addEventListener("click", (e) => {
+      const btn = e.target.closest(".ap-face-thumb-btn");
+      if (!btn) return;
+      openFaceModal(Number(btn.dataset.faceIndex));
+    });
+  }
+  if (els.apFaceModalClose) els.apFaceModalClose.addEventListener("click", closeFaceModal);
+  if (els.apFaceModal) {
+    els.apFaceModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeFaceModal();
+    });
+  }
   if (els.apStylePicker) els.apStylePicker.addEventListener("click", openStyleModal);
   if (els.apStyleModalClose) els.apStyleModalClose.addEventListener("click", closeStyleModal);
   if (els.apStyleModal) {
@@ -7634,6 +7663,7 @@
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
+    if (els.apFaceModal && !els.apFaceModal.hidden) closeFaceModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
