@@ -4850,8 +4850,19 @@
           if (badge) badge.textContent = "處理中";
           // Still clickable -- otherwise there's no way to come back and
           // check on a record that was still processing last time this list
-          // was fetched (see viewProcessingHistoryRecord).
-          li.addEventListener("click", () => viewProcessingHistoryRecord(job));
+          // was fetched (see viewProcessingHistoryRecord). The opening guard
+          // mirrors the done branch above -- viewProcessingHistoryRecord
+          // itself now handles its own errors, but this still guards against
+          // a double-click re-entering it mid-poll.
+          li.addEventListener("click", async () => {
+            if (li.classList.contains("opening")) return;
+            li.classList.add("opening");
+            try {
+              await viewProcessingHistoryRecord(job);
+            } finally {
+              li.classList.remove("opening");
+            }
+          });
         }
       } catch {
         li.className = "history-cube batch-sidebar-item error";
@@ -5389,7 +5400,16 @@
     // before that field existed.
     const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
     const previewUrl = job.path === "local" ? sourceImageUrl(jobIds[0]) : "";
-    showBatchMainLoading({ previewUrl, status: "processing" });
+    // aiPhotoEditing/imageModel: batchSettings (what showBatchMainLoading's
+    // rotating status text would otherwise fall back to) is only populated
+    // during an actual multi-photo batch run, never for a single history
+    // record resumed here -- see showBatchMainLoading's own comment.
+    showBatchMainLoading({
+      previewUrl,
+      status: "processing",
+      aiPhotoEditing: job.ai_photo_editing,
+      imageModel: job.image_model
+    });
 
     // A combined multi-RUN job (runCombinedMultiRun) is ONE job_id covering
     // every RUN (job_processor.py runs finish_stage `run_count` times inside
@@ -5398,7 +5418,30 @@
     // in-page flow uses) instead of only finding out once EVERYTHING is
     // done, so the progress bar/RUN switcher/canvas come back the same way
     // they would have if the user had just stayed on the page.
+    //
+    // jobIds.length === 1 alone can't tell a combined job apart from a plain
+    // single-RUN manual revise (a finish-stage /continue) -- both end up
+    // recorded identically as {path:"local", runs:[<one id>]}, since
+    // action_id only groups multiple ids together for an explicit multi-RUN
+    // revise. Ask the backend instead: job_processor.py only ever sets
+    // `stage`/`run_count` on a combined job's /status response (the same
+    // signal pollJobStatus's onStatus relies on below) -- a finish-stage job
+    // never has either. Misclassifying a finished single-RUN job here left
+    // it stuck showing this loading placeholder: watchCombinedJobRuns's
+    // fetchNewRuns reads /result's `runs` list, which a finish-stage job
+    // never has, so onRunDone silently never fired.
+    let isCombined = false;
     if (job.path === "local" && jobIds.length === 1) {
+      try {
+        const status = await getJobStatusOnce(jobIds[0], { path: job.path });
+        isCombined = typeof status.stage === "string" || typeof status.run_count === "number";
+      } catch {
+        // Falls through to the generic single-job path below, which already
+        // handles a genuine status-check failure on its own.
+      }
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+    }
+    if (isCombined) {
       const combinedJobId = jobIds[0];
       const runCount = Math.max(1, parseInt(job.run_count, 10) || 1);
 
@@ -5497,8 +5540,16 @@
       }
       if (historyViewToken !== myToken) return; // navigated away meanwhile
       // Finalizes exactly like a normally-finished record (revise button,
-      // etc.) now that every RUN is confirmed done.
-      await viewHistoryRecord(job);
+      // etc.) now that every RUN is confirmed done. Caught (unlike a plain
+      // await) so a failure here -- e.g. a transient fetch error -- surfaces
+      // as an error state instead of leaving #batch-main-loading stuck up
+      // forever with nothing watching it anymore.
+      try {
+        await viewHistoryRecord(job);
+      } catch (error) {
+        if (historyViewToken !== myToken) return; // navigated away meanwhile
+        showBatchMainError({ previewUrl, error: friendlyError(error) });
+      }
       return;
     }
 
@@ -5513,7 +5564,12 @@
       return;
     }
     if (historyViewToken !== myToken) return; // navigated away meanwhile
-    await viewHistoryRecord(job);
+    try {
+      await viewHistoryRecord(job);
+    } catch (error) {
+      if (historyViewToken !== myToken) return; // navigated away meanwhile
+      showBatchMainError({ previewUrl, error: friendlyError(error) });
+    }
   }
 
   // Reconstructs the full single-photo results view (recipe/analysis/QA
@@ -6257,11 +6313,22 @@
       }
       const startIndex = record.procSubStage === record.status ? (record.procSubIndex || 0) : 0;
       record.procSubStage = record.status;
+      // batchSettings is only populated during an actual multi-photo batch
+      // run -- a single-photo history record resumed via
+      // viewProcessingHistoryRecord has no batch in flight (batchSettings is
+      // null all session), so it passes aiPhotoEditing/imageModel directly on
+      // record itself instead. Falling back to batchSettings unconditionally
+      // here used to throw (Cannot read properties of null) the instant this
+      // ran for such a record, which corrupted the shared rotation timer
+      // (procSubGetMessages was already pointed at this crashing closure by
+      // startProcSubRotation before the throw) and silently broke ANY other
+      // rotation -- including the original upload's own -- reading it
+      // afterward, well past the point this function's own caller gave up.
       startProcSubRotation(analyzing
         ? analyzeSubMessages
         : () => editSubMessages({
-            aiPhotoEditing: batchSettings.aiPhotoEditing,
-            imageModel: batchSettings.imageModel,
+            aiPhotoEditing: record.aiPhotoEditing != null ? record.aiPhotoEditing : batchSettings?.aiPhotoEditing,
+            imageModel: record.imageModel || batchSettings?.imageModel,
             doneCount: 0,
             runCount: 1
           }), startIndex);
