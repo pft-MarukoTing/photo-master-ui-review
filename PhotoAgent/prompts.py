@@ -271,7 +271,10 @@ Return exactly this JSON shape:
   "preserve_rules": ["必須保留的內容。"]
 }
 
-correction_plan, correction_axes, correction_inverse, and retouch_recipe must describe the exact same set of adjustments, in the same order, one-to-one -- same number of entries in all four. Write correction_plan first as the precise technical plan the editing model will follow; then write retouch_recipe as a simplified, user-facing paraphrase of each corresponding correction_plan item -- not a separate or reworded set of steps.
+## Output alignment rules
+Intent: Treat correction_plan, correction_axes, correction_inverse, and retouch_recipe as one execution and review contract describing the exact same adjustments in the same order, with the same number of entries.
+
+Write correction_plan first as the precise technical plan the editing model will follow; then write retouch_recipe as a simplified, user-facing paraphrase of each corresponding correction_plan item -- not a separate or reworded set of steps.
 
 correction_inverse[i] is what the editing model will be told instead if the user unchecks correction_plan[i] on the review screen. Write it as a positive preservation instruction -- name what to reproduce from the original -- rather than as a prohibition, and hold it to the EXACT same scope as the item it inverts:
 - If the item only brightens the subject, the inverse pins the SUBJECT's brightness and says nothing about the rest of the frame. Pinning the whole frame there would suppress corrections the user did approve.
@@ -282,14 +285,17 @@ This is the only thing standing between an unchecked item and the editing model 
 
 """ + f"""correction_axes[i] is the machine-readable tag set for correction_plan[i]: which properties of the photograph that item changes. Pick every axis the item actually moves, from exactly this vocabulary, and nothing else: {_AXIS_VOCABULARY}. Most items need one or two axes; use the narrowest set that is true. The example above shows an item that raises overall brightness and recovers the bright end, hence ["exposure", "highlight"]. These tags let the user's recipe choices switch the corresponding instructions off precisely, so an inaccurate tag causes the wrong part of the edit to be suppressed.
 """ + """
-Zoomed face-crop images:
+
+## Face-crop evidence
+Intent: Use zoomed face crops as supporting evidence for facial details without treating them as separate photographs or using them for scene-level decisions.
+
 - After the main photo, you may be given one or more additional images labeled "Face crop N (zoomed, for judging eye state, blink, and gaze/pupil direction only)". Each one is a cropped, zoomed-in view of one visible person's face from the SAME photo above, not a different photo or a different moment.
 - Match each face crop to the corresponding person in the main photo by appearance (position, clothing, hair, expression) and use it as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, and pupil/iris direction -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo.
 - Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
 - Face-crop detection is best-effort: it can miss a visible person (non-frontal angle, occlusion, small size) or occasionally crop something that is not a face. If a visible person has no matching crop, or a crop clearly does not show a usable face, fall back to judging that person's eyes directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
 
-Eye blink / half-closed-eye inspection:
-This is an expression-intent classification task before it is a repair task. Do not judge only from eyelid openness. Judge whether the eye closure belongs to the person's expression, emotion, gesture, or moment.
+## Blink analysis
+Intent: Classify expression intent before considering repair: detect accidental shutter-timing failures without judging eyelid openness alone, while preserving eye closure that belongs to the person's expression, emotion, gesture, sleep, downward gaze, or captured moment.
 
 Two-stage decision process:
 Stage 1 -- Expression coherence test:
@@ -448,8 +454,10 @@ Mini-model calibration:
 - When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
 - When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
 
-Hair tidiness inspection:
-Intent before repair, as with the eyes, and stricter -- the editing model rebuilds whatever hair you point it at, and a rebuilt hairstyle is a worse failure than untidy hair. One reading decides most cases: disorder that is even and repeated across the head is style or texture, while disorder that is a single local contradiction on an otherwise settled head is an accident. Wind is the exception to that reading, since it can disturb a whole head at once: it displaces hair in one direction and against the hairstyle's own shape, on a body that is otherwise posed or still, and it usually shows elsewhere in the frame too -- clothing, foliage, other people's hair. Read wind as a flaw across the whole area it disturbed, not only where it landed on a face.
+## Hair analysis
+Intent: Detect actionable accidental hair disruption without redesigning an intentional hairstyle, natural texture, or motion; be conservative because pointing the editing model at hair can rebuild it, and a rebuilt hairstyle is a worse failure than untidy hair.
+
+One reading decides most cases: disorder that is even and repeated across the head is style or texture, while disorder that is a single local contradiction on an otherwise settled head is an accident. Wind is the exception to that reading, since it can disturb a whole head at once: it displaces hair in one direction and against the hairstyle's own shape, on a body that is otherwise posed or still, and it usually shows elsewhere in the frame too -- clothing, foliage, other people's hair. Read wind as a flaw across the whole area it disturbed, not only where it landed on a face.
 Not a flaw, so should_fix=false, and name which one: styled_messy (deliberate cut, tousle, or product separation), styled_bangs (center-parted, curtain/八字, or see-through fringe -- a designed parting is even on both sides and is not a split to close, and designed wisps are fine, similar in width, and evenly spaced; run the clumping test below before settling on this one), styled_face_framing (strands left out at the temples, as most updos and ponytails have), motion (hair mid-jump, spin, flip, throw, or turn, where the body itself is mid-action so the movement is the moment and tidying it would delete the action -- this is about what the person is doing, not about wind), natural_texture (curly, coily, fluffy, or baby hair -- flattening it changes who they are), occluded_or_unclear (head small in frame, motion-blurred, rim-lit, or dark on dark).
 A flaw across the whole area it covers when the wind reading above fits: windblown (the hairstyle is lifted, opened up, blown sideways, or pushed out of its own shape while the person is posed or still). Treat the whole disturbed area as the work, not only the strands that landed on the face.
 Front-hair check -- do this for every person with hair falling over the forehead or in front of the face, before choosing any state for them, and put the answer in visible_evidence. Whether that hair is a blunt fringe, a side sweep, or the front length of longer hair makes no difference here, and neither does whether skin shows through it or beside it; the question is only how those strands are distributed. Do they run at similar thickness and spacing, or are some stuck together into cords with bare skin between them? Record it in front_hair, required for anyone with hair in front of the face. It is a reading, not a state: never copy its value into hair_state, which only ever takes a value from its own list. front_hair="clumped" means hair_state="bangs_clumped" and fix_action="redistribute" -- not strands_across_face, whatever the strands look like individually, because the front of the hair is what is wrong and what gets worked on. front_hair="even" is not a flaw by itself. Judge the front of the hair as one shape, not by where its tips happen to fall -- hair whose ends reach the brows, eyes, or cheek is still the front of a hairstyle, and reading only those tips is what turns a clumped front into "a few strands near the eyes".
@@ -464,8 +472,8 @@ Write it as the state that hair ends in, not as something to take away: an item 
 Write that item as the finished picture, in words that can be rendered. The editing model cannot act on 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續: those name an intention rather than anything visible, and an item written that way comes back unchanged -- which is the most common reason a hair correction has no effect at all. Name the operation and the state it ends in. A clumped fringe needs both halves of the job named: 去油 -- 壓掉瀏海上的油亮反光，讓髮絲恢復霧面質感、不再黏成一束; and 梳整齊 -- 把結成一束一束的瀏海梳散成寬度一致的薄簾，並讓髮絲蓋過束與束之間露出額頭的空隙。Worked example of a whole item: 「把瀏海的油光壓掉、恢復霧面質感，並把結成束的瀏海梳散成寬度一致的薄簾，讓髮絲蓋過中間露出額頭的空隙；瀏海長度、髮際線與髮量不變。」
 correction_inverse keeps that person's hair as captured; retouch_recipe stays short, for example "把瀏海去油、梳整齊。" or "把黏在臉頰上的兩三根碎髮清掉。". Keep should_fix=false entries when they record a decision worth explaining, but write no correction_plan item for them -- tidy hair is not a correction, and hair tidying is never a routine portrait enhancement.
 
-Gaze contact / eye-focus inspection:
-This is a strict lens-contact detection task first, and an edit-feasibility task second. The main question is not whether the face points toward the camera. The main question is whether the person's pupils/irises are actually focused on the camera lens/viewer.
+## Gaze-contact analysis
+Intent: First determine strict lens contact from visible pupil/iris direction, binocular convergence, and eye focus—not merely face direction—then assess edit feasibility and produce a concrete repair handoff only when the gaze rules approve correction.
 
 Core policy:
 - Judge camera gaze by the eyes only: pupil/iris direction, binocular convergence, eye-focus feeling, and whether the eyes feel lens-locked.
@@ -743,8 +751,10 @@ Mini-model calibration:
 - The default output for any readable, not-lens-locked gaze is should_fix=true, even when the required adjustment is large or the strategy ends up being a conservative partial one.
 - If the person is not looking at the lens, recommend the correction; use the anatomical feasibility score only to decide how boldly to describe the fix.
 
-Smile reading:
-Classify each visible face as neutral, gentle, broad, or laughing. A smile is never a defect, so do not add it to correction_plan, detected_issues, or retouch_recipe.
+## Smile analysis
+Intent: Classify each visible face as neutral, gentle, broad, laughing, or unclear for optional edit-stage adjustment without treating an existing smile as a defect.
+
+A smile is never a defect, so do not add it to correction_plan, detected_issues, or retouch_recipe.
 Default to neutral. Only use gentle or above when a smile is clearly and unmistakably present.
 - neutral: no clear smile; includes speaking, posing, winking, pouting, parted lips, visible teeth, or pleasant/friendly expressions without definite smile structure.
 - gentle: clear but restrained smile.
@@ -757,7 +767,9 @@ Require a coherent smile pattern, especially coordinated mouth-corner retraction
 Prefer precision over recall: when uncertain between neutral and gentle, choose neutral.
 Use unclear only when the expression cannot be seen reliably. Set adjust_safe=false only when editing could overwrite distinctive dental features or when the face is obscured, too small, or turned too far away to render a reliable expression. adjust_safe measures technical edit feasibility, not whether the captured emotion should be preserved. Speaking, laughter, strong emotion, or another visible facial action does not by itself make smile adjustment unsafe.
 
-Analysis responsibilities:
+## Analysis responsibilities
+Intent: Convert visible photographic needs into a restrained, actionable, and internally consistent analysis and correction plan.
+
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
@@ -780,7 +792,9 @@ Analysis responsibilities:
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 
-Coordinate rules:
+## Coordinate and geometry rules
+Intent: Produce normalized subject and crop geometry that downstream framing logic can use safely and consistently.
+
 - crop_box, roi_box, subject_extent_box, and protected_regions use normalized original-image coordinates. x/y are top-left, w/h are width/height: the origin (x=0, y=0) is the photo's own top-left corner, x increases toward the photo's right edge, y increases toward its bottom edge.
 - Any "left"/"right"/"middle" wording -- in a subjects[].label, a reason field, or anywhere else describing where someone or something sits in the frame -- is always from the viewer's perspective looking at the photo (the side with the smaller x is "left"), never that person's own anatomical left/right. Keep this the same reference frame you use when writing box x/y/w/h for that same entry, so the coordinates and the words describing them never disagree about which side of the frame something is on.
 - roi_box is the focal area. subject_extent_box is the semantic subject area required by the intended framing; it is not automatically every visible body part, foreground object, furniture piece, or background element.
@@ -799,7 +813,9 @@ Coordinate rules:
 - Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
 - Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
 
-Composition decision framework:
+## Composition decision framework
+Intent: Choose framing from subject meaning, scene context, visual balance, useful empty space, and preservation needs rather than a fixed composition formula.
+
 - For completeness-first presentation, catalog-like, symmetrical, circular, stacked, shape-critical, food/product/object/still-life images, centered or near-centered balance is often competitive.
 - For lifestyle, story, portrait, street, travel, action, gaze, gesture, interaction, leading lines, asymmetry, or intentional negative space, off-center, thirds, diagonal, symmetry, or context-preserving framing may be stronger.
 - Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
@@ -849,7 +865,8 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
         instruction += CALM_HAIR_ENABLED_OVERRIDE
     if aspect_ratio_pref == "original":
         return instruction + """
-User aspect ratio requirement:
+## Aspect-ratio policy
+
 - The user explicitly requested that the final output keep the original photo's aspect ratio.
 - Set recommended_aspect_ratio to "original".
 - If crop_box.enabled is true, crop_box.aspect_ratio must be "original" (or blank).
@@ -857,7 +874,8 @@ User aspect ratio requirement:
 - Do not select a named ratio that changes the original proportions.
 """
     return instruction + """
-Auto aspect ratio requirement:
+## Aspect-ratio policy
+
 - Select recommended_aspect_ratio only from the supported output set declared above.
 - crop_box.aspect_ratio and every crop candidate aspect_ratio must equal recommended_aspect_ratio exactly.
 - The normalized x/y/w/h values are a composition proposal, not permission to use a different ratio.
