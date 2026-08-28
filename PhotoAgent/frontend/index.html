@@ -105,21 +105,6 @@
     .proc-container {
       max-width: 1425px;
     }
-    .proc-back-row {
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    /* ── Processing: back/continue buttons stacked beside proc-top ── */
-    .proc-top-actions {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin-left: auto;
-    }
-    @media (max-width: 900px) {
-      .proc-top-actions { margin-left: 0; }
-    }
 
     /* ── proc-visual done state ── */
     .proc-visual {
@@ -824,13 +809,6 @@
       .ap-option-groups { grid-template-columns: 1fr; }
     }
 
-    /* ── View Results button ── */
-    .view-results-wrap {
-      display: flex;
-      justify-content: flex-end;
-      animation: fadeUp .5s ease both;
-    }
-    .view-results-btn { height: 52px; padding: 0 36px; font-size: 20px; border-radius: 14px; gap: 10px; }
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(12px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -2339,16 +2317,9 @@
     .batch-main-loading.is-error .proc-thumb { border-radius: 14px; object-fit: contain; opacity: .5; }
     .batch-main-loading.is-error .proc-eyebrow { color: var(--red); }
     .batch-main-loading.is-error #batch-main-loading-title { color: var(--red); }
-    /* Analyzed, not yet edited: same "static square photo" treatment as the
-       error state (nothing is actively in progress) but with the default
-       (non-red) text colors. */
-    .batch-main-loading.is-analyzed .think-ring { opacity: 0; animation-play-state: paused; }
-    .batch-main-loading.is-analyzed .think-center { inset: 0; border-radius: 14px; background: none; }
-    .batch-main-loading.is-analyzed .proc-thumb { border-radius: 14px; object-fit: contain; }
     @media (max-width: 900px) {
       .batch-main-loading { flex-direction: column; text-align: center; gap: 32px; }
     }
-    .batch-review-continue-btn { margin-top: 12px; }
 
     @media (max-width: 900px) {
       .results-body { flex-direction: column; }
@@ -2752,7 +2723,7 @@
               </svg>
               Run
             </button>
-            <button id="start-btn" class="btn btn-secondary" type="button" hidden>
+            <button id="start-btn" class="btn btn-secondary" type="button">
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M8 5v14l11-7z"/>
               </svg>
@@ -2792,27 +2763,6 @@
             <p class="proc-sub">Agent 正在逐步診斷原圖、評選構圖。</p>
           </div>
 
-          <div class="proc-top-actions">
-            <div class="proc-back-row">
-              <button id="back-to-upload-btn" class="btn btn-secondary" type="button" hidden>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M15 18l-6-6 6-6" stroke="currentColor"
-                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                重新選擇照片
-              </button>
-            </div>
-
-            <div id="view-results-wrap" class="view-results-wrap" hidden>
-              <button id="view-results-btn" class="btn btn-grad view-results-btn">
-                繼續處理
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                  <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                    stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
-            </div>
-          </div>
         </div>
 
         <!-- Stable anchor #analysis-preview is moved back to whenever the
@@ -2822,8 +2772,9 @@
         <div id="analysis-preview" class="analysis-preview" hidden>
           <!-- Only shown when #analysis-preview is on loan to the results
                page (see openInlineAnalysisPanel in app.js) -- the normal
-               first-time flow has its own continue button
-               (#view-results-btn / #batch-review-continue) elsewhere and no
+               first-time flow never opens this (it goes straight to
+               #results-section via showPendingResults, whose own Run/back
+               buttons live inside #ap-options-card-inline below) and has no
                "cancel this review" concept at all. Normal flow (not
                absolutely positioned) so it pushes the title down instead of
                overlapping it. -->
@@ -2918,7 +2869,7 @@
                      closeApSettingsModal in app.js), same move as the
                      upload page's own #settings-modal. #ap-run-count-wrap
                      keeps its own id/hidden attribute inside that modal --
-                     showAnalysisPreview/startInlineBatchReview etc still
+                     showPendingResults/startInlineBatchReview etc still
                      toggle it directly to show/hide 生成張數 for flows
                      where it doesn't apply, unchanged. -->
                 <!-- Groups #ap-advanced-settings-btn + #inline-analysis-continue-btn
@@ -2951,6 +2902,18 @@
                       </svg>
                     </span>
                     <span class="ap-style-value">人像設定</span>
+                  </button>
+                  <!-- Only for showPendingResults' first-time "analyzed,
+                       waiting for Run" state (app.js) -- there's no prior
+                       result to fall back to yet, so unlike
+                       #inline-analysis-cancel-btn's "close panel, stay put"
+                       behavior, this leaves the flow entirely (resetApp). -->
+                  <button id="ap-back-to-upload-btn" class="analysis-preview-action analysis-preview-action-left" type="button" hidden>
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                      <path d="M15 18l-6-6 6-6" stroke="currentColor"
+                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <span>重新選擇照片</span>
                   </button>
                   <!-- Moved out of #inline-analysis-actions (which keeps
                        just the cancel button) -- sits at the right end of
@@ -3172,15 +3135,6 @@
           <p id="batch-main-loading-eyebrow" class="proc-eyebrow">Photo Master is working</p>
           <h2 id="batch-main-loading-title" class="proc-title"></h2>
           <p id="batch-main-loading-text" class="proc-sub"></p>
-          <!-- Only relevant (and only ever unhidden) for the "analyzed, not
-               yet edited" state -- see showBatchAnalyzedMain in app.js. -->
-          <button id="batch-review-continue-btn" class="btn btn-grad batch-review-continue-btn" type="button" hidden>
-            此張繼續處理
-            <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-              <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </button>
         </div>
       </div>
 

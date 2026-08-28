@@ -140,6 +140,12 @@
   let singleFlowState = null; // { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath }
   let lastSingleSelections = null; // { userPrompt, options, recipeChecked }
 
+  // True between showPendingResults and closePendingResults -- #download-link
+  // is shared with the finished-result state (gated there on lastResult), so
+  // this tells handleDownloadClick to route to the source-photo-only download
+  // instead while there's no edited result yet.
+  let pendingResultsActive = false;
+
   // Single-image RUN N times (mirrors batch's per-image runs): populated only
   // when the RUN count on the analysis-preview screen is > 1. singleRuns holds
   // each run's {run, jobId, status, imageUrl, result, timings, error};
@@ -1236,25 +1242,12 @@
     timingDetails.hidden = false;
   }
 
-  // ── Pause-for-review between analyze and finish ────────────────────────
-  let continueHandler = null;
-
-  function clearContinueWait() {
-    if (continueHandler) {
-      els.viewResultsBtn.removeEventListener("click", continueHandler);
-      continueHandler = null;
-    }
-    els.viewResultsWrap.hidden = true;
-  }
-
   // Disables the analysis-preview panel's controls (recipe checklist, style
-  // option checkboxes, quality/model/RUN-count selects, prompt textarea) plus
-  // the back button, while finishSingleFlow's edit/QA job is in flight --
-  // none of it applies to the already-submitted job, so leaving it live just
-  // invites confusing edits. Re-enabled by showAnalysisPreview each time the
-  // panel is (re)shown for a fresh round.
+  // option checkboxes, quality/model/RUN-count selects, prompt textarea)
+  // while finishSingleFlow's edit/QA job is in flight -- none of it applies
+  // to the already-submitted job, so leaving it live just invites confusing
+  // edits. Re-enabled once the panel is shown again for a fresh round.
   function setAnalysisPreviewDisabled(disabled) {
-    if (els.backToUploadBtn) els.backToUploadBtn.disabled = disabled;
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
         // #ap-recipe-picker just opens a read-only view of the recipe list
@@ -1265,18 +1258,6 @@
         el.disabled = disabled;
       });
     }
-  }
-
-  function waitForContinue() {
-    return new Promise((resolve) => {
-      clearContinueWait(); // drop any stale listener from an abandoned prior run
-      continueHandler = () => {
-        clearContinueWait();
-        resolve();
-      };
-      els.viewResultsBtn.addEventListener("click", continueHandler);
-      els.viewResultsWrap.hidden = false;
-    });
   }
 
   // ── Inline analysis-review panel (results page) ─────────────────────────
@@ -1315,6 +1296,72 @@
     if (els.apOptionsCardHome && els.apOptionsCardInline.previousElementSibling !== els.apOptionsCardHome) {
       els.apOptionsCardHome.after(els.apOptionsCardInline);
     }
+  }
+
+  // ── Pause-for-review between analyze and finish, shown on results-section ──
+  // Same "analyze done, wait for Run before editing" pause the two-stage flow
+  // has always had, but now rendered on #results-section itself (via
+  // renderResult's pending mode) instead of a separate-looking panel on the
+  // processing screen -- so it looks exactly like the finished-result page,
+  // just with no generated image/QA yet. Reuses moveOptionsCardTo, the same
+  // relocation backToProcessFromResults' revise flow already uses to park
+  // #ap-options-card-inline (recipe/style/prompt + Run button) below
+  // .compare-card.
+  async function showPendingResults(analysis, preset) {
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    // Before renderResult -- drawAnalysisBoxes (called via setCompareView)
+    // reads #original-img's laid-out size, which is all zeros while
+    // #results-section is still display:none.
+    showSection("results");
+    renderResult(
+      { data: {}, analysis, preset, imageModel: singleFlowState.imageModel, hasOriginal: true },
+      { pending: true }
+    );
+    moveOptionsCardTo(els.resultsCanvasTop);
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
+    if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
+    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
+    if (els.apBackToUploadBtn) els.apBackToUploadBtn.hidden = false;
+    pendingResultsActive = true;
+    if (els.downloadLink) {
+      els.downloadLink.hidden = !selectedFile;
+      els.downloadLink.title = "下載原圖";
+      els.downloadLink.setAttribute("aria-label", "下載原圖");
+    }
+    // Same debug-only gate revealResultsIfNeeded applies once the edit stage
+    // finishes -- the analyze-stage prompts (photo_analysis/
+    // user_instruction_review/crop_validation) are already in the DOM via
+    // renderResult's renderPrompts call above, so there's no reason to make
+    // debug users wait for the edit stage just to read those.
+    if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
+  }
+
+  function closePendingResults() {
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
+    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
+    if (els.apBackToUploadBtn) els.apBackToUploadBtn.hidden = true;
+    if (els.downloadLink) els.downloadLink.hidden = true;
+    pendingResultsActive = false;
+    restoreOptionsCardHome();
+  }
+
+  // Same one-shot-listener shape as waitForInlineAnalysisAction, but "back"
+  // here means leaving the flow entirely (resetApp) -- unlike the revise
+  // flow's Cancel, there's no previously-rendered result to fall back to on
+  // screen since the edit stage hasn't run yet.
+  function waitForPendingResultsAction() {
+    return new Promise((resolve) => {
+      const continueHandler = () => { cleanup(); resolve("continue"); };
+      const backHandler = () => { cleanup(); resolve("back"); };
+      function cleanup() {
+        els.inlineAnalysisContinueBtn.removeEventListener("click", continueHandler);
+        els.apBackToUploadBtn.removeEventListener("click", backHandler);
+      }
+      els.inlineAnalysisContinueBtn.addEventListener("click", continueHandler);
+      els.apBackToUploadBtn.addEventListener("click", backHandler);
+    });
   }
 
   // readOnly (used for historical playback, viewHistoryRecord) shows the same
@@ -1431,8 +1478,8 @@
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
-  // clicks -- same one-shot-listener shape as waitForContinue, just with two
-  // possible outcomes instead of one.
+  // clicks -- same one-shot-listener shape as waitForPendingResultsAction,
+  // just with two possible outcomes instead of one.
   function waitForInlineAnalysisAction() {
     return new Promise((resolve) => {
       clearInlineAnalysisWait();
@@ -1452,29 +1499,6 @@
       els.inlineAnalysisContinueBtn.addEventListener("click", inlineAnalysisContinueHandler);
       els.inlineAnalysisCancelBtn.addEventListener("click", inlineAnalysisCancelHandler);
     });
-  }
-
-  async function showAnalysisPreview(analysis, preset) {
-    restoreAnalysisPreviewHome();
-    // singleFlowState is already set (with this same `analysis`) by the time
-    // startSubmit calls this -- stripping disabled-topic items here keeps
-    // 修圖建議 matching what the backend already stripped from correction_plan
-    // (analyze_stage ran strip_disabled_topic_items with these exact toggles).
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
-    if (els.analysisPreview) els.analysisPreview.hidden = false;
-    if (els.backToUploadBtn) els.backToUploadBtn.hidden = false;
-    // RUN count only applies to the single-image flow -- batch mode never
-    // shows this panel for its own "analyzed" state at all anymore (only for
-    // startInlineBatchReview's per-image revise, which sets this itself).
-    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
-    setAnalysisPreviewDisabled(false);
-    updateAnalysisPreviewMaxHeight();
-    // Lets any not-yet-shown analyze-stage phrasings finish playing (fast-
-    // forwarded) before flipping the processing card to its "done" state.
-    await finishProcSubRotation();
-    procVisual.classList.add("done");
-    if (procTitle) procTitle.textContent = "初步分析已完成";
-    if (procSub) procSub.textContent = "已完成初步分析，請確認後繼續處理。";
   }
 
   // Some browsers/OSes don't map .heic/.heif to an image/* MIME type (file.type
@@ -1967,6 +1991,50 @@
     return [{ run: 1, result: lastResult.resultText, jobId: lastResult.jobId, status: "done" }];
   }
 
+  // pendingResultsActive's own download bundle -- source photo only (the
+  // edit stage hasn't run yet, so there's no result image/token usage to
+  // include), plus whatever the analyze stage itself already produced in
+  // --debug-ui mode (the raw analysis + its own prompts, same JSON shape
+  // buildNestedImageFiles writes per-RUN, just without a run_N/ subfolder
+  // since there's only ever one of these per photo).
+  async function buildPendingSourceZip() {
+    const sourceBuf = selectedFile ? await selectedFile.arrayBuffer() : null;
+    const files = sourceBuf ? [{ name: selectedFile.name || "source.jpg", data: new Uint8Array(sourceBuf) }] : [];
+    if (isDebugUiActive && singleFlowState?.analysis) {
+      const analysisBytes = new TextEncoder().encode(JSON.stringify(singleFlowState.analysis, null, 2));
+      const promptsBytes = new TextEncoder().encode(buildPromptsJson(singleFlowState.analysis.prompts || {}));
+      files.push(
+        { name: "analysis.json", data: analysisBytes },
+        { name: "prompts.json", data: promptsBytes }
+      );
+    }
+    return window.PhotoAgentZip.createZip(files);
+  }
+
+  async function downloadPendingSource() {
+    if (!selectedFile) return;
+    // --debug-ui mode still zips (source + analysis.json + prompts.json),
+    // same reasoning as downloadCurrentResultOnly's split below -- plain
+    // mode just wants the one photo, no zip overhead for a single file.
+    if (isDebugUiActive) {
+      await downloadZip(buildPendingSourceZip, buildDownloadZipFilename());
+      return;
+    }
+    try {
+      const url = URL.createObjectURL(selectedFile);
+      const tempLink = document.createElement("a");
+      tempLink.href = url;
+      tempLink.download = selectedFile.name || buildDownloadImageFilename();
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      tempLink.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showNoticeModal("已下載完成。");
+    } catch (error) {
+      showError("下載失敗，請稍後再試。");
+    }
+  }
+
   async function buildResultZip(onProgress) {
     const runs = lastResultRuns();
     // A combined multi-RUN job (job_processor.py's run_count loop) shares ONE
@@ -2354,6 +2422,10 @@
   // downloads the current result directly, same as before this menu existed.
   function handleDownloadClick(event) {
     event.preventDefault();
+    if (pendingResultsActive) {
+      downloadPendingSource();
+      return;
+    }
     if (!lastResult) return;
     if (lastDoneRunsCount > 1) {
       toggleDownloadMenu();
@@ -2659,8 +2731,7 @@
     // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
     // single-image run (which never touches these) isn't left with the
     // canvas/run switcher hidden from a prior batch session.
-    if (els.batchMainLoading) { els.batchMainLoading.hidden = true; els.batchMainLoading.classList.remove("is-error", "is-analyzed"); }
-    if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
+    if (els.batchMainLoading) { els.batchMainLoading.hidden = true; els.batchMainLoading.classList.remove("is-error"); }
     restoreAnalysisPreviewHome();
     if (els.resultsCanvasRow) { els.resultsCanvasRow.hidden = false; els.resultsCanvasRow.classList.remove("showing-analysis"); }
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
@@ -2843,9 +2914,8 @@
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
-    clearContinueWait();
+    closePendingResults(); // drop any stale pending-review state from an abandoned prior run
     if (els.analysisPreview) els.analysisPreview.hidden = true;
-    if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
     procVisual.style.height = "";
@@ -2913,9 +2983,27 @@
         renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
         await finishSingleFlow();
       } else {
-        showAnalysisPreview(analysis, preset);
-        await waitForContinue();
-        await finishSingleFlow();
+        await showPendingResults(analysis, preset);
+        const action = await waitForPendingResultsAction();
+        if (action === "back") {
+          resetApp();
+          return;
+        }
+        closePendingResults();
+        // Same "editing" loading overlay backToProcessFromResults' revise
+        // flow uses -- swaps the photo for the thinking-rings animation
+        // instead of navigating away from the results page.
+        setAnalysisPreviewDisabled(true);
+        if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
+        if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
+        if (els.canvasLoading) els.canvasLoading.hidden = false;
+        try {
+          await finishSingleFlow();
+        } finally {
+          if (els.canvasLoading) els.canvasLoading.hidden = true;
+          if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+          setAnalysisPreviewDisabled(false);
+        }
       }
     } catch (error) {
       // Lets any not-yet-shown phrasings finish playing (fast-forwarded)
@@ -2930,9 +3018,17 @@
     } finally {
       els.startButton.disabled = false;
       if (els.startDirectBtn) els.startDirectBtn.disabled = false;
-      clearContinueWait();
+      // Only a safety net for an abandoned pending-review (e.g. an error
+      // thrown while showPendingResults/waitForPendingResultsAction was still
+      // in play) -- the normal "continue" path already calls this itself
+      // before finishSingleFlow runs. Calling it unconditionally here would
+      // also fire on every successful finish, undoing the revise panel that
+      // finishSingleFlow's own tail (openInlineAnalysisForCurrentContext)
+      // just legitimately opened -- moving #ap-options-card-inline back home
+      // and re-hiding #download-link right after they were shown.
+      if (pendingResultsActive) closePendingResults();
       // Safety net for the isCurrent()===false edge case, where
-      // revealResultsIfNeeded/showAnalysisPreview bail out without ever
+      // revealResultsIfNeeded/showPendingResults bail out without ever
       // consuming the rotation themselves -- instant, not fast-forwarded,
       // since there's no longer a screen for it to play out on.
       stopProcSubRotation();
@@ -6059,7 +6155,7 @@
     const wasThisRecordRotating = activeBatchRotationRecord === record;
     if (record.status === "analyzed") {
       if (wasThisRecordRotating) await finishProcSubRotation();
-      showBatchAnalyzedMain(record);
+      await showBatchAnalyzedMain(record);
     // Guard against the brief window (mid-revise, with N new runs in flight
     // alongside older already-done ones) where syncRecordMirror's aggregate
     // "any run done" check flips record.status to "done" before the specific
@@ -6079,9 +6175,8 @@
   function hideAllBatchMainViews() {
     if (els.batchMainLoading) {
       els.batchMainLoading.hidden = true;
-      els.batchMainLoading.classList.remove("is-error", "is-analyzed");
+      els.batchMainLoading.classList.remove("is-error");
     }
-    if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = true;
     restoreAnalysisPreviewHome(); // vacates #results-analysis-slot if a done record's revise panel is open
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = true;
   }
@@ -6149,29 +6244,38 @@
     }
   }
 
-  // Pre-first-edit review: the recipe/style-options/prompt panel, shown full
-  // width in the main area (no canvas yet -- nothing has been edited for this
-  // image). Reuses the same #analysis-preview DOM the beside-canvas revise
-  // panel does, just relocated to a different destination.
-  // "Analyzed, not yet edited" -- no per-image recipe/options/prompt review
-  // anymore (that's only decided via the bulk batch-prompt-row/batch-options-
-  // row in the sidebar now); just a static preview of the source photo plus a
-  // way to continue this one image specifically, same info-block language as
-  // showBatchMainLoading/showBatchMainError but without the spinning rings
-  // (nothing is actually in progress for this record yet).
-  function showBatchAnalyzedMain(record) {
-    hideAllBatchMainViews();
-    if (els.batchMainLoading) {
-      els.batchMainLoading.hidden = false;
-      els.batchMainLoading.classList.add("is-analyzed");
-      if (els.batchMainLoadingThumb) els.batchMainLoadingThumb.src = record.thumbUrl || record.previewUrl;
-      if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is ready";
-      if (els.batchMainLoadingTitle) els.batchMainLoadingTitle.textContent = "已完成分析";
-      if (els.batchMainLoadingText) {
-        els.batchMainLoadingText.textContent = "可調整左側的整批補充指令或風格選項，或針對這張圖片單獨繼續處理。";
-      }
+  // Pre-first-edit review, rendered exactly like a finished result (just with
+  // no generated image/QA yet) via renderResult's pending mode -- same
+  // treatment showPendingResults gives the single-image flow's equivalent
+  // state, instead of the old #batch-main-loading placeholder card. Reuses
+  // startInlineBatchReview (via openInlineAnalysisForCurrentContext, now that
+  // currentDetailBatchRecord() recognizes "analyzed" too) for the actual
+  // options panel + Run button -- its tail (runBatchPool + editBatchItem) is
+  // the same submission path continueBatchRecords already used for this case.
+  async function showBatchAnalyzedMain(record) {
+    const hasOriginal = !!record.previewUrl;
+    if (!hasOriginal) {
+      els.originalImg.removeAttribute("src");
+    } else {
+      // setImgSrcPreloaded (not a bare src assignment) keeps #original-img
+      // from ever showing the broken-image icon/alt text while this record's
+      // own photo is a different one than whatever was on screen before --
+      // same reasoning as showBatchDoneMain's identical call.
+      await setImgSrcPreloaded(els.originalImg, record.previewUrl);
     }
-    if (els.batchReviewContinueBtn) els.batchReviewContinueBtn.hidden = false;
+    if (currentBatchRecord !== record) return; // switched to another case meanwhile
+
+    const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+    if (!alreadyShowing) hideAllBatchMainViews();
+    els.resultsCanvasRow.hidden = false;
+    if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
+    resetRunSwitcher(); // no RUNs exist yet for this record
+
+    renderResult(
+      { data: {}, analysis: record.analysis, preset: batchSettings.preset, imageModel: null, hasOriginal },
+      { pending: true }
+    );
+    openInlineAnalysisForCurrentContext(true);
   }
 
   // Shows a "產生中… N/total RUN" progress bar under the photo for as long
@@ -6380,12 +6484,19 @@
     applyRender();
   }
 
-  // Is a single already-finished batch record currently open in the main
-  // area? Returns null for the single-image flow (or a batch record that
-  // isn't done yet), so callers can branch between the whole-record batch
-  // path and the single-image path with one check.
+  // Is a batch record (either already-finished, or analyzed-but-not-yet-
+  // edited) currently open in the main area? Returns null for the
+  // single-image flow (or a batch record still analyzing/processing/
+  // errored), so callers can branch between the whole-record batch path and
+  // the single-image path with one check. "analyzed" is included alongside
+  // "done" so this record's own revise/first-edit panel (openInlineAnalysis-
+  // ForCurrentContext -> startInlineBatchReview) and the per-record setting
+  // routing below (applyModelQualityChange et al.) both work identically
+  // whether this is a first edit or a re-edit.
   function currentDetailBatchRecord() {
-    return (currentBatchRecord && currentBatchRecord.status === "done") ? currentBatchRecord : null;
+    return (currentBatchRecord && (currentBatchRecord.status === "done" || currentBatchRecord.status === "analyzed"))
+      ? currentBatchRecord
+      : null;
   }
 
   // "檢視分析結果" for one already-finished batch photo: reuses the same
@@ -6417,7 +6528,17 @@
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     if (els.apRunCountSelect) els.apRunCountSelect.value = String((record.runs || []).length || 1);
     openInlineAnalysisPanel();
-    captureInlineReviseSnapshot();
+    // The "run with no changes just reproduces the same result" guard
+    // (inlineReviseHasNoChanges) only makes sense when there's an existing
+    // result to reproduce -- for "analyzed" (not yet edited) records this is
+    // the first edit, so leave no snapshot behind (inlineReviseHasNoChanges
+    // treats a null snapshot as "there are changes", i.e. never blocks) and
+    // Run always goes through, same as the single-image pending flow.
+    if (record.status === "done") {
+      captureInlineReviseSnapshot();
+    } else {
+      inlineReviseSnapshot = null;
+    }
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
@@ -6850,7 +6971,6 @@
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     stopProcSubRotation();
-    clearContinueWait();
     // If the last thing the user did was an inline analysis review (single or
     // batch), #analysis-preview and #ap-options-card-inline are currently on
     // loan inside the results section (#results-analysis-slot /
@@ -6858,15 +6978,12 @@
     // before the next photo's analyze tries to show #analysis-preview there,
     // or it renders invisibly inside the now-hidden results section instead.
     restoreAnalysisPreviewHome();
-    restoreOptionsCardHome();
-    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
+    closePendingResults();
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
-    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
-    if (els.backToUploadBtn) els.backToUploadBtn.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of
-    // clicking continue (waitForContinue's promise is left pending), so
-    // re-enable Start explicitly here too.
+    // clicking continue (waitForPendingResultsAction's promise is left
+    // pending), so re-enable Start explicitly here too.
     els.startButton.disabled = false;
     if (els.startDirectBtn) els.startDirectBtn.disabled = false;
     if (timingDetails) timingDetails.hidden = true;
@@ -7105,7 +7222,7 @@
       const images = await readResultFolder(dirEntry);
       resetBatchState();
       resetSteps();
-      clearContinueWait();
+      closePendingResults();
       if (images.length > 1) await importAsBatch(images);
       else await importAsSingle(images[0], dirEntry.name);
     } catch (error) {
@@ -7254,7 +7371,6 @@
   }
   els.resetButton.addEventListener("click", resetApp);
   if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", resetApp);
-  if (els.backToUploadBtn) els.backToUploadBtn.addEventListener("click", resetApp);
   if (els.compareToggleBtn) {
     els.compareToggleBtn.addEventListener("click", () =>
       setCompareView(!els.compareCard?.classList.contains("showing-generated")));
@@ -7426,12 +7542,6 @@
   if (els.batchDrawerTrigger) els.batchDrawerTrigger.addEventListener("click", openBatchDrawer);
   if (els.batchSidebarCloseBtn) els.batchSidebarCloseBtn.addEventListener("click", closeBatchDrawer);
   if (els.batchSidebarBackdrop) els.batchSidebarBackdrop.addEventListener("click", closeBatchDrawer);
-  if (els.batchReviewContinueBtn) {
-    els.batchReviewContinueBtn.addEventListener("click", () => {
-      if (!currentBatchRecord) return;
-      continueBatchRecords([currentBatchRecord]);
-    });
-  }
 
   // Per-image ap-*-list radios: their <ul> elements are stable across
   // renderAnalysisPreview's re-fills (only the <li> children get replaced),

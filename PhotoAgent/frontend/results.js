@@ -766,7 +766,12 @@ window.PhotoAgentResults = (() => {
   // Before/After and re-assigning the image src.
   let lastRender = null;
 
-  function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }, { keepView = false } = {}) {
+  // pending: analyze stage just finished, edit stage hasn't run yet -- no
+  // generated image/QA data exists. Renders every analysis-only field the
+  // same way a finished result would, but skips the fields that only make
+  // sense once there's an actual edited image (generatedImg/downloadLink
+  // src, forcing the "After" view, model name).
+  function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }, { keepView = false, pending = false } = {}) {
     if (!keepView) lastRender = { data, analysis, preset, imageModel, hasOriginal };
     const qa = data.qualityCheck || null;
     const validation = analysis.crop_validation || null;
@@ -782,21 +787,29 @@ window.PhotoAgentResults = (() => {
     // existing caller is unaffected. Reset unconditionally (not just when
     // false) so a later live render doesn't inherit a hidden state left over
     // from an earlier historical one.
-    if (els.compareToggleBtn) els.compareToggleBtn.hidden = !hasOriginal;
+    // pending: no generated image exists yet, so there's nothing to toggle
+    // "before/after" between -- hide the toggle. Fullscreen just enlarges
+    // whichever photo is currently shown (the original, in pending mode) and
+    // has no such dependency, so it stays available.
+    if (els.compareToggleBtn) els.compareToggleBtn.hidden = pending || !hasOriginal;
     if (els.compareFullscreenBtn) els.compareFullscreenBtn.hidden = !hasOriginal;
 
     // Keep whatever the overlay toggle was set to, but bind it to this run's
     // analysis -- switching RUN tabs should redraw the boxes for the run now
     // on screen, not leave the previous one's up.
     boxesAnalysis = analysis;
-    if (!keepView) {
+    if (pending) {
+      // No generated image to show yet -- pin the compare-card to the
+      // original photo instead of forcing an "After" view with nothing in it.
+      setCompareView(false);
+    } else if (!keepView) {
       setCompareView(true);
       els.generatedImg.src = data.image;
       els.downloadLink.href = data.image;
     } else {
       drawAnalysisBoxes();
     }
-    els.modelName.textContent = data.model || imageModel;
+    els.modelName.textContent = pending ? "" : (data.model || imageModel);
     if (els.recipeTags) {
       renderTags(els.recipeTags, [
         ...buildStyleOptionTagLabels(analysis.style_options),
@@ -873,7 +886,7 @@ window.PhotoAgentResults = (() => {
         ? `保護區域：${analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || "重要區域").join("、")}。`
         : "",
       analysis.tool_strategy ? `工具分工：${analysis.tool_strategy}` : "",
-      data.localOnly ? "目前使用本機處理，未執行 AI 影像生成。" : "目前已執行 AI 影像修圖。"
+      pending ? "尚未執行修圖，確認後將開始 AI 影像修圖。" : (data.localOnly ? "目前使用本機處理，未執行 AI 影像生成。" : "目前已執行 AI 影像修圖。")
     ]);
 
     els.lightColorText.textContent = joinParts([
