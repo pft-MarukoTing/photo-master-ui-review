@@ -129,6 +129,55 @@
   // its async conversion finally resolves.
   let fileSelectionToken = 0;
   let lastResult = null; // { file, resultText, jobId, path } -- for the zip download
+  // Lifecycle metadata for the case currently shown in the shared result
+  // canvas. Backend history uses snake_case; live records use camelCase.
+  // Values are Unix seconds so both paths can share the same renderer.
+  let currentCaseTimes = { uploadedAt: null, modifiedAt: null };
+
+  function timestampValue(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number > 0 ? number : null;
+  }
+
+  function formatCaseTimestamp(timestamp) {
+    const date = new Date(timestamp * 1000);
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${date.getFullYear()}/${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  function renderCurrentCaseTimes() {
+    if (!els.resultCaseTimes) return;
+    const { uploadedAt, modifiedAt } = currentCaseTimes;
+    els.resultCaseTimes.hidden = !uploadedAt;
+    if (els.resultUploadedTime) {
+      els.resultUploadedTime.textContent = uploadedAt ? formatCaseTimestamp(uploadedAt) : "";
+      els.resultUploadedTime.dateTime = uploadedAt ? new Date(uploadedAt * 1000).toISOString() : "";
+    }
+    if (els.resultModifiedTimeItem) els.resultModifiedTimeItem.hidden = !modifiedAt;
+    if (els.resultModifiedTime) {
+      els.resultModifiedTime.textContent = modifiedAt ? formatCaseTimestamp(modifiedAt) : "";
+      els.resultModifiedTime.dateTime = modifiedAt ? new Date(modifiedAt * 1000).toISOString() : "";
+    }
+  }
+
+  function setCurrentCaseTimes(source = {}) {
+    currentCaseTimes = {
+      uploadedAt: timestampValue(source.uploaded_at ?? source.uploadedAt ?? source.ts),
+      modifiedAt: timestampValue(source.modified_at ?? source.modifiedAt)
+    };
+    renderCurrentCaseTimes();
+  }
+
+  function markCurrentCaseUploaded(timestamp = Date.now() / 1000) {
+    if (!currentCaseTimes.uploadedAt) currentCaseTimes.uploadedAt = timestamp;
+    renderCurrentCaseTimes();
+  }
+
+  function markCurrentCaseModified(timestamp = Date.now() / 1000) {
+    markCurrentCaseUploaded(timestamp);
+    currentCaseTimes.modifiedAt = timestamp;
+    renderCurrentCaseTimes();
+  }
   // Set once at startup by applyDebugUiVisibility -- gates whether the
   // result card shows the raw model string (e.g. "gpt-4.1-mini + gpt-image-2")
   // or a plain-language stand-in a regular user actually cares about.
@@ -2546,6 +2595,8 @@
       previewPending: true,
       // pending -> analyzing -> analyzed -> processing -> done / error
       status: "pending",
+      uploadedAt: null,
+      modifiedAt: null,
       analysis: null,       // step-1 result (shown in the step-2 review panel)
       analyzeJobId: null,   // local path only: the analyze job, reused by continue
       options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
@@ -2959,6 +3010,7 @@
       showError("請先上傳一張照片。");
       return;
     }
+    setCurrentCaseTimes({ uploadedAt: Date.now() / 1000 });
 
     const presetKey = "natural";
     const preset = presets[presetKey] || presets.natural;
@@ -3100,6 +3152,9 @@
     // job started from."
     const myHistoryToken = historyViewToken;
     const isCurrent = () => historyViewToken === myHistoryToken;
+    // This is the common entry point for the first edit and every later
+    // revise. Analysis-only views intentionally never set modifiedAt.
+    markCurrentCaseModified();
     const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const userPrompt = els.promptInput.value.trim();
@@ -3638,7 +3693,9 @@
     els.startButton.disabled = true;
     if (els.startDirectBtn) els.startDirectBtn.disabled = true;
     resetSteps(); // clears completedTimings so each run's total starts fresh
+    const uploadedAt = Date.now() / 1000;
     batchRecords.forEach((r) => {
+      if (!r.uploadedAt) r.uploadedAt = uploadedAt;
       r.status = "analyzing";
       r.analysis = null;
       r.analyzeJobId = null;
@@ -3801,6 +3858,8 @@
     const userPrompt = effectivePrompt(record);
     const overwritePrompt = effectiveOverwritePrompt(record);
     const stepStart = Date.now();
+    if (!record.uploadedAt) record.uploadedAt = stepStart / 1000;
+    record.modifiedAt = stepStart / 1000;
     try {
       await runCombinedMultiRun({
         file: record.file,
@@ -4018,7 +4077,10 @@
     // N independent edit runs per image from the same analysis. Each run is
     // its own job; the pool works through (record, run) pairs.
     const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
+    const modifiedAt = Date.now() / 1000;
     targets.forEach((r) => {
+      if (!r.uploadedAt) r.uploadedAt = modifiedAt;
+      r.modifiedAt = modifiedAt;
       r.runs = Array.from({ length: runCount }, (_, k) => ({
         run: k + 1, jobId: null, status: "processing",
         imageUrl: null, result: null, timings: [], error: null
@@ -5313,7 +5375,13 @@
           // minimal report-derived stand-in has nowhere else to get it
           // from; without this, #prompt would come back empty even though
           // the report captured the original 補充指令.
-          viewHistoryRecord({ path: r.path, runs: [r.job_id], user_prompt: r.user_prompt }, { revealDetailExtra: true, report: r });
+          viewHistoryRecord({
+            path: r.path,
+            runs: [r.job_id],
+            user_prompt: r.user_prompt,
+            uploaded_at: r.uploaded_at,
+            modified_at: r.modified_at
+          }, { revealDetailExtra: true, report: r });
         });
       } else {
         li.classList.add("is-static");
@@ -5439,6 +5507,7 @@
   // viewProcessingHistoryRecord does -- see its own comment.
   async function viewAnalyzeHistoryRecord(job) {
     const myToken = ++historyViewToken;
+    setCurrentCaseTimes(job);
     const analyzeJobId = Array.isArray(job.runs) && job.runs.length ? job.runs[0] : job.job_id;
     const previewUrl = sourceImageUrl(analyzeJobId);
     showSection("results");
@@ -5532,6 +5601,7 @@
   // job they've since stopped looking at.
   async function viewProcessingHistoryRecord(job) {
     const myToken = ++historyViewToken;
+    setCurrentCaseTimes(job);
     showSection("results");
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
@@ -5748,6 +5818,7 @@
   async function viewHistoryRecord(job, { revealDetailExtra = false, report = null } = {}) {
     historyViewToken += 1;
     const myToken = historyViewToken;
+    setCurrentCaseTimes(job);
     const runs = await fetchAllHistoryRuns(job);
     if (!runs.length) {
       showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
@@ -5862,7 +5933,9 @@
       runs,
       mirrorIndex: 0,
       timings: [],
-      status: "done"
+      status: "done",
+      uploadedAt: job.uploaded_at || job.ts || null,
+      modifiedAt: job.modified_at || null
     };
 
     showSection("results");
@@ -6403,6 +6476,7 @@
 
   async function renderBatchMain(record) {
     if (!record) return;
+    setCurrentCaseTimes(record);
     updateApSubjectTags(record);
     updateBatchSidebarMaxHeight();
     // Only this record's OWN rotation (if it was the one actively showing)
@@ -6816,6 +6890,9 @@
     if (action === "cancel") return;
 
     captureBatchReviewSelections(record);
+    if (!record.uploadedAt) record.uploadedAt = Date.now() / 1000;
+    record.modifiedAt = Date.now() / 1000;
+    setCurrentCaseTimes(record);
     setAnalysisPreviewDisabled(true);
 
     // N fresh runs (N = the count just confirmed above) -- drop the previous
@@ -7214,6 +7291,7 @@
     selectedFile = null;
     selectedFileSourceUrl = null;
     lastResult = null;
+    setCurrentCaseTimes();
     singleRuns = null;
     singleMirrorIndex = null;
     // A real fresh start (unlike just closing #demo-images-modal without

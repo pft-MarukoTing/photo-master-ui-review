@@ -911,6 +911,33 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .results-canvas-top {
   display: contents;
 }
+.result-case-times {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 10px;
+  padding: 0 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.result-case-times[hidden] { display: none; }
+.result-case-time-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.result-case-time-item[hidden] { display: none; }
+.result-case-time-label {
+  color: rgba(255,255,255,.52);
+  font-weight: 600;
+}
+.result-case-time-item time {
+  color: rgba(255,255,255,.82);
+}
 /* flex-grow ratio (both basis pinned at 0%) instead of a fixed px width --
    neither side is ever left with unclaimed blank space regardless of
    viewport width. Only flex-grow (a plain number) is transitioned --

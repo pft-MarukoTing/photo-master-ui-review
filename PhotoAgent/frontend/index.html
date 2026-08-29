@@ -3399,6 +3399,19 @@
             <strong id="model-name" hidden>AI 智能修圖</strong>
             </div>
           </div>
+          <!-- Case lifecycle metadata. uploaded_at is fixed when this photo
+               first enters history; modified_at is only present after an
+               edit RUN has been submitted and advances on later re-runs. -->
+          <div id="result-case-times" class="result-case-times" hidden>
+            <span class="result-case-time-item">
+              <span class="result-case-time-label">上傳時間</span>
+              <time id="result-uploaded-time"></time>
+            </span>
+            <span id="result-modified-time-item" class="result-case-time-item" hidden>
+              <span class="result-case-time-label">最後修改時間</span>
+              <time id="result-modified-time"></time>
+            </span>
+          </div>
         </div>
 
         <!-- #analysis-preview (from the processing section) is moved in here
