@@ -804,17 +804,25 @@ window.PhotoAgentResults = (() => {
       .filter((f) => f?.box && [f.box.x, f.box.y, f.box.w, f.box.h].every(Number.isFinite))
       .map((f) => {
         const sentToModel = f.sent_to_model !== false;
-        if (sentToModel) return { box: f.box, issues: faceIssueEntries(analysis, f.box), sentToModel };
-        // A local-only face (beyond the crop cap, never sent to the model as
-        // its own zoomed image) is still overlap-matched against subjects[]
-        // -- the model may well have described this exact person from the
-        // full photo alone -- but only kept as a thumbnail when that match
-        // actually exists. With no matching subject there is nothing
-        // meaningful to show (no box the model itself vouches for), so it's
-        // dropped entirely rather than displayed as a bare, unexplained box.
+        // Matched once here (rather than left to faceIssueEntries' own
+        // internal match) so the subject's own label -- used as the face
+        // modal's title in fillFaceIssueList below -- comes from the exact
+        // same match its issues do, not a second, potentially different one.
         const { subject } = bestSubjectMatch(analysis?.subjects, f.box);
-        if (!subject) return null;
-        return { box: f.box, issues: faceIssueEntries(analysis, f.box), sentToModel };
+        // A local-only face (beyond the crop cap, never sent to the model as
+        // its own zoomed image) is only kept as a thumbnail when it actually
+        // overlap-matches a subjects[] entry -- the model may well have
+        // described this exact person from the full photo alone. With no
+        // matching subject there is nothing meaningful to show (no box the
+        // model itself vouches for), so it's dropped entirely rather than
+        // displayed as a bare, unexplained box.
+        if (!sentToModel && !subject) return null;
+        return {
+          box: f.box,
+          issues: faceIssueEntries(analysis, f.box),
+          sentToModel,
+          label: (subject && subject.label) || "",
+        };
       })
       .filter(Boolean);
     row.innerHTML = "";
@@ -872,17 +880,22 @@ window.PhotoAgentResults = (() => {
   }
 
   // Called by app.js's #ap-face-thumb-row click handler right before it
-  // shows #ap-face-modal -- mirrors that face's own thumbnail into
-  // #ap-face-modal-thumb (so the modal doesn't rely on the user remembering
-  // which small row button they clicked) and fills #ap-face-issue-list with
-  // that face's should_fix/adjust_safe verdicts, matched at
-  // renderFaceThumbnails time above. Each flagged item also gets an
-  // "allow AI to fix this" toggle (ios-switch, same look as the Advanced
+  // shows #ap-face-modal -- sets the modal title to that person's own
+  // subjects[].label (renderFaceThumbnails' bestSubjectMatch), falling back
+  // to a plain "人物 N" when no subject matched; mirrors that face's own
+  // thumbnail into #ap-face-modal-thumb (so the modal doesn't rely on the
+  // user remembering which small row button they clicked) and fills
+  // #ap-face-issue-list with that face's should_fix/adjust_safe verdicts,
+  // matched at renderFaceThumbnails time above. Each flagged item also gets
+  // an "allow AI to fix this" toggle (ios-switch, same look as the Advanced
   // Settings ones) -- switching it off flips issue.allowed in place on the
   // faceThumbEntries entry itself, which getFaceIssueOverrides reads back at
   // submit time.
   function fillFaceIssueList(index) {
     const entry = faceThumbEntries[index];
+    if (els.apFaceModalTitle) {
+      els.apFaceModalTitle.textContent = `${entry?.label || `人物 ${index + 1}`} 分析結果`;
+    }
     if (els.apFaceModalThumb) {
       if (entry?.thumbUrl) {
         els.apFaceModalThumb.src = entry.thumbUrl;

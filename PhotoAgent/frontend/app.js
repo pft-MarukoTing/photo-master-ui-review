@@ -6253,12 +6253,11 @@
   // Per-face should_fix overlay -- one #ap-face-thumb-row button per detected
   // face (renderFaceThumbnails, results.js). fillFaceIssueList does the
   // actual list population (it owns the box-overlap matching against
-  // subjects[].box, then reads that subject's blink_issue/gaze_issue/
-  // hair_issue); this just sets the title to which face was clicked and
+  // subjects[].box, reads that subject's blink_issue/gaze_issue/hair_issue,
+  // and sets the modal's title to that subject's own label); this just
   // toggles the shared modal shell.
   function openFaceModal(index) {
     if (!els.apFaceModal) return;
-    if (els.apFaceModalTitle) els.apFaceModalTitle.textContent = `人物 ${index + 1} 分析結果`;
     fillFaceIssueList(index);
     els.apFaceModal.hidden = false;
   }
