@@ -111,10 +111,15 @@ def detect_face_crops(image_bytes: bytes) -> list:
     for plenty of photos, not an error -- callers must keep working from the
     full photo alone when this returns nothing.
 
-    Returns a list of {"box": {x, y, w, h}, "bytes": jpeg_bytes} -- box is
-    normalized against the original (EXIF-transposed) image, same convention
-    as roi_box/protected_regions, so callers can hand it straight to the
-    frontend's analysis-box overlay without a separate coordinate space.
+    Returns a list of {"box": {x, y, w, h}, "face_box": {x, y, w, h}, "bytes":
+    jpeg_bytes}. Both boxes are normalized against the original (EXIF-transposed)
+    image, same convention as roi_box/protected_regions, so callers can hand
+    either straight to the frontend's analysis-box overlay without a separate
+    coordinate space. "box" is the padded crop actually sent as the zoomed
+    image (see the 0.6/0.4 padding below); "face_box" is the detector's own
+    tight, unpadded bbox -- the one worth handing to the analysis model as a
+    face-location reference, since "box" would put a person-sized gap between
+    the stated coordinates and the actual face.
     """
     img = _open_rgb(image_bytes)
     if img.width < 1 or img.height < 1:
@@ -170,6 +175,12 @@ def detect_face_crops(image_bytes: bytes) -> list:
                 "y": top / img.height,
                 "w": (right - left) / img.width,
                 "h": (bottom - top) / img.height,
+            },
+            "face_box": {
+                "x": x / img.width,
+                "y": y / img.height,
+                "w": w / img.width,
+                "h": h / img.height,
             },
             "bytes": _to_jpeg_bytes(crop),
         })

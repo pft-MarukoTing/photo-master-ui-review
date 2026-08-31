@@ -621,10 +621,11 @@ window.PhotoAgentResults = (() => {
   // ── Face thumbnails (#ap-face-thumb-row) + should_fix modal (#ap-face-modal) ──
   // detect_face_crops (openai_client.analyze_photo) hands back up to 3 boxes
   // in analysis._face_crop_boxes, normalized against the original image --
-  // same convention as roi_box and each *_issues[].box below (prompts.py's
-  // shared _BOX_SCHEMA, "reused verbatim by subjects/eye_blink_issues/
-  // hair_issues/gaze_contact_issues/..."). subjects[].box (and so every
-  // *_issues[].box) is required to "tightly frame EXACTLY ONE individual
+  // same convention as subjects[].box (prompts.py's shared _BOX_SCHEMA).
+  // blink_issue/gaze_issue/hair_issue/smile_issue live nested inside each
+  // subjects[] entry (not as separate top-level arrays), so a face thumbnail
+  // is matched once against subjects[] rather than once per issue category.
+  // subjects[].box is required to "tightly frame EXACTLY ONE individual
   // person" -- i.e. that person's own bounding box, not necessarily just
   // their face -- while a face crop's box is padded only ~60%/40% around the
   // detected face itself (image_tools.py's detect_face_crops), so the two
@@ -637,22 +638,22 @@ window.PhotoAgentResults = (() => {
   // photo where people's boxes overlap each other.
   // flagField/flagWhen/flagText/okText mirror ANALYSIS_BOX_SPECS's own
   // per-category flag handling below: the first three flag on should_fix
-  // (true = needs fixing), but smile_states has no should_fix at all -- its
+  // (true = needs fixing), but smile_issue has no should_fix at all -- its
   // equivalent field is adjust_safe, flagged at false (unsafe to adjust),
   // the opposite polarity.
   const FACE_ISSUE_CATEGORIES = [
-    { field: "eye_blink_issues", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "gaze_contact_issues", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "hair_issues", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "smile_states", label: "笑容調整", flagField: "adjust_safe", flagWhen: false, flagText: "不建議調整", okText: "可以調整" }
+    { field: "blink_issue", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
+    { field: "gaze_issue", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
+    { field: "hair_issue", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
+    { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: false, flagText: "不建議調整", okText: "可以調整" }
   ];
 
   // Intersection over the SMALLER of the two boxes' own area (the
   // Szymkiewicz-Simpson overlap coefficient), not plain IoU -- faceBox and
-  // an issue's person box are rarely similar in size (see the comment
-  // above), so requiring most of the *larger* box to be covered would almost
-  // never trigger. This instead asks "does nearly all of whichever box is
-  // smaller sit inside the other one", which holds whichever way the size
+  // a subject's own box are rarely similar in size (see the comment above),
+  // so requiring most of the *larger* box to be covered would almost never
+  // trigger. This instead asks "does nearly all of whichever box is smaller
+  // sit inside the other one", which holds whichever way the size
   // difference actually goes.
   function boxOverlapCoefficient(a, b) {
     const ix = Math.max(a.x, b.x);
@@ -666,22 +667,24 @@ window.PhotoAgentResults = (() => {
     return smallerArea > 0 ? (iw * ih) / smallerArea : 0;
   }
 
-  function bestIssueMatch(items, faceBox) {
+  function bestSubjectMatch(subjects, faceBox) {
     let best = null;
     let bestScore = 0.5; // most of the smaller of the two boxes has to fall inside the other
-    (Array.isArray(items) ? items : []).forEach((item) => {
-      const box = item && item.box;
+    (Array.isArray(subjects) ? subjects : []).forEach((subject) => {
+      const box = subject && subject.box;
       if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;
       const score = boxOverlapCoefficient(faceBox, box);
-      if (score > bestScore) { bestScore = score; best = item; }
+      if (score > bestScore) { bestScore = score; best = subject; }
     });
     return best;
   }
 
   function faceIssueEntries(analysis, faceBox) {
+    const subject = bestSubjectMatch(analysis?.subjects, faceBox);
+    if (!subject) return [];
     return FACE_ISSUE_CATEGORIES.map((category) => {
-      const match = bestIssueMatch(analysis?.[category.field], faceBox);
-      if (!match) return null;
+      const match = subject[category.field];
+      if (!match || typeof match !== "object") return null;
       return {
         label: category.label,
         flagged: match[category.flagField] === category.flagWhen,
@@ -839,6 +842,11 @@ window.PhotoAgentResults = (() => {
   const ANALYSIS_BOX_SPECS = [
     { field: "roi_box", color: "#22c55e", label: "ROI", corner: "tl" },
     { field: "subject_extent_box", color: "#38bdf8", label: "主體範圍", corner: "tr" },
+    // subjects contains both people and non-person subjects. Only surface the
+    // former here: the per-person diagnostics below use the same person box,
+    // while product/animal/object subjects are outside this debug view's
+    // purpose. `personOnly` is applied by analysisBoxList before reading box.
+    { field: "subjects", color: "#6366f1", label: "人物主體（subjects）", corner: "br", list: true, itemBox: true, personOnly: true },
     { field: "crop_box", color: "#f59e0b", label: "crop_box（分析建議）", corner: "bl", dashed: true },
     { field: "applied_crop_plan", color: "#f43f5e", label: "實際送出裁切", corner: "br" },
     // detect_face_crops (openai_client.analyze_photo) -- zero, one, or several
@@ -846,24 +854,25 @@ window.PhotoAgentResults = (() => {
     // normalized-against-original-image convention as roi_box, so it slots
     // into the same overlay with no separate coordinate handling.
     { field: "_face_crop_boxes", color: "#a855f7", label: "臉部裁切", corner: "tl", list: true },
-    // These four are lists of {subject_label, box, <flagField>, ...} --
-    // itemBox tells analysisBoxList to read box.box instead of treating the
-    // array entry itself as the box (unlike _face_crop_boxes above, whose
-    // entries already ARE plain {x,y,w,h}). box here is that PERSON's own
-    // bounding box (subjects[].box, "reused verbatim" per prompts.py), not a
-    // face crop -- drawn alongside 臉部裁切 so it's visible on the original
-    // photo which analysis-reported person box renderFaceThumbnails'
-    // box-overlap matching (below) is actually comparing each face thumbnail
-    // against. flagField/flagWhen/flagText control the per-person "worth
-    // flagging" suffix: the first three use should_fix (true = needs fixing),
-    // but smile_states has no should_fix at all -- its equivalent field is
-    // adjust_safe, and there the notable value is false (unsafe to adjust),
-    // the opposite polarity, hence a per-spec flagWhen instead of a hardcoded
-    // should_fix check.
-    { field: "eye_blink_issues", color: "#eab308", label: "閉眼偵測", corner: "tl", list: true, itemBox: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
-    { field: "gaze_contact_issues", color: "#ec4899", label: "眼神對焦", corner: "tr", list: true, itemBox: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
-    { field: "hair_issues", color: "#14b8a6", label: "亂髮偵測", corner: "bl", list: true, itemBox: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
-    { field: "smile_states", color: "#84cc16", label: "笑容調整", corner: "br", list: true, itemBox: true, flagField: "adjust_safe", flagWhen: false, flagText: "（不建議調整）" }
+    // These four live nested inside each subjects[] entry (subject.blink_issue/
+    // gaze_issue/hair_issue/smile_issue), not as separate top-level arrays --
+    // perSubject tells analysisBoxList to walk analysis.subjects and read
+    // subject[spec.field] plus subject.box/subject.label directly, rather than
+    // treating analysis[spec.field] itself as a list (unlike _face_crop_boxes
+    // above, whose entries already ARE plain {x,y,w,h}). box here is that
+    // PERSON's own bounding box (subjects[].box), not a face crop -- drawn
+    // alongside 臉部裁切 so it's visible on the original photo which analysis-
+    // reported person box renderFaceThumbnails' box-overlap matching (below)
+    // is actually comparing each face thumbnail against. flagField/flagWhen/
+    // flagText control the per-person "worth flagging" suffix: the first
+    // three use should_fix (true = needs fixing), but smile_issue has no
+    // should_fix at all -- its equivalent field is adjust_safe, and there the
+    // notable value is false (unsafe to adjust), the opposite polarity, hence
+    // a per-spec flagWhen instead of a hardcoded should_fix check.
+    { field: "blink_issue", color: "#eab308", label: "閉眼偵測", corner: "tl", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
+    { field: "gaze_issue", color: "#ec4899", label: "眼神對焦", corner: "tr", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
+    { field: "hair_issue", color: "#14b8a6", label: "亂髮偵測", corner: "bl", perSubject: true, flagField: "should_fix", flagWhen: true, flagText: "（需修正）" },
+    { field: "smile_issue", color: "#84cc16", label: "笑容調整", corner: "br", perSubject: true, flagField: "adjust_safe", flagWhen: false, flagText: "（不建議調整）" }
   ];
 
   let boxesAnalysis = null;
@@ -894,15 +903,31 @@ window.PhotoAgentResults = (() => {
     if (!analysis) return [];
     return ANALYSIS_BOX_SPECS.flatMap((spec) => {
       if (!boxTypeVisibility[spec.field]) return [];
+      if (spec.perSubject) {
+        const subjects = Array.isArray(analysis.subjects) ? analysis.subjects : [];
+        return subjects
+          .map((subject) => {
+            const item = subject && subject[spec.field];
+            const box = subject && subject.box;
+            if (!item || typeof item !== "object" || !box) return null;
+            const flagged = spec.flagField && item[spec.flagField] === spec.flagWhen;
+            const subjectLabel = subject.label;
+            const label = `${spec.label}${subjectLabel ? ` · ${subjectLabel}` : ""}${flagged ? spec.flagText : ""}`;
+            return boxEntryFromRect(spec, label, box);
+          })
+          .filter(Boolean);
+      }
       if (spec.list) {
         const items = Array.isArray(analysis[spec.field]) ? analysis[spec.field] : [];
         return items
           .map((item, i) => {
+            if (spec.personOnly && item?.is_person !== true) return null;
             const box = spec.itemBox ? item?.box : item;
             if (!box) return null;
             const flagged = spec.flagField && item[spec.flagField] === spec.flagWhen;
+            const subjectLabel = spec.field === "subjects" ? item.label : item.subject_label;
             const label = spec.itemBox
-              ? `${spec.label}${item.subject_label ? ` · ${item.subject_label}` : ""}${flagged ? spec.flagText : ""}`
+              ? `${spec.label}${subjectLabel ? ` · ${subjectLabel}` : ""}${flagged ? spec.flagText : ""}`
               : (items.length > 1 ? `${spec.label} ${i + 1}` : spec.label);
             return boxEntryFromRect(spec, label, box);
           })
@@ -971,13 +996,14 @@ window.PhotoAgentResults = (() => {
 
     if (!legend) return;
     legend.innerHTML = "";
-    // itemBox categories (eye_blink_issues/gaze_contact_issues/hair_issues)
-    // can draw one box per detected person -- the legend just needs to say
-    // "this color is 閉眼偵測", not repeat that line once per person, so only
-    // the first box seen per itemBox field gets a legend row.
+    // itemBox categories (subjects) and perSubject categories (blink_issue/
+    // gaze_issue/hair_issue/smile_issue) can draw one box per detected
+    // person -- the legend just needs to say "this color is 閉眼偵測", not
+    // repeat that line once per person, so only the first box seen per such
+    // field gets a legend row.
     const seenItemBoxFields = new Set();
     boxes.forEach((box) => {
-      if (box.itemBox) {
+      if (box.itemBox || box.perSubject) {
         if (seenItemBoxFields.has(box.field)) return;
         seenItemBoxFields.add(box.field);
       }

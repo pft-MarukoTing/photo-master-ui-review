@@ -2880,9 +2880,9 @@
                      the #boxes-toggle-btn debug overlay). Populated by
                      renderFaceThumbnails (results.js), which crops each
                      thumbnail from #original-img via canvas and matches this
-                     face's box against eye_blink_issues/gaze_contact_issues/
-                     hair_issues by box overlap to find that person's
-                     should_fix verdicts. Hidden entirely when no faces were
+                     face's box against subjects[].box by overlap to find that
+                     person's blink_issue/gaze_issue/hair_issue should_fix
+                     verdicts. Hidden entirely when no faces were
                      detected. flex-basis:100% (see the CSS above) puts this
                      on its own full-width line above the
                      #ap-recipe-picker/#ap-style-picker pill row instead of
@@ -3257,7 +3257,7 @@
                     </button>
                     <!-- One checkbox per ANALYSIS_BOX_SPECS entry (results.js)
                          -- lets the user pick any combination of ROI/主體範圍/
-                         裁切框/臉部裁切/閉眼偵測/眼神對焦/亂髮偵測 to draw at once
+                         人物 subjects/裁切框/臉部裁切/閉眼偵測/眼神對焦/亂髮偵測 to draw at once
                          instead of an old all-or-nothing toggle (drawAnalysisBoxes
                          used to gate on a single boxesVisible flag; now each row
                          controls its own spec.field in boxTypeVisibility).
@@ -4275,9 +4275,9 @@
 <!-- Opened by clicking one of #ap-face-thumb-row's per-face thumbnail
      buttons (openFaceModal in app.js) -- lists that person's should_fix/
      adjust_safe verdict from every 人像設定 analysis category (閉眼偵測/眼神對焦/
-     亂髮偵測/笑容調整, i.e. eye_blink_issues/gaze_contact_issues/hair_issues/
-     smile_states) matched to this face by box overlap (fillFaceIssueList,
-     results.js). Same backdrop+box+close shape as #ap-recipe-modal above;
+     亂髮偵測/笑容調整, i.e. blink_issue/gaze_issue/hair_issue/smile_issue nested
+     under the matching subjects[] entry) matched to this face by box overlap
+     (fillFaceIssueList, results.js). Same backdrop+box+close shape as #ap-recipe-modal above;
      the list itself is read-only (step-inline-list--readonly, same look as
      #recipe-score-list's ✓/✕ adherence icons) since these are analysis
      findings, not user-toggleable choices. #ap-face-modal-thumb mirrors the

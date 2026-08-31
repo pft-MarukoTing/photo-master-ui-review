@@ -55,8 +55,23 @@ LEAVE_ME = {
 }
 
 
+def _subjects_from_hair_issues(hair_issues):
+    """hair_issue now lives nested under subjects[] rather than in a
+    top-level hair_issues array -- build one subject per legacy flat item,
+    carrying its subject_label forward as that subject's own label."""
+    return [
+        {
+            "label": item.get("subject_label") or "unnamed",
+            "is_person": True,
+            "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
+            "hair_issue": {k: v for k, v in item.items() if k != "subject_label"},
+        }
+        for item in hair_issues
+    ]
+
+
 def _prompt(hair_issues):
-    analysis = {**ANALYSIS, "hair_issues": hair_issues}
+    analysis = {**ANALYSIS, "subjects": _subjects_from_hair_issues(hair_issues)}
     return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
 
 
@@ -186,7 +201,7 @@ class BlockOrder(unittest.TestCase):
         # negative_block claims to override everything above it, so it has to stay
         # below the blocks that argue for changes -- including the hair one.
         analysis = {
-            **ANALYSIS, "hair_issues": [CLUMPED],
+            **ANALYSIS, "subjects": _subjects_from_hair_issues([CLUMPED]),
             "correction_plan": ["提升整體曝光"], "correction_axes": [["exposure"]],
             "rejected_corrections": ["淡化背景"], "rejected_axes": [["distraction"]],
             "rejected_preserve": ["維持背景原樣"],
@@ -208,7 +223,7 @@ class UncheckedHairItem(unittest.TestCase):
             "rejected_corrections": ["清掉黏在左臉頰上的兩三根碎髮"],
             "rejected_axes": [["hair"]],
             "rejected_preserve": ["維持左臉頰上原本的碎髮，完全照原圖呈現"],
-            "hair_issues": [FIX_ME],
+            "subjects": _subjects_from_hair_issues([FIX_ME]),
             **overrides,
         }
         return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
@@ -427,9 +442,9 @@ class CalmHair(unittest.TestCase):
         self.assertIn("Still-air hair (user-selected, mandatory)", self._prompt(True))
 
     def test_it_does_not_wait_for_the_analysis_to_find_a_defect(self):
-        # The point of the switch: the user asked for it, so no hair_issues entry
+        # The point of the switch: the user asked for it, so no hair_issue entry
         # and no confidence threshold gates it.
-        prompt = self._prompt(True, hair_issues=[])
+        prompt = self._prompt(True, subjects=[])
         self.assertIn("Still-air hair", prompt)
         self.assertNotIn("Hair tidying priority", prompt)
 

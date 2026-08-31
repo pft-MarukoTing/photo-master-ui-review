@@ -22,7 +22,7 @@ from openai_client import (
     edit_gaze_only as edit_gaze_only_openai,
     quality_check_photo,
 )
-from prompts import build_analysis_instruction, backfill_missing_correction_items
+from prompts import build_analysis_instruction, backfill_missing_correction_items, subject_issue_items
 
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
@@ -94,17 +94,14 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
 
     Gated here on advanced_options["gaze_contact_detection"] -- the analysis
     stage itself no longer reads this toggle at all (it always runs full gaze
-    detection, so gaze_contact_issues reflects genuine judgement regardless of
-    the toggle); this plain dict lookup, plus build_edit_prompt's own
-    strip_disabled_topic_items call on correction_plan, are the only two
+    detection, so each subject's gaze_issue reflects genuine judgement
+    regardless of the toggle); this plain dict lookup, plus build_edit_prompt's
+    own strip_disabled_topic_items call on correction_plan, are the only two
     places the toggle is actually enforced, both at edit time.
     """
     if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
         return image_b64, None, None
-    gaze_items = [
-        item for item in (analysis.get("gaze_contact_issues") or [])
-        if isinstance(item, dict) and item.get("should_fix")
-    ]
+    gaze_items = [item for item in subject_issue_items(analysis, "gaze_issue") if item.get("should_fix")]
     if not gaze_items:
         return image_b64, None, None
 
@@ -205,7 +202,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
     # The ANALYSIS_INSTRUCTION consistency-check lines ask the model to keep
-    # hair_issues/eye_blink_issues/gaze_contact_issues in sync with
+    # each subject's hair_issue/blink_issue/gaze_issue in sync with
     # correction_plan itself, but that alone isn't reliable -- backfill
     # deterministically here so the review screen (and a later revise) always
     # has something to show for a genuine should_fix=true finding.

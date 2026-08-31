@@ -32,6 +32,7 @@ from prompts import (
     build_edit_prompt,
     build_gaze_only_edit_prompt,
     build_quality_check_prompt,
+    expand_subject_boxes_to_contain_faces,
     style_option_entries,
 )
 
@@ -175,12 +176,15 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # (build_edit_prompt's strip_disabled_topic_items and build_smile_block).
     face_crops = detect_face_crops(image_bytes)
     for i, crop in enumerate(face_crops, start=1):
+        fb = crop["face_box"]
         content.append({
             "type": "input_text",
             "text": (
                 f"Face crop {i} (zoomed, for judging eye state, blink, gaze/pupil direction, and "
                 "smile state only -- match it to the corresponding person in the full photo above by "
-                "appearance; it is not a separate photo):"
+                "appearance; it is not a separate photo). Local face detector reference (normalized "
+                f"original-image coordinates, tight face-only box): x={fb['x']:.3f}, y={fb['y']:.3f}, "
+                f"w={fb['w']:.3f}, h={fb['h']:.3f} -- see Coordinate rules above for how much to trust this."
             ),
         })
         content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
@@ -200,6 +204,11 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     )
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
     result = _parse_json_from_text(_extract_output_text(data))
+    # Deterministic backstop for the face-detector containment rule in
+    # ANALYSIS_INSTRUCTION -- see expand_subject_boxes_to_contain_faces's own
+    # docstring for why the prompt rule alone isn't enough to guarantee this.
+    if face_crops:
+        result = expand_subject_boxes_to_contain_faces(result, [c["face_box"] for c in face_crops])
     # Debug-UI overlay only (frontend's #boxes-toggle-btn) -- lets a reviewer
     # see exactly what the model was shown, since a missed or misplaced crop
     # is itself useful information when a gaze/blink call still looks wrong.

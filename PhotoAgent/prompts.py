@@ -142,76 +142,60 @@ Return exactly this JSON shape:
       "prominence": 1,
       "is_person": true,
       "skin": "is_person=true 時必填，否則寫「不適用」。依序寫：原生膚色身分（在受光平均處判讀深淺與底調，不讀高光或陰影）；場景光色（臉上實際受光的方向與色性，以及是否為應保留的情境光）；非預期偏色（僅限無法由場景光解釋，或與頸、耳、手不連貫的偏黃、偏綠、偏紅、偏洋紅、偏灰；沒有則寫無）。原生膚色身分不可改變。不可把背景、草地、服裝或其他高飽和物體的主色當成膚色受光；只有可見光源或反射確實落在皮膚上才算情境光。夕陽、鎢絲燈、舞台燈、霓虹與反射色等合理光色不可被中性化。",
-      "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。"
-    }
-  ],
-  "eye_blink_issues": [
-    {
-      "subject_label": "對應 subjects 裡的人，例如 最右男性 / 前排中間小孩。",
-      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
-      "eye_state": "open / natural_smiling_squint / intentional_wink / intentional_closed / expressive_closed / downward_gaze / sleeping / occluded_or_unclear / accidental_blink / accidental_half_blink / uncertain",
-      "severity": "none / minor / moderate / severe",
-      "intent_cues": ["列出支持這個判斷的可見線索，例如 wink 手勢、嘴角表情、眉毛情緒、看鏡頭、雙眼同步閉合、眼皮不對稱、低頭視線、眼鏡遮擋。"],
-      "closure_intent": "intentional_expression / accidental_capture / ambiguous",
-      "expression_coherence": "supports_expression / conflicts_with_expression / unclear",
-      "blink_failure_confidence": 0.0,
-      "should_fix": true,
-      "reason": "說明為何判斷是不小心閉眼/半閉眼，或為何閉眼/眨眼其實是表情、情緒或手勢的一部分。"
-    }
-  ],
-  "hair_issues": [
-    {
-      "subject_label": "對應 subjects 裡的人，例如 左二女性 / 抱小孩的男性。",
-      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
-      "hair_state": "tidy / styled_messy / styled_bangs / styled_face_framing / motion / natural_texture / windblown / strands_across_face / bangs_disturbed / bangs_clumped / lock_out_of_place / frizz_halo / tuft_or_flattened / occluded_or_unclear / uncertain",
-      "visible_evidence": ["只寫真的看得見的細節，例如 三四根髮絲橫過右眼 / 瀏海一撮向上翻起露出額頭 / 左側一撮從包頭鬆脫垂在耳前、右側沒有對應的一撮。"],
-      "front_hair": "臉前或額前有頭髮的人一律必填，不分齊瀏海、旁分或長髮前段。none（臉前完全沒有頭髮）/ even（前方髮絲粗細相近、分佈均勻）/ clumped（髮絲粗細不一、有的黏成一束，束間露出光禿皮膚）",
-      "fix_action": "lay_back / remove / settle / redistribute / none",
-      "mess_intent": "intentional_style / accidental_capture / ambiguous",
-      "hair_mess_confidence": 0.0,
-      "should_fix": true,
-      "reason": "說明為何判斷是拍攝當下被風吹亂或壓翹，或為何這個凌亂本來就屬於髮型、髮質或動作。"
-    }
-  ],
-  "gaze_contact_issues": [
-    {
-      "subject_label": "對應 subjects 裡的人，例如 中間男性 / 左側女性。",
-      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
-      "gaze_state": "direct_camera / near_camera / off_camera / downward / upward_side / unfocused_camera / cross_focused / ambiguous / unclear",
-      "eye_focus_quality": "sharp_engaged / slightly_unfocused / clearly_unfocused / unclear",
-      "gaze_target_in_frame": {
-        "present": false,
-        "description": "只有在畫面中存在一個具體、可指認、看得見的物體或人，而且這個人的視線明確朝向它匯聚時才填寫，例如「舉在畫面裡的自拍裝置」、「手中拿著、正在看的產品」、「畫面裡另一位正在對話的人物」。不可寫『遠方』、『某處』、『看向旁邊』、『畫面外』這種無法指認具體位置的說法；那些情況 present 必須是 false。",
-        "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1}
+      "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。",
+      "blink_issue": {
+        "eye_state": "open / natural_smiling_squint / intentional_wink / intentional_closed / expressive_closed / downward_gaze / sleeping / occluded_or_unclear / accidental_blink / accidental_half_blink / uncertain",
+        "severity": "none / minor / moderate / severe",
+        "intent_cues": ["列出支持這個判斷的可見線索，例如 wink 手勢、嘴角表情、眉毛情緒、看鏡頭、雙眼同步閉合、眼皮不對稱、低頭視線、眼鏡遮擋。"],
+        "closure_intent": "intentional_expression / accidental_capture / ambiguous",
+        "expression_coherence": "supports_expression / conflicts_with_expression / unclear",
+        "blink_failure_confidence": 0.0,
+        "should_fix": true,
+        "reason": "說明為何判斷是不小心閉眼/半閉眼，或為何閉眼/眨眼其實是表情、情緒或手勢的一部分。is_person=false 時填「不適用」，should_fix=false。"
       },
-      "lens_contact_decision": "looking_at_lens / not_looking_at_lens / unclear",
-      "lens_contact_confidence": 0.0,
-      "not_looking_at_lens_confidence": 0.0,
-      "gaze_correction_reasonableness": 0.0,
-      "gaze_repair_strategy": {
-        "strategy_type": "eyes_only / eyes_plus_head_face_alignment / not_safe_to_repair",
-        "original_gaze_read": "用具體視覺語言描述原本眼神，例如 pupils/irises point camera-left and slightly above the lens / gaze passes beside the lens。",
-        "target_gaze_read": "修完後的具體視覺目標，例如 both pupils/irises aimed at the camera lens; viewer reads direct eye contact。",
-        "eye_adjustment": "描述瞳孔/虹膜應如何移動，例如 move pupils/irises toward camera center / slightly downward toward lens / slightly left toward lens。不可只寫 improve eye contact。",
-        "sclera_catchlight_adjustment": "描述眼白與眼神光如何配合，例如 rebalance sclera so iris sits naturally for the new direction; keep catchlights consistent。",
-        "head_face_adjustment": "描述是否需要頭臉方向配合，例如 none / slight yaw toward camera / moderate yaw toward camera / slight pitch adjustment。若 strategy_type=eyes_plus_head_face_alignment 不可寫 none。",
-        "repair_strength": "subtle / moderate / strong",
-        "edit_instruction": "一到兩句可直接給 edit model 執行的英文命令，必須包含 subject、eyes_only 或 eyes_plus_head_face_alignment、pupil/iris movement、必要的 head/face alignment、以及 final direct-lens-contact endpoint。",
-        "success_condition": "這張圖修完後應該如何判斷成功，例如 兩眼明確直視鏡頭，不停在 near-camera。",
-        "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "scene"],
-        "failure_to_avoid": ["near-camera only", "sharpen-only", "uncomfortable side-eye"]
+      "hair_issue": {
+        "hair_state": "tidy / styled_messy / styled_bangs / styled_face_framing / motion / natural_texture / windblown / strands_across_face / bangs_disturbed / bangs_clumped / lock_out_of_place / frizz_halo / tuft_or_flattened / occluded_or_unclear / uncertain",
+        "visible_evidence": ["只寫真的看得見的細節，例如 三四根髮絲橫過右眼 / 瀏海一撮向上翻起露出額頭 / 左側一撮從包頭鬆脫垂在耳前、右側沒有對應的一撮。"],
+        "front_hair": "臉前或額前有頭髮的人一律必填，不分齊瀏海、旁分或長髮前段。none（臉前完全沒有頭髮）/ even（前方髮絲粗細相近、分佈均勻）/ clumped（髮絲粗細不一、有的黏成一束，束間露出光禿皮膚）",
+        "fix_action": "lay_back / remove / settle / redistribute / none",
+        "mess_intent": "intentional_style / accidental_capture / ambiguous",
+        "hair_mess_confidence": 0.0,
+        "should_fix": true,
+        "reason": "說明為何判斷是拍攝當下被風吹亂或壓翹，或為何這個凌亂本來就屬於髮型、髮質或動作。is_person=false 時填「不適用」，should_fix=false。"
       },
-      "should_fix": true,
-      "reason": "第一句先說明 no-eyes-visible rule 或 half-face rule 是否適用（單眼可見、側臉、背對鏡頭等），若適用就直接 unclear/should_fix=false 並停在這裡；若都不適用才繼續依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_target_in_frame 是否成立（若成立，說明畫面中那個具體可指認的目標物是什麼）、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。"
-    }
-  ],
-  "smile_states": [
-    {
-      "subject_label": "對應 subjects 裡的人，例如 中間男性 / 左側女性。",
-      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
-      "smile_intensity": "neutral / gentle / broad / laughing / unclear",
-      "adjust_safe": true,
-      "reason": "簡短說明是否有明確可見的笑容證據、是否更可能是說話或其他表情動作，以及 adjust_safe 的依據。"
+      "gaze_issue": {
+        "gaze_state": "direct_camera / near_camera / off_camera / downward / upward_side / unfocused_camera / cross_focused / ambiguous / unclear",
+        "eye_focus_quality": "sharp_engaged / slightly_unfocused / clearly_unfocused / unclear",
+        "gaze_target_in_frame": {
+          "present": false,
+          "description": "只有在畫面中存在一個具體、可指認、看得見的物體或人，而且這個人的視線明確朝向它匯聚時才填寫，例如「舉在畫面裡的自拍裝置」、「手中拿著、正在看的產品」、「畫面裡另一位正在對話的人物」。不可寫『遠方』、『某處』、『看向旁邊』、『畫面外』這種無法指認具體位置的說法；那些情況 present 必須是 false。",
+          "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1}
+        },
+        "lens_contact_decision": "looking_at_lens / not_looking_at_lens / unclear",
+        "lens_contact_confidence": 0.0,
+        "not_looking_at_lens_confidence": 0.0,
+        "gaze_correction_reasonableness": 0.0,
+        "gaze_repair_strategy": {
+          "strategy_type": "eyes_only / eyes_plus_head_face_alignment / not_safe_to_repair",
+          "original_gaze_read": "用具體視覺語言描述原本眼神，例如 pupils/irises point camera-left and slightly above the lens / gaze passes beside the lens。",
+          "target_gaze_read": "修完後的具體視覺目標，例如 both pupils/irises aimed at the camera lens; viewer reads direct eye contact。",
+          "eye_adjustment": "描述瞳孔/虹膜應如何移動，例如 move pupils/irises toward camera center / slightly downward toward lens / slightly left toward lens。不可只寫 improve eye contact。",
+          "sclera_catchlight_adjustment": "描述眼白與眼神光如何配合，例如 rebalance sclera so iris sits naturally for the new direction; keep catchlights consistent。",
+          "head_face_adjustment": "描述是否需要頭臉方向配合，例如 none / slight yaw toward camera / moderate yaw toward camera / slight pitch adjustment。若 strategy_type=eyes_plus_head_face_alignment 不可寫 none。",
+          "repair_strength": "subtle / moderate / strong",
+          "edit_instruction": "一到兩句可直接給 edit model 執行的英文命令，必須包含 subject、eyes_only 或 eyes_plus_head_face_alignment、pupil/iris movement、必要的 head/face alignment、以及 final direct-lens-contact endpoint。",
+          "success_condition": "這張圖修完後應該如何判斷成功，例如 兩眼明確直視鏡頭，不停在 near-camera。",
+          "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "scene"],
+          "failure_to_avoid": ["near-camera only", "sharpen-only", "uncomfortable side-eye"]
+        },
+        "should_fix": true,
+        "reason": "第一句先說明 no-eyes-visible rule 或 half-face rule 是否適用（單眼可見、側臉、背對鏡頭等），若適用就直接 unclear/should_fix=false 並停在這裡；若都不適用才繼續依序說明 lens_contact_decision、gaze_state、pupil/iris 位置是否觸發 direct-camera veto、三個分數、gaze_target_in_frame 是否成立（若成立，說明畫面中那個具體可指認的目標物是什麼）、gaze_repair_strategy 為何選擇 eyes_only 或 eyes_plus_head_face_alignment，以及 should_fix 是否由 hard should_fix rule 推導出來。gaze_correction_reasonableness 只評估眼神轉向鏡頭是否符合人體工學/解剖自然性，不評估是否保留原本敘事。不要先憑直覺決定 should_fix 再回填分數。is_person=false 時填「不適用」，should_fix=false。"
+      },
+      "smile_issue": {
+        "smile_intensity": "neutral / gentle / broad / laughing / unclear",
+        "adjust_safe": true,
+        "reason": "簡短說明是否有明確可見的笑容證據、是否更可能是說話或其他表情動作，以及 adjust_safe 的依據。is_person=false 時填「不適用」，adjust_safe=false。"
+      }
     }
   ],
   "roi_box": {
@@ -431,9 +415,9 @@ Subject-size neutrality:
 
 Output rules:
 - For every visible person, inspect eye state independently.
-- Include an eye_blink_issues entry for every visible person whose eyes are legible enough to judge, not only the ones with something to explain -- an ordinary open-eyed person with nothing unusual still gets a should_fix=false entry, the same as a wink or laugh does.
-- Do not omit a visible person from eye_blink_issues just because their eyes look fine; the array should cover every legible face in the photo, not only the flagged or noteworthy ones.
-- In eye_blink_issues, include should_fix=false entries when they explain why a closed-eye case is intentionally left unchanged, especially for winks, laughter, crying/emotional expressions, child expressions, or ambiguous cases.
+- Fill blink_issue for every subjects[] entry with is_person=true whose eyes are legible enough to judge, not only the ones with something to explain -- an ordinary open-eyed person with nothing unusual still gets should_fix=false, the same as a wink or laugh does.
+- Do not leave a person subject's blink_issue at a placeholder just because their eyes look fine; every person subject gets a genuine reading, not only the flagged or noteworthy ones.
+- Use should_fix=false with a reason explaining why a closed-eye case is intentionally left unchanged, especially for winks, laughter, crying/emotional expressions, child expressions, or ambiguous cases.
 - Add an eye-related correction_plan item only when should_fix=true.
 - If should_fix=true, add a correction_plan item that names the exact person by position/role and asks the edit model to naturally reopen or relax only that person's eyes while preserving identity, gaze direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.
 - The matching correction_axes entry for that correction_plan item must include ["expression"].
@@ -442,7 +426,7 @@ Output rules:
 - If no accidental blink or half-blink needs correction, keep correction_plan free of eye-opening items.
 
 Edit-model execution guardrail:
-- When gaze_contact_issues.should_fix=true, do not leave the gaze unchanged.
+- When a subject's gaze_issue.should_fix=true, do not leave that subject's gaze unchanged.
 - A no-op gaze edit is a failure.
 - Apply the smallest visible gaze-alignment change that fully satisfies the per-subject gaze_repair_strategy and turns the named subject's gaze into natural camera-facing eye contact.
 - Start with the analysis model's strategy_type. If it says eyes_only, use iris/pupil direction and sclera balance. If it says eyes_plus_head_face_alignment, use iris/pupil direction plus the specified head/face alignment; do not stop with eye-only repair.
@@ -456,8 +440,8 @@ Low-capacity image-model wording rule:
 
 - For edit execution, camera-facing gaze is a physical eye-direction target: iris/pupil placement and both eyes' visual axes should aim at the camera lens, not merely look sharper or more intense.
 - Approved gaze repair has higher edit priority than generic preservation for the listed subject's local eye-direction change.
-- gaze_contact_issues.should_fix=true is not merely a recommendation; it authorizes the edit model to perform gaze redirection.
-- For every approved gaze repair, the analysis must produce the same instruction in three places: gaze_contact_issues, correction_plan, and retouch_recipe.
+- A subject's gaze_issue.should_fix=true is not merely a recommendation; it authorizes the edit model to perform gaze redirection.
+- For every approved gaze repair, the analysis must produce the same instruction in three places: that subject's gaze_issue, correction_plan, and retouch_recipe.
 - Do not rely on the edit model to infer gaze repair from JSON alone.
 - Do not let a preservation instruction cancel an approved gaze repair. Preservation should protect all unrelated facial traits while allowing local gaze redirection.
 
@@ -600,7 +584,7 @@ Stage 2 -- Anatomical gaze-redirection feasibility:
 - This score feeds strategy_type, repair_strength, and how the repair should be carried out. It never feeds should_fix: a low score means "repair carefully and conservatively," never "leave the gaze unchanged."
 
 Stage 3 -- Per-subject gaze repair strategy:
-For every gaze_contact_issues item, write gaze_repair_strategy as a concrete edit guide for this exact image, not a generic reminder. The edit model will follow this strategy literally, so vague or overly conservative wording will cause a weak edit.
+For every subject's gaze_issue, write gaze_repair_strategy as a concrete edit guide for this exact image, not a generic reminder. The edit model will follow this strategy literally, so vague or overly conservative wording will cause a weak edit.
 
 Required strategy fields:
 - original_gaze_read: describe what the eyes are doing NOW using visible pupil/iris evidence. Mention direction and failure type, e.g. "pupils/irises point slightly camera-right, so the gaze passes beside the lens" or "eyes aim above the lens".
@@ -678,18 +662,18 @@ Near-camera calibration:
 
 Hard should_fix rule:
 - Compute should_fix from the scores, not from overall intuition.
-- Set gaze_contact_issues.should_fix=true if and only if all of these are true:
+- Set that subject's gaze_issue.should_fix=true if and only if all of these are true:
   1. lens_contact_decision=not_looking_at_lens;
   2. not_looking_at_lens_confidence >= 0.55;
   3. the eye direction is visually clear enough to correct safely;
   4. the visible-target exception below does not apply.
 - gaze_correction_reasonableness is NOT part of this rule. A low reasonableness score changes strategy_type and repair_strength (see Stage 2/3 above), never should_fix. There is no reasonableness floor below which should_fix flips to false.
 - For readable near-camera or slightly-beside-lens gaze, do not suppress should_fix merely because the miss is small. A small but clear lens miss is still a valid gaze-contact issue.
-- Otherwise set gaze_contact_issues.should_fix=false.
+- Otherwise set gaze_issue.should_fix=false.
 - Do not override this rule just because the original gaze is natural, candid, acceptable, documentary, contextually appropriate, intentional, or important to the original story. None of those are valid grounds for should_fix=false when the eyes are readably not on the lens.
 - Natural original gaze and anatomically feasible gaze correction are different questions.
 - Do not use subject size, main-subject status, foreground/background status, pose naturalness, action type, or narrative preservation as a deciding factor. Those factors affect only uncertainty or repair feasibility, not whether the eyes are looking at the lens.
-- No-eyes-visible rule: when a person's face is turned away from the camera far enough that neither eye is actually visible -- back of head, near-total rear view, a passerby seen only from behind, or a silhouette -- lens_contact_decision must be unclear and should_fix must be false, even if the head/shoulder/body orientation makes it obvious they are not facing the camera. Body or head orientation is never a substitute for seeing the eyes; do not infer, guess, or extrapolate a gaze direction for eyes you cannot actually see. This is most common with incidental bystanders in landscape, street, or documentary photos who are not the photo's subject -- they still get a gaze_contact_issues entry (per the output rules below), just with lens_contact_decision=unclear and should_fix=false, not a guessed not_looking_at_lens.
+- No-eyes-visible rule: when a person's face is turned away from the camera far enough that neither eye is actually visible -- back of head, near-total rear view, or a silhouette -- lens_contact_decision must be unclear and should_fix must be false, even if the head/shoulder/body orientation makes it obvious they are not facing the camera. Body or head orientation is never a substitute for seeing the eyes; do not infer, guess, or extrapolate a gaze direction for eyes you cannot actually see. This still needs a gaze_issue reading (per the output rules below), just with lens_contact_decision=unclear and should_fix=false, not a guessed not_looking_at_lens.
 - Half-face rule: when only about half of a person's face is visible -- a side/profile view showing a single eye, or the other half of the face occluded by another person, an object, a hand, or hair -- lens_contact_decision must be unclear and should_fix must be false for that person, even when the one visible eye's direction looks clear. This applies to every person regardless of role, including the photo's main subject or anyone in an intentional group/portrait, not only incidental background people. A single visible eye is not enough evidence to safely judge or correct lens contact; do not extrapolate the hidden half of the face from the one eye you can see.
 
 Visible-target exception (the ONLY exception to the rule above):
@@ -731,19 +715,17 @@ Strong evidence that gaze redirection is NOT anatomically feasible:
 - The required correction would need changing head pose, face structure, eyelid openness, or expression, rather than only subtly redirecting the eyes.
 
 Output rules:
-- Inspect gaze_contact_issues independently for each visible person when gaze is relevant.
-- Incidental background person exception: skip gaze_contact_issues entirely (no entry at all, regardless of whether eyes are visible) for a visible person who is clearly not the photo's main subject and not one of its intentional subjects -- a passerby, bystander, or background figure who just happens to be caught in a landscape, street, architecture, product, food, or scenery shot, and who is not part of what the photo (per subject_category/main_subject/subjects above) is actually about. This exception does NOT apply to the main subject, a secondary posed subject, or anyone in an intentional group/portrait (family, friends, couple, event group), even if that person is smaller, softer-focus, or standing further back -- those still get full gaze_contact_issues treatment. When it is unclear whether a visible person is incidental background or an intentional subject, default to still including them in gaze_contact_issues rather than skipping them.
-- Include a gaze_contact_issues entry for any visible person whose gaze is readable and not clearly direct_camera, even if should_fix=false.
-- If a visible person's eyes are readable and the person is not unmistakably looking into the lens, do not omit them from gaze_contact_issues.
-- Include should_fix=false entries only for lens_contact_decision=looking_at_lens or lens_contact_decision=unclear (eyes too blurry/occluded/small to judge safely, not visible at all because the person faces away from the camera, or only about half the face/a single eye is visible). A readable off-camera, near-camera, or unfocused-looking gaze is should_fix=true; do not use should_fix=false to mean "correctable but better left as-is."
-- When any gaze_contact_issues item has should_fix=true, gaze repair is an approved edit request. It must not remain analysis-only.
-- For every gaze_contact_issues item with should_fix=true, fill gaze_repair_strategy with a concrete, per-image guide. This is mandatory, not optional.
-- Add a correction_plan item for every gaze_contact_issues item with should_fix=true. This is mandatory, not optional.
-- Add a matching retouch_recipe item for every gaze_contact_issues item with should_fix=true. This is mandatory, not optional.
-- Add a matching correction_axes entry including ["expression"] for every gaze_contact_issues item with should_fix=true.
+- Fill gaze_issue independently for every subjects[] entry with is_person=true whose gaze is relevant, even when should_fix ends up false.
+- If a person subject's eyes are readable and the person is not unmistakably looking into the lens, their gaze_issue must not default to looking_at_lens/should_fix=false just to skip the work.
+- Use should_fix=false only for lens_contact_decision=looking_at_lens or lens_contact_decision=unclear (eyes too blurry/occluded/small to judge safely, not visible at all because the person faces away from the camera, or only about half the face/a single eye is visible). A readable off-camera, near-camera, or unfocused-looking gaze is should_fix=true; do not use should_fix=false to mean "correctable but better left as-is."
+- When any subject's gaze_issue has should_fix=true, gaze repair is an approved edit request for that subject. It must not remain analysis-only.
+- For every subject whose gaze_issue.should_fix=true, fill gaze_repair_strategy with a concrete, per-image guide. This is mandatory, not optional.
+- Add a correction_plan item for every subject whose gaze_issue.should_fix=true. This is mandatory, not optional.
+- Add a matching retouch_recipe item for every subject whose gaze_issue.should_fix=true. This is mandatory, not optional.
+- Add a matching correction_axes entry including ["expression"] for every subject whose gaze_issue.should_fix=true.
 - Add a matching correction_inverse entry that protects unrelated properties while explicitly allowing the named subject's pupil/iris direction, eye-focus direction, sclera balance, gaze-consistent catchlight placement, and, when needed, the exact head/face alignment change approved by the analysis.
 - Treat the analysis output as the full repair specification. The edit model should not need to invent its own gaze-repair method.
-- Therefore, for every approved gaze repair, the analysis must make the intended execution explicit in four places that all agree: gaze_contact_issues.gaze_repair_strategy, correction_plan, correction_inverse, and retouch_recipe.
+- Therefore, for every approved gaze repair, the analysis must make the intended execution explicit in four places that all agree: that subject's gaze_issue.gaze_repair_strategy, correction_plan, correction_inverse, and retouch_recipe.
 - The correction_plan item must be self-sufficient: name the subject, state that the gaze should be redirected toward the camera lens / direct_camera, state the exact allowed method (for example, eyes only, or eyes plus slight/moderate head-face alignment), and include the same concrete method as gaze_repair_strategy.edit_instruction.
 - The correction_inverse item must explicitly say what to preserve and what is allowed to change for that subject. Do not leave these allowances implicit. It should mirror preserve_during_repair and the allowed local changes in gaze_repair_strategy.
 - The retouch_recipe item must stay concise and user-facing, but still clearly indicate that this is a gaze-to-camera correction for the named subject and whether face/head alignment may be involved.
@@ -751,10 +733,10 @@ Output rules:
 - Do not describe gaze repair only as "improve eye contact" or "enhance gaze"; state that the named subject's gaze should be redirected toward direct_camera / the camera lens and whether head/face alignment is part of the approved method.
 - Preserve identity, overall eye shape, eyelid openness, eye color, glasses/reflections, mouth expression, brow expression, facial structure, skin texture, and lighting, except where the approved analysis explicitly allows a local change.
 - Never use blink repair wording for gaze repair.
-- If the reason the eye direction cannot be judged is that the eyes may be closed or half-closed -- original_gaze_read says something like "eyes closed" or "gaze direction not observable" -- that is lens_contact_decision=unclear, not not_looking_at_lens, and should_fix must be false on gaze_contact_issues for that person no matter how confident the rest of the photo's gaze judgments are. Do not write a gaze_repair_strategy that reopens the eyes and redirects them in the same instruction; eyelid state is eye_blink_issues' question, not this one, and "the eyes might be closed" is never evidence that they are pointed away from the lens.
+- If the reason the eye direction cannot be judged is that the eyes may be closed or half-closed -- original_gaze_read says something like "eyes closed" or "gaze direction not observable" -- that is lens_contact_decision=unclear, not not_looking_at_lens, and should_fix must be false on that subject's gaze_issue no matter how confident the rest of the photo's gaze judgments are. Do not write a gaze_repair_strategy that reopens the eyes and redirects them in the same instruction; eyelid state is blink_issue's question, not this one, and "the eyes might be closed" is never evidence that they are pointed away from the lens.
 
 Analysis-to-edit handoff guardrail:
-- When gaze_contact_issues.should_fix=true, the analysis must hand off a fully actionable repair, not just a diagnosis.
+- When a subject's gaze_issue.should_fix=true, the analysis must hand off a fully actionable repair, not just a diagnosis.
 - A no-op or underspecified handoff is a failure.
 - Make the approved change strong enough, specific enough, and concrete enough that the edit model can execute it without inventing extra gaze logic.
 
@@ -794,19 +776,19 @@ Analysis responsibilities:
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
 - Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
 - Eye-opening is not a routine portrait enhancement. Add eye or blink repair to correction_plan only when the expression-intent rules above say should_fix=true.
-- Eye-contact repair is separate from blink repair. Analyze whether the eyes are truly lens-locked, not merely whether the face points forward. Derive gaze_contact_issues.should_fix from the hard gaze rule, then add gaze/contact correction only when should_fix=true; do not use blink repair to solve off-camera, near-camera, cross-focused, or unfocused gaze.
-- Gaze detection recall check: before finalizing analysis, revisit every visible person's eyes. If any readable eyes are not unmistakably lens-locked and no gaze_contact_issues entry exists for that person, add one.
-- Gaze analyze-to-edit consistency check: before finalizing analysis, verify that every gaze_contact_issues item with should_fix=true has a complete gaze_repair_strategy plus a matching correction_plan item and a matching retouch_recipe item using the same subject_label and the same goal: redirect gaze toward the camera lens / direct_camera. If any matching item or strategy detail is missing, add it.
-- Reverse gaze consistency check -- run this in the other direction too, separately from the check above: before finalizing analysis, re-read every correction_plan item. If any of them describes redirecting someone's gaze, eye direction, or eye contact toward the camera, or fixing where someone is looking, that item is only valid when there is a gaze_contact_issues entry for the same person with should_fix=true and a matching gaze_repair_strategy. gaze_contact_issues is the only place a gaze judgment is allowed to originate -- do not decide independently, while writing correction_plan/detected_issues/aesthetic_diagnosis, that someone's gaze needs fixing and add it there as a shortcut. If a correction_plan item describes a gaze fix with no such backing gaze_contact_issues entry, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry at the same index) rather than leaving it in; add the missing gaze_contact_issues entry only if the hard should_fix rule actually supports should_fix=true for that person.
-- gaze_contact_issues.should_fix=true authorizes the edit model to perform local gaze redirection. Do not leave approved gaze repair only inside analysis JSON.
+- Eye-contact repair is separate from blink repair. Analyze whether the eyes are truly lens-locked, not merely whether the face points forward. Derive each subject's gaze_issue.should_fix from the hard gaze rule, then add gaze/contact correction only when should_fix=true; do not use blink repair to solve off-camera, near-camera, cross-focused, or unfocused gaze.
+- Gaze detection recall check: before finalizing analysis, revisit every subjects[] person's eyes. If any readable eyes are not unmistakably lens-locked and that subject's gaze_issue does not yet reflect it, fix it.
+- Gaze analyze-to-edit consistency check: before finalizing analysis, verify that every subject whose gaze_issue.should_fix=true has a complete gaze_repair_strategy plus a matching correction_plan item and a matching retouch_recipe item naming that subject and the same goal: redirect gaze toward the camera lens / direct_camera. If any matching item or strategy detail is missing, add it.
+- Reverse gaze consistency check -- run this in the other direction too, separately from the check above: before finalizing analysis, re-read every correction_plan item. If any of them describes redirecting someone's gaze, eye direction, or eye contact toward the camera, or fixing where someone is looking, that item is only valid when that person's gaze_issue has should_fix=true and a matching gaze_repair_strategy. A subject's gaze_issue is the only place a gaze judgment is allowed to originate -- do not decide independently, while writing correction_plan/detected_issues/aesthetic_diagnosis, that someone's gaze needs fixing and add it there as a shortcut. If a correction_plan item describes a gaze fix with no such backing gaze_issue, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry at the same index) rather than leaving it in; add the missing should_fix=true only if the hard should_fix rule actually supports it for that subject.
+- A subject's gaze_issue.should_fix=true authorizes the edit model to perform local gaze redirection. Do not leave approved gaze repair only inside analysis JSON.
 - For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
 - For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
-- Blink analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every eye_blink_issues item with should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["expression"], a matching correction_inverse entry, and a matching retouch_recipe item, all using the same subject_label. If any matching item is missing, add it now, following the wording rules above.
-- Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing eye_blink_issues entry at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
+- Blink analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every subject whose blink_issue.should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["expression"], a matching correction_inverse entry, and a matching retouch_recipe item, naming that subject. If any matching item is missing, add it now, following the wording rules above.
+- Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing blink_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Hair tidying is not a routine portrait enhancement either. Add a hair item to correction_plan only when the hair inspection above says should_fix=true, and never for styled, moving, or naturally textured hair.
-- Hair analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every hair_issues item with should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["hair"], a matching correction_inverse entry, and a matching retouch_recipe item, all using the same subject_label. If any matching item is missing, add it now, following the fix_action-specific wording rules above (lay_back / remove / settle / redistribute, the forehead lock test, never 淡化/降低對比/柔化/模糊 on hair).
-- Reverse hair consistency check, same reasoning as the gaze one above: if any correction_plan item describes tidying, settling, redistributing, or removing hair with no backing hair_issues entry at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
+- Hair analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every subject whose hair_issue.should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["hair"], a matching correction_inverse entry, and a matching retouch_recipe item, naming that subject. If any matching item is missing, add it now, following the fix_action-specific wording rules above (lay_back / remove / settle / redistribute, the forehead lock test, never 淡化/降低對比/柔化/模糊 on hair).
+- Reverse hair consistency check, same reasoning as the gaze one above: if any correction_plan item describes tidying, settling, redistributing, or removing hair with no backing hair_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
@@ -816,6 +798,9 @@ Coordinate rules:
 - roi_box is the focal area. subject_extent_box is the semantic subject area required by the intended framing; it is not automatically every visible body part, foreground object, furniture piece, or background element.
 - subjects lists the candidate main subjects (people, animals, products, food, objects) ordered so index 0 is the photo's true main subject -- what the photo is actually about, consistent with main_subject, roi_box, and the composition intent. prominence means semantic importance as the subject, NOT which element is merely brightest, most colorful, or most saturated. Incidental background or decor -- flowers, plants, props, tableware, posters, scenery -- must rank lower than the real subject even when it is visually eye-catching; e.g. in a food photo the dish is the subject, not a bright vase of flowers behind it. Always output at least one entry, even for a single-subject photo.
 - Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
+- For a person-type subject whose face is visible anywhere in the photo, subjects[].box must include that entire visible head. A box that starts at or below the chin/neck/shoulders and excludes the face -- even if it otherwise fits the rest of the visible body tightly and looks "correct" by itself -- is wrong and must be corrected; the head is not an optional part of a person subject's box.
+- blink_issue, hair_issue, gaze_issue, and smile_issue are per-subject fields nested directly inside each subjects[] entry, not separate lists -- fill all four for every subject with is_person=true (using should_fix=false / adjust_safe=false defaults when nothing applies to that person), and set them to a "不適用" reading with should_fix=false / adjust_safe=false for any subject with is_person=false. Because each of these four fields lives on the exact subject it describes, there is no separate label to keep in sync and no way for one of them to silently apply to the wrong person.
+- When a "Local face detector reference" coordinate is provided alongside a zoomed face crop, treat it as a best-effort anchor for where that one face sits in the full photo above -- not as ground truth. This detector can misfire: it may report a false positive on background clutter, pattern, reflection, or a printed/painted face with no real person there, and it can miss a real face that is small, occluded, in profile, motion-blurred, or otherwise hard to detect. Before relying on a detection, verify it actually lines up with a face you can see in the photo. When it does, that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain a verified, correctly-matched face detection (for example one that starts below the neck and misses the face entirely) is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever a verified detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box. When a detection looks wrong, or a visible person has no matching detection, ignore it and rely entirely on your own visual reading.
 - protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
 - If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
 - The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
@@ -850,7 +835,7 @@ Composition decision framework:
 CALM_HAIR_ENABLED_OVERRIDE = """
 The user has asked for this person's hair to be laid down as if there were no wind:
 - This is a request, not a defect you have to find. Wind in the hair does not need to reach any confidence threshold, and it does not matter whether the disorder would otherwise read as intentional.
-- For every person whose hair is lifted, opened, or blown sideways by wind, add a hair_issues entry with hair_state="windblown", fix_action="settle", should_fix=true, and a reason naming the user request.
+- For every person whose hair is lifted, opened, or blown sideways by wind, set that subject's hair_issue to hair_state="windblown", fix_action="settle", should_fix=true, and a reason naming the user request.
 - Write the matching correction_plan item as laying that person's hair down into the hairstyle's own shape so it reads as a still day, tagged correction_axes ["hair"]. Keep retouch_recipe short, for example "把被風吹起的頭髮自然放下。"
 - This does not extend to hair moving because the person is moving. A jump, spin, hair flip, or run still keeps its motion; laying that hair flat would contradict the body in the same photograph. Only wind-displaced hair is settled.
 """
@@ -862,12 +847,13 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     advanced_options: the Upload page's Advanced Settings (e.g.
     {"eye_closed_detection": False}). Only calm_hair is read here -- the
     detection/repair toggles (eye_closed_detection, hair_mess_detection,
-    gaze_contact_detection) no longer affect analysis at all, so eye_blink_issues/
-    hair_issues/gaze_contact_issues/correction_plan always reflect the model's
-    genuine judgement; strip_disabled_topic_items (build_edit_prompt, prompts.py)
-    is what actually applies those three at edit time. smile_adjustment/
-    smile_level are edit-only for the same reason, applied by build_smile_block
-    against the smile_states the analysis always reads.
+    gaze_contact_detection) no longer affect analysis at all, so each
+    subject's blink_issue/hair_issue/gaze_issue and correction_plan always
+    reflect the model's genuine judgement; strip_disabled_topic_items
+    (build_edit_prompt, prompts.py) is what actually applies those three at
+    edit time. smile_adjustment/smile_level are edit-only for the same
+    reason, applied by build_smile_block against the smile_issue readings
+    the analysis always produces.
     """
     advanced_options = advanced_options or {}
     instruction = ANALYSIS_INSTRUCTION
@@ -945,9 +931,8 @@ def _schema_array_of(item_schema):
     return {"type": "array", "items": item_schema}
 
 
-# {"x","y","w","h"} normalized box, reused verbatim by subjects/
-# eye_blink_issues/hair_issues/gaze_contact_issues/gaze_target_in_frame/
-# smile_states.
+# {"x","y","w","h"} normalized box, reused verbatim by subjects and
+# gaze_target_in_frame.
 _BOX_SCHEMA = _schema_object({
     "x": _schema_number(), "y": _schema_number(),
     "w": _schema_number(), "h": _schema_number(),
@@ -960,18 +945,13 @@ _BOX_WITH_REASON_SCHEMA = _schema_object({
     "reason": _schema_string(),
 })
 
-_SUBJECT_SCHEMA = _schema_object({
-    "label": _schema_string(),
-    "box": _BOX_SCHEMA,
-    "prominence": _schema_integer(),
-    "is_person": _schema_boolean(),
-    "skin": _schema_string(),
-    "reason": _schema_string(),
-})
+# blink_issue/hair_issue/gaze_issue/smile_issue below deliberately carry no
+# subject_label or box of their own -- they are nested inside one
+# _SUBJECT_SCHEMA entry, so they always inherit that same subject's label and
+# box by construction. There is no cross-array label-matching step left for
+# the model to get wrong.
 
 _EYE_BLINK_ISSUE_SCHEMA = _schema_object({
-    "subject_label": _schema_string(),
-    "box": _BOX_SCHEMA,
     "eye_state": _schema_string(),
     "severity": _schema_string(),
     "intent_cues": _schema_string_array(),
@@ -983,8 +963,6 @@ _EYE_BLINK_ISSUE_SCHEMA = _schema_object({
 })
 
 _HAIR_ISSUE_SCHEMA = _schema_object({
-    "subject_label": _schema_string(),
-    "box": _BOX_SCHEMA,
     "hair_state": _schema_string(),
     "visible_evidence": _schema_string_array(),
     "front_hair": _schema_string(),
@@ -1016,8 +994,6 @@ _GAZE_REPAIR_STRATEGY_SCHEMA = _schema_object({
 })
 
 _GAZE_CONTACT_ISSUE_SCHEMA = _schema_object({
-    "subject_label": _schema_string(),
-    "box": _BOX_SCHEMA,
     "gaze_state": _schema_string(),
     "eye_focus_quality": _schema_string(),
     "gaze_target_in_frame": _GAZE_TARGET_IN_FRAME_SCHEMA,
@@ -1031,11 +1007,22 @@ _GAZE_CONTACT_ISSUE_SCHEMA = _schema_object({
 })
 
 _SMILE_STATE_SCHEMA = _schema_object({
-    "subject_label": _schema_string(),
-    "box": _BOX_SCHEMA,
     "smile_intensity": _schema_string(),
     "adjust_safe": _schema_boolean(),
     "reason": _schema_string(),
+})
+
+_SUBJECT_SCHEMA = _schema_object({
+    "label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "prominence": _schema_integer(),
+    "is_person": _schema_boolean(),
+    "skin": _schema_string(),
+    "reason": _schema_string(),
+    "blink_issue": _EYE_BLINK_ISSUE_SCHEMA,
+    "hair_issue": _HAIR_ISSUE_SCHEMA,
+    "gaze_issue": _GAZE_CONTACT_ISSUE_SCHEMA,
+    "smile_issue": _SMILE_STATE_SCHEMA,
 })
 
 # Flat x/y/w/h (no nested "box"), unlike the five schemas above.
@@ -1127,10 +1114,6 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "recommended_aspect_ratio": _schema_string(),
         "aspect_ratio_reason": _schema_string(),
         "subjects": _schema_array_of(_SUBJECT_SCHEMA),
-        "eye_blink_issues": _schema_array_of(_EYE_BLINK_ISSUE_SCHEMA),
-        "hair_issues": _schema_array_of(_HAIR_ISSUE_SCHEMA),
-        "gaze_contact_issues": _schema_array_of(_GAZE_CONTACT_ISSUE_SCHEMA),
-        "smile_states": _schema_array_of(_SMILE_STATE_SCHEMA),
         "roi_box": _BOX_WITH_REASON_SCHEMA,
         "subject_extent_box": _BOX_WITH_REASON_SCHEMA,
         "protected_regions": _schema_array_of(_PROTECTED_REGION_SCHEMA),
@@ -1718,14 +1701,14 @@ def strip_disabled_topic_items(analysis):
     retouch_recipe counterparts at the same index) that describe gaze, blink,
     hair, or smile work when the matching Advanced Settings toggle is off.
 
-    Exists because should_fix=false on the structured gaze_contact_issues/
-    eye_blink_issues/hair_issues entries, and even an explicit "do not add
-    this to correction_plan for any reason" instruction in the disabled-
-    toggle prompt override, have both been observed not to stop the analysis
-    model from writing a free-text correction_plan item anyway -- a real run
-    with gaze_contact_detection off still produced three gaze-redirection
-    correction_plan items, none backed by an approved gaze_contact_issues
-    entry because there wasn't supposed to be one.
+    Exists because should_fix=false on the structured gaze_issue/blink_issue/
+    hair_issue fields, and even an explicit "do not add this to
+    correction_plan for any reason" instruction in the disabled-toggle
+    prompt override, have both been observed not to stop the analysis model
+    from writing a free-text correction_plan item anyway -- a real run with
+    gaze_contact_detection off still produced three gaze-redirection
+    correction_plan items, none backed by an approved gaze_issue because
+    there wasn't supposed to be one.
 
     There is no structured field to check here -- correction_plan is free
     text with no subject/kind tag -- so this is a keyword match, deliberately
@@ -1772,17 +1755,43 @@ def strip_disabled_topic_items(analysis):
     return cleaned
 
 
+def subject_issue_items(analysis, key):
+    """Flatten analysis["subjects"][i][key] (one of "blink_issue"/"hair_issue"/
+    "gaze_issue"/"smile_issue") into the flat {subject_label, box, ...} shape
+    the rest of this module (and pipeline.py's gaze-repair pass) expects from
+    the pre-nesting schema, merging in the parent subject's own label and box.
+
+    Nesting these four fields inside subjects[] (instead of four separate
+    top-level arrays each carrying its own subject_label/box) removes the
+    label-matching failure mode entirely -- a nested field always belongs to
+    the subject it lives on -- but every downstream consumer still wants one
+    flat item per person, so this is the single place that reassembles it.
+    """
+    items = []
+    for subject in analysis.get("subjects") or []:
+        if not isinstance(subject, dict):
+            continue
+        issue = subject.get(key)
+        if not isinstance(issue, dict):
+            continue
+        item = dict(issue)
+        item["subject_label"] = subject.get("label")
+        item["box"] = subject.get("box")
+        items.append(item)
+    return items
+
+
 def _subject_labels(issues):
-    """De-duplicated, ordered subject_label list from a *_issues array, with
-    a fallback for a missing/blank label -- never blocks a backfill just
-    because the analysis omitted this one descriptive field."""
+    """De-duplicated, ordered subject_label list from a subject_issue_items
+    list, with a fallback for a missing/blank label -- never blocks a
+    backfill just because the analysis omitted this one descriptive field."""
     return list(dict.fromkeys((i.get("subject_label") or "").strip() or "畫面中的人" for i in issues))
 
 
 def backfill_missing_correction_items(analysis):
     """The mirror image of strip_disabled_topic_items: analysis is asked (the
     *_analyze-to-edit consistency check lines in ANALYSIS_INSTRUCTION) to keep
-    hair_issues/eye_blink_issues/gaze_contact_issues in sync with
+    each subject's hair_issue/blink_issue/gaze_issue in sync with
     correction_plan/correction_axes/correction_inverse/retouch_recipe, but
     that is a request to an LLM, not a guarantee -- observed in practice to
     set should_fix=true on an issue while never adding the matching
@@ -1821,7 +1830,7 @@ def backfill_missing_correction_items(analysis):
         inverse.append(inverse_item)
         backfilled.append(topic)
 
-    hair_hits = [i for i in (analysis.get("hair_issues") or []) if isinstance(i, dict) and i.get("should_fix")]
+    hair_hits = [i for i in subject_issue_items(analysis, "hair_issue") if i.get("should_fix")]
     if hair_hits and not any(_is_disabled_topic_text(item, True, True, False) for item in plan):
         subjects = "、".join(_subject_labels(hair_hits))
         add(
@@ -1834,7 +1843,7 @@ def backfill_missing_correction_items(analysis):
             f"保留{subjects}原本的頭髮狀態，不做調整。",
         )
 
-    blink_hits = [i for i in (analysis.get("eye_blink_issues") or []) if isinstance(i, dict) and i.get("should_fix")]
+    blink_hits = [i for i in subject_issue_items(analysis, "blink_issue") if i.get("should_fix")]
     if blink_hits and not any(_is_disabled_topic_text(item, True, False, True) for item in plan):
         subjects = "、".join(_subject_labels(blink_hits))
         add(
@@ -1846,14 +1855,14 @@ def backfill_missing_correction_items(analysis):
             f"保留{subjects}原本的眼部狀態與表情，不做調整。",
         )
 
-    gaze_hits = [i for i in (analysis.get("gaze_contact_issues") or []) if isinstance(i, dict) and i.get("should_fix")]
+    gaze_hits = [i for i in subject_issue_items(analysis, "gaze_issue") if i.get("should_fix")]
     if gaze_hits and not any(_is_disabled_topic_text(item, False, True, True) for item in plan):
         subjects = "、".join(_subject_labels(gaze_hits))
         # gaze_repair_strategy.edit_instruction is written by the analysis
         # model specifically to be "1-2 sentences directly executable by the
-        # edit model" (see the gaze_contact_issues schema) -- reuse it
-        # verbatim per person instead of re-deriving a weaker instruction
-        # from just subject_label.
+        # edit model" (see the gaze_issue schema) -- reuse it verbatim per
+        # person instead of re-deriving a weaker instruction from just
+        # subject_label.
         instructions = " ".join(
             (i.get("gaze_repair_strategy") or {}).get("edit_instruction")
             or f"Redirect {i.get('subject_label') or 'the subject'}'s gaze toward the camera lens, moving "
@@ -1884,6 +1893,93 @@ def backfill_missing_correction_items(analysis):
     return cleaned
 
 
+def expand_subject_boxes_to_contain_faces(analysis, face_boxes):
+    """Deterministic backstop for the Coordinate rules' face-detector
+    containment requirement: the model is asked to make a person subject's
+    box fully contain its verified, correctly-matched local face detection,
+    but that is a request to an LLM, not a guarantee -- observed in practice
+    to return a box that starts around the chin/mouth and misses the face
+    entirely, which then breaks the frontend's box-overlap face<->subject ID
+    matching (bestSubjectMatch in results.js) since there is nothing left to
+    overlap.
+
+    face_boxes: the same tight, unpadded {x,y,w,h} boxes detect_face_crops
+    already computed and handed to the model as its "Local face detector
+    reference" text -- no extra detection work here, just reusing it to
+    enforce the rule the prompt could only ask for.
+
+    Matching a face to a subject can't reuse a plain area-overlap test here:
+    the exact failure this backstops (a box that already excludes most of
+    the face) is also the case where area overlap is smallest, so a
+    containment- or IoU-style match would frequently miss the very box that
+    needs fixing. Two people standing side by side are reliably separated on
+    the x axis even when one person's box is vertically wrong, so faces and
+    subjects are paired by nearest horizontal center instead, greedily,
+    nearest pairs first, capped at a generous distance so an unrelated face
+    (a bystander, a false-positive detection) never gets unioned into the
+    wrong person's box.
+    """
+    subjects = analysis.get("subjects")
+    if not isinstance(subjects, list) or not face_boxes:
+        return analysis
+
+    def x_center(b):
+        return b["x"] + b["w"] / 2
+
+    candidates = []
+    for si, subject in enumerate(subjects):
+        if not isinstance(subject, dict) or not subject.get("is_person"):
+            continue
+        box = subject.get("box")
+        if not isinstance(box, dict) or not all(isinstance(box.get(k), (int, float)) for k in ("x", "y", "w", "h")):
+            continue
+        for fi, fb in enumerate(face_boxes):
+            if not isinstance(fb, dict) or not all(isinstance(fb.get(k), (int, float)) for k in ("x", "y", "w", "h")):
+                continue
+            candidates.append((abs(x_center(box) - x_center(fb)), si, fi))
+    candidates.sort(key=lambda c: c[0])
+
+    MAX_CENTER_DISTANCE = 0.2  # generous: well under a typical shoulder-to-shoulder gap
+    matched_subjects, matched_faces = set(), set()
+    pairs = []
+    for distance, si, fi in candidates:
+        if distance > MAX_CENTER_DISTANCE or si in matched_subjects or fi in matched_faces:
+            continue
+        matched_subjects.add(si)
+        matched_faces.add(fi)
+        pairs.append((si, fi))
+
+    if not pairs:
+        return analysis
+
+    new_subjects = list(subjects)
+    expanded_labels = []
+    for si, fi in pairs:
+        box = subjects[si]["box"]
+        fb = face_boxes[fi]
+        x0 = min(box["x"], fb["x"])
+        y0 = min(box["y"], fb["y"])
+        x1 = max(box["x"] + box["w"], fb["x"] + fb["w"])
+        y1 = max(box["y"] + box["h"], fb["y"] + fb["h"])
+        if x0 == box["x"] and y0 == box["y"] and x1 == box["x"] + box["w"] and y1 == box["y"] + box["h"]:
+            continue  # already contains the matched face; nothing to fix
+        new_subjects[si] = {
+            **subjects[si],
+            "box": {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0},
+        }
+        expanded_labels.append(subjects[si].get("label") or "unnamed subject")
+
+    if not expanded_labels:
+        return analysis
+
+    logger.warning(
+        "subjects[].box did not contain its matched local face detection for %s; expanding to fit "
+        "(see ANALYSIS_INSTRUCTION's face-detector containment rule)",
+        "、".join(expanded_labels),
+    )
+    return {**analysis, "subjects": new_subjects}
+
+
 def _build_skin_identity_lines(analysis):
     """Whose skin each face is, one line per person, from subjects[].skin."""
     lines = []
@@ -1912,7 +2008,7 @@ def _has_person(analysis):
 # ── Smile adjustment (人像設定「笑容調整」) ─────────────────────────────────────
 #
 # The user picks the level; the analysis only records where each face's mouth
-# already sits (smile_states). Keeping those two apart is what lets the level
+# already sits (each subject's smile_issue). Keeping those two apart is what lets the level
 # be changed on the results page without re-analyzing -- a target resolved at
 # analyze time would go stale the moment the user picked a different level,
 # and the readings themselves stay valid whatever the level becomes.
@@ -1956,7 +2052,7 @@ def _normalize_smile_intensity(value):
     if resolved:
         return resolved
     if state and "unclear" not in state and "occluded" not in state and "uncertain" not in state:
-        logger.warning("smile_states carried an unrecognized smile_intensity %r; ignoring that face", value)
+        logger.warning("smile_issue carried an unrecognized smile_intensity %r; ignoring that face", value)
     return None
 
 
@@ -2052,9 +2148,7 @@ def _read_smile_states(analysis):
     use the new intensity controls without being analyzed again.
     """
     read = []
-    for item in analysis.get("smile_states") or []:
-        if not isinstance(item, dict):
-            continue
+    for item in subject_issue_items(analysis, "smile_issue"):
         current = _normalize_smile_intensity(
             item.get("smile_intensity") or item.get("smile_state")
         )
@@ -2205,10 +2299,9 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     )
     correction_plan = "; ".join(analysis.get("correction_plan") or [])
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
-    eye_blink_issues = analysis.get("eye_blink_issues") or []
-    hair_issues = analysis.get("hair_issues") or []
-    gaze_contact_issues = analysis.get("gaze_contact_issues") or []
-    gaze_contact_issues_json = json.dumps(gaze_contact_issues, ensure_ascii=False)
+    eye_blink_issues = subject_issue_items(analysis, "blink_issue")
+    hair_issues = subject_issue_items(analysis, "hair_issue")
+    gaze_contact_issues = subject_issue_items(analysis, "gaze_issue")
     framing_intent_block = _build_framing_intent_block(analysis)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
@@ -3007,7 +3100,7 @@ Check dimensions:
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
 - Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyes are naturally corrected while identity, gaze, face shape, glasses, makeup, and expression style remain believable.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
-{smile_qa_line}- Approved gaze-contact repair: if gaze_contact_issues.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
+{smile_qa_line}- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
 
 Strict scoring rubric:
 - 9-10: excellent, faithful, polished, intentional framing, no meaningful preservation/crop issues.

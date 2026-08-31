@@ -35,7 +35,7 @@ MAX_RUN_COUNT = 20
 ADVANCED_OPTION_DEFAULTS = {
     "eye_closed_detection": True,
     # "眼神對焦" on the upload page. Read by build_analysis_instruction (gates
-    # the analysis's own gaze_contact_issues judgment) and, a second time and
+    # the analysis's own gaze_issue judgment) and, a second time and
     # independently, by pipeline._run_gaze_repair_pass (gates Step 5b) -- the
     # latter does not just trust should_fix coming back false from the former.
     "gaze_contact_detection": True,
