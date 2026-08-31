@@ -10,12 +10,14 @@ from __future__ import annotations
 import json
 import re
 
-
-_SMILE_ALIASES = {
-    "no_smile": "neutral", "closed_smile": "gentle",
-    "toothy_smile": "broad", "bright_smile": "broad",
-}
-_SMILE_LEVELS = {"neutral", "gentle", "broad", "laughing"}
+# The legacy prompt's own readers, deliberately shared rather than reimplemented
+# here: both builders must agree on which people a feature is in scope for,
+# including the per-person opt-out (_disabled_issue_subject_indices).
+from prompts import (
+    _disabled_issue_subject_indices,
+    resolve_smile_targets,
+    subject_issue_items,
+)
 
 _BASE_PRESERVE = {
     "identity", "underlying_facial_anatomy", "head_pose", "body_pose",
@@ -288,28 +290,13 @@ def _same_subject(left, right):
 
 
 def _smile_contracts(analysis):
-    options = analysis.get("_advanced_options") or {}
-    if not options.get("smile_adjustment", True):
-        return []
-    level = _SMILE_ALIASES.get(options.get("smile_level"), options.get("smile_level")) or "auto"
     contracts = []
-    for item in analysis.get("smile_states") or []:
-        if not isinstance(item, dict):
-            continue
-        current = item.get("smile_intensity") or item.get("smile_state")
-        current = _SMILE_ALIASES.get(current, current)
-        if current not in _SMILE_LEVELS:
-            continue
-        target = "gentle" if level == "auto" and current == "neutral" else level
-        if level == "auto" and (current != "neutral" or item.get("adjust_safe") is False):
-            continue
-        if target not in _SMILE_LEVELS or target == current:
-            continue
+    for item in resolve_smile_targets(analysis):
         contracts.append({
             "feature": "smile",
-            "subject": item.get("subject_label") or "畫面中的人物",
+            "subject": item.get("label") or "畫面中的人物",
             "box": _box(item),
-            "endpoint": {"smile_level": target},
+            "endpoint": {"smile_level": item["target"]},
             "direct_changes": ["mouth_expression"],
             "dependent_changes": [
                 "facial_expression", "cheek_tension", "brow_expression",
@@ -327,9 +314,10 @@ def _gaze_contracts(analysis, include_gaze):
     options = analysis.get("_advanced_options") or {}
     if not include_gaze or not options.get("gaze_contact_detection", True):
         return []
+    disabled = _disabled_issue_subject_indices(analysis, "gaze_issue")
     contracts = []
-    for item in analysis.get("gaze_contact_issues") or []:
-        if not isinstance(item, dict) or not item.get("should_fix"):
+    for item in subject_issue_items(analysis, "gaze_issue"):
+        if not item.get("should_fix") or item.get("_subject_index") in disabled:
             continue
         strategy = item.get("gaze_repair_strategy") or {}
         contracts.append({
@@ -357,9 +345,10 @@ def _blink_contracts(analysis):
     options = analysis.get("_advanced_options") or {}
     if not options.get("eye_closed_detection", True):
         return []
+    disabled = _disabled_issue_subject_indices(analysis, "blink_issue")
     contracts = []
-    for item in analysis.get("eye_blink_issues") or []:
-        if not isinstance(item, dict) or not item.get("should_fix"):
+    for item in subject_issue_items(analysis, "blink_issue"):
+        if not item.get("should_fix") or item.get("_subject_index") in disabled:
             continue
         contracts.append({
             "feature": "blink",
