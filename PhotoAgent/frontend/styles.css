@@ -1470,7 +1470,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 
 /* Analysis box overlay (#boxes-toggle-btn, debug UI only): roi_box /
-   subject_extent_box / crop_box / the crop actually sent to the edit model,
+   subject_extent_box / person subjects / crop_box / the crop actually sent to the edit model,
    drawn over the ORIGINAL photo. Sized to the image's rendered rect (not the
    frame's) by drawAnalysisBoxes, so each box is a plain percentage inside it.
    .photo-frame's overflow:hidden clips anything reaching past the photo. */
@@ -1495,7 +1495,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    have its label clipped away), one per corner so overlapping boxes -- the
    proposed and the actually-sent crop usually nearly coincide -- don't stack
    their labels on top of each other. Hidden until that box is hovered --
-   with up to 8 box types all drawable at once now (#boxes-type-menu), every
+   with many box types drawable at once now (#boxes-type-menu), every
    label showing at all times buried the photo under text. */
 .ab-box-label {
   position: absolute;
