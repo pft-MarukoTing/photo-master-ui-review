@@ -2612,7 +2612,7 @@ Approved-repair override:
         and item.get("_subject_index") not in gaze_disabled_indices
     ] if gaze_contact_detection_enabled else []
     gaze_block = ""
-    # Two-stage flow (single_pass_edit=False, the default): any approved gaze
+    # Two-stage flow (single_pass_edit=False): any approved gaze
     # repair is 100% Step 5b's job (pipeline._run_gaze_repair_pass calls
     # build_gaze_only_edit_prompt as an isolated second pass on this call's own
     # output), so this call must leave gaze untouched even when a fix is

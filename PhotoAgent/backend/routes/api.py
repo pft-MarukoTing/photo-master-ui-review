@@ -54,10 +54,12 @@ def _parse_and_validate_params(form):
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",
         "overwrite_prompt": str(form.get("overwrite_prompt", "false")).lower() == "true",
-        # One-shot alternative to the default two-call edit (Step 5 + Step 5b
-        # gaze repair) -- see photo_agent.param_validation._validate_params
-        # for the accompanying image_quality bump.
-        "single_pass_edit": str(form.get("single_pass_edit", "false")).lower() == "true",
+        # Default: one-shot edit (skips Step 5b's separate gaze-repair pass,
+        # see pipeline.finish_stage) instead of the two-call alternative --
+        # see pipeline.finish_stage for the accompanying image_quality bump,
+        # applied there instead of here since it's gated on whether this
+        # photo's analysis actually has an approved gaze fix to bundle.
+        "single_pass_edit": str(form.get("single_pass_edit", "true")).lower() == "true",
     }
     user_prompt = form.get("user_prompt")
     if user_prompt:
@@ -1032,7 +1034,7 @@ def aipoc_submit():
         stage="finish" if analysis else None,
         analysis=analysis,
         advanced_options=params.get("advanced_options", {}),
-        single_pass_edit=params.get("single_pass_edit", False),
+        single_pass_edit=params.get("single_pass_edit", True),
     )
     task_id = body.get("result", {}).get("taskId")
     if not task_id:

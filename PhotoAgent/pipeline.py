@@ -52,7 +52,7 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
 
     Runs on whichever model config.MODELS["gaze_repair"] names (see
     GAZE_REPAIR_BY_MODEL above), independent of whichever model Step 5 itself
-    used. Under the two-call default (single_pass_edit=False), Step 5 is
+    used. Under the two-call path (single_pass_edit=False), Step 5 is
     told to leave gaze completely untouched even when a fix is approved (see
     build_edit_prompt's single_pass_edit-gated gaze_block in prompts.py) --
     this pass is the ONLY place any approved gaze redirection happens, not a
@@ -222,7 +222,7 @@ def finish_stage(
     run_qa: bool = True,
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
-    single_pass_edit: bool = False,
+    single_pass_edit: bool = True,
 ) -> dict:
     """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
 
@@ -234,14 +234,17 @@ def finish_stage(
     single_pass_edit: skip Step 5b (see _run_gaze_repair_pass) and fall back
     to having Step 5's own edit call bundle any approved gaze fix in with
     everything else (build_edit_prompt's single_pass_edit-gated gaze_block,
-    prompts.py). Under the two-call default (single_pass_edit=False), Step 5
-    is instead told to leave gaze completely untouched and Step 5b performs
-    100% of any approved gaze redirection as an isolated second pass -- so
-    single_pass_edit trades that dedicated pass's reliability for a single
-    edit-model round trip; callers picking this path should use an
-    image_model/quality combination trusted to apply the bundled fix
-    reliably on its own (gpt-image-2 medium by default -- see
-    photo_agent/param_validation.py).
+    prompts.py). Under the two-call path (single_pass_edit=False), Step 5 is
+    instead told to leave gaze completely untouched and Step 5b performs 100%
+    of any approved gaze redirection as an isolated second pass -- so
+    single_pass_edit (the default) trades that dedicated pass's reliability
+    for a single edit-model round trip. That bundled call is only trusted to
+    apply an approved gaze fix reliably on gpt-image-2 at medium+, so when
+    single_pass_edit is on, image_model is gpt-image-2, quality is "low",
+    and this photo has an approved gaze_issue, Step 5 below bumps its own
+    edit call up to "medium" -- reported back as extra-info.image_quality --
+    rather than silently keeping a combination known not to apply the fix
+    reliably in one call. Requests with no approved gaze issue stay on "low".
 
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
@@ -289,13 +292,28 @@ def finish_stage(
     # result. Stays None under single_pass_edit or ai_photo_editing=False,
     # where there is no second stage to distinguish it from.
     pre_edit_image_b64 = None
+    # Default for the ai_photo_editing=False branch below, where no edit call
+    # runs and this stays whatever was requested; overwritten just below when
+    # an edit call actually happens.
+    edit_quality = quality
 
     if ai_photo_editing:
         # Step 5 — AI edit
         t0 = time.time()
-        logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, quality, image_model)
+        # single_pass_edit's bundled call only reliably applies an approved
+        # gaze fix on gpt-image-2 at medium+ (see _run_gaze_repair_pass's
+        # docstring) -- bump up from the requested "low" here, but only when
+        # this photo actually has one, since with no gaze fix to bundle
+        # there's nothing that combination would fail to apply.
+        if single_pass_edit and image_model == "gpt-image-2" and quality == "low":
+            gaze_fix_approved = any(
+                item.get("should_fix") for item in subject_issue_items(analysis, "gaze_issue")
+            )
+            if gaze_fix_approved:
+                edit_quality = "medium"
+        logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
-        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, quality, preset_key, aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit)
+        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, edit_quality, preset_key, aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit)
         prompts["image_edit"] = edit_prompt
         usage["Step 5 - image_edit"] = edit_result.get("usage")
         timings["Step 5 - image_edit"] = time.time() - t0
@@ -418,7 +436,7 @@ def finish_stage(
             "token_usage": usage,
             "extra-info": {
                 "image_model": image_model if ai_photo_editing else None,
-                "image_quality": quality,
+                "image_quality": edit_quality,
                 "analysis_model": analysis_model,
                 "timings": timings,
             },
@@ -437,7 +455,7 @@ def run_pipeline(
     run_qa: bool = True,
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
-    single_pass_edit: bool = False,
+    single_pass_edit: bool = True,
 ) -> dict:
     """Full pipeline: analyze_stage followed by finish_stage."""
     analysis = analyze_stage(image_bytes, aspect_ratio, analysis_model=analysis_model)
