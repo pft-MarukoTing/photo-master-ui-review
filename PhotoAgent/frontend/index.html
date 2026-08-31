@@ -4278,13 +4278,17 @@
      亂髮偵測/笑容調整, i.e. blink_issue/gaze_issue/hair_issue/smile_issue nested
      under the matching subjects[] entry) matched to this face by box overlap
      (fillFaceIssueList, results.js). Same backdrop+box+close shape as #ap-recipe-modal above;
-     the list itself is read-only (step-inline-list--readonly, same look as
-     #recipe-score-list's ✓/✕ adherence icons) since these are analysis
-     findings, not user-toggleable choices. #ap-face-modal-thumb mirrors the
-     same crop shown on the row button that was clicked (fillFaceIssueList
-     sets its src), hidden attribute added/removed instead of a CSS default
-     so a canvas-tainted (no thumbnail) face doesn't leave a broken-image
-     icon in the modal. -->
+     the verdict row itself is read-only (step-inline-list--readonly, same
+     look as #recipe-score-list's ✓/✕ adherence icons), but a flagged item
+     also gets an "allow AI to fix this" ios-switch (fillFaceIssueList) --
+     turning it off is what getFaceIssueOverrides/buildEffectiveAnalysis
+     (app.js) turn into should_fix=false (adjust_safe=true for smile) plus a
+     hard per-subject exclusion sent to the backend (analysis._disabled_face_
+     issues), so the edit model is not allowed to make that change for this
+     person. #ap-face-modal-thumb mirrors the same crop shown on the row
+     button that was clicked (fillFaceIssueList sets its src), hidden
+     attribute added/removed instead of a CSS default so a canvas-tainted (no
+     thumbnail) face doesn't leave a broken-image icon in the modal. -->
 <div id="ap-face-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box ap-face-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-face-modal-title">

@@ -709,6 +709,46 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .ios-switch input:checked + .ios-track .ios-thumb { left: 21px; }
 
+/* #ap-face-issue-list rows: toggle -> issue label -> should_fix icon ->
+   should_fix result label (results.js's fillFaceIssueList). Toggle switch is
+   smaller than the Advanced Settings .ios-switch so it fits inline with the
+   list text. */
+.ap-face-issue-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ap-face-issue-name { color: var(--text-2); }
+.ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; }
+.ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
+
+/* #ap-face-thumb-row's per-face buttons: a small red badge in the corner
+   when renderFaceThumbnails finds a flagged issue on that person, so the
+   user can tell which faces are worth opening #ap-face-modal for. Badge sits
+   on this wrapper, not .ap-face-thumb-btn itself, because that button is
+   overflow:hidden (it clips the square thumbnail into its round avatar
+   shape) and would clip the badge along with it. */
+.ap-face-thumb-wrap { position: relative; display: inline-flex; }
+.ap-face-thumb-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, .18);
+  color: var(--red);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--card);
+}
+.ap-face-issue-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
+
 /* Quality select */
 .quality-select {
   background: var(--card-2)

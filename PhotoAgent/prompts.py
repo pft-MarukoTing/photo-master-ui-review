@@ -1768,7 +1768,7 @@ def subject_issue_items(analysis, key):
     flat item per person, so this is the single place that reassembles it.
     """
     items = []
-    for subject in analysis.get("subjects") or []:
+    for index, subject in enumerate(analysis.get("subjects") or []):
         if not isinstance(subject, dict):
             continue
         issue = subject.get(key)
@@ -1777,8 +1777,29 @@ def subject_issue_items(analysis, key):
         item = dict(issue)
         item["subject_label"] = subject.get("label")
         item["box"] = subject.get("box")
+        item["_subject_index"] = index
         items.append(item)
     return items
+
+
+def _disabled_issue_subject_indices(analysis, category):
+    """Subject indices the user explicitly opted out of for `category`
+    (one of "blink_issue"/"hair_issue"/"gaze_issue"/"smile_issue"), via the
+    per-person toggle on the analysis-result face view.
+
+    This is a hard exclusion, checked in addition to should_fix/adjust_safe
+    rather than instead of them: it is what actually blocks smile, since
+    resolve_smile_targets ignores adjust_safe once the user picks an explicit
+    smile level (see its own docstring), and it is redundant-but-harmless
+    reinforcement for blink/hair/gaze, which already exclude a should_fix=false
+    item from their own targets list.
+    """
+    disabled = analysis.get("_disabled_face_issues") or []
+    return {
+        entry.get("subject_index") for entry in disabled
+        if isinstance(entry, dict) and entry.get("category") == category
+        and isinstance(entry.get("subject_index"), int)
+    }
 
 
 def _subject_labels(issues):
@@ -2090,8 +2111,11 @@ def resolve_smile_targets(analysis):
     level = smile_level(analysis)
     if level is None:
         return []
+    disabled_indices = _disabled_issue_subject_indices(analysis, "smile_issue")
     targets = []
     for item in _read_smile_states(analysis):
+        if item["_subject_index"] in disabled_indices:
+            continue
         if level == "auto" and item["adjust_safe"] is False:
             continue
         target = _smile_target_state(level, item["current"])
@@ -2159,6 +2183,7 @@ def _read_smile_states(analysis):
             "box": item.get("box") or {},
             "current": current,
             "adjust_safe": item.get("adjust_safe"),
+            "_subject_index": item.get("_subject_index"),
         })
     return read
 
@@ -2468,9 +2493,12 @@ Approved-repair override:
     # skin.
     has_person = _has_person(analysis)
     blink_block = ""
+    blink_disabled_indices = _disabled_issue_subject_indices(analysis, "blink_issue")
     blink_items_to_fix = [
-        item for item in eye_blink_issues
+        {k: v for k, v in item.items() if k != "_subject_index"}
+        for item in eye_blink_issues
         if isinstance(item, dict) and item.get("should_fix")
+        and item.get("_subject_index") not in blink_disabled_indices
     ] if eye_closed_detection_enabled else []
     if blink_items_to_fix:
         blink_block = """Accidental blink repair priority:
@@ -2524,9 +2552,12 @@ Approved-repair override:
     # people and strands left out, and this json is the one place hair gets named,
     # so a second copy of it would only give the model more hair to touch.
     hair_block = ""
+    hair_disabled_indices = _disabled_issue_subject_indices(analysis, "hair_issue")
     hair_items_to_fix = [
-        item for item in hair_issues
+        {k: v for k, v in item.items() if k != "_subject_index"}
+        for item in hair_issues
         if isinstance(item, dict) and item.get("should_fix")
+        and item.get("_subject_index") not in hair_disabled_indices
     ] if hair_mess_detection_enabled else []
     if hair_items_to_fix and not hair_rejected:
         hair_block = """Hair tidying priority:
@@ -2573,9 +2604,11 @@ Approved-repair override:
 - Settled is not sculpted. Hair hanging still keeps strand separation, its own unevenness, and the way it catches light. A smooth glossy sheet, a painted block, or a wig fails this even though the wind is gone.
 - Everything else in the photograph stays exactly as captured -- the same clothing, the same flags, leaves, water, and other people, still showing whatever the weather was doing to them. This settles hair only; it does not calm the scene."""
 
+    gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
     gaze_items_to_fix = [
         item for item in gaze_contact_issues
         if isinstance(item, dict) and item.get("should_fix")
+        and item.get("_subject_index") not in gaze_disabled_indices
     ] if gaze_contact_detection_enabled else []
     gaze_block = ""
     # Two-stage flow (single_pass_edit=False, the default): any approved gaze

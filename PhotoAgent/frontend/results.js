@@ -669,18 +669,23 @@ window.PhotoAgentResults = (() => {
 
   function bestSubjectMatch(subjects, faceBox) {
     let best = null;
+    let bestIndex = -1;
     let bestScore = 0.5; // most of the smaller of the two boxes has to fall inside the other
-    (Array.isArray(subjects) ? subjects : []).forEach((subject) => {
+    (Array.isArray(subjects) ? subjects : []).forEach((subject, index) => {
       const box = subject && subject.box;
       if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;
       const score = boxOverlapCoefficient(faceBox, box);
-      if (score > bestScore) { bestScore = score; best = subject; }
+      if (score > bestScore) { bestScore = score; best = subject; bestIndex = index; }
     });
-    return best;
+    return { subject: best, index: bestIndex };
   }
 
+  // subjectIndex/category identify the underlying analysis.subjects[i][category]
+  // field this entry came from -- the toggle in fillFaceIssueList writes back
+  // through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
+  // uses the same pair to flip should_fix/adjust_safe before submission.
   function faceIssueEntries(analysis, faceBox) {
-    const subject = bestSubjectMatch(analysis?.subjects, faceBox);
+    const { subject, index } = bestSubjectMatch(analysis?.subjects, faceBox);
     if (!subject) return [];
     return FACE_ISSUE_CATEGORIES.map((category) => {
       const match = subject[category.field];
@@ -690,9 +695,42 @@ window.PhotoAgentResults = (() => {
         flagged: match[category.flagField] === category.flagWhen,
         flagText: category.flagText,
         okText: category.okText,
-        reason: match.reason || ""
+        reason: match.reason || "",
+        category: category.field,
+        subjectIndex: index,
+        allowed: true
       };
     }).filter(Boolean);
+  }
+
+  // Flattened { "subjectIndex:category": false } for every flagged issue the
+  // user turned off in the face modal -- read once at submit time
+  // (buildEffectiveAnalysis, app.js) rather than kept in sync continuously,
+  // matching how recipeChecked is read fresh off the recipe checkboxes.
+  function getFaceIssueOverrides() {
+    const overrides = {};
+    faceThumbEntries.forEach((entry) => {
+      (entry.issues || []).forEach((issue) => {
+        if (issue.flagged && issue.allowed === false) {
+          overrides[`${issue.subjectIndex}:${issue.category}`] = false;
+        }
+      });
+    });
+    return overrides;
+  }
+
+  // Restores a previously captured getFaceIssueOverrides() result onto the
+  // just-rebuilt faceThumbEntries -- called after a re-render (backToProcess-
+  // FromResults' revise flow, or reopening a batch record's review panel) so
+  // switching away from and back to this photo doesn't silently re-allow a
+  // fix the user had turned off.
+  function applyFaceIssueOverrides(overrides) {
+    if (!overrides) return;
+    faceThumbEntries.forEach((entry) => {
+      (entry.issues || []).forEach((issue) => {
+        if (overrides[`${issue.subjectIndex}:${issue.category}`] === false) issue.allowed = false;
+      });
+    });
   }
 
   function cropFaceThumbnail(img, box) {
@@ -761,7 +799,26 @@ window.PhotoAgentResults = (() => {
         thumb.alt = `人物 ${index + 1}`;
         btn.appendChild(thumb);
       }
-      row.appendChild(btn);
+      // .ap-face-thumb-btn itself is overflow:hidden (it clips the square
+      // thumbnail into its round avatar shape) -- a badge placed straight on
+      // it would get clipped along with everything else that crosses its
+      // edge, so it goes on this unclipped wrapper instead, positioned over
+      // the button rather than inside it.
+      const wrap = document.createElement("span");
+      wrap.className = "ap-face-thumb-wrap";
+      wrap.appendChild(btn);
+      // Lets the user spot which faces have an analysis-flagged issue
+      // (should_fix/adjust_safe) without opening #ap-face-modal for every
+      // thumbnail -- reflects the model's own verdict, not the allow/deny
+      // toggle in the modal, so it stays put even after the user turns a fix
+      // off (it's still something the analysis found, just no longer approved).
+      if ((entry.issues || []).some((issue) => issue.flagged)) {
+        const badge = document.createElement("span");
+        badge.className = "ap-face-thumb-badge";
+        badge.textContent = "!";
+        wrap.appendChild(badge);
+      }
+      row.appendChild(wrap);
     });
     row.hidden = faceThumbEntries.length === 0;
   }
@@ -771,7 +828,11 @@ window.PhotoAgentResults = (() => {
   // #ap-face-modal-thumb (so the modal doesn't rely on the user remembering
   // which small row button they clicked) and fills #ap-face-issue-list with
   // that face's should_fix/adjust_safe verdicts, matched at
-  // renderFaceThumbnails time above.
+  // renderFaceThumbnails time above. Each flagged item also gets an
+  // "allow AI to fix this" toggle (ios-switch, same look as the Advanced
+  // Settings ones) -- switching it off flips issue.allowed in place on the
+  // faceThumbEntries entry itself, which getFaceIssueOverrides reads back at
+  // submit time.
   function fillFaceIssueList(index) {
     const entry = faceThumbEntries[index];
     if (els.apFaceModalThumb) {
@@ -795,21 +856,54 @@ window.PhotoAgentResults = (() => {
     }
     issues.forEach((issue) => {
       const li = document.createElement("li");
-      const label = document.createElement("label");
+      const row = document.createElement("div");
+      row.className = "ap-face-issue-row";
+
+      // Row order: toggle -> issue label -> should_fix icon -> should_fix
+      // result label. The toggle only exists for a flagged issue -- nothing
+      // to allow/deny when the model didn't propose a fix here.
+      if (issue.flagged) {
+        const toggle = document.createElement("label");
+        toggle.className = "ios-switch ap-face-issue-toggle";
+        toggle.title = "允許 AI 修正此項目";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.checked = issue.allowed;
+        input.addEventListener("change", () => {
+          issue.allowed = input.checked;
+          refreshVerdict();
+        });
+        const track = document.createElement("span");
+        track.className = "ios-track";
+        const thumb = document.createElement("span");
+        thumb.className = "ios-thumb";
+        track.appendChild(thumb);
+        toggle.appendChild(input);
+        toggle.appendChild(track);
+        row.appendChild(toggle);
+      }
+
+      const issueLabel = document.createElement("span");
+      issueLabel.className = "ap-face-issue-name";
+      issueLabel.textContent = issue.label;
+      row.appendChild(issueLabel);
 
       const icon = document.createElement("span");
-      icon.className = `adherence-icon ${issue.flagged ? "is-pending" : "is-done"}`;
-      icon.textContent = issue.flagged ? "!" : "✓";
+      const resultLabel = document.createElement("span");
+      resultLabel.className = "step-cb-label";
+      const refreshVerdict = () => {
+        const active = issue.flagged && issue.allowed;
+        icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
+        icon.textContent = active ? "!" : "✓";
+        resultLabel.textContent = !issue.flagged
+          ? issue.okText
+          : (issue.allowed ? issue.flagText : "已設定不修正");
+      };
+      refreshVerdict();
+      row.appendChild(icon);
+      row.appendChild(resultLabel);
 
-      const text = document.createElement("span");
-      text.className = "step-cb-label";
-      text.textContent = issue.flagged
-        ? `${issue.label}：${issue.flagText}`
-        : `${issue.label}：${issue.okText}`;
-
-      label.appendChild(icon);
-      label.appendChild(text);
-      li.appendChild(label);
+      li.appendChild(row);
 
       // The model's own reasoning is debug-only detail (same gate as the
       // box overlay's legend) -- a regular user just needs the verdict, not
@@ -1378,6 +1472,6 @@ window.PhotoAgentResults = (() => {
     renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
-    fillFaceIssueList
+    fillFaceIssueList, getFaceIssueOverrides, applyFaceIssueOverrides
   };
 })();

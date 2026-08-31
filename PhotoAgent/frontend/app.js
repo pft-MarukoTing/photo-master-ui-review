@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, fillFaceIssueList } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, fillFaceIssueList, getFaceIssueOverrides, applyFaceIssueOverrides } = window.PhotoAgentResults;
   renderBatchStyleOptions();
   renderBoxTypeMenu();
 
@@ -1525,8 +1525,19 @@
       // 人像設定 (#advanced-settings-modal, reopenable from #ap-settings-btn
       // now too) -- just as real an edit as the picks above, so it needs the
       // same before/after snapshot to unblock the Run button.
-      advancedOptions: readAdvancedOptionsFromDom()
+      advancedOptions: readAdvancedOptionsFromDom(),
+      // #ap-face-modal's per-person "允許 AI 修正此項目" toggles -- same
+      // reasoning as advancedOptions above, otherwise flipping only a face
+      // toggle (nothing else) leaves inlineReviseHasNoChanges thinking
+      // nothing changed and blocks the Run click.
+      faceIssueOverrides: getFaceIssueOverrides()
     };
+  }
+
+  function sameFaceIssueOverrides(a, b) {
+    const keysA = Object.keys(a || {});
+    const keysB = Object.keys(b || {});
+    return keysA.length === keysB.length && keysA.every((key) => (b || {})[key] === a[key]);
   }
 
   // True if the inline revise panel's Run button would submit an unchanged
@@ -1554,7 +1565,8 @@
     const advancedOptions = readAdvancedOptionsFromDom();
     const sameAdvancedOptions = Object.keys(advancedOptions).every(
       (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
-    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAdvancedOptions;
+    const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
+    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAdvancedOptions && sameFaceIssues;
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
@@ -3157,12 +3169,13 @@
     markCurrentCaseModified();
     const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
+    const faceIssueOverrides = getFaceIssueOverrides();
     const userPrompt = els.promptInput.value.trim();
     const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
-    lastSingleSelections = { userPrompt, overwritePrompt, ...selections };
+    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
-    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, { ...selections, advancedOptions });
+    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, { ...selections, advancedOptions, faceIssueOverrides });
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -3614,6 +3627,7 @@
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyStyleSelections(lastSingleSelections);
+      applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     openInlineAnalysisPanel();
@@ -4133,7 +4147,8 @@
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked,
-        advancedOptions: effectiveAdvancedOptions(record)
+        advancedOptions: effectiveAdvancedOptions(record),
+        faceIssueOverrides: record.faceIssueOverrides
       });
       const modelQuality = effectiveModelQuality(record);
       const analysisModel = effectiveAnalysisModel(record);
@@ -7172,7 +7187,7 @@
   // aesthetic_diagnosis, lighting_strategy) could still lead the model to make
   // the same change anyway. Any non-default pose/angle/lighting/size pick is
   // attached as style_options for the edit prompt.
-  function buildEffectiveAnalysis(analysis, { options, recipeChecked, advancedOptions } = {}) {
+  function buildEffectiveAnalysis(analysis, { options, recipeChecked, advancedOptions, faceIssueOverrides } = {}) {
     // Applied BEFORE the recipeChecked split below, and on the same
     // `advancedOptions` #ap-recipe-list was just rendered/refreshed with
     // (renderAnalysisPreview's callers, refreshInlineRecipeList) -- so
@@ -7181,6 +7196,45 @@
     // it always has with the raw `analysis` before this existed.
     const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
     const effective = { ...base };
+
+    // The per-person "allow AI to fix this" toggle in #ap-face-modal
+    // (getFaceIssueOverrides, results.js): { "subjectIndex:category": false }
+    // for every should_fix/adjust_safe=true item the user turned off. Both
+    // written onto a per-subject copy so the model's own original verdict on
+    // `analysis` is never mutated, in case the user flips the toggle back on
+    // a later revise:
+    //   1. should_fix (adjust_safe for smile_issue, opposite polarity) is
+    //      flipped to the "nothing to fix" value -- this alone is enough for
+    //      blink/hair/gaze, since build_edit_prompt already excludes a
+    //      should_fix=false item from its own per-category target list.
+    //   2. analysis._disabled_face_issues names the same (subjectIndex,
+    //      category) pairs directly, for build_edit_prompt to hard-exclude
+    //      regardless of should_fix/adjust_safe -- the belt to should_fix's
+    //      suspenders, and the only thing that actually blocks smile: an
+    //      explicit (non-auto) smile level in resolve_smile_targets is a user
+    //      override that ignores adjust_safe entirely, so only this hard
+    //      exclusion can still stop it for a person who was opted out.
+    if (faceIssueOverrides && Object.keys(faceIssueOverrides).length && Array.isArray(base.subjects)) {
+      const subjects = base.subjects.map((subject) => (subject && typeof subject === "object") ? { ...subject } : subject);
+      const disabledFaceIssues = [];
+      Object.entries(faceIssueOverrides).forEach(([key, allowed]) => {
+        if (allowed !== false) return;
+        const [subjectIndexStr, category] = key.split(":");
+        const subjectIndex = Number(subjectIndexStr);
+        const subject = subjects[subjectIndex];
+        if (!subject || !subject[category] || typeof subject[category] !== "object") return;
+        const issue = { ...subject[category] };
+        if (category === "smile_issue") {
+          issue.adjust_safe = true;
+        } else {
+          issue.should_fix = false;
+        }
+        subject[category] = issue;
+        disabledFaceIssues.push({ subject_index: subjectIndex, category });
+      });
+      effective.subjects = subjects;
+      effective._disabled_face_issues = disabledFaceIssues;
+    }
 
     // `analysis` already carries its own _advanced_options, baked in at
     // analyze time (pipeline.py's analyze_stage) -- overwrite it with
@@ -7252,6 +7306,7 @@
     const { options, recipeChecked } = readStyleSelectionsFromDom();
     record.options = options;
     if (recipeChecked) record.recipeChecked = recipeChecked;
+    record.faceIssueOverrides = getFaceIssueOverrides();
   }
 
   // Restores previously-captured pose/angle/lighting/size radios + recipe
@@ -7280,6 +7335,7 @@
   // show what will actually be submitted, same merge rule as effectiveOptions.
   function applyBatchReviewSelections(record) {
     applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
+    applyFaceIssueOverrides(record.faceIssueOverrides);
   }
 
   function resetApp() {
