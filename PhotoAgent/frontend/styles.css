@@ -749,6 +749,29 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .ap-face-issue-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
 
+/* A face renderFaceThumbnails found only via the local on-device detector
+   (beyond detect_face_crops' <=3 crop cap, never sent to the model as a
+   zoomed image) -- dimmed + dashed so it doesn't look equally analyzed as a
+   thumbnail that actually got the deeper zoomed-crop judgement. */
+.ap-face-thumb-btn--local-only { opacity: .55; outline: 1.5px dashed var(--border-2); outline-offset: 1px; }
+.ap-face-thumb-local-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  padding: 0 4px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--card-2);
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 0 0 2px var(--card);
+}
+.ap-face-issue-note { color: var(--text-2); font-size: 13px; margin-bottom: 4px; }
+
 /* Quality select */
 .quality-select {
   background: var(--card-2)

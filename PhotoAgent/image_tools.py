@@ -112,14 +112,22 @@ def detect_face_crops(image_bytes: bytes) -> list:
     full photo alone when this returns nothing.
 
     Returns a list of {"box": {x, y, w, h}, "face_box": {x, y, w, h}, "bytes":
-    jpeg_bytes}. Both boxes are normalized against the original (EXIF-transposed)
-    image, same convention as roi_box/protected_regions, so callers can hand
-    either straight to the frontend's analysis-box overlay without a separate
-    coordinate space. "box" is the padded crop actually sent as the zoomed
-    image (see the 0.6/0.4 padding below); "face_box" is the detector's own
-    tight, unpadded bbox -- the one worth handing to the analysis model as a
-    face-location reference, since "box" would put a person-sized gap between
-    the stated coordinates and the actual face.
+    jpeg_bytes_or_None}, largest face first. Both boxes are normalized against
+    the original (EXIF-transposed) image, same convention as roi_box/
+    protected_regions, so callers can hand either straight to the frontend's
+    analysis-box overlay without a separate coordinate space. "box" is the
+    padded crop (see the 0.6/0.4 padding below); "face_box" is the detector's
+    own tight, unpadded bbox -- the one worth handing to the analysis model as
+    a face-location reference, since "box" would put a person-sized gap
+    between the stated coordinates and the actual face.
+
+    Only the first _FACE_CROP_MAX_COUNT entries have "bytes" populated and are
+    meant to be sent to the model as zoomed images -- a token-cost cap, not a
+    detection limit. A photo can have more faces than that; the rest still
+    come back with real "box"/"face_box" values (cheap: pure arithmetic, no
+    image crop/resize/encode work) and "bytes"=None, so callers can still map
+    them against subjects[] and surface them (e.g. in the UI's face-thumbnail
+    row) without paying to send them to the model.
     """
     img = _open_rgb(image_bytes)
     if img.width < 1 or img.height < 1:
@@ -153,16 +161,27 @@ def detect_face_crops(image_bytes: bytes) -> list:
     # A real face's false-positive companions from background texture/pattern
     # are usually far smaller than the real thing in the same frame; this
     # drops those without needing a second model to tell them apart.
-    kept = [b for b in boxes if b[2] * b[3] >= largest_area * 0.4][:_FACE_CROP_MAX_COUNT]
-    logger.info("detect_face_crops: image=%dx%d raw_boxes=%s kept=%s", img.width, img.height, boxes, kept)
+    filtered = [b for b in boxes if b[2] * b[3] >= largest_area * 0.4]
+    # Only the first _FACE_CROP_MAX_COUNT faces get an actual cropped image
+    # sent to the analysis model (token-cost cap). A photo can legitimately
+    # have more locally-detected faces than that -- those still get a
+    # {"box", "face_box"} entry below (bytes=None) so callers can map them
+    # against subjects[] and surface them in the UI, just without a zoomed
+    # crop or "Local face detector reference" text ever reaching the model.
+    kept, extra = filtered[:_FACE_CROP_MAX_COUNT], filtered[_FACE_CROP_MAX_COUNT:]
+    logger.info("detect_face_crops: image=%dx%d raw_boxes=%s kept=%s extra=%s", img.width, img.height, boxes, kept, extra)
 
-    t_crop0 = time.perf_counter()
-    crops = []
-    for x, y, w, h in kept:
+    def _padded_box(x, y, w, h):
         left = min(max(0, x - round(w * 0.6)), img.width)
         top = min(max(0, y - round(h * 0.6)), img.height)
         right = max(min(img.width, x + w + round(w * 0.6)), 0)
         bottom = max(min(img.height, y + h + round(h * 0.4)), 0)
+        return left, top, right, bottom
+
+    t_crop0 = time.perf_counter()
+    crops = []
+    for x, y, w, h in kept:
+        left, top, right, bottom = _padded_box(x, y, w, h)
         logger.info("detect_face_crops: raw_box=(%d,%d,%d,%d) crop_box=(left=%d,top=%d,right=%d,bottom=%d)", x, y, w, h, left, top, right, bottom)
         crop = img.crop((left, top, right, bottom))
         longest = max(crop.width, crop.height)
@@ -186,6 +205,26 @@ def detect_face_crops(image_bytes: bytes) -> list:
         })
     aiutils_logger.log('[detect_face_crops] crop timing', crop_count=len(kept),
                         crop_total_ms=round((time.perf_counter() - t_crop0) * 1000, 1))
+
+    # Cheap (arithmetic only, no PIL crop/resize/encode) entries for the
+    # locally-detected faces beyond the crop cap -- never sent to the model.
+    for x, y, w, h in extra:
+        left, top, right, bottom = _padded_box(x, y, w, h)
+        crops.append({
+            "box": {
+                "x": left / img.width,
+                "y": top / img.height,
+                "w": (right - left) / img.width,
+                "h": (bottom - top) / img.height,
+            },
+            "face_box": {
+                "x": x / img.width,
+                "y": y / img.height,
+                "w": w / img.width,
+                "h": h / img.height,
+            },
+            "bytes": None,
+        })
     return crops
 
 

@@ -619,9 +619,15 @@ window.PhotoAgentResults = (() => {
   }
 
   // ── Face thumbnails (#ap-face-thumb-row) + should_fix modal (#ap-face-modal) ──
-  // detect_face_crops (openai_client.analyze_photo) hands back up to 3 boxes
-  // in analysis._face_crop_boxes, normalized against the original image --
-  // same convention as subjects[].box (prompts.py's shared _BOX_SCHEMA).
+  // detect_face_crops (openai_client.analyze_photo) hands back every locally-
+  // detected face in analysis._local_face_boxes, normalized against the
+  // original image -- same convention as subjects[].box (prompts.py's shared
+  // _BOX_SCHEMA). Only the first <=3 (largest first) got an actual zoomed
+  // crop sent to the model as an image (sent_to_model=true, also mirrored
+  // into analysis._face_crop_boxes for the debug box overlay); the rest are
+  // still shown here (localFaceEntries/renderFaceThumbnails below), just
+  // visually marked as local-detector-only since they never got that deeper
+  // per-face judgement.
   // blink_issue/gaze_issue/hair_issue/smile_issue live nested inside each
   // subjects[] entry (not as separate top-level arrays), so a face thumbnail
   // is matched once against subjects[] rather than once per issue category.
@@ -760,11 +766,25 @@ window.PhotoAgentResults = (() => {
   // the clicked button's index, not the data itself).
   let faceThumbEntries = [];
 
+  // Every locally-detected face (openai_client.analyze_photo's
+  // _local_face_boxes), not just the <=3 that got a zoomed crop sent to the
+  // model (_face_crop_boxes) -- detect_face_crops' own token-cost cap. Falls
+  // back to _face_crop_boxes for an older saved analysis (history record)
+  // that predates _local_face_boxes, treating every one of those as
+  // sent_to_model=true since that field's whole population always was.
+  function localFaceEntries(analysis) {
+    if (Array.isArray(analysis?._local_face_boxes)) return analysis._local_face_boxes;
+    if (Array.isArray(analysis?._face_crop_boxes)) {
+      return analysis._face_crop_boxes.map((box) => ({ box, sent_to_model: true }));
+    }
+    return [];
+  }
+
   function renderFaceThumbnails(analysis) {
     const row = els.apFaceThumbRow;
     if (!row) return;
-    const boxes = Array.isArray(analysis?._face_crop_boxes) ? analysis._face_crop_boxes : [];
-    if (!boxes.length) {
+    const faces = localFaceEntries(analysis);
+    if (!faces.length) {
       row.hidden = true;
       row.innerHTML = "";
       faceThumbEntries = [];
@@ -780,14 +800,35 @@ window.PhotoAgentResults = (() => {
       img.addEventListener("load", () => renderFaceThumbnails(analysis), { once: true });
       return;
     }
-    faceThumbEntries = boxes
-      .filter((box) => box && [box.x, box.y, box.w, box.h].every(Number.isFinite))
-      .map((box) => ({ box, issues: faceIssueEntries(analysis, box) }));
+    faceThumbEntries = faces
+      .filter((f) => f?.box && [f.box.x, f.box.y, f.box.w, f.box.h].every(Number.isFinite))
+      .map((f) => {
+        const sentToModel = f.sent_to_model !== false;
+        if (sentToModel) return { box: f.box, issues: faceIssueEntries(analysis, f.box), sentToModel };
+        // A local-only face (beyond the crop cap, never sent to the model as
+        // its own zoomed image) is still overlap-matched against subjects[]
+        // -- the model may well have described this exact person from the
+        // full photo alone -- but only kept as a thumbnail when that match
+        // actually exists. With no matching subject there is nothing
+        // meaningful to show (no box the model itself vouches for), so it's
+        // dropped entirely rather than displayed as a bare, unexplained box.
+        const { subject } = bestSubjectMatch(analysis?.subjects, f.box);
+        if (!subject) return null;
+        return { box: f.box, issues: faceIssueEntries(analysis, f.box), sentToModel };
+      })
+      .filter(Boolean);
     row.innerHTML = "";
     faceThumbEntries.forEach((entry, index) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "ap-face-thumb-btn";
+      // A locally-detected face beyond the crop cap never got its own zoomed
+      // image or "Local face detector reference" text in front of the model
+      // (see detect_face_crops/analyze_photo) -- any findings it shows came
+      // from the model describing this person off the full photo alone, not
+      // the deeper zoomed-crop analysis every other thumbnail benefits from.
+      // Dimmed + dashed so that distinction is visible at a glance.
+      if (!entry.sentToModel) btn.classList.add("ap-face-thumb-btn--local-only");
       btn.dataset.faceIndex = String(index);
       btn.setAttribute("aria-label", `人物 ${index + 1}`);
       const dataUrl = img ? cropFaceThumbnail(img, entry.box) : "";
@@ -818,6 +859,13 @@ window.PhotoAgentResults = (() => {
         badge.textContent = "!";
         wrap.appendChild(badge);
       }
+      if (!entry.sentToModel) {
+        const localBadge = document.createElement("span");
+        localBadge.className = "ap-face-thumb-local-badge";
+        localBadge.textContent = "本機";
+        localBadge.title = "本機偵測到的人臉，未送入分析模型做特寫判讀";
+        wrap.appendChild(localBadge);
+      }
       row.appendChild(wrap);
     });
     row.hidden = faceThumbEntries.length === 0;
@@ -847,6 +895,15 @@ window.PhotoAgentResults = (() => {
     const element = els.apFaceIssueList;
     if (!element) return;
     element.innerHTML = "";
+    if (entry && entry.sentToModel === false) {
+      // This face still has its subjects[] match's findings below (see
+      // renderFaceThumbnails) -- just a caveat that they came from the model
+      // reading the full photo alone, not this face's own zoomed crop.
+      const note = document.createElement("li");
+      note.className = "ap-face-issue-note";
+      note.textContent = "此人臉僅由本機偵測到，未送入分析模型做特寫判讀；以下為模型從整張照片判斷的結果。";
+      element.appendChild(note);
+    }
     const issues = entry?.issues || [];
     if (!issues.length) {
       const li = document.createElement("li");

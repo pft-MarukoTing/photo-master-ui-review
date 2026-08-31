@@ -175,7 +175,13 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # detection regardless of those toggles -- they only gate the edit stage
     # (build_edit_prompt's strip_disabled_topic_items and build_smile_block).
     face_crops = detect_face_crops(image_bytes)
-    for i, crop in enumerate(face_crops, start=1):
+    # Only entries with an actual cropped image (the first _FACE_CROP_MAX_COUNT,
+    # largest first -- see detect_face_crops' docstring) get sent to the model;
+    # a photo with more locally-detected faces than that still returns the
+    # rest with bytes=None, kept only for expand_subject_boxes_to_contain_faces
+    # and the UI's face-thumbnail row below, never as an extra image/token cost.
+    sent_crops = [c for c in face_crops if c.get("bytes") is not None]
+    for i, crop in enumerate(sent_crops, start=1):
         fb = crop["face_box"]
         content.append({
             "type": "input_text",
@@ -207,13 +213,25 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # Deterministic backstop for the face-detector containment rule in
     # ANALYSIS_INSTRUCTION -- see expand_subject_boxes_to_contain_faces's own
     # docstring for why the prompt rule alone isn't enough to guarantee this.
+    # Uses every locally-detected face_box, including ones beyond the crop cap
+    # that were never sent to the model as an image -- this backstop only
+    # needs the box, not the crop.
     if face_crops:
         result = expand_subject_boxes_to_contain_faces(result, [c["face_box"] for c in face_crops])
     # Debug-UI overlay only (frontend's #boxes-toggle-btn) -- lets a reviewer
     # see exactly what the model was shown, since a missed or misplaced crop
     # is itself useful information when a gaze/blink call still looks wrong.
+    if sent_crops:
+        result["_face_crop_boxes"] = [c["box"] for c in sent_crops]
+    # Every locally-detected face, sent to the model or not (see detect_face_crops'
+    # docstring) -- lets the frontend's face-thumbnail row show one thumbnail per
+    # face actually found on-device, not just the <=3 that got a zoomed crop, with
+    # sent_to_model marking which ones benefited from that crop's deeper analysis.
     if face_crops:
-        result["_face_crop_boxes"] = [c["box"] for c in face_crops]
+        result["_local_face_boxes"] = [
+            {"box": c["box"], "face_box": c["face_box"], "sent_to_model": c.get("bytes") is not None}
+            for c in face_crops
+        ]
     return result, {"model": analysis_model, "usage": data.get("usage")}
 
 
