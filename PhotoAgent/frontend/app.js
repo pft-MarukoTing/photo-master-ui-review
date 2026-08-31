@@ -786,11 +786,12 @@
   // which is only trusted to be handled reliably by Step 5's own bundled
   // call at gpt-image-2 medium+, not gpt-image-2 low. Bump the picker to
   // medium the moment single-pass is switched on if it's currently sitting
-  // on gpt-image-2 low, same way the backend itself defends this
-  // combination (see photo_agent/param_validation.py's own single_pass_edit
-  // bump) -- this just keeps what's displayed in sync with what will
-  // actually run instead of silently diverging from it. Never downgrades a
-  // HIGHER quality/model choice the user already made. Re-checking 兩階段
+  // on gpt-image-2 low -- a display nicety, not a guarantee of what will
+  // actually run: pipeline.finish_stage only bumps its own edit call to
+  // medium when this photo's analysis has an approved gaze fix to bundle,
+  // so a photo with none stays on low even though the picker now shows
+  // medium here. Never downgrades a HIGHER quality/model choice the user
+  // already made. Re-checking 兩階段
   // 修圖 reverses this: gpt-image-2 medium is only needed for the single-call
   // path's own gaze fix, so switch back down to low, the cheaper tier that's
   // sufficient once Step 5b's own dedicated pass is doing the gaze repair
@@ -1361,6 +1362,11 @@
   async function showPendingResults(analysis, preset) {
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    // Step 2 already ran by the time this review screen shows -- populate
+    // #timing-details/#timing-list with just that much now (finishSingleFlow
+    // repopulates it with the full Steps 2-6 timeline once the rest runs),
+    // same reasoning as tokenUsageAsText's fallback to analysis.usage below.
+    populateTimingSection(singleFlowState.analyzeTimings);
     // Before renderResult -- drawAnalysisBoxes (called via setCompareView)
     // reads #original-img's laid-out size, which is all zeros while
     // #results-section is still display:none.
@@ -6632,6 +6638,10 @@
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
     resetRunSwitcher(); // no RUNs exist yet for this record
 
+    // Same partial-timing display as the single-flow review screen
+    // (showPendingResults) -- record.analyzeTimings only has Step 2 so far.
+    populateTimingSection(record.analyzeTimings);
+
     renderResult(
       { data: {}, analysis: record.analysis, preset: batchSettings.preset, imageModel: null, hasOriginal },
       { pending: true }
@@ -6983,16 +6993,32 @@
   // total row gets its own blank-line gap in place of appendTimingRow's
   // border-top separator.
   function timingListAsText() {
-    if (!timingList) return "";
-    const rows = Array.from(timingList.querySelectorAll(".timing-row"));
-    if (!rows.length) return "";
-    const lineFor = (row) => {
-      const [nameEl, valEl] = row.querySelectorAll("span");
-      return `${(nameEl?.textContent || "").padEnd(24)}${valEl?.textContent || ""}`;
-    };
-    const totalRow = rows.find((r) => r.classList.contains("timing-total"));
-    const lines = rows.filter((r) => r !== totalRow).map(lineFor);
-    if (totalRow) lines.push("", lineFor(totalRow));
+    if (timingList) {
+      const rows = Array.from(timingList.querySelectorAll(".timing-row"));
+      if (rows.length) {
+        const lineFor = (row) => {
+          const [nameEl, valEl] = row.querySelectorAll("span");
+          return `${(nameEl?.textContent || "").padEnd(24)}${valEl?.textContent || ""}`;
+        };
+        const totalRow = rows.find((r) => r.classList.contains("timing-total"));
+        const lines = rows.filter((r) => r !== totalRow).map(lineFor);
+        if (totalRow) lines.push("", lineFor(totalRow));
+        return lines.join("\n");
+      }
+    }
+    // #timing-list only gets populated by populateTimingSection once a job
+    // fully finishes -- but on the review screen (before that), analysis.timings
+    // already carries Step 2's own duration (see currentTokenUsage's comment
+    // above for why), so fall back to reading that directly instead of staying
+    // empty until the whole pipeline is done.
+    const batchRecord = currentDetailBatchRecord();
+    const timings = batchRecord ? batchRecord.analysis?.timings : singleFlowState?.analysis?.timings;
+    if (!timings) return "";
+    const entries = Object.entries(timings).filter(([, seconds]) => seconds != null);
+    if (!entries.length) return "";
+    const lines = entries.map(([stage, seconds]) => `${stage.padEnd(24)}${Number(seconds).toFixed(2)}s`);
+    const total = entries.reduce((sum, [, seconds]) => sum + Number(seconds), 0);
+    lines.push("", `${"總計（尚未完成，僅分析階段）".padEnd(24)}${total.toFixed(2)}s`);
     return lines.join("\n");
   }
 
@@ -7021,6 +7047,7 @@
     { label: "第一階段中間圖（眼神修正前）", image: true },
     { label: "品質檢查", el: () => els.promptQa },
     { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" },
+    { label: "API 用量與費用", text: tokenUsageAsText, emptyText: "（尚無用量記錄）" },
     { label: "分析原始 JSON", text: analyzeRawJsonText, emptyText: "（尚無分析結果）" }
   ];
 
@@ -7106,6 +7133,137 @@
     const batchRecord = currentDetailBatchRecord();
     const analysis = batchRecord ? batchRecord.analysis : (singleFlowState && singleFlowState.analysis);
     return analysis ? JSON.stringify(analysis, null, 2) : "";
+  }
+
+  // USD price per 1M tokens, keyed by the exact model name pipeline.py puts
+  // into each token_usage[stage].model, split into text/image rates since
+  // gpt-image-1.5/gpt-image-2's edit calls bill image tokens far higher than
+  // text tokens (see normalizeStageUsage below). Standard (non-batch,
+  // non-cached), short-context list rates as published on each provider's own
+  // pricing page (checked 2026-08-31): gpt-4.1-mini/gpt-5.6-luna/gpt-5.6-sol/
+  // gpt-image-1.5/gpt-image-2 at developers.openai.com/api/docs/pricing;
+  // nano-banana-2/nano-banana-lite (gemini-3.1-flash-image /
+  // gemini-3.1-flash-lite-image) at ai.google.dev/gemini-api/docs/pricing --
+  // Gemini publishes one blended input rate across text/image, hence the
+  // same number in both fields there. Chat-only models (gpt-4.1-mini/
+  // gpt-5.6-*) never emit image tokens, so their own image rate is unused;
+  // it's set equal to the text rate rather than 0 only so a future stage that
+  // did send an image input wouldn't silently price it at zero. Re-check both
+  // pages if these ever look off -- list prices change.
+  const MODEL_PRICING = {
+    "gpt-4.1-mini": { input: { text: 0.40, image: 0.40 }, output: { text: 1.60, image: 1.60 } },
+    "gpt-5.6-luna": { input: { text: 0.20, image: 0.20 }, output: { text: 1.20, image: 1.20 } },
+    "gpt-5.6-sol": { input: { text: 4.00, image: 4.00 }, output: { text: 20.00, image: 20.00 } },
+    "gpt-image-2": { input: { text: 5.00, image: 8.00 }, output: { text: 0, image: 30.00 } },
+    "gpt-image-1.5": { input: { text: 5.00, image: 8.00 }, output: { text: 10.00, image: 32.00 } },
+    "nano-banana-2": { input: { text: 0.50, image: 0.50 }, output: { text: 60.00, image: 60.00 } },
+    "nano-banana-lite": { input: { text: 0.25, image: 0.25 }, output: { text: 30.00, image: 30.00 } }
+  };
+
+  // token_usage[stage].usage is the provider's own raw usage object, and its
+  // shape depends on which API answered: chat/Responses calls (Steps 2/3/6)
+  // use prompt_tokens/completion_tokens with no modality split; OpenAI's
+  // Images API (Step 5/5b on gpt-image-*) uses input_tokens/output_tokens
+  // plus input_tokens_details/output_tokens_details {text_tokens,
+  // image_tokens}; Gemini (Step 5/5b on nano-banana-*) uses promptTokenCount/
+  // candidatesTokenCount plus promptTokensDetails/candidatesTokensDetails,
+  // arrays of {modality, tokenCount}. This normalizes all three to the same
+  // {input: {text, image}, output: {text, image}, total} before display --
+  // whichever shape is missing a breakdown gets counted as all-text.
+  function normalizeStageUsage(raw) {
+    if (!raw) return null;
+    const sumModality = (details, modality) =>
+      (details || []).reduce((sum, d) => (d.modality === modality ? sum + (d.tokenCount || 0) : sum), 0);
+
+    let input = { text: 0, image: 0 };
+    let output = { text: 0, image: 0 };
+    if (raw.input_tokens !== undefined || raw.output_tokens !== undefined) {
+      // OpenAI Images API
+      const inImage = raw.input_tokens_details?.image_tokens ?? 0;
+      const inText = raw.input_tokens_details?.text_tokens ?? Math.max((raw.input_tokens ?? 0) - inImage, 0);
+      const outImage = raw.output_tokens_details?.image_tokens ?? 0;
+      const outText = raw.output_tokens_details?.text_tokens ?? Math.max((raw.output_tokens ?? 0) - outImage, 0);
+      input = { text: inText, image: inImage };
+      output = { text: outText, image: outImage };
+    } else if (raw.promptTokenCount !== undefined || raw.candidatesTokenCount !== undefined) {
+      // Gemini generateContent
+      const inImage = sumModality(raw.promptTokensDetails, "IMAGE");
+      const outImage = sumModality(raw.candidatesTokensDetails, "IMAGE");
+      input = { text: Math.max((raw.promptTokenCount ?? 0) - inImage, 0), image: inImage };
+      output = { text: Math.max((raw.candidatesTokenCount ?? 0) - outImage, 0), image: outImage };
+    } else {
+      // Chat Completions / Responses API -- text only
+      input = { text: raw.prompt_tokens ?? 0, image: 0 };
+      output = { text: raw.completion_tokens ?? 0, image: 0 };
+    }
+    const total = raw.total_tokens ?? raw.totalTokenCount ?? (input.text + input.image + output.text + output.image);
+    return { input, output, total };
+  }
+
+  // token_usage/extra-info/timings only reach their final (post-finish_stage)
+  // shape once Step 5/5b/6 have all run -- but pipeline.py's analyze_stage
+  // already stashes Step 2's own usage/timings on analysis.usage/.timings
+  // (popped off only by finish_stage), so the review screen (batch status
+  // "analyzed", or singleFlowState before finishSingleFlow ever populates
+  // lastResult) already has a partial-but-real Step 2 entry to show. Each
+  // getter here tries the finished shape first, falling back to that
+  // in-progress one so the "API 用量與費用"/"處理時間" tabs show whatever is
+  // available yet rather than staying empty until the whole job is done.
+  function currentTokenUsage() {
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) return batchRecord.result?.token_usage || batchRecord.analysis?.usage;
+    return lastResult?.resultText?.token_usage || singleFlowState?.analysis?.usage;
+  }
+
+  // extra-info only exists once finish_stage has assembled the final result
+  // (it carries image_quality, the Step 5 edit call's actual quality --
+  // possibly bumped up from the requested value, see pipeline.py's
+  // single_pass_edit gaze-fix upgrade) -- nothing to fall back to at the
+  // review-screen stage since Step 5 hasn't run yet there.
+  function currentExtraInfo() {
+    const batchRecord = currentDetailBatchRecord();
+    return batchRecord ? batchRecord.result?.["extra-info"] : lastResult?.resultText?.["extra-info"];
+  }
+
+  // #show-prompt-btn's "API 用量與費用" tab: one row per pipeline stage that
+  // actually called a model, with its text/image token counts and cost.
+  // Cost is only as accurate as MODEL_PRICING above -- update it if a
+  // provider changes its list prices.
+  function tokenUsageAsText() {
+    const usage = currentTokenUsage();
+    if (!usage) return "";
+    const imageQuality = currentExtraInfo()?.image_quality;
+    const lines = [];
+    let totalCost = 0;
+    let totalTokens = 0;
+    const zeroPricing = { input: { text: 0, image: 0 }, output: { text: 0, image: 0 } };
+    Object.entries(usage).forEach(([stage, entry]) => {
+      if (!entry || !entry.model) return;
+      const tokens = normalizeStageUsage(entry.usage);
+      if (!tokens) return;
+      const pricing = MODEL_PRICING[entry.model] || zeroPricing;
+      const cost =
+        (tokens.input.text / 1_000_000) * pricing.input.text +
+        (tokens.input.image / 1_000_000) * pricing.input.image +
+        (tokens.output.text / 1_000_000) * pricing.output.text +
+        (tokens.output.image / 1_000_000) * pricing.output.image;
+      totalCost += cost;
+      totalTokens += tokens.total;
+      // Step 5b (gaze repair) always runs at the same quality as Step 5's own
+      // edit call when it runs at all (pipeline.py's quality-upgrade only
+      // fires under single_pass_edit, which is exactly when Step 5b is
+      // skipped) -- so labeling just this one stage covers both.
+      const modelLabel = stage === "Step 5 - image_edit" && imageQuality
+        ? `${entry.model}, quality=${imageQuality}`
+        : entry.model;
+      lines.push(
+        `${stage} (${modelLabel})`.padEnd(48) +
+        `輸入 文字${tokens.input.text}/圖片${tokens.input.image}｜輸出 文字${tokens.output.text}/圖片${tokens.output.image}｜共 ${tokens.total} tokens ｜ $${cost.toFixed(4)}`
+      );
+    });
+    if (!lines.length) return "";
+    lines.push("", `${"總計".padEnd(48)}共 ${totalTokens} tokens ｜ $${totalCost.toFixed(4)}`);
+    return lines.join("\n");
   }
 
   // One tab per stage; clicking a tab is the only thing that changes
