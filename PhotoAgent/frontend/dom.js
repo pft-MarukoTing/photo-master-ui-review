@@ -139,6 +139,10 @@ window.PhotoAgentDom = (() => {
     imageRunCountPicker: document.querySelector("#image-run-count-picker"),
     analysisModelSelect: document.querySelector("#analysis-model"),
     analysisModelPicker: document.querySelector("#analysis-model-picker"),
+    editorPromptSettings: document.querySelector("#editor-prompt-settings"),
+    editorPromptStrategySelect: document.querySelector("#editor-prompt-strategy"),
+    apEditorPromptSettings: document.querySelector("#ap-editor-prompt-settings"),
+    apEditorPromptStrategySelect: document.querySelector("#ap-editor-prompt-strategy"),
     apAnalysisModelSelect: document.querySelector("#ap-analysis-model"),
     apAnalysisModelPicker: document.querySelector("#ap-analysis-model-picker"),
     apImageModelQualitySelect: document.querySelector("#ap-image-model-quality"),
@@ -299,7 +303,9 @@ window.PhotoAgentDom = (() => {
     promptAnalysis: document.querySelector("#prompt-analysis"),
     promptReview: document.querySelector("#prompt-review"),
     promptCrop: document.querySelector("#prompt-crop"),
+    promptEditRaw: document.querySelector("#prompt-edit-raw"),
     promptEdit: document.querySelector("#prompt-edit"),
+    promptEditResolution: document.querySelector("#prompt-edit-resolution"),
     promptGazeRepair: document.querySelector("#prompt-gaze-repair"),
     promptQa: document.querySelector("#prompt-qa")
   };

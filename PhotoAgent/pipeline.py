@@ -314,7 +314,10 @@ def finish_stage(
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
         edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, edit_quality, preset_key, aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit)
+        prompts["image_edit_raw"] = edit_result.get("raw_prompt") or edit_prompt
         prompts["image_edit"] = edit_prompt
+        prompts["image_edit_resolution"] = edit_result.get("prompt_resolution")
+        prompts["image_edit_strategy"] = edit_result.get("prompt_strategy") or "legacy"
         usage["Step 5 - image_edit"] = edit_result.get("usage")
         timings["Step 5 - image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]

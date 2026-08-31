@@ -67,9 +67,14 @@ ADVANCED_OPTION_CHOICES = {
     # already-smiling one alone; the other levels are the level every readable
     # face is taken to.
     "smile_level": SMILE_LEVELS,
+    # Which builder assembles the prompt sent to the image editor. Kept in
+    # advanced_options so it follows the analysis into both finish/rerun paths
+    # without changing the public pipeline's stage boundary.
+    "editor_prompt_strategy": ("legacy", "resolved_compact"),
 }
 ADVANCED_OPTION_CHOICE_DEFAULTS = {
     "smile_level": "auto",
+    "editor_prompt_strategy": "legacy",
 }
 
 

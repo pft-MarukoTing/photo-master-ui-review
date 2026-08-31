@@ -3574,7 +3574,9 @@
         <pre id="prompt-analysis">–</pre>
         <pre id="prompt-review">–</pre>
         <pre id="prompt-crop">–</pre>
+        <pre id="prompt-edit-raw">–</pre>
         <pre id="prompt-edit">–</pre>
+        <pre id="prompt-edit-resolution">–</pre>
         <pre id="prompt-gaze-repair">–</pre>
         <pre id="prompt-qa">–</pre>
       </div>
@@ -4013,6 +4015,15 @@
         <span class="ios-track"><span class="ios-thumb"></span></span>
       </label>
     </label>
+    <div id="editor-prompt-settings" class="option-pill-group" style="display:none;">
+      <label class="option-row">
+        <span class="option-text"><span class="option-label">Editor prompt 架構</span><span class="option-desc">可比較舊版與結構化 Compact prompt</span></span>
+        <select id="editor-prompt-strategy" class="quality-select">
+          <option value="legacy">Legacy raw</option>
+          <option value="resolved_compact">Resolved compact</option>
+        </select>
+      </label>
+    </div>
   </div>
   </div>
 </div>
@@ -4260,6 +4271,15 @@
           </select>
         </details>
       </div>
+    </div>
+    <div id="ap-editor-prompt-settings" class="option-pill-group" style="display:none;">
+      <label class="option-row">
+        <span class="option-text"><span class="option-label">Editor prompt 架構</span><span class="option-desc">可比較舊版與結構化 Compact prompt</span></span>
+        <select id="ap-editor-prompt-strategy" class="quality-select">
+          <option value="legacy">Legacy raw</option>
+          <option value="resolved_compact">Resolved compact</option>
+        </select>
+      </label>
     </div>
   </div>
   </div>

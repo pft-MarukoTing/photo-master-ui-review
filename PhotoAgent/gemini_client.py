@@ -19,6 +19,7 @@ from image_tools import (
     ensure_png_bytes,
 )
 from prompts import build_edit_prompt, build_gaze_only_edit_prompt
+from photo_agent.feature_resolver import build_compact_editor_prompt
 
 GEMINI_GENERATE_CONTENT_URL = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
@@ -187,7 +188,26 @@ def edit_photo(
     if framed_analysis.get("crop_box"):
         framed_analysis["crop_box"]["aspect_ratio"] = geometry_ratio_label
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio, source_size=(img_w, img_h), single_pass_edit=single_pass_edit)
+    raw_prompt, raw_prompt_sections = build_edit_prompt(
+        framed_analysis, preset, preset_prompt, user_direction, crop_plan,
+        revision_feedback, aspect_ratio_pref=aspect_ratio,
+        source_size=(img_w, img_h), single_pass_edit=single_pass_edit,
+        return_sections=True,
+    )
+    advanced_options = framed_analysis.get("_advanced_options") or {}
+    prompt_strategy = advanced_options.get("editor_prompt_strategy") or "legacy"
+    if user_instruction.get("overwrite_prompt"):
+        prompt_strategy = "legacy"
+    prompt_text = raw_prompt
+    resolution_metadata = None
+    if prompt_strategy == "resolved_compact":
+        prompt_text, resolution_metadata = build_compact_editor_prompt(
+            framed_analysis, preset_prompt, user_direction, crop_plan,
+            preset_key=preset_key, include_gaze=single_pass_edit,
+            revision_feedback=revision_feedback,
+            raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
+            raw_style_instruction=raw_prompt_sections.get("style_instruction"),
+        )
     image_config["aspectRatio"] = api_ratio_label
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
@@ -219,6 +239,9 @@ def edit_photo(
         # approximate on its own pixel grid (4:3 rasters as 1200x896), so the
         # physical ratio is what the output can actually be held to.
         "geometry_warnings": output_geometry_warnings(b64, geometry_ratio_label, crop_plan, img_w, img_h),
+        "raw_prompt": raw_prompt,
+        "prompt_resolution": resolution_metadata,
+        "prompt_strategy": prompt_strategy,
     }, prompt_text
 
 

@@ -495,6 +495,12 @@
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (els.twoStageEditRow) els.twoStageEditRow.style.display = isDebug ? "" : "none";
     if (els.promptOverwriteRow) els.promptOverwriteRow.style.display = isDebug ? "" : "none";
+    if (els.editorPromptSettings) els.editorPromptSettings.style.display = isDebug ? "" : "none";
+    if (els.apEditorPromptSettings) els.apEditorPromptSettings.style.display = isDebug ? "" : "none";
+    if (!isDebug) {
+      if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = "legacy";
+      if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = "legacy";
+    }
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
     // the recipe-tags ratio pill reports recommended_aspect_ratio -- both are
@@ -1020,8 +1026,26 @@
       calm_hair: !!(els.hairMessDetectionToggle?.checked && els.calmHairToggle?.checked),
       smile_adjustment: els.smileAdjustmentToggle ? els.smileAdjustmentToggle.checked : true,
       smile_level: (els.smileLevelSelect && els.smileLevelSelect.value) || "auto",
+      editor_prompt_strategy: els.apEditorPromptStrategySelect?.value || els.editorPromptStrategySelect?.value || "legacy",
     };
   }
+
+  // The same strategy lives on the upload page and the results page, so a
+  // pick on either has to show up on the other.
+  function syncEditorPromptStrategy(source = "upload") {
+    const fromAp = source === "ap";
+    const strategy = (fromAp ? els.apEditorPromptStrategySelect?.value : els.editorPromptStrategySelect?.value) || "legacy";
+    if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = strategy;
+    if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = strategy;
+  }
+
+  [
+    [els.editorPromptStrategySelect, "upload"], [els.apEditorPromptStrategySelect, "ap"],
+  ].forEach(([control, source]) => control?.addEventListener("change", () => {
+    syncEditorPromptStrategy(source);
+    applyAdvancedOptionsChange();
+  }));
+  syncEditorPromptStrategy();
 
   // 笑容程度 only means anything while 笑容調整 is on, so it dims with the
   // switch (same .is-locked treatment the results page's read-only 分析模型
@@ -1156,6 +1180,8 @@
     // key, and showing the switch off there would misreport what a revise of
     // it would actually do.
     if (els.smileAdjustmentToggle) els.smileAdjustmentToggle.checked = advancedOptions.smile_adjustment !== false;
+    if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = advancedOptions.editor_prompt_strategy || "legacy";
+    syncEditorPromptStrategy("upload");
     applySmileLevelOption(advancedOptions.smile_level);
     syncHairTidinessLevelLock();
     syncSmileLevelLock();
@@ -1978,7 +2004,12 @@
     return `photoMuse-${dateStr}-${timeStr}.png`;
   }
 
-  const PROMPT_KEYS = ["photo_analysis", "user_instruction_review", "crop_validation", "image_edit", "gaze_repair_pass", "quality_check"];
+  const PROMPT_KEYS = [
+    "photo_analysis", "user_instruction_review", "crop_validation",
+    "image_edit_raw", "image_edit",
+    "image_edit_resolution", "image_edit_strategy",
+    "gaze_repair_pass", "quality_check"
+  ];
 
   function buildPromptsJson(prompts) {
     const ordered = {};
@@ -7035,7 +7066,9 @@
     { label: "照片分析", el: () => els.promptAnalysis },
     { label: "使用者指令審查", el: () => els.promptReview },
     { label: "裁切驗證", el: () => els.promptCrop },
-    { label: "修圖", el: () => els.promptEdit },
+    { label: "修圖（Legacy raw）", el: () => els.promptEditRaw, omitWhenEmpty: true },
+    { label: "修圖（送給 Editor）", el: () => els.promptEdit },
+    { label: "Feature Resolver 結果", el: () => els.promptEditResolution, omitWhenEmpty: true },
     { label: "眼神修正（第二段）", el: () => els.promptGazeRepair },
     // Unlike every stage above, this one has no #prompt-* element to read --
     // it's a same-origin image lazy-fetched on click (see

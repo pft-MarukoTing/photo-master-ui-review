@@ -35,6 +35,7 @@ from prompts import (
     expand_subject_boxes_to_contain_faces,
     style_option_entries,
 )
+from photo_agent.feature_resolver import build_compact_editor_prompt
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 OPENAI_IMAGES_EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -318,7 +319,26 @@ def edit_photo(
     if framed_analysis.get("crop_box"):
         framed_analysis["crop_box"]["aspect_ratio"] = effective_ratio_label
     crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
-    prompt_text = build_edit_prompt(framed_analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback, aspect_ratio_pref=aspect_ratio, source_size=(img_w, img_h), single_pass_edit=single_pass_edit)
+    raw_prompt, raw_prompt_sections = build_edit_prompt(
+        framed_analysis, preset, preset_prompt, user_direction, crop_plan,
+        revision_feedback, aspect_ratio_pref=aspect_ratio,
+        source_size=(img_w, img_h), single_pass_edit=single_pass_edit,
+        return_sections=True,
+    )
+    advanced_options = framed_analysis.get("_advanced_options") or {}
+    prompt_strategy = advanced_options.get("editor_prompt_strategy") or "legacy"
+    if user_instruction.get("overwrite_prompt"):
+        prompt_strategy = "legacy"
+    prompt_text = raw_prompt
+    resolution_metadata = None
+    if prompt_strategy == "resolved_compact":
+        prompt_text, resolution_metadata = build_compact_editor_prompt(
+            framed_analysis, preset_prompt, user_direction, crop_plan,
+            preset_key=preset_key, include_gaze=single_pass_edit,
+            revision_feedback=revision_feedback,
+            raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
+            raw_style_instruction=raw_prompt_sections.get("style_instruction"),
+        )
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.
@@ -333,6 +353,9 @@ def edit_photo(
         "image_b64": b64,
         "usage": {"model": model, "usage": data.get("usage")},
         "geometry_warnings": output_geometry_warnings(b64, effective_ratio_label, crop_plan, img_w, img_h),
+        "raw_prompt": raw_prompt,
+        "prompt_resolution": resolution_metadata,
+        "prompt_strategy": prompt_strategy,
     }, prompt_text
 
 

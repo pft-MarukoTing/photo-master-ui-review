@@ -2272,7 +2272,7 @@ def build_smile_block(analysis):
 {_smile_craft_rules({'gentle' if level == 'auto' else level})}"""
 
 
-def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False):
+def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False, return_sections=False):
     analysis = strip_disabled_topic_items(analysis)
     rejected_axes = resolve_rejected_axes(analysis)
     color_craft_direction = build_color_craft_direction(rejected_axes)
@@ -2300,7 +2300,8 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     # bypassing every analysis-derived block built below (style/crop/color-
     # grade/retouch-priority/...).
     if user_instruction.get("overwrite_prompt") and effective_user_direction.strip():
-        return effective_user_direction.strip()
+        prompt = effective_user_direction.strip()
+        return (prompt, {"crop_instruction": "", "style_instruction": ""}) if return_sections else prompt
 
     # Same leak strip_disabled_topic_items guards against in correction_plan,
     # applied here too: detected_issues is free text the analysis model writes
@@ -2878,7 +2879,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
         "Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic."
     )
 
-    return f"""{task_intro}
+    prompt = f"""{task_intro}
 
 {opening_preservation_rule}
 The photographed content keeps its true shape throughout: every person, face, object, and background structure comes through with the proportions, the tilt, and the relative sizes and distances it has in the input photograph. The output canvas may be a different shape than the input; that new shape comes from cropping and uniform scaling alone, never from resizing one axis on its own.
@@ -2951,6 +2952,12 @@ User extra direction:
 
 {color_grade_check}
 """
+    if return_sections:
+        return prompt, {
+            "crop_instruction": crop_instruction_block,
+            "style_instruction": style_block,
+        }
+    return prompt
 
 
 def build_gaze_only_edit_prompt(gaze_items):

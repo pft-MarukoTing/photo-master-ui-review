@@ -1444,7 +1444,18 @@ window.PhotoAgentResults = (() => {
     setPrompt(els.promptAnalysis, prompts.photo_analysis);
     setPrompt(els.promptReview, prompts.user_instruction_review);
     setPrompt(els.promptCrop, prompts.crop_validation);
+    // The legacy raw prompt is only a meaningful "before" when another
+    // strategy replaced it. Do not show a duplicate prompt on legacy runs.
+    const resolution = prompts.image_edit_resolution;
+    setPrompt(els.promptEditRaw, resolution ? prompts.image_edit_raw : null);
     setPrompt(els.promptEdit, prompts.image_edit);
+    setPrompt(
+      els.promptEditResolution,
+      resolution ? JSON.stringify({
+        prompt_strategy: prompts.image_edit_strategy,
+        ...resolution,
+      }, null, 2) : null
+    );
     setPrompt(els.promptGazeRepair, prompts.gaze_repair_pass);
     setPrompt(els.promptQa, prompts.quality_check);
   }
