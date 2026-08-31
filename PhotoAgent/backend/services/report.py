@@ -13,7 +13,7 @@ import time
 import uuid
 
 from aiserver_utils.pf_redis import pf_redis_client
-from backend.services.account import normalize_username
+from backend.services.account import get_history_entry, get_history_entry_for_job, normalize_username
 
 REPORTS_KEY = "yce_ai:photoAgent:reports"
 REPORT_STATUSES = ("unread", "read", "solved")
@@ -23,6 +23,19 @@ _ADMIN_USERS = {
     for name in os.environ.get("PHOTO_AGENT_ADMIN_USERS", "admin").split(",")
     if name.strip()
 }
+
+
+def _case_for_report(username, job_id, image_key=None):
+    """Best-effort history metadata lookup; reporting must stay independent
+    from history availability just like screenshot upload already does."""
+    try:
+        if image_key:
+            case = get_history_entry(username, image_key)
+            if case:
+                return case
+        return get_history_entry_for_job(username, job_id)
+    except Exception:
+        return None
 
 
 def is_admin(username):
@@ -66,6 +79,12 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
         entry["user_prompt"] = user_prompt
     if screenshot_key:
         entry["screenshot_key"] = screenshot_key
+    if job_id:
+        case = _case_for_report(name, job_id)
+        if case:
+            entry["uploaded_at"] = case.get("uploaded_at")
+            entry["modified_at"] = case.get("modified_at")
+            entry["history_image_key"] = case.get("image_key")
     pf_redis_client.hset(REPORTS_KEY, field, json.dumps(entry))
     return field
 
@@ -100,6 +119,7 @@ def update_report_status(report_id, status):
     entry["status"] = status
     pf_redis_client.hset(REPORTS_KEY, report_id, json.dumps(entry))
     entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
+    entry.pop("history_image_key", None)
     return entry
 
 
@@ -122,6 +142,15 @@ def get_reports(limit=200):
             continue
         entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
         entry.setdefault("status", "unread")  # entries recorded before this field existed
+        # Backfill reports created before case lifecycle timestamps were
+        # copied onto the report itself. This also keeps an older report in
+        # sync if the user subsequently re-edits the same case.
+        history_image_key = entry.pop("history_image_key", None)
+        if entry.get("job_id"):
+            case = _case_for_report(entry.get("user"), entry["job_id"], history_image_key)
+            if case:
+                entry.setdefault("uploaded_at", case.get("uploaded_at"))
+                entry["modified_at"] = case.get("modified_at")
         # The hash field IS the report_id (record_report writes entry["report_id"] == field),
         # but entries recorded before that field existed have no report_id in their JSON --
         # always deriving it from the hash key itself (rather than trusting the JSON copy)

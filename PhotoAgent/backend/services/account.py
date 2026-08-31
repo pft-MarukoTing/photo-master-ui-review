@@ -89,17 +89,34 @@ def record_history(username, job_id, path, image_key, action_id, params=None):
         except (TypeError, ValueError):
             existing = None
 
+    now = time.time()
+    # `ts` remains the latest-activity timestamp used to sort/prune history.
+    # Keep the case's lifecycle timestamps separately: uploaded_at is pinned
+    # to the first submission, while modified_at advances only once an edit
+    # job is submitted (an analyze-only job is still just the upload stage).
+    uploaded_at = (existing or {}).get("uploaded_at") or (existing or {}).get("ts") or now
+    runs_edit = (params or {}).get("stage") != "analyze"
+    modified_at = now if runs_edit else (existing or {}).get("modified_at")
+
     if existing and existing.get("action_id") == action_id:
         runs = existing.get("runs") or []
         if job_id not in runs:
             runs.append(job_id)
-        entry = {**existing, "runs": runs, "ts": time.time()}
+        entry = {
+            **existing,
+            "runs": runs,
+            "ts": now,
+            "uploaded_at": uploaded_at,
+            "modified_at": modified_at,
+        }
     else:
         entry = {
             "action_id": action_id,
             "path": path,
             "runs": [job_id],
-            "ts": time.time(),
+            "ts": now,
+            "uploaded_at": uploaded_at,
+            "modified_at": modified_at,
             **(params or {}),
         }
     pf_redis_client.hset(key, image_key, json.dumps(entry))
@@ -139,9 +156,47 @@ def get_history(username, limit=50):
         # the frontend needs this back to identify which entry to delete
         # (delete_history_entry below), since it's otherwise never exposed.
         entry["image_key"] = field.decode() if isinstance(field, bytes) else field
+        # Compatibility for entries written before lifecycle timestamps were
+        # introduced. The old schema only retained its latest activity time,
+        # so that is the best recoverable value for both fields. Analyze-only
+        # records deliberately have no modified_at until an edit is run.
+        entry.setdefault("uploaded_at", entry.get("ts"))
+        if "modified_at" not in entry:
+            entry["modified_at"] = None if entry.get("stage") == "analyze" else entry.get("ts")
         entries.append(entry)
     entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
     return entries[:limit]
+
+
+def get_history_entry_for_job(username, job_id):
+    """Return the case containing ``job_id``, if it is still in history.
+
+    Reports store a job id rather than an image/history key. This lookup lets
+    a reported result carry the original case upload/edit timestamps into the
+    admin result page without duplicating lifecycle ownership in report.py.
+    """
+    for entry in get_history(username, limit=HISTORY_MAX_LEN):
+        runs = entry.get("runs") or []
+        if job_id in runs or entry.get("job_id") == job_id:
+            return entry
+    return None
+
+
+def get_history_entry(username, image_key):
+    """Resolve one case by its durable history/image key."""
+    key = USER_HISTORY_KEY_FORMAT.format(user=username)
+    raw = pf_redis_client.hget(key, image_key)
+    if not raw:
+        return None
+    try:
+        entry = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    entry["image_key"] = image_key
+    entry.setdefault("uploaded_at", entry.get("ts"))
+    if "modified_at" not in entry:
+        entry["modified_at"] = None if entry.get("stage") == "analyze" else entry.get("ts")
+    return entry
 
 
 def delete_history_entry(username, image_key):
