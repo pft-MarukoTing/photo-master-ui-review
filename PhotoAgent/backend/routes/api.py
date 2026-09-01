@@ -724,12 +724,20 @@ def analyze_batch():
         return jsonify({"error": error}), 400
     params["stage"] = "analyze"
 
+    user = request.form.get("user")
     entries = []
     for image in images:
         try:
             engine_params = get_engine_params_template()
             engine_params["acts"][0]["params"] = params
             job_id = enqueue(engine_params, src_content=[image.read()])
+            # Same reasoning as /analyze just above: without this, a batch
+            # manual-review upload had no history row per image until each
+            # one got past review and continued -- an image left at "analyzed"
+            # was invisible in history, not just unrecoverable via one shared
+            # row. action_id=job_id since an analyze-only job has no prior
+            # action to group under, same as /analyze.
+            _record_history_safely(user, job_id, "local", engine_params["srcKeys"][0], job_id, params=params)
             entries.append({"filename": image.filename, "job_id": job_id})
         except Exception as exc:
             entries.append({"filename": image.filename, "error": str(exc)})

@@ -3780,7 +3780,8 @@
       analysisModel: batchSettings.analysisModel,
       aspectRatio: batchSettings.aspectRatio,
       aiPhotoEditing: batchSettings.aiPhotoEditing,
-      advancedOptions: batchSettings.advancedOptions
+      advancedOptions: batchSettings.advancedOptions,
+      user: getCurrentUser()
     };
 
     try {

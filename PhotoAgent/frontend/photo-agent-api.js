@@ -284,7 +284,7 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
-  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
+  async function analyzeJobBatch({ files, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions, user }) {
     const form = new FormData();
     files.forEach((file) => form.append("image", file, file.name || "photo.jpg"));
     form.append("preset", preset);
@@ -295,6 +295,10 @@ window.PhotoAgentApi = (() => {
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
     if (userPrompt) form.append("user_prompt", userPrompt);
+    // Lets the backend record each analyze-only job into history (see
+    // api.py's /analyze-batch) -- same reasoning as analyzeJob() above, one
+    // row per image instead of one for the whole batch.
+    if (user) form.append("user", user);
 
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze-batch`, {
       method: "POST",
