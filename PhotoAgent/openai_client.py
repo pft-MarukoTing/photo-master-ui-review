@@ -165,36 +165,51 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         {"type": "input_image", "image_url": data_url},
     ]
 
-    # The whole-photo preview gets resampled by the vision API to its own
-    # canonical resolution regardless of how large a preview we send (measured
-    # empirically -- see detect_face_crops' docstring), so on anything but a
-    # tight face close-up each eye ends up too few pixels to read pupil/iris
-    # direction. A zoomed face crop gets its own resolution budget spent
-    # entirely on that face, which is what actually helps. Always fetched now
-    # (not gated on eye_closed_detection/gaze_contact_detection/
-    # smile_adjustment) since analysis always runs full eye/gaze/smile
-    # detection regardless of those toggles -- they only gate the edit stage
-    # (build_edit_prompt's strip_disabled_topic_items and build_smile_block).
+    # Analysis is position-only now (no eye/gaze/hair/smile judging left), but
+    # the local, on-device face detector is still a more reliable way to find
+    # every person than asking the vision model to spot small/backgrounded
+    # faces in the full-frame preview alone. So each detected face is handed
+    # back to the model as its own zoomed crop image, captioned as the basis
+    # for subject detection: the model is told to anchor its subjects[] list
+    # on these detections (one subjects[] entry per detection, expanded to
+    # that person's full extent) rather than only self-discovering faces and
+    # cross-checking them against this afterward. See ANALYSIS_INSTRUCTION's
+    # "Local face detector reference" rule for the matching instruction text.
     face_crops = detect_face_crops(image_bytes)
     # Only entries with an actual cropped image (the first _FACE_CROP_MAX_COUNT,
-    # largest first -- see detect_face_crops' docstring) get sent to the model;
-    # a photo with more locally-detected faces than that still returns the
-    # rest with bytes=None, kept only for expand_subject_boxes_to_contain_faces
-    # and the UI's face-thumbnail row below, never as an extra image/token cost.
-    sent_crops = [c for c in face_crops if c.get("bytes") is not None]
-    for i, crop in enumerate(sent_crops, start=1):
+    # largest first -- see detect_face_crops' docstring) get sent to the model
+    # as an image; a photo with more locally-detected faces than that still
+    # gets the rest as a coordinate-only text hint, never as an extra image/
+    # token cost.
+    for i, crop in enumerate(face_crops, start=1):
         fb = crop["face_box"]
-        content.append({
-            "type": "input_text",
-            "text": (
-                f"Face crop {i} (zoomed, for judging eye state, blink, gaze/pupil direction, and "
-                "smile state only -- match it to the corresponding person in the full photo above by "
-                "appearance; it is not a separate photo). Local face detector reference (normalized "
-                f"original-image coordinates, tight face-only box): x={fb['x']:.3f}, y={fb['y']:.3f}, "
-                f"w={fb['w']:.3f}, h={fb['h']:.3f} -- see Coordinate rules above for how much to trust this."
-            ),
-        })
-        content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
+        if crop.get("bytes") is not None:
+            content.append({
+                "type": "input_text",
+                "text": (
+                    f"Face crop {i} (zoomed, for anchoring subject detection and judging eye state, blink, "
+                    "gaze/pupil direction, and smile state; it is not a separate photo). Local face detector "
+                    "reference (normalized original-image coordinates, tight face-only box): "
+                    f"x={fb['x']:.3f}, y={fb['y']:.3f}, w={fb['w']:.3f}, h={fb['h']:.3f} -- this is "
+                    f"detection_index {i}: give it a local_face_review entry, and create a matching "
+                    "subjects[] entry only when it passes the Subject inclusion rule; see the Subject "
+                    "inclusion rule, Zoomed face-crop images, and Coordinate rules sections above for how "
+                    "to judge and how much to trust this."
+                ),
+            })
+            content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
+        else:
+            content.append({
+                "type": "input_text",
+                "text": (
+                    f"Local face detector reference {i} (normalized original-image coordinates, tight "
+                    f"face-only box): x={fb['x']:.3f}, y={fb['y']:.3f}, w={fb['w']:.3f}, h={fb['h']:.3f} -- "
+                    f"this is detection_index {i} too: give it a local_face_review entry, and create a "
+                    "matching subjects[] entry only when it passes the Subject inclusion rule; see the "
+                    "Subject inclusion rule and Coordinate rules sections above for how to judge and how "
+                    "much to trust this."
+                ),
+            })
 
     # Constrains decoding to ANALYSIS_RESPONSE_SCHEMA's shape (Responses API
     # strict structured output) rather than relying on the prompt's "return
@@ -211,6 +226,7 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     )
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
     result = _parse_json_from_text(_extract_output_text(data))
+    sent_crops = [c for c in face_crops if c.get("bytes") is not None]
     # Deterministic backstop for the face-detector containment rule in
     # ANALYSIS_INSTRUCTION -- see expand_subject_boxes_to_contain_faces's own
     # docstring for why the prompt rule alone isn't enough to guarantee this.
@@ -221,7 +237,7 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         result = expand_subject_boxes_to_contain_faces(result, [c["face_box"] for c in face_crops])
     # Debug-UI overlay only (frontend's #boxes-toggle-btn) -- lets a reviewer
     # see exactly what the model was shown, since a missed or misplaced crop
-    # is itself useful information when a gaze/blink call still looks wrong.
+    # is itself useful information when a subject detection still looks wrong.
     if sent_crops:
         result["_face_crop_boxes"] = [c["box"] for c in sent_crops]
     # Every locally-detected face, sent to the model or not (see detect_face_crops'

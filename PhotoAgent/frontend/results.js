@@ -686,12 +686,36 @@ window.PhotoAgentResults = (() => {
     return { subject: best, index: bestIndex };
   }
 
+  // Prefers the analysis model's own authoritative answer (analysis.
+  // local_face_review[].matched_subject_index, prompts.py's ANALYSIS_
+  // RESPONSE_SCHEMA) over the box-overlap heuristic above: the model was
+  // told exactly which subjects[] entry each locally-detected face became,
+  // if any, so there is no guessing left to do once that field exists.
+  // detectionIndex is 1-based, matching local_face_review[].detection_index
+  // and the "Face crop N" / "Local face detector reference N" numbering
+  // (openai_client.py's analyze_photo) -- i.e. the face's own 1-based
+  // position in analysis._local_face_boxes.
+  // matched=true means local_face_review had an entry for this detection
+  // (even when it resolved to "no subject" -- a bystander or detector false
+  // positive); matched=false means no local_face_review data exists at all
+  // (an analysis saved before this field existed), so the caller should fall
+  // back to bestSubjectMatch's box-overlap guess instead.
+  function subjectForDetection(analysis, detectionIndex, faceBox) {
+    const review = (analysis?.local_face_review || []).find((r) => r?.detection_index === detectionIndex);
+    if (review) {
+      const idx = review.matched_subject_index;
+      const subjects = Array.isArray(analysis?.subjects) ? analysis.subjects : [];
+      const subject = Number.isInteger(idx) && idx >= 0 && idx < subjects.length ? subjects[idx] : null;
+      return { subject, index: subject ? idx : -1, matched: true };
+    }
+    return { ...bestSubjectMatch(analysis?.subjects, faceBox), matched: false };
+  }
+
   // subjectIndex/category identify the underlying analysis.subjects[i][category]
   // field this entry came from -- the toggle in fillFaceIssueList writes back
   // through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
   // uses the same pair to flip should_fix/adjust_safe before submission.
-  function faceIssueEntries(analysis, faceBox) {
-    const { subject, index } = bestSubjectMatch(analysis?.subjects, faceBox);
+  function faceIssueEntries(subject, index) {
     if (!subject) return [];
     return FACE_ISSUE_CATEGORIES.map((category) => {
       const match = subject[category.field];
@@ -801,25 +825,35 @@ window.PhotoAgentResults = (() => {
       return;
     }
     faceThumbEntries = faces
-      .filter((f) => f?.box && [f.box.x, f.box.y, f.box.w, f.box.h].every(Number.isFinite))
-      .map((f) => {
+      // detectionIndex is 1-based and must reflect each face's own position
+      // in the original (unfiltered) faces/_local_face_boxes array -- it has
+      // to line up with local_face_review[].detection_index, which the
+      // model assigned from that same "Face crop N" / "Local face detector
+      // reference N" ordering -- so this runs before the geometry filter
+      // below, not after.
+      .map((f, i) => ({ f, detectionIndex: i + 1 }))
+      .filter(({ f }) => f?.box && [f.box.x, f.box.y, f.box.w, f.box.h].every(Number.isFinite))
+      .map(({ f, detectionIndex }) => {
         const sentToModel = f.sent_to_model !== false;
         // Matched once here (rather than left to faceIssueEntries' own
         // internal match) so the subject's own label -- used as the face
         // modal's title in fillFaceIssueList below -- comes from the exact
         // same match its issues do, not a second, potentially different one.
-        const { subject } = bestSubjectMatch(analysis?.subjects, f.box);
-        // A local-only face (beyond the crop cap, never sent to the model as
-        // its own zoomed image) is only kept as a thumbnail when it actually
-        // overlap-matches a subjects[] entry -- the model may well have
-        // described this exact person from the full photo alone. With no
-        // matching subject there is nothing meaningful to show (no box the
-        // model itself vouches for), so it's dropped entirely rather than
-        // displayed as a bare, unexplained box.
-        if (!sentToModel && !subject) return null;
+        const { subject, index, matched } = subjectForDetection(analysis, detectionIndex, f.box);
+        // When the analysis has local_face_review, its verdict is
+        // authoritative: no subject means the model itself already decided
+        // this detection is a detector false positive or an excluded
+        // bystander (see the Subject inclusion rule in ANALYSIS_
+        // INSTRUCTION), so there is nothing meaningful to show -- drop it.
+        // Without local_face_review (an analysis saved before this field
+        // existed), fall back to the old heuristic: keep a local-only face
+        // (beyond the crop cap) only when box-overlap still finds a subject
+        // for it, since the model may have described this exact person from
+        // its coordinate-only text hint alone.
+        if (!subject && (matched || !sentToModel)) return null;
         return {
           box: f.box,
-          issues: faceIssueEntries(analysis, f.box),
+          issues: faceIssueEntries(subject, index),
           sentToModel,
           label: (subject && subject.label) || "",
         };

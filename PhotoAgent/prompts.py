@@ -109,6 +109,15 @@ Hard limits:
 - For people, preserve identity, face, body shape, pose, and natural skin texture.
 - For products, food, pets, architecture, and landscapes, preserve shape, material, and scene truth.
 
+Subject inclusion rule (for people specifically):
+- subjects[] lists this photo's actual people among its subjects -- the intended human subject(s) and anyone clearly posing or interacting with them -- not every visible human, including ones the local face detector or your own scan of the photo turns up. Strong models in particular tend to over-include: finding and boxing every technically-visible person, even incidental strangers, is not the goal here.
+- Exclude a visible person from subjects[] when they read as an incidental background bystander: someone unrelated to the photo's own subject(s) who merely happens to be in frame -- a stranger walking past in a street/travel photo, an unrelated person faintly visible in a crowd, a passerby in the background of a portrait or product/food shot.
+- Signals that someone is likely an incidental bystander rather than an intended subject (none of these is decisive alone; weigh them together): they show only their back or the side/rear of their head with no facial detail at all; they are small, distant, blurred, or heavily occluded relative to this photo's real subject(s); they are not looking toward, posed with, or interacting with the photo's main subject(s); the photo's framing/composition clearly centers on someone or something else and this person sits at the edge or deep in the background.
+- These signals do not automatically disqualify someone. A main subject deliberately photographed from behind, or a close companion standing slightly behind/beside the main subject, still belongs in subjects[] even if their face is not fully visible.
+- Judge from the whole picture: would someone looking at this photo say "the people in this photo" includes this individual, or would they say "there's also a stranger in the background"? Only the former belongs in subjects[].
+- A real face that fails this inclusion test (a genuine incidental bystander) still gets a local_face_review entry -- with matched_subject_index=-1 and a reason naming the exclusion -- it just does not get a subjects[] entry of its own.
+- This rule is about which people belong in subjects[]; it has no bearing on non-person subjects (products, food, animals, objects), which are still selected and ordered by the existing prominence rules in Coordinate rules below.
+
 Return exactly this JSON shape:
 {
   "photo_summary": "一句話描述照片內容與整體觀感。",
@@ -140,6 +149,7 @@ Return exactly this JSON shape:
       "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
       "prominence": 1,
       "is_person": true,
+      "local_detection_index": 1,
       "skin": "is_person=true 時必填，否則寫「不適用」。依序寫：原生膚色身分（在受光平均處判讀深淺與底調，不讀高光或陰影）；場景光色（臉上實際受光的方向與色性，以及是否為應保留的情境光）；非預期偏色（僅限無法由場景光解釋，或與頸、耳、手不連貫的偏黃、偏綠、偏紅、偏洋紅、偏灰；沒有則寫無）。原生膚色身分不可改變。不可把背景、草地、服裝或其他高飽和物體的主色當成膚色受光；只有可見光源或反射確實落在皮膚上才算情境光。夕陽、鎢絲燈、舞台燈、霓虹與反射色等合理光色不可被中性化。",
       "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。",
       "blink_issue": {
@@ -195,6 +205,14 @@ Return exactly this JSON shape:
         "adjust_safe": true,
         "reason": "簡短說明是否有明確可見的笑容證據、是否更可能是說話或其他表情動作，以及 adjust_safe 的依據。is_person=false 時填「不適用」，adjust_safe=false。"
       }
+    }
+  ],
+  "local_face_review": [
+    {
+      "detection_index": 1,
+      "is_real_face": true,
+      "matched_subject_index": 0,
+      "reason": "說明判斷依據；若 is_real_face=false 或 matched_subject_index=-1，必須說明是偵測器誤判（背景花紋/反光/印刷人臉等，並具體指出是什麼）還是真人臉但屬於陪襯路人（依 Subject inclusion rule 說明原因）。"
     }
   ],
   "roi_box": {
@@ -271,6 +289,12 @@ Return exactly this JSON shape:
   "preserve_rules": ["必須保留的內容。"]
 }
 
+local_face_review must contain exactly one entry per "Face crop N" / "Local face detector reference N" you were given, in the same order, with detection_index equal to that N -- this is a completeness check, not a sample. For each entry:
+- is_real_face=false whenever the crop/coordinate does not actually show a real human face (background clutter, pattern, reflection, printed/painted face); matched_subject_index must then be -1, and reason must name what it actually shows.
+- is_real_face=true and matched_subject_index=-1 whenever the detection is a real face that fails the Subject inclusion rule (an incidental bystander); reason must say so and name which signal(s) from that rule apply.
+- is_real_face=true and matched_subject_index=<that subject's 0-based index> whenever you created a subjects[] entry from this detection; that subjects[] entry's own local_detection_index must equal this same detection_index, so the two arrays cross-reference each other consistently in both directions.
+Every subjects[] entry needs a local_detection_index: for a person (is_person=true) created from a local detection, set it to that detection_index; set it to -1 for a person you added yourself from the full photo with no backing detection, and -1 for any non-person subject (is_person=false), since the face detector never applies to those.
+
 ## Output alignment rules
 Intent: Treat correction_plan, correction_axes, correction_inverse, and retouch_recipe as one execution and review contract describing the exact same adjustments in the same order, with the same number of entries.
 
@@ -289,10 +313,11 @@ This is the only thing standing between an unchecked item and the editing model 
 ## Face-crop evidence
 Intent: Use zoomed face crops as supporting evidence for facial details without treating them as separate photographs or using them for scene-level decisions.
 
-- After the main photo, you may be given one or more additional images labeled "Face crop N (zoomed, for judging eye state, blink, and gaze/pupil direction only)". Each one is a cropped, zoomed-in view of one visible person's face from the SAME photo above, not a different photo or a different moment.
-- Match each face crop to the corresponding person in the main photo by appearance (position, clothing, hair, expression) and use it as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, and pupil/iris direction -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo.
-- Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
-- Face-crop detection is best-effort: it can miss a visible person (non-frontal angle, occlusion, small size) or occasionally crop something that is not a face. If a visible person has no matching crop, or a crop clearly does not show a usable face, fall back to judging that person's eyes directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
+- After the main photo, you may be given one or more additional images labeled "Face crop N (zoomed, for anchoring subject detection and judging eye state, blink, gaze/pupil direction, and smile state; it is not a separate photo)". Each one is a cropped, zoomed-in view of one face a local face detector found in the SAME photo above, not a different photo or a different moment. Each comes with its own "Local face detector reference" coordinate (normalized original-image x/y/w/h) for that same face, numbered the same as its face crop (or, beyond the detector's own crop-count cap, given as a coordinate-only text reference with no image).
+- Go through every "Face crop N" / "Local face detector reference N" you are given, in order, and record one local_face_review entry per detection_index=N (see the JSON shape above). For each one, decide: (1) is this actually a real face (not background clutter, a pattern, a reflection, or a printed/painted face)? (2) if real, does this person pass the Subject inclusion rule above? Only when both are true do you create a subjects[] entry for them; set that entry's is_person=true and local_detection_index to this same N, and set this detection's matched_subject_index to that subjects[] entry's 0-based index. Otherwise set matched_subject_index=-1 and write reason: name whichever of "not a real face" or "real face but an incidental bystander (name why)" applies.
+- The detector can also miss a real, includable face (small, occluded, profile, motion-blurred). Still look at the full photo yourself and add a subjects[] entry for any additional visible person the detector did not catch and who passes the Subject inclusion rule; give that subjects[] entry local_detection_index=-1 since no detection produced it.
+- Use each matched face crop as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, and pupil/iris direction -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo. Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
+- A visible, includable person with no matching crop (beyond the detector's cap, or a person the detector missed entirely) is judged directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
 
 ## Blink analysis
 Intent: Classify expression intent before considering repair: detect accidental shutter-timing failures without judging eyelid openness alone, while preserving eye closure that belongs to the person's expression, emotion, gesture, sleep, downward gaze, or captured moment.
@@ -790,6 +815,8 @@ Intent: Convert visible photographic needs into a restrained, actionable, and in
 - Reverse hair consistency check, same reasoning as the gaze one above: if any correction_plan item describes tidying, settling, redistributing, or removing hair with no backing hair_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
+- Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
+- Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and its blink_issue/hair_issue/gaze_issue/smile_issue, and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 
 ## Coordinate and geometry rules
@@ -802,7 +829,7 @@ Intent: Produce normalized subject and crop geometry that downstream framing log
 - Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
 - For a person-type subject whose face is visible anywhere in the photo, subjects[].box must include that entire visible head. A box that starts at or below the chin/neck/shoulders and excludes the face -- even if it otherwise fits the rest of the visible body tightly and looks "correct" by itself -- is wrong and must be corrected; the head is not an optional part of a person subject's box.
 - blink_issue, hair_issue, gaze_issue, and smile_issue are per-subject fields nested directly inside each subjects[] entry, not separate lists -- fill all four for every subject with is_person=true (using should_fix=false / adjust_safe=false defaults when nothing applies to that person), and set them to a "不適用" reading with should_fix=false / adjust_safe=false for any subject with is_person=false. Because each of these four fields lives on the exact subject it describes, there is no separate label to keep in sync and no way for one of them to silently apply to the wrong person.
-- When a "Local face detector reference" coordinate is provided alongside a zoomed face crop, treat it as a best-effort anchor for where that one face sits in the full photo above -- not as ground truth. This detector can misfire: it may report a false positive on background clutter, pattern, reflection, or a printed/painted face with no real person there, and it can miss a real face that is small, occluded, in profile, motion-blurred, or otherwise hard to detect. Before relying on a detection, verify it actually lines up with a face you can see in the photo. When it does, that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain a verified, correctly-matched face detection (for example one that starts below the neck and misses the face entirely) is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever a verified detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box. When a detection looks wrong, or a visible person has no matching detection, ignore it and rely entirely on your own visual reading.
+- For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
 - protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
 - If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
 - The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
@@ -1023,12 +1050,32 @@ _SUBJECT_SCHEMA = _schema_object({
     "box": _BOX_SCHEMA,
     "prominence": _schema_integer(),
     "is_person": _schema_boolean(),
+    # -1 when this subject was added from the model's own reading of the full
+    # photo rather than from a "Local face detector reference" detection, or
+    # when is_person=false (the face detector never applies to those) -- see
+    # the "Subject inclusion rule" and "Zoomed face-crop images" sections of
+    # ANALYSIS_INSTRUCTION. Cross-references local_face_review[].
+    # matched_subject_index in the other direction.
+    "local_detection_index": _schema_integer(),
     "skin": _schema_string(),
     "reason": _schema_string(),
     "blink_issue": _EYE_BLINK_ISSUE_SCHEMA,
     "hair_issue": _HAIR_ISSUE_SCHEMA,
     "gaze_issue": _GAZE_CONTACT_ISSUE_SCHEMA,
     "smile_issue": _SMILE_STATE_SCHEMA,
+})
+
+# One entry per locally-detected face the model was handed (as a "Face crop
+# N" image and/or a "Local face detector reference N" coordinate) -- lets a
+# caller see, for every detection the local face detector produced, whether
+# the analysis model treated it as a real, includable person and which
+# subjects[] entry (if any) it became; or, when it didn't become one, why
+# (detector false positive vs. a real but excluded incidental bystander).
+_LOCAL_FACE_REVIEW_SCHEMA = _schema_object({
+    "detection_index": _schema_integer(),
+    "is_real_face": _schema_boolean(),
+    "matched_subject_index": _schema_integer(),
+    "reason": _schema_string(),
 })
 
 # Flat x/y/w/h (no nested "box"), unlike the five schemas above.
@@ -1109,6 +1156,7 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "recommended_aspect_ratio": _schema_string(),
         "aspect_ratio_reason": _schema_string(),
         "subjects": _schema_array_of(_SUBJECT_SCHEMA),
+        "local_face_review": _schema_array_of(_LOCAL_FACE_REVIEW_SCHEMA),
         "roi_box": _BOX_WITH_REASON_SCHEMA,
         "subject_extent_box": _BOX_WITH_REASON_SCHEMA,
         "protected_regions": _schema_array_of(_PROTECTED_REGION_SCHEMA),
