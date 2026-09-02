@@ -7230,7 +7230,12 @@
       output = { text: raw.completion_tokens ?? 0, image: 0 };
     }
     const total = raw.total_tokens ?? raw.totalTokenCount ?? (input.text + input.image + output.text + output.image);
-    return { input, output, total };
+    // Only OpenAI's Responses API (Steps 2/3/6) ever reports this -- Images
+    // API edit calls and Gemini calls have no reasoning phase, so this stays
+    // null for them rather than a misleading 0 (used below to omit the
+    // reasoning/non-reasoning label entirely for those stages).
+    const reasoningTokens = raw.output_tokens_details?.reasoning_tokens ?? null;
+    return { input, output, total, reasoningTokens };
   }
 
   // token_usage/extra-info/timings only reach their final (post-finish_stage)
@@ -7248,6 +7253,16 @@
     return lastResult?.resultText?.token_usage || singleFlowState?.analysis?.usage;
   }
 
+  // Same finished-shape-first, in-progress-fallback lookup as
+  // currentTokenUsage above, but for the timings dict -- so "API 用量與費用"
+  // can show each stage's own duration alongside its usage/cost instead of
+  // that living only on the separate "處理時間" tab.
+  function currentTimings() {
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) return batchRecord.result?.["extra-info"]?.timings || batchRecord.analysis?.timings;
+    return lastResult?.resultText?.["extra-info"]?.timings || singleFlowState?.analysis?.timings;
+  }
+
   // extra-info only exists once finish_stage has assembled the final result
   // (it carries image_quality, the Step 5 edit call's actual quality --
   // possibly bumped up from the requested value, see pipeline.py's
@@ -7259,16 +7274,24 @@
   }
 
   // #show-prompt-btn's "API 用量與費用" tab: one row per pipeline stage that
-  // actually called a model, with its text/image token counts and cost.
-  // Cost is only as accurate as MODEL_PRICING above -- update it if a
-  // provider changes its list prices.
+  // actually called a model, with its model/reasoning state, processing
+  // time, text/image token counts and cost. Folds in what used to be the
+  // separate "處理時間" tab's numbers too, since they always describe the
+  // same stage -- and unlike the raw analysis JSON (whose "timings"/"usage"
+  // keys get popped off once finish_stage runs, see pipeline.py), this tab's
+  // own lookups (currentTokenUsage/currentTimings) already fall back to
+  // wherever those live at any point in the pipeline. Cost is only as
+  // accurate as MODEL_PRICING above -- update it if a provider changes its
+  // list prices.
   function tokenUsageAsText() {
     const usage = currentTokenUsage();
     if (!usage) return "";
+    const timings = currentTimings() || {};
     const imageQuality = currentExtraInfo()?.image_quality;
     const lines = [];
     let totalCost = 0;
     let totalTokens = 0;
+    let totalSeconds = 0;
     const zeroPricing = { input: { text: 0, image: 0 }, output: { text: 0, image: 0 } };
     Object.entries(usage).forEach(([stage, entry]) => {
       if (!entry || !entry.model) return;
@@ -7282,6 +7305,8 @@
         (tokens.output.image / 1_000_000) * pricing.output.image;
       totalCost += cost;
       totalTokens += tokens.total;
+      const seconds = timings[stage];
+      if (seconds != null) totalSeconds += Number(seconds);
       // Step 5b (gaze repair) always runs at the same quality as Step 5's own
       // edit call when it runs at all (pipeline.py's quality-upgrade only
       // fires under single_pass_edit, which is exactly when Step 5b is
@@ -7289,13 +7314,30 @@
       const modelLabel = stage === "Step 5 - image_edit" && imageQuality
         ? `${entry.model}, quality=${imageQuality}`
         : entry.model;
+      // reasoningTokens is null for stages that have no reasoning phase at
+      // all (image-edit calls, Gemini) -- only label the ones where it's a
+      // real signal (OpenAI Responses API stages), and go off the actual
+      // token count rather than config.py's ANALYSIS_MODEL_REASONING_EFFORT
+      // mapping, so this stays correct even if that mapping changes. entry.
+      // reasoning_effort (added alongside reasoningTokens, same stages only)
+      // is the effort level config.py's ANALYSIS_MODEL_REASONING_EFFORT
+      // actually had *at the time this call ran* -- shown alongside the
+      // token count since a historical run's effort can differ from what
+      // that mapping says today.
+      const effortPart = entry.reasoning_effort ? `effort=${entry.reasoning_effort}` : null;
+      const reasoningLabel = tokens.reasoningTokens == null
+        ? ""
+        : tokens.reasoningTokens > 0
+          ? `, reasoning(${[tokens.reasoningTokens, effortPart].filter(Boolean).join(", ")})`
+          : effortPart ? `, non-reasoning(${effortPart})` : ", non-reasoning";
+      const timePart = seconds != null ? `${Number(seconds).toFixed(2)}s｜` : "";
       lines.push(
-        `${stage} (${modelLabel})`.padEnd(48) +
-        `輸入 文字${tokens.input.text}/圖片${tokens.input.image}｜輸出 文字${tokens.output.text}/圖片${tokens.output.image}｜共 ${tokens.total} tokens ｜ $${cost.toFixed(4)}`
+        `${stage} (${modelLabel}${reasoningLabel})`.padEnd(64) +
+        `${timePart}輸入 文字${tokens.input.text}/圖片${tokens.input.image}｜輸出 文字${tokens.output.text}/圖片${tokens.output.image}｜共 ${tokens.total} tokens ｜ $${cost.toFixed(4)}`
       );
     });
     if (!lines.length) return "";
-    lines.push("", `${"總計".padEnd(48)}共 ${totalTokens} tokens ｜ $${totalCost.toFixed(4)}`);
+    lines.push("", `${"總計".padEnd(64)}${totalSeconds > 0 ? `${totalSeconds.toFixed(2)}s｜` : ""}共 ${totalTokens} tokens ｜ $${totalCost.toFixed(4)}`);
     return lines.join("\n");
   }
 
