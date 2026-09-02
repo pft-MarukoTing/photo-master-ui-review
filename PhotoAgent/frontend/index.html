@@ -2984,18 +2984,6 @@
                     </span>
                     <span class="ap-style-value">人像設定</span>
                   </button>
-                  <!-- Only for showPendingResults' first-time "analyzed,
-                       waiting for Run" state (app.js) -- there's no prior
-                       result to fall back to yet, so unlike
-                       #inline-analysis-cancel-btn's "close panel, stay put"
-                       behavior, this leaves the flow entirely (resetApp). -->
-                  <button id="ap-back-to-upload-btn" class="analysis-preview-action analysis-preview-action-left" type="button" hidden>
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                      <path d="M15 18l-6-6 6-6" stroke="currentColor"
-                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <span>重新選擇照片</span>
-                  </button>
                   <!-- Moved out of #inline-analysis-actions (which keeps
                        just the cancel button) -- sits at the right end of
                        this pill row instead. Own hidden attribute now (was

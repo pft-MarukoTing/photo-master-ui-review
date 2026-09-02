@@ -1405,7 +1405,6 @@
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
-    if (els.apBackToUploadBtn) els.apBackToUploadBtn.hidden = false;
     pendingResultsActive = true;
     if (els.downloadLink) {
       els.downloadLink.hidden = !selectedFile;
@@ -1424,26 +1423,19 @@
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
-    if (els.apBackToUploadBtn) els.apBackToUploadBtn.hidden = true;
     if (els.downloadLink) els.downloadLink.hidden = true;
     pendingResultsActive = false;
     restoreOptionsCardHome();
   }
 
-  // Same one-shot-listener shape as waitForInlineAnalysisAction, but "back"
-  // here means leaving the flow entirely (resetApp) -- unlike the revise
-  // flow's Cancel, there's no previously-rendered result to fall back to on
-  // screen since the edit stage hasn't run yet.
+  // Same one-shot-listener shape as waitForInlineAnalysisAction.
   function waitForPendingResultsAction() {
     return new Promise((resolve) => {
-      const continueHandler = () => { cleanup(); resolve("continue"); };
-      const backHandler = () => { cleanup(); resolve("back"); };
       function cleanup() {
         els.inlineAnalysisContinueBtn.removeEventListener("click", continueHandler);
-        els.apBackToUploadBtn.removeEventListener("click", backHandler);
       }
+      function continueHandler() { cleanup(); resolve(); }
       els.inlineAnalysisContinueBtn.addEventListener("click", continueHandler);
-      els.apBackToUploadBtn.addEventListener("click", backHandler);
     });
   }
 
@@ -1454,11 +1446,7 @@
   // exact same paused state by different routes.
   async function runPendingReviewFlow(analysis, preset) {
     await showPendingResults(analysis, preset);
-    const action = await waitForPendingResultsAction();
-    if (action === "back") {
-      resetApp();
-      return;
-    }
+    await waitForPendingResultsAction();
     closePendingResults();
     // Same "editing" loading overlay backToProcessFromResults' revise flow
     // uses -- swaps the photo for the thinking-rings animation instead of

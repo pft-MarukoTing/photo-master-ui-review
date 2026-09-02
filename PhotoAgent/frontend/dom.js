@@ -216,7 +216,6 @@ window.PhotoAgentDom = (() => {
     runProgressFill: document.querySelector("#run-progress-fill"),
     apOptionsCardInline: document.querySelector("#ap-options-card-inline"),
     apOptionsCardHome: document.querySelector("#ap-options-card-home"),
-    apBackToUploadBtn: document.querySelector("#ap-back-to-upload-btn"),
     runCountSelect: document.querySelector("#run-count"),
     reloadBatchBtn: document.querySelector("#reload-batch-btn"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),
