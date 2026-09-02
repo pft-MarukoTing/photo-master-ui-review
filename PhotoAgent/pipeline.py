@@ -27,9 +27,9 @@ from prompts import (
     build_analysis_instruction,
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
-    build_gaze_repair_planning_instruction,
+    build_eye_repair_planning_instruction,
     backfill_missing_correction_items,
-    gaze_repair_targets,
+    eye_repair_targets,
     portrait_qc_persons,
     subject_issue_items,
 )
@@ -191,12 +191,12 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         # never reorders or filters subjects[], so this reconstruction
         # matches what was actually sent).
         persons = portrait_qc_persons(analysis)
-        repair_targets = gaze_repair_targets(analysis)
+        repair_targets = eye_repair_targets(analysis)
         analysis["prompts"] = {
             "photo_analysis": build_overall_analysis_instruction(aspect_ratio, advanced_options),
             "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
-            "photo_analysis_gaze_repair_planning": (
-                build_gaze_repair_planning_instruction(repair_targets)
+            "photo_analysis_eye_repair_planning": (
+                build_eye_repair_planning_instruction(repair_targets)
                 if repair_targets else None
             ),
         }

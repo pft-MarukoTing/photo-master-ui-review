@@ -34,8 +34,8 @@ from prompts import (
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
     build_portrait_qc_response_schema,
-    build_gaze_repair_planning_instruction,
-    build_gaze_repair_planning_response_schema,
+    build_eye_repair_planning_instruction,
+    build_eye_repair_planning_response_schema,
     build_user_instruction_review_prompt,
     build_edit_prompt,
     build_gaze_only_edit_prompt,
@@ -44,8 +44,8 @@ from prompts import (
     merge_portrait_qc_issues,
     derive_luna_blink_decisions,
     derive_luna_gaze_decisions,
-    gaze_repair_targets,
-    merge_gaze_repair_strategies,
+    eye_repair_targets,
+    merge_eye_repair_strategies,
     portrait_qc_persons,
     style_option_entries,
     _apply_default_person_issues,
@@ -378,28 +378,28 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         _apply_default_person_issues(overall_analysis.get("subjects"))
         analysis = overall_analysis
 
-    repair_targets = gaze_repair_targets(analysis)
+    repair_targets = eye_repair_targets(analysis)
     if repair_targets:
         try:
             content_c = [
-                {"type": "input_text", "text": build_gaze_repair_planning_instruction(repair_targets)},
+                {"type": "input_text", "text": build_eye_repair_planning_instruction(repair_targets)},
                 {"type": "input_image", "image_url": data_url},
                 *face_crop_items,
             ]
             payload_c = _responses_payload(
                 analysis_model, content_c,
-                text_format=build_gaze_repair_planning_response_schema(len(repair_targets)),
+                text_format=build_eye_repair_planning_response_schema(len(repair_targets)),
                 reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
             )
             data_c = _post_json(
-                OPENAI_RESPONSES_URL, payload_c, "Photo analysis failed (gaze repair-planning pass)"
+                OPENAI_RESPONSES_URL, payload_c, "Photo analysis failed (eye repair-planning pass)"
             )
             repair_response = _parse_json_from_text(_extract_output_text(data_c))
-            analysis = merge_gaze_repair_strategies(analysis, repair_response)
+            analysis = merge_eye_repair_strategies(analysis, repair_response)
             usage_c = data_c.get("usage")
         except Exception as exc:
             logger.warning(
-                "Gaze repair-planning pass failed; keeping deterministic fallback strategies: %s", exc,
+                "Eye repair-planning pass failed; keeping deterministic fallback strategies: %s", exc,
             )
 
     analysis = backfill_missing_correction_items(analysis)

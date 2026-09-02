@@ -2049,7 +2049,8 @@ Intent: Convert visible photographic needs into a restrained, actionable, and in
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
 - Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
-- correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis and adds any resulting correction_plan items deterministically; write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering only the composition/crop/color/skin/product issues you actually found.
+- correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis; any approved blink/gaze repair is executed directly from that person's own blink_issue/gaze_issue, never through correction_plan. Write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering only the composition/crop/color/skin/product issues you actually found.
+- preserve_rules must not mention eyes, blink, eye contact, gaze, hair, or smile at all, in either direction -- not "must keep eyes/hair as-is" and not "must fix eyes/hair too." Exactly like correction_plan above, that topic belongs entirely to the portrait-QC pass and its own repair-planning stage, which apply their own preservation and repair instructions directly to each person who needs one; a preserve_rules item on this topic would contradict whatever that later pass decides for a specific person. Write preserve_rules only about composition, crop, color, scene structure, materials, and other subjects/objects this analysis itself is responsible for.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
@@ -2163,37 +2164,62 @@ def build_portrait_qc_instruction(persons):
     )
 
 
-def build_gaze_repair_planning_instruction(targets):
-    """Optional Luna Call C. Only people that passed the deterministic gaze
-    gate are included, so this prompt plans execution without re-deciding
-    whether they looked at the lens.
+def build_eye_repair_planning_instruction(targets):
+    """Optional Luna Call C. Only people who passed the deterministic blink
+    and/or gaze gate are included, so this prompt plans execution without
+    re-deciding whether either fix is approved.
     """
     compact_targets = []
     for target in targets:
-        compact_targets.append({
+        needs_gaze = bool(target.get("needs_gaze_repair"))
+        needs_blink = bool(target.get("needs_blink_repair"))
+        gaze_issue = target.get("gaze_issue") or {}
+        blink_issue = target.get("blink_issue") or {}
+        entry = {
             "subject_index": target.get("subject_index"),
             "local_detection_index": target.get("local_detection_index", -1),
             "label": target.get("label") or "person",
             "box": target.get("box") or {},
-            "gaze_observability": target.get("gaze_observability"),
-            "eye_detail_quality": target.get("eye_detail_quality"),
-            "head_pose": target.get("head_pose"),
-            "left_eye_direction": target.get("left_eye_direction"),
-            "right_eye_direction": target.get("right_eye_direction"),
-            "binocular_alignment": target.get("binocular_alignment"),
-            "gaze_state": target.get("gaze_state"),
-            "reason": target.get("reason"),
-        })
-    return """You are planning a local gaze-to-camera repair for only the people listed below.
+            "needs_gaze_repair": needs_gaze,
+            "needs_blink_repair": needs_blink,
+        }
+        if needs_gaze:
+            entry["gaze"] = {
+                "gaze_observability": gaze_issue.get("gaze_observability"),
+                "eye_detail_quality": gaze_issue.get("eye_detail_quality"),
+                "head_pose": gaze_issue.get("head_pose"),
+                "left_eye_direction": gaze_issue.get("left_eye_direction"),
+                "right_eye_direction": gaze_issue.get("right_eye_direction"),
+                "binocular_alignment": gaze_issue.get("binocular_alignment"),
+                "gaze_state": gaze_issue.get("gaze_state"),
+                "reason": gaze_issue.get("reason"),
+            }
+        if needs_blink:
+            entry["blink"] = {
+                "blink_observability": blink_issue.get("blink_observability"),
+                "eyelid_detail_quality": blink_issue.get("eyelid_detail_quality"),
+                "left_eye_state": blink_issue.get("left_eye_state"),
+                "right_eye_state": blink_issue.get("right_eye_state"),
+                "physical_eye_state": blink_issue.get("physical_eye_state"),
+                "eye_state": blink_issue.get("eye_state"),
+                "reason": blink_issue.get("reason"),
+            }
+        compact_targets.append(entry)
+    return """You are planning local eye repairs for only the people listed below.
 
-Their exact-lens detection is final and was already gated by deterministic Python. Do not reclassify it, remove a target, add another person, or change should_fix. Return exactly one repair plan per listed subject_index.
+Their blink and/or gaze detection is final and was already gated by deterministic Python. Do not reclassify it, remove a target, add another person, or change should_fix. Return exactly one repair plan per listed subject_index. Each plan must include both gaze_repair_strategy and blink_repair_strategy. For whichever of the two a target's needs_gaze_repair/needs_blink_repair is false, fill that one with its "not applicable" placeholder shape (strategy_type/target_eye_state "not_safe_to_repair"/"不適用", every other field "不適用" or an empty list) instead of omitting it.
 
+Every free-text field you write (edit_instruction, target_eye_state, target_gaze_read, success_condition, preservation rules, failure modes, etc.) will be copied verbatim into a separate prompt for a different model later -- one that sees only the full photo plus this same target's label and box, and nothing else about this analysis. So each field must stand on its own: describe the person only by their label wording or frame position (e.g. "the person on the left", the label given below), and describe the required change only in terms visible in the final photo. Never reference "Face crop N", subject_index, local_detection_index, detection_index, or any other identifier, numbering, or artifact of this analysis session -- that other model has never seen any of them and will not know what they mean.
+
+Gaze repair (only for a target with needs_gaze_repair true):
 Use the full photo and matching Face crop N to choose an anatomically plausible method that produces an unmistakable, normally visible correction to the exact current lens. The correction must be obvious at normal photo-viewing size, not only when the face is highly enlarged:
 - eyes_plus_head_face_alignment is the default for near_camera, off_camera, upward_side, downward, unfocused_camera, and cross_focused whenever head yaw/pitch or face orientation contributes to the miss. Require a visible but natural head/face alignment together with the eye correction. Keep the torso, shoulders, body pose, and camera framing unchanged;
 - eyes_only is a narrow exception. Choose it only when ALL of these are true: the head and face are already naturally aligned to the current lens; the miss is extremely small; both visible eyes can reach exact lens contact without side-eye, strain, crossed axes, or excessive sclera; and the result will still be clearly visible at normal viewing size. Ordinary near_camera is not enough by itself;
 - not_safe_to_repair only when the pixels or geometry cannot support a reliable correction. In that case write a conservative plan and explicitly name the limitation.
+For each gaze strategy, provide concrete English instructions. Name the current pupil/iris direction, exact target, required pupil/iris movement, natural sclera/catchlight rebalancing, required bounded head/face alignment, repair strength, success condition, preservation rules, and likely failure modes. Use moderate strength by default; use subtle only for a genuinely tiny eyes_only miss whose completed correction remains obvious at normal viewing size. For off-camera, upward, or downward gaze, explicitly describe the needed head yaw and/or pitch as well as eye movement. Preserve identity, eyelid openness, eye shape/color, expression, glasses, skin, torso, shoulders, body pose, clothing, scene, and every unlisted person. Do not stop at near-camera gaze.
 
-For each strategy, provide concrete English instructions. Name the current pupil/iris direction, exact target, required pupil/iris movement, natural sclera/catchlight rebalancing, required bounded head/face alignment, repair strength, success condition, preservation rules, and likely failure modes. Use moderate strength by default; use subtle only for a genuinely tiny eyes_only miss whose completed correction remains obvious at normal viewing size. For off-camera, upward, or downward gaze, explicitly describe the needed head yaw and/or pitch as well as eye movement. Preserve identity, eyelid openness, eye shape/color, expression, glasses, skin, torso, shoulders, body pose, clothing, scene, and every unlisted person. Do not stop at near-camera gaze.
+Blink repair (only for a target with needs_blink_repair true):
+Choose a method that naturally reopens or relaxes the closed/half-closed eyelids to match this person's existing expression and the photo's moment -- never a generic wide-open or symmetrical look, and never copied from another person. Name the target eyelid state, the eyelid adjustment itself, repair strength, success condition, preservation rules, and likely failure modes. When this same person also needs a gaze repair, describe the eyelid opening as part of one coherent local eye reconstruction together with the final approved gaze direction, not as an independent step performed before or after it. Preserve identity, gaze direction (unless this person's own gaze repair specifies a new direction), facial structure, expression style, skin texture, glasses, makeup, lighting, and every unlisted person. Never describe converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into neutral open eyes.
 
 Targets:
 """ + json.dumps(compact_targets, ensure_ascii=False, indent=2)
@@ -2338,6 +2364,20 @@ _EYE_BLINK_ISSUE_SCHEMA = _schema_object({
     "reason": _schema_string(),
 })
 
+# Luna-only: a Call-C-authored (or deterministic-fallback) repair strategy for
+# an approved blink fix, the same role _GAZE_REPAIR_STRATEGY_SCHEMA plays for
+# gaze. Added only to _BLINK_DETECTION_LUNA_SCHEMA below, never to
+# _EYE_BLINK_ISSUE_SCHEMA above -- non-luna models must see zero shape change.
+_BLINK_REPAIR_STRATEGY_SCHEMA = _schema_object({
+    "target_eye_state": _schema_string(),
+    "eyelid_adjustment": _schema_string(),
+    "repair_strength": _schema_string(),
+    "edit_instruction": _schema_string(),
+    "success_condition": _schema_string(),
+    "preserve_during_repair": _schema_string_array(),
+    "failure_to_avoid": _schema_string_array(),
+})
+
 # Luna Call B reports recall-first physical evidence only.  The legacy fields
 # remain in the shape for downstream compatibility, but their final values are
 # overwritten by derive_luna_blink_decisions; the model is not authoritative
@@ -2382,6 +2422,7 @@ _BLINK_DETECTION_LUNA_SCHEMA = _schema_object({
     "blink_failure_confidence": _schema_number(),
     "should_fix": _schema_boolean(),
     "reason": _schema_string(),
+    "blink_repair_strategy": _BLINK_REPAIR_STRATEGY_SCHEMA,
 })
 
 _HAIR_ISSUE_SCHEMA = _schema_object({
@@ -2649,22 +2690,23 @@ def build_portrait_qc_response_schema(person_count):
     }
 
 
-_GAZE_REPAIR_PLAN_ITEM_SCHEMA = _schema_object({
+_EYE_REPAIR_PLAN_ITEM_SCHEMA = _schema_object({
     "subject_index": _schema_integer(),
     "local_detection_index": _schema_integer(),
     "gaze_repair_strategy": _GAZE_REPAIR_STRATEGY_SCHEMA,
+    "blink_repair_strategy": _BLINK_REPAIR_STRATEGY_SCHEMA,
 })
 
 
-def build_gaze_repair_planning_response_schema(person_count):
+def build_eye_repair_planning_response_schema(person_count):
     return {
         "type": "json_schema",
-        "name": "gaze_repair_planning",
+        "name": "eye_repair_planning",
         "strict": True,
         "schema": _schema_object({
             "repair_plans": {
                 "type": "array",
-                "items": _GAZE_REPAIR_PLAN_ITEM_SCHEMA,
+                "items": _EYE_REPAIR_PLAN_ITEM_SCHEMA,
                 "minItems": person_count,
                 "maxItems": person_count,
             },
@@ -2692,6 +2734,11 @@ def _default_person_issues():
             "eye_state": "不適用", "severity": "none", "intent_cues": [],
             "closure_intent": "ambiguous", "expression_coherence": "unclear",
             "blink_failure_confidence": 0.0, "should_fix": False, "reason": "不適用",
+            "blink_repair_strategy": {
+                "target_eye_state": "不適用", "eyelid_adjustment": "不適用",
+                "repair_strength": "subtle", "edit_instruction": "不適用",
+                "success_condition": "不適用", "preserve_during_repair": [], "failure_to_avoid": [],
+            },
         },
         "hair_issue": {
             "hair_state": "不適用", "visible_evidence": [], "front_hair": "不適用",
@@ -3084,11 +3131,74 @@ def derive_luna_blink_decisions(analysis):
             "blink_failure_confidence": failure_confidence,
             "should_fix": should_fix,
             "reason": (reason + " " + gate_reason).strip(),
+            "blink_repair_strategy": (
+                _fallback_blink_repair_strategy(issue, subject.get("label") or "the subject")
+                if should_fix else _empty_blink_repair_strategy()
+            ),
             "_subject_index": subject_index,
         })
         subject["blink_issue"] = issue
 
     return cleaned
+
+
+def _empty_blink_repair_strategy():
+    return {
+        "target_eye_state": "不適用",
+        "eyelid_adjustment": "不適用",
+        "repair_strength": "subtle",
+        "edit_instruction": "不適用",
+        "success_condition": "不適用",
+        "preserve_during_repair": [],
+        "failure_to_avoid": [],
+    }
+
+
+def _fallback_blink_repair_strategy(issue, label):
+    """Deterministic pre-Call-C strategy, and Call C's own failure fallback.
+
+    Ports the wording build_edit_prompt's blink_block used to hardcode
+    (reopen/relax naturally, avoid doll-like/oversized/symmetrical eyes,
+    match lighting, never convert an intentional wink/laugh/sleep/etc. into
+    open eyes) into the structured shape gaze repairs already use, so
+    behavior is unchanged the moment this ships, before Call C ever
+    authors something better for a given person.
+    """
+    return {
+        "target_eye_state": "open, matching {}'s existing expression and the photo's moment".format(label),
+        "eyelid_adjustment": (
+            "Naturally reopen or relax the closed or half-closed eyelids. Render realistic eyelids, "
+            "iris, pupil, catchlights, and eyelashes, with gaze direction matching the head angle and "
+            "the photo's lighting, unless a separately approved gaze repair for this same person "
+            "specifies a different target direction, in which case follow that instead."
+        ),
+        "repair_strength": "moderate",
+        "edit_instruction": (
+            "Naturally reopen or relax {}'s closed or half-closed eyes to match their existing "
+            "expression and the photo's moment. Avoid making the eyes too large, symmetrical, "
+            "doll-like, or copied from another person. Render realistic eyelids, iris, pupil, "
+            "catchlights, and eyelashes, with gaze direction matching the head angle and lighting. "
+            "Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this."
+        ).format(label),
+        "success_condition": (
+            "At normal photo-viewing size, {}'s eyes read naturally open, matching their original "
+            "expression and the photo's moment, with no doll-like, oversized, symmetrical, or "
+            "copied appearance."
+        ).format(label),
+        "preserve_during_repair": [
+            "identity", "gaze direction unless a separately approved gaze repair says otherwise",
+            "facial structure", "expression style", "skin texture", "glasses", "makeup", "lighting",
+            "unlisted people",
+        ],
+        "failure_to_avoid": [
+            "oversized or doll-like eyes", "symmetrical eyes copied from another person",
+            "reshaped face or smoothed skin",
+            "converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye "
+            "reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into "
+            "neutral open eyes",
+            "changes to unlisted people",
+        ],
+    }
 
 
 def _empty_gaze_repair_strategy():
@@ -3279,54 +3389,76 @@ def derive_luna_gaze_decisions(analysis):
     return cleaned
 
 
-def gaze_repair_targets(analysis):
+def eye_repair_targets(analysis):
+    """Union of every person whose blink and/or gaze gate approved a fix --
+    the shared gate for Luna Call C, which now plans both topics per person
+    instead of gaze alone.
+    """
     targets = []
     for subject_index, subject in enumerate(analysis.get("subjects") or []):
         if not isinstance(subject, dict) or not subject.get("is_person"):
             continue
-        issue = subject.get("gaze_issue") or {}
-        if not issue.get("should_fix"):
+        gaze_issue = subject.get("gaze_issue") or {}
+        blink_issue = subject.get("blink_issue") or {}
+        needs_gaze = bool(gaze_issue.get("should_fix"))
+        needs_blink = bool(blink_issue.get("should_fix"))
+        if not (needs_gaze or needs_blink):
             continue
-        target = {
+        targets.append({
             "subject_index": subject_index,
             "local_detection_index": subject.get("local_detection_index", -1),
             "label": subject.get("label") or "person",
             "box": subject.get("box") or {},
-        }
-        target.update(issue)
-        targets.append(target)
+            "needs_gaze_repair": needs_gaze,
+            "needs_blink_repair": needs_blink,
+            "gaze_issue": gaze_issue if needs_gaze else None,
+            "blink_issue": blink_issue if needs_blink else None,
+        })
     return targets
 
 
-def merge_gaze_repair_strategies(analysis, repair_response):
+def merge_eye_repair_strategies(analysis, repair_response):
     cleaned = dict(analysis)
     subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
     cleaned["subjects"] = subjects
-    expected = {target["subject_index"] for target in gaze_repair_targets(analysis)}
+    targets_by_index = {target["subject_index"]: target for target in eye_repair_targets(analysis)}
+    expected = set(targets_by_index)
     seen = set()
 
     for item in (repair_response or {}).get("repair_plans") or []:
         subject_index = item.get("subject_index")
         if subject_index not in expected or subject_index in seen:
-            raise ValueError("invalid or duplicate gaze repair subject_index {}".format(subject_index))
+            raise ValueError("invalid or duplicate eye repair subject_index {}".format(subject_index))
+        target = targets_by_index[subject_index]
         subject = subjects[subject_index]
         expected_detection = subject.get("local_detection_index", -1)
         if item.get("local_detection_index", -1) != expected_detection:
-            raise ValueError("gaze repair local_detection_index mismatch for subject_index {}".format(subject_index))
-        strategy = item.get("gaze_repair_strategy")
-        if not isinstance(strategy, dict):
-            raise ValueError("missing gaze_repair_strategy for subject_index {}".format(subject_index))
-        issue = dict(subject.get("gaze_issue") or {})
-        issue["gaze_repair_strategy"] = strategy
-        if strategy.get("strategy_type") == "not_safe_to_repair":
-            issue["should_fix"] = False
-            issue["reason"] = (str(issue.get("reason") or "") + " Repair planner：影像或幾何不足以安全修正。").strip()
-        subject["gaze_issue"] = issue
+            raise ValueError("eye repair local_detection_index mismatch for subject_index {}".format(subject_index))
+
+        if target["needs_gaze_repair"]:
+            gaze_strategy = item.get("gaze_repair_strategy")
+            if not isinstance(gaze_strategy, dict):
+                raise ValueError("missing gaze_repair_strategy for subject_index {}".format(subject_index))
+            gaze_issue = dict(subject.get("gaze_issue") or {})
+            gaze_issue["gaze_repair_strategy"] = gaze_strategy
+            if gaze_strategy.get("strategy_type") == "not_safe_to_repair":
+                gaze_issue["should_fix"] = False
+                gaze_issue["reason"] = (str(gaze_issue.get("reason") or "") + " Repair planner：影像或幾何不足以安全修正。").strip()
+            subject["gaze_issue"] = gaze_issue
+
+        if target["needs_blink_repair"]:
+            blink_strategy = item.get("blink_repair_strategy")
+            if not isinstance(blink_strategy, dict):
+                raise ValueError("missing blink_repair_strategy for subject_index {}".format(subject_index))
+            blink_issue = dict(subject.get("blink_issue") or {})
+            blink_issue["blink_repair_strategy"] = blink_strategy
+            subject["blink_issue"] = blink_issue
+
         seen.add(subject_index)
 
     missing = sorted(expected - seen)
     if missing:
-        raise ValueError("gaze repair plans missing subject_index values: {}".format(missing))
+        raise ValueError("eye repair plans missing subject_index values: {}".format(missing))
     return cleaned
 
 
@@ -4057,39 +4189,15 @@ def backfill_missing_correction_items(analysis):
             f"保留{subjects}原本的頭髮狀態，不做調整。",
         )
 
-    blink_hits = [i for i in subject_issue_items(analysis, "blink_issue") if i.get("should_fix")]
-    if blink_hits and not any(_is_disabled_topic_text(item, True, False, True) for item in plan):
-        subjects = "、".join(_subject_labels(blink_hits))
-        add(
-            "blink",
-            f"Naturally reopen or relax the closed/half-closed eyes for {subjects}, preserving identity, gaze "
-            "direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.",
-            f"修正{subjects}不小心閉眼或半閉眼的表情。",
-            ["expression"],
-            f"保留{subjects}原本的眼部狀態與表情，不做調整。",
-        )
-
-    gaze_hits = [i for i in subject_issue_items(analysis, "gaze_issue") if i.get("should_fix")]
-    if gaze_hits and not any(_is_disabled_topic_text(item, False, True, True) for item in plan):
-        subjects = "、".join(_subject_labels(gaze_hits))
-        # gaze_repair_strategy.edit_instruction is written by the analysis
-        # model specifically to be "1-2 sentences directly executable by the
-        # edit model" (see the gaze_issue schema) -- reuse it verbatim per
-        # person instead of re-deriving a weaker instruction from just
-        # subject_label.
-        instructions = " ".join(
-            (i.get("gaze_repair_strategy") or {}).get("edit_instruction")
-            or f"Redirect {i.get('subject_label') or 'the subject'}'s gaze toward the camera lens, moving "
-               "pupils/irises toward camera center, while preserving identity, facial structure, and expression."
-            for i in gaze_hits
-        )
-        add(
-            "gaze",
-            instructions,
-            f"修正{subjects}的眼神，讓視線望向鏡頭。",
-            ["expression"],
-            f"保留{subjects}原本的臉部結構、表情與場景，只調整眼神方向。",
-        )
+    # blink and gaze are deliberately NOT backfilled here: their repair
+    # instructions now live entirely inside subjects[].blink_issue/gaze_issue
+    # (blink_repair_strategy / gaze_repair_strategy, authored by Call C or its
+    # deterministic fallback), and correction_plan/correction_axes/
+    # correction_inverse/retouch_recipe are "全局修圖" (overall photo-level)
+    # only. build_edit_prompt's blink_block/gaze_block already read
+    # subjects[] directly, never correction_plan, so this only changes what
+    # the main analyze-preview checklist shows -- the per-subject face-
+    # analysis modal is unaffected.
 
     if not backfilled:
         return analysis
@@ -4694,7 +4802,51 @@ Approved-repair override:
         if isinstance(item, dict) and item.get("should_fix")
         and item.get("_subject_index") not in blink_disabled_indices
     ] if eye_closed_detection_enabled else []
-    if blink_items_to_fix:
+    # blink_repair_strategy only exists on luna's _BLINK_DETECTION_LUNA_SCHEMA
+    # (derive_luna_blink_decisions always sets it once Call B has run); a
+    # non-luna model's blink_issue never carries this key, so this stays
+    # False there and the generic template below is byte-for-byte unchanged.
+    blink_has_repair_strategy = any(
+        isinstance(item.get("blink_repair_strategy"), dict) for item in blink_items_to_fix
+    )
+    if blink_items_to_fix and blink_has_repair_strategy:
+        blink_targets = []
+        for item in blink_items_to_fix:
+            label = item.get("subject_label", "unnamed subject")
+            box = item.get("box") or {}
+            eye_state = item.get("eye_state", "unknown")
+            strategy = item.get("blink_repair_strategy") or {}
+            edit_instruction = strategy.get("edit_instruction") if isinstance(strategy, dict) else ""
+            target_eye_state = strategy.get("target_eye_state", "") if isinstance(strategy, dict) else ""
+            eyelid_adjustment = strategy.get("eyelid_adjustment", "") if isinstance(strategy, dict) else ""
+            repair_strength = strategy.get("repair_strength", "") if isinstance(strategy, dict) else ""
+            success_condition = strategy.get("success_condition", "") if isinstance(strategy, dict) else ""
+            preserve = strategy.get("preserve_during_repair") if isinstance(strategy, dict) else None
+            avoid = strategy.get("failure_to_avoid") if isinstance(strategy, dict) else None
+            blink_targets.append(
+                f'- Subject: {label}\n'
+                f'  Subject box: {json.dumps(box, ensure_ascii=False)}\n'
+                f'  Current eye state: {eye_state}\n'
+                f'  Analysis edit instruction: {edit_instruction or "Naturally reopen or relax the closed/half-closed eyes to match the existing expression."}\n'
+                f'  Target eye state: {target_eye_state or "open, matching the existing expression"}\n'
+                f'  Eyelid adjustment: {eyelid_adjustment or "reopen or relax the eyelids naturally"}\n'
+                f'  Repair strength: {repair_strength or "moderate"}\n'
+                f'  Success condition: {success_condition or "eyes read naturally open at normal photo-viewing size"}\n'
+                f'  Preserve during repair: {json.dumps(preserve or [], ensure_ascii=False)}\n'
+                f'  Avoid during repair: {json.dumps(avoid or [], ensure_ascii=False)}'
+            )
+        blink_targets_block = "\n".join(blink_targets)
+        blink_block = """Accidental blink repair priority:
+- The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
+- Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
+- Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
+- Execute the approved repair using only the execution instructions below. Do not read confidence scores or reasons to decide whether to be more conservative.
+- When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
+- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
+
+Execution instructions:
+""" + blink_targets_block
+    elif blink_items_to_fix:
         blink_block = """Accidental blink repair priority:
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
 - Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
@@ -5032,7 +5184,7 @@ STYLE OVERRIDE MODE. The user selected one or more pose/angle/lighting/framing o
 Priority order:
 1. Preserve safety, identity, same subject, same location, same environment, same clothing, same props, and photographic realism.
 2. Apply user-selected style overrides visibly and deliberately for the selected aspects.
-3. Apply the user-approved correction plan and user's extra direction. If the analysis approved a gaze repair, follow the analysis-defined repair method and allowances for that named subject. Generic preservation rules must yield only where the analysis explicitly permits the local change.
+3. Apply the user-approved correction plan and user's extra direction. If the analysis approved a gaze and/or blink repair for a named subject, follow the analysis-defined repair method and allowances for that subject. Generic preservation rules must yield only where the analysis explicitly permits the local change.
 4. Use the preset style as a supporting finish.
 5. Apply default preservation rules only to aspects not selected by the user."""
         retouch_priorities = f"""Retouch priorities:
@@ -5051,7 +5203,7 @@ Priority order:
             "facial structure, body shape, and important details."
         )
         edit_mode_block = """Edit mode:
-FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction. If an approved gaze repair exists, follow the analysis-defined repair method and allowances for that named subject; this is not permission for unrelated pose or viewpoint changes."""
+FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction. If an approved gaze and/or blink repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."""
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
