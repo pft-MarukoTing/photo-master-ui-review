@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import re
@@ -153,6 +154,7 @@ Return exactly this JSON shape:
       "skin": "is_person=true 時必填，否則寫「不適用」。依序寫：原生膚色身分（在受光平均處判讀深淺與底調，不讀高光或陰影）；場景光色（臉上實際受光的方向與色性，以及是否為應保留的情境光）；非預期偏色（僅限無法由場景光解釋，或與頸、耳、手不連貫的偏黃、偏綠、偏紅、偏洋紅、偏灰；沒有則寫無）。原生膚色身分不可改變。不可把背景、草地、服裝或其他高飽和物體的主色當成膚色受光；只有可見光源或反射確實落在皮膚上才算情境光。夕陽、鎢絲燈、舞台燈、霓虹與反射色等合理光色不可被中性化。",
       "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。",
       "blink_issue": {
+        "physical_eye_state": "open / narrowed_open / half_closed / fully_closed / one_eye_closed / unclear",
         "eye_state": "open / natural_smiling_squint / intentional_wink / intentional_closed / expressive_closed / downward_gaze / sleeping / occluded_or_unclear / accidental_blink / accidental_half_blink / uncertain",
         "severity": "none / minor / moderate / severe",
         "intent_cues": ["列出支持這個判斷的可見線索，例如 wink 手勢、嘴角表情、眉毛情緒、看鏡頭、雙眼同步閉合、眼皮不對稱、低頭視線、眼鏡遮擋。"],
@@ -320,127 +322,213 @@ Intent: Use zoomed face crops as supporting evidence for facial details without 
 - A visible, includable person with no matching crop (beyond the detector's cap, or a person the detector missed entirely) is judged directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
 
 ## Blink analysis
-Intent: Classify expression intent before considering repair: detect accidental shutter-timing failures without judging eyelid openness alone, while preserving eye closure that belongs to the person's expression, emotion, gesture, sleep, downward gaze, or captured moment.
+Intent: Detect accidental blink, half-blink, or unintended full eye closure at the shutter moment. Prioritize recall for readable eyes while preserving eye closure only when affirmative visible evidence shows that it belongs to an intentional expression, emotion, activity, downward gaze, or sleep.
 
-Two-stage decision process:
-Stage 1 -- Expression coherence test:
-- Ask whether the eye state supports the visible expression. Look at mouth shape, eyebrows, cheeks, head pose, hand gesture, body language, gaze direction, social context, and scene type.
-- If the closed/narrowed/winked eye supports the person's expression or emotion, classify it as intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, or sleeping. Set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
-- Examples of expression-coherent eye closure: wink with smile/smirk/greeting; crying face with squeezed eyes; laughing with eyes closed; cute child expression; playful selfie/video gesture; stage/fan-service expression; pain/sadness/embarrassment face; looking down at a specific, visible in-frame target.
+Important separation:
+- First classify the physical eyelid state from visible eye evidence.
+- Then classify whether that state was likely intentional or accidentally captured.
+- Do not infer intent first and reinterpret the eyelids to fit a plausible story.
+- A smile, pose, generic hand gesture, selfie framing, child subject, social-media context, or pleasant expression does NOT by itself prove that closed eyes were intentional.
+- Judge every included person independently. Do not skip secondary subjects.
 
-Stage 2 -- Accidental capture test:
-- Only if the eye state does NOT support the expression, ask whether it looks like a shutter-timing mistake.
-- Accidental blink/half-blink means the eye closure conflicts with the rest of the face or moment: the mouth/expression is otherwise neutral or photo-ready, but the eyelids look droopy, transitional, uneven, or mistimed -- for an instant, not for the whole visible moment. This is different from a person who is genuinely asleep; run the sleeping guardrail below before concluding accidental capture.
-- If the eye state conflicts with the intended expression and blink_failure_confidence >= 0.65, set closure_intent="accidental_capture", expression_coherence="conflicts_with_expression", and should_fix=true.
-- If evidence is mixed, set closure_intent="ambiguous", expression_coherence="unclear", and should_fix=false.
+Evidence order:
+1. Eyelid morphology: open, narrowed, fully sealed, uneven, droopy, or transitional.
+2. Eye symmetry: both eyes match, one eye is closed, or the two eyes have different closure amounts.
+3. Capture context: posed/photo-ready, group photo, candid action, performance, sleep, prayer, eating, or active laughter.
+4. Expression evidence: mouth, cheek, brow, head-pose, and gesture evidence that specifically explains the eyelid state.
+5. Intent decision: accidental_capture, intentional_expression, or ambiguous.
 
-Core policy:
-- The goal is to catch photo-taking mistakes users would likely want fixed, not to make every person open their eyes.
-- A closed or narrowed eye is not a defect when it carries emotion, charm, playfulness, pain, laughter, sadness, greeting, or performance.
-- False positive eye repair is worse than missing a subtle blink when the closed eye is part of an intentional or emotional expression.
-- Do not use subject size, foreground/background status, or main/secondary subject status as a deciding factor. Size only affects visual uncertainty.
+### Stage 1 -- Physical eyelid-state inspection
+
+Use the matched zoomed face crop as primary evidence when available.
+
+- open: both readable eyes have normal visible eye apertures.
+- narrowed: the eyes remain visibly open but are reduced by cheek lift, bright light, or expression.
+- half-closed/transitional: one or both eyelids cover an unusual amount of the iris or pupil; the apertures are uneven, droopy, glassy, or caught between open and closed.
+- fully closed: upper and lower eyelids meet and no iris, pupil, or sclera is visibly exposed.
+- one-eye closed: exactly one eye is fully or nearly closed while the other remains open.
+- unclear: eyelid state genuinely cannot be read because of occlusion, blur, reflection, shadow, compression, or insufficient detail.
+
+Do not use occluded_or_unclear merely because the face is small in the full image when a readable face crop is available.
+
+Populate physical_eye_state before choosing eye_state or closure_intent, using exactly one value:
+- open: both readable eyes have normal visible apertures;
+- narrowed_open: the eyes are narrowed but remain visibly open;
+- half_closed: one or both eyelids are partly descended, droopy, uneven, glassy, or transitional;
+- fully_closed: both eyelids are fully sealed with no visible iris, pupil, or sclera;
+- one_eye_closed: exactly one eye is fully or nearly closed while the other remains open;
+- unclear: the physical eyelid state cannot be read reliably.
+
+physical_eye_state is a direct visual observation. Do not change it to match a later interpretation of intent. eye_state and closure_intent must be derived only after physical_eye_state has been recorded.
+
+### Stage 2 -- Accidental-capture test
+
+Positive evidence of accidental capture:
+- one or both eyelids look droopy, uneven, partly descended, glassy, or transitional;
+- the visible iris or pupil is partly covered in a way that looks mid-blink;
+- the person otherwise appears awake, posed, engaged, or photo-ready;
+- the mouth, cheeks, brows, head pose, and gesture do not specifically explain the eyelid state;
+- one person in a group has closed or half-closed eyes while the others appear ready for the photograph;
+- fully closed eyes occur in an ordinary portrait, group photo, or casual posed photo without affirmative evidence that eye closure is part of the intended expression;
+- opening the eyes would preserve the same smile, pose, emotion, and meaning while simply making the photograph look better timed.
+
+When these cues are present, classify as accidental_blink or accidental_half_blink even if the person is smiling, posing, making a V-sign, or appearing in a playful/social photograph.
+
+### Stage 3 -- Intentional-expression exception
+
+Classify eye closure as intentional only when affirmative, closure-specific evidence is visible. Valid evidence includes:
+- unmistakable high-intensity laughter visibly compresses both eyes shut, supported by both a clearly laughing mouth and strong coordinated eye-region/mid-face muscle changes as defined in the Strict laughter-induced closure rule below;
+- crying, pain, embarrassment, dramatic reaction, or another strong emotion visibly explains the closed eyes;
+- prayer, meditation, resting, savoring food, or another visible activity specifically calls for closed eyes;
+- the person is genuinely asleep;
+- a deliberate wink is supported by wink-specific facial asymmetry or interaction;
+- the person is visibly looking downward at a specific, nameable target inside the frame.
+
+These are weak contextual cues and are NOT sufficient by themselves:
+- an ordinary smile;
+- a V-sign, wave, finger pose, or hand near the face;
+- a tilted head or styled portrait pose;
+- selfie framing;
+- being a child;
+- being in a casual, playful, stage, fan, or social-media photo;
+- both eyelids being symmetrically closed;
+- absence of proof that the closure was accidental; intentional closure still requires affirmative visible evidence.
+
+Intentional classification requires visible evidence, not a plausible explanation.
 
 Decision labels:
 - open: both eyes are naturally open.
-- natural_smiling_squint: eyes are narrowed because the person is smiling, laughing, reacting, or showing joy; this is not a failure.
-- intentional_wink: one eye is closed or nearly closed while the other eye is open, and the face/body/context reads as a deliberate wink, greeting, pose, playful expression, performance, selfie gesture, video moment, or social-media interaction; this is not a failure.
-- intentional_closed: eyes are deliberately closed as part of a pose, prayer/resting expression, savoring food, calm moment, or other intentional moment; this is not a failure. Requires the eyelids themselves to be fully and cleanly shut (no visible sclera or pupil) -- see the pose-does-not-imply-eyelid-state guardrail below.
-- expressive_closed: eyes are closed as part of a strong emotional or expressive face, such as crying, exaggerated sadness, pain, embarrassment, cute reaction, dramatic performance, or meme-like reaction face; this is not a failure.
-- downward_gaze: eyes appear closed or narrowed because the person is looking down at a specific, nameable, visible target inside this same frame and the gaze is anatomically consistent with looking at it; this is not a blink failure. Looking down or away with no identifiable in-frame target does not qualify for this label; see the downward-gaze guardrail below.
-- sleeping: the person is genuinely asleep or napping -- both eyes fully and evenly closed, face and jaw relaxed/slack, and a resting posture (head tilted onto a pillow/shoulder/arm, reclined or lying down, eyes closed for the whole visible moment rather than mid-transition); this is not a failure, regardless of how neutral the mouth looks.
-- occluded_or_unclear: eyes are hard to judge because of glasses, hair, motion blur, shadow, hand/object occlusion, low resolution, compression, or face size. Do not fix unless the accidental blink is visually clear.
-- accidental_blink: eyes are caught closed in an unintentionally mistimed shutter moment.
-- accidental_half_blink: one or both eyes are caught unevenly half-closed, droopy, sleepy-looking, or transitional in a way that conflicts with the person's expression and likely weakens the photo.
-- uncertain: evidence is mixed or not important enough to repair.
+- natural_smiling_squint: the eyes are visibly narrowed by raised cheeks or active laughter. Ordinary full eyelid closure during a smile does not qualify by itself.
+- intentional_wink: one eye is deliberately squeezed closed with affirmative wink-specific evidence.
+- intentional_closed: both eyes are deliberately closed because a visible pose, activity, or held expression specifically calls for closure.
+- expressive_closed: both eyes are closed as an inseparable part of strong laughter, crying, pain, embarrassment, dramatic reaction, or another visibly strong emotion.
+- downward_gaze: the eyelids appear narrowed because the eyes anatomically converge on a specific, visible, nameable in-frame target.
+- sleeping: the person is genuinely asleep or dozing, supported by relaxed facial and posture cues and disengagement from the photograph.
+- occluded_or_unclear: the physical eyelid state cannot be read reliably.
+- accidental_blink: readable eyes are fully closed in an unintentionally mistimed shutter moment.
+- accidental_half_blink: one or both readable eyes are unevenly half-closed, droopy, sleepy-looking, glassy, or transitional in a way that conflicts with the otherwise awake/photo-ready moment.
+- uncertain: accidental and intentional evidence is genuinely balanced after applying the rules below.
 
-Wink / one-eye-closed guardrail:
-- If exactly one eye is closed or nearly closed and the other eye is open, run the Expression coherence test first. Do not jump to accidental_half_blink.
-- Classify as intentional_wink with should_fix=false when at least TWO of these cues are present:
-  1. the open eye looks toward the camera/viewer;
-  2. the mouth has a controlled smile, smirk, greeting expression, speaking shape, or playful expression;
-  3. the eyebrows/cheeks/head pose support a deliberate expression rather than a sleepy mistake;
-  4. there is a hand gesture, salute/wave, selfie framing, video screenshot feel, stage/performance context, close camera interaction, or social-media capture;
-  5. the closed eye is a clean expressive squeeze rather than a droopy transitional lid.
-- A one-eye-closed face is accidental_half_blink only when the mouth, brow, gaze, head pose, and context look neutral/unprepared AND the closed lid looks mistimed rather than expressive.
+### Wink rule
 
-Emotional closed-eye guardrail:
-- If eyes are closed together with a strong mouth/brow emotion, classify by expression first, not by eyelid state.
-- Crying face, pained face, exaggerated sadness, embarrassment, dramatic reaction, cute reaction, meme-like expression, or laugh-with-eyes-closed should be expressive_closed or natural_smiling_squint with should_fix=false.
-- Do not open eyes when opening them would erase the emotional meaning of the photo.
-- Counterfactual test: If opening the eyes would make the expression less truthful, less funny, less cute, less emotional, or less like the captured moment, then should_fix=false.
+For exactly one closed or nearly closed eye:
+- Do not classify intentional_wink from an open eye facing the camera plus an ordinary smile alone.
+- A general hand gesture such as a V-sign, salute, or wave is not wink-specific evidence by itself.
+- Use intentional_wink only when the closed eye is a controlled expressive squeeze AND at least one additional wink-specific cue is visible: asymmetric cheek/brow action, a knowingly playful smirk, direct wink interaction with the camera, or a gesture clearly coordinated with the wink.
+- If the eyelid looks droopy, incomplete, transitional, or mismatched with the face, classify accidental_half_blink.
+- If evidence remains genuinely balanced, use uncertain.
 
-Smile-squint vs. full-closure guardrail:
-- A genuine smile-driven squint narrows the eyes; it does not require them to be fully sealed shut. Before classifying closed eyes during a smile as natural_smiling_squint or intentional_closed, check whether the eyelids are only narrowed (a visible eyelash line, a slight eye-corner crease, still some sliver of the eye showing) versus fully and completely shut with no eye visible at all.
-- Full, complete eyelid closure during an otherwise ordinary smile or casual pose is not, by itself, evidence of natural_smiling_squint or intentional_closed -- a blink can happen at the exact camera-click moment independent of what the mouth is doing at that instant. Only classify fully-shut eyes as natural_smiling_squint/intentional_closed when there is supporting evidence beyond "the person is smiling": an active laugh (visible teeth, raised cheeks compressing the eyes shut), a deliberate pose context (prayer, savoring food, resting, a repeated stylistic expression across other photos of the same shoot), or an intentional_wink/performance context.
-- intentional_closed's own qualifying contexts are specific -- a held pose, prayer/rest, savoring food, a calm moment. An ordinary candid or posed smile in a casual or group photo does not by itself qualify; let it fall through to the Stage 2 accidental-capture test instead of defaulting to intentional_closed.
-- In a group photo, one person with fully shut eyes while everyone else's eyes are open and the shot otherwise looks photo-ready is strong evidence for accidental capture (see "Strong evidence for accidental capture" above) -- that person's own smile, on its own, does not override this signal.
+### Smile-squint rule
 
-Pose-does-not-imply-eyelid-state guardrail:
-- A deliberate held pose -- hands framing the chin/cheek, head tilted back or to the side, a styled selfie/portrait setup -- proves the pose is intentional. It does NOT by itself prove the eyelids are also fully and deliberately closed at that same instant; a blink can happen involuntarily even while every other part of a held pose is exactly as intended.
-- Before classifying eyes as intentional_closed, expressive_closed, or natural_smiling_squint on the strength of a deliberate pose, check the eyelids themselves: are they cleanly, fully, and evenly shut with no sclera or pupil visible? If any sliver of white or the pupil/iris is visible, the eyes are not fully closed -- treat it as a half-open, transitional state and run the Stage 2 accidental-capture test instead of defaulting to intentional_closed just because the pose looks deliberate.
-- A symmetric hand-on-face / head-tilt pose paired with half-open, glassy, unfocused eyes and no visible in-frame gaze target is a common signature of an accidental blink caught mid-transition during an otherwise well-executed pose -- it is not, by itself, evidence that the eye closure was intentional.
+- natural_smiling_squint normally retains some visible eye aperture and is visibly driven by raised cheeks.
+- Fully sealed eyes are not automatically natural_smiling_squint merely because the person is smiling.
+- Fully sealed eyes with an ordinary posed smile must continue to the accidental-capture test.
+- Fully sealed eyes may be expressive_closed because of laughter only when the Strict laughter-induced closure rule below is fully satisfied. Strong cheek compression without unmistakable high-intensity laughter is insufficient.
 
-Sleeping guardrail:
-- Before concluding accidental_blink or accidental_half_blink, check whether the person is genuinely asleep rather than mid-blink while awake.
-- Evidence of genuine sleep: both eyelids are fully and evenly closed (not droopy, uneven, or half-open); the face and jaw are relaxed/slack rather than tensed for a shot; the head/body is in a resting posture -- tilted onto a pillow, shoulder, arm, car seat, stroller, or someone's lap, reclined, or lying down; the eyes are closed for the entire visible moment, not caught transitioning between open and closed. This applies to babies, children, and adults alike, and to candid or posed photos of someone napping.
-- Genuine sleep does not require a reclined posture. A person can be sitting or standing upright with eyes fully and evenly closed, a slack/disengaged face, and no interaction with the camera or surroundings, and still be genuinely dozing off rather than caught mid-blink.
-- A neutral or slack mouth on a sleeping person is expected and is not, by itself, evidence of an accidental blink -- a real accidental blink still requires the droopy/uneven/transitional eyelid look, not just closed eyes plus a neutral mouth.
-- When genuine sleep is indicated, classify as eye_state=sleeping, closure_intent=intentional_expression, expression_coherence=supports_expression, blink_failure_confidence 0.0-0.25, should_fix=false. Never add an eye-opening correction_plan item for a sleeping subject.
-- Only override this and treat it as accidental capture if the eyelids themselves look droopy, uneven, or mid-transition (evidence the person is awake and drifting/struggling to keep eyes open) rather than fully and evenly at rest.
+### Strict laughter-induced closure rule
 
-Downward-gaze guardrail:
-- downward_gaze requires a nameable, boxable, visible target inside this same frame that the person is plausibly looking at or interacting with. This is the ONLY thing that qualifies narrowed/closed eyes as downward_gaze.
-- It does NOT cover looking down at the ground/floor with nothing there, looking away into empty space or the distance, or any case where you cannot point to a specific in-frame object the eyes are aimed at. A vague "they're just looking down/away" is not evidence of this label.
-- When narrowed or closed eyes have no qualifying in-frame target, do not classify as downward_gaze and do not default to should_fix=false on that basis alone -- run the Stage 2 accidental-capture test normally; this is typically accidental_half_blink or accidental_blink, should_fix=true, unless another guardrail (wink, emotional, sleeping) independently applies.
+Do not classify closed eyes as laughter-induced from the mouth, smile label, or social context alone. This is a strict exception: every required category below must have clear, affirmative visible evidence.
 
-Balanced should_fix rule:
-- Set should_fix=true only when blink_failure_confidence >= 0.65 AND the eye issue visibly looks like accidental capture timing on someone who is awake.
-- Moderate accidental half-blinks should be fixed when they make a person who is awake and otherwise posed/ready look unintentionally droopy, distracted, unprepared, or mid-blink, and there is no strong intentional-expression cue and no sleeping-guardrail evidence.
-- For blurry, occluded, compressed, shadowed, glasses-reflected, or unclear eyes, require stronger confidence around 0.85 before fixing. This is about visual ambiguity, not subject size or prominence.
-- If there is strong evidence of intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze (with a genuine in-frame target -- see the downward-gaze guardrail), sleeping, or playful/performance/emotional expression, should_fix=false even if one or both eyes are closed.
+Required evidence -- all three categories must be satisfied:
+1. Unmistakable high-intensity laughter:
+   - the mouth is substantially opened in active laughter, or is extremely broadly retracted in a way that unmistakably reads as laughter rather than a posed smile, speech, singing, shouting, or surprise;
+   - the whole face reads as an active, high-intensity laugh, not merely cheerful, pleasant, or broadly smiling.
+2. Coordinated eye-region and mid-face muscle action:
+   - both cheeks are strongly elevated and visibly push upward against the lower eyelids;
+   - the lower eyelids visibly bulge, rise, or form pronounced upward curves;
+   - compression or creasing is visible near the outer eye corners;
+   - the eye closure appears produced by upward cheek/lower-eyelid compression, not merely by the upper eyelids descending as in a blink.
+3. Expression dependence:
+   - the closed-eye state is integral to the same high-intensity laughing expression;
+   - opening the eyes would materially weaken or contradict that captured laugh, rather than preserve the same expression and merely improve shutter timing.
 
-Strong evidence for accidental capture:
-- The person otherwise looks normally posed or photo-ready.
-- The mouth, brows, cheeks, and head pose do not support a wink, laugh, cute expression, emotional reaction, downward gaze, or performance.
-- The eyelids look droopy, uneven, transitional, sleepy, or mistimed.
-- The eye state makes the person look unintentionally tired, distracted, unprepared, or caught mid-blink.
-- In a group photo, the person's expression is the only one that reads accidentally mistimed while the scene otherwise looks photo-ready.
+Not sufficient, individually or in combination, unless all required categories above are visibly satisfied:
+- an ordinary, polite, gentle, broad, or toothy smile;
+- visible teeth, braces, raised mouth corners, or a slightly/open mouth;
+- raised cheeks without pronounced lower-eyelid and outer-eye compression;
+- narrowed or closed eyes without an unmistakable laughing mouth and whole-face laugh;
+- speaking, singing, shouting, surprise, a playful pose, V-sign, party setting, child subject, selfie, or group-photo context;
+- a plausible guess that the person may have been laughing.
 
-Strong evidence against accidental capture:
-- The closed eye matches the mouth expression, brow tension, cheek lift, hand gesture, head pose, or emotional tone.
-- One eye is closed and the other eye is open in a controlled way, with a wink-like expression, smirk, greeting, salute, wave, playful mouth shape, or camera interaction.
-- Both eyes are closed because of laughter, smile-squint, crying, pain, sadness, embarrassment, cute expression, prayer/rest, eating/savoring, dramatic reaction, or downward gaze at a specific visible in-frame target.
-- The image is a selfie, video screenshot, stage/performance moment, fan-service moment, close-up social-media capture, or playful social snapshot where expressive eyes are normal.
-- The person is genuinely asleep: eyes fully and evenly closed, face relaxed, head/body in a resting posture (pillow, shoulder, reclined, lying down) -- see the sleeping guardrail above.
+Decision rule:
+- Use natural_smiling_squint when the eyes remain visibly open and are naturally narrowed by a smile.
+- Use expressive_closed for laughter only when every required category above is clearly satisfied.
+- If any required category is missing, weak, obscured, or ambiguous, do not use laughter to explain fully_closed or half_closed eyes. Re-run the accidental-capture test and prefer accidental_blink or accidental_half_blink when the subject is otherwise awake/photo-ready.
+- When uncertain between laughter-induced closure and shutter-time blink, prefer accidental_capture. intentional_expression requires strong affirmative evidence; accidental_capture does not require proof of the person's private intention.
 
-Practical examples:
-- Close-up selfie or video frame where one eye is closed and the other eye looks at the camera, with a smile/smirk/salute/wave/greeting gesture: intentional_wink, closure_intent=intentional_expression, should_fix=false.
-- Stage or celebrity close-up where one eye is closed in a controlled expression: intentional_wink, should_fix=false.
-- Crying face, pained reaction, exaggerated sad face, or dramatic meme-like expression with eyes squeezed shut: expressive_closed, should_fix=false.
-- Person laughing so hard both eyes close: natural_smiling_squint or expressive_closed, should_fix=false.
-- Casual child photo where the child smiles/plays with eyes closed: natural_smiling_squint or expressive_closed, should_fix=false unless the eye state clearly conflicts with the expression.
-- Group photo where one person has a sleepy half-blink while the mouth/brows are otherwise neutral and everyone else is ready: accidental_half_blink, closure_intent=accidental_capture, should_fix=true.
-- A baby or adult napping with eyes fully and evenly closed, relaxed face, and head resting on a pillow/shoulder/arm or lying down, even if the mouth is neutral: sleeping, closure_intent=intentional_expression, should_fix=false.
-- Formal or ordinary portrait where the subject's eyelids are accidentally half-closed and the expression otherwise looks neutral/photo-ready: accidental_half_blink, should_fix=true.
-- Person looking down at a specific, visible in-frame target: downward_gaze, should_fix=false unless the eye state clearly conflicts with the rest of the face.
-- Person looking down or away with no identifiable in-frame target (staring at the ground/floor, gazing off into empty space or the distance): does not qualify as downward_gaze; run the accidental-capture test -- typically accidental_half_blink/accidental_blink, should_fix=true, unless another guardrail (wink, emotional, sleeping) applies.
-- Blurry, compressed, shadowed, or unclear eyes: should_fix=false unless the accidental capture is visually clear.
+### Intentional-closed rule
+
+- Use intentional_closed only when a visible activity or deliberately held expression specifically explains why both eyes are closed.
+- A clean and symmetric closure does not by itself prove intention. A shutter-time blink can also be clean, symmetric, and fully closed.
+- A deliberate body pose proves that the pose is intentional; it does not prove that the eyelids were intentionally closed at the shutter instant.
+
+### Sleeping rule
+
+Use sleeping only when multiple visible cues support genuine sleep:
+- fully and evenly closed eyelids;
+- relaxed or slack facial muscles;
+- a resting/dozing head or body posture, or clear disengagement from the surroundings;
+- no active posing or interaction with the camera.
+
+A person standing or sitting upright with closed eyes while otherwise posing for the photograph is not sleeping merely because the face looks calm.
+
+### Downward-gaze rule
+
+Use downward_gaze only when:
+- a specific visible target exists inside the image;
+- the eye direction anatomically converges toward that target;
+- the subject appears to attend to or interact with it.
+
+Looking vaguely downward, toward the floor, into empty space, or away from the camera does not qualify. Run the accidental-capture test instead.
+
+### Capture-context calibration
+
+- In a posed or group photograph, one person's readable closed or half-closed eyes while others are ready is strong accidental-capture evidence.
+- In an ordinary portrait, a normal smile does not override droopy, transitional, or fully shutter-closed eyelids.
+- In a candid photograph, do not assume intentional closure merely because the moment is candid. The eyelids still need expression-specific evidence.
+- In a playful photograph, generic playfulness does not prove eyelid intent. The visible expression must specifically explain the closure.
+- For a child, apply the same evidence standard as for an adult. Age, activity, or playfulness is not evidence of intentional eye closure.
+
+### Confidence and should_fix
+
+- blink_failure_confidence measures confidence that the photo caught an accidental shutter-timing failure, not confidence that the eyes are closed.
+- Set closure_intent="accidental_capture", expression_coherence="conflicts_with_expression", and should_fix=true when all are true:
+  1. the subject appears awake;
+  2. the eyelid state is readable;
+  3. eye_state is accidental_blink or accidental_half_blink;
+  4. blink_failure_confidence >= 0.55.
+- Use 0.55-0.69 for probable accidental cases and 0.70-1.00 for clear accidental cases.
+- For genuinely blurred, reflected, shadowed, compressed, or occluded eyes, require blink_failure_confidence >= 0.85.
+- For affirmative intentional cases, set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
+- Use closure_intent="ambiguous", expression_coherence="unclear", and should_fix=false only when accidental and intentional evidence is genuinely balanced or the physical eyelid state is unreadable.
+- Do not set should_fix=false merely because the blink is subtle, the person is smiling, or the overall photograph is still acceptable.
+
+### Recall check
+
+Before finalizing:
+1. Revisit every included person's eyes using the face crop when available.
+2. Identify every fully closed, partly closed, droopy, asymmetric, glassy, or transitional eyelid.
+3. For every such person classified as intentional, name the affirmative closure-specific evidence in intent_cues and reason. For laughter-induced closure, explicitly name evidence from all three required categories: unmistakable high-intensity laughing mouth/whole-face expression, coordinated cheek/lower-eyelid/outer-eye compression, and expression dependence. If all three cannot be named from visible evidence, the laughter exception fails.
+4. If the reason contains only a smile, pose, generic hand gesture, selfie context, child/playful context, social/performance context, or symmetric closure, the intentional classification is unsupported. Re-run the accidental-capture test.
+5. In a posed or group photograph, apply this counterfactual: if opening the eyes would preserve the person's existing expression and simply make the shot look better timed, prefer accidental_capture.
+6. Do not use uncertain as a safe default. Use it only after naming evidence on both sides.
 
 Subject-size neutrality:
-- Do not decide should_fix based on whether the face is large, small, foreground, background, main subject, or secondary subject.
-- Size/prominence may affect how easy the eye state is to see, but it must not be the reason for fixing or not fixing.
-- If the eye state and expression are visually clear, apply the same blink-vs-expression logic to every person.
+- Do not decide should_fix from face size, foreground/background status, or main/secondary-subject status.
+- Size affects only whether the eyelids are readable.
+- If a zoomed face crop makes the eyelids readable, apply the same rules as for a large face.
 
 Output rules:
-- For every visible person, inspect eye state independently.
-- Fill blink_issue for every subjects[] entry with is_person=true whose eyes are legible enough to judge, not only the ones with something to explain -- an ordinary open-eyed person with nothing unusual still gets should_fix=false, the same as a wink or laugh does.
-- Do not leave a person subject's blink_issue at a placeholder just because their eyes look fine; every person subject gets a genuine reading, not only the flagged or noteworthy ones.
-- Use should_fix=false with a reason explaining why a closed-eye case is intentionally left unchanged, especially for winks, laughter, crying/emotional expressions, child expressions, or ambiguous cases.
+- Fill physical_eye_state first from eyelid appearance alone. Never use smile, pose, gesture, scene type, age, or a possible story to alter this physical observation.
+- Fill blink_issue for every subjects[] entry with is_person=true, including open-eyed people.
+- intent_cues must contain only visible evidence, not inferred stories.
+- For should_fix=true, reason must name the visible eyelid morphology and why it conflicts with the otherwise awake/photo-ready moment.
+- For should_fix=false on a closed-eye case, reason must name the affirmative intentional-expression, downward-target, or sleep evidence. Generic speculation about intent is invalid.
 - Add an eye-related correction_plan item only when should_fix=true.
-- If should_fix=true, add a correction_plan item that names the exact person by position/role and asks the edit model to naturally reopen or relax only that person's eyes while preserving identity, gaze direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.
-- The matching correction_axes entry for that correction_plan item must include ["expression"].
-- The matching correction_inverse entry should preserve the original eye state and facial expression for that same person if the user unchecks the item.
-- The matching retouch_recipe item should be user-facing and concise, for example: "修正右側男生不小心半閉眼的表情。"
+- If should_fix=true, add a correction_plan item naming the exact person by position/role and ask the edit model to naturally reopen or relax only that person's eyes while preserving identity, gaze direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.
+- The matching correction_axes entry must include ["expression"].
+- The matching correction_inverse entry must preserve the original eye state and facial expression for that same person.
+- The matching retouch_recipe item must be concise and user-facing, for example: "修正右側男生不小心半閉眼的表情。"
 - If no accidental blink or half-blink needs correction, keep correction_plan free of eye-opening items.
 
 Edit-model execution guardrail:
@@ -463,21 +551,16 @@ Low-capacity image-model wording rule:
 - Do not rely on the edit model to infer gaze repair from JSON alone.
 - Do not let a preservation instruction cancel an approved gaze repair. Preservation should protect all unrelated facial traits while allowing local gaze redirection.
 
-Mini-model calibration:
-- Do not reason as: "eyes closed means accidental blink."
-- Do not reason as: "one eye closed means half-blink."
-- Do not reason as: "emotional closed eyes should be opened."
-- Do not reason as: "neutral mouth plus closed eyes means accidental blink" -- a genuinely sleeping person also has a neutral, relaxed mouth; check the sleeping guardrail's posture and eyelid cues before assuming a mistake.
-- Do not reason as: "the person is looking down/away so it's fine" -- that is only true when there is a specific, visible, nameable target in this frame that the gaze is aimed at; check the downward-gaze guardrail before assuming a mistake.
-- Do not reason as: "the pose is clearly deliberate (hands on face, head tilt, styled shot), so the closed eyes must be deliberate too" -- a held pose does not guarantee the eyelids were fully closed on purpose; check whether sclera or pupil is visible before assuming intentional_closed. See the pose-does-not-imply-eyelid-state guardrail.
-- Always ask first: "Does the eye state support the visible mouth/brow/gesture/emotion?" If yes, do not fix.
-- For one-eye-closed faces, run the wink guardrail before any blink-failure reasoning.
-- For strong emotional faces, run the emotional closed-eye guardrail before any blink-failure reasoning.
-- For any fully-closed-eyes case, run the sleeping guardrail before any blink-failure reasoning.
-- For any downward/averted-gaze case, run the downward-gaze guardrail before any blink-failure reasoning.
-- For any deliberately posed shot (hands on face, held head tilt, styled portrait/selfie), run the pose-does-not-imply-eyelid-state guardrail before any blink-failure reasoning.
-- When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
-- When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
+GPT-5.6 Luna calibration:
+- Do not rationalize closed eyes as intentional from context alone.
+- Do not reason as: "the person is smiling, therefore the closed eyes are natural."
+- Do not reason as: "the pose or hand gesture is deliberate, therefore the eyelids are deliberate."
+- Do not reason as: "this is a child, selfie, social, stage, fan, playful, or candid photo, therefore closed eyes belong to the moment."
+- Do not reason as: "both eyelids are cleanly and symmetrically closed, therefore closure is intentional."
+- Do not reason as: "one eye is closed and the other faces the camera, therefore this is a wink."
+- Do not reason as: "looking downward or away is acceptable" unless a specific visible in-frame gaze target exists.
+- Set should_fix=false for intentional closure only when affirmative visible evidence supports that classification.
+- First state the physical eyelid evidence. Then state the intent evidence. Then compute eye_state, closure_intent, confidence, and should_fix from those observations.
 
 ## Hair analysis
 Intent: Detect actionable accidental hair disruption without redesigning an intentional hairstyle, natural texture, or motion; be conservative because pointing the editing model at hair can rebuild it, and a rebuilt hairstyle is a worse failure than untidy hair.
@@ -805,8 +888,8 @@ Intent: Convert visible photographic needs into a restrained, actionable, and in
 - Gaze analyze-to-edit consistency check: before finalizing analysis, verify that every subject whose gaze_issue.should_fix=true has a complete gaze_repair_strategy plus a matching correction_plan item and a matching retouch_recipe item naming that subject and the same goal: redirect gaze toward the camera lens / direct_camera. If any matching item or strategy detail is missing, add it.
 - Reverse gaze consistency check -- run this in the other direction too, separately from the check above: before finalizing analysis, re-read every correction_plan item. If any of them describes redirecting someone's gaze, eye direction, or eye contact toward the camera, or fixing where someone is looking, that item is only valid when that person's gaze_issue has should_fix=true and a matching gaze_repair_strategy. A subject's gaze_issue is the only place a gaze judgment is allowed to originate -- do not decide independently, while writing correction_plan/detected_issues/aesthetic_diagnosis, that someone's gaze needs fixing and add it there as a shortcut. If a correction_plan item describes a gaze fix with no such backing gaze_issue, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry at the same index) rather than leaving it in; add the missing should_fix=true only if the hard should_fix rule actually supports it for that subject.
 - A subject's gaze_issue.should_fix=true authorizes the edit model to perform local gaze redirection. Do not leave approved gaze repair only inside analysis JSON.
-- For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case.
-- For crying, pained, laughing, cute, dramatic, or meme-like closed-eye expressions, classify as expressive_closed or natural_smiling_squint and do not add blink repair.
+- For one-eye-closed cases, do not default to intentional_wink. Classify intentional_wink only when wink-specific affirmative evidence is visible. An open eye facing the camera plus an ordinary smile or generic hand gesture is insufficient. Otherwise classify accidental_half_blink when the closed eyelid looks transitional or mistimed, or uncertain when the evidence is genuinely balanced.
+- Apply the Strict laughter-induced closure rule above. For laughter, use expressive_closed only when all three visible evidence categories are satisfied: unmistakable high-intensity laughter, coordinated cheek/lower-eyelid/outer-eye compression, and expression dependence. A normal or broad smile, visible teeth, open mouth, raised cheeks alone, speech-like mouth shape, child subject, playful pose, V-sign, selfie, party, or social-photo context is insufficient. If any required laughter category is weak or ambiguous, re-run the accidental-capture test. Other strong emotions such as crying or pain still require their own affirmative coordinated facial evidence.
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
 - Blink analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every subject whose blink_issue.should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["expression"], a matching correction_inverse entry, and a matching retouch_recipe item, naming that subject. If any matching item is missing, add it now, following the wording rules above.
 - Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing blink_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
@@ -872,7 +955,1252 @@ The user has asked for this person's hair to be laid down as if there were no wi
 """
 
 
-def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
+# gpt-5.6-luna measured 22% recall vs gpt-4.1-mini's 46% on the eye_close eval
+# (eval_results/20260828-155737-eyeclose-2posimg-production-2models-100runs), while
+# both sit at ~99-100% precision/specificity -- so luna under-detects genuine
+# accidental blinks rather than false-flagging. The blink section below was
+# rewritten (evidence-first structure, lower confidence bars, an explicit
+# recall check) to correct that. Since gpt-4.1-mini's own recall/precision
+# balance on the original wording is untouched by this problem, the rewritten
+# section is spliced in only for gpt-5.6-luna; every other model keeps the
+# original wording captured in _BLINK_ANALYSIS_LEGACY /
+# _BLINK_WINK_DEFAULT_BULLET_LEGACY below. See build_analysis_instruction's
+# analysis_model param.
+_BLINK_ANALYSIS_LUNA = """## Blink analysis
+Intent: Detect accidental blink, half-blink, or unintended full eye closure at the shutter moment. Prioritize recall for readable eyes while preserving eye closure only when affirmative visible evidence shows that it belongs to an intentional expression, emotion, activity, downward gaze, or sleep.
+
+Important separation:
+- First classify the physical eyelid state from visible eye evidence.
+- Then classify whether that state was likely intentional or accidentally captured.
+- Do not infer intent first and reinterpret the eyelids to fit a plausible story.
+- A smile, pose, generic hand gesture, selfie framing, child subject, social-media context, or pleasant expression does NOT by itself prove that closed eyes were intentional.
+- Judge every included person independently. Do not skip secondary subjects.
+
+Evidence order:
+1. Eyelid morphology: open, narrowed, fully sealed, uneven, droopy, or transitional.
+2. Eye symmetry: both eyes match, one eye is closed, or the two eyes have different closure amounts.
+3. Capture context: posed/photo-ready, group photo, candid action, performance, sleep, prayer, eating, or active laughter.
+4. Expression evidence: mouth, cheek, brow, head-pose, and gesture evidence that specifically explains the eyelid state.
+5. Intent decision: accidental_capture, intentional_expression, or ambiguous.
+
+### Stage 1 -- Physical eyelid-state inspection
+
+Use the matched zoomed face crop as primary evidence when available.
+
+- open: both readable eyes have normal visible eye apertures.
+- narrowed: the eyes remain visibly open but are reduced by cheek lift, bright light, or expression.
+- half-closed/transitional: one or both eyelids cover an unusual amount of the iris or pupil; the apertures are uneven, droopy, glassy, or caught between open and closed.
+- fully closed: upper and lower eyelids meet and no iris, pupil, or sclera is visibly exposed.
+- one-eye closed: exactly one eye is fully or nearly closed while the other remains open.
+- unclear: eyelid state genuinely cannot be read because of occlusion, blur, reflection, shadow, compression, or insufficient detail.
+
+Do not use occluded_or_unclear merely because the face is small in the full image when a readable face crop is available.
+
+Populate physical_eye_state before choosing eye_state or closure_intent, using exactly one value:
+- open: both readable eyes have normal visible apertures;
+- narrowed_open: the eyes are narrowed but remain visibly open;
+- half_closed: one or both eyelids are partly descended, droopy, uneven, glassy, or transitional;
+- fully_closed: both eyelids are fully sealed with no visible iris, pupil, or sclera;
+- one_eye_closed: exactly one eye is fully or nearly closed while the other remains open;
+- unclear: the physical eyelid state cannot be read reliably.
+
+physical_eye_state is a direct visual observation. Do not change it to match a later interpretation of intent. eye_state and closure_intent must be derived only after physical_eye_state has been recorded.
+
+### Stage 2 -- Accidental-capture test
+
+Positive evidence of accidental capture:
+- one or both eyelids look droopy, uneven, partly descended, glassy, or transitional;
+- the visible iris or pupil is partly covered in a way that looks mid-blink;
+- the person otherwise appears awake, posed, engaged, or photo-ready;
+- the mouth, cheeks, brows, head pose, and gesture do not specifically explain the eyelid state;
+- one person in a group has closed or half-closed eyes while the others appear ready for the photograph;
+- fully closed eyes occur in an ordinary portrait, group photo, or casual posed photo without affirmative evidence that eye closure is part of the intended expression;
+- opening the eyes would preserve the same smile, pose, emotion, and meaning while simply making the photograph look better timed.
+
+When these cues are present, classify as accidental_blink or accidental_half_blink even if the person is smiling, posing, making a V-sign, or appearing in a playful/social photograph.
+
+### Stage 3 -- Intentional-expression exception
+
+Classify eye closure as intentional only when affirmative, closure-specific evidence is visible. Valid evidence includes:
+- unmistakable high-intensity laughter visibly compresses both eyes shut, supported by both a clearly laughing mouth and strong coordinated eye-region/mid-face muscle changes as defined in the Strict laughter-induced closure rule below;
+- crying, pain, embarrassment, dramatic reaction, or another strong emotion visibly explains the closed eyes;
+- prayer, meditation, resting, savoring food, or another visible activity specifically calls for closed eyes;
+- the person is genuinely asleep;
+- a deliberate wink is supported by wink-specific facial asymmetry or interaction;
+- the person is visibly looking downward at a specific, nameable target inside the frame.
+
+These are weak contextual cues and are NOT sufficient by themselves:
+- an ordinary smile;
+- a V-sign, wave, finger pose, or hand near the face;
+- a tilted head or styled portrait pose;
+- selfie framing;
+- being a child;
+- being in a casual, playful, stage, fan, or social-media photo;
+- both eyelids being symmetrically closed;
+- absence of proof that the closure was accidental; intentional closure still requires affirmative visible evidence.
+
+Intentional classification requires visible evidence, not a plausible explanation.
+
+Decision labels:
+- open: both eyes are naturally open.
+- natural_smiling_squint: the eyes are visibly narrowed by raised cheeks or active laughter. Ordinary full eyelid closure during a smile does not qualify by itself.
+- intentional_wink: one eye is deliberately squeezed closed with affirmative wink-specific evidence.
+- intentional_closed: both eyes are deliberately closed because a visible pose, activity, or held expression specifically calls for closure.
+- expressive_closed: both eyes are closed as an inseparable part of strong laughter, crying, pain, embarrassment, dramatic reaction, or another visibly strong emotion.
+- downward_gaze: the eyelids appear narrowed because the eyes anatomically converge on a specific, visible, nameable in-frame target.
+- sleeping: the person is genuinely asleep or dozing, supported by relaxed facial and posture cues and disengagement from the photograph.
+- occluded_or_unclear: the physical eyelid state cannot be read reliably.
+- accidental_blink: readable eyes are fully closed in an unintentionally mistimed shutter moment.
+- accidental_half_blink: one or both readable eyes are unevenly half-closed, droopy, sleepy-looking, glassy, or transitional in a way that conflicts with the otherwise awake/photo-ready moment.
+- uncertain: accidental and intentional evidence is genuinely balanced after applying the rules below.
+
+### Wink rule
+
+For exactly one closed or nearly closed eye:
+- Do not classify intentional_wink from an open eye facing the camera plus an ordinary smile alone.
+- A general hand gesture such as a V-sign, salute, or wave is not wink-specific evidence by itself.
+- Use intentional_wink only when the closed eye is a controlled expressive squeeze AND at least one additional wink-specific cue is visible: asymmetric cheek/brow action, a knowingly playful smirk, direct wink interaction with the camera, or a gesture clearly coordinated with the wink.
+- If the eyelid looks droopy, incomplete, transitional, or mismatched with the face, classify accidental_half_blink.
+- If evidence remains genuinely balanced, use uncertain.
+
+### Smile-squint rule
+
+- natural_smiling_squint normally retains some visible eye aperture and is visibly driven by raised cheeks.
+- Fully sealed eyes are not automatically natural_smiling_squint merely because the person is smiling.
+- Fully sealed eyes with an ordinary posed smile must continue to the accidental-capture test.
+- Fully sealed eyes may be expressive_closed because of laughter only when the Strict laughter-induced closure rule below is fully satisfied. Strong cheek compression without unmistakable high-intensity laughter is insufficient.
+
+### Strict laughter-induced closure rule
+
+Do not classify closed eyes as laughter-induced from the mouth, smile label, or social context alone. This is a strict exception: every required category below must have clear, affirmative visible evidence.
+
+Required evidence -- all three categories must be satisfied:
+1. Unmistakable high-intensity laughter:
+   - the mouth is substantially opened in active laughter, or is extremely broadly retracted in a way that unmistakably reads as laughter rather than a posed smile, speech, singing, shouting, or surprise;
+   - the whole face reads as an active, high-intensity laugh, not merely cheerful, pleasant, or broadly smiling.
+2. Coordinated eye-region and mid-face muscle action:
+   - both cheeks are strongly elevated and visibly push upward against the lower eyelids;
+   - the lower eyelids visibly bulge, rise, or form pronounced upward curves;
+   - compression or creasing is visible near the outer eye corners;
+   - the eye closure appears produced by upward cheek/lower-eyelid compression, not merely by the upper eyelids descending as in a blink.
+3. Expression dependence:
+   - the closed-eye state is integral to the same high-intensity laughing expression;
+   - opening the eyes would materially weaken or contradict that captured laugh, rather than preserve the same expression and merely improve shutter timing.
+
+Not sufficient, individually or in combination, unless all required categories above are visibly satisfied:
+- an ordinary, polite, gentle, broad, or toothy smile;
+- visible teeth, braces, raised mouth corners, or a slightly/open mouth;
+- raised cheeks without pronounced lower-eyelid and outer-eye compression;
+- narrowed or closed eyes without an unmistakable laughing mouth and whole-face laugh;
+- speaking, singing, shouting, surprise, a playful pose, V-sign, party setting, child subject, selfie, or group-photo context;
+- a plausible guess that the person may have been laughing.
+
+Decision rule:
+- Use natural_smiling_squint when the eyes remain visibly open and are naturally narrowed by a smile.
+- Use expressive_closed for laughter only when every required category above is clearly satisfied.
+- If any required category is missing, weak, obscured, or ambiguous, do not use laughter to explain fully_closed or half_closed eyes. Re-run the accidental-capture test and prefer accidental_blink or accidental_half_blink when the subject is otherwise awake/photo-ready.
+- When uncertain between laughter-induced closure and shutter-time blink, prefer accidental_capture. intentional_expression requires strong affirmative evidence; accidental_capture does not require proof of the person's private intention.
+
+### Intentional-closed rule
+
+- Use intentional_closed only when a visible activity or deliberately held expression specifically explains why both eyes are closed.
+- A clean and symmetric closure does not by itself prove intention. A shutter-time blink can also be clean, symmetric, and fully closed.
+- A deliberate body pose proves that the pose is intentional; it does not prove that the eyelids were intentionally closed at the shutter instant.
+
+### Sleeping rule
+
+Use sleeping only when multiple visible cues support genuine sleep:
+- fully and evenly closed eyelids;
+- relaxed or slack facial muscles;
+- a resting/dozing head or body posture, or clear disengagement from the surroundings;
+- no active posing or interaction with the camera.
+
+A person standing or sitting upright with closed eyes while otherwise posing for the photograph is not sleeping merely because the face looks calm.
+
+### Downward-gaze rule
+
+Use downward_gaze only when:
+- a specific visible target exists inside the image;
+- the eye direction anatomically converges toward that target;
+- the subject appears to attend to or interact with it.
+
+Looking vaguely downward, toward the floor, into empty space, or away from the camera does not qualify. Run the accidental-capture test instead.
+
+### Capture-context calibration
+
+- In a posed or group photograph, one person's readable closed or half-closed eyes while others are ready is strong accidental-capture evidence.
+- In an ordinary portrait, a normal smile does not override droopy, transitional, or fully shutter-closed eyelids.
+- In a candid photograph, do not assume intentional closure merely because the moment is candid. The eyelids still need expression-specific evidence.
+- In a playful photograph, generic playfulness does not prove eyelid intent. The visible expression must specifically explain the closure.
+- For a child, apply the same evidence standard as for an adult. Age, activity, or playfulness is not evidence of intentional eye closure.
+
+### Confidence and should_fix
+
+- blink_failure_confidence measures confidence that the photo caught an accidental shutter-timing failure, not confidence that the eyes are closed.
+- Set closure_intent="accidental_capture", expression_coherence="conflicts_with_expression", and should_fix=true when all are true:
+  1. the subject appears awake;
+  2. the eyelid state is readable;
+  3. eye_state is accidental_blink or accidental_half_blink;
+  4. blink_failure_confidence >= 0.55.
+- Use 0.55-0.69 for probable accidental cases and 0.70-1.00 for clear accidental cases.
+- For genuinely blurred, reflected, shadowed, compressed, or occluded eyes, require blink_failure_confidence >= 0.85.
+- For affirmative intentional cases, set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
+- Use closure_intent="ambiguous", expression_coherence="unclear", and should_fix=false only when accidental and intentional evidence is genuinely balanced or the physical eyelid state is unreadable.
+- Do not set should_fix=false merely because the blink is subtle, the person is smiling, or the overall photograph is still acceptable.
+
+### Recall check
+
+Before finalizing:
+1. Revisit every included person's eyes using the face crop when available.
+2. Identify every fully closed, partly closed, droopy, asymmetric, glassy, or transitional eyelid.
+3. For every such person classified as intentional, name the affirmative closure-specific evidence in intent_cues and reason. For laughter-induced closure, explicitly name evidence from all three required categories: unmistakable high-intensity laughing mouth/whole-face expression, coordinated cheek/lower-eyelid/outer-eye compression, and expression dependence. If all three cannot be named from visible evidence, the laughter exception fails.
+4. If the reason contains only a smile, pose, generic hand gesture, selfie context, child/playful context, social/performance context, or symmetric closure, the intentional classification is unsupported. Re-run the accidental-capture test.
+5. In a posed or group photograph, apply this counterfactual: if opening the eyes would preserve the person's existing expression and simply make the shot look better timed, prefer accidental_capture.
+6. Do not use uncertain as a safe default. Use it only after naming evidence on both sides.
+
+Subject-size neutrality:
+- Do not decide should_fix from face size, foreground/background status, or main/secondary-subject status.
+- Size affects only whether the eyelids are readable.
+- If a zoomed face crop makes the eyelids readable, apply the same rules as for a large face.
+
+Output rules:
+- Fill physical_eye_state first from eyelid appearance alone. Never use smile, pose, gesture, scene type, age, or a possible story to alter this physical observation.
+- Fill blink_issue for every subjects[] entry with is_person=true, including open-eyed people.
+- intent_cues must contain only visible evidence, not inferred stories.
+- For should_fix=true, reason must name the visible eyelid morphology and why it conflicts with the otherwise awake/photo-ready moment.
+- For should_fix=false on a closed-eye case, reason must name the affirmative intentional-expression, downward-target, or sleep evidence. Generic speculation about intent is invalid.
+- Add an eye-related correction_plan item only when should_fix=true.
+- If should_fix=true, add a correction_plan item naming the exact person by position/role and ask the edit model to naturally reopen or relax only that person's eyes while preserving identity, gaze direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.
+- The matching correction_axes entry must include ["expression"].
+- The matching correction_inverse entry must preserve the original eye state and facial expression for that same person.
+- The matching retouch_recipe item must be concise and user-facing, for example: "修正右側男生不小心半閉眼的表情。"
+- If no accidental blink or half-blink needs correction, keep correction_plan free of eye-opening items.
+
+Edit-model execution guardrail:
+- When a subject's gaze_issue.should_fix=true, do not leave that subject's gaze unchanged.
+- A no-op gaze edit is a failure.
+- Apply the smallest visible gaze-alignment change that fully satisfies the per-subject gaze_repair_strategy and turns the named subject's gaze into natural camera-facing eye contact.
+- Start with the analysis model's strategy_type. If it says eyes_only, use iris/pupil direction and sclera balance. If it says eyes_plus_head_face_alignment, use iris/pupil direction plus the specified head/face alignment; do not stop with eye-only repair.
+- This is not a full pose change: preserve identity, facial structure, expression, body pose, shoulders, hands, clothing, scene, and camera viewpoint.
+
+Analyze-to-edit alignment guardrail:
+Low-capacity image-model wording rule:
+- When instructing gaze repair, prefer concrete physical wording over abstract labels.
+- Interpret "camera-facing gaze" as: both pupils/irises visibly point at the camera, and the subject clearly looks at the camera.
+- Do not rely only on terms like direct_camera, lens-locked, or eye contact without also saying how the pupils/irises should move.
+
+- For edit execution, camera-facing gaze is a physical eye-direction target: iris/pupil placement and both eyes' visual axes should aim at the camera lens, not merely look sharper or more intense.
+- Approved gaze repair has higher edit priority than generic preservation for the listed subject's local eye-direction change.
+- A subject's gaze_issue.should_fix=true is not merely a recommendation; it authorizes the edit model to perform gaze redirection.
+- For every approved gaze repair, the analysis must produce the same instruction in three places: that subject's gaze_issue, correction_plan, and retouch_recipe.
+- Do not rely on the edit model to infer gaze repair from JSON alone.
+- Do not let a preservation instruction cancel an approved gaze repair. Preservation should protect all unrelated facial traits while allowing local gaze redirection.
+
+GPT-5.6 Luna calibration:
+- Do not rationalize closed eyes as intentional from context alone.
+- Do not reason as: "the person is smiling, therefore the closed eyes are natural."
+- Do not reason as: "the pose or hand gesture is deliberate, therefore the eyelids are deliberate."
+- Do not reason as: "this is a child, selfie, social, stage, fan, playful, or candid photo, therefore closed eyes belong to the moment."
+- Do not reason as: "both eyelids are cleanly and symmetrically closed, therefore closure is intentional."
+- Do not reason as: "one eye is closed and the other faces the camera, therefore this is a wink."
+- Do not reason as: "looking downward or away is acceptable" unless a specific visible in-frame gaze target exists.
+- Set should_fix=false for intentional closure only when affirmative visible evidence supports that classification.
+- First state the physical eyelid evidence. Then state the intent evidence. Then compute eye_state, closure_intent, confidence, and should_fix from those observations.
+
+"""
+
+_BLINK_ANALYSIS_LEGACY = """## Blink analysis
+Intent: Classify expression intent before considering repair: detect accidental shutter-timing failures without judging eyelid openness alone, while preserving eye closure that belongs to the person's expression, emotion, gesture, sleep, downward gaze, or captured moment.
+
+Two-stage decision process:
+Before Stage 1, populate physical_eye_state from eyelid appearance alone using exactly one of open / narrowed_open / half_closed / fully_closed / one_eye_closed / unclear. This field is a direct observation and must not be changed to fit the later intent classification.
+Stage 1 -- Expression coherence test:
+- Ask whether the eye state supports the visible expression. Look at mouth shape, eyebrows, cheeks, head pose, hand gesture, body language, gaze direction, social context, and scene type.
+- If the closed/narrowed/winked eye supports the person's expression or emotion, classify it as intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze, or sleeping. Set closure_intent="intentional_expression", expression_coherence="supports_expression", blink_failure_confidence 0.0-0.25, and should_fix=false.
+- Examples of expression-coherent eye closure: wink with smile/smirk/greeting; crying face with squeezed eyes; laughing with eyes closed; cute child expression; playful selfie/video gesture; stage/fan-service expression; pain/sadness/embarrassment face; looking down at a specific, visible in-frame target.
+
+Stage 2 -- Accidental capture test:
+- Only if the eye state does NOT support the expression, ask whether it looks like a shutter-timing mistake.
+- Accidental blink/half-blink means the eye closure conflicts with the rest of the face or moment: the mouth/expression is otherwise neutral or photo-ready, but the eyelids look droopy, transitional, uneven, or mistimed -- for an instant, not for the whole visible moment. This is different from a person who is genuinely asleep; run the sleeping guardrail below before concluding accidental capture.
+- If the eye state conflicts with the intended expression and blink_failure_confidence >= 0.65, set closure_intent="accidental_capture", expression_coherence="conflicts_with_expression", and should_fix=true.
+- If evidence is mixed, set closure_intent="ambiguous", expression_coherence="unclear", and should_fix=false.
+
+Core policy:
+- The goal is to catch photo-taking mistakes users would likely want fixed, not to make every person open their eyes.
+- A closed or narrowed eye is not a defect when it carries emotion, charm, playfulness, pain, laughter, sadness, greeting, or performance.
+- False positive eye repair is worse than missing a subtle blink when the closed eye is part of an intentional or emotional expression.
+- Do not use subject size, foreground/background status, or main/secondary subject status as a deciding factor. Size only affects visual uncertainty.
+
+Decision labels:
+- open: both eyes are naturally open.
+- natural_smiling_squint: eyes are narrowed because the person is smiling, laughing, reacting, or showing joy; this is not a failure.
+- intentional_wink: one eye is closed or nearly closed while the other eye is open, and the face/body/context reads as a deliberate wink, greeting, pose, playful expression, performance, selfie gesture, video moment, or social-media interaction; this is not a failure.
+- intentional_closed: eyes are deliberately closed as part of a pose, prayer/resting expression, savoring food, calm moment, or other intentional moment; this is not a failure. Requires the eyelids themselves to be fully and cleanly shut (no visible sclera or pupil) -- see the pose-does-not-imply-eyelid-state guardrail below.
+- expressive_closed: eyes are closed as part of a strong emotional or expressive face, such as crying, exaggerated sadness, pain, embarrassment, cute reaction, dramatic performance, or meme-like reaction face; this is not a failure.
+- downward_gaze: eyes appear closed or narrowed because the person is looking down at a specific, nameable, visible target inside this same frame and the gaze is anatomically consistent with looking at it; this is not a blink failure. Looking down or away with no identifiable in-frame target does not qualify for this label; see the downward-gaze guardrail below.
+- sleeping: the person is genuinely asleep or napping -- both eyes fully and evenly closed, face and jaw relaxed/slack, and a resting posture (head tilted onto a pillow/shoulder/arm, reclined or lying down, eyes closed for the whole visible moment rather than mid-transition); this is not a failure, regardless of how neutral the mouth looks.
+- occluded_or_unclear: eyes are hard to judge because of glasses, hair, motion blur, shadow, hand/object occlusion, low resolution, compression, or face size. Do not fix unless the accidental blink is visually clear.
+- accidental_blink: eyes are caught closed in an unintentionally mistimed shutter moment.
+- accidental_half_blink: one or both eyes are caught unevenly half-closed, droopy, sleepy-looking, or transitional in a way that conflicts with the person's expression and likely weakens the photo.
+- uncertain: evidence is mixed or not important enough to repair.
+
+Wink / one-eye-closed guardrail:
+- If exactly one eye is closed or nearly closed and the other eye is open, run the Expression coherence test first. Do not jump to accidental_half_blink.
+- Classify as intentional_wink with should_fix=false when at least TWO of these cues are present:
+  1. the open eye looks toward the camera/viewer;
+  2. the mouth has a controlled smile, smirk, greeting expression, speaking shape, or playful expression;
+  3. the eyebrows/cheeks/head pose support a deliberate expression rather than a sleepy mistake;
+  4. there is a hand gesture, salute/wave, selfie framing, video screenshot feel, stage/performance context, close camera interaction, or social-media capture;
+  5. the closed eye is a clean expressive squeeze rather than a droopy transitional lid.
+- A one-eye-closed face is accidental_half_blink only when the mouth, brow, gaze, head pose, and context look neutral/unprepared AND the closed lid looks mistimed rather than expressive.
+
+Emotional closed-eye guardrail:
+- If eyes are closed together with a strong mouth/brow emotion, classify by expression first, not by eyelid state.
+- Crying face, pained face, exaggerated sadness, embarrassment, dramatic reaction, cute reaction, meme-like expression, or laugh-with-eyes-closed should be expressive_closed or natural_smiling_squint with should_fix=false.
+- Do not open eyes when opening them would erase the emotional meaning of the photo.
+- Counterfactual test: If opening the eyes would make the expression less truthful, less funny, less cute, less emotional, or less like the captured moment, then should_fix=false.
+
+Smile-squint vs. full-closure guardrail:
+- A genuine smile-driven squint narrows the eyes; it does not require them to be fully sealed shut. Before classifying closed eyes during a smile as natural_smiling_squint or intentional_closed, check whether the eyelids are only narrowed (a visible eyelash line, a slight eye-corner crease, still some sliver of the eye showing) versus fully and completely shut with no eye visible at all.
+- Full, complete eyelid closure during an otherwise ordinary smile or casual pose is not, by itself, evidence of natural_smiling_squint or intentional_closed -- a blink can happen at the exact camera-click moment independent of what the mouth is doing at that instant. Only classify fully-shut eyes as natural_smiling_squint/intentional_closed when there is supporting evidence beyond "the person is smiling": an active laugh (visible teeth, raised cheeks compressing the eyes shut), a deliberate pose context (prayer, savoring food, resting, a repeated stylistic expression across other photos of the same shoot), or an intentional_wink/performance context.
+- intentional_closed's own qualifying contexts are specific -- a held pose, prayer/rest, savoring food, a calm moment. An ordinary candid or posed smile in a casual or group photo does not by itself qualify; let it fall through to the Stage 2 accidental-capture test instead of defaulting to intentional_closed.
+- In a group photo, one person with fully shut eyes while everyone else's eyes are open and the shot otherwise looks photo-ready is strong evidence for accidental capture (see "Strong evidence for accidental capture" above) -- that person's own smile, on its own, does not override this signal.
+
+Pose-does-not-imply-eyelid-state guardrail:
+- A deliberate held pose -- hands framing the chin/cheek, head tilted back or to the side, a styled selfie/portrait setup -- proves the pose is intentional. It does NOT by itself prove the eyelids are also fully and deliberately closed at that same instant; a blink can happen involuntarily even while every other part of a held pose is exactly as intended.
+- Before classifying eyes as intentional_closed, expressive_closed, or natural_smiling_squint on the strength of a deliberate pose, check the eyelids themselves: are they cleanly, fully, and evenly shut with no sclera or pupil visible? If any sliver of white or the pupil/iris is visible, the eyes are not fully closed -- treat it as a half-open, transitional state and run the Stage 2 accidental-capture test instead of defaulting to intentional_closed just because the pose looks deliberate.
+- A symmetric hand-on-face / head-tilt pose paired with half-open, glassy, unfocused eyes and no visible in-frame gaze target is a common signature of an accidental blink caught mid-transition during an otherwise well-executed pose -- it is not, by itself, evidence that the eye closure was intentional.
+
+Sleeping guardrail:
+- Before concluding accidental_blink or accidental_half_blink, check whether the person is genuinely asleep rather than mid-blink while awake.
+- Evidence of genuine sleep: both eyelids are fully and evenly closed (not droopy, uneven, or half-open); the face and jaw are relaxed/slack rather than tensed for a shot; the head/body is in a resting posture -- tilted onto a pillow, shoulder, arm, car seat, stroller, or someone's lap, reclined, or lying down; the eyes are closed for the entire visible moment, not caught transitioning between open and closed. This applies to babies, children, and adults alike, and to candid or posed photos of someone napping.
+- Genuine sleep does not require a reclined posture. A person can be sitting or standing upright with eyes fully and evenly closed, a slack/disengaged face, and no interaction with the camera or surroundings, and still be genuinely dozing off rather than caught mid-blink.
+- A neutral or slack mouth on a sleeping person is expected and is not, by itself, evidence of an accidental blink -- a real accidental blink still requires the droopy/uneven/transitional eyelid look, not just closed eyes plus a neutral mouth.
+- When genuine sleep is indicated, classify as eye_state=sleeping, closure_intent=intentional_expression, expression_coherence=supports_expression, blink_failure_confidence 0.0-0.25, should_fix=false. Never add an eye-opening correction_plan item for a sleeping subject.
+- Only override this and treat it as accidental capture if the eyelids themselves look droopy, uneven, or mid-transition (evidence the person is awake and drifting/struggling to keep eyes open) rather than fully and evenly at rest.
+
+Downward-gaze guardrail:
+- downward_gaze requires a nameable, boxable, visible target inside this same frame that the person is plausibly looking at or interacting with. This is the ONLY thing that qualifies narrowed/closed eyes as downward_gaze.
+- It does NOT cover looking down at the ground/floor with nothing there, looking away into empty space or the distance, or any case where you cannot point to a specific in-frame object the eyes are aimed at. A vague "they're just looking down/away" is not evidence of this label.
+- When narrowed or closed eyes have no qualifying in-frame target, do not classify as downward_gaze and do not default to should_fix=false on that basis alone -- run the Stage 2 accidental-capture test normally; this is typically accidental_half_blink or accidental_blink, should_fix=true, unless another guardrail (wink, emotional, sleeping) independently applies.
+
+Balanced should_fix rule:
+- Set should_fix=true only when blink_failure_confidence >= 0.65 AND the eye issue visibly looks like accidental capture timing on someone who is awake.
+- Moderate accidental half-blinks should be fixed when they make a person who is awake and otherwise posed/ready look unintentionally droopy, distracted, unprepared, or mid-blink, and there is no strong intentional-expression cue and no sleeping-guardrail evidence.
+- For blurry, occluded, compressed, shadowed, glasses-reflected, or unclear eyes, require stronger confidence around 0.85 before fixing. This is about visual ambiguity, not subject size or prominence.
+- If there is strong evidence of intentional_wink, natural_smiling_squint, intentional_closed, expressive_closed, downward_gaze (with a genuine in-frame target -- see the downward-gaze guardrail), sleeping, or playful/performance/emotional expression, should_fix=false even if one or both eyes are closed.
+
+Strong evidence for accidental capture:
+- The person otherwise looks normally posed or photo-ready.
+- The mouth, brows, cheeks, and head pose do not support a wink, laugh, cute expression, emotional reaction, downward gaze, or performance.
+- The eyelids look droopy, uneven, transitional, sleepy, or mistimed.
+- The eye state makes the person look unintentionally tired, distracted, unprepared, or caught mid-blink.
+- In a group photo, the person's expression is the only one that reads accidentally mistimed while the scene otherwise looks photo-ready.
+
+Strong evidence against accidental capture:
+- The closed eye matches the mouth expression, brow tension, cheek lift, hand gesture, head pose, or emotional tone.
+- One eye is closed and the other eye is open in a controlled way, with a wink-like expression, smirk, greeting, salute, wave, playful mouth shape, or camera interaction.
+- Both eyes are closed because of laughter, smile-squint, crying, pain, sadness, embarrassment, cute expression, prayer/rest, eating/savoring, dramatic reaction, or downward gaze at a specific visible in-frame target.
+- The image is a selfie, video screenshot, stage/performance moment, fan-service moment, close-up social-media capture, or playful social snapshot where expressive eyes are normal.
+- The person is genuinely asleep: eyes fully and evenly closed, face relaxed, head/body in a resting posture (pillow, shoulder, reclined, lying down) -- see the sleeping guardrail above.
+
+Practical examples:
+- Close-up selfie or video frame where one eye is closed and the other eye looks at the camera, with a smile/smirk/salute/wave/greeting gesture: intentional_wink, closure_intent=intentional_expression, should_fix=false.
+- Stage or celebrity close-up where one eye is closed in a controlled expression: intentional_wink, should_fix=false.
+- Crying face, pained reaction, exaggerated sad face, or dramatic meme-like expression with eyes squeezed shut: expressive_closed, should_fix=false.
+- Person laughing so hard both eyes close: natural_smiling_squint or expressive_closed, should_fix=false.
+- Casual child photo where the child smiles/plays with eyes closed: natural_smiling_squint or expressive_closed, should_fix=false unless the eye state clearly conflicts with the expression.
+- Group photo where one person has a sleepy half-blink while the mouth/brows are otherwise neutral and everyone else is ready: accidental_half_blink, closure_intent=accidental_capture, should_fix=true.
+- A baby or adult napping with eyes fully and evenly closed, relaxed face, and head resting on a pillow/shoulder/arm or lying down, even if the mouth is neutral: sleeping, closure_intent=intentional_expression, should_fix=false.
+- Formal or ordinary portrait where the subject's eyelids are accidentally half-closed and the expression otherwise looks neutral/photo-ready: accidental_half_blink, should_fix=true.
+- Person looking down at a specific, visible in-frame target: downward_gaze, should_fix=false unless the eye state clearly conflicts with the rest of the face.
+- Person looking down or away with no identifiable in-frame target (staring at the ground/floor, gazing off into empty space or the distance): does not qualify as downward_gaze; run the accidental-capture test -- typically accidental_half_blink/accidental_blink, should_fix=true, unless another guardrail (wink, emotional, sleeping) applies.
+- Blurry, compressed, shadowed, or unclear eyes: should_fix=false unless the accidental capture is visually clear.
+
+Subject-size neutrality:
+- Do not decide should_fix based on whether the face is large, small, foreground, background, main subject, or secondary subject.
+- Size/prominence may affect how easy the eye state is to see, but it must not be the reason for fixing or not fixing.
+- If the eye state and expression are visually clear, apply the same blink-vs-expression logic to every person.
+
+Output rules:
+- For every visible person, inspect eye state independently.
+- Fill blink_issue for every subjects[] entry with is_person=true whose eyes are legible enough to judge, not only the ones with something to explain -- an ordinary open-eyed person with nothing unusual still gets should_fix=false, the same as a wink or laugh does.
+- Do not leave a person subject's blink_issue at a placeholder just because their eyes look fine; every person subject gets a genuine reading, not only the flagged or noteworthy ones.
+- Use should_fix=false with a reason explaining why a closed-eye case is intentionally left unchanged, especially for winks, laughter, crying/emotional expressions, child expressions, or ambiguous cases.
+- Add an eye-related correction_plan item only when should_fix=true.
+- If should_fix=true, add a correction_plan item that names the exact person by position/role and asks the edit model to naturally reopen or relax only that person's eyes while preserving identity, gaze direction, facial structure, expression style, skin texture, glasses, makeup, and lighting.
+- The matching correction_axes entry for that correction_plan item must include ["expression"].
+- The matching correction_inverse entry should preserve the original eye state and facial expression for that same person if the user unchecks the item.
+- The matching retouch_recipe item should be user-facing and concise, for example: "修正右側男生不小心半閉眼的表情。"
+- If no accidental blink or half-blink needs correction, keep correction_plan free of eye-opening items.
+
+Edit-model execution guardrail:
+- When a subject's gaze_issue.should_fix=true, do not leave that subject's gaze unchanged.
+- A no-op gaze edit is a failure.
+- Apply the smallest visible gaze-alignment change that fully satisfies the per-subject gaze_repair_strategy and turns the named subject's gaze into natural camera-facing eye contact.
+- Start with the analysis model's strategy_type. If it says eyes_only, use iris/pupil direction and sclera balance. If it says eyes_plus_head_face_alignment, use iris/pupil direction plus the specified head/face alignment; do not stop with eye-only repair.
+- This is not a full pose change: preserve identity, facial structure, expression, body pose, shoulders, hands, clothing, scene, and camera viewpoint.
+
+Analyze-to-edit alignment guardrail:
+Low-capacity image-model wording rule:
+- When instructing gaze repair, prefer concrete physical wording over abstract labels.
+- Interpret "camera-facing gaze" as: both pupils/irises visibly point at the camera, and the subject clearly looks at the camera.
+- Do not rely only on terms like direct_camera, lens-locked, or eye contact without also saying how the pupils/irises should move.
+
+- For edit execution, camera-facing gaze is a physical eye-direction target: iris/pupil placement and both eyes' visual axes should aim at the camera lens, not merely look sharper or more intense.
+- Approved gaze repair has higher edit priority than generic preservation for the listed subject's local eye-direction change.
+- A subject's gaze_issue.should_fix=true is not merely a recommendation; it authorizes the edit model to perform gaze redirection.
+- For every approved gaze repair, the analysis must produce the same instruction in three places: that subject's gaze_issue, correction_plan, and retouch_recipe.
+- Do not rely on the edit model to infer gaze repair from JSON alone.
+- Do not let a preservation instruction cancel an approved gaze repair. Preservation should protect all unrelated facial traits while allowing local gaze redirection.
+
+Mini-model calibration:
+- Do not reason as: "eyes closed means accidental blink."
+- Do not reason as: "one eye closed means half-blink."
+- Do not reason as: "emotional closed eyes should be opened."
+- Do not reason as: "neutral mouth plus closed eyes means accidental blink" -- a genuinely sleeping person also has a neutral, relaxed mouth; check the sleeping guardrail's posture and eyelid cues before assuming a mistake.
+- Do not reason as: "the person is looking down/away so it's fine" -- that is only true when there is a specific, visible, nameable target in this frame that the gaze is aimed at; check the downward-gaze guardrail before assuming a mistake.
+- Do not reason as: "the pose is clearly deliberate (hands on face, head tilt, styled shot), so the closed eyes must be deliberate too" -- a held pose does not guarantee the eyelids were fully closed on purpose; check whether sclera or pupil is visible before assuming intentional_closed. See the pose-does-not-imply-eyelid-state guardrail.
+- Always ask first: "Does the eye state support the visible mouth/brow/gesture/emotion?" If yes, do not fix.
+- For one-eye-closed faces, run the wink guardrail before any blink-failure reasoning.
+- For strong emotional faces, run the emotional closed-eye guardrail before any blink-failure reasoning.
+- For any fully-closed-eyes case, run the sleeping guardrail before any blink-failure reasoning.
+- For any downward/averted-gaze case, run the downward-gaze guardrail before any blink-failure reasoning.
+- For any deliberately posed shot (hands on face, held head tilt, styled portrait/selfie), run the pose-does-not-imply-eyelid-state guardrail before any blink-failure reasoning.
+- When the expression could reasonably be deliberate, emotional, charming, playful, or performative, choose should_fix=false.
+- When the eye state clearly conflicts with the expression and looks like shutter mistiming, choose should_fix=true.
+
+"""
+
+_BLINK_WINK_DEFAULT_BULLET_LUNA = "- For one-eye-closed cases, do not default to intentional_wink. Classify intentional_wink only when wink-specific affirmative evidence is visible. An open eye facing the camera plus an ordinary smile or generic hand gesture is insufficient. Otherwise classify accidental_half_blink when the closed eyelid looks transitional or mistimed, or uncertain when the evidence is genuinely balanced."
+
+_BLINK_WINK_DEFAULT_BULLET_LEGACY = "- For one-eye-closed cases, intentional_wink is the default classification when the open eye faces the camera and the face/gesture/emotion looks controlled; do not add blink repair for that case."
+
+
+# ---------------------------------------------------------------------------
+# Two-pass split for gpt-5.6-luna: Call A (overall photo direction + subject
+# identification) and Call B (dedicated portrait-QC pass judging blink/hair/
+# gaze/smile only for the people Call A already identified). See
+# openai_client._analyze_photo_two_pass. Every other model keeps the single
+# ANALYSIS_INSTRUCTION call above untouched.
+#
+# Why split: the single-call flow doesn't just ask the model to judge blink/
+# gaze/hair -- it also asks it to keep every should_fix=true issue in sync
+# with a hand-authored correction_plan/correction_axes/correction_inverse/
+# retouch_recipe entry, and to reverse-check and delete any it invents
+# without backing. That's substantial extra bookkeeping layered on top of the
+# visual judgment itself, and a plausible independent contributor to
+# gpt-5.6-luna's low blink recall (see project memory
+# project_luna_eyeclose_recall.md / the 20260828 eval). Call A below is told
+# to leave correction_plan free of eye/gaze/hair items entirely;
+# backfill_missing_correction_items already knows how to synthesize those
+# deterministically from subjects[].{blink,hair,gaze}_issue once
+# correction_plan has zero items for that topic, which is now simply always
+# true for this path instead of a rare fallback case. Smile never went
+# through correction_plan at all (build_smile_block reads smile_issue
+# directly), so it needs no such backfill.
+# ---------------------------------------------------------------------------
+
+_FACE_CROP_EVIDENCE_SECTION = """## Face-crop evidence
+Intent: Use zoomed face crops as supporting evidence for facial details without treating them as separate photographs or using them for scene-level decisions.
+
+- After the main photo, you may be given one or more additional images labeled "Face crop N (zoomed, for anchoring subject detection and judging eye state, blink, gaze/pupil direction, and smile state; it is not a separate photo)". Each one is a cropped, zoomed-in view of one face a local face detector found in the SAME photo above, not a different photo or a different moment. Each comes with its own "Local face detector reference" coordinate (normalized original-image x/y/w/h) for that same face, numbered the same as its face crop (or, beyond the detector's own crop-count cap, given as a coordinate-only text reference with no image).
+- Go through every "Face crop N" / "Local face detector reference N" you are given, in order, and record one local_face_review entry per detection_index=N (see the JSON shape above). For each one, decide: (1) is this actually a real face (not background clutter, a pattern, a reflection, or a printed/painted face)? (2) if real, does this person pass the Subject inclusion rule above? Only when both are true do you create a subjects[] entry for them; set that entry's is_person=true and local_detection_index to this same N, and set this detection's matched_subject_index to that subjects[] entry's 0-based index. Otherwise set matched_subject_index=-1 and write reason: name whichever of "not a real face" or "real face but an incidental bystander (name why)" applies.
+- The detector can also miss a real, includable face (small, occluded, profile, motion-blurred). Still look at the full photo yourself and add a subjects[] entry for any additional visible person the detector did not catch and who passes the Subject inclusion rule; give that subjects[] entry local_detection_index=-1 since no detection produced it.
+- Use each matched face crop as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, and pupil/iris direction -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo. Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
+- A visible, includable person with no matching crop (beyond the detector's cap, or a person the detector missed entirely) is judged directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
+"""
+
+_PORTRAIT_QC_FACE_CROP_EVIDENCE_SECTION = """## Face-crop evidence for portrait QC
+Intent: Use the supplied full photo for photographic context and each zoomed face crop for local facial evidence, without repeating subject discovery or changing the subject list finalized by Call A.
+
+- The people to review are authoritative. Do not create, remove, reorder, merge, split, or relabel people.
+- Each listed person has an immutable subject_index from Call A. Echo that exact subject_index in the corresponding output item.
+- Also echo local_detection_index exactly as listed. It identifies the matching Face crop N when its value is greater than or equal to 1; -1 means no detector-backed crop is available.
+- Match a Face crop N only to the listed person whose local_detection_index equals N. Do not associate crops by visual similarity, list position, prominence, or guesswork.
+- Use the matched face crop as primary evidence for physical_eye_state, blink/closure, pupil/iris detail, and local hair detail.
+- For gaze, use the crop and full photo together: the crop resolves pupil/iris placement, while both views establish head yaw/pitch, facial geometry, and the current camera viewpoint. Never treat the crop center as the lens position.
+- Use the full photo for expression, gesture, body posture, group-photo readiness, visible gaze targets, sleep/activity context, and the relationship between people.
+- A crop is the same person and same shutter moment as the full photo, not a separate image.
+- If local_detection_index=-1 or the matching crop is unavailable, judge from the full photo and mark a field unclear only when the relevant visual evidence is genuinely unreadable.
+- Return exactly one result for every listed subject_index. Never output an issue result for a person not listed here.
+"""
+
+_BLINK_DETECTION_LUNA_SECTION = """## Blink / eyelid physical-observation pass
+Intent: maximize recall of readable half-closed, fully closed, and one-eye-closed states. Report physical evidence first. Deterministic Python, not you, decides blink_candidate, intent labels, confidence, and should_fix.
+
+Use the matched face crop as primary eyelid evidence and the full photo only for expression and activity context. Inspect every listed person independently, including secondary people.
+
+Physical fields:
+- blink_observability: both_eyes when both eyelids can be inspected; one_eye when only one can be inspected; unreadable only when neither eyelid state is reliable.
+- eyelid_detail_quality: readable, borderline, or unreadable based on blur, occlusion, reflection, compression, darkness, and actual pixel detail.
+- left_eye_state and right_eye_state describe each anatomical eye separately: open, narrowed_open, half_closed, fully_closed, not_visible, or unclear.
+- half_closed means an eyelid unusually covers the iris or pupil, or the aperture looks droopy, uneven, glassy, or transitional. Do not demote it to narrowed_open because the person is smiling.
+- fully_closed means the eyelids meet with no iris, pupil, or sclera visible.
+- physical_eye_state summarizes the two per-eye states without interpreting intention.
+- eye_closure_confidence is confidence from 0 to 1 that at least one eye is physically half_closed or fully_closed. It is not confidence that the closure was accidental.
+
+Record the following exception evidence separately; never use it to rewrite the physical states:
+- mouth_laughter_state: active_high_intensity_laughter only for unmistakable active laughter, not a normal, toothy, broad, posed, speaking, singing, shouting, or surprised mouth.
+- periocular_contraction: strong_bilateral only when both cheeks strongly elevate into the lower eyelids and pronounced lower-lid/outer-eye compression is visible. Raised cheeks alone are none_or_mild.
+- closure_expression_dependence: integral_to_expression only when opening the eyes would visibly contradict the same captured expression; otherwise independent_or_transitional or unclear.
+- explicit_closure_context: choose a named value only when clear visible evidence supports it. A V-sign, generic hand gesture, selfie, child subject, party, stage, playful pose, ordinary smile, symmetric closure, or plausible story is none, not evidence of intention. downward_at_visible_target requires a specific visible target in this same frame.
+- intent_evidence_confidence measures confidence in that explicit exception evidence, not confidence in eyelid closure.
+- intent_cues must name only visible facts. Do not write guesses such as possibly intentional, natural for the moment, cute, candid, or likely posing.
+- overall_demeanor reads this person's whole visible body: posture, muscle tension, and engagement with the camera or the moment, independent of the eyelid state itself and independent of explicit_closure_context. This is a separate axis from whether a specific named story applies -- most photos have no specific story either way, and this field is what still tells them apart. alert_or_camera_ready: posture upright/engaged, muscles active, everything else in the frame (hands, head angle, other people) reads as poised and mid-moment -- a closed eye here specifically conflicts with the rest of the person's own readiness. calm_or_at_ease: posture relaxed, unhurried, or settled -- shoulders down, no tension, nothing else about this person suggests they were caught mid-action -- so closed eyes read as consistent with the rest of their own relaxed state, not as a mismatch with it. unclear: body language cannot be read (too small, occluded, cropped tightly to the face). Judge only this person's own body, not the scene or other people, and only from what the pose/tension actually shows -- not from the eyelid state itself, not from guessing why their eyes are closed.
+
+Strict laughter evidence requires all three observations simultaneously: active_high_intensity_laughter, strong_bilateral periocular_contraction, and integral_to_expression. If any one is weak, obscured, or unclear, the laughter exception is not established.
+
+Output compatibility fields in this observation pass as placeholders only: blink_candidate=false, eye_state="observation_only", severity="none", closure_intent="ambiguous", expression_coherence="unclear", blink_failure_confidence=0.0, and should_fix=false. Python overwrites them after validating the physical evidence. The Traditional-Chinese reason should concisely describe left/right eyelid morphology, readability, laughter muscle evidence, and any explicit closure context. Do not make a repair decision in reason.
+"""
+
+_HAIR_ANALYSIS_SECTION = """## Hair analysis
+Intent: Detect actionable accidental hair disruption without redesigning an intentional hairstyle, natural texture, or motion; be conservative because pointing the editing model at hair can rebuild it, and a rebuilt hairstyle is a worse failure than untidy hair.
+
+One reading decides most cases: disorder that is even and repeated across the head is style or texture, while disorder that is a single local contradiction on an otherwise settled head is an accident. Wind is the exception to that reading, since it can disturb a whole head at once: it displaces hair in one direction and against the hairstyle's own shape, on a body that is otherwise posed or still, and it usually shows elsewhere in the frame too -- clothing, foliage, other people's hair. Read wind as a flaw across the whole area it disturbed, not only where it landed on a face.
+Not a flaw, so should_fix=false, and name which one: styled_messy (deliberate cut, tousle, or product separation), styled_bangs (center-parted, curtain/八字, or see-through fringe -- a designed parting is even on both sides and is not a split to close, and designed wisps are fine, similar in width, and evenly spaced; run the clumping test below before settling on this one), styled_face_framing (strands left out at the temples, as most updos and ponytails have), motion (hair mid-jump, spin, flip, throw, or turn, where the body itself is mid-action so the movement is the moment and tidying it would delete the action -- this is about what the person is doing, not about wind), natural_texture (curly, coily, fluffy, or baby hair -- flattening it changes who they are), occluded_or_unclear (head small in frame, motion-blurred, rim-lit, or dark on dark).
+A flaw across the whole area it covers when the wind reading above fits: windblown (the hairstyle is lifted, opened up, blown sideways, or pushed out of its own shape while the person is posed or still). Treat the whole disturbed area as the work, not only the strands that landed on the face.
+Front-hair check -- do this for every person with hair falling over the forehead or in front of the face, before choosing any state for them, and put the answer in visible_evidence. Whether that hair is a blunt fringe, a side sweep, or the front length of longer hair makes no difference here, and neither does whether skin shows through it or beside it; the question is only how those strands are distributed. Do they run at similar thickness and spacing, or are some stuck together into cords with bare skin between them? Record it in front_hair, required for anyone with hair in front of the face. It is a reading, not a state: never copy its value into hair_state, which only ever takes a value from its own list. front_hair="clumped" means hair_state="bangs_clumped" and fix_action="redistribute" -- not strands_across_face, whatever the strands look like individually, because the front of the hair is what is wrong and what gets worked on. front_hair="even" is not a flaw by itself. Judge the front of the hair as one shape, not by where its tips happen to fall -- hair whose ends reach the brows, eyes, or cheek is still the front of a hairstyle, and reading only those tips is what turns a clumped front into "a few strands near the eyes".
+bangs_clumped: the fringe has separated into uneven clumps with bare gaps showing forehead between them, because the hair is oily, damp, or sweaty rather than because it was cut or styled that way. Confirm it with any two of these, coarsest first: the clumps differ visibly in thickness, with bare gaps beside thick strands; only the fringe changed, while the rest of the head still reads clean and smooth; the scene explains it -- heat, humidity, rain, sweat, a long day or a long outdoor event -- usually with the same sheen on the forehead and nose; the hair separates at the root and clings to the forehead, where styled bangs stay evenly distributed at the root and separate along their length; the fringe carries a hard specular streak and looks darker and slicker than the lengths below it. Two of those make it should_fix=true; the last two need a clear enough view of the strands to be worth reading at all.
+Also a flaw, but only when local and fighting the hair around it: strands_across_face (hair that has left the hairstyle and come to rest on the face -- over an eye, nose, or mouth, or stuck to a lip or cheek. Hair that still belongs to the fringe, lying where the fringe lies, is a fringe state, never "a few loose strands"; this is the label that most often swallows a clumped fringe by mistake), bangs_disturbed (fringe flipped up or pushed against its own direction, exposing forehead it covered), lock_out_of_place (one lock escaped a tie, clip, or hat and hangs by the ear or below the fringe, with no match on the other side), frizz_halo (static outline on an otherwise smooth head), tuft_or_flattened (one tuft standing up or hat/sleep-pressed while its neighbours lie correctly). Set mess_intent="accidental_capture" only at hair_mess_confidence >= 0.75; mixed evidence means "ambiguous" and should_fix=false.
+Hair over an eye, nose, or mouth is the case users most want fixed, so it stays should_fix=true. What being on a feature changes is the wording, not the verdict: moving a strand means whatever it covered has to come from the original photograph, so the item must say so -- reveal the person's own feature as the photograph already shows it on both sides of the strand, with its shape, position, and edges unchanged, rather than letting it be re-rendered. The single case that cannot be done is a section of hair thick enough to bury a whole feature, with nothing visible either side of it to continue from: there is no original left to reveal, so should_fix=false with the reason naming what is buried.
+Forehead-or-cheek lock test, for the case most often misread -- run it before settling on any state above, since a deliberate lock and a fallen one look alike in a still frame. Deliberate: comes as a matched pair, lies along the cheekbone following the hairline's own direction, is combed out from the parting with the hair behind it intact, and stays clear of the eyes. Fallen: one side only, crossing that direction at its own angle, visibly pulled free leaving a gap or kink at the tie it escaped, landing on an eye, brow, or mouth. Two or more cues decide it; one each way means should_fix=false.
+Judge only from strands you can actually resolve: if you cannot see individual strands you cannot see the flaw, so occluded_or_unclear, and require >= 0.9 on blurred, backlit, or small heads. Size and prominence change only how clearly you see the hair, never whether to fix it, and grooming the subject is not a goal of this retouch -- a false positive costs the person their own hair, where a miss costs nothing.
+Every should_fix=true commits to a fix_action: lay_back where adjacent hair runs the same way and can take the strands back, remove where they are isolated on skin, on a feature, or on background with no flow to rejoin -- and remove is only ever for hair that has LEFT the hairstyle, never for hair that the hairstyle puts where it is. Hair lying on the forehead, along the hairline, or at the temples is a fringe or the hairstyle's own edge, so removing it deletes part of the haircut and uncovers forehead the person's hair is meant to cover. That hair takes redistribute or lay_back and never remove, whatever state you assigned it. Strands resting further down -- on a cheek, a jaw, a lip -- have left the hairstyle and are what remove is for. Writing "移除前額的碎髮" is how a fringe gets erased -- settle for a windblown area -- the one action whose scope is a region rather than a single strand, combing the disturbed hair back down into the hairstyle's own shape so the outline reads continuous again -- and redistribute for a clumped fringe, spreading the hair that is already there so the clumps even out and the bare gaps close. For settle, name the reference in the item: the part of the same head the wind did not disturb is what defines the length, parting, volume, direction, and silhouette the disturbed area returns to. Where the wind disturbed the whole head there is less of that reference left to read, so require >= 0.85 there and say that the hairstyle's own evident shape is the target. Never 淡化, 降低對比, 柔化, or 模糊 hair -- toning a strand down leaves a grey ghost of it on the skin, which reads as damage where the strand only read as untidy, and there is no partial version of this repair. Stray hair is never a distraction item for the same reason: that toolkit (tonal control, desaturation, blur) is the wrong instrument on hair and produces exactly that smear. The one tonal instruction that is right on hair is the oily sheen itself: a redistribute item should also say to bring the hard specular streak down to the soft even sheen the rest of that person's hair has, with strand detail recovered inside it -- that is recovering texture in a blown highlight, not fading hair away, and it never means darkening, flattening, or blurring the fringe.
+Then add one correction_plan item per distinct hair problem on that person, tagged correction_axes ["hair"] -- a clumped fringe and strands resting on a cheek are two problems needing two different actions, not one item covering both.
+Write it as the state that hair ends in, not as something to take away: an item that only names hair to be rid of leaves the editing model nothing to render towards, and what it renders instead is the hair it was given. Name them by position, name the strands/tuft/area, state the fix_action, and hold hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color unchanged.
+Write that item as the finished picture, in words that can be rendered. The editing model cannot act on 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續: those name an intention rather than anything visible, and an item written that way comes back unchanged -- which is the most common reason a hair correction has no effect at all. Name the operation and the state it ends in. A clumped fringe needs both halves of the job named: 去油 -- 壓掉瀏海上的油亮反光，讓髮絲恢復霧面質感、不再黏成一束; and 梳整齊 -- 把結成一束一束的瀏海梳散成寬度一致的薄簾，並讓髮絲蓋過束與束之間露出額頭的空隙。Worked example of a whole item: 「把瀏海的油光壓掉、恢復霧面質感，並把結成束的瀏海梳散成寬度一致的薄簾，讓髮絲蓋過中間露出額頭的空隙；瀏海長度、髮際線與髮量不變。」
+correction_inverse keeps that person's hair as captured; retouch_recipe stays short, for example "把瀏海去油、梳整齊。" or "把黏在臉頰上的兩三根碎髮清掉。". Keep should_fix=false entries when they record a decision worth explaining, but write no correction_plan item for them -- tidy hair is not a correction, and hair tidying is never a routine portrait enhancement.
+"""
+
+_GAZE_CONTACT_ANALYSIS_SECTION_LEGACY = """## Gaze-contact analysis
+Intent: First determine strict lens contact from visible pupil/iris direction, binocular convergence, and eye focus—not merely face direction—then assess edit feasibility and produce a concrete repair handoff only when the gaze rules approve correction.
+
+Core policy:
+- Judge camera gaze by the eyes only: pupil/iris direction, binocular convergence, eye-focus feeling, and whether the eyes feel lens-locked.
+- Face direction, body direction, pose, scene type, and subject importance are supporting context only. They must never be used as proof of direct eye contact.
+- A forward-facing face with pupils looking slightly above, beside, past, or through the camera is NOT direct_camera.
+- near_camera is NOT direct_camera.
+- Direct_camera is a strict positive label, not a default. Use it only when lens contact is visually obvious.
+- Recall priority: when gaze_contact_detection is ON, missing a readable non-lens-looking subject is worse than flagging a borderline near-camera subject for review.
+- If the eyes are visible and not unmistakably lens-locked, choose lens_contact_decision=not_looking_at_lens rather than looking_at_lens.
+- Do not set not_looking_at_lens_confidence to zero because the off-camera gaze looks natural, candid, documentary, performative, or contextually appropriate.
+- Do not reject gaze detection merely because the original gaze has a plausible reason.
+- If the person is not looking at the lens and the eyes are readable, should_fix=true -- regardless of how natural, candid, or anatomically demanding the correction would be. How demanding the correction is only changes strategy_type and repair_strength (see the gaze_repair_strategy rules below), never whether to fix it.
+
+Strict direct-camera criteria:
+Assign direct_camera / looking_at_lens only when ALL are true:
+1. both visible eyes, or the only visible eye, appear aimed at the camera lens/viewer;
+2. the pupils/irises are centered or oriented consistently with camera-facing gaze;
+3. the eyes feel engaged with the viewer rather than looking past, above, beside, downward, or through the lens;
+4. there is no clear evidence of sideward, upward, downward, cross-focused, or unfocused gaze;
+5. an ordinary viewer would immediately say "this person is looking into the camera," not merely "the face is turned toward me."
+
+If any of these are not true and the eyes are still readable, do NOT label direct_camera. Use near_camera, off_camera, upward_side, downward, unfocused_camera, cross_focused, or ambiguous.
+Borderline readable cases should not be promoted to direct_camera. If unsure between direct_camera and near_camera, choose near_camera / not_looking_at_lens.
+
+Pupil / iris position checklist:
+Before assigning direct_camera, inspect the pupil/iris position inside each visible eye opening.
+- For a camera-facing face, the pupils/irises should appear positioned and aimed consistently with looking into the camera lens/viewer.
+- If both pupils/irises are shifted toward the same side of their eye openings, the subject is looking sideways, not at the camera.
+- If both pupils/irises are shifted upward within the eye openings, the subject is looking upward, not at the camera.
+- If both pupils/irises are shifted downward within the eye openings, the subject is looking downward, not at the camera.
+- If the pupils/irises are aimed toward upper-left, upper-right, lower-left, or lower-right relative to the camera, do not label direct_camera.
+- If the face is centered or frontal but the pupils/irises are side-shifted, classify the gaze as near_camera, off_camera, upward_side, downward, or ambiguous based on the eye direction. Do not classify it as direct_camera.
+- Do not use facial orientation, portrait-like framing, smile, centered composition, or product-demo posing to override visible pupil/iris displacement.
+
+Readable-eye forced choice rule:
+- If the eyes are readable, do not use unclear merely because the scene context is ambiguous.
+- For readable eyes, choose one of these:
+  1. looking_at_lens only if the eyes are unmistakably lens-locked;
+  2. not_looking_at_lens if the eyes point even slightly beside, above, below, past, through, or near but not into the lens;
+  3. unclear only when blur, occlusion, reflection, shadow, compression, face size, or closed eyes make the eye direction visually unsafe to judge.
+- If the eyes are readable and lens contact is not obvious, the correct decision is not_looking_at_lens.
+
+Direct-camera veto rule:
+Do NOT assign direct_camera or lens_contact_decision=looking_at_lens if any of the following are visible:
+- the pupils/irises are displaced toward the same side of both eye openings;
+- the pupils/irises are visibly higher or lower than expected for lens contact;
+- the eyes appear to look above, beside, below, or past the camera even when the face is frontal;
+- the gaze direction could reasonably be described as up-left, up-right, side-left, side-right, down-left, down-right, above-camera, beside-camera, or past-camera;
+- the eye focus appears engaged but directed at someone/something near the camera rather than at the lens.
+
+If a direct-camera veto is triggered and the eyes are readable:
+- set lens_contact_decision=not_looking_at_lens;
+- set gaze_state to near_camera, off_camera, upward_side, downward, unfocused_camera, cross_focused, or ambiguous;
+- keep lens_contact_confidence below 0.60;
+- set not_looking_at_lens_confidence to at least 0.60 unless the eye direction is visually unclear.
+
+Binary lens-contact gate:
+- First output lens_contact_decision before scoring:
+  - looking_at_lens: the eyes are clearly and unmistakably focused on the camera lens/viewer.
+  - not_looking_at_lens: the eyes are visibly not focused on the camera lens/viewer, including near-camera, slightly-beside-lens, above-lens, below-lens, past-camera, or unfocused gaze.
+  - unclear: the eyes are too blurry, occluded, tiny, shadowed, reflected, compressed, closed, or ambiguous to judge safely.
+- The decision must be based on the eyes, not the face.
+- Do not infer looking_at_lens from a centered face, frontal head pose, smile, portrait framing, or product-demo pose.
+- If the pupil / iris position checklist or direct-camera veto indicates non-camera gaze, lens_contact_decision must be not_looking_at_lens, not looking_at_lens.
+- If the eyes are readable and direct lens contact is not obvious, lens_contact_decision must be not_looking_at_lens.
+
+Score mapping:
+- If lens_contact_decision=looking_at_lens:
+  - gaze_state should be direct_camera.
+  - lens_contact_confidence should be >= 0.75.
+  - not_looking_at_lens_confidence should be <= 0.25.
+  - should_fix=false.
+- If lens_contact_decision=not_looking_at_lens:
+  - gaze_state must NOT be direct_camera.
+  - lens_contact_confidence should usually be <= 0.40.
+  - not_looking_at_lens_confidence should usually be >= 0.70 for readable eyes, and at least 0.60 for borderline-but-readable eyes.
+  - should_fix=true whenever the eyes are readable (see Hard should_fix rule below); gaze_correction_reasonableness only shapes the repair strategy, not whether to fix.
+- If lens_contact_decision=unclear:
+  - gaze_state should be ambiguous or unclear.
+  - both lens_contact_confidence and not_looking_at_lens_confidence should stay low or moderate.
+  - should_fix=false unless the eye direction is still clear enough to edit safely.
+
+Stage 1 -- Lens-contact detection:
+- lens_contact_confidence measures only whether the eyes are actually focused on the camera lens.
+- not_looking_at_lens_confidence measures only whether the eyes are not focused on the camera lens.
+- Judge lens contact independently from scene context, pose, body action, gesture, product interaction, speaking/performance status, candidness, documentary feeling, or whether direct eye contact would "make sense" in the photo.
+- The decision boundary is visual and eye-based only: look at pupil/iris direction, binocular alignment, and whether the visual axes appear to meet the lens.
+- Context must not reduce not_looking_at_lens_confidence. Context affects only whether the gaze redirection is anatomically feasible and visually natural when applied, not whether the person is currently looking at the lens.
+- A speaker, performer, athlete, demonstrator, or candid subject can still be not_looking_at_lens if the eyes do not visually meet the lens. Conversely, a posed portrait subject is not looking_at_lens unless the eyes visually meet the lens.
+- Output lens_contact_confidence:
+  - 0.90-1.00: unmistakable direct lens contact; eyes are locked onto the camera/viewer.
+  - 0.65-0.89: probably looking at the camera, but not perfectly locked.
+  - 0.35-0.64: near-camera or ambiguous; face may point forward but eye focus is not clearly on the lens.
+  - 0.10-0.34: probably not looking at the lens; eyes look past, above, beside, downward, or unfocused.
+  - 0.00-0.09: clearly not looking at the lens.
+- Output not_looking_at_lens_confidence as the evidence strength that the person is NOT lens-locked. This should be high for near_camera, off_camera, upward_side, downward, unfocused_camera, or cross_focused states when the eye direction is visually clear.
+- Do not collapse not_looking_at_lens_confidence to 0 just because the original gaze is contextually natural.
+
+Stage 2 -- Anatomical gaze-redirection feasibility:
+- Decide whether changing the subject's gaze to look at the camera would remain physically natural and anatomically plausible.
+- gaze_correction_reasonableness measures whether redirecting the eyes, with a bounded moderate head/face orientation refinement if needed, would remain ergonomically and anatomically natural.
+- It does NOT measure whether the corrected gaze preserves the original narrative, story, candidness, documentary realism, speech direction, or scene intent.
+- This score feeds strategy_type, repair_strength, and how the repair should be carried out. It never feeds should_fix: a low score means "repair carefully and conservatively," never "leave the gaze unchanged."
+
+Stage 3 -- Per-subject gaze repair strategy:
+For every subject's gaze_issue, write gaze_repair_strategy as a concrete edit guide for this exact image, not a generic reminder. The edit model will follow this strategy literally, so vague or overly conservative wording will cause a weak edit.
+
+Required strategy fields:
+- original_gaze_read: describe what the eyes are doing NOW using visible pupil/iris evidence. Mention direction and failure type, e.g. "pupils/irises point slightly camera-right, so the gaze passes beside the lens" or "eyes aim above the lens".
+- target_gaze_read: describe the ENDPOINT, not just improvement. Use wording like "both pupils/irises aimed at the camera lens; viewer reads unmistakable direct eye contact."
+- eye_adjustment: say the practical direction of the pupil/iris correction for this subject, not just "improve eye contact". Example: "move both pupils/irises leftward and slightly downward toward camera-lens center."
+- sclera_catchlight_adjustment: say how to keep eye whites and catchlights natural after the gaze change.
+- head_face_adjustment: say whether to keep the head angle, slightly align it, or moderately align it toward the camera. If strategy_type=eyes_plus_head_face_alignment, this must not be "none".
+- edit_instruction: write one or two direct English commands for the edit model. This is the most important handoff field. It must be executable without reading the rest of the gaze rules. Write it in clean, grammatical English only -- do not mix in a word or phrase from any other language (e.g. Chinese, Spanish). A single foreign word dropped into an otherwise-English sentence makes the instruction unparseable as a command.
+
+Strategy type decision:
+- eyes_only: choose this only when moving the pupils/irises and rebalancing sclera can naturally create unmistakable direct lens contact while keeping the current head/face angle. Use this mainly for near_camera or very mild off-camera gaze.
+- eyes_plus_head_face_alignment: choose this when eye-only repair would still look like side-eye, near-camera gaze, looking past the lens, or an uncomfortable eye rotation. This authorizes the edit model to turn/tilt the face toward the camera within the bounded preservation rules.
+- not_safe_to_repair: choose this only when gaze repair would genuinely require a large pose/head change, new face structure, changed expression, or unclear/invented eyes -- a physical/visibility constraint, never a narrative or contextual one. "The gaze looks natural/candid/intentional here" is not a valid reason to choose not_safe_to_repair. should_fix still stays true when this strategy_type is chosen: describe the safest partial adjustment that moves the gaze visibly closer to the lens (repair_strength=subtle), rather than describing no change at all.
+
+Strategy strength consistency rules:
+- If gaze_state is off_camera, upward_side, downward, unfocused_camera, or cross_focused and not_looking_at_lens_confidence >= 0.75, do NOT choose repair_strength=subtle unless the eyes are already extremely close to the lens and original_gaze_read explains why.
+- If gaze_state=off_camera and failure_to_avoid includes "near-camera only", do NOT choose eyes_only unless eye_adjustment can clearly reach direct lens contact without side-eye.
+- If the original face/head angle is a reason the subject still reads as looking away, choose eyes_plus_head_face_alignment and specify slight or moderate head_face_adjustment.
+- If head_face_adjustment="none" while gaze_state=off_camera, the reason must explain why eyes_only is sufficient and why it will not stop at near-camera.
+- If strategy_type=eyes_only, failure_to_avoid should normally include "pupil shift without direct lens contact"; if the subject is clearly off-camera, consider eyes_plus_head_face_alignment instead.
+- If the target is "unmistakable direct eye contact", repair_strength should usually be moderate for off_camera cases.
+
+Wording requirements:
+- Do not write "將瞳孔輕微調整向鏡頭中心" for clear off_camera cases unless the gaze is already nearly direct. That wording is too weak.
+- Prefer concrete commands such as: "Move both pupils/irises toward the camera-lens center and moderately turn the face toward camera until the viewer reads direct eye contact."
+- success_condition must be stricter than "improved": it should state the final viewer read, for example "subject clearly looks straight at the camera lens" or "do not stop at near-camera gaze".
+- preserve_during_repair should list what must stay unchanged for this image, such as body pose, shoulder direction, hands, clothing, mouth expression, identity, background, and object interaction.
+- failure_to_avoid should name likely failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "changed body pose".
+
+Example strategy for a clear off-camera seated portrait:
+{
+  "strategy_type": "eyes_plus_head_face_alignment",
+  "original_gaze_read": "The face is slightly angled and the pupils/irises read off-camera rather than lens-locked.",
+  "target_gaze_read": "Both pupils/irises aim at the camera lens; viewer reads direct eye contact.",
+  "eye_adjustment": "Move both pupils/irises toward the camera-lens center, not merely closer to it.",
+  "sclera_catchlight_adjustment": "Rebalance sclera naturally around the new iris position and keep catchlights consistent with the original lighting.",
+  "head_face_adjustment": "moderate yaw toward camera while preserving body pose and shoulders",
+  "repair_strength": "moderate",
+  "edit_instruction": "Redirect the named subject's gaze to the camera lens using pupil/iris repositioning plus a moderate face yaw toward camera. Do not stop at near-camera; the final viewer read must be direct eye contact.",
+  "success_condition": "Subject clearly looks straight at the camera lens.",
+  "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "clothing", "scene"],
+  "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "changed body pose"]
+}
+- Judge this score by:
+  - whether the required eye rotation is small enough to look natural;
+  - whether the head direction and corrected eye direction are compatible;
+  - whether the corrected gaze would preserve natural binocular alignment;
+  - whether the corrected gaze would avoid a cross-eyed, divergent, strained, or anatomically awkward appearance;
+  - whether the eyelids, eye opening, eye corners, and surrounding facial tension would still look natural after the gaze shift;
+  - whether the eye region is visible and detailed enough to edit safely.
+- Output gaze_correction_reasonableness:
+  - 0.80-1.00: redirecting the gaze to the camera would be physically natural and require only a subtle, believable eye adjustment.
+  - 0.60-0.79: redirecting the gaze to the camera would still be anatomically plausible and visually natural.
+  - 0.35-0.59: redirecting the gaze may be possible, but the required eye rotation or head-eye relationship may start to look slightly awkward.
+  - 0.00-0.34: redirecting the gaze would likely look anatomically implausible, overly strained, cross-focused, divergent, or inconsistent with the head pose.
+- A gaze can be natural in the original story but still reasonable to correct if the corrected result would remain physically believable.
+
+Decision labels:
+- direct_camera: the eyes appear locked onto the lens/viewer. Use this only for clear, unmistakable lens contact.
+- near_camera: the eyes are close to camera direction but not clearly lens-locked. near_camera does NOT count as direct camera gaze.
+- off_camera: the eyes clearly look to the side or toward someone/something outside the camera.
+- downward: the eyes look downward; this is gaze direction, not blink.
+- upward_side: the eyes look upward and/or to the side.
+- unfocused_camera: the face is oriented toward camera, but the eyes look vacant, past the lens, not converged on the lens, or mentally disengaged.
+- cross_focused: eye alignment or convergence looks unintentionally mismatched, creating a crossed or divergent focus impression.
+- ambiguous: hard to decide whether the gaze is intentional or missed, but the eyes are somewhat visible.
+- unclear: eye direction cannot be judged due to blur, shadow, glasses/reflection, occlusion, compression, or low resolution -- or because no eye is visible at all (back of head, rear/near-rear view, face turned away from the camera, silhouette, hat/hair/mask fully covering both eyes) -- or because only about half the face and a single eye are visible (side/profile view, or the other half occluded by a person, object, hand, or hair), even if that one visible eye's direction looks clear.
+
+Near-camera calibration:
+- near_camera is not direct_camera.
+- If the eyes are close to the lens direction but not clearly lens-locked, treat this as not fully looking at the camera.
+- For near_camera, lens_contact_confidence should usually stay below 0.60.
+- For near_camera, not_looking_at_lens_confidence should usually be at least 0.60 when the eyes are visible enough to judge.
+- Do not use a forward-facing head or centered face as proof of direct_camera.
+
+Hard should_fix rule:
+- Compute should_fix from the scores, not from overall intuition.
+- Set that subject's gaze_issue.should_fix=true if and only if all of these are true:
+  1. lens_contact_decision=not_looking_at_lens;
+  2. not_looking_at_lens_confidence >= 0.55;
+  3. the eye direction is visually clear enough to correct safely;
+  4. the visible-target exception below does not apply.
+- gaze_correction_reasonableness is NOT part of this rule. A low reasonableness score changes strategy_type and repair_strength (see Stage 2/3 above), never should_fix. There is no reasonableness floor below which should_fix flips to false.
+- For readable near-camera or slightly-beside-lens gaze, do not suppress should_fix merely because the miss is small. A small but clear lens miss is still a valid gaze-contact issue.
+- Otherwise set gaze_issue.should_fix=false.
+- Do not override this rule just because the original gaze is natural, candid, acceptable, documentary, contextually appropriate, intentional, or important to the original story. None of those are valid grounds for should_fix=false when the eyes are readably not on the lens.
+- Natural original gaze and anatomically feasible gaze correction are different questions.
+- Do not use subject size, main-subject status, foreground/background status, pose naturalness, action type, or narrative preservation as a deciding factor. Those factors affect only uncertainty or repair feasibility, not whether the eyes are looking at the lens.
+- No-eyes-visible rule: when a person's face is turned away from the camera far enough that neither eye is actually visible -- back of head, near-total rear view, or a silhouette -- lens_contact_decision must be unclear and should_fix must be false, even if the head/shoulder/body orientation makes it obvious they are not facing the camera. Body or head orientation is never a substitute for seeing the eyes; do not infer, guess, or extrapolate a gaze direction for eyes you cannot actually see. This still needs a gaze_issue reading (per the output rules below), just with lens_contact_decision=unclear and should_fix=false, not a guessed not_looking_at_lens.
+- Half-face rule: when only about half of a person's face is visible -- a side/profile view showing a single eye, or the other half of the face occluded by another person, an object, a hand, or hair -- lens_contact_decision must be unclear and should_fix must be false for that person, even when the one visible eye's direction looks clear. This applies to every person regardless of role, including the photo's main subject or anyone in an intentional group/portrait, not only incidental background people. A single visible eye is not enough evidence to safely judge or correct lens contact; do not extrapolate the hidden half of the face from the one eye you can see.
+
+Visible-target exception (the ONLY exception to the rule above):
+- If, and only if, the eyes are demonstrably converging on a specific object or person that is actually visible inside this photograph's own frame -- for example a phone or camera someone in the shot is holding up to take this very picture, a product the subject is looking at in their own hands, or another visible person they are looking at and interacting with -- set gaze_target_in_frame.present=true, name and box that target, and set should_fix=false.
+- This exception requires a nameable, boxable, visible target the gaze plausibly aims at. It does NOT cover looking down, looking to the side, looking into the distance, looking "away" or "off-camera" in general, or any case where you cannot point to a specific box in this frame the eyes are aimed at -- those stay should_fix=true under the hard rule above. An unnamed, unboxed "this gaze looks intentional/natural" is exactly the excuse this exception must never become; gaze_target_in_frame.present must not be set to true without a real box.
+- The most common legitimate case: a selfie or group photo where a phone/camera held up by someone in the shot is visible in frame. The true camera for that shot is that visible device, not an implied external viewpoint at eye level. When other subjects in the same photo are credibly looking at that same visible device, a subject whose eyes converge on it too is already looking at the actual camera for this shot -- forcing their gaze toward an abstract "face the viewer" direction instead would make them look at a different point than everyone else in the same photo, which is the failure here, not the fix.
+- The exception changes should_fix only. Still judge lens_contact_decision, gaze_state, and the confidence scores honestly from the eyes first, exactly as the rules above describe.
+
+Score-first reasoning order:
+0. First check the no-eyes-visible rule and the half-face rule above, before anything else. If either applies -- neither eye visible, or only about half the face / a single eye visible (side-profile, occlusion) -- set lens_contact_decision=unclear and should_fix=false immediately and skip steps 1-6 for this person. A single visible eye that reads sharp, clear, or confidently-directed is exactly the case the half-face rule covers, not evidence against it; eye_focus_quality looking "sharp_engaged" on that one eye is never a reason to treat the half-face rule as not applying.
+1. Determine lens_contact_decision from the eyes only. Do not use scene context, pose, action, or whether lens contact would be narratively appropriate.
+2. Determine gaze_state from the eyes, not from face direction.
+3. Assign lens_contact_confidence.
+4. Assign not_looking_at_lens_confidence.
+5. Assign gaze_correction_reasonableness based on anatomical / ergonomic feasibility only.
+6. Derive should_fix strictly from the hard should_fix rule.
+- Do not decide should_fix first and then back-fill the scores.
+- The reason field must state first, before anything else, whether the no-eyes-visible or half-face rule applies to this person and why. Only if neither applies should the reason field go on to say whether the eyes are lens-locked or not lens-locked and explain how the scores lead to should_fix.
+
+Strong evidence for not looking at the lens:
+- Pupils/irises point slightly left/right/up/down relative to the camera even though the face points forward.
+- The eyes appear to look past the lens, above the lens, beside the lens, at a person nearby, toward an audience, toward an object, or into the distance.
+- The eyes look vacant, disengaged, cross-focused, or not converged on the viewer.
+- One or both eyes lack the sense of contact even though the face is otherwise camera-facing.
+
+Strong evidence that gaze redirection is anatomically feasible:
+- The head pose is already close to camera-facing, or can become camera-facing with a bounded moderate natural yaw/pitch refinement.
+- The required pupil/iris shift is small or moderate, not extreme.
+- The corrected eyes would keep normal left/right eye alignment and convergence.
+- The eyelids and eye opening can remain the same; the gaze change can be achieved through eye direction plus bounded head/face alignment.
+- The expression can be preserved while changing the eye direction and aligning the face more directly toward the camera.
+- The eye and face region are clear enough to edit without inventing new eye shape or facial structure.
+
+Strong evidence that gaze redirection is NOT anatomically feasible:
+- The head is turned so far away that camera gaze would require an unnatural eye rotation.
+- Redirecting the gaze would create a strained side-eye, cross-eyed, divergent, or visually awkward look.
+- The corrected gaze would conflict with the eyelid shape or surrounding facial tension in a way that looks physically unnatural.
+- The eyes are too blurry, occluded, shadowed, reflected by glasses, low-resolution, or too small to adjust safely.
+- The required correction would need changing head pose, face structure, eyelid openness, or expression, rather than only subtly redirecting the eyes.
+
+Output rules:
+- Fill gaze_issue independently for every subjects[] entry with is_person=true whose gaze is relevant, even when should_fix ends up false.
+- If a person subject's eyes are readable and the person is not unmistakably looking into the lens, their gaze_issue must not default to looking_at_lens/should_fix=false just to skip the work.
+- Use should_fix=false only for lens_contact_decision=looking_at_lens or lens_contact_decision=unclear (eyes too blurry/occluded/small to judge safely, not visible at all because the person faces away from the camera, or only about half the face/a single eye is visible). A readable off-camera, near-camera, or unfocused-looking gaze is should_fix=true; do not use should_fix=false to mean "correctable but better left as-is."
+- When any subject's gaze_issue has should_fix=true, gaze repair is an approved edit request for that subject. It must not remain analysis-only.
+- For every subject whose gaze_issue.should_fix=true, fill gaze_repair_strategy with a concrete, per-image guide. This is mandatory, not optional.
+- Add a correction_plan item for every subject whose gaze_issue.should_fix=true. This is mandatory, not optional.
+- Add a matching retouch_recipe item for every subject whose gaze_issue.should_fix=true. This is mandatory, not optional.
+- Add a matching correction_axes entry including ["expression"] for every subject whose gaze_issue.should_fix=true.
+- Add a matching correction_inverse entry that protects unrelated properties while explicitly allowing the named subject's pupil/iris direction, eye-focus direction, sclera balance, gaze-consistent catchlight placement, and, when needed, the exact head/face alignment change approved by the analysis.
+- Treat the analysis output as the full repair specification. The edit model should not need to invent its own gaze-repair method.
+- Therefore, for every approved gaze repair, the analysis must make the intended execution explicit in four places that all agree: that subject's gaze_issue.gaze_repair_strategy, correction_plan, correction_inverse, and retouch_recipe.
+- The correction_plan item must be self-sufficient: name the subject, state that the gaze should be redirected toward the camera lens / direct_camera, state the exact allowed method (for example, eyes only, or eyes plus slight/moderate head-face alignment), and include the same concrete method as gaze_repair_strategy.edit_instruction.
+- The correction_inverse item must explicitly say what to preserve and what is allowed to change for that subject. Do not leave these allowances implicit. It should mirror preserve_during_repair and the allowed local changes in gaze_repair_strategy.
+- The retouch_recipe item must stay concise and user-facing, but still clearly indicate that this is a gaze-to-camera correction for the named subject and whether face/head alignment may be involved.
+- Phrase the gaze correction action as a concrete repair instruction, not as opening eyes and not as a vague "make eye contact better" suggestion.
+- Do not describe gaze repair only as "improve eye contact" or "enhance gaze"; state that the named subject's gaze should be redirected toward direct_camera / the camera lens and whether head/face alignment is part of the approved method.
+- Preserve identity, overall eye shape, eyelid openness, eye color, glasses/reflections, mouth expression, brow expression, facial structure, skin texture, and lighting, except where the approved analysis explicitly allows a local change.
+- Never use blink repair wording for gaze repair.
+- If the reason the eye direction cannot be judged is that the eyes may be closed or half-closed -- original_gaze_read says something like "eyes closed" or "gaze direction not observable" -- that is lens_contact_decision=unclear, not not_looking_at_lens, and should_fix must be false on that subject's gaze_issue no matter how confident the rest of the photo's gaze judgments are. Do not write a gaze_repair_strategy that reopens the eyes and redirects them in the same instruction; eyelid state is blink_issue's question, not this one, and "the eyes might be closed" is never evidence that they are pointed away from the lens.
+
+Analysis-to-edit handoff guardrail:
+- When a subject's gaze_issue.should_fix=true, the analysis must hand off a fully actionable repair, not just a diagnosis.
+- A no-op or underspecified handoff is a failure.
+- Make the approved change strong enough, specific enough, and concrete enough that the edit model can execute it without inventing extra gaze logic.
+
+Mini-model calibration:
+- Default away from direct_camera unless the eyes are unmistakably lens-locked.
+- False-negative guardrail: many failures come from calling near-camera or contextually natural off-camera gaze "direct_camera." Do not do that.
+- Visible pupil/iris displacement overrides frontal face direction: if the face is frontal but both pupils/irises point up/side/down, do not call it direct_camera.
+- A centered face with side-shifted or upward-shifted pupils is a not_looking_at_lens case.
+- A face that looks portrait-like, formal, smiling, or centered is still not_looking_at_lens if the eyes are not lens-locked.
+- Do not use broad scene context to zero out not_looking_at_lens_confidence.
+- Do not treat face-forward as proof of direct eye contact.
+- Do not reject gaze correction just because it changes the original story, speech direction, documentary feeling, or candidness.
+- Do not decide should_fix by intuition.
+- First judge whether the eyes are lens-locked.
+- Then judge whether redirecting the gaze to the lens would be anatomically and ergonomically natural -- this only shapes strategy_type and repair_strength, never should_fix.
+- Then compute should_fix strictly from the lens-contact thresholds (readable + not_looking_at_lens), independent of the anatomical feasibility score.
+- The default output for any readable, not-lens-locked gaze is should_fix=true, even when the required adjustment is large or the strategy ends up being a conservative partial one.
+- If the person is not looking at the lens, recommend the correction; use the anatomical feasibility score only to decide how boldly to describe the fix.
+"""
+
+_GAZE_DETECTION_LUNA_SECTION = """## Exact lens-contact detection
+Intent: For every listed person, decide only whether the visible eyes point at the exact lens that captured this image. Do not decide whether the gaze is attractive, intentional, narratively appropriate, or worth editing. Do not produce a repair strategy; Python derives should_fix after this visual classification.
+
+### Observation order
+
+Record these physical observations before choosing lens_contact_decision:
+1. gaze_observability: both_eyes / one_eye / unreadable.
+2. eye_detail_quality: readable / borderline / unreadable.
+3. head_pose: frontal / slight_yaw / strong_yaw / profile / rear_or_hidden / unclear.
+4. left_eye_direction and right_eye_direction: toward_exact_lens / near_lens_left / near_lens_right / above_lens / below_lens / off_left / off_right / up / down / unclear / not_visible.
+5. binocular_alignment: exact_lens_convergent / near_lens_convergent / off_lens_convergent / mismatched / unverifiable.
+
+Use the matched face crop for pupil/iris detail. Use both the crop and full photo for head yaw, pitch, facial geometry, and camera-viewpoint interpretation. The crop's geometric center is not the camera lens.
+
+Head direction is never proof of lens contact, but it is required geometric context for interpreting iris position. A turned face may still look at the lens through compensating eye rotation. A frontal face may still look beside the lens. Do not require centered irises when head yaw makes an offset anatomically consistent with exact lens contact.
+
+### Strict exact-lens gate
+
+- direct_camera / looking_at_lens is a strict positive label. Use it only when exact contact with the current lens is unmistakable.
+- near_camera is always not_looking_at_lens.
+- Looking at another nearby camera, the photographer's face, or a point slightly above, below, left, right, beside, or past the lens is not_looking_at_lens.
+- A frontal, centered, smiling, posed, camera-aware, or engaging face is not evidence of exact lens contact.
+- If readable eyes look generally toward the camera but exact lock is not unmistakable, use near_camera / not_looking_at_lens.
+- If uncertain between direct_camera and near_camera, use near_camera / not_looking_at_lens.
+- Use unclear only when blur, reflection, occlusion, closed eyes, compression, or insufficient detail makes direction physically unreadable. Do not use unclear for readable near-camera eyes.
+- One visible eye may support a lens-contact classification, but binocular_alignment must be unverifiable. Repair safety is decided later; do not erase a readable detection merely because only one eye is visible.
+
+### Labels and confidence
+
+gaze_state:
+- direct_camera: unmistakable exact-current-lens contact.
+- near_camera: close to the current lens but landing beside, above, below, or past it.
+- off_camera: clearly looking left or right away from the lens.
+- downward: clearly looking down.
+- upward_side: clearly looking up and/or sideways.
+- unfocused_camera: eye axes visibly fail to converge on one lens point; never infer attention, emotion, or mental engagement.
+- cross_focused: the two eyes visibly converge inconsistently.
+- ambiguous: readable evidence conflicts, but direction is not physically unreadable.
+- unclear: direction cannot be resolved from the pixels.
+
+lens_contact_confidence measures exact positive lens contact:
+- 0.80-1.00: unmistakable exact-lens lock; looking_at_lens.
+- 0.40-0.79: near-camera or uncertain exact contact; not_looking_at_lens when eyes are readable.
+- 0.00-0.39: clearly not looking at the exact lens.
+
+not_looking_at_lens_confidence measures evidence for a lens miss:
+- Use at least 0.55 for readable near-camera or off-camera eyes.
+- Use 0.75-1.00 when the miss direction is clear.
+- Keep both confidence values low only when lens_contact_decision=unclear.
+- Do not assign high confidence to both sides. Their sum should normally be approximately 1.0 when the eyes are readable.
+
+gaze_target_in_frame records observation only. Set present=true only for a specific, visible, boxable object or person the eyes clearly target. A phone is the current capture device only when visible mirror geometry or another explicit capture setup proves it; a merely visible phone is not enough. This field does not change lens_contact_decision.
+
+### Hard-negative calibration
+
+Treat each of these as near_camera / not_looking_at_lens, not direct_camera:
+- a posed person whose face points at the camera but pupils land just beside the lens;
+- a press-photo subject looking toward a neighboring photographer or nearby camera;
+- a foreground subject whose gaze feels engaging but the two eye axes meet slightly beside or past the current lens.
+
+Output only the structured gaze-detection fields. reason must briefly name the visible pupil/iris direction, head-pose geometry, and why exact lens lock is present, missed, or unreadable. Do not write should_fix, gaze_correction_reasonableness, or gaze_repair_strategy; those are derived later.
+"""
+
+
+_SMILE_ANALYSIS_SECTION = """## Smile analysis
+Intent: Classify each visible face as neutral, gentle, broad, laughing, or unclear for optional edit-stage adjustment without treating an existing smile as a defect.
+
+A smile is never a defect, so do not add it to correction_plan, detected_issues, or retouch_recipe.
+Default to neutral. Only use gentle or above when a smile is clearly and unmistakably present.
+- neutral: no clear smile; includes speaking, posing, winking, pouting, parted lips, visible teeth, or pleasant/friendly expressions without definite smile structure.
+- gentle: clear but restrained smile.
+- broad: strong cheerful smile.
+- laughing: unmistakable laughter or intense joy.
+Judge smile presence before smile intensity.
+If the expression could reasonably be caused by speaking, pronunciation, posing, or another facial action, classify it as neutral.
+Visible teeth, mouth openness, slight mouth-corner elevation, narrowed eyes, or raised cheeks do not establish a smile by themselves.
+Require a coherent smile pattern, especially coordinated mouth-corner retraction/elevation that clearly reads as smiling rather than speaking or posing.
+Prefer precision over recall: when uncertain between neutral and gentle, choose neutral.
+Use unclear only when the expression cannot be seen reliably. Set adjust_safe=false only when editing could overwrite distinctive dental features or when the face is obscured, too small, or turned too far away to render a reliable expression. adjust_safe measures technical edit feasibility, not whether the captured emotion should be preserved. Speaking, laughter, strong emotion, or another visible facial action does not by itself make smile adjustment unsafe.
+"""
+
+_ASPECT_RATIO_POLICY_ORIGINAL = """
+## Aspect-ratio policy
+
+- The user explicitly requested that the final output keep the original photo's aspect ratio.
+- Set recommended_aspect_ratio to "original".
+- If crop_box.enabled is true, crop_box.aspect_ratio must be "original" (or blank).
+- Every crop candidate must preserve the source aspect ratio.
+- Do not select a named ratio that changes the original proportions.
+"""
+
+_ASPECT_RATIO_POLICY_AUTO = """
+## Aspect-ratio policy
+
+- Select recommended_aspect_ratio only from the supported output set declared above.
+- crop_box.aspect_ratio and every crop candidate aspect_ratio must equal recommended_aspect_ratio exactly.
+- The normalized x/y/w/h values are a composition proposal, not permission to use a different ratio.
+- Downstream deterministic geometry will fit the crop rectangle to this selected ratio, so protect the ROI, subject extent, and protected regions with enough breathing room.
+"""
+
+_OVERALL_ANALYSIS_PERSONA = """You are a senior photography director, colorist, and high-end retoucher.
+Analyze the uploaded photo and return only valid JSON. Keep the JSON keys in English. Every user-visible string value must be Traditional Chinese.
+
+Analysis goal:
+- Help a user understand how their photo can be improved.
+- Recommend a tasteful retouch that preserves the same subject, same scene, and same moment.
+- Decide whether a simple crop/reframe is useful.
+- Identify every subject in the photo (people, animals, products, food, objects) so a separate, dedicated pass can judge each person's blink/hair/gaze/smile state -- your own output does not include those four fields at all.
+
+Hard limits:
+- Do not change the subject into something else.
+- Do not add text, logos, watermarks, extra people, fantasy elements, or a new scene.
+- Do not rebuild, replace, or materially simplify the original environment. Preserve scene truth: recognizable background structure, surface material, perspective, lighting direction, and real spatial relationships.
+- Cleanup means reducing distraction within the same scene, not turning a casual/lifestyle/documentary scene into a studio, catalog, or different location unless the user explicitly asks for that.
+- For people, preserve identity, face, body shape, pose, and natural skin texture.
+- For products, food, pets, architecture, and landscapes, preserve shape, material, and scene truth.
+
+Subject inclusion rule (for people specifically):
+- subjects[] lists this photo's actual people among its subjects -- the intended human subject(s) and anyone clearly posing or interacting with them -- not every visible human, including ones the local face detector or your own scan of the photo turns up. Strong models in particular tend to over-include: finding and boxing every technically-visible person, even incidental strangers, is not the goal here.
+- Exclude a visible person from subjects[] when they read as an incidental background bystander: someone unrelated to the photo's own subject(s) who merely happens to be in frame -- a stranger walking past in a street/travel photo, an unrelated person faintly visible in a crowd, a passerby in the background of a portrait or product/food shot.
+- Signals that someone is likely an incidental bystander rather than an intended subject (none of these is decisive alone; weigh them together): they show only their back or the side/rear of their head with no facial detail at all; they are small, distant, blurred, or heavily occluded relative to this photo's real subject(s); they are not looking toward, posed with, or interacting with the photo's main subject(s); the photo's framing/composition clearly centers on someone or something else and this person sits at the edge or deep in the background.
+- These signals do not automatically disqualify someone. A main subject deliberately photographed from behind, or a close companion standing slightly behind/beside the main subject, still belongs in subjects[] even if their face is not fully visible.
+- Judge from the whole picture: would someone looking at this photo say "the people in this photo" includes this individual, or would they say "there's also a stranger in the background"? Only the former belongs in subjects[].
+- A real face that fails this inclusion test (a genuine incidental bystander) still gets a local_face_review entry -- with matched_subject_index=-1 and a reason naming the exclusion -- it just does not get a subjects[] entry of its own.
+- This rule is about which people belong in subjects[]; it has no bearing on non-person subjects (products, food, animals, objects), which are still selected and ordered by the existing prominence rules in Coordinate rules below.
+
+"""
+
+_RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
+{
+  "photo_summary": "一句話描述照片內容與整體觀感。",
+  "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 生活紀錄 / 其他",
+  "scene_category": "室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他",
+  "main_subject": "主要主體是誰或什麼。",
+  "scene_type": "更具體的場景類型。",
+  "aesthetic_diagnosis": "說明照片目前不夠精緻的原因。",
+  "detected_issues": ["2 到 6 個具體問題。"],
+  "edit_philosophy": "整體修圖哲學。",
+  "edit_intent": "這次修圖要達成的結果。",
+  "composition_mood": "完成後希望呈現的氛圍。",
+  "composition_intent": "這張照片最適合的構圖意圖，例如主體展示、生活敘事、動作瞬間、環境紀實、圖形平衡、負空間、親密肖像等。",
+  "framing_intent": "取景意圖，例如 detail / close-up / upper-body / half-body / three-quarter / full-body / environmental / object-complete / context-preserving。",
+  "layout_method": "center / thirds / symmetry / diagonal / vertical-horizontal / leading-lines / pattern / negative-space，加上中文理由。",
+  "portrait_framing": "若不是人像可寫不適用；若是人像，說明 close-up, upper-body, half-body, full-body 等框法。",
+  "composition_strategy": "構圖與裁切策略。",
+  "visual_balance_strategy": "左右與上下視覺重量如何處理。",
+  "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
+  "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
+  "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景，以及如何處理。",
+  "scene_preservation_strategy": "如何保留原始場景真實性、背景結構、材質、透視與光線關係。",
+  "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
+  "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
+  "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
+  "subjects": [
+    {
+      "label": "主體描述,例如 左二女性 / 中間男性 / 蛋糕。",
+      "box": {"x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1},
+      "prominence": 1,
+      "is_person": true,
+      "local_detection_index": 1,
+      "skin": "is_person=true 時必填，否則寫「不適用」。依序寫：原生膚色身分（在受光平均處判讀深淺與底調，不讀高光或陰影）；場景光色（臉上實際受光的方向與色性，以及是否為應保留的情境光）；非預期偏色（僅限無法由場景光解釋，或與頸、耳、手不連貫的偏黃、偏綠、偏紅、偏洋紅、偏灰；沒有則寫無）。原生膚色身分不可改變。不可把背景、草地、服裝或其他高飽和物體的主色當成膚色受光；只有可見光源或反射確實落在皮膚上才算情境光。夕陽、鎢絲燈、舞台燈、霓虹與反射色等合理光色不可被中性化。",
+      "reason": "為何突出:最大 / 最中央 / 最清晰 / 互動焦點。",
+""" + "\n" + """    }
+  ],
+  "local_face_review": [
+    {
+      "detection_index": 1,
+      "is_real_face": true,
+      "matched_subject_index": 0,
+      "reason": "說明判斷依據；若 is_real_face=false 或 matched_subject_index=-1，必須說明是偵測器誤判（背景花紋/反光/印刷人臉等，並具體指出是什麼）還是真人臉但屬於陪襯路人（依 Subject inclusion rule 說明原因）。"
+    }
+  ],
+  "roi_box": {
+    "x": 0.25,
+    "y": 0.20,
+    "w": 0.45,
+    "h": 0.50,
+    "reason": "ROI 包住主體最重要、不可裁掉的區域。"
+  },
+  "subject_extent_box": {
+    "x": 0.15,
+    "y": 0.08,
+    "w": 0.70,
+    "h": 0.82,
+    "reason": "依照場景意圖與框法包住完整語意主體；不一定等於所有可見身體或所有可見物件。"
+  },
+  "protected_regions": [
+    {
+      "label": "important subject part / structural edge / fine detail / supporting element",
+      "x": 0.0,
+      "y": 0.0,
+      "w": 0.1,
+      "h": 0.1,
+      "reason": "此區域是主體語意或構圖平衡的一部分，不應被裁掉或貼邊。"
+    }
+  ],
+  "lighting_strategy": "光線與明暗層次調整方向。",
+  "memory_color_strategy": "記憶色（膚色、天空、綠色、食物、材質）在這張照片的光線下應該呈現的狀態。有人物時先說明人物受光的方向與色性；整體白平衡、色相與飽和度可以調整畫面調性，但膚色須獨立保護，維持人物原生膚色與合理情境光，只移除非預期偏色。",
+  "evaluation_criteria": ["完成後用來判斷成功的標準。"],
+  "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
+  "crop_box": {
+    "enabled": true,
+    "x": 0.0,
+    "y": 0.0,
+    "w": 1.0,
+    "h": 1.0,
+    "aspect_ratio": "",
+    "reason": "裁切理由。若裁切，aspect_ratio 應符合 recommended_aspect_ratio；若保留原構圖可留空或寫 original。"
+  },
+  "crop_candidates": [
+    {
+      "id": "ai-primary",
+      "label": "主要建議裁切",
+      "crop_box": {
+        "enabled": true,
+        "x": 0.0,
+        "y": 0.0,
+        "w": 1.0,
+        "h": 1.0,
+        "aspect_ratio": ""
+      },
+      "composition_intent": "這個候選如何服務主體、陪襯、留白、場景與視覺平衡。",
+      "tradeoffs": "這個候選保留與犧牲了什麼。"
+    }
+  ],
+  "crop_intent": {
+    "trim_left": false,
+    "trim_right": false,
+    "trim_top": false,
+    "trim_bottom": false,
+    "subject_anchor": "center",
+    "looking_direction": "unknown",
+    "remove_edge_distractions": []
+  },
+  "crop_risk": {
+    "needs_validation": false,
+    "risk_level": "low",
+    "reasons": []
+  },
+  "correction_plan": ["1 到 6 項，實際會做的具體技術調整，供編修模型執行；例如「提升整體曝光 0.3 EV 並拉回高光」。只列這張照片真正需要的項目；若某個面向已經夠好就不要列，不要為了湊數而發明問題。照片本來就平衡時，只列一項最必要的即可。"],
+  "correction_axes": [["exposure", "highlight"]],
+  "correction_inverse": ["與 correction_plan 一一對應：若使用者取消勾選這一項，改成告訴編修模型「維持原樣」的說法；例如對應上例可寫「維持原圖的整體曝光與高光亮度，不要提亮，也不要壓暗或改變高光的層次」。"],
+  "retouch_recipe": ["與 correction_plan 一一對應、順序相同、項數相同，但改寫成給使用者看的簡潔白話版本；例如對應上例可寫「讓照片更明亮」。"],
+  "preserve_rules": ["必須保留的內容。"]
+}
+
+local_face_review must contain exactly one entry per "Face crop N" / "Local face detector reference N" you were given, in the same order, with detection_index equal to that N -- this is a completeness check, not a sample. For each entry:
+- is_real_face=false whenever the crop/coordinate does not actually show a real human face (background clutter, pattern, reflection, printed/painted face); matched_subject_index must then be -1, and reason must name what it actually shows.
+- is_real_face=true and matched_subject_index=-1 whenever the detection is a real face that fails the Subject inclusion rule (an incidental bystander); reason must say so and name which signal(s) from that rule apply.
+- is_real_face=true and matched_subject_index=<that subject's 0-based index> whenever you created a subjects[] entry from this detection; that subjects[] entry's own local_detection_index must equal this same detection_index, so the two arrays cross-reference each other consistently in both directions.
+Every subjects[] entry needs a local_detection_index: for a person (is_person=true) created from a local detection, set it to that detection_index; set it to -1 for a person you added yourself from the full photo with no backing detection, and -1 for any non-person subject (is_person=false), since the face detector never applies to those.
+"""
+
+_COORDINATE_GEOMETRY_RULES_OVERALL = """## Coordinate and geometry rules
+Intent: Produce normalized subject and crop geometry that downstream framing logic can use safely and consistently.
+
+- crop_box, roi_box, subject_extent_box, and protected_regions use normalized original-image coordinates. x/y are top-left, w/h are width/height: the origin (x=0, y=0) is the photo's own top-left corner, x increases toward the photo's right edge, y increases toward its bottom edge.
+- Any "left"/"right"/"middle" wording -- in a subjects[].label, a reason field, or anywhere else describing where someone or something sits in the frame -- is always from the viewer's perspective looking at the photo (the side with the smaller x is "left"), never that person's own anatomical left/right. Keep this the same reference frame you use when writing box x/y/w/h for that same entry, so the coordinates and the words describing them never disagree about which side of the frame something is on.
+- roi_box is the focal area. subject_extent_box is the semantic subject area required by the intended framing; it is not automatically every visible body part, foreground object, furniture piece, or background element.
+- subjects lists the candidate main subjects (people, animals, products, food, objects) ordered so index 0 is the photo's true main subject -- what the photo is actually about, consistent with main_subject, roi_box, and the composition intent. prominence means semantic importance as the subject, NOT which element is merely brightest, most colorful, or most saturated. Incidental background or decor -- flowers, plants, props, tableware, posters, scenery -- must rank lower than the real subject even when it is visually eye-catching; e.g. in a food photo the dish is the subject, not a bright vase of flowers behind it. Always output at least one entry, even for a single-subject photo.
+- Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
+- For a person-type subject whose face is visible anywhere in the photo, subjects[].box must include that entire visible head. A box that starts at or below the chin/neck/shoulders and excludes the face -- even if it otherwise fits the rest of the visible body tightly and looks "correct" by itself -- is wrong and must be corrected; the head is not an optional part of a person subject's box.
+""" + "\n" + """- For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
+- protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
+- If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
+- The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
+- Changing the outer canvas ratio never permits changing the internal proportions of the photographed content. Plan the new frame only by cropping/recomposition; never stretch or squash the original scene to fill it.
+- The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
+- This is not just a label match: each crop_box's own x/y/w/h must itself compute to that same ratio -- (w * original_image_width) : (h * original_image_height) must equal the stated aspect_ratio, for both crop_box and every crop_candidates[].crop_box. A correctly-labeled aspect_ratio paired with geometry sized for a different ratio is an error, not a valid answer.
+- Prefer ordinary photographic ratios (1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9). Use 1:4, 4:1, 1:8, or 8:1 only when strongly justified and subject safety remains excellent.
+- Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
+- Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
+"""
+
+_COMPOSITION_DECISION_FRAMEWORK = """## Composition decision framework
+Intent: Choose framing from subject meaning, scene context, visual balance, useful empty space, and preservation needs rather than a fixed composition formula.
+
+- For completeness-first presentation, catalog-like, symmetrical, circular, stacked, shape-critical, food/product/object/still-life images, centered or near-centered balance is often competitive.
+- For lifestyle, story, portrait, street, travel, action, gaze, gesture, interaction, leading lines, asymmetry, or intentional negative space, off-center, thirds, diagonal, symmetry, or context-preserving framing may be stronger.
+- Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
+- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements and reduce emphasis through subtle retouching rather than rebuilding the scene.
+- Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
+- Preserve scene truth: background structure, surface material, perspective, lighting direction, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
+- For people and animals, the face ROI alone is not automatically the whole subject. Protect the semantic subject extent and role cues required by the framing. Partial-person crops are acceptable only when intentional, clean, and supportive of the scene.
+- For action, eating, gesture, interaction, or expression-driven moments, protect expression, hands, held objects, interaction points, and relevant context. Preserve lower body, furniture, foreground objects, or peripheral context only when they support posture, story, scale, balance, or scene intent.
+- For fashion, posture, full-body portrait, dance, sports, product shape, architecture, or object-completeness tasks, preserve the full visible form more conservatively.
+- Judge real-image breathing room from actual photo content, not transparent padding, UI checkerboard, or empty canvas.
+"""
+
+_ANALYSIS_RESPONSIBILITIES_OVERALL = """## Analysis responsibilities
+Intent: Convert visible photographic needs into a restrained, actionable, and internally consistent analysis and correction plan, leaving every eye, gaze, and hair judgment to the dedicated portrait-QC pass that runs after this one.
+
+- Observe the image, identify semantic roles, and describe why the photo can improve.
+- Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
+- Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
+- Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
+- correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis and adds any resulting correction_plan items deterministically; write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering only the composition/crop/color/skin/product issues you actually found.
+- Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
+- Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
+- Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
+- Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
+- Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
+
+"""
+
+_ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Eye-contact detection is separate from blink repair. Analyze whether the readable eyes are locked to the exact current lens, not merely whether the face points forward. Do not derive should_fix and do not write a repair strategy in this pass.
+- Gaze detection recall check: before finalizing, revisit every listed person's eyes. If any readable eyes are not unmistakably lens-locked and that subject's gaze_issue does not yet reflect it, fix it.
+- Gaze consistency check: direct_camera must pair with looking_at_lens; every other readable gaze state, including near_camera, must pair with not_looking_at_lens; physically unreadable eyes must pair with unclear.
+- Blink detection is observation-only in this pass. Report left/right physical eyelid states and the separate exception-evidence fields exactly as seen. Keep blink_candidate=false and should_fix=false placeholders; deterministic Python derives both after this response.
+- Blink recall check: revisit every listed person's eyelids and record every readable half_closed, fully_closed, or one-eye-closed state even when the person is smiling, posing, making a gesture, or appears playful.
+- Never use an ordinary or broad smile as laughter evidence. active_high_intensity_laughter, strong_bilateral periocular contraction, and integral_to_expression must each be independently visible before recording the full laughter exception evidence.
+"""
+
+_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. A separate photography-direction pass has already analyzed this photo's composition, color, and crop, and has identified the people listed below. Your only job is to inspect each of them, independently, for four physical/expression states: blink/eye closure, gaze direction, hair disruption, and smile intensity. You are not judging composition, color, or crop, and you do not write a correction_plan -- only the per-person identifiers and four issue fields the JSON shape asks for.
+
+Return only valid JSON. Keep the JSON keys in English. Every user-visible string value (e.g. each issue's "reason") must be Traditional Chinese.
+
+For every listed person, echo subject_index and local_detection_index exactly as provided. These identifiers are authoritative and are used to merge results; do not derive them from output order. Populate blink_issue, hair_issue, gaze_issue, and smile_issue for that same person. Do not output correction_plan, correction_axes, correction_inverse, or retouch_recipe.
+"""
+
+
+def _person_list_text(persons):
+    entries = []
+    for i, p in enumerate(persons):
+        box = p.get("box") or {}
+        subject_index = p.get("subject_index", p.get("_subject_index", i))
+        local_detection_index = p.get("local_detection_index", -1)
+        entries.append(
+            "subject_index={} | local_detection_index={} | {} -- box x={:.3f}, y={:.3f}, w={:.3f}, h={:.3f}".format(
+                subject_index, local_detection_index, p.get("label") or "person",
+                box.get("x", 0), box.get("y", 0), box.get("w", 0), box.get("h", 0),
+            )
+        )
+    return "\n".join(entries)
+
+
+def portrait_qc_persons(analysis):
+    """Return Call B's person list with stable indices from Call A.
+
+    Callers should pass this result to build_portrait_qc_instruction instead
+    of filtering subjects[] themselves, because a filtered-list position is
+    not necessarily the subject's index in the original subjects[] array.
+    """
+    persons = []
+    for subject_index, subject in enumerate(analysis.get("subjects") or []):
+        if not isinstance(subject, dict) or not subject.get("is_person"):
+            continue
+        person = dict(subject)
+        person["subject_index"] = subject_index
+        persons.append(person)
+    return persons
+
+
+def _aspect_ratio_policy_suffix(aspect_ratio_pref):
+    if aspect_ratio_pref == "original":
+        return _ASPECT_RATIO_POLICY_ORIGINAL
+    return _ASPECT_RATIO_POLICY_AUTO
+
+
+def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
+    """Call A of the gpt-5.6-luna two-pass split (see the module comment
+    above _FACE_CROP_EVIDENCE_SECTION): everything ANALYSIS_INSTRUCTION does
+    except judging blink/hair/gaze/smile, which the portrait-QC pass
+    (build_portrait_qc_instruction) does afterward from this call's own
+    finalized subjects[] list.
+    """
+    advanced_options = advanced_options or {}
+    instruction = (
+        _OVERALL_ANALYSIS_PERSONA
+        + _RETURN_SHAPE_OVERALL
+        + "\n\n"
+        + _FACE_CROP_EVIDENCE_SECTION
+        + "\n"
+        + _ANALYSIS_RESPONSIBILITIES_OVERALL
+        + _COORDINATE_GEOMETRY_RULES_OVERALL
+        + "\n\n"
+        + _COMPOSITION_DECISION_FRAMEWORK
+        + "\n"
+    )
+    if advanced_options.get("calm_hair", False):
+        instruction += CALM_HAIR_ENABLED_OVERRIDE
+    return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref)
+
+
+def build_portrait_qc_instruction(persons):
+    """Call B of the gpt-5.6-luna two-pass split: given Call A's already-
+    finalized, ordered list of is_person=true subjects (label + box), judge
+    each one's blink/hair/gaze/smile independently. Build persons with
+    portrait_qc_persons(analysis), so every item carries its immutable
+    subject_index from Call A. Results are merged by subject_index, never by
+    response-array position.
+    """
+    return (
+        _PORTRAIT_QC_PERSONA_HEADER
+        + "\nPeople to review, in order:\n"
+        + _person_list_text(persons)
+        + "\n\n"
+        + _PORTRAIT_QC_FACE_CROP_EVIDENCE_SECTION
+        + "\n"
+        + _BLINK_DETECTION_LUNA_SECTION
+        + _HAIR_ANALYSIS_SECTION
+        + "\n"
+        + _GAZE_DETECTION_LUNA_SECTION
+        + "\n"
+        + _SMILE_ANALYSIS_SECTION
+        + "\n## Portrait-QC responsibilities\n"
+        + _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC
+    )
+
+
+def build_gaze_repair_planning_instruction(targets):
+    """Optional Luna Call C. Only people that passed the deterministic gaze
+    gate are included, so this prompt plans execution without re-deciding
+    whether they looked at the lens.
+    """
+    compact_targets = []
+    for target in targets:
+        compact_targets.append({
+            "subject_index": target.get("subject_index"),
+            "local_detection_index": target.get("local_detection_index", -1),
+            "label": target.get("label") or "person",
+            "box": target.get("box") or {},
+            "gaze_observability": target.get("gaze_observability"),
+            "eye_detail_quality": target.get("eye_detail_quality"),
+            "head_pose": target.get("head_pose"),
+            "left_eye_direction": target.get("left_eye_direction"),
+            "right_eye_direction": target.get("right_eye_direction"),
+            "binocular_alignment": target.get("binocular_alignment"),
+            "gaze_state": target.get("gaze_state"),
+            "reason": target.get("reason"),
+        })
+    return """You are planning a local gaze-to-camera repair for only the people listed below.
+
+Their exact-lens detection is final and was already gated by deterministic Python. Do not reclassify it, remove a target, add another person, or change should_fix. Return exactly one repair plan per listed subject_index.
+
+Use the full photo and matching Face crop N to choose an anatomically plausible method that produces an unmistakable, normally visible correction to the exact current lens. The correction must be obvious at normal photo-viewing size, not only when the face is highly enlarged:
+- eyes_plus_head_face_alignment is the default for near_camera, off_camera, upward_side, downward, unfocused_camera, and cross_focused whenever head yaw/pitch or face orientation contributes to the miss. Require a visible but natural head/face alignment together with the eye correction. Keep the torso, shoulders, body pose, and camera framing unchanged;
+- eyes_only is a narrow exception. Choose it only when ALL of these are true: the head and face are already naturally aligned to the current lens; the miss is extremely small; both visible eyes can reach exact lens contact without side-eye, strain, crossed axes, or excessive sclera; and the result will still be clearly visible at normal viewing size. Ordinary near_camera is not enough by itself;
+- not_safe_to_repair only when the pixels or geometry cannot support a reliable correction. In that case write a conservative plan and explicitly name the limitation.
+
+For each strategy, provide concrete English instructions. Name the current pupil/iris direction, exact target, required pupil/iris movement, natural sclera/catchlight rebalancing, required bounded head/face alignment, repair strength, success condition, preservation rules, and likely failure modes. Use moderate strength by default; use subtle only for a genuinely tiny eyes_only miss whose completed correction remains obvious at normal viewing size. For off-camera, upward, or downward gaze, explicitly describe the needed head yaw and/or pitch as well as eye movement. Preserve identity, eyelid openness, eye shape/color, expression, glasses, skin, torso, shoulders, body pose, clothing, scene, and every unlisted person. Do not stop at near-camera gaze.
+
+Targets:
+""" + json.dumps(compact_targets, ensure_ascii=False, indent=2)
+
+
+
+def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, analysis_model=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
 
     advanced_options: the Upload page's Advanced Settings (e.g.
@@ -885,9 +2213,19 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
     edit time. smile_adjustment/smile_level are edit-only for the same
     reason, applied by build_smile_block against the smile_issue readings
     the analysis always produces.
+
+    analysis_model: which analysis model this prompt is being built for.
+    ANALYSIS_INSTRUCTION already carries the gpt-5.6-luna blink wording
+    (_BLINK_ANALYSIS_LUNA / _BLINK_WINK_DEFAULT_BULLET_LUNA); every other
+    model (including analysis_model=None, for callers that don't pass one)
+    gets it swapped back to the original wording those models were actually
+    calibrated against.
     """
     advanced_options = advanced_options or {}
     instruction = ANALYSIS_INSTRUCTION
+    if analysis_model != "gpt-5.6-luna":
+        instruction = instruction.replace(_BLINK_ANALYSIS_LUNA, _BLINK_ANALYSIS_LEGACY)
+        instruction = instruction.replace(_BLINK_WINK_DEFAULT_BULLET_LUNA, _BLINK_WINK_DEFAULT_BULLET_LEGACY)
     if advanced_options.get("calm_hair", False):
         instruction += CALM_HAIR_ENABLED_OVERRIDE
     if aspect_ratio_pref == "original":
@@ -933,6 +2271,10 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
 
 def _schema_string():
     return {"type": "string"}
+
+
+def _schema_enum(values):
+    return {"type": "string", "enum": list(values)}
 
 
 def _schema_number():
@@ -985,9 +2327,56 @@ _BOX_WITH_REASON_SCHEMA = _schema_object({
 # the model to get wrong.
 
 _EYE_BLINK_ISSUE_SCHEMA = _schema_object({
+    "physical_eye_state": _schema_string(),
     "eye_state": _schema_string(),
     "severity": _schema_string(),
     "intent_cues": _schema_string_array(),
+    "closure_intent": _schema_string(),
+    "expression_coherence": _schema_string(),
+    "blink_failure_confidence": _schema_number(),
+    "should_fix": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+# Luna Call B reports recall-first physical evidence only.  The legacy fields
+# remain in the shape for downstream compatibility, but their final values are
+# overwritten by derive_luna_blink_decisions; the model is not authoritative
+# for blink_candidate or should_fix.
+_BLINK_DETECTION_LUNA_SCHEMA = _schema_object({
+    "blink_observability": _schema_enum(("both_eyes", "one_eye", "unreadable")),
+    "eyelid_detail_quality": _schema_enum(("readable", "borderline", "unreadable")),
+    "left_eye_state": _schema_enum((
+        "open", "narrowed_open", "half_closed", "fully_closed", "not_visible", "unclear",
+    )),
+    "right_eye_state": _schema_enum((
+        "open", "narrowed_open", "half_closed", "fully_closed", "not_visible", "unclear",
+    )),
+    "physical_eye_state": _schema_enum((
+        "open", "narrowed_open", "half_closed", "fully_closed", "one_eye_closed", "unclear",
+    )),
+    "eye_closure_confidence": _schema_number(),
+    "mouth_laughter_state": _schema_enum((
+        "not_laughing", "smile_or_broad_smile", "active_high_intensity_laughter", "unclear",
+    )),
+    "periocular_contraction": _schema_enum((
+        "none_or_mild", "strong_bilateral", "unclear",
+    )),
+    "closure_expression_dependence": _schema_enum((
+        "integral_to_expression", "independent_or_transitional", "unclear",
+    )),
+    "explicit_closure_context": _schema_enum((
+        "none", "deliberate_wink", "sleep", "prayer_or_meditation", "savoring",
+        "crying_or_pain_or_strong_emotion", "downward_at_visible_target",
+        "other_clear_activity", "unclear",
+    )),
+    "intent_evidence_confidence": _schema_number(),
+    "overall_demeanor": _schema_enum((
+        "alert_or_camera_ready", "calm_or_at_ease", "unclear",
+    )),
+    "intent_cues": _schema_string_array(),
+    "blink_candidate": _schema_boolean(),
+    "eye_state": _schema_string(),
+    "severity": _schema_string(),
     "closure_intent": _schema_string(),
     "expression_coherence": _schema_string(),
     "blink_failure_confidence": _schema_number(),
@@ -1036,6 +2425,36 @@ _GAZE_CONTACT_ISSUE_SCHEMA = _schema_object({
     "gaze_correction_reasonableness": _schema_number(),
     "gaze_repair_strategy": _GAZE_REPAIR_STRATEGY_SCHEMA,
     "should_fix": _schema_boolean(),
+    "reason": _schema_string(),
+})
+
+# Luna Call B deliberately stops at physical observation and exact-lens
+# classification.  should_fix and the full repair strategy are added by
+# deterministic Python and an optional repair-planning Call C respectively.
+_GAZE_DETECTION_LUNA_SCHEMA = _schema_object({
+    "gaze_observability": _schema_enum(("both_eyes", "one_eye", "unreadable")),
+    "eye_detail_quality": _schema_enum(("readable", "borderline", "unreadable")),
+    "head_pose": _schema_enum(("frontal", "slight_yaw", "strong_yaw", "profile", "rear_or_hidden", "unclear")),
+    "left_eye_direction": _schema_enum((
+        "toward_exact_lens", "near_lens_left", "near_lens_right", "above_lens", "below_lens",
+        "off_left", "off_right", "up", "down", "unclear", "not_visible",
+    )),
+    "right_eye_direction": _schema_enum((
+        "toward_exact_lens", "near_lens_left", "near_lens_right", "above_lens", "below_lens",
+        "off_left", "off_right", "up", "down", "unclear", "not_visible",
+    )),
+    "binocular_alignment": _schema_enum((
+        "exact_lens_convergent", "near_lens_convergent", "off_lens_convergent",
+        "mismatched", "unverifiable",
+    )),
+    "gaze_state": _schema_enum((
+        "direct_camera", "near_camera", "off_camera", "downward", "upward_side",
+        "unfocused_camera", "cross_focused", "ambiguous", "unclear",
+    )),
+    "gaze_target_in_frame": _GAZE_TARGET_IN_FRAME_SCHEMA,
+    "lens_contact_decision": _schema_enum(("looking_at_lens", "not_looking_at_lens", "unclear")),
+    "lens_contact_confidence": _schema_number(),
+    "not_looking_at_lens_confidence": _schema_number(),
     "reason": _schema_string(),
 })
 
@@ -1175,6 +2594,740 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "preserve_rules": _schema_string_array(),
     }),
 }
+
+# Call A's schema for the gpt-5.6-luna two-pass split (see
+# build_overall_analysis_instruction) -- identical to ANALYSIS_RESPONSE_SCHEMA
+# except subjects[] carries none of the four per-person issue fields, since
+# Call A never judges them. Derived from ANALYSIS_RESPONSE_SCHEMA itself
+# (deepcopy + swap the subjects item schema) so any future top-level field
+# added there is automatically reflected here too.
+_SUBJECT_SCHEMA_OVERALL = _schema_object({
+    "label": _schema_string(),
+    "box": _BOX_SCHEMA,
+    "prominence": _schema_integer(),
+    "is_person": _schema_boolean(),
+    "local_detection_index": _schema_integer(),
+    "skin": _schema_string(),
+    "reason": _schema_string(),
+})
+
+ANALYSIS_RESPONSE_SCHEMA_OVERALL = copy.deepcopy(ANALYSIS_RESPONSE_SCHEMA)
+ANALYSIS_RESPONSE_SCHEMA_OVERALL["name"] = "photo_analysis_overall"
+ANALYSIS_RESPONSE_SCHEMA_OVERALL["schema"]["properties"]["subjects"] = _schema_array_of(_SUBJECT_SCHEMA_OVERALL)
+
+# Call B's per-person output shape (build_portrait_qc_instruction) -- one
+# entry per person handed to Call B. subject_index is the stable merge key;
+# local_detection_index validates the Face crop N association.
+_PERSON_ISSUES_SCHEMA = _schema_object({
+    "subject_index": _schema_integer(),
+    "local_detection_index": _schema_integer(),
+    "blink_issue": _BLINK_DETECTION_LUNA_SCHEMA,
+    "hair_issue": _HAIR_ISSUE_SCHEMA,
+    "gaze_issue": _GAZE_DETECTION_LUNA_SCHEMA,
+    "smile_issue": _SMILE_STATE_SCHEMA,
+})
+
+
+def build_portrait_qc_response_schema(person_count):
+    """person_count pins person_issues[] to exactly that many entries via
+    minItems/maxItems, so a length mismatch against the `persons` list
+    build_portrait_qc_instruction was given is an API-level schema violation.
+    Identity and merge correctness are validated separately by subject_index
+    and local_detection_index; array order is not used as identity."""
+    return {
+        "type": "json_schema",
+        "name": "portrait_qc",
+        "strict": True,
+        "schema": _schema_object({
+            "person_issues": {
+                "type": "array",
+                "items": _PERSON_ISSUES_SCHEMA,
+                "minItems": person_count,
+                "maxItems": person_count,
+            },
+        }),
+    }
+
+
+_GAZE_REPAIR_PLAN_ITEM_SCHEMA = _schema_object({
+    "subject_index": _schema_integer(),
+    "local_detection_index": _schema_integer(),
+    "gaze_repair_strategy": _GAZE_REPAIR_STRATEGY_SCHEMA,
+})
+
+
+def build_gaze_repair_planning_response_schema(person_count):
+    return {
+        "type": "json_schema",
+        "name": "gaze_repair_planning",
+        "strict": True,
+        "schema": _schema_object({
+            "repair_plans": {
+                "type": "array",
+                "items": _GAZE_REPAIR_PLAN_ITEM_SCHEMA,
+                "minItems": person_count,
+                "maxItems": person_count,
+            },
+        }),
+    }
+
+
+def _default_person_issues():
+    """The "不適用" shape ANALYSIS_INSTRUCTION already documents for
+    is_person=false subjects (see the Coordinate and geometry rules bullet on
+    blink_issue/hair_issue/gaze_issue/smile_issue) -- reused as the two-pass
+    split's pre-merge baseline in openai_client._analyze_photo_two_pass, so
+    every subjects[] entry is well-formed even before Call B runs or if it
+    fails outright.
+    """
+    return {
+        "blink_issue": {
+            "blink_observability": "unreadable", "eyelid_detail_quality": "unreadable",
+            "left_eye_state": "unclear", "right_eye_state": "unclear",
+            "physical_eye_state": "unclear", "eye_closure_confidence": 0.0,
+            "mouth_laughter_state": "unclear", "periocular_contraction": "unclear",
+            "closure_expression_dependence": "unclear", "explicit_closure_context": "unclear",
+            "intent_evidence_confidence": 0.0, "overall_demeanor": "unclear",
+            "blink_candidate": False,
+            "eye_state": "不適用", "severity": "none", "intent_cues": [],
+            "closure_intent": "ambiguous", "expression_coherence": "unclear",
+            "blink_failure_confidence": 0.0, "should_fix": False, "reason": "不適用",
+        },
+        "hair_issue": {
+            "hair_state": "不適用", "visible_evidence": [], "front_hair": "不適用",
+            "fix_action": "none", "mess_intent": "ambiguous", "hair_mess_confidence": 0.0,
+            "should_fix": False, "reason": "不適用",
+        },
+        "gaze_issue": {
+            "gaze_observability": "unreadable", "eye_detail_quality": "unreadable",
+            "head_pose": "unclear", "left_eye_direction": "unclear",
+            "right_eye_direction": "unclear", "binocular_alignment": "unverifiable",
+            "gaze_state": "不適用", "eye_focus_quality": "unclear",
+            "gaze_target_in_frame": {"present": False, "description": "不適用", "box": {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0}},
+            "lens_contact_decision": "unclear", "lens_contact_confidence": 0.0,
+            "not_looking_at_lens_confidence": 0.0, "gaze_correction_reasonableness": 0.0,
+            "gaze_repair_strategy": {
+                "strategy_type": "not_safe_to_repair", "original_gaze_read": "不適用",
+                "target_gaze_read": "不適用", "eye_adjustment": "不適用",
+                "sclera_catchlight_adjustment": "不適用", "head_face_adjustment": "none",
+                "repair_strength": "subtle", "edit_instruction": "不適用",
+                "success_condition": "不適用", "preserve_during_repair": [], "failure_to_avoid": [],
+            },
+            "should_fix": False, "reason": "不適用",
+        },
+        "smile_issue": {"smile_intensity": "unclear", "adjust_safe": False, "reason": "不適用"},
+    }
+
+
+def _apply_default_person_issues(subjects):
+    for subject in subjects or []:
+        defaults = _default_person_issues()
+        for key, value in defaults.items():
+            subject.setdefault(key, value)
+    return subjects
+
+
+def merge_portrait_qc_issues(analysis, portrait_qc):
+    """Merge Call B into Call A by stable subject_index, never by position.
+
+    Raises ValueError on a missing, duplicate, out-of-range, non-person, or
+    face-crop-mismatched result. After this merge, callers may run
+    backfill_missing_correction_items to create approved repair items.
+    """
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+
+    expected_indices = {
+        index for index, subject in enumerate(subjects)
+        if isinstance(subject, dict) and subject.get("is_person")
+    }
+    seen_indices = set()
+
+    for item in (portrait_qc or {}).get("person_issues") or []:
+        if not isinstance(item, dict):
+            raise ValueError("portrait-QC person_issues entries must be objects")
+
+        subject_index = item.get("subject_index")
+        if isinstance(subject_index, bool) or not isinstance(subject_index, int):
+            raise ValueError("portrait-QC subject_index must be an integer")
+        if subject_index not in expected_indices:
+            raise ValueError(
+                "portrait-QC subject_index {} does not identify a person in Call A".format(subject_index)
+            )
+        if subject_index in seen_indices:
+            raise ValueError("duplicate portrait-QC subject_index {}".format(subject_index))
+
+        subject = subjects[subject_index]
+        expected_detection_index = subject.get("local_detection_index", -1)
+        returned_detection_index = item.get("local_detection_index", -1)
+        if returned_detection_index != expected_detection_index:
+            raise ValueError(
+                "portrait-QC local_detection_index mismatch for subject_index {}: expected {}, got {}".format(
+                    subject_index, expected_detection_index, returned_detection_index
+                )
+            )
+
+        for key in ("blink_issue", "hair_issue", "gaze_issue", "smile_issue"):
+            value = item.get(key)
+            if not isinstance(value, dict):
+                raise ValueError(
+                    "portrait-QC {} is missing or invalid for subject_index {}".format(key, subject_index)
+                )
+            subject[key] = value
+
+        seen_indices.add(subject_index)
+
+    missing_indices = sorted(expected_indices - seen_indices)
+    if missing_indices:
+        raise ValueError(
+            "portrait-QC results missing subject_index values: {}".format(missing_indices)
+        )
+
+    _apply_default_person_issues(subjects)
+    return cleaned
+
+
+def derive_luna_blink_decisions(analysis):
+    """Turn Luna Call B's recall-first eyelid observations into the legacy
+    blink_issue decision shape.
+
+    Physical closure detection is intentionally broader than automatic edit
+    approval: blink_candidate records every readable half/full closure, while
+    should_fix additionally requires safe two-eye geometry and no strictly
+    proven expression/activity exception.
+    """
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+
+    def score(value):
+        try:
+            return max(0.0, min(1.0, float(value)))
+        except (TypeError, ValueError):
+            return 0.0
+
+    closure_states = ("half_closed", "fully_closed")
+    candidate_states = ("half_closed", "fully_closed", "one_eye_closed")
+
+    for subject_index, subject in enumerate(subjects):
+        if not subject.get("is_person"):
+            continue
+
+        issue = dict(subject.get("blink_issue") or {})
+        observability = issue.get("blink_observability") or "unreadable"
+        detail = issue.get("eyelid_detail_quality") or "unreadable"
+        left_state = issue.get("left_eye_state") or "unclear"
+        right_state = issue.get("right_eye_state") or "unclear"
+        raw_physical = issue.get("physical_eye_state") or "unclear"
+        closure_confidence = score(issue.get("eye_closure_confidence"))
+        intent_confidence = score(issue.get("intent_evidence_confidence"))
+
+        per_eye = (left_state, right_state)
+        readable_per_eye = [state for state in per_eye if state not in ("not_visible", "unclear")]
+        both_states_readable = observability == "both_eyes" and len(readable_per_eye) == 2
+
+        if observability == "unreadable" or detail == "unreadable" or not readable_per_eye:
+            physical = "unclear"
+        elif both_states_readable:
+            closed_count = sum(state == "fully_closed" for state in readable_per_eye)
+            half_count = sum(state == "half_closed" for state in readable_per_eye)
+            narrowed_count = sum(state == "narrowed_open" for state in readable_per_eye)
+            if closed_count == 2:
+                physical = "fully_closed"
+            elif closed_count == 1:
+                physical = "one_eye_closed"
+            elif half_count:
+                physical = "half_closed"
+            elif narrowed_count:
+                physical = "narrowed_open"
+            else:
+                physical = "open"
+        elif any(state in closure_states for state in readable_per_eye):
+            # Preserve recall for a physically visible closure even when only
+            # one eye can be inspected, but do not automatically edit it.
+            physical = raw_physical if raw_physical in candidate_states else "half_closed"
+        elif any(state == "narrowed_open" for state in readable_per_eye):
+            physical = "narrowed_open"
+        elif readable_per_eye and all(state == "open" for state in readable_per_eye):
+            physical = "open"
+        else:
+            physical = "unclear"
+
+        mouth = issue.get("mouth_laughter_state") or "unclear"
+        periocular = issue.get("periocular_contraction") or "unclear"
+        dependence = issue.get("closure_expression_dependence") or "unclear"
+        context = issue.get("explicit_closure_context") or "unclear"
+
+        # narrowed_open is genuinely ambiguous: it's the correct read for a
+        # smile-driven squint (which must stay excluded from should_fix), but
+        # despite this section's own instruction not to, the model also uses
+        # it for a reduced-but-not-fully-closed eyelid with NO smiling
+        # explanation at all. Confirmed on eval_results/20260902-luna-round1-
+        # demeanor-eyeclose/raw_results.json: of the 400 eye_close positive
+        # rows, 67/129 missed rows (52% of all misses) were entirely
+        # narrowed_open subjects with mouth_laughter_state=not_laughing and
+        # periocular_contraction=none_or_mild -- i.e. nothing about them reads
+        # as a smile-squint either. Reclassifying narrowed_open as half_closed
+        # specifically in that no-smile signature recovered 91 of those rows
+        # in an offline check, with zero new false positives introduced on
+        # the 200 negative rows (no negative-image subject shared that exact
+        # signature). Left as narrowed_open -- excluded from candidate_states,
+        # same as before -- whenever there IS a laughter/smile explanation,
+        # preserving the original smile-squint protection this exclusion
+        # exists for.
+        #
+        # Scoped to BOTH eyes independently reading narrowed_open, not just
+        # the derived physical=="narrowed_open" summary: an asymmetric
+        # left_eye_state="open"/right_eye_state="narrowed_open" pair (one eye
+        # fully open, the other only mildly reduced) also derives to
+        # physical="narrowed_open", but that pattern is normal facial
+        # asymmetry, not a reduced-aperture candidate -- confirmed on a
+        # production photo where eye_closure_confidence was only 0.18 and the
+        # model's own reason text said the eyes did not reach half/fully
+        # closed, yet this reclassification still promoted it to should_fix.
+        both_eyes_narrowed = left_state == "narrowed_open" and right_state == "narrowed_open"
+        if physical == "narrowed_open" and mouth == "not_laughing" and periocular == "none_or_mild" and both_eyes_narrowed:
+            physical = "half_closed"
+
+        blink_candidate = bool(
+            physical in candidate_states
+            and observability != "unreadable"
+            and detail != "unreadable"
+        )
+        symmetric_closure = bool(
+            both_states_readable
+            and all(state in closure_states for state in readable_per_eye)
+            and len(set(readable_per_eye)) == 1
+        )
+        strong_laughter = bool(
+            blink_candidate
+            and symmetric_closure
+            and mouth == "active_high_intensity_laughter"
+            and periocular == "strong_bilateral"
+            and dependence == "integral_to_expression"
+            and intent_confidence >= 0.80
+        )
+
+        gaze_target = ((subject.get("gaze_issue") or {}).get("gaze_target_in_frame") or {})
+        # Unlike strong_laughter/explicit_activity below, a deliberate wink is
+        # not required to be "integral_to_expression" -- a wink is routinely a
+        # deliberate action layered on top of an otherwise ordinary/neutral
+        # expression (closure_expression_dependence legitimately reads
+        # independent_or_transitional), not necessarily something the rest of
+        # the face's expression depends on. Requiring integral_to_expression
+        # here was rejecting genuine winks the model itself classified as
+        # explicit_closure_context=deliberate_wink at intent_evidence_confidence
+        # ~0.98 -- observed on 4/10 eye_close negative images (505135523,
+        # pexels-olly-3777574, pyQoH7AJoRKQ2aYU48F4mR, and a screenshot),
+        # each with the exact same signature: context=deliberate_wink,
+        # confidence=0.98, dependence=independent_or_transitional.
+        deliberate_wink = bool(
+            physical == "one_eye_closed"
+            and both_states_readable
+            and context == "deliberate_wink"
+            and intent_confidence >= 0.85
+        )
+        # 0.90 was rejecting correct context+dependence matches at confidence
+        # 0.82-0.86 (savoring/crying_or_pain_or_strong_emotion, observed on 2/10
+        # eye_close negative images) purely for falling short of that bar --
+        # lowered to 0.80. Checked against the 400 positive eye_close rows in
+        # eval_results/20260901-luna-current-eyeclose-v3/raw_results.json: zero
+        # currently-should_fix=true subjects have confidence in [0.80, 0.90)
+        # with a matching context+dependence, so this does not risk turning any
+        # currently-correct accidental-blink detection into a miss.
+        # Sleep, like a deliberate wink, is not required to be
+        # "integral_to_expression" -- sleep is a state the person is in, not
+        # an expression their eyes are "integral to". Requiring that here
+        # rejected genuine sleep photos: confirmed on 3 real photos (a subway
+        # nap, a child asleep in a car, someone dozing at a desk) where the
+        # model consistently read explicit_closure_context=sleep at
+        # confidence 0.98-0.99, correctly, but closure_expression_dependence
+        # as independent_or_transitional -- a self-consistent reading, just
+        # not what this exception demanded. prayer_or_meditation/savoring/
+        # crying_or_pain_or_strong_emotion keep the dependence requirement
+        # for now (not yet checked against real photos the way sleep was).
+        sleep_exception = bool(
+            physical in candidate_states
+            and context == "sleep"
+            and intent_confidence >= 0.80
+        )
+        explicit_activity = bool(
+            physical in candidate_states
+            and dependence == "integral_to_expression"
+            and intent_confidence >= 0.80
+            and (
+                context in (
+                    "prayer_or_meditation", "savoring",
+                    "crying_or_pain_or_strong_emotion",
+                )
+                or (
+                    context == "downward_at_visible_target"
+                    and bool(gaze_target.get("present"))
+                )
+            )
+        )
+        # Every exception above requires a specific named story (laughter,
+        # wink, sleep, ...), but most legitimately-fine closed-eye photos have
+        # no such story at all -- explicit_closure_context=none and low
+        # intent_evidence_confidence describe a genuine accidental blink
+        # exactly as well as they describe an ordinary calm/content closed-eye
+        # moment (confirmed empirically: this signature appears on both the
+        # 200 eye_close negative rows and the 400 positive rows in
+        # eval_results/20260901-luna-current-eyeclose-v3, so gating should_fix
+        # on that signature alone is not a safe lever). overall_demeanor is an
+        # independent evidence axis -- this person's own posture/tension,
+        # nothing to do with why their eyes are closed -- that a genuine
+        # accidental blink and an ordinary restful moment do NOT share: someone
+        # caught mid-blink while otherwise alert and camera-ready still reads
+        # as alert_or_camera_ready, while someone genuinely at ease reads as
+        # calm_or_at_ease regardless of whether a specific story applies.
+        demeanor = issue.get("overall_demeanor") or "unclear"
+        # Scoped to fully_closed only, not every candidate_states member: the
+        # 4 false positives this targets (see eval note above) were all
+        # fully_closed, and half_closed/one_eye_closed's own droopy/uneven/
+        # transitional framing is already a specific accidental-capture
+        # signature on its own that a calm demeanor reading shouldn't be
+        # allowed to override without separate validation.
+        calm_demeanor_exception = bool(
+            physical == "fully_closed"
+            and context in ("none", "unclear")
+            and demeanor == "calm_or_at_ease"
+        )
+        intentional_exception = (
+            strong_laughter or deliberate_wink or explicit_activity
+            or calm_demeanor_exception or sleep_exception
+        )
+
+        readable_enough = detail == "readable" or (
+            detail == "borderline" and closure_confidence >= 0.75
+        )
+        safe_edit_geometry = observability == "both_eyes" and both_states_readable
+        should_fix = bool(
+            blink_candidate
+            and readable_enough
+            and safe_edit_geometry
+            and not intentional_exception
+        )
+
+        if physical == "unclear":
+            eye_state = "occluded_or_unclear"
+            severity = "none"
+            closure_intent = "ambiguous"
+            expression_coherence = "unclear"
+            failure_confidence = 0.0
+            gate_reason = "Python gate：眼瞼物理狀態不可可靠讀取，不建立閉眼候選。"
+        elif physical == "open":
+            eye_state = "open"
+            severity = "none"
+            closure_intent = "ambiguous"
+            expression_coherence = "unclear"
+            failure_confidence = 0.0
+            gate_reason = "Python gate：雙眼物理狀態為張開，不建立閉眼候選。"
+        elif physical == "narrowed_open":
+            eye_state = "natural_smiling_squint"
+            severity = "none"
+            closure_intent = "ambiguous"
+            expression_coherence = "unclear"
+            failure_confidence = 0.0
+            gate_reason = "Python gate：眼睛仍有可見開口，屬 narrowed_open，不建立閉眼候選。"
+        elif intentional_exception:
+            if strong_laughter:
+                eye_state = "expressive_closed"
+                exception_name = "明顯高強度大笑"
+            elif deliberate_wink:
+                eye_state = "intentional_wink"
+                exception_name = "明確眨單眼"
+            elif context == "sleep":
+                eye_state = "sleeping"
+                exception_name = "明確睡眠"
+            elif context == "downward_at_visible_target":
+                eye_state = "downward_gaze"
+                exception_name = "畫面內明確向下目標"
+            elif context == "crying_or_pain_or_strong_emotion":
+                eye_state = "expressive_closed"
+                exception_name = "明確強烈情緒"
+            elif calm_demeanor_exception:
+                eye_state = "intentional_closed"
+                exception_name = "整體神情放鬆平靜，非清醒準備拍照狀態"
+            else:
+                eye_state = "intentional_closed"
+                exception_name = "明確閉眼活動"
+            severity = "none"
+            closure_intent = "intentional_expression"
+            expression_coherence = "supports_expression"
+            failure_confidence = min(0.25, 1.0 - intent_confidence)
+            gate_reason = "Python gate：{}的嚴格可見證據通過，因此保留閉眼。".format(exception_name)
+        else:
+            eye_state = "accidental_blink" if physical == "fully_closed" else "accidental_half_blink"
+            severity = "severe" if physical == "fully_closed" else "moderate"
+            closure_intent = "accidental_capture" if should_fix else "ambiguous"
+            expression_coherence = "conflicts_with_expression" if should_fix else "unclear"
+            failure_confidence = max(0.70 if detail == "readable" else 0.55, closure_confidence)
+            if should_fix:
+                gate_reason = "Python gate：偵測到可讀的閉眼候選，且沒有通過嚴格豁免，should_fix=true。"
+            elif observability != "both_eyes":
+                gate_reason = "Python gate：保留 blink_candidate=true，但只有單眼幾何可讀，不自動修正。"
+            else:
+                gate_reason = "Python gate：保留 blink_candidate=true，但細節品質未達自動修正門檻。"
+
+        reason = str(issue.get("reason") or "").strip()
+        issue.update({
+            "physical_eye_state": physical,
+            "eye_closure_confidence": closure_confidence,
+            "intent_evidence_confidence": intent_confidence,
+            "blink_candidate": blink_candidate,
+            "eye_state": eye_state,
+            "severity": severity,
+            "closure_intent": closure_intent,
+            "expression_coherence": expression_coherence,
+            "blink_failure_confidence": failure_confidence,
+            "should_fix": should_fix,
+            "reason": (reason + " " + gate_reason).strip(),
+            "_subject_index": subject_index,
+        })
+        subject["blink_issue"] = issue
+
+    return cleaned
+
+
+def _empty_gaze_repair_strategy():
+    return {
+        "strategy_type": "not_safe_to_repair",
+        "original_gaze_read": "不適用",
+        "target_gaze_read": "不適用",
+        "eye_adjustment": "不適用",
+        "sclera_catchlight_adjustment": "不適用",
+        "head_face_adjustment": "none",
+        "repair_strength": "subtle",
+        "edit_instruction": "不適用",
+        "success_condition": "不適用",
+        "preserve_during_repair": [],
+        "failure_to_avoid": [],
+    }
+
+
+def _fallback_gaze_repair_strategy(issue, label):
+    gaze_state = issue.get("gaze_state") or "near_camera"
+    head_pose = issue.get("head_pose") or "unclear"
+    binocular = issue.get("binocular_alignment") or "unverifiable"
+    visible_directions = [
+        direction for direction in (
+            issue.get("left_eye_direction"), issue.get("right_eye_direction")
+        )
+        if direction and direction != "not_visible"
+    ]
+    near_lens_directions = ("near_lens_left", "near_lens_right")
+    try:
+        original_lens_confidence = float(issue.get("lens_contact_confidence", 0.0))
+    except (TypeError, ValueError):
+        original_lens_confidence = 0.0
+    tiny_frontal_miss = bool(
+        gaze_state == "near_camera"
+        and head_pose == "frontal"
+        and len(visible_directions) == 2
+        and all(direction in near_lens_directions for direction in visible_directions)
+        and len(set(visible_directions)) == 1
+        and binocular == "near_lens_convergent"
+        and original_lens_confidence >= 0.70
+    )
+    eyes_only = tiny_frontal_miss
+    strategy_type = "eyes_only" if eyes_only else "eyes_plus_head_face_alignment"
+    head_adjustment = (
+        "none; the head and face are already naturally aligned to the current lens"
+        if eyes_only else
+        "visibly but naturally align the head/face toward the current camera lens with bounded yaw and/or pitch; keep the torso, shoulders, and body pose unchanged"
+    )
+    return {
+        "strategy_type": strategy_type,
+        "original_gaze_read": issue.get("reason") or "The readable eyes miss the exact current lens.",
+        "target_gaze_read": "Both pupils/irises aim at the exact current camera lens; the viewer reads unmistakable direct eye contact.",
+        "eye_adjustment": "Move both pupils/irises from the observed gaze direction to the exact current camera-lens point.",
+        "sclera_catchlight_adjustment": "Rebalance sclera naturally around the corrected iris positions and keep catchlights consistent with the original lighting.",
+        "head_face_adjustment": head_adjustment,
+        "repair_strength": "moderate",
+        "edit_instruction": (
+            "Redirect {}'s readable eyes to the exact current camera lens using {}. "
+            "Make the completed correction immediately readable at normal photo-viewing size. "
+            "Do not stop at near-camera gaze; preserve identity, eyelid openness, eye shape, expression, glasses, lighting, torso, shoulders, and body pose."
+        ).format(label, "pupil/iris repositioning only because the frontal miss is extremely small" if eyes_only else "pupil/iris repositioning plus a visible, bounded head/face alignment toward the lens"),
+        "success_condition": "At normal viewing size, the subject immediately and unmistakably looks into the exact current camera lens, not beside, above, below, or past it.",
+        "preserve_during_repair": [
+            "identity", "eyelid openness", "eye shape and color", "expression", "glasses",
+            "skin texture", "body pose", "clothing", "background", "unlisted people",
+        ],
+        "failure_to_avoid": [
+            "near-camera only", "correction visible only in a highly enlarged crop",
+            "pupil shift without compatible head/face alignment", "cross-eyed or strained gaze",
+            "excessive sclera", "changed eyelid shape", "changed identity",
+            "rotated shoulders or torso", "changes to unlisted people",
+        ],
+    }
+
+
+def derive_luna_gaze_decisions(analysis):
+    """Convert Luna Call B's observation-only gaze result into the legacy
+    downstream gaze_issue shape.  The strict positive gate and should_fix
+    threshold live here so prompt wording cannot silently change them.
+    """
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+
+    for subject_index, subject in enumerate(subjects):
+        if not subject.get("is_person"):
+            continue
+        issue = dict(subject.get("gaze_issue") or {})
+        observability = issue.get("gaze_observability") or "unreadable"
+        detail = issue.get("eye_detail_quality") or "unreadable"
+        state = issue.get("gaze_state") or "unclear"
+        head_pose = issue.get("head_pose") or "unclear"
+        left_direction = issue.get("left_eye_direction") or "unclear"
+        right_direction = issue.get("right_eye_direction") or "unclear"
+        binocular = issue.get("binocular_alignment") or "unverifiable"
+        target = issue.get("gaze_target_in_frame") or {
+            "present": False, "description": "不適用",
+            "box": {"x": 0.0, "y": 0.0, "w": 0.0, "h": 0.0},
+        }
+        try:
+            lens_confidence = max(0.0, min(1.0, float(issue.get("lens_contact_confidence", 0.0))))
+        except (TypeError, ValueError):
+            lens_confidence = 0.0
+        try:
+            miss_confidence = max(0.0, min(1.0, float(issue.get("not_looking_at_lens_confidence", 0.0))))
+        except (TypeError, ValueError):
+            miss_confidence = 0.0
+
+        visible_directions = [
+            direction for direction in (left_direction, right_direction)
+            if direction != "not_visible"
+        ]
+        if observability == "unreadable" or detail == "unreadable" or not visible_directions:
+            decision = "unclear"
+            state = "unclear"
+            should_fix = False
+            miss_confidence = min(miss_confidence, 0.49)
+            gate_reason = "Python gate：眼部方向不可可靠讀取，因此不觸發視線修正。"
+        else:
+            exact_eye_evidence = all(direction == "toward_exact_lens" for direction in visible_directions)
+            expected_visible_count = 2 if observability == "both_eyes" else 1
+            exact_eye_evidence = exact_eye_evidence and len(visible_directions) == expected_visible_count
+            exact_binocular_evidence = (
+                binocular == "exact_lens_convergent"
+                if observability == "both_eyes"
+                else binocular == "unverifiable"
+            )
+            exact_positive = (
+                issue.get("lens_contact_decision") == "looking_at_lens"
+                and state == "direct_camera"
+                and lens_confidence >= 0.80
+                and exact_eye_evidence
+                and exact_binocular_evidence
+            )
+            if exact_positive:
+                decision = "looking_at_lens"
+                miss_confidence = min(miss_confidence, 0.25, 1.0 - lens_confidence)
+                should_fix = False
+                gate_reason = "Python gate：雙眼物理證據通過 exact-lens positive gate。"
+            else:
+                decision = "not_looking_at_lens"
+                if state in ("direct_camera", "ambiguous", "unclear"):
+                    state = "near_camera"
+                miss_floor = 0.75 if state not in ("near_camera", "ambiguous") else 0.55
+                miss_confidence = max(miss_confidence, miss_floor, 1.0 - lens_confidence)
+                lens_confidence = min(lens_confidence, 0.79, 1.0 - miss_confidence)
+                readable_enough = detail == "readable" or (
+                    detail == "borderline" and miss_confidence >= 0.75
+                )
+                edit_geometry_available = (
+                    observability == "both_eyes"
+                    and head_pose not in ("profile", "rear_or_hidden", "unclear")
+                )
+                should_fix = bool(
+                    miss_confidence >= 0.55
+                    and readable_enough
+                    and edit_geometry_available
+                    and not bool(target.get("present"))
+                )
+                gate_reason = (
+                    "Python gate：未通過 exact-lens positive gate；依可讀性、雙眼可見性、"
+                    "信心門檻與可見目標規則推導 should_fix={}。"
+                ).format(str(should_fix).lower())
+
+        reason = str(issue.get("reason") or "").strip()
+        issue.update({
+            "gaze_state": state,
+            "eye_focus_quality": detail,
+            "gaze_target_in_frame": target,
+            "lens_contact_decision": decision,
+            "lens_contact_confidence": lens_confidence,
+            "not_looking_at_lens_confidence": miss_confidence,
+            "gaze_correction_reasonableness": (
+                0.90 if head_pose == "frontal" else
+                0.75 if head_pose == "slight_yaw" else
+                0.55 if head_pose == "strong_yaw" else 0.20
+            ),
+            "gaze_repair_strategy": (
+                _fallback_gaze_repair_strategy(issue, subject.get("label") or "the subject")
+                if should_fix else _empty_gaze_repair_strategy()
+            ),
+            "should_fix": should_fix,
+            "reason": (reason + " " + gate_reason).strip(),
+            "_subject_index": subject_index,
+        })
+        subject["gaze_issue"] = issue
+    return cleaned
+
+
+def gaze_repair_targets(analysis):
+    targets = []
+    for subject_index, subject in enumerate(analysis.get("subjects") or []):
+        if not isinstance(subject, dict) or not subject.get("is_person"):
+            continue
+        issue = subject.get("gaze_issue") or {}
+        if not issue.get("should_fix"):
+            continue
+        target = {
+            "subject_index": subject_index,
+            "local_detection_index": subject.get("local_detection_index", -1),
+            "label": subject.get("label") or "person",
+            "box": subject.get("box") or {},
+        }
+        target.update(issue)
+        targets.append(target)
+    return targets
+
+
+def merge_gaze_repair_strategies(analysis, repair_response):
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+    expected = {target["subject_index"] for target in gaze_repair_targets(analysis)}
+    seen = set()
+
+    for item in (repair_response or {}).get("repair_plans") or []:
+        subject_index = item.get("subject_index")
+        if subject_index not in expected or subject_index in seen:
+            raise ValueError("invalid or duplicate gaze repair subject_index {}".format(subject_index))
+        subject = subjects[subject_index]
+        expected_detection = subject.get("local_detection_index", -1)
+        if item.get("local_detection_index", -1) != expected_detection:
+            raise ValueError("gaze repair local_detection_index mismatch for subject_index {}".format(subject_index))
+        strategy = item.get("gaze_repair_strategy")
+        if not isinstance(strategy, dict):
+            raise ValueError("missing gaze_repair_strategy for subject_index {}".format(subject_index))
+        issue = dict(subject.get("gaze_issue") or {})
+        issue["gaze_repair_strategy"] = strategy
+        if strategy.get("strategy_type") == "not_safe_to_repair":
+            issue["should_fix"] = False
+            issue["reason"] = (str(issue.get("reason") or "") + " Repair planner：影像或幾何不足以安全修正。").strip()
+        subject["gaze_issue"] = issue
+        seen.add(subject_index)
+
+    missing = sorted(expected - seen)
+    if missing:
+        raise ValueError("gaze repair plans missing subject_index values: {}".format(missing))
+    return cleaned
 
 
 # The light/color direction shared by both retouch modes. The sentence this
@@ -2548,6 +4701,7 @@ Approved-repair override:
 - Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
 - Reopen or relax the eyes naturally so they match the person's existing expression and the photo's moment. Avoid making the eyes too large, symmetrical, doll-like, or copied from another person.
 - Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting -- unless a separately approved gaze repair for this same person specifies a different target direction, in which case follow that instead. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
+- When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
 - Eyes to work on: """ + json.dumps(blink_items_to_fix, ensure_ascii=False)
     else:
@@ -2717,12 +4871,13 @@ Execution instructions:
 
 Execution rule:
 - Follow the Analysis edit instruction for each subject literally.
-- If Strategy type is eyes_only, keep the head/face angle unchanged.
-- If Strategy type is eyes_plus_head_face_alignment, allow the exact level of head/face adjustment described in Head/face adjustment.
+- If Strategy type is eyes_only, keep the head/face angle unchanged. This method is valid only for an extremely small miss when the head and face are already naturally aligned to the current lens.
+- If Strategy type is eyes_plus_head_face_alignment, the described head/face adjustment is mandatory, not optional. Visibly but naturally turn and/or tilt the head/face toward the exact current lens while keeping the torso, shoulders, body pose, and framing unchanged. A pupil-only change with the original incompatible head direction is a failed execution.
 - Use the listed Repair strength for the named subject.
 - Preserve everything listed in Preserve during repair and in the matching correction_inverse item.
 - Avoid every failure mode listed in Avoid during repair.
 - Do not weaken a moderate or strong instruction into a subtle eye nudge.
+- The completed gaze correction must be immediately readable at normal photo-viewing size; a change visible only in a highly enlarged face crop is insufficient.
 """
     else:
         # Same "highest priority" + named-fields treatment as blink_block's
@@ -3038,12 +5193,12 @@ def build_gaze_only_edit_prompt(gaze_items):
         label = item.get("subject_label") or "the subject"
         box = item.get("box") or {}
         strategy = item.get("gaze_repair_strategy") or {}
-        edit_instruction = strategy.get("edit_instruction") or "Redirect this person's gaze to the camera lens using pupil/iris repositioning."
+        edit_instruction = strategy.get("edit_instruction") or "Redirect this person's gaze to the exact camera lens using pupil/iris repositioning plus a visible, bounded head/face alignment."
         eye_adjustment = strategy.get("eye_adjustment") or "as needed to reach direct lens contact"
-        head_face_adjustment = strategy.get("head_face_adjustment") or "none"
+        head_face_adjustment = strategy.get("head_face_adjustment") or "visibly but naturally align the head/face toward the exact current lens while keeping the torso and shoulders unchanged"
         sclera_catchlight_adjustment = strategy.get("sclera_catchlight_adjustment") or "rebalance naturally around the new eye position"
         target_gaze_read = strategy.get("target_gaze_read") or "both eyes clearly and directly looking at the camera lens"
-        strategy_type = strategy.get("strategy_type") or "eyes_only"
+        strategy_type = strategy.get("strategy_type") or "eyes_plus_head_face_alignment"
         repair_strength = strategy.get("repair_strength") or "moderate"
         targets.append(
             f"- Subject: {label}\n"
@@ -3063,9 +5218,13 @@ This is the ONLY task for this edit: redirect the named subject's or subjects' g
 
 {targets_block}
 
-Scope is limited to the eye/pupil region of the named subject(s) above, and nothing else. If the photo contains other people who are not named above, they are completely out of scope: do not touch their eyes, gaze, expression, pose, hair, or anything else about them, even if their gaze also looks imperfect -- only the subject(s) explicitly listed are being fixed here. For the named subject(s) themselves, do not let the eye/pupil movement drag along any other change to their face: eyebrows, eyelid crease shape, mouth, and overall expression must read exactly as they did before this edit, except for the direction the eyes are now pointing.
+Scope is limited to the named subject's eye direction and the exact bounded head/face alignment explicitly approved for that subject. If the photo contains other people who are not named above, they are completely out of scope: do not touch their eyes, gaze, expression, pose, hair, or anything else about them, even if their gaze also looks imperfect. For the named subject, preserve eyebrows, eyelid openness and crease shape, mouth, expression, identity, neck anatomy, torso, shoulders, and body pose. The head/face may turn or tilt only when the approved repair method is eyes_plus_head_face_alignment; never rotate the shoulders or torso to simulate that head correction.
 
-Go all the way to direct lens contact, not partway there. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils have moved far enough, move them further rather than settling for a subtle, ambiguous shift; a slightly bold correction that unmistakably reads as direct eye contact is the right outcome, a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.
+Execution by method:
+- eyes_plus_head_face_alignment: the head/face adjustment is required, not optional. Visibly but naturally turn and/or tilt the head/face toward the exact current lens, then align both pupils/irises to that lens. Do not merely shift the pupils while retaining an incompatible original head direction.
+- eyes_only: keep the head/face angle unchanged and reposition only the pupils/irises. This is reserved for an extremely small miss with an already lens-aligned frontal head.
+
+Go all the way to direct lens contact, not partway there. The completed correction must be immediately readable at normal photo-viewing size, without zooming into the face. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils and, when required, the head/face have moved far enough, move them further within natural anatomical limits rather than settling for a subtle, ambiguous shift. A clearly visible correction that unmistakably reads as direct eye contact is the right outcome; a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.
 
 Preserve everything else in the photograph exactly as supplied, especially: every other person in the frame, in full and completely unmodified; the named subject's expression, mouth, and eyebrows; and the entire background. Also preserve identity, face shape, skin texture, skin tone, hairstyle, glasses, makeup, lighting, clothing, pose, and composition. Do not add text, logos, watermarks, or new people. Do not crop, reframe, resize, or change the composition -- the output must be the same framing as the input, at the same size.
 """
@@ -3177,9 +5336,9 @@ Check dimensions:
 - Alignment and edges: credible horizontals/verticals feel stable unless slant has a clear purpose; output edges are fully photographic with no blank, transparent, checkerboard, or artificial canvas areas.
 - Distraction and scene truth: harmful distractions are reduced, but contextual/neutral elements are preserved unless they still compete strongly. The scene must not be rebuilt, over-simplified, or turned into a different style.
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
-- Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyes are naturally corrected while identity, gaze, face shape, glasses, makeup, and expression style remain believable.
+- Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyelids are naturally corrected while identity, face shape, glasses, makeup, and expression style remain believable. The result must not be a no-op, merely sharpened eyelids, oversized/doll-like eyes, copied-looking eyes, or an unrelated expression change. If that same person also had an approved gaze repair, verify one coherent final result: correct eyelid openness and exact-lens pupil/iris alignment with natural sclera and catchlights, not two conflicting eye states. If no gaze repair was approved, preserve a natural gaze consistent with the original head direction instead of forcing camera contact.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
-{smile_qa_line}- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a visible gaze-direction change actually occurred for the named subject and that the final gaze unmistakably reads as direct lens contact. In simple terms, the subject should clearly look straight at the camera after the edit. The iris/pupil positions and visual axes should appear aimed at the camera lens, with natural sclera balance and gaze-consistent catchlights; if eye-only redirection would look strained, weak, or still off-camera, a moderate head/face orientation refinement is allowed and expected to make the result natural. Only the eye direction/focus, iris/pupil placement, sclera balance, visual-axis alignment, gaze-consistent catchlight placement, and bounded moderate head/face orientation refinement may change; eyelid openness, identity, expression structure, body pose, shoulder direction, glasses/reflections, and facial structure must remain believable. A no-op gaze result, a result that only sharpens/brightens/intensifies the eyes, or a result that still reads off-camera/near-camera/past-camera/slightly-beside-lens, fails this QA check.
+{smile_qa_line}- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a clearly visible gaze-direction change actually occurred for the named subject and that the final gaze immediately and unmistakably reads as direct contact with the exact current lens at normal photo-viewing size. The iris/pupil positions and visual axes must aim naturally at the lens, with believable sclera balance and gaze-consistent catchlights. If the approved strategy is eyes_plus_head_face_alignment, verify that the head/face also visibly turned and/or tilted toward the lens by the planned bounded amount; unchanged head direction with pupil-only movement is a failure. If the approved strategy is eyes_only, verify that the original head was already frontal and lens-aligned and that the miss was genuinely tiny. In all cases preserve eyelid openness, identity, expression structure, facial anatomy, neck anatomy, body pose, shoulder direction, torso direction, glasses/reflections, and every unlisted person. Fail the check for a no-op, sharpen/brighten-only eyes, a change visible only in a highly enlarged crop, residual off-camera/near-camera/past-camera/slightly-beside-lens gaze, crossed or strained visual axes, excessive sclera, incompatible head/eye geometry, rotated shoulders/torso, or an unplanned identity/expression change.
 
 Strict scoring rubric:
 - 9-10: excellent, faithful, polished, intentional framing, no meaningful preservation/crop issues.

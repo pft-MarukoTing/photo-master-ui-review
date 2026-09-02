@@ -2,6 +2,7 @@ import base64
 import logging
 import time
 from functools import partial
+from typing import Optional
 
 from config import MODELS
 from image_tools import (
@@ -22,7 +23,16 @@ from openai_client import (
     edit_gaze_only as edit_gaze_only_openai,
     quality_check_photo,
 )
-from prompts import build_analysis_instruction, backfill_missing_correction_items, subject_issue_items
+from prompts import (
+    build_analysis_instruction,
+    build_overall_analysis_instruction,
+    build_portrait_qc_instruction,
+    build_gaze_repair_planning_instruction,
+    backfill_missing_correction_items,
+    gaze_repair_targets,
+    portrait_qc_persons,
+    subject_issue_items,
+)
 
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
@@ -173,9 +183,27 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
             analysis.get("recommended_aspect_ratio"), analysis.get("crop_box_measured_ratio"),
         )
 
-    analysis["prompts"] = {
-        "photo_analysis": build_analysis_instruction(aspect_ratio, advanced_options),
-    }
+    if analysis_model == "gpt-5.6-luna":
+        # Two-pass split (see openai_client._analyze_photo_two_pass): analysis
+        # already ran by this point, so subjects[] here is Call A's own
+        # finalized result -- portrait_qc_persons re-derives the exact same
+        # subject_index-tagged list Call B was actually given (the merge
+        # never reorders or filters subjects[], so this reconstruction
+        # matches what was actually sent).
+        persons = portrait_qc_persons(analysis)
+        repair_targets = gaze_repair_targets(analysis)
+        analysis["prompts"] = {
+            "photo_analysis": build_overall_analysis_instruction(aspect_ratio, advanced_options),
+            "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
+            "photo_analysis_gaze_repair_planning": (
+                build_gaze_repair_planning_instruction(repair_targets)
+                if repair_targets else None
+            ),
+        }
+    else:
+        analysis["prompts"] = {
+            "photo_analysis": build_analysis_instruction(aspect_ratio, advanced_options, analysis_model),
+        }
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
     }
@@ -250,7 +278,7 @@ def finish_stage(
         result_image: str,          # base64 PNG (no data-URL prefix)
         result_image_data_url: str, # data:image/png;base64,...
         result_text: dict,          # analysis + quality_check + token_usage
-        pre_edit_image: str | None, # base64 PNG, Step 5 output before Step 5b
+        pre_edit_image: Optional[str], # base64 PNG, Step 5 output before Step 5b
                                      # overwrites it -- None unless Step 5b
                                      # actually ran (see pre_edit_image_b64 below)
     }
