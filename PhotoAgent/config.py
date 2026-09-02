@@ -20,10 +20,10 @@ MODELS = {
 # with its Responses API calls: None omits the "reasoning" field entirely,
 # required for non-reasoning models since the API rejects that field on
 # models that don't support it; a reasoning model needs an explicit effort
-# level instead -- "none" runs gpt-5.6-luna reasoning-free.
+# level instead -- "none" runs reasoning-free, gpt-5.6-luna now runs "low".
 ANALYSIS_MODEL_REASONING_EFFORT = {
     "gpt-4.1-mini": None,
-    "gpt-5.6-luna": "none",
+    "gpt-5.6-luna": "low",
     "gpt-5.6-sol": "none",
 }
 
