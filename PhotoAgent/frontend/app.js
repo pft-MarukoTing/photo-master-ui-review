@@ -3067,7 +3067,7 @@
     const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
     const imageQuality = modelQualityOpt.quality || "medium";
     const imageModel = modelQualityOpt.model || "gpt-image-2";
-    const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-4.1-mini";
+    const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna";
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
@@ -3733,7 +3733,7 @@
       // Prompt is entered per-image (or batch-level) at step 2, not at upload.
       imageQuality: modelQualityOpt.quality || "medium",
       imageModel: modelQualityOpt.model || "gpt-image-2",
-      analysisModel: els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-4.1-mini",
+      analysisModel: els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna",
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
@@ -5616,7 +5616,7 @@
       preset,
       imageQuality: job.image_quality || "medium",
       imageModel: job.image_model || "gpt-image-2",
-      analysisModel: job.analysis_model || "gpt-4.1-mini",
+      analysisModel: job.analysis_model || "gpt-5.6-luna",
       aspectRatio: job.aspect_ratio || "auto",
       aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : true,
       runQa: job.run_qa != null ? job.run_qa : true,
@@ -5761,7 +5761,7 @@
             preset: presets[job.preset] || presets.natural,
             imageQuality: job.image_quality || extraInfo.image_quality || "medium",
             imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
-            analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-4.1-mini",
+            analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
             aspectRatio: job.aspect_ratio || "auto",
             aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
             runQa: job.run_qa != null ? job.run_qa : true,
@@ -5933,7 +5933,7 @@
         preset: presets[job.preset] || presets.natural,
         imageQuality: job.image_quality || extraInfo.image_quality || "medium",
         imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
-        analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-4.1-mini",
+        analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
         aspectRatio: job.aspect_ratio || "auto",
         aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
         runQa: job.run_qa != null ? job.run_qa : true,
@@ -6022,7 +6022,7 @@
       job.image_model || extraInfo.image_model || "gpt-image-2",
       job.image_quality || extraInfo.image_quality || "medium"
     ));
-    applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-4.1-mini"));
+    applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna"));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
     applyAdvancedOptionsOption(record.result.analysis?._advanced_options);
     if (historyViewToken === myToken) closeHistoryDrawer();
@@ -7841,7 +7841,7 @@
       preset: presets[presetKey] || presets.natural,
       imageQuality: modelQualityOpt.quality || extraInfo.image_quality || "medium",
       imageModel: modelQualityOpt.model || extraInfo.image_model || "gpt-image-2",
-      analysisModel: extraInfo.analysis_model || "gpt-4.1-mini",
+      analysisModel: extraInfo.analysis_model || "gpt-5.6-luna",
       // The pref this run's EDIT was made under (recorded by finish_stage).
       // _aspect_ratio_pref_at_analysis is the pre-ratio-neutral-analysis field,
       // read only so folders exported back then still re-run as they were.

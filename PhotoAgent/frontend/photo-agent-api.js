@@ -40,7 +40,7 @@ window.PhotoAgentApi = (() => {
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
-    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
+    form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
@@ -261,7 +261,7 @@ window.PhotoAgentApi = (() => {
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
-    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
+    form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
@@ -290,7 +290,7 @@ window.PhotoAgentApi = (() => {
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
-    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
+    form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
@@ -330,7 +330,7 @@ window.PhotoAgentApi = (() => {
         preset,
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
-        analysis_model: analysisModel || "gpt-4.1-mini",
+        analysis_model: analysisModel || "gpt-5.6-luna",
         aspect_ratio: aspectRatio || "auto",
         ai_photo_editing: aiPhotoEditing ? "true" : "false",
         run_qa: runQa === false ? "false" : "true",
@@ -364,7 +364,7 @@ window.PhotoAgentApi = (() => {
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
-    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
+    form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("run_qa", runQa === false ? "false" : "true");
@@ -394,7 +394,7 @@ window.PhotoAgentApi = (() => {
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
-    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
+    form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));
@@ -417,7 +417,7 @@ window.PhotoAgentApi = (() => {
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");
-    form.append("analysis_model", analysisModel || "gpt-4.1-mini");
+    form.append("analysis_model", analysisModel || "gpt-5.6-luna");
     form.append("aspect_ratio", aspectRatio || "auto");
     form.append("ai_photo_editing", aiPhotoEditing ? "true" : "false");
     form.append("advanced_options", JSON.stringify(advancedOptions || {}));

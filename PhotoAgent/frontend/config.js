@@ -6,7 +6,7 @@ window.PhotoAgentConfig = {
   apiBaseUrl: "",
   // Mirrors config.py's MODELS["analysis"] -- fallback label for the result
   // page's "輸出結果" card when a job predates extra-info.analysis_model.
-  analysisModel: "gpt-4.1-mini",
+  analysisModel: "gpt-5.6-luna",
   // Mirrors config.py's ANALYSIS_MODEL_LABELS -- the "輸出結果" card's
   // actually-ran label (keyed off extra-info.analysis_model) reads from here.
   analysisModels: {
@@ -22,7 +22,7 @@ window.PhotoAgentConfig = {
     { value: "gpt-5.6-luna", label: "GPT 5.6 Luna" },
     { value: "gpt-5.6-sol", label: "GPT 5.6 Sol" }
   ],
-  defaultAnalysisModel: "gpt-4.1-mini",
+  defaultAnalysisModel: "gpt-5.6-luna",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
     "nano-banana-2": "Nano Banana 2"
