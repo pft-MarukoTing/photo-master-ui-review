@@ -642,16 +642,20 @@ window.PhotoAgentResults = (() => {
   // the only signal available: this is a best-effort match, same spirit as
   // detect_face_crops itself, and can misfire in a tightly packed group
   // photo where people's boxes overlap each other.
-  // flagField/flagWhen/flagText/okText mirror ANALYSIS_BOX_SPECS's own
-  // per-category flag handling below: the first three flag on should_fix
-  // (true = needs fixing), but smile_issue has no should_fix at all -- its
-  // equivalent field is adjust_safe, flagged at false (unsafe to adjust),
-  // the opposite polarity.
+  // flagField/flagWhen/flagText/okText control which issues get the "allow
+  // AI to fix this" toggle in fillFaceIssueList below: flagged means there
+  // is a proposed action for the user to accept or decline. The first three
+  // flag on should_fix (true = a fix is proposed). smile_issue has no
+  // should_fix at all -- its equivalent field is adjust_safe, and adjust_
+  // safe=true is the case with a proposed action (auto mode may adjust the
+  // smile), so it flags at true, not false. adjust_safe=false means the
+  // model already ruled adjustment unsafe -- nothing to toggle, so no toggle
+  // should render for that case (okText only).
   const FACE_ISSUE_CATEGORIES = [
     { field: "blink_issue", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "gaze_issue", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "hair_issue", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: false, flagText: "不建議調整", okText: "可以調整" }
+    { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: true, flagText: "可以調整", okText: "不建議調整" }
   ];
 
   // Intersection over the SMALLER of the two boxes' own area (the
@@ -964,28 +968,33 @@ window.PhotoAgentResults = (() => {
       row.className = "ap-face-issue-row";
 
       // Row order: toggle -> issue label -> should_fix icon -> should_fix
-      // result label. The toggle only exists for a flagged issue -- nothing
-      // to allow/deny when the model didn't propose a fix here.
-      if (issue.flagged) {
-        const toggle = document.createElement("label");
-        toggle.className = "ios-switch ap-face-issue-toggle";
-        toggle.title = "允許 AI 修正此項目";
-        const input = document.createElement("input");
-        input.type = "checkbox";
-        input.checked = issue.allowed;
-        input.addEventListener("change", () => {
-          issue.allowed = input.checked;
-          refreshVerdict();
-        });
-        const track = document.createElement("span");
-        track.className = "ios-track";
-        const thumb = document.createElement("span");
-        thumb.className = "ios-thumb";
-        track.appendChild(thumb);
-        toggle.appendChild(input);
-        toggle.appendChild(track);
-        row.appendChild(toggle);
-      }
+      // result label. The toggle itself always renders now, disabled when
+      // this issue isn't flagged (nothing to allow/deny) -- keeps every
+      // row's own fixed 34px-wide slot regardless of flagged state, so the
+      // label/icon/text after it land in the same column on every row
+      // instead of an unflagged row (previously no toggle at all) sitting
+      // ~44px left of a flagged one right above/below it.
+      const toggle = document.createElement("label");
+      toggle.className = "ios-switch ap-face-issue-toggle";
+      toggle.title = issue.flagged
+        ? "允許 AI 修正此項目"
+        : "模型未判定此項目需要修正，無需操作";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.disabled = !issue.flagged;
+      input.checked = issue.flagged && issue.allowed;
+      input.addEventListener("change", () => {
+        issue.allowed = input.checked;
+        refreshVerdict();
+      });
+      const track = document.createElement("span");
+      track.className = "ios-track";
+      const thumb = document.createElement("span");
+      thumb.className = "ios-thumb";
+      track.appendChild(thumb);
+      toggle.appendChild(input);
+      toggle.appendChild(track);
+      row.appendChild(toggle);
 
       const issueLabel = document.createElement("span");
       issueLabel.className = "ap-face-issue-name";
@@ -1353,11 +1362,11 @@ window.PhotoAgentResults = (() => {
 
     document.querySelector("#r-status").textContent = formatStatus(qa);
 
-    els.diagnosisText.textContent = joinParts([
-      analysis.aesthetic_diagnosis || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。",
-      analysis.main_subject ? `主體：${analysis.main_subject}。` : "",
-      analysis.scene_type ? `場景：${analysis.scene_type}。` : ""
-    ]);
+    // main_subject/scene_type are already surfaced by buildPhotoContentSummary
+    // just above (els.subjectText, "照片內容") -- repeating them here as well
+    // read as the same "主體：.../場景：..." sentence printed twice in a row.
+    els.diagnosisText.textContent = analysis.aesthetic_diagnosis
+      || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。";
 
     els.philosophyText.textContent = joinParts([
       userInstruction.has_user_direction
@@ -1519,12 +1528,12 @@ window.PhotoAgentResults = (() => {
       ]);
     }
 
+    // main_subject/scene_type are already surfaced by buildPhotoContentSummary
+    // just above (els.apSubject, "照片內容") -- repeating them here as well
+    // read as the same "主體：.../場景：..." sentence printed twice in a row.
     if (els.apDiagnosis) {
-      els.apDiagnosis.textContent = joinParts([
-        analysis.aesthetic_diagnosis || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。",
-        analysis.main_subject ? `主體：${analysis.main_subject}。` : "",
-        analysis.scene_type ? `場景：${analysis.scene_type}。` : ""
-      ]);
+      els.apDiagnosis.textContent = analysis.aesthetic_diagnosis
+        || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。";
     }
 
     if (els.apComposition) {

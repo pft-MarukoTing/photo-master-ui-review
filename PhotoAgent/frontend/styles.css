@@ -709,7 +709,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .ios-switch input:checked + .ios-track .ios-thumb { left: 21px; }
 
-/* #ap-face-issue-list rows: toggle -> issue label -> should_fix icon ->
+/* #ap-face-issue-list rows: toggle slot -> issue label -> should_fix icon ->
    should_fix result label (results.js's fillFaceIssueList). Toggle switch is
    smaller than the Advanced Settings .ios-switch so it fits inline with the
    list text. */
@@ -718,9 +718,23 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   align-items: center;
   gap: 10px;
 }
-.ap-face-issue-name { color: var(--text-2); }
-.ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; }
+/* Fixed width, not just a min-width -- FACE_ISSUE_CATEGORIES' four labels
+   (results.js) are always exactly four Chinese characters, so pinning this
+   keeps the icon+verdict text that follows lined up in its own column across
+   every row instead of drifting with each label's own rendered width. */
+/* Was var(--text-2) at inherited weight -- came out dimmer and lighter than
+   the verdict text right next to it (.step-cb-label: var(--text-3)/500),
+   so the row read as "the verdict is the point" rather than naming which
+   feature it's about. Bumped to the brightest text token + bold so this
+   label reads as this row's primary heading, the verdict as its detail. */
+.ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
+.ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; flex-shrink: 0; }
 .ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
+/* An unflagged issue still renders its toggle (results.js) -- always the
+   same 34px slot on every row -- but disabled, since there's no proposed
+   fix to allow/deny. Same dim+not-allowed treatment as the option pickers'
+   own disabled rows (.step-inline-list li label:has(input:disabled)). */
+.ap-face-issue-toggle:has(input:disabled) { opacity: .35; cursor: not-allowed; }
 
 /* #ap-face-thumb-row's per-face buttons: a small red badge in the corner
    when renderFaceThumbnails finds a flagged issue on that person, so the
