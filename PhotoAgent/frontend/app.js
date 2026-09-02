@@ -2005,7 +2005,8 @@
   }
 
   const PROMPT_KEYS = [
-    "photo_analysis", "user_instruction_review", "crop_validation",
+    "photo_analysis", "photo_analysis_portrait_qc", "photo_analysis_gaze_repair_planning",
+    "user_instruction_review", "crop_validation",
     "image_edit_raw", "image_edit",
     "image_edit_resolution", "image_edit_strategy",
     "gaze_repair_pass", "quality_check"
