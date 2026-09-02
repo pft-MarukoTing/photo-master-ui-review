@@ -3840,6 +3840,13 @@
           const entry = entries[i];
           if (entry && entry.job_id) {
             r.analyzeJobId = entry.job_id;
+            // Stamped at submission, not when analyzeBatchItem's poll loop
+            // gets a free slot (POLL_CONCURRENCY may lag behind how many
+            // jobs the backend already started) -- otherwise "分析中"'s
+            // wall-clock duration can come in shorter than its own "Step 2：
+            // 照片分析" child, which reads straight from the backend's own
+            // (always-accurate) timings dict.
+            r.analyzeSubmittedAt = Date.now();
           } else {
             r.status = "error";
             r.error = (entry && entry.error) || "送出分析失敗";
@@ -3986,7 +3993,7 @@
   // Poll one local analyze job and fetch its analysis (step 1).
   async function analyzeBatchItem(record) {
     try {
-      const stepStart = Date.now();
+      const stepStart = record.analyzeSubmittedAt || Date.now();
       await pollJobStatus(record.analyzeJobId, { path: "local" });
       const analyzeResult = await getAnalyzeResult(record.analyzeJobId);
       record.analysis = analyzeResult.result.analysis;
