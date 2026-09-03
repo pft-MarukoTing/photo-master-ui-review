@@ -2933,8 +2933,30 @@ def derive_luna_blink_decisions(analysis):
         # production photo where eye_closure_confidence was only 0.18 and the
         # model's own reason text said the eyes did not reach half/fully
         # closed, yet this reclassification still promoted it to should_fix.
+        # Confidence floor added after this same reclassification fired on
+        # three more production false positives that all share one signature:
+        # both_eyes_narrowed at eye_closure_confidence 0.14-0.18, with the
+        # model's own reason text explicitly denying half/full closure (a
+        # smiling child's smile-squint the model itself called "因微笑略為
+        # 瞇窄但仍保持睜開", and a stern/squinting adult's "眼瞼開口略窄但沒有
+        # 達到半閉或全閉") -- the exact asymmetric-case risk this block's own
+        # comment above already flagged, just occurring on the symmetric
+        # (both_eyes_narrowed=true) side that guard doesn't cover. The one
+        # genuine narrowed-eye accidental-closure case checked alongside these
+        # (a different subject, model-reported left_eye_state=half_closed
+        # directly rather than via this reclassification) carried
+        # eye_closure_confidence 0.72 -- comfortably clear of 0.5, so this
+        # floor is set to trust the model's own low-confidence signal instead
+        # of overriding it, while still promoting genuinely-uncertain-but-not-
+        # rock-bottom readings the original fix targeted.
         both_eyes_narrowed = left_state == "narrowed_open" and right_state == "narrowed_open"
-        if physical == "narrowed_open" and mouth == "not_laughing" and periocular == "none_or_mild" and both_eyes_narrowed:
+        if (
+            physical == "narrowed_open"
+            and mouth == "not_laughing"
+            and periocular == "none_or_mild"
+            and both_eyes_narrowed
+            and closure_confidence >= 0.5
+        ):
             physical = "half_closed"
 
         blink_candidate = bool(
@@ -3308,11 +3330,60 @@ def derive_luna_gaze_decisions(analysis):
         except (TypeError, ValueError):
             miss_confidence = 0.0
 
+        # Cross-check against derive_luna_blink_decisions, which runs first
+        # (see openai_client.py's two-pass call order) and already wrote the
+        # deterministically-derived eyelid state onto this same subject's
+        # blink_issue. The hard gaze rule (see ANALYSIS_INSTRUCTION) requires
+        # should_fix=false whenever the eyes are closed/half-closed enough
+        # that gaze isn't readable, but until this check existed that rule
+        # depended entirely on the model itself reporting unreadable/
+        # not_visible eye directions in this same Call B response -- observed
+        # in production eval to fail routinely: the model would correctly
+        # call blink_issue.physical_eye_state="fully_closed" while still
+        # reporting a readable, on-lens gaze direction for the same person.
+        # Gating on the already-computed physical_eye_state removes that
+        # dependency on the model policing itself. one_eye_closed is included
+        # for the same reason the prompt's own half-face rule refuses to
+        # judge gaze from a single visible eye.
+        # Narrowed after a follow-up eye_contact-only production eval (320
+        # calls, 16 photos) showed this gate firing 46 times, 45 of them on
+        # half_closed (never once on fully_closed -- these photos generally
+        # have open eyes, just not aimed at the lens) and one on
+        # one_eye_closed. Of those 45 half_closed triggers, 24 (53%) landed on
+        # a subject whose gaze_issue fields, from that exact same Call B
+        # response, independently read gaze_observability="both_eyes" and
+        # eye_detail_quality="readable" -- i.e. the gaze pass itself had
+        # direct, high-quality evidence the eyes were open enough to read,
+        # contradicting blink's own half_closed call for the same eyes in the
+        # same response. Concretely, on sample_images/eye_contact/000000594.jpg,
+        # a photo whose gaze reason text opens with "雙眼虹膜與瞳孔細節可讀"
+        # (both irises/pupils are legibly detailed), the gate was still
+        # suppressing should_fix=true on blink's half_closed call alone,
+        # turning a previously-correct prediction into a miss. fully_closed
+        # keeps the unconditional gate -- gaze claiming "both eyes, readable"
+        # against a fully_closed call is a far less physically plausible
+        # disagreement than against a half_closed one, and no such case
+        # showed up in this eval to weigh against keeping it strict.
+        gaze_independently_readable = observability == "both_eyes" and detail == "readable"
+        blink_state = (subject.get("blink_issue") or {}).get("physical_eye_state")
+        eyes_closed = blink_state == "fully_closed" or (
+            blink_state in ("half_closed", "one_eye_closed") and not gaze_independently_readable
+        )
+
         visible_directions = [
             direction for direction in (left_direction, right_direction)
             if direction != "not_visible"
         ]
-        if observability == "unreadable" or detail == "unreadable" or not visible_directions:
+        if eyes_closed:
+            decision = "unclear"
+            state = "unclear"
+            should_fix = False
+            miss_confidence = min(miss_confidence, 0.49)
+            gate_reason = (
+                "Python gate：blink_issue.physical_eye_state={}，眼睛閉合/半閉合導致視線不可讀，"
+                "依 hard gaze rule 不觸發視線修正。"
+            ).format(blink_state)
+        elif observability == "unreadable" or detail == "unreadable" or not visible_directions:
             decision = "unclear"
             state = "unclear"
             should_fix = False
@@ -3346,8 +3417,26 @@ def derive_luna_gaze_decisions(analysis):
                 miss_floor = 0.75 if state not in ("near_camera", "ambiguous") else 0.55
                 miss_confidence = max(miss_confidence, miss_floor, 1.0 - lens_confidence)
                 lens_confidence = min(lens_confidence, 0.79, 1.0 - miss_confidence)
+                # The borderline-detail bar used to be a flat 0.75 regardless
+                # of state, but miss_confidence is itself floored per state
+                # just above (0.55 for near_camera/ambiguous, 0.75 for
+                # everything else) -- so a flat 0.75 bar was a no-op grace
+                # margin for off_camera-like states (their floor already
+                # clears it) while being an almost-unreachable ceiling for
+                # near_camera, whose floor sits 0.20 below it and rarely rises
+                # much past it organically. Confirmed in production eval: a
+                # single-subject near-camera photo with a stable ground-truth
+                # gaze-miss went should_fix=true only on the ~1/8 of runs
+                # where eye_focus_quality happened to read "readable" instead
+                # of "borderline" for the exact same face, purely on that
+                # borderline/readable coin flip, not on any change in the
+                # gaze evidence itself (its miss_confidence spanned 0.55-0.75
+                # on both readable and borderline runs alike). Scaling the
+                # bar off each state's own floor keeps the intended "extra
+                # assurance beyond the state's own bar" margin (now +0.10)
+                # without that state-dependent no-op/wall split.
                 readable_enough = detail == "readable" or (
-                    detail == "borderline" and miss_confidence >= 0.75
+                    detail == "borderline" and miss_confidence >= miss_floor + 0.10
                 )
                 edit_geometry_available = (
                     observability == "both_eyes"
