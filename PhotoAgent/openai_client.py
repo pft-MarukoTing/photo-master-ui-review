@@ -51,6 +51,7 @@ from prompts import (
     _apply_default_person_issues,
 )
 from photo_agent.feature_resolver import build_compact_editor_prompt
+from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
 
 logger = logging.getLogger(__name__)
 
@@ -516,7 +517,7 @@ def edit_photo(
         return_sections=True,
     )
     advanced_options = framed_analysis.get("_advanced_options") or {}
-    prompt_strategy = advanced_options.get("editor_prompt_strategy") or "legacy"
+    prompt_strategy = advanced_options.get("editor_prompt_strategy") or DEFAULT_EDITOR_PROMPT_STRATEGY
     if user_instruction.get("overwrite_prompt"):
         prompt_strategy = "legacy"
     prompt_text = raw_prompt

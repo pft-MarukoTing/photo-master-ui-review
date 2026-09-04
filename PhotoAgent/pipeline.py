@@ -33,6 +33,7 @@ from prompts import (
     subject_issue_items,
 )
 
+from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
     "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
@@ -336,7 +337,7 @@ def finish_stage(
         prompts["image_edit_raw"] = edit_result.get("raw_prompt") or edit_prompt
         prompts["image_edit"] = edit_prompt
         prompts["image_edit_resolution"] = edit_result.get("prompt_resolution")
-        prompts["image_edit_strategy"] = edit_result.get("prompt_strategy") or "legacy"
+        prompts["image_edit_strategy"] = edit_result.get("prompt_strategy") or DEFAULT_EDITOR_PROMPT_STRATEGY
         usage["Step 5 - image_edit"] = edit_result.get("usage")
         timings["Step 5 - image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]

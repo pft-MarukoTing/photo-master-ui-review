@@ -478,7 +478,7 @@ class AdvancedSettingsToggle(unittest.TestCase):
                 "calm_hair": False,
                 "smile_adjustment": True,
                 "smile_level": "auto",
-                "editor_prompt_strategy": "legacy",
+                "editor_prompt_strategy": "resolved_compact",
             },
         )
 

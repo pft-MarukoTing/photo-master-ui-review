@@ -464,6 +464,12 @@
     }
   }
 
+  // Editor prompt 架構 is a debug-only picker, so outside debug mode every run
+  // uses this one strategy -- kept in sync with the backend's own default
+  // (photo_agent/param_validation.py DEFAULT_EDITOR_PROMPT_STRATEGY).
+  const DEFAULT_EDITOR_PROMPT_STRATEGY =
+    window.PhotoAgentConfig.defaultEditorPromptStrategy || "resolved_compact";
+
   // GPT 5.6 Sol is a testbed-only analysis-model variant, not yet vetted for
   // general use -- keep it out of the 分析模型 picker outside debug mode.
   const DEBUG_ONLY_ANALYSIS_MODELS = ["gpt-5.6-sol"];
@@ -498,8 +504,8 @@
     if (els.editorPromptSettings) els.editorPromptSettings.style.display = isDebug ? "" : "none";
     if (els.apEditorPromptSettings) els.apEditorPromptSettings.style.display = isDebug ? "" : "none";
     if (!isDebug) {
-      if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = "legacy";
-      if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = "legacy";
+      if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = DEFAULT_EDITOR_PROMPT_STRATEGY;
+      if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = DEFAULT_EDITOR_PROMPT_STRATEGY;
     }
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
@@ -1026,7 +1032,7 @@
       calm_hair: !!(els.hairMessDetectionToggle?.checked && els.calmHairToggle?.checked),
       smile_adjustment: els.smileAdjustmentToggle ? els.smileAdjustmentToggle.checked : true,
       smile_level: (els.smileLevelSelect && els.smileLevelSelect.value) || "auto",
-      editor_prompt_strategy: els.apEditorPromptStrategySelect?.value || els.editorPromptStrategySelect?.value || "legacy",
+      editor_prompt_strategy: els.apEditorPromptStrategySelect?.value || els.editorPromptStrategySelect?.value || DEFAULT_EDITOR_PROMPT_STRATEGY,
     };
   }
 
@@ -1034,7 +1040,7 @@
   // pick on either has to show up on the other.
   function syncEditorPromptStrategy(source = "upload") {
     const fromAp = source === "ap";
-    const strategy = (fromAp ? els.apEditorPromptStrategySelect?.value : els.editorPromptStrategySelect?.value) || "legacy";
+    const strategy = (fromAp ? els.apEditorPromptStrategySelect?.value : els.editorPromptStrategySelect?.value) || DEFAULT_EDITOR_PROMPT_STRATEGY;
     if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = strategy;
     if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = strategy;
   }
@@ -1180,7 +1186,7 @@
     // key, and showing the switch off there would misreport what a revise of
     // it would actually do.
     if (els.smileAdjustmentToggle) els.smileAdjustmentToggle.checked = advancedOptions.smile_adjustment !== false;
-    if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = advancedOptions.editor_prompt_strategy || "legacy";
+    if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = advancedOptions.editor_prompt_strategy || DEFAULT_EDITOR_PROMPT_STRATEGY;
     syncEditorPromptStrategy("upload");
     applySmileLevelOption(advancedOptions.smile_level);
     syncHairTidinessLevelLock();

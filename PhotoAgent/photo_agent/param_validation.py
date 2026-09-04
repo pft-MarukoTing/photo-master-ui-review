@@ -72,9 +72,13 @@ ADVANCED_OPTION_CHOICES = {
     # without changing the public pipeline's stage boundary.
     "editor_prompt_strategy": ("legacy", "resolved_compact"),
 }
+# Every caller that has to pick a strategy on its own reads this -- the edit
+# clients' fallback when an analysis carries no _advanced_options, and the
+# frontend's own default (frontend/config.js defaultEditorPromptStrategy).
+DEFAULT_EDITOR_PROMPT_STRATEGY = "resolved_compact"
 ADVANCED_OPTION_CHOICE_DEFAULTS = {
     "smile_level": "auto",
-    "editor_prompt_strategy": "legacy",
+    "editor_prompt_strategy": DEFAULT_EDITOR_PROMPT_STRATEGY,
 }
 
 
