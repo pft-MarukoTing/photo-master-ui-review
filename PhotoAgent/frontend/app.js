@@ -7465,6 +7465,11 @@
           disabledFaceIssues.push({ subject_index: subjectIndex, category });
         } else if (override && typeof override === "object" && override.level) {
           issue._user_level = override.level;
+          // "Forced" means that the user overrode a negative analyzer verdict,
+          // not merely that an enabled row carries a per-person level. Keep an
+          // automatically approved hair repair on its normal prompt path.
+          if (category === "hair_issue") issue._user_forced = issue.should_fix !== true;
+          else if (category === "smile_issue") issue._user_forced = true;
         }
         subject[category] = issue;
       });

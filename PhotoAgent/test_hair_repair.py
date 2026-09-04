@@ -14,6 +14,7 @@ from prompts import (
     build_edit_prompt,
     build_portrait_qc_instruction,
     derive_hair_decisions,
+    resolve_user_hair_request,
     resolve_rejected_axes,
 )
 
@@ -78,6 +79,53 @@ def _prompt(hair_issues):
 
 
 class HairBlockGating(unittest.TestCase):
+    def test_manual_motion_cleanup_keeps_the_motion_endpoint(self):
+        issue = resolve_user_hair_request({
+            **LEAVE_ME, "_user_forced": True, "_user_level": "dynamic",
+        })
+        self.assertEqual(issue["fix_action"], "lay_back")
+        self.assertIn("visible wind or body-motion flow", issue["correction_plan"])
+        self.assertIn("preserving its lifted volume and motion", issue["correction_plan"])
+        self.assertIn("do not add hair", issue["correction_plan"])
+
+    def test_manual_bangs_cleanup_preserves_the_fringe_design(self):
+        issue = resolve_user_hair_request({
+            "hair_state": "styled_bangs", "front_hair": "even",
+            "should_fix": False, "_user_forced": True, "_user_level": "dynamic",
+        })
+        self.assertIn("existing front fringe above the eyes", issue["correction_plan"])
+        self.assertIn("redistribute those same strands", issue["correction_plan"])
+        self.assertIn("roots, and lower endpoints", issue["correction_plan"])
+        self.assertIn("do not add hair", issue["correction_plan"])
+        self.assertIn("create a new lock", issue["correction_plan"])
+
+    def test_manual_styled_hair_requests_visible_whole_style_cleanup(self):
+        issue = resolve_user_hair_request({
+            "hair_state": "styled_face_framing", "front_hair": "none",
+            "should_fix": False, "_user_forced": True, "_user_level": "dynamic",
+        })
+        self.assertIn("source-visible front and face-framing strands", issue["correction_plan"])
+        self.assertIn("exact number, roots, endpoints, length, and curve", issue["correction_plan"])
+        self.assertIn("Leave crown, side lengths, and rear hair unchanged", issue["correction_plan"])
+        self.assertIn("Keep the head, face, eyelids, expression, and skin unchanged", issue["correction_plan"])
+
+    def test_manual_tidy_level_has_a_renderable_still_hair_endpoint(self):
+        issue = resolve_user_hair_request({
+            **LEAVE_ME, "_user_forced": True, "_user_level": "tidy",
+        })
+        self.assertEqual(issue["fix_action"], "settle")
+        self.assertIn("existing hairstyle into visibly neater versions", issue["correction_plan"])
+        self.assertIn("do not add hair, create a new lock", issue["correction_plan"])
+        self.assertIn("head pose, face, eyelids, expression, or skin", issue["correction_plan"])
+
+    def test_manual_cleanup_reaches_the_legacy_edit_prompt(self):
+        manual = {
+            **LEAVE_ME, "_user_forced": True, "_user_level": "dynamic",
+        }
+        prompt = _prompt([manual])
+        self.assertIn("Hair tidying priority", prompt)
+        self.assertIn("preserving its lifted volume and motion", prompt)
+
     def test_no_hair_issues_means_no_hair_block(self):
         self.assertNotIn("Hair tidying priority", _prompt([]))
 

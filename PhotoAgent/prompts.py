@@ -2889,6 +2889,100 @@ _HAIR_FALLBACK_PLAN_BY_STATE = {
 }
 
 
+def _forced_visible_hair_plan(target):
+    """Raise an explicit manual hair request above a subtle/no-op cleanup."""
+    return (
+        "User-forced hair-only edit: " + target + " Use only existing strands: do not add hair, increase hair mass, "
+        "or create a new lock. Preserve strand roots and endpoints. Keep the head, face, eyelids, expression, and skin "
+        "unchanged. Make the target visibly tidier."
+    )
+
+
+def resolve_user_hair_request(issue):
+    """Return the executable hair issue after a per-person manual opt-in.
+
+    Analysis truth stays untouched: ``should_fix`` still records the automatic
+    verdict.  This thin adapter only supplies a conservative, renderable target
+    when the user explicitly enables a should_fix=false row.  It deliberately
+    reuses the existing action vocabulary and state-specific behavior.
+    """
+    resolved = dict(issue or {})
+    if not resolved.get("_user_forced") or resolved.get("should_fix"):
+        return resolved
+
+    state = resolved.get("hair_state") or "uncertain"
+    front = resolved.get("front_hair") or "unclear"
+    level = resolved.get("_user_level") or "dynamic"
+
+    if level == "tidy":
+        resolved.update({
+            "fix_action": "settle",
+            "correction_plan": (
+                "User-forced hair-only edit: comb the existing hairstyle into visibly neater versions of its current "
+                "sections, settling loose, lifted, crossed, or uneven strands. Rearrange source-visible hair only; do not "
+                "add hair, create a new lock, or change strand roots, endpoints, head pose, face, eyelids, expression, or skin."
+            ),
+        })
+        return resolved
+
+    if state == "bangs_clumped" or front == "clumped":
+        resolved.update({
+            "hair_state": "bangs_clumped",
+            "front_hair": "clumped",
+            "fix_action": "redistribute",
+            "correction_plan": _forced_visible_hair_plan(
+                "Within the existing fringe only, split thick stuck clumps and redistribute those same strands into finer, "
+                "more even sections across abnormal gaps; reduce greasy shine without changing fringe length or density."
+            ),
+        })
+    elif state in {"windblown", "motion"}:
+        resolved.update({
+            "fix_action": "lay_back",
+            "correction_plan": _forced_visible_hair_plan(
+                "Align existing stray, crossing, tangled, and directionless strands with the visible wind or body-motion "
+                "flow while preserving its lifted volume and motion."
+            ),
+        })
+    elif state in _HAIR_ACTION_BY_STATE:
+        action = resolved.get("fix_action")
+        if action not in {"lay_back", "remove", "settle", "redistribute"}:
+            action = _HAIR_ACTION_BY_STATE[state]
+        plan = str(resolved.get("correction_plan") or "").strip()
+        resolved.update({
+            "fix_action": action,
+            "correction_plan": _forced_visible_hair_plan(
+                plan if plan and plan != "不適用" else _HAIR_FALLBACK_PLAN_BY_STATE[state]
+            ),
+        })
+    elif state in {"styled_bangs"} or front == "even":
+        resolved.update({
+            "fix_action": "lay_back",
+            "correction_plan": _forced_visible_hair_plan(
+                "Edit only the existing front fringe above the eyes: separate thick or crossing sections and redistribute "
+                "those same strands into finer, more even spacing. Preserve its airy type, length, density, roots, and lower "
+                "endpoints; leave the crown, sides, and rear hair unchanged."
+            ),
+        })
+    elif state in {"styled_messy", "styled_face_framing", "natural_texture"}:
+        resolved.update({
+            "fix_action": "lay_back",
+            "correction_plan": _forced_visible_hair_plan(
+                "Edit only the source-visible front and face-framing strands: remove crossings and align each strand with "
+                "its nearest existing flow while preserving the exact number, roots, endpoints, length, and curve of those "
+                "locks. Leave crown, side lengths, and rear hair unchanged."
+            ),
+        })
+    else:
+        resolved.update({
+            "fix_action": "lay_back",
+            "correction_plan": _forced_visible_hair_plan(
+                "Comb all visible loose, crossed, uneven, and directionless strands into coherent sections following the "
+                "existing part and hair flow, and clean up the outer silhouette."
+            ),
+        })
+    return resolved
+
+
 def derive_hair_decisions(analysis):
     """Derive hair_issue.should_fix from physical observations in Python.
 
@@ -4531,7 +4625,7 @@ def resolve_smile_targets(analysis):
             continue
         item_level = item.get("user_level") or level
         item_level = item_level if item_level in SMILE_LEVEL_LABELS else level
-        if item_level == "auto" and item["adjust_safe"] is False:
+        if item_level == "auto" and item["adjust_safe"] is False and not item.get("user_forced"):
             continue
         target = _smile_target_state(item_level, item["current"])
         if not target:
@@ -4600,6 +4694,7 @@ def _read_smile_states(analysis):
             "adjust_safe": item.get("adjust_safe"),
             "_subject_index": item.get("_subject_index"),
             "user_level": item.get("_user_level"),
+            "user_forced": bool(item.get("_user_forced")),
         })
     return read
 
@@ -5011,18 +5106,22 @@ Execution instructions:
     )
     # The selected level is resolved per approved detected issue below. It is
     # never an independent licence to groom an unflagged person's hair.
+    # Only automatically approved or explicitly user-enabled items are handed
+    # over. Manual items are converted to the same small action vocabulary and
+    # preservation contract as detected repairs.
     hair_block = ""
     hair_disabled_indices = _disabled_issue_subject_indices(analysis, "hair_issue")
+    resolved_hair_issues = [resolve_user_hair_request(item) for item in hair_issues]
     hair_items_to_fix = [
         {k: v for k, v in item.items() if k != "_subject_index"}
-        for item in hair_issues
-        if isinstance(item, dict) and item.get("should_fix")
+        for item in resolved_hair_issues
+        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
         and item.get("_subject_index") not in hair_disabled_indices
     ] if hair_mess_detection_enabled else []
     calm_hair_items = [
         {k: v for k, v in item.items() if k != "_subject_index"}
-        for item in hair_issues
-        if isinstance(item, dict) and item.get("should_fix")
+        for item in resolved_hair_issues
+        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
         and item.get("_subject_index") not in hair_disabled_indices
         and (item.get("_user_level") == "tidy" or (
             item.get("_user_level") not in {"dynamic", "tidy"}

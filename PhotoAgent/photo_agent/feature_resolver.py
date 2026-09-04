@@ -16,6 +16,7 @@ import re
 from prompts import (
     _disabled_issue_subject_indices,
     _read_smile_states,
+    resolve_user_hair_request,
     resolve_smile_targets,
     smile_level,
     subject_issue_items,
@@ -490,13 +491,17 @@ def _hair_contracts(analysis):
     for index, subject in enumerate(analysis.get("subjects") or []):
         if not isinstance(subject, dict):
             continue
-        issue = subject.get("hair_issue") or {}
+        issue = resolve_user_hair_request(subject.get("hair_issue") or {})
+        # Old saved analyses may have marked every enabled hair row as forced.
+        # A positive automatic verdict always belongs to the automatic path;
+        # forced is reserved for a user opt-in over should_fix=false.
+        hair_user_forced = bool(issue.get("_user_forced")) and not bool(issue.get("should_fix"))
         local_fix = (
-            isinstance(issue, dict) and issue.get("should_fix")
+            isinstance(issue, dict) and (issue.get("should_fix") or hair_user_forced)
             and index not in disabled
         )
-        # The level rides on an approved finding; it never grooms a person the
-        # analysis left alone.
+        # Automatic findings and explicit per-person opt-ins share the same
+        # two levels and preservation contract.
         if not local_fix:
             continue
         user_level = issue.get("_user_level")
@@ -524,6 +529,7 @@ def _hair_contracts(analysis):
             "endpoint": {
                 "hair_level": hair_level,
                 "hair_action": action or "",
+                "hair_user_forced": hair_user_forced,
                 "hair_state": issue.get("hair_state") or "",
                 "front_hair": issue.get("front_hair") or "",
                 "hair_correction_plan": correction_plan,
@@ -753,7 +759,8 @@ def build_compact_editor_prompt(
             and state.get("hair_state") == "bangs_clumped"
             and state.get("front_hair") == "clumped"
         )
-        if hair_level == "local_cleanup" and not redistribute:
+        hair_user_forced = bool(state.get("hair_user_forced"))
+        if hair_level == "local_cleanup" and not redistribute and not hair_user_forced:
             state_lines.append(
                 "- Hair level — local cleanup: complete the approved defect correction inside its named footprint while preserving the rest of the captured hairstyle and movement. This preservation boundary does not permit leaving the named defect unchanged."
             )
@@ -763,7 +770,7 @@ def build_compact_editor_prompt(
             )
         if redistribute:
             evidence = "；".join(state.get("hair_visible_evidence") or [])
-            target = evidence or hair_correction_plan
+            target = hair_correction_plan if hair_user_forced else (evidence or hair_correction_plan)
             if target and target != "不適用":
                 state_lines.append(f"- Hair target — existing fringe: {target}")
         elif hair_correction_plan and hair_correction_plan != "不適用":
@@ -784,7 +791,8 @@ def build_compact_editor_prompt(
                 "- Hair level — preserve motion (authoritative final state): keep the clearly visible wind direction and lifted, flowing volume, but express that motion through a small number of clean, coherent locks and broad streaming arcs—not scattered flyaways, loops, tangles, or crisscrossing strands. Sweep displaced windblown hair away from the eyes, nose, mouth, and central face so the expression and facial contours are clearly readable; preserve only intentional fringe or face-framing hair that belongs to the existing haircut. Clean the outer silhouette and merge chaotic strands into the dominant wind flow while retaining natural strand separation. The result must remain unmistakably windblown, but controlled and portrait-ready rather than messy; do not settle the hair into a still-air shape."
             )
         if hair_action and hair_level != "preserve_motion":
-            state_lines.append(f"- {_hair_action_instruction(state)}")
+            if not (hair_user_forced and hair_level == "local_cleanup"):
+                state_lines.append(f"- {_hair_action_instruction(state)}")
             if redistribute:
                 state_lines.append(
                     "- Preserve the source fringe type, main part and sweep, length, outer edge, hairline, and total hair mass. Keep subtype-defining openings, but not the defective clump layout or accidental gaps; do not add hair or form an opaque sheet."

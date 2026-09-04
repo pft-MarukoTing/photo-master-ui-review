@@ -648,9 +648,9 @@ window.PhotoAgentResults = (() => {
   // flag on should_fix (true = a fix is proposed). smile_issue has no
   // should_fix at all -- its equivalent field is adjust_safe, and adjust_
   // safe=true is the case with a proposed action (auto mode may adjust the
-  // smile), so it flags at true, not false. adjust_safe=false means the
-  // model already ruled adjustment unsafe -- nothing to toggle, so no toggle
-  // should render for that case (okText only).
+  // smile), so it flags at true, not false. adjust_safe=false is shown as a
+  // warning with the switch initially off, but smile alone remains manually
+  // controllable so the user can explicitly override that recommendation.
   const FACE_ISSUE_CATEGORIES = [
     { field: "blink_issue", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "gaze_issue", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
@@ -724,6 +724,11 @@ window.PhotoAgentResults = (() => {
     return FACE_ISSUE_CATEGORIES.map((category) => {
       const match = subject[category.field];
       if (!match || typeof match !== "object") return null;
+      const explicitSmileLevel = category.field === "smile_issue"
+        && advancedOptions.smile_adjustment !== false
+        && advancedOptions.smile_level
+        && advancedOptions.smile_level !== "auto";
+      const isHair = category.field === "hair_issue";
       return {
         label: category.label,
         flagged: match[category.flagField] === category.flagWhen,
@@ -732,9 +737,12 @@ window.PhotoAgentResults = (() => {
         reason: match.reason || "",
         category: category.field,
         subjectIndex: index,
-        allowed: true,
-        // The level this person's hair/smile edit runs at, seeded from the
-        // upload-page defaults and overridable per person in the face modal.
+        // Hair and smile are user-selectable transformations even when the
+        // analyzer recommends preserving them. An explicit upload-page smile level is already a manual opt-in,
+        // including for a face the analyzer marked unsafe. Auto still starts
+        // such a face off. Detection-based rows remain analysis-gated.
+        controllable: match[category.flagField] === category.flagWhen || isHair || category.field === "smile_issue",
+        allowed: match[category.flagField] === category.flagWhen || !!explicitSmileLevel,
         level: category.field === "hair_issue"
           ? (advancedOptions.calm_hair ? "tidy" : "dynamic")
           : category.field === "smile_issue"
@@ -752,7 +760,7 @@ window.PhotoAgentResults = (() => {
     const overrides = {};
     faceThumbEntries.forEach((entry) => {
       (entry.issues || []).forEach((issue) => {
-        if (!issue.flagged) return;
+        if (!issue.flagged && !["hair_issue", "smile_issue"].includes(issue.category)) return;
         if (issue.allowed === false) overrides[`${issue.subjectIndex}:${issue.category}`] = false;
         else if (issue.level) overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true, level: issue.level };
       });
@@ -936,9 +944,10 @@ window.PhotoAgentResults = (() => {
   // thumbnail into #ap-face-modal-thumb (so the modal doesn't rely on the
   // user remembering which small row button they clicked) and fills
   // #ap-face-issue-list with that face's should_fix/adjust_safe verdicts,
-  // matched at renderFaceThumbnails time above. Each flagged item also gets
-  // an "allow AI to fix this" toggle (ios-switch, same look as the Advanced
-  // Settings ones) -- switching it off flips issue.allowed in place on the
+  // matched at renderFaceThumbnails time above. Flagged items get an
+  // "allow AI to fix this" toggle; unsafe smile gets the same toggle off by
+  // default so the user can override the warning. Changing it updates
+  // issue.allowed in place on the
   // faceThumbEntries entry itself, which getFaceIssueOverrides reads back at
   // submit time.
   function fillFaceIssueList(index) {
@@ -990,11 +999,13 @@ window.PhotoAgentResults = (() => {
       toggle.className = "ios-switch ap-face-issue-toggle";
       toggle.title = issue.flagged
         ? "允許 AI 修正此項目"
-        : "模型未判定此項目需要修正，無需操作";
+        : ["hair_issue", "smile_issue"].includes(issue.category)
+          ? "分析判定無需或不建議調整；仍可手動開啟"
+          : "模型未判定此項目需要修正，無需操作";
       const input = document.createElement("input");
       input.type = "checkbox";
-      input.disabled = !issue.flagged;
-      input.checked = issue.flagged && issue.allowed;
+      input.disabled = !issue.controllable;
+      input.checked = issue.controllable && issue.allowed;
       input.addEventListener("change", () => {
         issue.allowed = input.checked;
         refreshVerdict();
@@ -1017,19 +1028,22 @@ window.PhotoAgentResults = (() => {
       const resultLabel = document.createElement("span");
       resultLabel.className = "step-cb-label";
       const refreshVerdict = () => {
-        const active = issue.flagged && issue.allowed;
+        const active = issue.controllable && issue.allowed;
         icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
         icon.textContent = active ? "!" : "✓";
         resultLabel.textContent = !issue.flagged
-          ? issue.okText
+          ? (["hair_issue", "smile_issue"].includes(issue.category) && issue.allowed
+              ? `已手動開啟`
+              : issue.okText)
           : (issue.allowed ? issue.flagText : "已設定不修正");
       };
       refreshVerdict();
       row.appendChild(icon);
       row.appendChild(resultLabel);
 
-      // Hair and smile each run at a level the user picks per person. CSS
-      // places the selector at the row's right edge on desktop and on a
+      // Hair and smile both remain available as explicit user transformations
+      // even when the analyzer recommends preserving the captured state.
+      // CSS places the selector at the row's right edge on desktop and on a
       // second verdict-aligned row on mobile. Hide it whenever this person's
       // edit is off.
       let levelRow = null;
