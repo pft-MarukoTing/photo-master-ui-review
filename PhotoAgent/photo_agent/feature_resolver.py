@@ -25,6 +25,10 @@ _BASE_PRESERVE = {
     "identity", "underlying_facial_anatomy", "head_pose", "body_pose",
     "skin_texture", "hair", "clothing", "scene", "lighting",
 }
+_EYE_IDENTITY_PRESERVE = {
+    "eye_landmark_geometry", "iris_identity", "eyelash_identity",
+    "eye_makeup", "glasses_and_reflections",
+}
 _HAIR_IDENTITY_PRESERVE = {
     "hair_parting", "hair_length", "hair_volume", "hair_density",
     "hairline", "curl_pattern", "hair_color", "haircut_silhouette",
@@ -85,6 +89,15 @@ def _is_hair_correction(text, axes):
     return any("hair" in str(axis).lower() for axis in axes) or any(
         term in lowered for term in _HAIR_PLAN_TERMS
     )
+
+
+def _repair_strength(value, default="moderate"):
+    """Collapse model prose back to the small strength vocabulary."""
+    text = str(value or "").strip().lower()
+    for level in ("subtle", "moderate", "strong"):
+        if text == level or text.startswith(level + " ") or text.startswith(level + ","):
+            return level
+    return default
 
 
 def _build_color_blocks(analysis, skin_corrections, lighting_style=None):
@@ -357,7 +370,7 @@ def _smile_contracts(analysis):
             # This mirrors the existing smile block's useful independent
             # protections. gaze_direction is deliberately represented here:
             # the resolver removes it when gaze is also authorized.
-            "preserve": sorted(_BASE_PRESERVE | {"gaze_direction"}),
+            "preserve": sorted(_BASE_PRESERVE | _EYE_IDENTITY_PRESERVE | {"gaze_direction"}),
         })
     return contracts
 
@@ -372,21 +385,38 @@ def _gaze_contracts(analysis, include_gaze):
         if not item.get("should_fix") or item.get("_subject_index") in disabled:
             continue
         strategy = item.get("gaze_repair_strategy") or {}
+        method = strategy.get("strategy_type") or "eyes_only"
+        # A frontal face already has the required head/face alignment. Letting
+        # a model-authored plan add a speculative "slight alignment if needed"
+        # expands a local gaze correction into a face reprojection and is a
+        # common identity failure, especially when hair is edited nearby.
+        if method == "eyes_plus_head_face_alignment" and str(item.get("head_pose") or "").lower() == "frontal":
+            method = "eyes_only"
+        direct_changes = ["gaze_direction", "iris_direction", "pupil_direction"]
+        dependent_changes = ["sclera_balance", "catchlight_consistency"]
+        if method == "eyes_plus_head_face_alignment":
+            direct_changes.extend(["head_pose", "face_orientation"])
+            dependent_changes.append("viewpoint_projected_facial_geometry")
         contracts.append({
             "feature": "gaze",
             "subject": item.get("subject_label") or "畫面中的人物",
             "box": _box(item),
             "endpoint": {
                 "gaze": "direct_camera",
-                "method": strategy.get("strategy_type") or "eyes_only",
-                "strength": strategy.get("repair_strength") or "moderate",
+                "method": method,
+                "strength": _repair_strength(strategy.get("repair_strength")),
+                "eye_adjustment": strategy.get("eye_adjustment") or "",
+                "head_face_adjustment": (
+                    strategy.get("head_face_adjustment") or ""
+                    if method == "eyes_plus_head_face_alignment" else ""
+                ),
             },
-            "direct_changes": ["gaze_direction", "iris_direction", "pupil_direction"],
-            "dependent_changes": ["sclera_balance", "catchlight_consistency"],
+            "direct_changes": direct_changes,
+            "dependent_changes": dependent_changes,
             # Existing analysis strategies commonly freeze these during gaze
             # repair. They are compatible for gaze-only, but are removed from
             # preservation when a smile owns the final facial expression.
-            "preserve": sorted(_BASE_PRESERVE | {
+            "preserve": sorted(_BASE_PRESERVE | _EYE_IDENTITY_PRESERVE | {
                 "mouth_expression", "facial_expression", "eyelid_aperture",
             }),
         })
@@ -402,14 +432,29 @@ def _blink_contracts(analysis):
     for item in subject_issue_items(analysis, "blink_issue"):
         if not item.get("should_fix") or item.get("_subject_index") in disabled:
             continue
+        # eye_state stays the machine-level endpoint the resolver reasons about;
+        # the analysis strategy's own wording rides alongside it under keys gaze
+        # never uses, so a subject carrying both features cannot collide. Only
+        # luna authors a per-person blink strategy, so these stay absent (and
+        # the rendered line generic) for every other analysis model.
+        strategy = item.get("blink_repair_strategy") or {}
+        endpoint = {"eye_state": "naturally_open_and_matched_to_expression"}
+        for key, source in (
+            ("eyelid_target", "target_eye_state"),
+            ("eyelid_strength", "repair_strength"),
+            ("eyelid_adjustment", "eyelid_adjustment"),
+        ):
+            value = str(strategy.get(source) or "").strip()
+            if value:
+                endpoint[key] = _repair_strength(value, default="subtle") if key == "eyelid_strength" else value
         contracts.append({
             "feature": "blink",
             "subject": item.get("subject_label") or "畫面中的人物",
             "box": _box(item),
-            "endpoint": {"eye_state": "naturally_open_and_matched_to_expression"},
+            "endpoint": endpoint,
             "direct_changes": ["eyelid_aperture"],
-            "dependent_changes": ["iris_visibility", "lash_line"],
-            "preserve": sorted(_BASE_PRESERVE),
+            "dependent_changes": ["iris_visibility", "lash_line_position"],
+            "preserve": sorted(_BASE_PRESERVE | _EYE_IDENTITY_PRESERVE),
         })
     return contracts
 
@@ -496,6 +541,19 @@ def _hair_action_instruction(state):
     )
 
 
+def _safe_gaze_eye_adjustment(value):
+    """Keep Call C detail without forwarding language that invites eye redraw."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if re.search(r"\b(?:reconstruct|rebuild|replace|regenerate|redraw)\w*\b", text, re.IGNORECASE):
+        return (
+            "reposition the existing irises and pupils inside the unchanged eye openings, "
+            "preserving eye shape, canthi, lid folds, lashes, makeup, and iris identity"
+        )
+    return text
+
+
 def build_feature_contracts(analysis, *, include_gaze=True):
     """Return active, editor-stage feature contracts from analysis/options."""
     return (
@@ -540,6 +598,8 @@ def resolve_feature_contracts(contracts):
             endpoints["gaze_within_expression"] = "align_irises_and_pupils_inside_that_expression"
         if endpoints.get("eye_state") and endpoints.get("smile_level"):
             endpoints["eye_state"] = "naturally_open_while_remaining_coherent_with_the_final_expression"
+        if endpoints.get("eye_state") and endpoints.get("gaze"):
+            endpoints["coordinated_eye_edit"] = "render_eyelid_openness_and_final_gaze_together"
 
         resolved.append({
             "subject": items[0]["subject"],
@@ -589,6 +649,12 @@ def build_compact_editor_prompt(
 
     subject_blocks = []
     resolved_features = {feature for item in resolved for feature in item["features"]}
+    has_gaze = "gaze" in resolved_features
+    has_facial_edit = bool(resolved_features & {"smile", "gaze", "blink"})
+    has_head_aligned_gaze = any(
+        item["final_state"].get("method") == "eyes_plus_head_face_alignment"
+        for item in resolved
+    )
     for item in resolved:
         state_lines = []
         state = item["final_state"]
@@ -614,10 +680,50 @@ def build_compact_editor_prompt(
                 state_lines.append(f"- Render {smile_text} on the existing face—{replacement_guard}.")
             state_lines.append("- Coordinate the mouth, cheeks, brows, periocular muscles, and eyelid aperture naturally as one expression.")
         if state.get("eye_state"):
-            state_lines.append("- Open or relax the accidentally closed/half-closed eye naturally, matching the final expression and the person's anatomy.")
+            # Strategy fields are empty unless the analysis authored a per-person
+            # blink plan (luna only), so every other model keeps the generic
+            # sentence this block has always emitted.
+            eyelid_strength = str(state.get("eyelid_strength") or "").strip()
+            eyelid_target = str(state.get("eyelid_target") or "").strip()
+            eyelid_adjustment = str(state.get("eyelid_adjustment") or "").strip()
+            if smile:
+                # The smile endpoint owns the final expression, so the planned
+                # target eyelid state -- written against the captured
+                # expression -- is dropped here; its method still applies.
+                eyelid_text = "Shape the eyelids for the final expression first, then reopen the affected eye only enough to be naturally readable within that expression; retain natural smile narrowing rather than restoring captured openness"
+            else:
+                opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
+                eyelid_text = f"{opening} or relax the accidentally closed/half-closed eye naturally, matching the person's anatomy"
+                if eyelid_target:
+                    eyelid_text += f". Target eyelid state: {eyelid_target}"
+            if eyelid_adjustment:
+                eyelid_text += f". Eyelid method: {eyelid_adjustment}"
+            if not eyelid_text.endswith("."):
+                eyelid_text += "."
+            state_lines.append(f"- {eyelid_text}")
         if state.get("gaze"):
-            state_lines.append("- Within the final expression, align both irises and pupils toward the camera for unmistakable direct lens contact.")
-            state_lines.append("- Rebalance sclera and catchlights naturally around the new iris positions.")
+            gaze_method = state.get("method") or "eyes_only"
+            gaze_strength = state.get("strength") or "moderate"
+            eye_adjustment = _safe_gaze_eye_adjustment(state.get("eye_adjustment"))
+            head_face_adjustment = str(state.get("head_face_adjustment") or "").strip()
+            if gaze_method == "eyes_only":
+                gaze_method_text = (
+                    f"Use a {gaze_strength} eyes-only correction and keep the original head/face angle fixed"
+                )
+            else:
+                bounded_head_change = head_face_adjustment or "only the minimum head/face alignment needed"
+                gaze_method_text = (
+                    f"Use a {gaze_strength} eyes-plus-head/face correction, limited to {bounded_head_change}"
+                )
+            if eye_adjustment:
+                gaze_method_text += f"; iris/pupil movement: {eye_adjustment}"
+            state_lines.append(f"- {gaze_method_text}; reach clear direct lens contact.")
+        if state.get("coordinated_eye_edit"):
+            state_lines.append(
+                "- Render the final eyelid openness, iris/pupil direction, sclera balance, and catchlights as one coordinated local eye edit; do not reopen the eye to one gaze and then redirect it."
+            )
+        if (smile or state.get("eye_state")) and not state.get("gaze"):
+            state_lines.append("- Keep the captured iris/pupil direction, sclera balance, and catchlights.")
         hair_level = state.get("hair_level")
         hair_correction_plan = str(state.get("hair_correction_plan") or "").strip()
         hair_action = state.get("hair_action")
@@ -662,7 +768,10 @@ def build_compact_editor_prompt(
                 state_lines.append(
                     "- Preserve the source fringe type, main part and sweep, length, outer edge, hairline, and total hair mass. Keep subtype-defining openings, but not the defective clump layout or accidental gaps; do not add hair or form an opaque sheet."
                 )
-        display_preserve = set(item["preserve"]) - _HAIR_IDENTITY_PRESERVE
+        # Eye-identity properties are rendered above in concrete visual terms;
+        # repeating their internal contract names here adds tokens but gives the
+        # image editor less useful guidance.
+        display_preserve = set(item["preserve"]) - _EYE_IDENTITY_PRESERVE - _HAIR_IDENTITY_PRESERVE
         preserve = ", ".join(value.replace("_", " ") for value in sorted(display_preserve))
         subject_blocks.append(
             f"Subject: {item['subject']}\n"
@@ -695,6 +804,28 @@ def build_compact_editor_prompt(
         analysis, skin_corrections, lighting_style=style_options.get("lighting"),
     )
     subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
+    shared_face_rules = []
+    if has_facial_edit:
+        projection_exception = (
+            " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed."
+            if has_head_aligned_gaze else ""
+        )
+        shared_face_rules.append(
+            "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, ear shape, and natural asymmetry. Preserve lashes/brows, makeup, and all landmarks outside an explicitly authorized local movement."
+            + projection_exception
+        )
+    if has_gaze:
+        shared_face_rules.append(
+            "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
+        )
+    if has_facial_edit:
+        shared_face_rules.append(
+            "- Carry the original lash line/lashes, brow design, eyeliner, eyeshadow, mascara, false lashes, glasses, and reflections through authorized movement without redesigning, enhancing, removing, or replacing them."
+        )
+    shared_face_block = (
+        "\nShared facial execution rules:\n" + "\n".join(shared_face_rules)
+        if shared_face_rules else ""
+    )
     hair_boundary_block = (
         "\nHair execution boundary:\n"
         "- Treat hair work as an arrangement/local-sheen edit, not a head or face regeneration. Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color. Where hair crosses a facial feature, retain that feature's visible source shape and position and repair only the strand-width footprint; any authorized eye or expression changes follow only their own resolved final states above."
@@ -733,11 +864,15 @@ def build_compact_editor_prompt(
         if style_footprint else
         "- No style option authorizes a change to pose, viewpoint, lighting style, or framing size."
     )
-    facial_locality = (
-        "- Apply facial feature edits locally. Any head/body movement must come only from the selected pose style."
-        if "pose" in style_options else
-        "- Apply facial edits locally without moving the head, body, or surrounding content."
-    )
+    if "pose" in style_options:
+        facial_locality = "- Apply facial feature edits locally. Any head/body movement must come only from the selected pose style."
+    elif has_head_aligned_gaze:
+        facial_locality = (
+            "- Apply facial edits locally. Only the resolved eyes-plus-head/face gaze endpoint may make its specified bounded head/face alignment; "
+            "keep the body and surrounding content fixed."
+        )
+    else:
+        facial_locality = "- Apply facial edits locally without moving the head, body, or surrounding content."
     portrait_style_priority = (
         "- Resolved subject final states remain mandatory inside the style transformation; style may coordinate surrounding pose and light but must not replace a specified smile, eye state, gaze, or hair endpoint."
         if style_footprint and resolved else ""
@@ -751,7 +886,7 @@ Required framing:
 Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
-{hair_boundary_block}
+{shared_face_block}{hair_boundary_block}
 
 Other approved corrections:
 {correction_block}
@@ -771,6 +906,7 @@ User direction:
 
 Global preservation:
 - Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform, add, or erase people/objects; authorized framing may place existing content outside the output frame.
+- Preserve each person's anatomical facial proportions and profile identity. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint or selected style explicitly changes viewpoint; then change only the specified orientation and its natural projection, never the underlying anatomy.
 - Preserve these unselected properties from the original: {spatial_preserve_text}.
 {style_scope_text}
 {facial_locality}
