@@ -15,7 +15,9 @@ import re
 # including the per-person opt-out (_disabled_issue_subject_indices).
 from prompts import (
     _disabled_issue_subject_indices,
+    _read_smile_states,
     resolve_smile_targets,
+    smile_level,
     subject_issue_items,
 )
 
@@ -290,12 +292,42 @@ def _same_subject(left, right):
 
 
 def _smile_contracts(analysis):
+    targets = resolve_smile_targets(analysis)
+
+    # The legacy/raw prompt has always retained an explicit user-selected
+    # level when analysis produced no usable reading.  Keep the compact path
+    # equivalent: a missing or malformed analyzer value must not silently
+    # turn a mandatory UI choice into "preserve expression".  Explicitly
+    # unreadable faces remain excluded because there are no pixels on which
+    # to execute a reliable expression edit.
+    level = smile_level(analysis)
+    if not targets and level not in (None, "auto") and not _read_smile_states(analysis):
+        disabled = _disabled_issue_subject_indices(analysis, "smile_issue")
+        for index, subject in enumerate(analysis.get("subjects") or []):
+            if not isinstance(subject, dict) or not subject.get("is_person") or index in disabled:
+                continue
+            issue = subject.get("smile_issue") or {}
+            raw_state = issue.get("smile_intensity") or issue.get("smile_state")
+            normalized_raw = str(raw_state or "").strip().lower().replace("-", "_")
+            if normalized_raw in {
+                "unclear", "occluded_or_unclear", "uncertain",
+                "不清楚", "不清晰", "無法判斷", "无法判断",
+            }:
+                continue
+            targets.append({
+                "label": (subject.get("label") or "").strip() or "畫面中的人",
+                "box": subject.get("box") or {},
+                "current": None,
+                "target": level,
+            })
+
     contracts = []
-    for item in resolve_smile_targets(analysis):
+    for item in targets:
         contracts.append({
             "feature": "smile",
             "subject": item.get("label") or "畫面中的人物",
             "box": _box(item),
+            "source_state": ({"smile_level": item["current"]} if item["current"] else {}),
             "endpoint": {"smile_level": item["target"]},
             "direct_changes": ["mouth_expression"],
             "dependent_changes": [
@@ -390,8 +422,11 @@ def resolve_feature_contracts(contracts):
         requested_preserve = {value for item in items for value in item["preserve"]}
         preserve = requested_preserve - footprint
         endpoints = {}
+        source_states = {}
         conflicts = []
         for item in items:
+            for key, value in (item.get("source_state") or {}).items():
+                source_states.setdefault(key, value)
             for key, value in item["endpoint"].items():
                 if key in endpoints and endpoints[key] != value:
                     conflicts.append(f"{key}: {endpoints[key]} vs {value}")
@@ -407,6 +442,7 @@ def resolve_feature_contracts(contracts):
             "subject": items[0]["subject"],
             "box": items[0].get("box") or {},
             "features": [item["feature"] for item in items],
+            "source_state": source_states,
             "final_state": endpoints,
             "direct_changes": sorted(direct),
             "dependent_changes": sorted(dependent),
@@ -452,15 +488,26 @@ def build_compact_editor_prompt(
     for item in resolved:
         state_lines = []
         state = item["final_state"]
+        source_state = item.get("source_state") or {}
         smile = state.get("smile_level")
         if smile:
             smile_text = {
                 "neutral": "a neutral, non-smiling expression",
                 "gentle": "a small, clearly readable natural smile",
                 "broad": "a clearly broad, joyful smile",
-                "laughing": "an unmistakable, intense and joyful laughing expression",
+                "laughing": "an unmistakably happy, intense and natural expression of genuine laughter",
             }[smile]
-            state_lines.append(f"- Render {smile_text}.")
+            replacement_guard = (
+                "not a generic replacement or merely a broad posed smile"
+                if smile == "laughing" else "not a generic replacement"
+            )
+            current_smile = source_state.get("smile_level")
+            if current_smile:
+                state_lines.append(
+                    f"- Transform this person's existing {current_smile} expression into {smile_text} on the existing face—{replacement_guard}."
+                )
+            else:
+                state_lines.append(f"- Render {smile_text} on the existing face—{replacement_guard}.")
             state_lines.append("- Coordinate the mouth, cheeks, brows, periocular muscles, and eyelid aperture naturally as one expression.")
         if state.get("eye_state"):
             state_lines.append("- Open or relax the accidentally closed/half-closed eye naturally, matching the final expression and the person's anatomy.")

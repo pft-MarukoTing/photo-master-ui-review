@@ -318,7 +318,7 @@ Intent: Use zoomed face crops as supporting evidence for facial details without 
 - After the main photo, you may be given one or more additional images labeled "Face crop N (zoomed, for anchoring subject detection and judging eye state, blink, gaze/pupil direction, and smile state; it is not a separate photo)". Each one is a cropped, zoomed-in view of one face a local face detector found in the SAME photo above, not a different photo or a different moment. Each comes with its own "Local face detector reference" coordinate (normalized original-image x/y/w/h) for that same face, numbered the same as its face crop (or, beyond the detector's own crop-count cap, given as a coordinate-only text reference with no image).
 - Go through every "Face crop N" / "Local face detector reference N" you are given, in order, and record one local_face_review entry per detection_index=N (see the JSON shape above). For each one, decide: (1) is this actually a real face (not background clutter, a pattern, a reflection, or a printed/painted face)? (2) if real, does this person pass the Subject inclusion rule above? Only when both are true do you create a subjects[] entry for them; set that entry's is_person=true and local_detection_index to this same N, and set this detection's matched_subject_index to that subjects[] entry's 0-based index. Otherwise set matched_subject_index=-1 and write reason: name whichever of "not a real face" or "real face but an incidental bystander (name why)" applies.
 - The detector can also miss a real, includable face (small, occluded, profile, motion-blurred). Still look at the full photo yourself and add a subjects[] entry for any additional visible person the detector did not catch and who passes the Subject inclusion rule; give that subjects[] entry local_detection_index=-1 since no detection produced it.
-- Use each matched face crop as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, and pupil/iris direction -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo. Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
+- Use each matched face crop as your primary evidence for that person's eye_state, gaze_state, lens_contact_decision, pupil/iris direction, and smile_intensity -- the main photo alone often does not have enough resolution on the eyes to judge this reliably, especially in a half-body, full-body, or group photo. Everything else about that person (composition role, pose, clothing, scene relationship, framing decisions) still comes from the main photo, not the crop.
 - A visible, includable person with no matching crop (beyond the detector's cap, or a person the detector missed entirely) is judged directly from the main photo as usual -- do not treat a missing or unusable crop as evidence the eyes are unreadable.
 
 ## Blink analysis
@@ -2500,7 +2500,11 @@ _GAZE_DETECTION_LUNA_SCHEMA = _schema_object({
 })
 
 _SMILE_STATE_SCHEMA = _schema_object({
-    "smile_intensity": _schema_string(),
+    # Keep this constrained at the API boundary as well as in the prose
+    # instruction.  A plain string allowed structured-output models to
+    # translate values (for example gentle -> "溫和微笑"), which made
+    # the downstream resolver discard an otherwise readable face.
+    "smile_intensity": _schema_enum(("neutral", "gentle", "broad", "laughing", "unclear")),
     "adjust_safe": _schema_boolean(),
     "reason": _schema_string(),
 })
@@ -4451,6 +4455,12 @@ _SMILE_INTENSITY_ALIASES = {
     "bright_smile": "broad", "toothy_smile": "broad", "open_smile": "broad",
     "grin": "broad", "grinning": "broad", "wide_smile": "broad", "big_smile": "broad",
     "laugh": "laughing", "laughter": "laughing", "laughing_smile": "laughing",
+    # Compatibility for already-saved analyses and defensive handling of a
+    # model translating the enum despite the response schema.
+    "不笑": "neutral", "無笑容": "neutral", "无笑容": "neutral", "中性": "neutral",
+    "微笑": "gentle", "溫和微笑": "gentle", "温和微笑": "gentle", "輕微微笑": "gentle", "轻微微笑": "gentle",
+    "開朗笑": "broad", "开朗笑": "broad", "燦爛笑容": "broad", "灿烂笑容": "broad",
+    "大笑": "laughing", "大笑表情": "laughing",
 }
 
 
