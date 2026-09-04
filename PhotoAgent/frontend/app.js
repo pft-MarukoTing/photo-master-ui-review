@@ -7452,20 +7452,21 @@
     if (faceIssueOverrides && Object.keys(faceIssueOverrides).length && Array.isArray(base.subjects)) {
       const subjects = base.subjects.map((subject) => (subject && typeof subject === "object") ? { ...subject } : subject);
       const disabledFaceIssues = [];
-      Object.entries(faceIssueOverrides).forEach(([key, allowed]) => {
-        if (allowed !== false) return;
+      Object.entries(faceIssueOverrides).forEach(([key, override]) => {
         const [subjectIndexStr, category] = key.split(":");
         const subjectIndex = Number(subjectIndexStr);
         const subject = subjects[subjectIndex];
         if (!subject || !subject[category] || typeof subject[category] !== "object") return;
         const issue = { ...subject[category] };
-        if (category === "smile_issue") {
-          issue.adjust_safe = true;
-        } else {
-          issue.should_fix = false;
+        const allowed = override !== false && (!override || override.allowed !== false);
+        if (!allowed) {
+          if (category === "smile_issue") issue.adjust_safe = true;
+          else issue.should_fix = false;
+          disabledFaceIssues.push({ subject_index: subjectIndex, category });
+        } else if (override && typeof override === "object" && override.level) {
+          issue._user_level = override.level;
         }
         subject[category] = issue;
-        disabledFaceIssues.push({ subject_index: subjectIndex, category });
       });
       effective.subjects = subjects;
       effective._disabled_face_issues = disabledFaceIssues;

@@ -717,6 +717,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   display: flex;
   align-items: center;
   gap: 10px;
+  min-height: 28px;
 }
 /* Fixed width, not just a min-width -- FACE_ISSUE_CATEGORIES' four labels
    (results.js) are always exactly four Chinese characters, so pinning this
@@ -728,6 +729,22 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    feature it's about. Bumped to the brightest text token + bold so this
    label reads as this row's primary heading, the verdict as its detail. */
 .ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
+.ap-face-issue-row .step-cb-label { white-space: nowrap; }
+.ap-face-issue-item--with-level { position: relative; }
+.ap-face-issue-row--with-level {
+  /* Reserve the selector plus a visible gutter from the nowrap verdict. */
+  width: calc(100% - 142px);
+}
+.ap-face-issue-level-row {
+  position: absolute;
+  /* Anchor to the 28px verdict row, not the full <li>. The <li> can also
+     contain a multi-line debug reason; centering against that total height
+     pushed the selector down over the reason text. */
+  top: 0;
+  right: 0;
+  transform: none;
+  margin: 0;
+}
 .ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; flex-shrink: 0; }
 .ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
 /* An unflagged issue still renders its toggle (results.js) -- always the
@@ -785,6 +802,32 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   box-shadow: 0 0 0 2px var(--card);
 }
 .ap-face-issue-note { color: var(--text-2); font-size: 13px; margin-bottom: 4px; }
+.quality-select.ap-face-issue-level-select {
+  flex: 0 0 96px;
+  width: 96px;
+  height: 28px;
+  padding: 3px 21px 3px 6px;
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+.ap-face-issue-level-select:disabled { opacity: .45; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .ap-face-modal-box {
+    width: calc(100vw - 16px);
+    padding: 14px;
+  }
+  .ap-face-modal-box .step-list-frame { padding: 12px; }
+  .ap-face-issue-row { gap: 6px; }
+  .ap-face-issue-name { flex-basis: 64px; }
+  .ap-face-issue-row--with-level { width: 100%; }
+  /* Mobile row uses 6px gaps: 34 + 3*6 + 64 + 20 = 136. */
+  .ap-face-issue-level-row {
+    position: static;
+    transform: none;
+    margin: 8px 0 2px 136px;
+  }
+}
 
 /* Quality select */
 .quality-select {

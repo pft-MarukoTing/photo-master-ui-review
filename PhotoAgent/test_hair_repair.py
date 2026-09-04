@@ -405,7 +405,7 @@ class HairAxis(unittest.TestCase):
 
 
 class CalmHair(unittest.TestCase):
-    """The 頭髮自然放下 switch: a user-elected transformation, not a defect repair."""
+    """Legacy prompt coverage for the upload-page hair preference."""
 
     def _prompt(self, calm, **overrides):
         analysis = {**ANALYSIS, "_advanced_options": {"calm_hair": calm}, **overrides}
@@ -417,13 +417,14 @@ class CalmHair(unittest.TestCase):
         self.assertNotIn("Still-air hair", build_edit_prompt(ANALYSIS, PRESET, "自然風格", "", CROP_PLAN))
 
     def test_on_reaches_the_edit_prompt(self):
-        self.assertIn("Still-air hair (user-selected, mandatory)", self._prompt(True))
+        prompt = self._prompt(True, subjects=_subjects_from_hair_issues([FIX_ME]))
+        self.assertIn("Still-air hair (user-selected, mandatory)", prompt)
+        self.assertIn("Mandatory visible change", prompt)
+        self.assertIn("entire visible hairstyle", prompt)
 
-    def test_it_does_not_wait_for_the_analysis_to_find_a_defect(self):
-        # The point of the switch: the user asked for it, so no hair_issue entry
-        # and no confidence threshold gates it.
+    def test_it_still_requires_the_analysis_to_find_a_defect(self):
         prompt = self._prompt(True, subjects=[])
-        self.assertIn("Still-air hair", prompt)
+        self.assertNotIn("Still-air hair", prompt)
         self.assertNotIn("Hair tidying priority", prompt)
 
     def test_unchecking_the_hair_item_still_switches_it_off(self):
@@ -438,7 +439,10 @@ class CalmHair(unittest.TestCase):
     def test_the_scene_keeps_its_weather(self):
         # "No wind" applied to the whole frame would rebuild the scene; only hair
         # settles, and the flags and foliage still blow.
-        self.assertIn("This settles hair only; it does not calm the scene", self._prompt(True))
+        self.assertIn(
+            "This settles hair only; it does not calm the scene",
+            self._prompt(True, subjects=_subjects_from_hair_issues([FIX_ME])),
+        )
 
     def test_a_moving_body_keeps_its_moving_hair(self):
         # Detection records body-driven motion without making the edit verdict.

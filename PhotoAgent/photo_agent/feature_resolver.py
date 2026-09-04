@@ -485,7 +485,7 @@ def _hair_contracts(analysis):
         return []
 
     disabled = _disabled_issue_subject_indices(analysis, "hair_issue")
-    fully_groomed = bool(options.get("calm_hair"))
+    fully_groomed_default = bool(options.get("calm_hair"))
     contracts = []
     for index, subject in enumerate(analysis.get("subjects") or []):
         if not isinstance(subject, dict):
@@ -495,12 +495,16 @@ def _hair_contracts(analysis):
             isinstance(issue, dict) and issue.get("should_fix")
             and index not in disabled
         )
-        if not local_fix and not (fully_groomed and subject.get("is_person")):
+        # The level rides on an approved finding; it never grooms a person the
+        # analysis left alone.
+        if not local_fix:
             continue
+        user_level = issue.get("_user_level")
+        fully_groomed = user_level == "tidy" if user_level in {"dynamic", "tidy"} else fully_groomed_default
         action = issue.get("fix_action") if local_fix else ""
         hair_level = "fully_groomed" if fully_groomed else "local_cleanup"
         correction_plan = str(issue.get("correction_plan") or "").strip() if local_fix else ""
-        if local_fix and not fully_groomed and issue.get("hair_state") == "windblown":
+        if local_fix and not fully_groomed and issue.get("hair_state") in {"windblown", "motion"}:
             # Keep the exact per-person target, but resolve the requested level
             # into controlled wind movement rather than either untouched chaos
             # or the still-air endpoint used by fully_groomed.
@@ -755,7 +759,7 @@ def build_compact_editor_prompt(
             )
         elif hair_level == "fully_groomed":
             state_lines.append(
-                "- Hair level — fully groomed: bring lifted, fanned, or streaming hair under its own weight into the still-air silhouette of this person's existing haircut, retaining natural strand separation rather than forming a smooth solid mass."
+                "- Hair level — fully groomed (mandatory visible change): fully comb and organize this person's entire visible hairstyle into a clean, deliberate, portrait-ready arrangement—not merely a local cleanup. Settle every loose, lifted, crossed, uneven, windblown, or directionless strand into coherent sections following the existing haircut; neaten the fringe, part, surface flow, and outer silhouette. The result must look clearly tidier at normal viewing size; leaving the hair unchanged or making only a barely perceptible adjustment fails. Keep natural strand separation and texture rather than forming a smooth solid mass."
             )
         if redistribute:
             evidence = "；".join(state.get("hair_visible_evidence") or [])

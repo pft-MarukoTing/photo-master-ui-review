@@ -4529,9 +4529,11 @@ def resolve_smile_targets(analysis):
     for item in _read_smile_states(analysis):
         if item["_subject_index"] in disabled_indices:
             continue
-        if level == "auto" and item["adjust_safe"] is False:
+        item_level = item.get("user_level") or level
+        item_level = item_level if item_level in SMILE_LEVEL_LABELS else level
+        if item_level == "auto" and item["adjust_safe"] is False:
             continue
-        target = _smile_target_state(level, item["current"])
+        target = _smile_target_state(item_level, item["current"])
         if not target:
             continue
         targets.append({**item, "target": target})
@@ -4597,6 +4599,7 @@ def _read_smile_states(analysis):
             "current": current,
             "adjust_safe": item.get("adjust_safe"),
             "_subject_index": item.get("_subject_index"),
+            "user_level": item.get("_user_level"),
         })
     return read
 
@@ -4670,10 +4673,15 @@ def build_smile_block(analysis):
     targets = resolve_smile_targets(analysis)
     if targets:
         lines = "\n".join(_smile_target_line(t) for t in targets)
-        return f"""Smile adjustment (user-selected, mandatory). Requested level: {SMILE_LEVEL_LABELS[level]}
+        target_levels = {t["target"] for t in targets}
+        requested_label = (
+            SMILE_LEVEL_LABELS[next(iter(target_levels))]
+            if len(target_levels) == 1 else "個別人物設定（見下列目標）"
+        )
+        return f"""Smile adjustment (user-selected, mandatory). Requested level: {requested_label}
 - Apply the requested smile intensity to each person named below.
 {lines}
-{_smile_craft_rules({t['target'] for t in targets})}"""
+{_smile_craft_rules(target_levels)}"""
 
     if _read_smile_states(analysis):
         return SMILE_PRESERVATION_BLOCK
@@ -5001,15 +5009,8 @@ Execution instructions:
         "hair" in _axis_set(analysis.get("rejected_axes"))
         and "hair" not in _axis_set(analysis.get("correction_axes"))
     )
-    # calm_hair (see calm_hair_block below) is its own opt-in hair transformation,
-    # unrelated to whether hair_mess_detection found anything -- computed here so
-    # hair_block's own empty-case fallback just below can defer to it instead of
-    # contradicting it with a blanket "leave hair untouched" instruction.
-    calm_hair_active = bool(advanced_options.get("calm_hair")) and not hair_rejected
-    # Only the should_fix items are handed over, unlike the blink block's full
-    # list: the "everything else stays as captured" rule below already covers the
-    # people and strands left out, and this json is the one place hair gets named,
-    # so a second copy of it would only give the model more hair to touch.
+    # The selected level is resolved per approved detected issue below. It is
+    # never an independent licence to groom an unflagged person's hair.
     hair_block = ""
     hair_disabled_indices = _disabled_issue_subject_indices(analysis, "hair_issue")
     hair_items_to_fix = [
@@ -5018,6 +5019,17 @@ Execution instructions:
         if isinstance(item, dict) and item.get("should_fix")
         and item.get("_subject_index") not in hair_disabled_indices
     ] if hair_mess_detection_enabled else []
+    calm_hair_items = [
+        {k: v for k, v in item.items() if k != "_subject_index"}
+        for item in hair_issues
+        if isinstance(item, dict) and item.get("should_fix")
+        and item.get("_subject_index") not in hair_disabled_indices
+        and (item.get("_user_level") == "tidy" or (
+            item.get("_user_level") not in {"dynamic", "tidy"}
+            and advanced_options.get("calm_hair")
+        ))
+    ] if hair_mess_detection_enabled and not hair_rejected else []
+    calm_hair_active = bool(calm_hair_items)
     if hair_items_to_fix and not hair_rejected:
         hair_block = """Hair tidying priority:
 - Work only on the hair named below, on the person named below. Every other part of that person's hair, and everyone else's hair, comes through exactly as captured.
@@ -5057,11 +5069,15 @@ Execution instructions:
     calm_hair_block = ""
     if calm_hair_active:
         calm_hair_block = """Still-air hair (user-selected, mandatory):
-- The user asked for this photograph to look as though there were no wind. Every person's hair hangs down under its own weight, in the shape their haircut gives it, as it would on a still day indoors.
-- Bring lifted, fanned, streaming, and sideways-blown hair back down onto the head and shoulders. Close the gaps the wind opened, using the hair that is already in the photograph. The outline of each hairstyle reads continuous and settled rather than caught mid-gust.
+- Fully groom the entire visible hairstyle of each person named below, not merely the originally detected defect footprint. Other people and unapproved hair remain exactly as captured.
+- For each named person, this full-hairstyle scope overrides the earlier local-only hair boundary: the detected item identifies whom to groom, not the maximum edit footprint.
+- Mandatory visible change: the result must look clearly tidier at normal viewing size. An unchanged result or a barely perceptible cleanup fails this user request.
+- Comb loose, lifted, crossed, uneven, and directionless strands into clean coherent sections following the existing haircut. Neaten the fringe, part, surface flow, and outer silhouette so the finished hair looks deliberately combed and portrait-ready.
+- Bring lifted, fanned, streaming, and sideways-blown hair back down onto the head and shoulders. Close the gaps the wind opened, using the hair that is already in the photograph. No wind-driven or body-motion disorder remains in the finished hairstyle.
 - Same person, same haircut: length, volume, density, parting, hairline, curl pattern, and color are unchanged, no hair is added, and the face is untouched. Hair falls, but its owner does not change.
 - Settled is not sculpted. Hair hanging still keeps strand separation, its own unevenness, and the way it catches light. A smooth glossy sheet, a painted block, or a wig fails this even though the wind is gone.
-- Everything else in the photograph stays exactly as captured -- the same clothing, the same flags, leaves, water, and other people, still showing whatever the weather was doing to them. This settles hair only; it does not calm the scene."""
+- Everything else in the photograph stays exactly as captured -- the same clothing, the same flags, leaves, water, and other people, still showing whatever the weather was doing to them. This settles hair only; it does not calm the scene.
+- Detected hair to tidy: """ + json.dumps(calm_hair_items, ensure_ascii=False)
 
     gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
     gaze_items_to_fix = [

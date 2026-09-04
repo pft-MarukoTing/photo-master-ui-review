@@ -449,11 +449,6 @@
       object-fit: cover;
       display: block;
     }
-    /* Wider than the shared .error-modal-box's own 440px (see
-       .ap-style-modal-box above for the same override pattern) -- gives
-       #ap-face-modal-thumb below room to be a real portrait, not a tiny
-       icon crammed into a message-sized box. */
-    .ap-face-modal-box { width: min(520px, calc(100vw - 40px)); }
     /* #ap-face-modal's own larger echo of whichever #ap-face-thumb-row
        button was clicked (fillFaceIssueList, results.js) -- bigger than the
        41px row button so it reads as "here's who this list is about", not
@@ -1206,6 +1201,12 @@
       position: relative; width: min(440px, calc(100vw - 40px));
       background: var(--card); border: 1px solid var(--border-2);
       border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
+    }
+    @media (max-width: 560px) {
+      .ap-face-modal-box {
+        width: calc(100vw - 16px);
+        padding: 14px;
+      }
     }
     /* Divider between the header and everything below it -- originally
        scoped to just #ap-style-modal (its own inner frame border had been

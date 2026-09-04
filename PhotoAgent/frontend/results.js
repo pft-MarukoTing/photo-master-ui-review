@@ -719,7 +719,7 @@ window.PhotoAgentResults = (() => {
   // field this entry came from -- the toggle in fillFaceIssueList writes back
   // through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
   // uses the same pair to flip should_fix/adjust_safe before submission.
-  function faceIssueEntries(subject, index) {
+  function faceIssueEntries(subject, index, advancedOptions = {}) {
     if (!subject) return [];
     return FACE_ISSUE_CATEGORIES.map((category) => {
       const match = subject[category.field];
@@ -732,7 +732,14 @@ window.PhotoAgentResults = (() => {
         reason: match.reason || "",
         category: category.field,
         subjectIndex: index,
-        allowed: true
+        allowed: true,
+        // The level this person's hair/smile edit runs at, seeded from the
+        // upload-page defaults and overridable per person in the face modal.
+        level: category.field === "hair_issue"
+          ? (advancedOptions.calm_hair ? "tidy" : "dynamic")
+          : category.field === "smile_issue"
+            ? (advancedOptions.smile_level || "auto")
+            : null
       };
     }).filter(Boolean);
   }
@@ -745,9 +752,9 @@ window.PhotoAgentResults = (() => {
     const overrides = {};
     faceThumbEntries.forEach((entry) => {
       (entry.issues || []).forEach((issue) => {
-        if (issue.flagged && issue.allowed === false) {
-          overrides[`${issue.subjectIndex}:${issue.category}`] = false;
-        }
+        if (!issue.flagged) return;
+        if (issue.allowed === false) overrides[`${issue.subjectIndex}:${issue.category}`] = false;
+        else if (issue.level) overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true, level: issue.level };
       });
     });
     return overrides;
@@ -762,7 +769,12 @@ window.PhotoAgentResults = (() => {
     if (!overrides) return;
     faceThumbEntries.forEach((entry) => {
       (entry.issues || []).forEach((issue) => {
-        if (overrides[`${issue.subjectIndex}:${issue.category}`] === false) issue.allowed = false;
+        const override = overrides[`${issue.subjectIndex}:${issue.category}`];
+        if (override === false) issue.allowed = false;
+        else if (override && typeof override === "object") {
+          issue.allowed = override.allowed !== false;
+          if (override.level) issue.level = override.level;
+        }
       });
     });
   }
@@ -857,7 +869,7 @@ window.PhotoAgentResults = (() => {
         if (!subject && (matched || !sentToModel)) return null;
         return {
           box: f.box,
-          issues: faceIssueEntries(subject, index),
+          issues: faceIssueEntries(subject, index, analysis?._advanced_options || {}),
           sentToModel,
           label: (subject && subject.label) || "",
         };
@@ -1016,7 +1028,41 @@ window.PhotoAgentResults = (() => {
       row.appendChild(icon);
       row.appendChild(resultLabel);
 
+      // Hair and smile each run at a level the user picks per person. CSS
+      // places the selector at the row's right edge on desktop and on a
+      // second verdict-aligned row on mobile. Hide it whenever this person's
+      // edit is off.
+      let levelRow = null;
+      if (["hair_issue", "smile_issue"].includes(issue.category)) {
+        li.classList.add("ap-face-issue-item--with-level");
+        row.classList.toggle("ap-face-issue-row--with-level", issue.allowed);
+        levelRow = document.createElement("div");
+        levelRow.className = "ap-face-issue-level-row";
+        const select = document.createElement("select");
+        select.className = "quality-select ap-face-issue-level-select";
+        const choices = issue.category === "hair_issue"
+          ? [["dynamic", "保留髮絲動態"], ["tidy", "梳整俐落"]]
+          : [["auto", "自動"], ["neutral", "不笑"], ["gentle", "微笑"], ["broad", "開朗笑"], ["laughing", "大笑"]];
+        choices.forEach(([value, label]) => {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = label;
+          select.appendChild(option);
+        });
+        select.value = issue.level || choices[0][0];
+        select.disabled = !issue.allowed;
+        select.addEventListener("change", () => { issue.level = select.value; });
+        input.addEventListener("change", () => {
+          select.disabled = !input.checked;
+          levelRow.hidden = !input.checked;
+          row.classList.toggle("ap-face-issue-row--with-level", input.checked);
+        });
+        levelRow.hidden = !issue.allowed;
+        levelRow.appendChild(select);
+      }
+
       li.appendChild(row);
+      if (levelRow) li.appendChild(levelRow);
 
       // The model's own reasoning is debug-only detail (same gate as the
       // box overlay's legend) -- a regular user just needs the verdict, not
