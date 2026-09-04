@@ -48,6 +48,7 @@ _SKIN_COLOR_TERMS = (
     "tone", "warm", "cool", "yellow", "orange", "red", "green", "gray",
     "grey", "magenta", "cast", "hue", "chroma", "saturation",
 )
+_FACE_TONAL_AXES = {"exposure", "shadow", "highlight", "contrast"}
 _HAIR_PLAN_TERMS = (
     "髮", "头发", "hair", "bang", "fringe", "flyaway", "frizz",
 )
@@ -84,6 +85,12 @@ def _is_skin_correction(text, axes):
     )
 
 
+def _is_face_tonal_correction(text, axes):
+    return bool(_FACE_TONAL_AXES & set(axes)) and bool(
+        re.search(r"(?:臉部|面部|臉頰|人臉|\bface\b|\bfacial\b)", text, re.IGNORECASE)
+    )
+
+
 def _is_hair_correction(text, axes):
     lowered = str(text or "").lower()
     return any("hair" in str(axis).lower() for axis in axes) or any(
@@ -100,8 +107,8 @@ def _repair_strength(value, default="moderate"):
     return default
 
 
-def _build_color_blocks(analysis, skin_corrections, lighting_style=None):
-    """Compact equivalents of the tuned legacy color craft and stop check."""
+def _build_color_blocks(analysis, skin_corrections, face_tonal_corrections=(), lighting_style=None):
+    """Compact equivalents of the tuned legacy color and skin guidance."""
     rejected = _axis_set(analysis.get("rejected_axes")) - _axis_set(analysis.get("correction_axes"))
     tonal = []
     if "shadow" not in rejected:
@@ -148,24 +155,21 @@ def _build_color_blocks(analysis, skin_corrections, lighting_style=None):
     correction_text = "\n".join(f"- Approved skin correction: {item}" for item in skin_corrections)
     if not correction_text:
         correction_text = "- No local skin-color correction is approved; retain each person's native complexion under the final scene light."
+    face_tonal_text = "\n".join(
+        f"- Approved local face tonal correction: {item} Apply it through exposure and tonal density on the existing facial pixels only; it does not authorize redrawing facial features, contours, or hair boundaries."
+        for item in face_tonal_corrections
+    )
+    if face_tonal_text:
+        face_tonal_text += "\n"
     skin_block = f"""Skin color contract:
 {identity_text}
 {correction_text}
-- Preserve each person's native complexion depth, undertone, and chroma. Let skin respond naturally to the final scene light without tinting skin independently.
+{face_tonal_text}- Preserve each person's native complexion depth, undertone, and chroma. Let skin respond naturally to the final scene light without tinting skin independently.
 - Grade skin independently from the surrounding palette. A global white-balance, hue, or saturation adjustment may change the environment without forcing the same shift onto skin; skin still responds naturally to shared exposure, contrast, and actual scene illumination.
 - Treat wording such as “slightly warmer” only as a relative correction away from a specifically identified unwanted cool/cyan/green/gray cast, stopping at that person's recorded native complexion under the existing light. It is not permission to add warmth, yellow, orange, red, rosiness, or saturation.
-- Correct face, neck, ears, and visible hands as one continuous skin surface with no patch, band, edge, or mismatched region. Preserve pores and natural tonal modelling."""
+- Skin work is color/tonal only. Except for facial properties explicitly changed in the Resolved subject final states, keep eye shape and lash line, iris and catchlights, brows, nostrils, lip edges, and facial structure in their source positions. Carry every authorized gaze, blink, or expression endpoint through the skin grade without adding further facial change. Keep face, neck, ears, and visible hands continuous with no patch or mismatch, preserving pores and natural tonal modelling."""
 
-    if lighting_style:
-        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(lighting_style, lighting_style)
-        grade_check = f"""Final color check:
-- The selected {lighting_label} lighting endpoint is clearly visible across both subject and environment, with believable depth and highlight rolloff.
-- Material colors remain plausible and nobody's complexion identity is changed; the style reads as scene light, not a uniform skin tint or pasted-on filter."""
-    else:
-        grade_check = """Final color check against the original:
-- The result retains the original photograph's intentional color character while showing visibly better tonal depth, highlight rolloff, and tonal distinction between subject and background.
-- Every approved cast correction is complete without introducing a new global filter or changing anyone's complexion identity."""
-    return color_block, skin_block, grade_check
+    return color_block, skin_block
 
 
 def _compact_raw_crop_instruction(raw_instruction):
@@ -197,6 +201,14 @@ def _compact_raw_crop_instruction(raw_instruction):
         tightness_match = re.search(r"Roughly how tight:\s*([^\.\n]+)", raw)
         aspect = aspect_match.group(1).strip() if aspect_match else "the stated output ratio"
         tightness = tightness_match.group(1).strip() if tightness_match else "use the stated crop tightness"
+        same_shape = "same shape as the photograph" in raw and "nothing has to be given up" in raw
+        near_full_frame = "close to the full frame" in tightness.lower()
+        if same_shape and near_full_frame and "Closer framing was requested" not in raw:
+            return (
+                "Keep the supplied framing and subject scale; at most trim a small amount from the outer edges if needed. "
+                "Do not zoom out, outpaint, or recompose. Scale uniformly only—never stretch content—and preserve internal "
+                "proportions, tilt, relative sizes, spacing, and overlap."
+            )
         consequence = ""
         if "left and right edges cannot both be inside" in raw:
             consequence = " Trim side content as needed rather than narrowing people or objects."
@@ -649,12 +661,18 @@ def build_compact_editor_prompt(
 
     subject_blocks = []
     resolved_features = {feature for item in resolved for feature in item["features"]}
+    has_smile = "smile" in resolved_features
+    has_laugh = any(item["final_state"].get("smile_level") == "laughing" for item in resolved)
     has_gaze = "gaze" in resolved_features
     has_facial_edit = bool(resolved_features & {"smile", "gaze", "blink"})
+    has_joint_smile_gaze = any(
+        {"smile", "gaze"}.issubset(set(item["features"])) for item in resolved
+    )
     has_head_aligned_gaze = any(
         item["final_state"].get("method") == "eyes_plus_head_face_alignment"
         for item in resolved
     )
+    correction_axes = analysis.get("correction_axes") or []
     for item in resolved:
         state_lines = []
         state = item["final_state"]
@@ -678,7 +696,6 @@ def build_compact_editor_prompt(
                 )
             else:
                 state_lines.append(f"- Render {smile_text} on the existing face—{replacement_guard}.")
-            state_lines.append("- Coordinate the mouth, cheeks, brows, periocular muscles, and eyelid aperture naturally as one expression.")
         if state.get("eye_state"):
             # Strategy fields are empty unless the analysis authored a per-person
             # blink plan (luna only), so every other model keeps the generic
@@ -783,11 +800,16 @@ def build_compact_editor_prompt(
     feature_terms = ("視線", "眼神", "虹膜", "瞳孔", "direct_camera", "gaze", "閉眼", "眼皮", "blink", "笑", "smile", "laugh")
     other_corrections = []
     skin_corrections = []
-    correction_axes = analysis.get("correction_axes") or []
+    face_tonal_corrections = []
     for index, raw_item in enumerate(analysis.get("correction_plan") or []):
         item = str(raw_item)
         axes = _axis_set([correction_axes[index]]) if index < len(correction_axes) else set()
         if any(term.lower() in item.lower() for term in feature_terms):
+            continue
+        # Required framing already carries the authoritative compacted raw crop
+        # decision. Repeating an analysis crop item here can turn a same-shape,
+        # near-full-frame instruction into a second generative reframe request.
+        if "crop" in axes:
             continue
         if _is_hair_correction(item, axes):
             # Hair has one authoritative route: the matching person's
@@ -797,11 +819,14 @@ def build_compact_editor_prompt(
             continue
         elif _is_skin_correction(item, axes):
             skin_corrections.append(item)
+        elif _is_face_tonal_correction(item, axes):
+            face_tonal_corrections.append(item)
         else:
             other_corrections.append(item)
     correction_block = "\n".join(f"- {item}" for item in other_corrections) or "- No additional approved local corrections."
-    color_block, skin_block, grade_check = _build_color_blocks(
-        analysis, skin_corrections, lighting_style=style_options.get("lighting"),
+    color_block, skin_block = _build_color_blocks(
+        analysis, skin_corrections, face_tonal_corrections,
+        lighting_style=style_options.get("lighting"),
     )
     subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
     shared_face_rules = []
@@ -813,6 +838,21 @@ def build_compact_editor_prompt(
         shared_face_rules.append(
             "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, ear shape, and natural asymmetry. Preserve lashes/brows, makeup, and all landmarks outside an explicitly authorized local movement."
             + projection_exception
+        )
+    if has_smile:
+        shared_face_rules.append(
+            "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, natural asymmetry, and visible dental characteristics rather than regenerating or beautifying the whole face."
+        )
+        shared_face_rules.append(
+            "- Retain the original skin age and fold pattern. Existing crow's-feet, under-eye creases, and nasolabial folds may compress minimally but must not become deeper, darker, sharper, longer, or more numerous."
+        )
+    if has_laugh:
+        shared_face_rules.append(
+            "- For laughter, show spontaneous joy coherently through the mouth, cheek lift, periocular response, and a compatible relaxed brow; do not leave a neutral, worried, stern, or angry upper face. Reach the requested intensity through coordinated expression—not an oversized mouth or reshaped facial features."
+        )
+    if has_joint_smile_gaze:
+        shared_face_rules.append(
+            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter narrow the eyelids modestly through natural cheek lift while retaining canthi, lid folds, recognizable eye openness, and iris visibility; avoid both fixed-open staring and exaggerated squinting."
         )
     if has_gaze:
         shared_face_rules.append(
@@ -878,7 +918,8 @@ def build_compact_editor_prompt(
         if style_footprint and resolved else ""
     )
 
-    prompt = f"""Edit the supplied photograph; do not create a new scene.
+    prompt = f"""You are editing the supplied image, not creating a new image.
+Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic.
 
 Required framing:
 {compact_crop_block}
@@ -912,9 +953,7 @@ Global preservation:
 {facial_locality}
 {portrait_style_priority}
 - Preserve natural skin and material texture. Do not add text, logos, watermarks, people, props, or a different background.
-- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.
-
-{grade_check}{revision_text}
+- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.{revision_text}
 """
     return prompt.strip(), {
         "strategy": "resolved_compact",
@@ -930,6 +969,7 @@ Global preservation:
         ],
         "color_contract": {
             "skin_corrections": skin_corrections,
+            "face_tonal_corrections": face_tonal_corrections,
             "memory_color_strategy": analysis.get("memory_color_strategy") or "",
         },
         "crop_instruction_source": crop_instruction_source,
