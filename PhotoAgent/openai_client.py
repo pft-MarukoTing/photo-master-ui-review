@@ -29,7 +29,6 @@ from prompts import (
     ANALYSIS_INSTRUCTION,
     ANALYSIS_RESPONSE_SCHEMA,
     ANALYSIS_RESPONSE_SCHEMA_OVERALL,
-    backfill_missing_correction_items,
     build_analysis_instruction,
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
@@ -42,6 +41,7 @@ from prompts import (
     build_quality_check_prompt,
     expand_subject_boxes_to_contain_faces,
     merge_portrait_qc_issues,
+    derive_hair_decisions,
     derive_luna_blink_decisions,
     derive_luna_gaze_decisions,
     eye_repair_targets,
@@ -204,7 +204,7 @@ def _face_crop_content_items(face_crops):
                 "type": "input_text",
                 "text": (
                     f"Face crop {i} (zoomed, for anchoring subject detection and judging eye state, blink, "
-                    "gaze/pupil direction, and smile state; it is not a separate photo). Local face detector "
+                    "gaze/pupil direction, smile state, and strand-level front-hair detail; it is not a separate photo). Local face detector "
                     "reference (normalized original-image coordinates, tight face-only box): "
                     f"x={fb['x']:.3f}, y={fb['y']:.3f}, w={fb['w']:.3f}, h={fb['h']:.3f} -- this is "
                     f"detection_index {i}: give it a local_face_review entry, and create a matching "
@@ -278,6 +278,7 @@ def _analyze_photo_single_pass(image_bytes: bytes, aspect_ratio: str = "auto", a
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
     result = _parse_json_from_text(_extract_output_text(data))
     result = _stamp_local_face_debug_fields(result, face_crops)
+    result = derive_hair_decisions(result)
     return result, {
         "model": analysis_model,
         "usage": data.get("usage"),
@@ -311,11 +312,12 @@ def _sum_usage(*usage_items: dict) -> dict:
 def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL) -> dict:
     """gpt-5.6-luna only (see analyze_photo below). Call A does overall photo
     direction and subject identification, same as the single-pass flow minus
-    blink/hair/gaze/smile; Call B is a dedicated portrait-QC pass that judges
-    those four fields, only for the people Call A already identified, merged
+    blink/hair/gaze/smile; Call B is a dedicated portrait-QC pass that observes
+    those four fields and writes each candidate per-person hair correction,
+    only for the people Call A already identified, merged
     back by prompts.merge_portrait_qc_issues's stable subject_index (never by
-    response-array position).  Python then applies the exact-lens gate and an
-    optional Call C creates repair strategies only for people that passed it.
+    response-array position). Python then derives hair/blink/gaze decisions;
+    an optional Call C creates eye repair strategies only for people that pass.
 
     Call B (including a validation failure raised by merge_portrait_qc_issues
     itself -- a missing/duplicate/mismatched subject_index) is best-effort:
@@ -361,6 +363,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
             data_b = _post_json(OPENAI_RESPONSES_URL, payload_b, "Photo analysis failed (portrait-QC pass)")
             portrait_qc = _parse_json_from_text(_extract_output_text(data_b))
             analysis = merge_portrait_qc_issues(overall_analysis, portrait_qc)
+            analysis = derive_hair_decisions(analysis)
             analysis = derive_luna_blink_decisions(analysis)
             analysis = derive_luna_gaze_decisions(analysis)
             usage_b = data_b.get("usage")
@@ -402,7 +405,6 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
                 "Eye repair-planning pass failed; keeping deterministic fallback strategies: %s", exc,
             )
 
-    analysis = backfill_missing_correction_items(analysis)
     usage = _sum_usage(data_a.get("usage"), usage_b, usage_c)
     return analysis, {
         "model": analysis_model,

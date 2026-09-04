@@ -93,6 +93,81 @@ def style_option_entries(analysis):
     return entries
 
 
+# Shared by both analysis paths: spliced into ANALYSIS_INSTRUCTION below (the
+# single-call flow) and into build_portrait_qc_instruction's Call B prompt.
+_HAIR_ANALYSIS_SECTION = """## Hair analysis
+
+### Role
+- Observe each listed person's physical hair state from the full photo and matched face crop.
+- Classify the state and propose its candidate plan; do not decide whether the edit should run or anticipate the user's hair level.
+- Always output should_fix=false as a placeholder. Python overwrites it after this response.
+
+### Output fields
+- hair_state: choose exactly one from tidy / styled_messy / styled_bangs / styled_face_framing / motion / natural_texture / disheveled / windblown / strands_across_face / bangs_disturbed / bangs_clumped / lock_out_of_place / frizz_halo / tuft_or_flattened / occluded_or_unclear / uncertain.
+- visible_evidence: name the exact strands, fringe, or region and the visible geometry that supports the state. Do not write aesthetic preference or guessed intent.
+- front_hair: none / even / clumped / unclear. It is a reading, not a state: never copy its value into hair_state.
+- fix_action: propose one physical operation from none / lay_back / remove / settle / redistribute. This is a candidate action, not an edit approval.
+- mess_intent: always output ambiguous as a compatibility placeholder. Do not infer intent or use it as an edit verdict.
+- hair_mess_confidence: confidence from 0 to 1 in the physical hair_state classification, not confidence that an edit should happen.
+- correction_plan: write a candidate editor instruction for a physically actionable state; otherwise write "不適用". Writing a plan does not set should_fix.
+- reason: briefly explain the physical classification and evidence. Do not argue whether the user should keep or remove it.
+
+### Inspection order
+1. Readability: if hair structure cannot be resolved because of blur, backlight, occlusion, or subject size, use occluded_or_unclear.
+2. Source of movement: use motion when the person's jump, spin, flip, throw, or turn drives the hair; use windblown when environmental wind substantially lifts, opens, scatters, or pushes hair away from its settled silhouette. A coherent wind direction confirms windblown and does not make it non-actionable. Hair does not need to cover a facial feature.
+3. Front-hair check: first decide whether a real fringe exists. A fringe is a shorter front layer rooted along the front hairline and visibly distinct in length or grouping from the main lengths; it may be blunt, curtain/八字, see-through, or side-swept. A side part or full-length front section that continues into the shoulder-length hair is not a fringe merely because it crosses the forehead, brow, eye, or cheek; record front_hair="none". Never use position on the face alone as evidence—use the strand's root band, endpoint, length relative to the main hair, and continuity into the longer lengths. For every confirmed fringe, inspect its left, center, and right zones at the roots and through the lengths before choosing even versus clumped. Compare adjacent bundle widths and the forehead gaps beside them; do not summarize the fringe as "light", "see-through", "roughly balanced", or "naturally separated" until this comparison is complete. If any zone contains a conspicuously thicker stuck bundle beside a much thinner bundle or an abnormally wide bare gap, use front_hair="clumped" and bangs_clumped. One such local contradiction is sufficient even when the remaining zones are balanced, the lock follows the parting direction, or oil sheen is not readable. Before choosing styled_face_framing, apply the same test to any shorter front layer: use front_hair="clumped" and bangs_clumped even when that lock follows the parting direction; a coarse separated lock with a source gap/hard edge is clumped fringe, not intentional face framing.
+4. Structure: distinguish deliberate repeated styling or natural texture from disheveled hair with several unrelated disruptions, and from a single local contradiction in the surrounding hair flow.
+5. Select the single clearest state. If moving or windblown hair also contains a more specific local defect such as strands_across_face or lock_out_of_place, use that local defect as hair_state and mention the movement context in visible_evidence and correction_plan.
+
+### State and candidate-action routing
+- tidy: settled hair; fix_action=none; correction_plan="不適用".
+- styled_messy: deliberate tousle, cut, or product separation; fix_action=none; correction_plan="不適用".
+- styled_bangs: center-parted, curtain/八字, or see-through fringe only after the left/center/right comparison finds no local thick-cord-beside-abnormal-gap contradiction; fix_action=none; correction_plan="不適用". Repetition alone does not prove styling: several separated bundles can all be clumps. A fringe is not even merely because its strands point the same way, its overall coverage looks balanced, or forehead is intentionally visible through it.
+- styled_face_framing: deliberate paired temple/cheek strands integrated with an updo, ponytail, or clearly repeated face-framing cut; fix_action=none; correction_plan="不適用". Do not use this state for one isolated front lock on otherwise worn-down hair, especially when it is stuck together, has separated from the surrounding fringe/front layer, leaves a visible source gap, or falls across a brow or eye. Following the general parting direction alone does not prove intentional face framing.
+- natural_texture: coherent curly, coily, fluffy, or baby-hair texture; fix_action=none; correction_plan="不適用".
+- motion: body-driven flowing hair without a more specific local defect; fix_action=none; correction_plan="不適用". This state does not prevent the user's later fully-groomed transformation.
+- disheveled: several visible regions have unrelated uneven directions, tangles, displaced sections, or collapsed volume that break the readable haircut, without environmental wind or body motion explaining them; fix_action=settle; describe the affected regions and use coherent hair on the same head as the target reference. Do not use this state for a consistent tousled style or natural texture.
+- windblown: environmental wind has displaced a region or the whole hairstyle; fix_action=settle; provide a candidate correction_plan describing the whole disturbed region and the same head's readable haircut/flow as reference.
+- strands_across_face: hair has left its surrounding flow and rests across an eye, brow, nose, mouth, lip, or cheek; use lay_back when adjacent hair can receive it, otherwise remove. Hair that belongs to an existing fringe is not this state.
+- bangs_disturbed: a real fringe is flipped or pushed against its own direction; fix_action=lay_back.
+- bangs_clumped: a confirmed existing fringe either forms conspicuously unequal thick bundles beside abnormal bare forehead gaps, or contains one visibly stuck-together coarse front lock separated from the otherwise coherent fringe and leaving a gap or hard edge at its source; fix_action=redistribute. This is primarily a distribution-geometry decision, not an oil-detection decision. One strong coarse pattern in any left/center/right zone is sufficient. Oil/sweat, forehead adhesion, darker or slicker grouping, and a hard continuous reflection support this reading but are not required. A clumped lock may still point in the same direction as the parting; directional agreement does not make it styled. Only front_hair="clumped" on a confirmed existing fringe may use this state and action.
+- lock_out_of_place: one lock has escaped a tie, clip, hat, or surrounding flow; fix_action=lay_back.
+- frizz_halo: a localized static halo contradicts an otherwise settled outline; fix_action=settle.
+- tuft_or_flattened: one local tuft stands up or one area is visibly pressed against its neighbours; fix_action=settle.
+- uncertain: visible hair whose state cannot be selected reliably; fix_action=none; correction_plan="不適用".
+
+### Action meanings
+- lay_back: return only the named strands to adjacent existing hair flow. A non-fringe correction must return them to the source side part or long-hair flow; never create a fringe or close forehead gaps.
+- remove: use only for isolated hair that has left the hairstyle. Never remove an existing fringe, hairline, or hairstyle edge. Strands resting further down on a cheek, jaw, or lip may use remove when no adjacent flow can receive them.
+- settle: describe the complete disturbed area and use undisturbed hair on the same head to define length, parting, volume, direction, and silhouette. Treat the whole disturbed area as the work, not only strands touching the face.
+- redistribute: use only for a confirmed clumped fringe. Reduce its oily hard reflection to the surrounding hair's sheen and spread the same existing strands into a balanced but translucent fringe, closing abnormal gaps without adding hair, density, length, or width.
+
+### Face and hairstyle safety
+- Hair over an eye, nose, or mouth may still receive a candidate plan when the feature remains visibly recoverable around the strands. The plan must preserve that person's visible feature shape and position and repair only the strand-width footprint.
+- If hair completely buries a feature and no source evidence remains around it, use occluded_or_unclear rather than inventing the feature.
+- Preserve hairstyle shape, parting, length, volume, density, hairline, curl pattern, color, and real strand texture except for the candidate operation itself.
+- Never 淡化, 降低對比, 柔化, or 模糊 hair. Stray hair is never a distraction item. The only tonal hair operation is reducing localized oily fringe sheen while restoring strand detail.
+
+### Output invariants
+- Hair recall check: revisit every confirmed fringe after drafting the result. Explicitly compare its left, center, and right bundle widths and adjacent forehead gaps. If the evidence names unequal/coarse/stuck bundles, a hard source edge, or an abnormal bare gap, the final pair must be front_hair="clumped" plus hair_state="bangs_clumped"; never leave the same evidence under front_hair="even" or styled_bangs. Do not require visible oil, multiple defective zones, or whole-fringe disorder.
+- Do not derive or discuss should_fix. Return should_fix=false for every person; Python is the only authority that changes it.
+- Return mess_intent="ambiguous"; it is retained only for response compatibility.
+- fix_action and correction_plan describe the candidate implied by hair_state even while should_fix remains false.
+- Never add hair work to top-level correction_plan, correction_axes, correction_inverse, or retouch_recipe.
+"""
+
+
+_HAIR_CORRECTION_HANDOFF_SECTION = """## Per-person candidate hair correction plan
+- Keep the plan inside that person's hair_issue.correction_plan.
+- For a state routed to a non-none candidate action above, name the exact visible target, the operation, and the visible final state. The instruction must stand on its own for the editor.
+- Write a renderable endpoint, not vague intent such as 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續.
+- For lay_back/remove, limit work to the named strands and their thin footprints; keep surrounding hair and visible facial geometry source-matched.
+- For settle, name the disturbed region and the unaffected hair on the same head that defines its target flow and silhouette.
+- For redistribute, include both operations: 去油，恢復霧面髮絲細節；梳散粗細不一的束，讓相同髮絲形成通透且較均衡的瀏海並覆蓋異常空隙。Keep fringe length, outer edge, parting, hairline, and density unchanged.
+- For none, write "不適用".
+"""
+
+
 ANALYSIS_INSTRUCTION = """
 You are a senior photography director, colorist, and high-end retoucher.
 Analyze the uploaded photo and return only valid JSON. Keep the JSON keys in English. Every user-visible string value must be Traditional Chinese.
@@ -165,14 +240,15 @@ Return exactly this JSON shape:
         "reason": "說明為何判斷是不小心閉眼/半閉眼，或為何閉眼/眨眼其實是表情、情緒或手勢的一部分。is_person=false 時填「不適用」，should_fix=false。"
       },
       "hair_issue": {
-        "hair_state": "tidy / styled_messy / styled_bangs / styled_face_framing / motion / natural_texture / windblown / strands_across_face / bangs_disturbed / bangs_clumped / lock_out_of_place / frizz_halo / tuft_or_flattened / occluded_or_unclear / uncertain",
+        "hair_state": "tidy / styled_messy / styled_bangs / styled_face_framing / motion / natural_texture / disheveled / windblown / strands_across_face / bangs_disturbed / bangs_clumped / lock_out_of_place / frizz_halo / tuft_or_flattened / occluded_or_unclear / uncertain",
         "visible_evidence": ["只寫真的看得見的細節，例如 三四根髮絲橫過右眼 / 瀏海一撮向上翻起露出額頭 / 左側一撮從包頭鬆脫垂在耳前、右側沒有對應的一撮。"],
-        "front_hair": "臉前或額前有頭髮的人一律必填，不分齊瀏海、旁分或長髮前段。none（臉前完全沒有頭髮）/ even（前方髮絲粗細相近、分佈均勻）/ clumped（髮絲粗細不一、有的黏成一束，束間露出光禿皮膚）",
+        "front_hair": "判讀真正的較短前髮層，可包含齊瀏海、八字/curtain、空氣瀏海或側掃瀏海；不可只因位置而把連到肩側主髮長度的旁分長髮算成瀏海。none（沒有真正瀏海）/ even（既有瀏海分佈自然）/ clumped（既有瀏海出現粗細不一的油黏束與異常空隙，或單一油黏粗束從其餘瀏海分離並在來源處留下空隙/硬邊）",
         "fix_action": "lay_back / remove / settle / redistribute / none",
         "mess_intent": "intentional_style / accidental_capture / ambiguous",
         "hair_mess_confidence": 0.0,
-        "should_fix": true,
-        "reason": "說明為何判斷是拍攝當下被風吹亂或壓翹，或為何這個凌亂本來就屬於髮型、髮質或動作。is_person=false 時填「不適用」，should_fix=false。"
+        "should_fix": false,
+        "correction_plan": "依 hair_state 與 fix_action 寫候選修正指令；不可在此決定是否執行。無候選操作時填不適用。",
+        "reason": "只說明可見的頭髮物理狀態及證據，不判斷是否應修。is_person=false 時填「不適用」，should_fix=false。"
       },
       "gaze_issue": {
         "gaze_state": "direct_camera / near_camera / off_camera / downward / upward_side / unfocused_camera / cross_focused / ambiguous / unclear",
@@ -562,23 +638,7 @@ GPT-5.6 Luna calibration:
 - Set should_fix=false for intentional closure only when affirmative visible evidence supports that classification.
 - First state the physical eyelid evidence. Then state the intent evidence. Then compute eye_state, closure_intent, confidence, and should_fix from those observations.
 
-## Hair analysis
-Intent: Detect actionable accidental hair disruption without redesigning an intentional hairstyle, natural texture, or motion; be conservative because pointing the editing model at hair can rebuild it, and a rebuilt hairstyle is a worse failure than untidy hair.
-
-One reading decides most cases: disorder that is even and repeated across the head is style or texture, while disorder that is a single local contradiction on an otherwise settled head is an accident. Wind is the exception to that reading, since it can disturb a whole head at once: it displaces hair in one direction and against the hairstyle's own shape, on a body that is otherwise posed or still, and it usually shows elsewhere in the frame too -- clothing, foliage, other people's hair. Read wind as a flaw across the whole area it disturbed, not only where it landed on a face.
-Not a flaw, so should_fix=false, and name which one: styled_messy (deliberate cut, tousle, or product separation), styled_bangs (center-parted, curtain/八字, or see-through fringe -- a designed parting is even on both sides and is not a split to close, and designed wisps are fine, similar in width, and evenly spaced; run the clumping test below before settling on this one), styled_face_framing (strands left out at the temples, as most updos and ponytails have), motion (hair mid-jump, spin, flip, throw, or turn, where the body itself is mid-action so the movement is the moment and tidying it would delete the action -- this is about what the person is doing, not about wind), natural_texture (curly, coily, fluffy, or baby hair -- flattening it changes who they are), occluded_or_unclear (head small in frame, motion-blurred, rim-lit, or dark on dark).
-A flaw across the whole area it covers when the wind reading above fits: windblown (the hairstyle is lifted, opened up, blown sideways, or pushed out of its own shape while the person is posed or still). Treat the whole disturbed area as the work, not only the strands that landed on the face.
-Front-hair check -- do this for every person with hair falling over the forehead or in front of the face, before choosing any state for them, and put the answer in visible_evidence. Whether that hair is a blunt fringe, a side sweep, or the front length of longer hair makes no difference here, and neither does whether skin shows through it or beside it; the question is only how those strands are distributed. Do they run at similar thickness and spacing, or are some stuck together into cords with bare skin between them? Record it in front_hair, required for anyone with hair in front of the face. It is a reading, not a state: never copy its value into hair_state, which only ever takes a value from its own list. front_hair="clumped" means hair_state="bangs_clumped" and fix_action="redistribute" -- not strands_across_face, whatever the strands look like individually, because the front of the hair is what is wrong and what gets worked on. front_hair="even" is not a flaw by itself. Judge the front of the hair as one shape, not by where its tips happen to fall -- hair whose ends reach the brows, eyes, or cheek is still the front of a hairstyle, and reading only those tips is what turns a clumped front into "a few strands near the eyes".
-bangs_clumped: the fringe has separated into uneven clumps with bare gaps showing forehead between them, because the hair is oily, damp, or sweaty rather than because it was cut or styled that way. Confirm it with any two of these, coarsest first: the clumps differ visibly in thickness, with bare gaps beside thick strands; only the fringe changed, while the rest of the head still reads clean and smooth; the scene explains it -- heat, humidity, rain, sweat, a long day or a long outdoor event -- usually with the same sheen on the forehead and nose; the hair separates at the root and clings to the forehead, where styled bangs stay evenly distributed at the root and separate along their length; the fringe carries a hard specular streak and looks darker and slicker than the lengths below it. Two of those make it should_fix=true; the last two need a clear enough view of the strands to be worth reading at all.
-Also a flaw, but only when local and fighting the hair around it: strands_across_face (hair that has left the hairstyle and come to rest on the face -- over an eye, nose, or mouth, or stuck to a lip or cheek. Hair that still belongs to the fringe, lying where the fringe lies, is a fringe state, never "a few loose strands"; this is the label that most often swallows a clumped fringe by mistake), bangs_disturbed (fringe flipped up or pushed against its own direction, exposing forehead it covered), lock_out_of_place (one lock escaped a tie, clip, or hat and hangs by the ear or below the fringe, with no match on the other side), frizz_halo (static outline on an otherwise smooth head), tuft_or_flattened (one tuft standing up or hat/sleep-pressed while its neighbours lie correctly). Set mess_intent="accidental_capture" only at hair_mess_confidence >= 0.75; mixed evidence means "ambiguous" and should_fix=false.
-Hair over an eye, nose, or mouth is the case users most want fixed, so it stays should_fix=true. What being on a feature changes is the wording, not the verdict: moving a strand means whatever it covered has to come from the original photograph, so the item must say so -- reveal the person's own feature as the photograph already shows it on both sides of the strand, with its shape, position, and edges unchanged, rather than letting it be re-rendered. The single case that cannot be done is a section of hair thick enough to bury a whole feature, with nothing visible either side of it to continue from: there is no original left to reveal, so should_fix=false with the reason naming what is buried.
-Forehead-or-cheek lock test, for the case most often misread -- run it before settling on any state above, since a deliberate lock and a fallen one look alike in a still frame. Deliberate: comes as a matched pair, lies along the cheekbone following the hairline's own direction, is combed out from the parting with the hair behind it intact, and stays clear of the eyes. Fallen: one side only, crossing that direction at its own angle, visibly pulled free leaving a gap or kink at the tie it escaped, landing on an eye, brow, or mouth. Two or more cues decide it; one each way means should_fix=false.
-Judge only from strands you can actually resolve: if you cannot see individual strands you cannot see the flaw, so occluded_or_unclear, and require >= 0.9 on blurred, backlit, or small heads. Size and prominence change only how clearly you see the hair, never whether to fix it, and grooming the subject is not a goal of this retouch -- a false positive costs the person their own hair, where a miss costs nothing.
-Every should_fix=true commits to a fix_action: lay_back where adjacent hair runs the same way and can take the strands back, remove where they are isolated on skin, on a feature, or on background with no flow to rejoin -- and remove is only ever for hair that has LEFT the hairstyle, never for hair that the hairstyle puts where it is. Hair lying on the forehead, along the hairline, or at the temples is a fringe or the hairstyle's own edge, so removing it deletes part of the haircut and uncovers forehead the person's hair is meant to cover. That hair takes redistribute or lay_back and never remove, whatever state you assigned it. Strands resting further down -- on a cheek, a jaw, a lip -- have left the hairstyle and are what remove is for. Writing "移除前額的碎髮" is how a fringe gets erased -- settle for a windblown area -- the one action whose scope is a region rather than a single strand, combing the disturbed hair back down into the hairstyle's own shape so the outline reads continuous again -- and redistribute for a clumped fringe, spreading the hair that is already there so the clumps even out and the bare gaps close. For settle, name the reference in the item: the part of the same head the wind did not disturb is what defines the length, parting, volume, direction, and silhouette the disturbed area returns to. Where the wind disturbed the whole head there is less of that reference left to read, so require >= 0.85 there and say that the hairstyle's own evident shape is the target. Never 淡化, 降低對比, 柔化, or 模糊 hair -- toning a strand down leaves a grey ghost of it on the skin, which reads as damage where the strand only read as untidy, and there is no partial version of this repair. Stray hair is never a distraction item for the same reason: that toolkit (tonal control, desaturation, blur) is the wrong instrument on hair and produces exactly that smear. The one tonal instruction that is right on hair is the oily sheen itself: a redistribute item should also say to bring the hard specular streak down to the soft even sheen the rest of that person's hair has, with strand detail recovered inside it -- that is recovering texture in a blown highlight, not fading hair away, and it never means darkening, flattening, or blurring the fringe.
-Then add one correction_plan item per distinct hair problem on that person, tagged correction_axes ["hair"] -- a clumped fringe and strands resting on a cheek are two problems needing two different actions, not one item covering both.
-Write it as the state that hair ends in, not as something to take away: an item that only names hair to be rid of leaves the editing model nothing to render towards, and what it renders instead is the hair it was given. Name them by position, name the strands/tuft/area, state the fix_action, and hold hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color unchanged.
-Write that item as the finished picture, in words that can be rendered. The editing model cannot act on 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續: those name an intention rather than anything visible, and an item written that way comes back unchanged -- which is the most common reason a hair correction has no effect at all. Name the operation and the state it ends in. A clumped fringe needs both halves of the job named: 去油 -- 壓掉瀏海上的油亮反光，讓髮絲恢復霧面質感、不再黏成一束; and 梳整齊 -- 把結成一束一束的瀏海梳散成寬度一致的薄簾，並讓髮絲蓋過束與束之間露出額頭的空隙。Worked example of a whole item: 「把瀏海的油光壓掉、恢復霧面質感，並把結成束的瀏海梳散成寬度一致的薄簾，讓髮絲蓋過中間露出額頭的空隙；瀏海長度、髮際線與髮量不變。」
-correction_inverse keeps that person's hair as captured; retouch_recipe stays short, for example "把瀏海去油、梳整齊。" or "把黏在臉頰上的兩三根碎髮清掉。". Keep should_fix=false entries when they record a decision worth explaining, but write no correction_plan item for them -- tidy hair is not a correction, and hair tidying is never a routine portrait enhancement.
+""" + _HAIR_ANALYSIS_SECTION + _HAIR_CORRECTION_HANDOFF_SECTION + """
 
 ## Gaze-contact analysis
 Intent: First determine strict lens contact from visible pupil/iris direction, binocular convergence, and eye focus—not merely face direction—then assess edit feasibility and produce a concrete repair handoff only when the gaze rules approve correction.
@@ -893,9 +953,8 @@ Intent: Convert visible photographic needs into a restrained, actionable, and in
 - For a person who is genuinely asleep or napping, classify as sleeping and do not add blink repair, even if the mouth looks neutral.
 - Blink analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every subject whose blink_issue.should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["expression"], a matching correction_inverse entry, and a matching retouch_recipe item, naming that subject. If any matching item is missing, add it now, following the wording rules above.
 - Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing blink_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
-- Hair tidying is not a routine portrait enhancement either. Add a hair item to correction_plan only when the hair inspection above says should_fix=true, and never for styled, moving, or naturally textured hair.
-- Hair analyze-to-edit consistency check, same reasoning as the gaze one above: before finalizing analysis, verify that every subject whose hair_issue.should_fix=true has a matching correction_plan item, a matching correction_axes entry including ["hair"], a matching correction_inverse entry, and a matching retouch_recipe item, naming that subject. If any matching item is missing, add it now, following the fix_action-specific wording rules above (lay_back / remove / settle / redistribute, the forehead lock test, never 淡化/降低對比/柔化/模糊 on hair).
-- Reverse hair consistency check, same reasoning as the gaze one above: if any correction_plan item describes tidying, settling, redistributing, or removing hair with no backing hair_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
+- Hair analysis is observation-only. Classify the physical state and, when that state has a candidate action, keep its candidate correction_plan inside the matching person's hair_issue. Always return hair_issue.should_fix=false; Python derives the final value after analysis.
+- A candidate fix_action or correction_plan may coexist with the should_fix=false placeholder. Top-level correction_plan/correction_axes/correction_inverse/retouch_recipe must contain no hair work.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
@@ -936,22 +995,6 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 - For action, eating, gesture, interaction, or expression-driven moments, protect expression, hands, held objects, interaction points, and relevant context. Preserve lower body, furniture, foreground objects, or peripheral context only when they support posture, story, scale, balance, or scene intent.
 - For fashion, posture, full-body portrait, dance, sports, product shape, architecture, or object-completeness tasks, preserve the full visible form more conservatively.
 - Judge real-image breathing room from actual photo content, not transparent padding, UI checkerboard, or empty canvas.
-"""
-
-
-# calm_hair is a request, not a detection toggle -- unlike eye_closed_detection/
-# hair_mess_detection/gaze_contact_detection (which only gate the EDIT stage
-# now, via strip_disabled_topic_items in build_edit_prompt; analysis itself
-# always runs full detection so a later revise can turn one back on without
-# re-analyzing), there is no "always detect" baseline for a user-elected style
-# change to fall back to when the switch is off. So this one still only
-# reaches the analysis model when the user actually asked for it.
-CALM_HAIR_ENABLED_OVERRIDE = """
-The user has asked for this person's hair to be laid down as if there were no wind:
-- This is a request, not a defect you have to find. Wind in the hair does not need to reach any confidence threshold, and it does not matter whether the disorder would otherwise read as intentional.
-- For every person whose hair is lifted, opened, or blown sideways by wind, set that subject's hair_issue to hair_state="windblown", fix_action="settle", should_fix=true, and a reason naming the user request.
-- Write the matching correction_plan item as laying that person's hair down into the hairstyle's own shape so it reads as a still day, tagged correction_axes ["hair"]. Keep retouch_recipe short, for example "把被風吹起的頭髮自然放下。"
-- This does not extend to hair moving because the person is moving. A jump, spin, hair flip, or run still keeps its motion; laying that hair flat would contradict the body in the same photograph. Only wind-displaced hair is settled.
 """
 
 
@@ -1393,12 +1436,10 @@ _BLINK_WINK_DEFAULT_BULLET_LEGACY = "- For one-eye-closed cases, intentional_win
 # gpt-5.6-luna's low blink recall (see project memory
 # project_luna_eyeclose_recall.md / the 20260828 eval). Call A below is told
 # to leave correction_plan free of eye/gaze/hair items entirely;
-# backfill_missing_correction_items already knows how to synthesize those
-# deterministically from subjects[].{blink,hair,gaze}_issue once
-# correction_plan has zero items for that topic, which is now simply always
-# true for this path instead of a rare fallback case. Smile never went
-# through correction_plan at all (build_smile_block reads smile_issue
-# directly), so it needs no such backfill.
+# Call B authors the hair handoff directly inside subjects[].hair_issue.
+# Blink and gaze execute directly from their structured repair strategies,
+# while smile executes directly from smile_issue, so none of those three
+# needs a correction_plan backfill.
 # ---------------------------------------------------------------------------
 
 _FACE_CROP_EVIDENCE_SECTION = """## Face-crop evidence
@@ -1418,9 +1459,10 @@ Intent: Use the supplied full photo for photographic context and each zoomed fac
 - Each listed person has an immutable subject_index from Call A. Echo that exact subject_index in the corresponding output item.
 - Also echo local_detection_index exactly as listed. It identifies the matching Face crop N when its value is greater than or equal to 1; -1 means no detector-backed crop is available.
 - Match a Face crop N only to the listed person whose local_detection_index equals N. Do not associate crops by visual similarity, list position, prominence, or guesswork.
-- Use the matched face crop as primary evidence for physical_eye_state, blink/closure, pupil/iris detail, and local hair detail.
+- Use the matched face crop as primary evidence for the physical reading of a face: physical_eye_state, blink/closure, pupil/iris detail, smile_intensity and the mouth-corner, lip, and cheek structure behind it, and strand-level hair detail -- the fringe's root band, strand thickness and spacing, forehead showing between clumps, oily sheen, and strands resting on a feature.
+- The crop is one person enlarged, never the evidence for which person this is: the listed box and label identify them in the full photo, and the crop stops at the head. So the hairstyle as a whole is read from the full photo -- whether the front strands continue into the lengths (a side sweep or long front hair) or stop as a shorter band (a fringe), whether the disorder is even across the whole head (style) or a single local contradiction (accident), whether wind shows elsewhere in the frame on clothing, foliage, or other people's hair, and which part of the same head is still undisturbed enough to define what a settle returns to.
 - For gaze, use the crop and full photo together: the crop resolves pupil/iris placement, while both views establish head yaw/pitch, facial geometry, and the current camera viewpoint. Never treat the crop center as the lens position.
-- Use the full photo for expression, gesture, body posture, group-photo readiness, visible gaze targets, sleep/activity context, and the relationship between people.
+- Use the full photo for what that reading means and for everything outside the face: expression intent, gesture, body posture, group-photo readiness, visible gaze targets, sleep/activity context, and the relationship between people.
 - A crop is the same person and same shutter moment as the full photo, not a separate image.
 - If local_detection_index=-1 or the matching crop is unavailable, judge from the full photo and mark a field unclear only when the relevant visual evidence is genuinely unreadable.
 - Return exactly one result for every listed subject_index. Never output an issue result for a person not listed here.
@@ -1452,25 +1494,6 @@ Record the following exception evidence separately; never use it to rewrite the 
 Strict laughter evidence requires all three observations simultaneously: active_high_intensity_laughter, strong_bilateral periocular_contraction, and integral_to_expression. If any one is weak, obscured, or unclear, the laughter exception is not established.
 
 Output compatibility fields in this observation pass as placeholders only: blink_candidate=false, eye_state="observation_only", severity="none", closure_intent="ambiguous", expression_coherence="unclear", blink_failure_confidence=0.0, and should_fix=false. Python overwrites them after validating the physical evidence. The Traditional-Chinese reason should concisely describe left/right eyelid morphology, readability, laughter muscle evidence, and any explicit closure context. Do not make a repair decision in reason.
-"""
-
-_HAIR_ANALYSIS_SECTION = """## Hair analysis
-Intent: Detect actionable accidental hair disruption without redesigning an intentional hairstyle, natural texture, or motion; be conservative because pointing the editing model at hair can rebuild it, and a rebuilt hairstyle is a worse failure than untidy hair.
-
-One reading decides most cases: disorder that is even and repeated across the head is style or texture, while disorder that is a single local contradiction on an otherwise settled head is an accident. Wind is the exception to that reading, since it can disturb a whole head at once: it displaces hair in one direction and against the hairstyle's own shape, on a body that is otherwise posed or still, and it usually shows elsewhere in the frame too -- clothing, foliage, other people's hair. Read wind as a flaw across the whole area it disturbed, not only where it landed on a face.
-Not a flaw, so should_fix=false, and name which one: styled_messy (deliberate cut, tousle, or product separation), styled_bangs (center-parted, curtain/八字, or see-through fringe -- a designed parting is even on both sides and is not a split to close, and designed wisps are fine, similar in width, and evenly spaced; run the clumping test below before settling on this one), styled_face_framing (strands left out at the temples, as most updos and ponytails have), motion (hair mid-jump, spin, flip, throw, or turn, where the body itself is mid-action so the movement is the moment and tidying it would delete the action -- this is about what the person is doing, not about wind), natural_texture (curly, coily, fluffy, or baby hair -- flattening it changes who they are), occluded_or_unclear (head small in frame, motion-blurred, rim-lit, or dark on dark).
-A flaw across the whole area it covers when the wind reading above fits: windblown (the hairstyle is lifted, opened up, blown sideways, or pushed out of its own shape while the person is posed or still). Treat the whole disturbed area as the work, not only the strands that landed on the face.
-Front-hair check -- do this for every person with hair falling over the forehead or in front of the face, before choosing any state for them, and put the answer in visible_evidence. Whether that hair is a blunt fringe, a side sweep, or the front length of longer hair makes no difference here, and neither does whether skin shows through it or beside it; the question is only how those strands are distributed. Do they run at similar thickness and spacing, or are some stuck together into cords with bare skin between them? Record it in front_hair, required for anyone with hair in front of the face. It is a reading, not a state: never copy its value into hair_state, which only ever takes a value from its own list. front_hair="clumped" means hair_state="bangs_clumped" and fix_action="redistribute" -- not strands_across_face, whatever the strands look like individually, because the front of the hair is what is wrong and what gets worked on. front_hair="even" is not a flaw by itself. Judge the front of the hair as one shape, not by where its tips happen to fall -- hair whose ends reach the brows, eyes, or cheek is still the front of a hairstyle, and reading only those tips is what turns a clumped front into "a few strands near the eyes".
-bangs_clumped: the fringe has separated into uneven clumps with bare gaps showing forehead between them, because the hair is oily, damp, or sweaty rather than because it was cut or styled that way. Confirm it with any two of these, coarsest first: the clumps differ visibly in thickness, with bare gaps beside thick strands; only the fringe changed, while the rest of the head still reads clean and smooth; the scene explains it -- heat, humidity, rain, sweat, a long day or a long outdoor event -- usually with the same sheen on the forehead and nose; the hair separates at the root and clings to the forehead, where styled bangs stay evenly distributed at the root and separate along their length; the fringe carries a hard specular streak and looks darker and slicker than the lengths below it. Two of those make it should_fix=true; the last two need a clear enough view of the strands to be worth reading at all.
-Also a flaw, but only when local and fighting the hair around it: strands_across_face (hair that has left the hairstyle and come to rest on the face -- over an eye, nose, or mouth, or stuck to a lip or cheek. Hair that still belongs to the fringe, lying where the fringe lies, is a fringe state, never "a few loose strands"; this is the label that most often swallows a clumped fringe by mistake), bangs_disturbed (fringe flipped up or pushed against its own direction, exposing forehead it covered), lock_out_of_place (one lock escaped a tie, clip, or hat and hangs by the ear or below the fringe, with no match on the other side), frizz_halo (static outline on an otherwise smooth head), tuft_or_flattened (one tuft standing up or hat/sleep-pressed while its neighbours lie correctly). Set mess_intent="accidental_capture" only at hair_mess_confidence >= 0.75; mixed evidence means "ambiguous" and should_fix=false.
-Hair over an eye, nose, or mouth is the case users most want fixed, so it stays should_fix=true. What being on a feature changes is the wording, not the verdict: moving a strand means whatever it covered has to come from the original photograph, so the item must say so -- reveal the person's own feature as the photograph already shows it on both sides of the strand, with its shape, position, and edges unchanged, rather than letting it be re-rendered. The single case that cannot be done is a section of hair thick enough to bury a whole feature, with nothing visible either side of it to continue from: there is no original left to reveal, so should_fix=false with the reason naming what is buried.
-Forehead-or-cheek lock test, for the case most often misread -- run it before settling on any state above, since a deliberate lock and a fallen one look alike in a still frame. Deliberate: comes as a matched pair, lies along the cheekbone following the hairline's own direction, is combed out from the parting with the hair behind it intact, and stays clear of the eyes. Fallen: one side only, crossing that direction at its own angle, visibly pulled free leaving a gap or kink at the tie it escaped, landing on an eye, brow, or mouth. Two or more cues decide it; one each way means should_fix=false.
-Judge only from strands you can actually resolve: if you cannot see individual strands you cannot see the flaw, so occluded_or_unclear, and require >= 0.9 on blurred, backlit, or small heads. Size and prominence change only how clearly you see the hair, never whether to fix it, and grooming the subject is not a goal of this retouch -- a false positive costs the person their own hair, where a miss costs nothing.
-Every should_fix=true commits to a fix_action: lay_back where adjacent hair runs the same way and can take the strands back, remove where they are isolated on skin, on a feature, or on background with no flow to rejoin -- and remove is only ever for hair that has LEFT the hairstyle, never for hair that the hairstyle puts where it is. Hair lying on the forehead, along the hairline, or at the temples is a fringe or the hairstyle's own edge, so removing it deletes part of the haircut and uncovers forehead the person's hair is meant to cover. That hair takes redistribute or lay_back and never remove, whatever state you assigned it. Strands resting further down -- on a cheek, a jaw, a lip -- have left the hairstyle and are what remove is for. Writing "移除前額的碎髮" is how a fringe gets erased -- settle for a windblown area -- the one action whose scope is a region rather than a single strand, combing the disturbed hair back down into the hairstyle's own shape so the outline reads continuous again -- and redistribute for a clumped fringe, spreading the hair that is already there so the clumps even out and the bare gaps close. For settle, name the reference in the item: the part of the same head the wind did not disturb is what defines the length, parting, volume, direction, and silhouette the disturbed area returns to. Where the wind disturbed the whole head there is less of that reference left to read, so require >= 0.85 there and say that the hairstyle's own evident shape is the target. Never 淡化, 降低對比, 柔化, or 模糊 hair -- toning a strand down leaves a grey ghost of it on the skin, which reads as damage where the strand only read as untidy, and there is no partial version of this repair. Stray hair is never a distraction item for the same reason: that toolkit (tonal control, desaturation, blur) is the wrong instrument on hair and produces exactly that smear. The one tonal instruction that is right on hair is the oily sheen itself: a redistribute item should also say to bring the hard specular streak down to the soft even sheen the rest of that person's hair has, with strand detail recovered inside it -- that is recovering texture in a blown highlight, not fading hair away, and it never means darkening, flattening, or blurring the fringe.
-Then add one correction_plan item per distinct hair problem on that person, tagged correction_axes ["hair"] -- a clumped fringe and strands resting on a cheek are two problems needing two different actions, not one item covering both.
-Write it as the state that hair ends in, not as something to take away: an item that only names hair to be rid of leaves the editing model nothing to render towards, and what it renders instead is the hair it was given. Name them by position, name the strands/tuft/area, state the fix_action, and hold hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color unchanged.
-Write that item as the finished picture, in words that can be rendered. The editing model cannot act on 修飾, 整理, 調整, 重組, 精修, 順服, 自然分布, or 均勻連續: those name an intention rather than anything visible, and an item written that way comes back unchanged -- which is the most common reason a hair correction has no effect at all. Name the operation and the state it ends in. A clumped fringe needs both halves of the job named: 去油 -- 壓掉瀏海上的油亮反光，讓髮絲恢復霧面質感、不再黏成一束; and 梳整齊 -- 把結成一束一束的瀏海梳散成寬度一致的薄簾，並讓髮絲蓋過束與束之間露出額頭的空隙。Worked example of a whole item: 「把瀏海的油光壓掉、恢復霧面質感，並把結成束的瀏海梳散成寬度一致的薄簾，讓髮絲蓋過中間露出額頭的空隙；瀏海長度、髮際線與髮量不變。」
-correction_inverse keeps that person's hair as captured; retouch_recipe stays short, for example "把瀏海去油、梳整齊。" or "把黏在臉頰上的兩三根碎髮清掉。". Keep should_fix=false entries when they record a decision worth explaining, but write no correction_plan item for them -- tidy hair is not a correction, and hair tidying is never a routine portrait enhancement.
 """
 
 _GAZE_CONTACT_ANALYSIS_SECTION_LEGACY = """## Gaze-contact analysis
@@ -2059,7 +2082,8 @@ Intent: Convert visible photographic needs into a restrained, actionable, and in
 
 """
 
-_ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Eye-contact detection is separate from blink repair. Analyze whether the readable eyes are locked to the exact current lens, not merely whether the face points forward. Do not derive should_fix and do not write a repair strategy in this pass.
+_ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Hair analysis is observation-only: classify hair_state, record evidence, and provide the routed candidate fix_action/correction_plan. Always leave hair_issue.should_fix=false for Python to derive; do not suppress a physical state because it may be intentional or because the selected hair level is unknown.
+- Eye-contact detection is separate from blink repair. Analyze whether the readable eyes are locked to the exact current lens, not merely whether the face points forward. Do not derive should_fix and do not write a repair strategy in this pass.
 - Gaze detection recall check: before finalizing, revisit every listed person's eyes. If any readable eyes are not unmistakably lens-locked and that subject's gaze_issue does not yet reflect it, fix it.
 - Gaze consistency check: direct_camera must pair with looking_at_lens; every other readable gaze state, including near_camera, must pair with not_looking_at_lens; physically unreadable eyes must pair with unclear.
 - Blink detection is observation-only in this pass. Report left/right physical eyelid states and the separate exception-evidence fields exactly as seen. Keep blink_candidate=false and should_fix=false placeholders; deterministic Python derives both after this response.
@@ -2067,11 +2091,11 @@ _ANALYSIS_RESPONSIBILITIES_PORTRAIT_QC = """- Eye-contact detection is separate 
 - Never use an ordinary or broad smile as laughter evidence. active_high_intensity_laughter, strong_bilateral periocular contraction, and integral_to_expression must each be independently visible before recording the full laughter exception evidence.
 """
 
-_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. A separate photography-direction pass has already analyzed this photo's composition, color, and crop, and has identified the people listed below. Your only job is to inspect each of them, independently, for four physical/expression states: blink/eye closure, gaze direction, hair disruption, and smile intensity. You are not judging composition, color, or crop, and you do not write a correction_plan -- only the per-person identifiers and four issue fields the JSON shape asks for.
+_PORTRAIT_QC_PERSONA_HEADER = """You are a meticulous portrait quality-control reviewer. A separate photography-direction pass has already analyzed this photo's composition, color, and crop, and has identified the people listed below. Your only job is to inspect each of them, independently, for four physical/expression states: blink/eye closure, gaze direction, hair disruption, and smile intensity. You are not judging composition, color, or crop. For hair, author only the nested per-person candidate hair_issue.correction_plan required by the observed state; Python decides whether that candidate is enabled.
 
 Return only valid JSON. Keep the JSON keys in English. Every user-visible string value (e.g. each issue's "reason") must be Traditional Chinese.
 
-For every listed person, echo subject_index and local_detection_index exactly as provided. These identifiers are authoritative and are used to merge results; do not derive them from output order. Populate blink_issue, hair_issue, gaze_issue, and smile_issue for that same person. Do not output correction_plan, correction_axes, correction_inverse, or retouch_recipe.
+For every listed person, echo subject_index and local_detection_index exactly as provided. These identifiers are authoritative and are used to merge results; do not derive them from output order. Populate blink_issue, hair_issue, gaze_issue, and smile_issue for that same person. Do not output any top-level correction_plan, correction_axes, correction_inverse, or retouch_recipe.
 """
 
 
@@ -2133,8 +2157,6 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_option
         + _COMPOSITION_DECISION_FRAMEWORK
         + "\n"
     )
-    if advanced_options.get("calm_hair", False):
-        instruction += CALM_HAIR_ENABLED_OVERRIDE
     return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref)
 
 
@@ -2155,6 +2177,7 @@ def build_portrait_qc_instruction(persons):
         + "\n"
         + _BLINK_DETECTION_LUNA_SECTION
         + _HAIR_ANALYSIS_SECTION
+        + _HAIR_CORRECTION_HANDOFF_SECTION
         + "\n"
         + _GAZE_DETECTION_LUNA_SECTION
         + "\n"
@@ -2229,16 +2252,11 @@ Targets:
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, analysis_model=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
 
-    advanced_options: the Upload page's Advanced Settings (e.g.
-    {"eye_closed_detection": False}). Only calm_hair is read here -- the
-    detection/repair toggles (eye_closed_detection, hair_mess_detection,
-    gaze_contact_detection) no longer affect analysis at all, so each
-    subject's blink_issue/hair_issue/gaze_issue and correction_plan always
-    reflect the model's genuine judgement; strip_disabled_topic_items
-    (build_edit_prompt, prompts.py) is what actually applies those three at
-    edit time. smile_adjustment/smile_level are edit-only for the same
-    reason, applied by build_smile_block against the smile_issue readings
-    the analysis always produces.
+    advanced_options: the Upload page's Advanced Settings. Detection/repair
+    toggles do not change analysis; each person's portrait findings are always
+    recorded, with hair execution kept in hair_issue.correction_plan. The
+    edit stage applies the toggles. calm_hair and smile settings are also
+    edit-only transformations.
 
     analysis_model: which analysis model this prompt is being built for.
     ANALYSIS_INSTRUCTION already carries the gpt-5.6-luna blink wording
@@ -2252,8 +2270,6 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, 
     if analysis_model != "gpt-5.6-luna":
         instruction = instruction.replace(_BLINK_ANALYSIS_LUNA, _BLINK_ANALYSIS_LEGACY)
         instruction = instruction.replace(_BLINK_WINK_DEFAULT_BULLET_LUNA, _BLINK_WINK_DEFAULT_BULLET_LEGACY)
-    if advanced_options.get("calm_hair", False):
-        instruction += CALM_HAIR_ENABLED_OVERRIDE
     if aspect_ratio_pref == "original":
         return instruction + """
 ## Aspect-ratio policy
@@ -2426,13 +2442,24 @@ _BLINK_DETECTION_LUNA_SCHEMA = _schema_object({
 })
 
 _HAIR_ISSUE_SCHEMA = _schema_object({
-    "hair_state": _schema_string(),
+    "hair_state": _schema_enum((
+        "tidy", "styled_messy", "styled_bangs", "styled_face_framing",
+        "motion", "natural_texture", "disheveled", "windblown", "strands_across_face",
+        "bangs_disturbed", "bangs_clumped", "lock_out_of_place",
+        "frizz_halo", "tuft_or_flattened", "occluded_or_unclear",
+        "uncertain", "不適用",
+    )),
     "visible_evidence": _schema_string_array(),
-    "front_hair": _schema_string(),
-    "fix_action": _schema_string(),
-    "mess_intent": _schema_string(),
+    "front_hair": _schema_enum(("none", "even", "clumped", "unclear", "不適用")),
+    "fix_action": _schema_enum((
+        "none", "lay_back", "remove", "settle", "redistribute", "不適用",
+    )),
+    "mess_intent": _schema_enum((
+        "intentional_style", "accidental_capture", "ambiguous", "不適用",
+    )),
     "hair_mess_confidence": _schema_number(),
     "should_fix": _schema_boolean(),
+    "correction_plan": _schema_string(),
     "reason": _schema_string(),
 })
 
@@ -2747,7 +2774,7 @@ def _default_person_issues():
         "hair_issue": {
             "hair_state": "不適用", "visible_evidence": [], "front_hair": "不適用",
             "fix_action": "none", "mess_intent": "ambiguous", "hair_mess_confidence": 0.0,
-            "should_fix": False, "reason": "不適用",
+            "should_fix": False, "correction_plan": "不適用", "reason": "不適用",
         },
         "gaze_issue": {
             "gaze_observability": "unreadable", "eye_detail_quality": "unreadable",
@@ -2782,8 +2809,8 @@ def merge_portrait_qc_issues(analysis, portrait_qc):
     """Merge Call B into Call A by stable subject_index, never by position.
 
     Raises ValueError on a missing, duplicate, out-of-range, non-person, or
-    face-crop-mismatched result. After this merge, callers may run
-    backfill_missing_correction_items to create approved repair items.
+    face-crop-mismatched result. Each candidate hair repair remains nested in
+    that person's hair_issue.correction_plan for the Python decision pass.
     """
     cleaned = dict(analysis)
     subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
@@ -2836,6 +2863,80 @@ def merge_portrait_qc_issues(analysis, portrait_qc):
         )
 
     _apply_default_person_issues(subjects)
+    return cleaned
+
+
+_HAIR_ACTION_BY_STATE = {
+    "disheveled": "settle",
+    "windblown": "settle",
+    "strands_across_face": "lay_back",
+    "bangs_disturbed": "lay_back",
+    "bangs_clumped": "redistribute",
+    "lock_out_of_place": "lay_back",
+    "frizz_halo": "settle",
+    "tuft_or_flattened": "settle",
+}
+
+_HAIR_FALLBACK_PLAN_BY_STATE = {
+    "disheveled": "整理分析指出的多處失序髮流，以同一人仍然連貫的分線、長度、髮量、蓬度與髮流作為終點參照，不重新設計髮型。",
+    "windblown": "整理可見的受風紊亂區域，以同一人未受干擾的分線、長度、髮量與髮流作為終點參照。",
+    "strands_across_face": "只將分析指出、偏離原髮流並落在臉上的髮絲順回相鄰的既有髮流，保留原本髮型與可見五官。",
+    "bangs_disturbed": "只將被翻起或推離原方向的既有瀏海順回其原本分線與髮流，不增減瀏海。",
+    "bangs_clumped": "降低既有瀏海局部油亮並恢復髮絲細節，再將同一批結成束髮絲梳散成通透、較均衡的既有瀏海，不改變長度、髮量、分線或髮際線。",
+    "lock_out_of_place": "只將分析指出、脫離固定處或周圍髮流的髮束順回相鄰的既有結構。",
+    "frizz_halo": "只收整分析指出、與其餘穩定輪廓不一致的局部毛躁區，依同一人相鄰髮絲的方向與質感完成。",
+    "tuft_or_flattened": "只修正分析指出的局部翹起或壓扁區，使其接回相鄰既有髮流、蓬度與質感。",
+}
+
+
+def derive_hair_decisions(analysis):
+    """Derive hair_issue.should_fix from physical observations in Python.
+
+    The analyzer classifies state and proposes a candidate operation; it is
+    never authoritative for edit approval.  A clean body-driven ``motion``
+    state remains locally non-actionable, but the user's later fully-groomed
+    option can still transform it because that global hair level is resolved
+    independently by the compact editor-prompt builder.
+    """
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+
+    for subject_index, subject in enumerate(subjects):
+        if not subject.get("is_person"):
+            continue
+
+        issue = dict(subject.get("hair_issue") or {})
+        state = issue.get("hair_state") or "uncertain"
+        action = _HAIR_ACTION_BY_STATE.get(state)
+
+        # Removing an isolated strand can be more geometrically appropriate
+        # than laying it back. Preserve that bounded analyzer choice; all other
+        # actionable states use one deterministic operation.
+        if state == "strands_across_face" and issue.get("fix_action") == "remove":
+            action = "remove"
+
+        # Redistribution is valid only for a positively identified existing
+        # fringe. This guard prevents long side hair from becoming new bangs.
+        if state == "bangs_clumped" and issue.get("front_hair") != "clumped":
+            action = None
+
+        should_fix = action is not None
+        plan = str(issue.get("correction_plan") or "").strip()
+        if should_fix and (not plan or plan == "不適用"):
+            plan = _HAIR_FALLBACK_PLAN_BY_STATE[state]
+        elif not should_fix:
+            plan = "不適用"
+
+        issue.update({
+            "fix_action": action or "none",
+            "mess_intent": "ambiguous",
+            "should_fix": should_fix,
+            "correction_plan": plan,
+            "_subject_index": subject_index,
+        })
+        subject["hair_issue"] = issue
+
     return cleaned
 
 
@@ -4218,94 +4319,6 @@ def _disabled_issue_subject_indices(analysis, category):
         if isinstance(entry, dict) and entry.get("category") == category
         and isinstance(entry.get("subject_index"), int)
     }
-
-
-def _subject_labels(issues):
-    """De-duplicated, ordered subject_label list from a subject_issue_items
-    list, with a fallback for a missing/blank label -- never blocks a
-    backfill just because the analysis omitted this one descriptive field."""
-    return list(dict.fromkeys((i.get("subject_label") or "").strip() or "畫面中的人" for i in issues))
-
-
-def backfill_missing_correction_items(analysis):
-    """The mirror image of strip_disabled_topic_items: analysis is asked (the
-    *_analyze-to-edit consistency check lines in ANALYSIS_INSTRUCTION) to keep
-    each subject's hair_issue/blink_issue/gaze_issue in sync with
-    correction_plan/correction_axes/correction_inverse/retouch_recipe, but
-    that is a request to an LLM, not a guarantee -- observed in practice to
-    set should_fix=true on an issue while never adding the matching
-    correction_plan entry at all.
-
-    Deliberately coarse: for a given topic, only backfills when correction_plan
-    has ZERO items mentioning it at all, despite should_fix=true issues
-    existing. Telling which correction_plan item (if any) already covers
-    WHICH specific should_fix=true person, from free text alone, isn't
-    reliable -- and duplicating a fix the model already wrote, just under
-    different wording than subject_label, would be worse than occasionally
-    missing a second person who shares a first person's already-covered
-    topic. One combined item per topic (naming every affected subject) is
-    the safe middle ground.
-
-    Called unconditionally at analyze time (pipeline.analyze_stage), same as
-    the toggle-independent detection it backstops -- advanced_options plays
-    no part here; whether a backfilled item survives to the edit stage is
-    entirely strip_disabled_topic_items's job in build_edit_prompt.
-    """
-    plan = list(analysis.get("correction_plan") or [])
-    recipe = list(analysis.get("retouch_recipe") or [])
-    axes = list(analysis.get("correction_axes") or [])
-    inverse = list(analysis.get("correction_inverse") or [])
-    # Already inconsistent in a way strip_disabled_topic_items's own re-index
-    # guard also declines to touch -- appending here would only compound it.
-    if not (len(recipe) == len(plan) and len(axes) == len(plan) and len(inverse) == len(plan)):
-        return analysis
-
-    backfilled = []
-
-    def add(topic, plan_item, recipe_item, axis_tags, inverse_item):
-        plan.append(plan_item)
-        recipe.append(recipe_item)
-        axes.append(list(axis_tags))
-        inverse.append(inverse_item)
-        backfilled.append(topic)
-
-    hair_hits = [i for i in subject_issue_items(analysis, "hair_issue") if i.get("should_fix")]
-    if hair_hits and not any(_is_disabled_topic_text(item, True, True, False) for item in plan):
-        subjects = "、".join(_subject_labels(hair_hits))
-        add(
-            "hair",
-            f"Tidy the disturbed hair for {subjects}: settle, redistribute, or remove only the strands the "
-            "hair analysis flagged, following each person's own fix_action and hairstyle shape. Never fade, "
-            "flatten, or blur hair; touch only the hair itself, not the face, skin, or lighting.",
-            f"整理{subjects}被風吹亂、翹起或散落的頭髮。",
-            ["hair"],
-            f"保留{subjects}原本的頭髮狀態，不做調整。",
-        )
-
-    # blink and gaze are deliberately NOT backfilled here: their repair
-    # instructions now live entirely inside subjects[].blink_issue/gaze_issue
-    # (blink_repair_strategy / gaze_repair_strategy, authored by Call C or its
-    # deterministic fallback), and correction_plan/correction_axes/
-    # correction_inverse/retouch_recipe are "全局修圖" (overall photo-level)
-    # only. build_edit_prompt's blink_block/gaze_block already read
-    # subjects[] directly, never correction_plan, so this only changes what
-    # the main analyze-preview checklist shows -- the per-subject face-
-    # analysis modal is unaffected.
-
-    if not backfilled:
-        return analysis
-
-    logger.warning(
-        "should_fix=true on %s issue(s) with no matching correction_plan item at all; backfilling one "
-        "combined item per topic",
-        ", ".join(backfilled),
-    )
-    cleaned = dict(analysis)
-    cleaned["correction_plan"] = plan
-    cleaned["retouch_recipe"] = recipe
-    cleaned["correction_axes"] = axes
-    cleaned["correction_inverse"] = inverse
-    return cleaned
 
 
 def expand_subject_boxes_to_contain_faces(analysis, face_boxes):

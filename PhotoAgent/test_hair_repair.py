@@ -12,6 +12,8 @@ from prompts import (
     AXIS_DEFINITIONS,
     build_analysis_instruction,
     build_edit_prompt,
+    build_portrait_qc_instruction,
+    derive_hair_decisions,
     resolve_rejected_axes,
 )
 
@@ -149,6 +151,15 @@ class HairBlockGating(unittest.TestCase):
         self.assertIn("First, de-grease it", prompt)
         self.assertIn("Second, comb it out", prompt)
 
+    def test_analysis_uses_recall_first_clumped_fringe_geometry(self):
+        instruction = build_analysis_instruction()
+        self.assertIn("inspect its left, center, and right zones", instruction)
+        self.assertIn("One such local contradiction is sufficient", instruction)
+        self.assertIn("primarily a distribution-geometry decision, not an oil-detection decision", instruction)
+        self.assertIn("Hair recall check", instruction)
+        self.assertIn('front_hair="clumped" plus hair_state="bangs_clumped"', instruction)
+        self.assertIn("Do not require visible oil, multiple defective zones, or whole-fringe disorder", instruction)
+
     def test_redistribute_keeps_the_fringe_see_through(self):
         # Closing the gaps is the job; closing the fringe is the failure. Real
         # bangs show skin through them, and an opaque one reads as a wig.
@@ -251,151 +262,118 @@ class UncheckedHairItem(unittest.TestCase):
 
 
 class AnalysisInstruction(unittest.TestCase):
-    """The analysis-side rules that decide whether a hair item gets written."""
+    """The model observes hair; Python owns the edit verdict."""
 
     def setUp(self):
         self.instruction = build_analysis_instruction("auto")
 
-    def test_hair_states_in_schema_match_the_ones_the_rules_assign(self):
-        # A state named in a rule but missing from the enum is a state the model
-        # cannot actually return, so the rule silently does nothing.
-        for state in (
-            "styled_messy", "styled_bangs", "styled_face_framing", "motion",
-            "natural_texture", "strands_across_face", "bangs_disturbed",
-            "lock_out_of_place", "frizz_halo", "tuft_or_flattened",
-            "occluded_or_unclear",
+    def test_analysis_is_ordered_and_observation_only(self):
+        for heading in (
+            "### Role", "### Output fields", "### Inspection order",
+            "### State and candidate-action routing", "### Action meanings",
+            "### Face and hairstyle safety", "### Output invariants",
         ):
-            with self.subTest(state=state):
-                self.assertIn(state, self.instruction)
+            self.assertIn(heading, self.instruction)
+        self.assertIn("Always output should_fix=false as a placeholder", self.instruction)
+        self.assertIn("Python is the only authority that changes it", self.instruction)
 
-    def test_fade_wording_is_banned_and_named_in_the_users_own_language(self):
-        self.assertIn("Never 淡化, 降低對比, 柔化, or 模糊 hair", self.instruction)
+    def test_motion_and_wind_are_physical_states_not_user_preferences(self):
+        self.assertIn("use motion when the person's jump, spin, flip, throw, or turn drives the hair", self.instruction)
+        self.assertIn("A coherent wind direction confirms windblown", self.instruction)
+        self.assertIn("This state does not prevent the user's later fully-groomed transformation", self.instruction)
 
-    def test_hair_is_routed_off_the_distraction_axis(self):
-        # The distraction toolkit is what produces "淡化某處的頭髮" in the first
-        # place, so the routing rule matters as much as the wording ban.
+    def test_general_disorder_is_distinct_from_a_deliberate_messy_style(self):
+        self.assertIn("disheveled", self.instruction)
+        self.assertIn("several unrelated disruptions", self.instruction)
+        self.assertIn("Do not use this state for a consistent tousled style or natural texture", self.instruction)
+
+    def test_candidate_plan_can_exist_while_placeholder_is_false(self):
+        self.assertIn("Writing a plan does not set should_fix", self.instruction)
+        self.assertIn("may coexist with the should_fix=false placeholder", self.instruction)
+
+    def test_hair_is_kept_out_of_general_corrections(self):
+        self.assertIn("Never add hair work to top-level correction_plan", self.instruction)
         self.assertIn("Stray hair is never a distraction item", self.instruction)
 
-    def test_wind_is_separated_from_the_persons_own_motion(self):
-        # These look alike -- hair off the head, one direction -- but one is the
-        # moment and the other is the flaw, so the body decides which.
-        self.assertIn("this is about what the person is doing, not about wind", self.instruction)
-        self.assertIn("on a body that is otherwise posed or still", self.instruction)
+    def test_fringe_and_face_safety_survive_the_compaction(self):
+        self.assertIn("it may be blunt, curtain/八字, see-through, or side-swept", self.instruction)
+        self.assertIn("A side part or full-length front section", self.instruction)
+        self.assertIn("never create a fringe or close forehead gaps", self.instruction)
+        self.assertIn("repair only the strand-width footprint", self.instruction)
 
-    def test_windblown_work_covers_the_whole_disturbed_area(self):
-        self.assertIn("Read wind as a flaw across the whole area it disturbed, not only where it landed on a face", self.instruction)
-        self.assertIn("Treat the whole disturbed area as the work", self.instruction)
+    def test_single_oily_lock_is_not_misread_as_styled_face_framing(self):
+        self.assertIn("Do not use this state for one isolated front lock", self.instruction)
+        self.assertIn("Following the general parting direction alone does not prove intentional face framing", self.instruction)
+        self.assertIn("one visibly stuck-together coarse front lock", self.instruction)
+        self.assertIn("directional agreement does not make it styled", self.instruction)
+        self.assertIn('use front_hair="clumped" and bangs_clumped even when that lock follows the parting direction', self.instruction)
 
-    def test_settle_names_its_reference(self):
-        # Region work with no stated reference is what invents a hairstyle; the
-        # undisturbed hair on the same head is the only safe target.
-        self.assertIn("settle for a windblown area", self.instruction)
-        self.assertIn("the part of the same head the wind did not disturb", self.instruction)
-        self.assertIn(">= 0.85", self.instruction)
+    def test_portrait_qc_uses_nested_candidate_plan(self):
+        instruction = build_portrait_qc_instruction([{
+            "subject_index": 0, "local_detection_index": 0,
+            "label": "中間女性", "box": {"x": .2, "y": .1, "w": .3, "h": .6},
+        }])
+        self.assertIn("Per-person candidate hair correction plan", instruction)
+        self.assertIn("Python decides whether that candidate is enabled", instruction)
+        self.assertIn("Always leave hair_issue.should_fix=false", instruction)
 
-    def test_remove_can_never_target_forehead_hair(self):
-        # A live run labelled a whole clumped fringe "strands_across_face", chose
-        # remove, and wrote "移除前額覆蓋眼部的碎髮" -- the edit model obeyed and
-        # erased the fringe. remove was bounded by WHERE hair lies, and a fringe
-        # on a forehead fits that description exactly, so the bound has to be
-        # what the hair IS. Classification stays fragile at 768px; this does not
-        # depend on it.
-        self.assertIn("remove is only ever for hair that has LEFT the hairstyle", self.instruction)
-        # Anchored on where the hair sits, not on the front_hair reading: a
-        # 10-run sample of one photo split that reading four ways, so it cannot
-        # carry a rule. Position is unambiguous, and it keeps remove available
-        # for strands that really have left the hairstyle onto a cheek.
-        self.assertIn("Hair lying on the forehead, along the hairline, or at the temples", self.instruction)
-        self.assertIn("never remove, whatever state you assigned it", self.instruction)
-        self.assertIn("Strands resting further down", self.instruction)
 
-    def test_the_fringe_is_read_as_a_shape_not_by_its_tips(self):
-        # The same run's evidence was "幾根碎髮橫跨於右側眉眼附近": it looked at
-        # where the fringe ENDED, not at the fringe.
-        self.assertIn("Judge the front of the hair as one shape, not by where its tips happen to fall", self.instruction)
+class HairDecisionDerivation(unittest.TestCase):
+    def _derive(self, issue):
+        analysis = {"subjects": [{"label": "人物", "is_person": True, "hair_issue": issue}]}
+        return derive_hair_decisions(analysis)["subjects"][0]["hair_issue"]
 
-    def test_the_reading_cannot_be_pasted_into_the_state(self):
-        # try7/image 3 returned hair_state="uneven_clumps" -- a fringe_reading
-        # value, not a legal state -- because the two fields share a vocabulary.
-        self.assertIn("It is a reading, not a state: never copy its value into hair_state", self.instruction)
+    def test_model_verdict_is_overwritten_for_actionable_state(self):
+        issue = self._derive({
+            "hair_state": "windblown", "fix_action": "none",
+            "should_fix": False, "correction_plan": "整理右側受風區",
+        })
+        self.assertTrue(issue["should_fix"])
+        self.assertEqual(issue["fix_action"], "settle")
+        self.assertEqual(issue["correction_plan"], "整理右側受風區")
 
-    def test_an_uneven_reading_forces_the_fringe_path(self):
-        # try7 read uneven_clumps on four photos and still labelled every one
-        # strands_across_face, so the consequence has to be spelled out with the
-        # wrong answer named.
-        self.assertIn('front_hair="clumped" means hair_state="bangs_clumped" and fix_action="redistribute"', self.instruction)
-        self.assertIn("not strands_across_face, whatever the strands look like individually", self.instruction)
+    def test_model_verdict_is_overwritten_for_non_actionable_state(self):
+        issue = self._derive({
+            "hair_state": "tidy", "fix_action": "settle",
+            "should_fix": True, "correction_plan": "整頭梳整",
+        })
+        self.assertFalse(issue["should_fix"])
+        self.assertEqual(issue["fix_action"], "none")
+        self.assertEqual(issue["correction_plan"], "不適用")
 
-    def test_vague_item_wording_is_banned_by_name(self):
-        # Every try7 hair item was written as 修飾/整理/重組/順服/均勻連續 -- an
-        # intention with nothing to render, so the edit came back unchanged.
-        for word in ("修飾", "整理", "調整", "重組", "精修", "順服", "自然分布", "均勻連續"):
-            with self.subTest(word=word):
-                self.assertIn(word, self.instruction)
-        self.assertIn("Write that item as the finished picture, in words that can be rendered", self.instruction)
+    def test_clean_body_motion_is_not_a_local_defect(self):
+        issue = self._derive({
+            "hair_state": "motion", "fix_action": "settle",
+            "should_fix": True, "correction_plan": "整頭梳整",
+        })
+        self.assertFalse(issue["should_fix"])
+        self.assertEqual(issue["fix_action"], "none")
 
-    def test_the_item_must_name_both_halves_in_plain_words(self):
-        self.assertIn("去油", self.instruction)
-        self.assertIn("梳整齊", self.instruction)
-        self.assertIn("Worked example of a whole item", self.instruction)
+    def test_missing_actionable_plan_gets_deterministic_fallback(self):
+        issue = self._derive({
+            "hair_state": "strands_across_face", "fix_action": "lay_back",
+            "should_fix": False, "correction_plan": "不適用",
+        })
+        self.assertTrue(issue["should_fix"])
+        self.assertIn("落在臉上的髮絲", issue["correction_plan"])
 
-    def test_fringe_reading_is_a_required_field_not_just_an_instruction(self):
-        # Two runs ignored the instruction to check the fringe. A required output
-        # field has to be answered for the JSON to be well-formed.
-        self.assertIn('"front_hair"', self.instruction)
-        self.assertIn("required for anyone with hair in front of the face", self.instruction)
+    def test_disheveled_state_is_actionable_without_wind_or_motion(self):
+        issue = self._derive({
+            "hair_state": "disheveled", "fix_action": "none",
+            "should_fix": False, "correction_plan": "不適用",
+        })
+        self.assertTrue(issue["should_fix"])
+        self.assertEqual(issue["fix_action"], "settle")
+        self.assertIn("多處失序髮流", issue["correction_plan"])
 
-    def test_the_fringe_is_inspected_not_merely_classifiable(self):
-        # Two live runs logged this photo's clumped fringe as "少數髮絲分布在額頭"
-        # and moved on: the model saw the hair but never asked the fringe question,
-        # because nothing made it. Criteria the model has to reach for on its own
-        # do not fire; an ordered check placed before state selection does.
-        self.assertIn("Front-hair check -- do this for every person with hair falling over the forehead", self.instruction)
-        self.assertIn("before choosing any state for them", self.instruction)
-        self.assertIn('front_hair="even" is not a flaw by itself', self.instruction)
-
-    def test_stray_strands_cannot_swallow_a_fringe(self):
-        # strands_across_face matches anything hair-shaped on a face, fringe
-        # included, and is listed first -- it needs an explicit boundary.
-        self.assertIn("Hair that still belongs to the fringe, lying where the fringe lies, is a fringe state", self.instruction)
-
-    def test_coarse_clumping_cues_come_before_the_unresolvable_ones(self):
-        # The analyzer sees a 768x1024 preview, so root separation and specular
-        # streaks are near-unreadable; the two cues it can actually judge have to
-        # be enough on their own to reach the threshold.
-        cues = self.instruction[self.instruction.index("Confirm it with any two of these"):]
-        self.assertLess(cues.index("differ visibly in thickness"), cues.index("separates at the root"))
-        self.assertLess(cues.index("the scene explains it"), cues.index("hard specular streak"))
-
-    def test_one_person_may_have_several_hair_problems(self):
-        # The old one-item cap meant the first state the model picked used up the
-        # person's only slot, so a fringe problem could never be added afterwards.
-        self.assertIn("one correction_plan item per distinct hair problem", self.instruction)
-
-    def test_oily_sheen_is_the_one_tonal_instruction_allowed_on_hair(self):
-        # It has to be carved out explicitly, or the blanket 淡化/模糊 ban below
-        # reads as forbidding the only correct treatment for the shine itself.
-        self.assertIn("The one tonal instruction that is right on hair is the oily sheen", self.instruction)
-        self.assertIn("recovering texture in a blown highlight, not fading hair away", self.instruction)
-
-    def test_hair_on_a_feature_is_still_fixed(self):
-        # Hair over the eyes/nose/mouth is the case users most want fixed. Being on
-        # a feature bounds HOW it is written, never whether it is written.
-        self.assertIn("Hair over an eye, nose, or mouth is the case users most want fixed", self.instruction)
-        self.assertIn("has to come from the original photograph", self.instruction)
-
-    def test_only_a_fully_buried_feature_is_declined(self):
-        # The one genuinely impossible case: nothing visible either side to
-        # continue from, so there is no original left to reveal.
-        self.assertIn("thick enough to bury a whole feature", self.instruction)
-
-    def test_forehead_lock_test_keeps_both_verdicts_and_the_tie_breaker(self):
-        self.assertIn("Forehead-or-cheek lock test", self.instruction)
-        self.assertIn("Deliberate:", self.instruction)
-        self.assertIn("Fallen:", self.instruction)
-        # The tie-break is the whole point of a two-of-four rule; without it the
-        # model resolves an even split by fixing.
-        self.assertIn("one each way means should_fix=false", self.instruction)
+    def test_clumped_bangs_require_a_confirmed_fringe(self):
+        issue = self._derive({
+            "hair_state": "bangs_clumped", "front_hair": "none",
+            "fix_action": "redistribute", "should_fix": False,
+            "correction_plan": "梳散瀏海",
+        })
+        self.assertFalse(issue["should_fix"])
+        self.assertEqual(issue["fix_action"], "none")
 
 
 class HairAxis(unittest.TestCase):
@@ -463,23 +441,21 @@ class CalmHair(unittest.TestCase):
         self.assertIn("This settles hair only; it does not calm the scene", self._prompt(True))
 
     def test_a_moving_body_keeps_its_moving_hair(self):
-        # Hair flat against a mid-jump body is physically incoherent, so the
-        # analysis override carves motion out even with the switch on.
+        # Detection records body-driven motion without making the edit verdict.
+        # The user-selected fully-groomed transformation is applied at edit time.
         instruction = build_analysis_instruction("auto", {"calm_hair": True})
-        self.assertIn("This does not extend to hair moving because the person is moving", instruction)
+        self.assertIn("use motion when the person's jump, spin, flip, throw, or turn drives the hair", instruction)
+        self.assertIn("does not prevent the user's later fully-groomed transformation", instruction)
 
     def test_items_are_written_as_a_finished_state(self):
-        # The two real sentences from the controlled pair, as the contrast example.
         i = build_analysis_instruction("auto")
-        self.assertIn("Write it as the state that hair ends in", i)
-        self.assertIn("nothing to render towards", i)
+        self.assertIn("name the exact visible target, the operation, and the visible final state", i)
+        self.assertIn("The instruction must stand on its own for the editor", i)
 
-    def test_the_analysis_still_routes_it_through_the_reviewable_recipe(self):
-        # It goes into correction_plan like everything else, so the review screen
-        # can uncheck it and QA can score it.
+    def test_analysis_never_routes_hair_through_the_global_recipe(self):
         instruction = build_analysis_instruction("auto", {"calm_hair": True})
-        self.assertIn("Write the matching correction_plan item", instruction)
-        self.assertIn('correction_axes ["hair"]', instruction)
+        self.assertIn("hair_issue.correction_plan", instruction)
+        self.assertIn("Never add hair work to top-level correction_plan", instruction)
 
 
 class AdvancedSettingsToggle(unittest.TestCase):

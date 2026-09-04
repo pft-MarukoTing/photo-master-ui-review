@@ -28,7 +28,6 @@ from prompts import (
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
     build_eye_repair_planning_instruction,
-    backfill_missing_correction_items,
     eye_repair_targets,
     portrait_qc_persons,
     subject_issue_items,
@@ -217,11 +216,9 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # forced by that earlier choice, not a genuine model judgment -- see
     # build_edit_prompt's use of this field.
     analysis["_aspect_ratio_pref_at_analysis"] = aspect_ratio
-    # Same trick for the Advanced Settings toggles: build_edit_prompt needs the
-    # calm-hair switch at step 5, and carrying it on the analysis rather than as
-    # a finish_stage argument means the two-stage flow and the debug-UI /rerun
-    # both hand it back automatically, with the stored analysis recording which
-    # toggles that run actually used.
+    # Carry the edit-stage toggles on the analysis so the two-stage flow and
+    # debug-UI /rerun both hand them back automatically, with the stored
+    # analysis recording which corrections that run allowed.
     # Recorded, not applied here: eye_closed_detection/hair_mess_detection/
     # gaze_contact_detection now only gate the EDIT stage (build_edit_prompt's
     # own strip_disabled_topic_items call) -- analysis always runs full
@@ -229,12 +226,6 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # genuine finding and a later revise can turn a toggle back on without
     # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
-    # The ANALYSIS_INSTRUCTION consistency-check lines ask the model to keep
-    # each subject's hair_issue/blink_issue/gaze_issue in sync with
-    # correction_plan itself, but that alone isn't reliable -- backfill
-    # deterministically here so the review screen (and a later revise) always
-    # has something to show for a genuine should_fix=true finding.
-    analysis = backfill_missing_correction_items(analysis)
     return analysis
 
 
