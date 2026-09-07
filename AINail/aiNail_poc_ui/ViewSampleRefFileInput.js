@@ -17,17 +17,50 @@ export default function ViewSampleRefFileInput(props) {
 
   const [hoveredIdx, setHoveredIdx] = React.useState(null);
 
-  const isMTTemplate = function (tpl) {
-    var info = (tpl && tpl.info) || {};
+  var infoOf = function (tpl) {
+    return (tpl && tpl.info) || {};
+  };
+  var thumbUrlOf = function (tpl) {
+    return infoOf(tpl).pImage || '';
+  };
+  var refUrlOf = function (tpl) {
+    return infoOf(tpl).template_ref_image || '';
+  };
+  var titleOf = function (tpl) {
+    var info = infoOf(tpl);
     var title = info.i18n && info.i18n[0] && info.i18n[0].data && info.i18n[0].data.title;
-    return typeof title === 'string' && title.indexOf('MT_Template') === 0;
+    return typeof title === 'string' ? title : '';
+  };
+  var idOf = function (tpl, idx) {
+    if (tpl && tpl.id != null) return String(tpl.id);
+    if (tpl && tpl.value != null) return String(tpl.value);
+    return 'tpl_' + idx;
+  };
+  var labelOf = function (tpl, idx) {
+    var title = titleOf(tpl);
+    if (title) return title;
+    if (tpl && tpl.guid) return tpl.guid;
+    if (tpl && tpl.label) return tpl.label;
+    return 'template ' + (idx + 1);
+  };
+
+  const isMTTemplate = function (tpl) {
+    return titleOf(tpl).indexOf('MT_Template') === 0;
+  };
+
+  // the displayed label, minus the index fallback which is not known yet
+  var sortKeyOf = function (tpl) {
+    return labelOf(tpl, 0);
   };
 
   const templates = (Array.isArray(templateParams) ? templateParams.slice() : []).sort(
     function (a, b) {
       var aMT = isMTTemplate(a), bMT = isMTTemplate(b);
       if (aMT !== bMT) return aMT ? 1 : -1;
-      return (a.createdTime || 0) - (b.createdTime || 0);
+      return sortKeyOf(a).localeCompare(sortKeyOf(b), undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      });
     }
   );
 
@@ -39,30 +72,6 @@ export default function ViewSampleRefFileInput(props) {
         '<text x="60" y="70" font-size="40" text-anchor="middle" fill="#9ca3af" font-family="sans-serif">?</text>' +
       '</svg>'
     );
-
-  var infoOf = function (tpl) {
-    return (tpl && tpl.info) || {};
-  };
-  var thumbUrlOf = function (tpl) {
-    return infoOf(tpl).pImage || '';
-  };
-  var refUrlOf = function (tpl) {
-    return infoOf(tpl).template_ref_image || '';
-  };
-  var idOf = function (tpl, idx) {
-    if (tpl && tpl.id != null) return String(tpl.id);
-    if (tpl && tpl.value != null) return String(tpl.value);
-    return 'tpl_' + idx;
-  };
-  var labelOf = function (tpl, idx) {
-    var info = infoOf(tpl);
-    if (info.i18n && info.i18n[0] && info.i18n[0].data && info.i18n[0].data.title) {
-      return info.i18n[0].data.title;
-    }
-    if (tpl && tpl.guid) return tpl.guid;
-    if (tpl && tpl.label) return tpl.label;
-    return 'template ' + (idx + 1);
-  };
 
   var selectedIds = Array.isArray(selectedSampleFileId)
     ? selectedSampleFileId.map(String)
