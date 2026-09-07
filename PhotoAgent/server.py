@@ -7,6 +7,7 @@ import time
 import traceback
 
 import requests
+from PIL import Image as PILImage
 
 from server_logger import ServerLogger
 
@@ -19,7 +20,7 @@ from aiserver_utils.health_checker import HeartBeatV2
 
 from photo_agent import EFFECT_NAME
 from artifact_store import S3ArtifactStore
-from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR, RESULT_AI_SERVICE_TIMEOUT
+from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR, RESULT_AI_SERVICE_TIMEOUT, RESULT_EXCEED_MAX_RESOLUTION
 from job_processor import PhotoAgentJobProcessor
 
 
@@ -160,6 +161,9 @@ def check_queue():
                 error_code = e.args[1]
             elif isinstance(e, requests.exceptions.Timeout):
                 error_code = RESULT_AI_SERVICE_TIMEOUT
+            elif isinstance(e, PILImage.DecompressionBombError):
+                error_code = RESULT_EXCEED_MAX_RESOLUTION
+                error_message = "Image resolution is too high, please use a smaller image."
             else:
                 error_code = RESULT_UNKNOWN_INTERNAL_ERROR
             logger.error(task_id, f'[Worker] process with error: {error_message}')
