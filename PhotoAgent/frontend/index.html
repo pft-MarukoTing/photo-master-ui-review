@@ -1232,11 +1232,13 @@
        (history-drawer), just without its status badge/remove button since a
        demo photo has neither. */
     .demo-images-modal-box { width: min(560px, calc(100vw - 40px)); }
-    /* #changelog-modal -- a plain scrollable list of dated entries (see
-       renderChangelog, app.js), nowhere near as wide as #prompts-modal's
-       tab+content layout needs. max-height instead of a fixed one (unlike
-       .prompts-modal-box) since entry count/length varies and there's no
-       second pane fighting it for a stable height. */
+    /* #changelog-modal -- a scrollable list of dated entries, each a
+       <details> (see renderChangelog, app.js) so only the newest one is
+       open by default and older ones fold away instead of piling up.
+       Nowhere near as wide as #prompts-modal's tab+content layout needs.
+       max-height instead of a fixed one (unlike .prompts-modal-box) since
+       entry count/length varies and there's no second pane fighting it
+       for a stable height. */
     .changelog-modal-box { width: min(480px, calc(100vw - 40px)); }
     .changelog-modal-body {
       max-height: calc(100vh - 160px);
@@ -1252,6 +1254,22 @@
       font-weight: 700;
       color: var(--accent);
       margin-bottom: 8px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none;
+    }
+    .changelog-entry-date::-webkit-details-marker { display: none; }
+    .changelog-entry-date::before {
+      content: "▸";
+      display: inline-block;
+      width: 1em;
+      transition: transform 0.15s ease;
+    }
+    .changelog-entry[open] > .changelog-entry-date::before {
+      transform: rotate(90deg);
+    }
+    .changelog-entry:not([open]) > .changelog-entry-date {
+      margin-bottom: 0;
     }
     .changelog-entry-list {
       margin: 0;
