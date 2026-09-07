@@ -197,7 +197,7 @@ Subject inclusion rule (for people specifically):
 Return exactly this JSON shape:
 {
   "photo_summary": "一句話描述照片內容與整體觀感。",
-  "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 生活紀錄 / 其他",
+  "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 其他",
   "scene_category": "室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他",
   "main_subject": "主要主體是誰或什麼。",
   "scene_type": "更具體的場景類型。",
