@@ -17,6 +17,7 @@ from prompts import (
     _disabled_issue_subject_indices,
     _read_smile_states,
     resolve_user_hair_request,
+    body_reshape_items,
     resolve_smile_targets,
     smile_level,
     subject_issue_items,
@@ -548,6 +549,36 @@ def _hair_contracts(analysis):
     return contracts
 
 
+def _body_reshape_contracts(analysis):
+    """Turn body-planning key points into bounded per-person contracts."""
+    contracts = []
+    posture_terms = ("姿勢", "站姿", "肩線", "挺直", "重心")
+    for item in body_reshape_items(analysis):
+        key_points = tuple(item.get("key_points") or [])
+        direct = ["named_body_contours", "named_body_proportions"]
+        if any(term in point for point in key_points for term in posture_terms):
+            direct.append("body_pose")
+        contracts.append({
+            "feature": "body_reshape",
+            "subject": item.get("subject_label") or "畫面中的人物",
+            "box": _box(item),
+            "endpoint": {"body_adjustments": key_points},
+            "direct_changes": direct,
+            "dependent_changes": [
+                "body_edge_continuity",
+                "source_texture_transport_inside_existing_clothing_or_skin_region",
+            ],
+            "preserve": sorted(_BASE_PRESERVE | {
+                "face", "expression", "hands", "feet", "unlisted_body_regions",
+                "clothing", "clothing_design", "garment_coverage",
+                "garment_boundaries", "garment_length", "garment_construction",
+                "exposed_skin_boundaries", "body_clothing_topology",
+                "background_geometry", "camera_viewpoint",
+            }),
+        })
+    return contracts
+
+
 def _hair_action_instruction(state):
     action = state.get("hair_action") or ""
     if action == "redistribute" and not (
@@ -583,6 +614,7 @@ def build_feature_contracts(analysis, *, include_gaze=True):
         + _gaze_contracts(analysis, include_gaze)
         + _blink_contracts(analysis)
         + _hair_contracts(analysis)
+        + _body_reshape_contracts(analysis)
     )
 
 
@@ -751,6 +783,13 @@ def build_compact_editor_prompt(
             )
         if (smile or state.get("eye_state")) and not state.get("gaze"):
             state_lines.append("- Keep the captured iris/pupil direction, sclera balance, and catchlights.")
+        body_adjustments = state.get("body_adjustments") or []
+        if body_adjustments:
+            state_lines.append("- Body reshape — apply every approved adjustment below to this person and no unlisted body change:")
+            state_lines.extend(f"  - {point}" for point in body_adjustments)
+            state_lines.append(
+                "- Keep the adjustment restrained and anatomically believable. Preserve the overall identity and pose unless a listed point explicitly requests a small posture correction."
+            )
         hair_level = state.get("hair_level")
         hair_correction_plan = str(state.get("hair_correction_plan") or "").strip()
         hair_action = state.get("hair_action")
@@ -883,6 +922,14 @@ def build_compact_editor_prompt(
         "- Treat hair work as an arrangement/local-sheen edit, not a head or face regeneration. Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color. Where hair crosses a facial feature, retain that feature's visible source shape and position and repair only the strand-width footprint; any authorized eye or expression changes follow only their own resolved final states above."
         if "hair" in resolved_features else ""
     )
+    body_boundary_block = (
+        "\nBody reshape execution boundary:\n"
+        "- Treat body work as a local contour/proportion correction, not a new identity, weight-loss transformation, fitness transformation, or unrelated pose change. Preserve unlisted body regions, face, skin texture, hair, hands, feet, accessories, nearby people/objects, background lines, architecture, camera viewpoint, and perspective. No warping, bending, smearing, duplication, or displacement outside the named body region.\n"
+        "- CLOTHING/BODY TOPOLOGY HARD LOCK: clothing is a preservation layer, never a substitute for body reshaping. Keep every neckline, sleeve opening, shirt/top hem, waistband, trouser/skirt top, belt, exposed-skin boundary, overlap, seam, fold, opening, garment length, and tucked/untucked state at its exact source position, shape, coverage, and front/back ordering.\n"
+        "- Never extend/lower a shirt to cover exposed abdomen, raise a waistband, add fabric, remove exposed skin, reveal new skin, shorten/lengthen a garment, or redraw folds to conceal body volume. If bare abdomen is visible between a top hem and waistband, preserve that same bare area, hem, waistband, navel, and relative order.\n"
+        "- A body contour may move only inside its existing skin or clothing region. Keep a narrow immutable guard band around hems, waistbands, necklines, sleeve openings, and every skin/clothing boundary. If a requested reshape cannot be achieved without moving or crossing those anchors, leave the body contour unchanged rather than modifying clothing."
+        if "body_reshape" in resolved_features else ""
+    )
     user_text = user_direction.strip() or "No additional direction."
     revision_text = f"\n\nRevision feedback:\n{revision_feedback}" if revision_feedback else ""
     # Compact mode deliberately does not reuse prose that freezes a captured
@@ -906,8 +953,14 @@ def build_compact_editor_prompt(
         spatial_preserve = ["underlying scene layout"]
     if "size" not in style_options:
         spatial_preserve.extend(["scale", "visible extent", "framing"])
-    if "pose" not in style_options:
+    body_posture_active = any(
+        "body_pose" in item.get("change_footprint", []) for item in resolved
+        if "body_reshape" in item.get("features", [])
+    )
+    if "pose" not in style_options and not body_posture_active:
         spatial_preserve.extend(["pose", "gesture", "interaction points"])
+    elif "pose" not in style_options:
+        spatial_preserve.extend(["gesture", "interaction points outside the named posture adjustment"])
     if "lighting" not in style_options:
         spatial_preserve.append("lighting logic")
     spatial_preserve_text = ", ".join(spatial_preserve)
@@ -916,17 +969,32 @@ def build_compact_editor_prompt(
         if style_footprint else
         "- No style option authorizes a change to pose, viewpoint, lighting style, or framing size."
     )
+    body_reshape_active = "body_reshape" in resolved_features
     if "pose" in style_options:
-        facial_locality = "- Apply facial feature edits locally. Any head/body movement must come only from the selected pose style."
+        facial_locality = (
+            "- Apply facial feature edits locally. Head/body movement is limited to the selected pose style "
+            "plus any explicitly resolved gaze or body-reshape endpoint."
+        )
+    elif has_head_aligned_gaze and body_reshape_active:
+        facial_locality = (
+            "- Apply facial edits locally. Only the resolved eyes-plus-head/face gaze endpoint may make its specified "
+            "bounded head/face alignment. Apply body changes only inside the named body regions and by the minimum "
+            "amount required; keep surrounding content and unlisted body regions fixed."
+        )
     elif has_head_aligned_gaze:
         facial_locality = (
             "- Apply facial edits locally. Only the resolved eyes-plus-head/face gaze endpoint may make its specified bounded head/face alignment; "
             "keep the body and surrounding content fixed."
         )
+    elif body_reshape_active:
+        facial_locality = (
+            "- Apply facial edits locally. Apply body changes only inside the named body regions and by the minimum "
+            "amount required; do not move the head, surrounding content, or unlisted body regions."
+        )
     else:
         facial_locality = "- Apply facial edits locally without moving the head, body, or surrounding content."
     portrait_style_priority = (
-        "- Resolved subject final states remain mandatory inside the style transformation; style may coordinate surrounding pose and light but must not replace a specified smile, eye state, gaze, or hair endpoint."
+        "- Resolved subject final states remain mandatory inside the style transformation; style may coordinate surrounding pose and light but must not replace a specified smile, eye state, gaze, hair, or body-reshape endpoint."
         if style_footprint and resolved else ""
     )
 
@@ -939,7 +1007,7 @@ Required framing:
 Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
-{shared_face_block}{hair_boundary_block}
+{shared_face_block}{hair_boundary_block}{body_boundary_block}
 
 Other approved corrections:
 {correction_block}

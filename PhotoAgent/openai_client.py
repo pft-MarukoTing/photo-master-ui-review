@@ -35,6 +35,8 @@ from prompts import (
     build_portrait_qc_response_schema,
     build_eye_repair_planning_instruction,
     build_eye_repair_planning_response_schema,
+    build_body_reshape_planning_instruction,
+    build_body_reshape_planning_response_schema,
     build_user_instruction_review_prompt,
     build_edit_prompt,
     build_gaze_only_edit_prompt,
@@ -46,6 +48,8 @@ from prompts import (
     derive_luna_gaze_decisions,
     eye_repair_targets,
     merge_eye_repair_strategies,
+    merge_body_reshape_plans,
+    apply_default_body_reshape_plans,
     portrait_qc_persons,
     style_option_entries,
     _apply_default_person_issues,
@@ -317,8 +321,12 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     those four fields and writes each candidate per-person hair correction,
     only for the people Call A already identified, merged
     back by prompts.merge_portrait_qc_issues's stable subject_index (never by
-    response-array position). Python then derives hair/blink/gaze decisions;
-    an optional Call C creates eye repair strategies only for people that pass.
+    response-array position).  Python then applies the exact-lens gate and an
+    optional Call C creates repair strategies only for people that passed it.
+    A separate body-planning pass reviews every person and merges a concise
+    body-only report plus at most five actionable key_points by the same
+    stable subject_index. The report is review prose; downstream editing uses
+    only the short key_points so uncertain observations cannot become edits.
 
     Call B (including a validation failure raised by merge_portrait_qc_issues
     itself -- a missing/duplicate/mismatched subject_index) is best-effort:
@@ -350,6 +358,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     analysis = None
     usage_b = None
     usage_c = None
+    usage_body = None
     if persons:
         try:
             content_b = [
@@ -382,6 +391,30 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         _apply_default_person_issues(overall_analysis.get("subjects"))
         analysis = overall_analysis
 
+    if persons:
+        try:
+            content_body = [
+                {"type": "input_text", "text": build_body_reshape_planning_instruction(persons)},
+                {"type": "input_image", "image_url": data_url},
+            ]
+            payload_body = _responses_payload(
+                analysis_model,
+                content_body,
+                text_format=build_body_reshape_planning_response_schema(len(persons)),
+                reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+            )
+            data_body = _post_json(
+                OPENAI_RESPONSES_URL, payload_body, "Photo analysis failed (body reshape-planning pass)"
+            )
+            body_response = _parse_json_from_text(_extract_output_text(data_body))
+            analysis = merge_body_reshape_plans(analysis, body_response)
+            usage_body = data_body.get("usage")
+        except Exception as exc:
+            logger.warning(
+                "Body reshape-planning pass failed; preserving every person's original body: %s", exc,
+            )
+            analysis = apply_default_body_reshape_plans(analysis)
+
     repair_targets = eye_repair_targets(analysis)
     if repair_targets:
         try:
@@ -406,7 +439,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
                 "Eye repair-planning pass failed; keeping deterministic fallback strategies: %s", exc,
             )
 
-    usage = _sum_usage(data_a.get("usage"), usage_b, usage_c)
+    usage = _sum_usage(data_a.get("usage"), usage_b, usage_c, usage_body)
     return analysis, {
         "model": analysis_model,
         "usage": usage,

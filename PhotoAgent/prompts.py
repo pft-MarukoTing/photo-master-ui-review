@@ -2248,6 +2248,159 @@ Targets:
 """ + json.dumps(compact_targets, ensure_ascii=False, indent=2)
 
 
+# Luna does not always repeat the long display label verbatim.  In particular,
+# it commonly shortens "全身／整體身形" to "全身" or "整體身形".  Keep a
+# deliberately small alias table so harmless wording differences are
+# canonicalised while non-body requests such as background or skin edits are
+# still kept out of the editor prompt.
+_BODY_RESHAPE_REGION_ALIASES = {
+    "全身/整體身形": "整體身形",
+    "全身": "整體身形",
+    "整體": "整體身形",
+    "整體身形": "整體身形",
+    "整體比例": "整體身形",
+    "全身比例": "整體身形",
+    "身形": "整體身形",
+    "站姿": "整體身形",
+    "軀幹": "整體身形",
+    "腿": "腿部",
+    "雙腿": "腿部",
+    "腿部": "腿部",
+    "腰": "腰部",
+    "腰線": "腰部",
+    "腰部": "腰部",
+    "腹": "腹部",
+    "腹部": "腹部",
+    "胸": "胸部",
+    "胸部": "胸部",
+    "肩": "肩部",
+    "肩膀": "肩部",
+    "雙肩": "肩部",
+    "肩部": "肩部",
+    "頸": "頸部",
+    "脖子": "頸部",
+    "頸部": "頸部",
+    "臀": "臀部",
+    "臀型": "臀部",
+    "臀線": "臀部",
+    "臀部": "臀部",
+    "雙臂": "手臂",
+    "上臂": "手臂",
+    "前臂": "手臂",
+    "手臂": "手臂",
+    "背": "背部",
+    "後背": "背部",
+    "背部": "背部",
+}
+
+# Clothing is a preservation boundary, never an executable body target.  If
+# Luna leaks any of these terms into a short key point, discard that point
+# instead of handing an ambiguous garment operation to the image editor.
+_BODY_RESHAPE_CLOTHING_TERMS = (
+    "衣物", "衣服", "服裝", "上衣", "T恤", "下擺", "領口", "袖口",
+    "腰頭", "褲頭", "裙頭", "皮帶", "縫線", "褶皺", "開口", "覆蓋", "遮蓋", "露膚",
+)
+
+
+def _body_reshape_key_point_preserves_clothing(normalized):
+    if not normalized:
+        return False
+    direction = normalized.split("：", 1)[-1]
+    return not any(term.lower() in direction.lower() for term in _BODY_RESHAPE_CLOTHING_TERMS)
+
+
+def build_body_reshape_planning_instruction(persons):
+    """Generate one independent body-reshape review for each person.
+
+    ``persons`` must come from :func:`portrait_qc_persons`, which supplies the
+    stable subject_index used to merge this pass back into subjects[].
+    """
+    return """你是專業的人像身形修圖顧問。
+
+請只根據附上的原始照片，為下方每一位人物分別進行身形調整分析。每位人物必須獨立判斷，不可將其他人物的身形特徵或建議套用過來。
+
+【分析範圍】
+只分析與身形輪廓、比例和姿勢有關的內容，例如：
+- 整體身形與上下身比例
+- 腿部、腰部、腹部、胸部
+- 肩部、頸部、臀部
+- 手臂、背部與站姿
+
+衣服只能作為判斷身形輪廓的參考，不可評論或建議修改衣服的顏色、材質、款式或圖案。
+
+【衣物與身體相對關係是不可變更的硬性邊界】
+- 分析腰部、腹部、胸部或臀部前，先辨識照片中的領口、袖口、上衣下擺、褲頭／裙頭／腰頭、皮帶、縫線、褶皺、開口、衣物重疊邊界與露膚邊界。
+- 上述邊界的畫面位置、形狀、長度、覆蓋範圍、穿著方式與彼此順序必須完全保留。不可建議拉長、縮短、上移、下移、收緊、放鬆、新增或消除任何衣物區域。
+- 露出的腹部、腰側、胸口或其他膚色區域必須維持同樣的可見範圍。例如原圖 T 恤下擺在腹部上方且腹部裸露，修圖後 T 恤下擺仍必須在原位，不得延長或下移來遮住腹部。
+- 身形調整不可透過改變衣物覆蓋來「假裝完成」。若某項調整無法在固定這些衣物邊界的前提下完成，該部位必須判定為不安全，不得列入 key_points。
+
+不要分析或建議修改以下內容：
+- 臉部五官或臉型
+- 臉部與身體的膚色
+- 皮膚紋理、瑕疵或平滑度
+- 妝容、髮型、光線或背景
+- 衣服顏色、材質、款式或圖案
+
+【判斷原則】
+- 只描述照片中清楚可見的身形問題。
+- 被衣服、人物、物件或畫面邊界遮擋的部位，不可猜測。
+- 沒有明確需要調整的部位，不要勉強提出建議。
+- 所有調整都應自然、輕微，並維持真實人體比例。
+- 避免調整造成衣服邊緣、背景線條、肢體結構或透視變形。
+- report 必須說明與建議部位相鄰的衣物邊界與露膚關係需要原位保留；但 key_points 只寫身體輪廓調整，不把衣物當成修改目標。
+
+【輸出要求】
+回傳有效 JSON，並依照人物清單順序輸出。
+
+每位人物必須包含：
+- subject_index：原樣回傳。
+- local_detection_index：原樣回傳。
+- report：使用繁體中文，簡要說明可見的身形狀況、建議調整部位、調整方向，以及需要保留的自然比例。
+- key_points：從 report 濃縮出的最多五點身形調整重點。
+
+subject_index 與 local_detection_index 只用於系統合併，不可出現在 report 或 key_points 的文字中。
+
+【key_points 重要規則】
+- 最多五點，按照重要性排序。
+- 每點格式固定為「身體部位：修圖方向」，必須使用中文全形冒號「：」。
+- 冒號前的身體部位只可使用：整體身形、腿部、腰部、腹部、胸部、肩部、頸部、臀部、手臂、背部。
+- 每點必須同時說明：
+  1. 要修改的可見部位或問題。
+  2. 希望達成的自然修圖方向。
+- 每點最多 30 個字元，包含標點與空格。
+- 超過 30 個字元的內容不可輸出。
+- 只有 report 有明確影像依據的部位才能列入。
+- 只有在「衣物邊界、衣物覆蓋範圍、露膚範圍與衣物／身體相對關係皆可原位保留」時，才能輸出該 key_point；否則不輸出。
+- key_points 不可包含衣物、服裝、下擺、腰頭、褲頭、袖口、領口、褶皺、縫線、覆蓋或露膚等衣物操作詞彙。
+- 不需要湊滿五點。
+- 輸出前必須逐點確認字數。
+
+key_points 句型範例：
+- 「整體身形：微調輪廓並保留自然比例」
+- 「腰部：微收腰線並維持自然比例」
+- 「手臂：修順外側線條避免過細」
+- 「腿部：平衡左右腿部視覺粗細」
+- 「肩部：微調肩線改善左右落差」
+- 「腹部：輕修突出並保留自然弧度」
+
+JSON 格式：
+{
+  "body_reshape_plans": [
+    {
+      "subject_index": 0,
+      "local_detection_index": 0,
+      "report": "繁體中文身形分析內容",
+      "key_points": [
+        "腰部：微收腰線並維持自然比例"
+      ]
+    }
+  ]
+}
+
+People to review:
+""" + _person_list_text(persons)
+
+
 
 def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, analysis_model=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
@@ -2738,6 +2891,36 @@ def build_eye_repair_planning_response_schema(person_count):
             "repair_plans": {
                 "type": "array",
                 "items": _EYE_REPAIR_PLAN_ITEM_SCHEMA,
+                "minItems": person_count,
+                "maxItems": person_count,
+            },
+        }),
+    }
+
+
+_BODY_RESHAPE_PLAN_SCHEMA = _schema_object({
+    "subject_index": _schema_integer(),
+    "local_detection_index": _schema_integer(),
+    "report": _schema_string(),
+    "key_points": {
+        "type": "array",
+        "items": {"type": "string", "maxLength": 30},
+        "minItems": 0,
+        "maxItems": 5,
+    },
+})
+
+
+def build_body_reshape_planning_response_schema(person_count):
+    """Strict output shape for build_body_reshape_planning_instruction."""
+    return {
+        "type": "json_schema",
+        "name": "body_reshape_planning",
+        "strict": True,
+        "schema": _schema_object({
+            "body_reshape_plans": {
+                "type": "array",
+                "items": _BODY_RESHAPE_PLAN_SCHEMA,
                 "minItems": person_count,
                 "maxItems": person_count,
             },
@@ -3748,6 +3931,215 @@ def merge_eye_repair_strategies(analysis, repair_response):
     if missing:
         raise ValueError("eye repair plans missing subject_index values: {}".format(missing))
     return cleaned
+
+
+def _default_body_reshape_plan(subject_index, local_detection_index=-1):
+    """Conservative fallback used when the optional body-planning call fails."""
+    return {
+        "subject_index": subject_index,
+        "local_detection_index": local_detection_index,
+        "report": "照片資訊不足，無法可靠判斷可見身形是否需要調整；不提出身形修改，保留原始自然比例、姿勢、服裝邊緣與場景透視。",
+        "key_points": [],
+    }
+
+
+def apply_default_body_reshape_plans(analysis):
+    """Ensure every is_person subject has a predictable body_reshape field."""
+    for subject_index, subject in enumerate(analysis.get("subjects") or []):
+        if not isinstance(subject, dict) or not subject.get("is_person"):
+            continue
+        subject.setdefault(
+            "body_reshape",
+            _default_body_reshape_plan(subject_index, subject.get("local_detection_index", -1)),
+        )
+    return analysis
+
+
+def merge_body_reshape_plans(analysis, planning_response):
+    """Validate and merge one report/key-points result into each person."""
+    cleaned = dict(analysis)
+    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+    expected = {
+        index for index, subject in enumerate(subjects)
+        if isinstance(subject, dict) and subject.get("is_person")
+    }
+    seen = set()
+
+    for plan in (planning_response or {}).get("body_reshape_plans") or []:
+        if not isinstance(plan, dict):
+            raise ValueError("body reshape plan entries must be objects")
+        subject_index = plan.get("subject_index")
+        if isinstance(subject_index, bool) or not isinstance(subject_index, int):
+            raise ValueError("body reshape subject_index must be an integer")
+        if subject_index not in expected or subject_index in seen:
+            raise ValueError("invalid or duplicate body reshape subject_index {}".format(subject_index))
+
+        subject = subjects[subject_index]
+        expected_detection = subject.get("local_detection_index", -1)
+        if plan.get("local_detection_index", -1) != expected_detection:
+            raise ValueError(
+                "body reshape local_detection_index mismatch for subject_index {}".format(subject_index)
+            )
+        report = plan.get("report")
+        if not isinstance(report, str) or not report.strip():
+            raise ValueError("body reshape report must be a non-empty string")
+        key_points = plan.get("key_points")
+        if not isinstance(key_points, list) or len(key_points) > 5:
+            raise ValueError("body reshape key_points must contain at most five items")
+        if any(not isinstance(point, str) for point in key_points):
+            raise ValueError("body reshape key_points items must be strings")
+        normalized_points = []
+        ignored_points = []
+        for point in key_points:
+            normalized = _normalize_body_reshape_key_point(point)
+            if normalized is None:
+                ignored_points.append(point)
+                continue
+            if len(normalized) > 30:
+                raise ValueError("body reshape key_points items must be at most 30 characters")
+            if not _body_reshape_key_point_preserves_clothing(normalized):
+                ignored_points.append(point)
+                continue
+            if normalized not in normalized_points:
+                normalized_points.append(normalized)
+        if ignored_points:
+            logger.warning(
+                "Ignoring unsupported body reshape key_points for subject_index %s: %s",
+                subject_index,
+                ignored_points,
+            )
+
+        normalized_plan = dict(plan)
+        normalized_plan["report"] = report.strip()
+        normalized_plan["key_points"] = normalized_points
+        subject["body_reshape"] = normalized_plan
+        seen.add(subject_index)
+
+    missing = sorted(expected - seen)
+    if missing:
+        raise ValueError("body reshape plans missing subject_index values: {}".format(missing))
+    return cleaned
+
+
+def _normalize_body_reshape_key_point(point):
+    """Return a canonical body key point, or ``None`` when out of scope.
+
+    Structured output constrains the JSON shape and string length, but cannot
+    express that the text before the colon is an enum.  Luna may therefore use
+    a reasonable short label or add a Markdown/list marker.  Normalising those
+    harmless variants here prevents an optional planning pass from failing the
+    entire photo, while the explicit alias table still rejects background,
+    skin, face, clothing, and other out-of-scope edit requests.
+    """
+    text = str(point or "").strip()
+    text = re.sub(
+        r"^(?:[-*•●▪–—]+\s*|[(（]?\d+[)）.、．]\s*|"
+        r"[一二三四五六七八九十]+[、.．]\s*)",
+        "",
+        text,
+    )
+    parts = re.split(r"[：:﹕]", text, maxsplit=1)
+    if len(parts) != 2:
+        return None
+    region, direction = (part.strip() for part in parts)
+    region_key = re.sub(r"\s+", "", region).replace("／", "/")
+    canonical_region = _BODY_RESHAPE_REGION_ALIASES.get(region_key)
+    if not canonical_region or not direction:
+        return None
+    return f"{canonical_region}：{direction}"
+
+
+def _is_valid_body_reshape_key_point(point):
+    """Return whether a key point can be safely normalised for body editing."""
+    normalized = _normalize_body_reshape_key_point(point)
+    return (
+        normalized is not None
+        and len(normalized) <= 30
+        and _body_reshape_key_point_preserves_clothing(normalized)
+    )
+
+
+def body_reshape_items(analysis):
+    """Flatten actionable per-person body plans for editor/QA consumers.
+
+    ``report`` remains review-only prose.  Only the short, validated
+    ``key_points`` are execution instructions, which prevents descriptive or
+    uncertain report text from accidentally becoming a body transformation.
+    """
+    disabled_subjects = {
+        index for index in (analysis.get("_disabled_body_reshape_subjects") or [])
+        if isinstance(index, int) and not isinstance(index, bool)
+    }
+    disabled_points = {
+        (entry.get("subject_index"), entry.get("key_point_index"))
+        for entry in (analysis.get("_disabled_body_reshape_key_points") or [])
+        if isinstance(entry, dict)
+        and isinstance(entry.get("subject_index"), int)
+        and not isinstance(entry.get("subject_index"), bool)
+        and isinstance(entry.get("key_point_index"), int)
+        and not isinstance(entry.get("key_point_index"), bool)
+    }
+    items = []
+    for subject_index, subject in enumerate(analysis.get("subjects") or []):
+        if subject_index in disabled_subjects:
+            continue
+        if not isinstance(subject, dict) or not subject.get("is_person"):
+            continue
+        plan = subject.get("body_reshape") or {}
+        if not isinstance(plan, dict):
+            continue
+        key_points = []
+        for key_point_index, point in enumerate(plan.get("key_points") or []):
+            if (subject_index, key_point_index) in disabled_points:
+                continue
+            if not isinstance(point, str):
+                continue
+            normalized = _normalize_body_reshape_key_point(point)
+            if (
+                normalized and len(normalized) <= 30
+                and _body_reshape_key_point_preserves_clothing(normalized)
+                and normalized not in key_points
+            ):
+                key_points.append(normalized)
+        if not key_points:
+            continue
+        items.append({
+            "subject_index": subject_index,
+            "subject_label": subject.get("label") or "畫面中的人物",
+            "box": subject.get("box") or {},
+            "key_points": key_points,
+        })
+    return items
+
+
+def build_body_reshape_edit_block(analysis):
+    """Render body key points as bounded, per-person edit instructions."""
+    targets = []
+    for item in body_reshape_items(analysis):
+        adjustments = "\n".join(f"  - {point}" for point in item["key_points"])
+        targets.append(
+            f'- Subject: {item["subject_label"]}\n'
+            f'  Approximate location in frame: {json.dumps(item["box"], ensure_ascii=False)}\n'
+            f'  Approved natural body adjustments:\n{adjustments}'
+        )
+    if not targets:
+        return ""
+
+    return """Body reshape execution instructions (analysis-approved):
+- Apply every listed key point to the named person, and make no body-shape or posture change that is not listed.
+- Locations identify people only; do not move a person to the box coordinates or treat the box as a target silhouette.
+- Keep each change natural and restrained. Maintain believable anatomy, joints, left/right balance, weight bearing, limb continuity, and realistic human proportions.
+- This is a local body-contour/proportion correction, not a new pose, weight-loss transformation, fitness transformation, or identity change. Change posture only when a listed key point explicitly asks for it, and only by the minimum amount required.
+- Clothing is a locked preservation layer, not a way to accomplish body reshaping. Keep the exact source garment coverage and the exact body/clothing topology: every neckline, sleeve opening, shirt/top hem, waistband, trouser/skirt top, belt, exposed-skin boundary, overlap, seam, fold, opening, garment length, and tucked/untucked state stays at its original image position and keeps the same shape and ordering.
+- Never extend or lower a shirt/top to cover exposed abdomen or waist; never raise a waistband, add fabric, remove exposed skin, reveal new skin, shorten/lengthen a garment, or redraw folds to hide a body contour. For example, if the source shows bare abdomen between a T-shirt hem and trouser waistband, that same bare area, hem, waistband, navel, and their relative order must remain visible after the edit.
+- A named body contour may move only within the existing skin/clothing region and may not cross a garment or exposed-skin boundary. Treat a narrow guard band around every hem, waistband, neckline, sleeve opening, and skin/clothing boundary as immutable source pixels. If the requested body adjustment cannot be completed while those anchors stay fixed, preserve the original body contour instead of changing clothing.
+- Preserve face, facial features, expression, skin color and texture, hair, hands, feet, accessories, camera viewpoint, crop, lighting, and every unlisted body region.
+- Protect body/clothing boundaries, nearby people and objects, background lines, architecture, furniture, and perspective from warping, bending, smearing, duplication, or displacement.
+- Every person not listed below is completely out of scope and must remain unchanged.
+
+Targets:
+""" + "\n".join(targets)
 
 
 # The light/color direction shared by both retouch modes. The sentence this
@@ -4844,6 +5236,8 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     eye_blink_issues = subject_issue_items(analysis, "blink_issue")
     hair_issues = subject_issue_items(analysis, "hair_issue")
     gaze_contact_issues = subject_issue_items(analysis, "gaze_issue")
+    body_reshape_block = build_body_reshape_edit_block(analysis)
+    has_body_reshape = bool(body_reshape_block)
     framing_intent_block = _build_framing_intent_block(analysis)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
@@ -5411,7 +5805,7 @@ STYLE OVERRIDE MODE. The user selected one or more pose/angle/lighting/framing o
 Priority order:
 1. Preserve safety, identity, same subject, same location, same environment, same clothing, same props, and photographic realism.
 2. Apply user-selected style overrides visibly and deliberately for the selected aspects.
-3. Apply the user-approved correction plan and user's extra direction. If the analysis approved a gaze and/or blink repair for a named subject, follow the analysis-defined repair method and allowances for that subject. Generic preservation rules must yield only where the analysis explicitly permits the local change.
+3. Apply the user-approved correction plan, the analysis-approved body reshape instructions, and user's extra direction. If the analysis approved a gaze, blink, and/or body repair for a named subject, follow the analysis-defined method and allowances for that subject. Generic preservation rules must yield only where the analysis explicitly permits the local change.
 4. Use the preset style as a supporting finish.
 5. Apply default preservation rules only to aspects not selected by the user."""
         retouch_priorities = f"""Retouch priorities:
@@ -5423,14 +5817,18 @@ Priority order:
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if lighting is not selected, preserve the original lighting logic; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
 8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, change the camera viewpoint clearly as described in that angle's own instruction above, while keeping a believable same-scene result.
-9. The user-approved correction plan and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
+9. The user-approved correction plan, analysis-approved body reshape instructions, and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
     else:
         opening_preservation_rule = (
             "Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, "
-            "facial structure, body shape, and important details."
+            + (
+                "facial structure, every unlisted body region, and important details. Apply body-shape changes only where the named body reshape instructions explicitly authorize them."
+                if has_body_reshape else
+                "facial structure, body shape, and important details."
+            )
         )
         edit_mode_block = """Edit mode:
-FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, preset finish, and user's extra direction. If an approved gaze and/or blink repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."""
+FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, analysis-approved body reshape instructions, preset finish, and user's extra direction. If an approved gaze, blink, and/or body repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."""
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
@@ -5440,7 +5838,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
 7. {alignment_priority}
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
-9. The user-approved correction plan is the definitive specification of what to change -- apply it in full and do not perform additional corrections beyond it, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
+9. The user-approved correction plan and analysis-approved body reshape instructions are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
 
     # The diagnosis lines below are the loudest remaining voice for a rejected
     # correction, and they sit ~40 lines above the negative block. Caveat them
@@ -5461,10 +5859,17 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
         "Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic."
     )
 
+    shape_preservation_rule = (
+        "The photographed content keeps its true shape except for the exact local body regions named in the body reshape instructions below. "
+        "Those approved regions may change only as described; every face, object, background structure, unlisted body region, tilt, and relative spatial relationship remains faithful to the input photograph. "
+        if has_body_reshape else
+        "The photographed content keeps its true shape throughout: every person, face, object, and background structure comes through with the proportions, the tilt, and the relative sizes and distances it has in the input photograph. "
+    )
+
     prompt = f"""{task_intro}
 
 {opening_preservation_rule}
-The photographed content keeps its true shape throughout: every person, face, object, and background structure comes through with the proportions, the tilt, and the relative sizes and distances it has in the input photograph. The output canvas may be a different shape than the input; that new shape comes from cropping and uniform scaling alone, never from resizing one axis on its own.
+{shape_preservation_rule}The output canvas may be a different shape than the input; that new shape comes from cropping and uniform scaling alone, never from resizing one axis on its own.
 Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
 Do not make the result look synthetic, plastic, or heavily filtered.
 
@@ -5513,6 +5918,8 @@ User extra direction:
 {style_block}
 
 {correction_plan_block}
+
+{body_reshape_block}
 
 {blink_block}
 
@@ -5686,6 +6093,20 @@ Judge each rejected item independently and put the result in recipe_adherence.re
             "to the original. A changed expression on anyone not named fails this check.\n"
         )
 
+    body_qa_items = body_reshape_items(analysis)
+    body_qa_block = ""
+    if body_qa_items:
+        body_targets = []
+        for item in body_qa_items:
+            points = "; ".join(item["key_points"])
+            body_targets.append(
+                f'- {item["subject_label"]} at {json.dumps(item["box"], ensure_ascii=False)}: {points}'
+            )
+        body_qa_block = """- Approved body reshape: verify every listed adjustment is visibly but naturally completed for the named person, without broadening it into an unlisted body, pose, weight, fitness, face, skin, clothing, or scene change. Check anatomy, joints, left/right balance, weight bearing, limb continuity, and realistic proportions. Compare nearby body/clothing edges, people, objects, background lines, architecture, and perspective against the original; warping, bending, smearing, duplication, displacement, or a changed unlisted person fails this check.
+- Clothing/body topology hard check: compare every neckline, sleeve opening, shirt/top hem, waistband, trouser/skirt top, belt, exposed-skin boundary, overlap, seam, fold, opening, garment length, and tucked/untucked state directly with the source. Their image position, shape, coverage, and front/back order must remain unchanged. Clothing may retain its existing local contour but may not gain or lose coverage.
+- Specifically fail the result if a shirt/top is extended or lowered over formerly exposed abdomen/waist, a waistband is raised, fabric is invented, exposed skin is removed or newly revealed, a garment is shortened/lengthened, or folds are rewritten to conceal body volume. If the source shows bare abdomen between a T-shirt hem and trouser waistband, the output must preserve the same bare area, hem, waistband, navel, and relative order. A body adjustment that required moving these anchors should have been skipped, not solved by changing clothing. Targets:
+{}\n""".format("\n".join(body_targets))
+
     framing_focus = analysis.get("_framing_focus") or {}
     closer_block = ""
     if framing_focus.get("size") == "closer":
@@ -5717,6 +6138,7 @@ Check dimensions:
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
 - Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyelids are naturally corrected while identity, face shape, glasses, makeup, and expression style remain believable. The result must not be a no-op, merely sharpened eyelids, oversized/doll-like eyes, copied-looking eyes, or an unrelated expression change. If that same person also had an approved gaze repair, verify one coherent final result: correct eyelid openness and exact-lens pupil/iris alignment with natural sclera and catchlights, not two conflicting eye states. If no gaze repair was approved, preserve a natural gaze consistent with the original head direction instead of forcing camera contact.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
+{body_qa_block}
 {smile_qa_line}- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a clearly visible gaze-direction change actually occurred for the named subject and that the final gaze immediately and unmistakably reads as direct contact with the exact current lens at normal photo-viewing size. The iris/pupil positions and visual axes must aim naturally at the lens, with believable sclera balance and gaze-consistent catchlights. If the approved strategy is eyes_plus_head_face_alignment, verify that the head/face also visibly turned and/or tilted toward the lens by the planned bounded amount; unchanged head direction with pupil-only movement is a failure. If the approved strategy is eyes_only, verify that the original head was already frontal and lens-aligned and that the miss was genuinely tiny. In all cases preserve eyelid openness, identity, expression structure, facial anatomy, neck anatomy, body pose, shoulder direction, torso direction, glasses/reflections, and every unlisted person. Fail the check for a no-op, sharpen/brighten-only eyes, a change visible only in a highly enlarged crop, residual off-camera/near-camera/past-camera/slightly-beside-lens gaze, crossed or strained visual axes, excessive sclera, incompatible head/eye geometry, rotated shoulders/torso, or an unplanned identity/expression change.
 
 Strict scoring rubric:
@@ -5727,6 +6149,7 @@ Strict scoring rubric:
 - 1-2: severe failure; preservation damage, important missing content, artificial borders, distorted shape/perspective, or wrong/rebuilt scene.
 
 Score caps:
+- If a body-reshape output changes garment coverage, a hem/waistband/neckline/sleeve boundary, exposed-skin extent, garment length, tucked/untucked state, or the front/back relationship between clothing and body, this is a major preservation failure: pass must be false and score must be 3 or lower, even when the requested body contour otherwise looks improved.
 - If required main subject content, protected_regions, role cues, important props, structural edges, fine details, or connected components are accidentally cut off or incomplete, score must be 3 or lower.
 - Apply the previous cap only to content required by the intended framing. Do not penalize partial portrait/person crops when they are intentional, clean, and preserve the role/story.
 - If subject shape, identity, material, anatomy, object geometry, structural continuity, fine-detail structure, or perspective relationship is changed unnaturally, score must be 3 or lower.

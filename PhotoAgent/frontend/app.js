@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, fillFaceIssueList, getFaceIssueOverrides, applyFaceIssueOverrides } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, fillFaceIssueList, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides } = window.PhotoAgentResults;
   renderBatchStyleOptions();
   renderBoxTypeMenu();
 
@@ -1556,7 +1556,8 @@
       // reasoning as advancedOptions above, otherwise flipping only a face
       // toggle (nothing else) leaves inlineReviseHasNoChanges thinking
       // nothing changed and blocks the Run click.
-      faceIssueOverrides: getFaceIssueOverrides()
+      faceIssueOverrides: getFaceIssueOverrides(),
+      bodyReshapeOverrides: getBodyReshapeOverrides()
     };
   }
 
@@ -1592,7 +1593,10 @@
     const sameAdvancedOptions = Object.keys(advancedOptions).every(
       (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
-    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAdvancedOptions && sameFaceIssues;
+    const sameBodyReshape = sameFaceIssueOverrides(
+      getBodyReshapeOverrides(), inlineReviseSnapshot.bodyReshapeOverrides);
+    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount
+      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape;
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
@@ -2646,6 +2650,7 @@
       options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
       optionsTouched: {},   // per-category: did the user actually change this image's own radio (vs. just viewing the batch-inherited default)
       recipeChecked: null,  // per-image recipe checklist state (UI-only)
+      bodyReshapeOverrides: null, // unchecked per-person body key points (UI-only)
       userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
       overwritePrompt: false, // "取代最終送給編輯模型的完整指令" checkbox, alongside userPrompt
       analyzeTimings: [],   // step-1 timing rows, merged into the detail view
@@ -3202,12 +3207,14 @@
     const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
     const selections = readStyleSelectionsFromDom();
     const faceIssueOverrides = getFaceIssueOverrides();
+    const bodyReshapeOverrides = getBodyReshapeOverrides();
     const userPrompt = els.promptInput.value.trim();
     const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
-    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides };
+    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides, bodyReshapeOverrides };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
-    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(analysis, { ...selections, advancedOptions, faceIssueOverrides });
+    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(
+      analysis, { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeOverrides });
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -3660,6 +3667,7 @@
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyStyleSelections(lastSingleSelections);
       applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
+      applyBodyReshapeOverrides(lastSingleSelections.bodyReshapeOverrides);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     openInlineAnalysisPanel();
@@ -4188,7 +4196,8 @@
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked,
         advancedOptions: effectiveAdvancedOptions(record),
-        faceIssueOverrides: record.faceIssueOverrides
+        faceIssueOverrides: record.faceIssueOverrides,
+        bodyReshapeOverrides: record.bodyReshapeOverrides
       });
       const modelQuality = effectiveModelQuality(record);
       const analysisModel = effectiveAnalysisModel(record);
@@ -7422,7 +7431,9 @@
   // aesthetic_diagnosis, lighting_strategy) could still lead the model to make
   // the same change anyway. Any non-default pose/angle/lighting/size pick is
   // attached as style_options for the edit prompt.
-  function buildEffectiveAnalysis(analysis, { options, recipeChecked, advancedOptions, faceIssueOverrides } = {}) {
+  function buildEffectiveAnalysis(analysis, {
+    options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeOverrides
+  } = {}) {
     // Applied BEFORE the recipeChecked split below, and on the same
     // `advancedOptions` #ap-recipe-list was just rendered/refreshed with
     // (renderAnalysisPreview's callers, refreshInlineRecipeList) -- so
@@ -7476,6 +7487,23 @@
       effective.subjects = subjects;
       effective._disabled_face_issues = disabledFaceIssues;
     }
+
+    // Keep every analyzed body key point in subjects[] for review/history,
+    // and send a separate deny-list for the points the user unchecked. The
+    // backend's body_reshape_items() enforces this list for both legacy and
+    // compact editor prompts, so an unchecked item cannot become an edit.
+    const bodyOverrideEntries = Object.entries(bodyReshapeOverrides || {});
+    effective._disabled_body_reshape_subjects = bodyOverrideEntries
+      .filter(([key, allowed]) => key.startsWith("subject:") && allowed === false)
+      .map(([key]) => Number(key.slice("subject:".length)))
+      .filter((subjectIndex) => Number.isInteger(subjectIndex));
+    effective._disabled_body_reshape_key_points = bodyOverrideEntries
+      .filter(([key, allowed]) => !key.startsWith("subject:") && allowed === false)
+      .map(([key]) => {
+        const [subjectIndex, keyPointIndex] = key.split(":").map(Number);
+        return { subject_index: subjectIndex, key_point_index: keyPointIndex };
+      })
+      .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index));
 
     // `analysis` already carries its own _advanced_options, baked in at
     // analyze time (pipeline.py's analyze_stage) -- overwrite it with
@@ -7548,6 +7576,7 @@
     record.options = options;
     if (recipeChecked) record.recipeChecked = recipeChecked;
     record.faceIssueOverrides = getFaceIssueOverrides();
+    record.bodyReshapeOverrides = getBodyReshapeOverrides();
   }
 
   // Restores previously-captured pose/angle/lighting/size radios + recipe
@@ -7577,6 +7606,7 @@
   function applyBatchReviewSelections(record) {
     applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
     applyFaceIssueOverrides(record.faceIssueOverrides);
+    applyBodyReshapeOverrides(record.bodyReshapeOverrides);
   }
 
   function resetApp() {

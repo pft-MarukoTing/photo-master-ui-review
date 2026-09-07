@@ -449,6 +449,15 @@
       object-fit: cover;
       display: block;
     }
+    /* Wider than the shared .error-modal-box's own 440px (see
+       .ap-style-modal-box above for the same override pattern) -- gives
+       #ap-face-modal-thumb below room to be a real portrait, not a tiny
+       icon crammed into a message-sized box. */
+    .ap-face-modal-box {
+      width: min(520px, calc(100vw - 40px));
+      max-height: min(90vh, 760px);
+      overflow-y: auto;
+    }
     /* #ap-face-modal's own larger echo of whichever #ap-face-thumb-row
        button was clicked (fillFaceIssueList, results.js) -- bigger than the
        41px row button so it reads as "here's who this list is about", not
@@ -4304,7 +4313,12 @@
      (app.js) turn into should_fix=false (adjust_safe=true for smile) plus a
      hard per-subject exclusion sent to the backend (analysis._disabled_face_
      issues), so the edit model is not allowed to make that change for this
-     person. #ap-face-modal-thumb mirrors the same crop shown on the row
+     person. A separate 身形調整 section below those four rows lists
+     subjects[].body_reshape.key_points as checkboxes. Its master switch
+     collapses the list and writes analysis._disabled_body_reshape_subjects;
+     unchecked individual points are written to analysis._disabled_body_
+     reshape_key_points. Both are excluded from the edit contract.
+     #ap-face-modal-thumb mirrors the same crop shown on the row
      button that was clicked (fillFaceIssueList sets its src), hidden
      attribute added/removed instead of a CSS default so a canvas-tainted (no
      thumbnail) face doesn't leave a broken-image icon in the modal. -->

@@ -830,6 +830,31 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   }
 }
 
+.ap-body-reshape-section {
+  margin-top: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-2);
+}
+.ap-body-reshape-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.ap-body-reshape-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text-2);
+  cursor: pointer;
+  line-height: 1.45;
+}
+.ap-body-reshape-option input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
 /* Quality select */
 .quality-select {
   background: var(--card-2)

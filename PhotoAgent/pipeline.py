@@ -28,6 +28,7 @@ from prompts import (
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
     build_eye_repair_planning_instruction,
+    build_body_reshape_planning_instruction,
     eye_repair_targets,
     portrait_qc_persons,
     subject_issue_items,
@@ -198,6 +199,10 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
             "photo_analysis_eye_repair_planning": (
                 build_eye_repair_planning_instruction(repair_targets)
                 if repair_targets else None
+            ),
+            "photo_analysis_body_reshape": (
+                build_body_reshape_planning_instruction(persons)
+                if persons else None
             ),
         }
     else:
