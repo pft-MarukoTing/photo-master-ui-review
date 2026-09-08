@@ -7247,7 +7247,9 @@
   // plus input_tokens_details/output_tokens_details {text_tokens,
   // image_tokens}; Gemini (Step 5/5b on nano-banana-*) uses promptTokenCount/
   // candidatesTokenCount plus promptTokensDetails/candidatesTokensDetails,
-  // arrays of {modality, tokenCount}. This normalizes all three to the same
+  // arrays of {modality, tokenCount}; MAI uses num_input_text_tokens,
+  // num_input_image_tokens, and num_output_tokens. This normalizes all three
+  // provider shapes to the same
   // {input: {text, image}, output: {text, image}, total} before display --
   // whichever shape is missing a breakdown gets counted as all-text.
   function normalizeStageUsage(raw) {
@@ -7271,6 +7273,17 @@
       const outImage = sumModality(raw.candidatesTokensDetails, "IMAGE");
       input = { text: Math.max((raw.promptTokenCount ?? 0) - inImage, 0), image: inImage };
       output = { text: Math.max((raw.candidatesTokenCount ?? 0) - outImage, 0), image: outImage };
+    } else if (
+      raw.num_input_text_tokens !== undefined ||
+      raw.num_input_image_tokens !== undefined ||
+      raw.num_output_tokens !== undefined
+    ) {
+      // Microsoft Foundry MAI image edits API
+      input = {
+        text: raw.num_input_text_tokens ?? 0,
+        image: raw.num_input_image_tokens ?? 0
+      };
+      output = { text: 0, image: raw.num_output_tokens ?? 0 };
     } else {
       // Chat Completions / Responses API -- text only
       input = { text: raw.prompt_tokens ?? 0, image: 0 };

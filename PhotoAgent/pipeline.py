@@ -16,6 +16,7 @@ from gemini_client import (
     edit_gaze_only as edit_gaze_only_gemini,
     NANO_BANANA_LITE_MODEL,
 )
+from mai_client import edit_photo as edit_photo_mai, MAI_IMAGE_26_MODEL
 from openai_client import (
     analyze_photo,
     review_user_instruction,
@@ -40,6 +41,7 @@ EDIT_PHOTO_BY_MODEL = {
     "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
     "nano-banana-2": edit_photo_gemini,
     "nano-banana-lite": partial(edit_photo_gemini, model=NANO_BANANA_LITE_MODEL),
+    "MAI-Image-2.6": partial(edit_photo_mai, model=MAI_IMAGE_26_MODEL),
 }
 
 # Step 5b's model is a separate choice from Step 5's (config.MODELS["gaze_repair"],

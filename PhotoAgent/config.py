@@ -34,14 +34,15 @@ ANALYSIS_MODEL_LABELS = {
 }
 
 # UI-selectable image-edit models (Step 5). "gpt-image-2"/"gpt-image-1.5" call
-# OpenAI's images/edits API (openai_client.edit_photo); "nano-banana-2"/
-# "nano-banana-lite" call Gemini's generateContent API (gemini_client.edit_photo)
-# with Google's gemini-3.1-flash-image / gemini-3.1-flash-lite-image.
+# OpenAI's images/edits API; "nano-banana-2"/"nano-banana-lite" call Gemini's
+# generateContent API; "MAI-Image-2.6" calls Microsoft Foundry's MAI image
+# edits API.
 IMAGE_MODEL_LABELS = {
     "gpt-image-2": "GPT Image 2",
     "gpt-image-1.5": "GPT Image 1.5",
     "nano-banana-2": "Nano Banana 2",
     "nano-banana-lite": "Nano Banana 2 Lite",
+    "MAI-Image-2.6": "MAI-Image-2.6",
 }
 
 PRESETS = {

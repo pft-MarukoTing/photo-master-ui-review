@@ -29,15 +29,16 @@ window.PhotoAgentConfig = {
   defaultEditorPromptStrategy: "resolved_compact",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
-    "nano-banana-2": "Nano Banana 2"
+    "nano-banana-2": "Nano Banana 2",
+    "MAI-Image-2.6": "MAI-Image-2.6"
   },
   // Single source of truth for the merged 修圖模型/影像品質 selector (upload
   // page + analyze-preview) -- one option per valid model+quality
   // combination, instead of two independent selects the user could
   // previously pair up in invalid ways (and whose option lists had to be
-  // hand-duplicated across both screens). Nano Banana 2 (Gemini) has no
-  // quality parameter at all, so it gets a single option with quality fixed
-  // to a sensible default rather than a user-facing quality choice.
+  // hand-duplicated across both screens). Nano Banana 2 (Gemini) and
+  // MAI-Image-2.6 have no PhotoAgent quality tier, so each gets one option
+  // with quality fixed internally rather than a user-facing quality choice.
   // "Standard"/"Enhanced" (not "Low"/"Medium") describe what the two tiers
   // actually trade off -- faster/lighter vs. more detail -- without reading
   // as "worse" vs. "better" the way the raw API quality names do; `quality`
@@ -45,7 +46,8 @@ window.PhotoAgentConfig = {
   imageModelQualityOptions: [
     { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard" },
     { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced" },
-    { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" }
+    { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" },
+    { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6" }
   ],
   defaultImageModelQuality: "gpt-image-2:low",
   // User-facing aspect-ratio choices (upload page + analyze-preview, above

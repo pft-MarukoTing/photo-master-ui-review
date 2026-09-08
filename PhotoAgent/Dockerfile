@@ -54,6 +54,7 @@ COPY sdl_face_detector.py /app/
 COPY models              /app/models
 COPY openai_client.py    /app/
 COPY gemini_client.py   /app/
+COPY mai_client.py      /app/
 COPY pipeline.py         /app/
 COPY job_processor.py    /app/
 COPY server.py           /app/
