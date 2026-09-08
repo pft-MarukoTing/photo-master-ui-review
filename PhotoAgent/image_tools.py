@@ -161,7 +161,7 @@ def detect_face_crops(image_bytes: bytes) -> list:
     # A real face's false-positive companions from background texture/pattern
     # are usually far smaller than the real thing in the same frame; this
     # drops those without needing a second model to tell them apart.
-    filtered = [b for b in boxes if b[2] * b[3] >= largest_area * 0.4]
+    filtered = [b for b in boxes if b[2] * b[3] >= largest_area * 0.2]
     # Only the first _FACE_CROP_MAX_COUNT faces get an actual cropped image
     # sent to the analysis model (token-cost cap). A photo can legitimately
     # have more locally-detected faces than that -- those still get a
