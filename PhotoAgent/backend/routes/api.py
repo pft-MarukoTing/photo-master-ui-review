@@ -6,6 +6,7 @@ from functools import lru_cache
 
 import requests
 from flask import Blueprint, Response, current_app, jsonify, request, send_from_directory
+from PIL import Image as PILImage
 from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
@@ -552,6 +553,22 @@ def result_pre_edit_image(job_id):
     return Response(image_bytes, mimetype="image/png")
 
 
+def _ensure_jpeg_bytes_or_error(image_bytes):
+    """ensure_jpeg_bytes(), but turns PIL's decompression-bomb guard into a
+    plain-language 422 instead of an unhandled 500 -- these routes serve a
+    source image that's already stored (unlike the /submit upload path,
+    which never gets this far for an oversized photo), so a job created
+    before that guard existed, or one whose source came from an
+    already-huge upload, can still trip it here. Returns (jpeg_bytes, None)
+    on success or (None, response) on failure, mirroring this file's other
+    (result, error) route helpers.
+    """
+    try:
+        return ensure_jpeg_bytes(image_bytes), None
+    except PILImage.DecompressionBombError:
+        return None, (jsonify({"error": "Image resolution is too high, please use a smaller image."}), 422)
+
+
 def _immutable_image_response(image_bytes, mimetype):
     """Same Response(bytes, mimetype) every image route already returns, plus
     a long-lived Cache-Control -- used only where the bytes for a given URL
@@ -642,7 +659,10 @@ def source_image(job_id):
     # normalizes it to a real JPEG first -- same reasoning as /result/<job_id>
     # /image's hardcoded "image/png" mimetype, which is safe as-is since that
     # one's bytes are always genuinely PNG-encoded already.
-    return Response(ensure_jpeg_bytes(image_bytes), mimetype="image/jpeg")
+    jpeg_bytes, error_response = _ensure_jpeg_bytes_or_error(image_bytes)
+    if error_response:
+        return error_response
+    return Response(jpeg_bytes, mimetype="image/jpeg")
 
 
 @api_bp.get("/source/<job_id>/thumbnail")
@@ -671,7 +691,10 @@ def source_thumbnail(job_id):
     # Unlike thumb_bytes above (already a real JPEG from create_preview_bytes
     # at upload time), this is the raw full-res upload -- same HEIC/HEIF risk
     # as source_image() above, so normalize it the same way.
-    return _immutable_image_response(ensure_jpeg_bytes(image_bytes), "image/jpeg")
+    jpeg_bytes, error_response = _ensure_jpeg_bytes_or_error(image_bytes)
+    if error_response:
+        return error_response
+    return _immutable_image_response(jpeg_bytes, "image/jpeg")
 
 
 # ── Two-stage local flow: analyze now, review, /continue later ─────────────
