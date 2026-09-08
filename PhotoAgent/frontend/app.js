@@ -1413,7 +1413,11 @@
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
     pendingResultsActive = true;
     if (els.downloadLink) {
-      els.downloadLink.hidden = !selectedFile;
+      // selectedFile is null for a history record reopened at this same
+      // pending-review stage (viewAnalyzeHistoryRecord) -- selectedFileSourceUrl
+      // is its own source photo in that case, so only hide the button when
+      // neither is available.
+      els.downloadLink.hidden = !selectedFile && !selectedFileSourceUrl;
       els.downloadLink.title = "下載原圖";
       els.downloadLink.setAttribute("aria-label", "下載原圖");
     }
@@ -2124,10 +2128,17 @@
   // include), plus whatever the analyze stage itself already produced in
   // --debug-ui mode (the raw analysis + its own prompts, same JSON shape
   // buildNestedImageFiles writes per-RUN, just without a run_N/ subfolder
-  // since there's only ever one of these per photo).
+  // since there's only ever one of these per photo). selectedFile is null
+  // for a history record reopened at this same pending-review stage
+  // (viewAnalyzeHistoryRecord) -- falls back to fetching selectedFileSourceUrl
+  // instead, same as fetchImageDownloadData's own file/sourceUrl fallback.
   async function buildPendingSourceZip() {
-    const sourceBuf = selectedFile ? await selectedFile.arrayBuffer() : null;
-    const files = sourceBuf ? [{ name: selectedFile.name || "source.jpg", data: new Uint8Array(sourceBuf) }] : [];
+    const sourceBuf = selectedFile
+      ? await selectedFile.arrayBuffer()
+      : selectedFileSourceUrl
+        ? await fetchWithRetry(selectedFileSourceUrl).then((response) => response.arrayBuffer())
+        : null;
+    const files = sourceBuf ? [{ name: selectedFile?.name || "source.jpg", data: new Uint8Array(sourceBuf) }] : [];
     if (isDebugUiActive && singleFlowState?.analysis) {
       const analysisBytes = new TextEncoder().encode(JSON.stringify(singleFlowState.analysis, null, 2));
       const promptsBytes = new TextEncoder().encode(buildPromptsJson(singleFlowState.analysis.prompts || {}));
@@ -2187,7 +2198,7 @@
   }
 
   async function downloadPendingSource() {
-    if (!selectedFile) return;
+    if (!selectedFile && !selectedFileSourceUrl) return;
     // --debug-ui mode still zips (source + analysis.json + prompts.json),
     // same reasoning as downloadCurrentResultOnly's split below -- plain
     // mode just wants the one photo, no zip overhead for a single file.
@@ -2196,7 +2207,36 @@
       return;
     }
     try {
-      await saveImageToDevice(selectedFile, selectedFile.name || buildDownloadImageFilename());
+      // selectedFile is null for a history record reopened at this same
+      // pending-review stage (viewAnalyzeHistoryRecord) -- fetch its own
+      // source photo (selectedFileSourceUrl) into a blob instead, same
+      // fallback buildPendingSourceZip's debug-mode path applies.
+      const blob = selectedFile || await fetchWithRetry(selectedFileSourceUrl).then((response) => response.blob());
+      await saveImageToDevice(blob, (selectedFile && selectedFile.name) || buildDownloadImageFilename());
+      showNoticeModal("已下載完成。");
+    } catch (error) {
+      showError("下載失敗，請稍後再試。");
+    }
+  }
+
+  // downloadPendingSource's batch counterpart -- for a batch record still at
+  // "analyzed" (reviewed but not yet edited), #download-link has the same
+  // "only the source photo exists" situation as the single-image flow's own
+  // pending-review screen, just keyed off this record's file/analysis
+  // instead of selectedFile/singleFlowState. Reuses buildBatchSourceFiles
+  // (buildAllBatchResultsZip's own per-image fallback) for the debug-mode
+  // zip so the analysis.json/prompts.json inclusion logic isn't duplicated.
+  async function downloadPendingBatchSource(record) {
+    if (!record.file) return;
+    if (isDebugUiActive) {
+      await downloadZip(
+        async () => window.PhotoAgentZip.createZip(await buildBatchSourceFiles(record, "", () => {})),
+        buildDownloadZipFilename()
+      );
+      return;
+    }
+    try {
+      await saveImageToDevice(record.file, record.file.name || buildDownloadImageFilename());
       showNoticeModal("已下載完成。");
     } catch (error) {
       showError("下載失敗，請稍後再試。");
@@ -2585,6 +2625,15 @@
     event.preventDefault();
     if (pendingResultsActive) {
       downloadPendingSource();
+      return;
+    }
+    // Batch counterpart of pendingResultsActive: the currently-viewed record
+    // is still at its pre-edit analysis review (showBatchAnalyzedMain), so
+    // there's no result yet to route through the lastResult path below --
+    // same "only the source photo exists" situation, just per-record instead
+    // of a single global flag.
+    if (currentBatchRecord && currentBatchRecord.status === "analyzed") {
+      downloadPendingBatchSource(currentBatchRecord);
       return;
     }
     if (!lastResult) return;
@@ -4342,31 +4391,72 @@
     await Promise.all(runners);
   }
 
-  // Batch counterpart of buildResultZip/buildAllRunsZip: bundles every done
+  // Batch counterpart of buildResultZip/buildAllRunsZip: bundles every
   // image's *every done RUN* into one zip, each image under its own
   // "image N/" folder (1-indexed by position in the batch) -- if an image
   // was revised with a higher RUN count, all of those RUNs are included, not
   // just the currently mirrored one, so the zip's file count actually
   // matches how many results were generated instead of silently dropping to
-  // one per image.
+  // one per image. An image with no done RUN yet (still under analysis
+  // review, or its edit is running/failed) falls back to just its original
+  // source photo -- same reasoning as buildPendingSourceZip for the
+  // single-image flow -- so "download all" has something to offer from the
+  // analysis page onward instead of staying hidden until every image is
+  // fully edited.
   function doneBatchRecordsWithResult() {
     return batchRecords.filter((r) => r.status === "done" && r.result);
   }
 
   // Same "fall back to a synthetic single run" shape as lastResultRuns(),
-  // for a batch record instead of the single-image flow's lastResult.
+  // for a batch record instead of the single-image flow's lastResult. Only
+  // safe to call on a record that's actually done (record.runs empty/absent
+  // otherwise just means "no edit attempted yet", not "one implicit done
+  // run") -- callers that iterate every batchRecords entry regardless of
+  // status (buildAllBatchResultsZip) must check that themselves first.
   function batchRecordRuns(record) {
     if (Array.isArray(record.runs) && record.runs.length) return record.runs;
     return [{ run: 1, result: record.result, jobId: record.jobId, status: "done" }];
   }
 
+  // done-only RUNs for one batch record, safe to call regardless of the
+  // record's status -- a record with no runs array is only a real single
+  // done RUN (batchRecordRuns' synthetic fallback) when it's actually done
+  // with a result; otherwise (still pending/analyzing/processing/error) it
+  // has none.
+  function doneRunsForBatchRecord(record) {
+    if (Array.isArray(record.runs) && record.runs.length) {
+      return record.runs.filter((run) => run.status === "done");
+    }
+    return (record.status === "done" && record.result) ? batchRecordRuns(record) : [];
+  }
+
+  // --debug-ui parity with buildPendingSourceZip's own source-only bundle:
+  // an image with no done RUN yet still has whatever the analyze stage
+  // already produced, so include that under this image's own prefix folder
+  // instead of leaving debug mode's "download all" no more informative than
+  // normal mode's.
+  async function buildBatchSourceFiles(record, prefix, onItemDone) {
+    const sourceBuf = await record.file.arrayBuffer();
+    const files = [{ name: prefix + (record.file.name || "source.jpg"), data: new Uint8Array(sourceBuf) }];
+    if (isDebugUiActive && record.analysis) {
+      const analysisBytes = new TextEncoder().encode(JSON.stringify(record.analysis, null, 2));
+      const promptsBytes = new TextEncoder().encode(buildPromptsJson(record.analysis.prompts || {}));
+      files.push(
+        { name: prefix + "analysis.json", data: analysisBytes },
+        { name: prefix + "prompts.json", data: promptsBytes }
+      );
+    }
+    onItemDone();
+    return files;
+  }
+
   async function buildAllBatchResultsZip(onProgress) {
-    const records = doneBatchRecordsWithResult();
-    const runsPerRecord = records.map((r) => batchRecordRuns(r).filter((run) => run.status === "done"));
-    // Aggregate across every image's RUNs, not just one image's -- each
-    // image's fetches run in parallel, so this is a shared counter rather
-    // than a per-image local count.
-    const total = runsPerRecord.reduce((sum, runs) => sum + runs.length, 0);
+    const runsPerRecord = batchRecords.map((r) => doneRunsForBatchRecord(r));
+    // Aggregate across every image's RUNs (or the one source-photo fallback
+    // "item" for an image with no done RUN yet), not just one image's --
+    // each image's fetches run in parallel, so this is a shared counter
+    // rather than a per-image local count.
+    const total = runsPerRecord.reduce((sum, runs) => sum + (runs.length || 1), 0);
     let done = 0;
     const tick = () => {
       done += 1;
@@ -4378,29 +4468,32 @@
     // fetches at once can overwhelm the browser's connection/TLS handling
     // (net::ERR_HTTP2_PROTOCOL_ERROR, net::ERR_CERT_VERIFIER_CHANGED),
     // failing the whole zip over what's really just too much concurrency.
-    const groups = await mapWithConcurrency(records, 3, (r, i) =>
-      buildImageFiles(
-        { file: r.file, path: batchSettings.path, prefix: `image ${i + 1}/` },
-        runsPerRecord[i],
-        tick
-      )
-    );
+    const groups = await mapWithConcurrency(batchRecords, 3, (r, i) => {
+      const prefix = `image ${i + 1}/`;
+      const runs = runsPerRecord[i];
+      return runs.length
+        ? buildImageFiles({ file: r.file, path: batchSettings.path, prefix }, runs, tick)
+        : buildBatchSourceFiles(r, prefix, tick);
+    });
     return window.PhotoAgentZip.createZip(groups.flat());
   }
 
   function updateBatchDownloadAllVisibility() {
     if (!els.batchDownloadAllBtn) return;
-    const count = doneBatchRecordsWithResult().length;
-    els.batchDownloadAllBtn.hidden = count === 0;
-    if (count > 0) {
-      const hint = `下載所有已完成的結果（${count} 張）`;
-      els.batchDownloadAllBtn.title = hint;
-      els.batchDownloadAllBtn.setAttribute("aria-label", hint);
-    }
+    els.batchDownloadAllBtn.hidden = batchRecords.length === 0;
+    if (batchRecords.length === 0) return;
+    const doneCount = doneBatchRecordsWithResult().length;
+    const hint = doneCount === 0
+      ? `下載所有原圖（${batchRecords.length} 張）`
+      : doneCount === batchRecords.length
+        ? `下載所有已完成的結果（${doneCount} 張）`
+        : `下載全部（已完成 ${doneCount} 張，其餘為原圖，共 ${batchRecords.length} 張）`;
+    els.batchDownloadAllBtn.title = hint;
+    els.batchDownloadAllBtn.setAttribute("aria-label", hint);
   }
 
   function handleDownloadAllBatchClick() {
-    if (!doneBatchRecordsWithResult().length) return;
+    if (!batchRecords.length) return;
     downloadZip(buildAllBatchResultsZip, buildDownloadZipFilename());
   }
 
@@ -6714,6 +6807,15 @@
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
+    // Same "下載原圖" treatment as the single-image flow's own pending-review
+    // screen (showPendingResults) -- no edit has run yet, so this can only
+    // ever offer the source photo, handled by handleDownloadClick's
+    // currentBatchRecord-is-"analyzed" branch above.
+    if (els.downloadLink) {
+      els.downloadLink.hidden = !record.file;
+      els.downloadLink.title = "下載原圖";
+      els.downloadLink.setAttribute("aria-label", "下載原圖");
+    }
     resetRunSwitcher(); // no RUNs exist yet for this record
 
     // Same partial-timing display as the single-flow review screen

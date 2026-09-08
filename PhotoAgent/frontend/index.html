@@ -1091,10 +1091,11 @@
       gap: 8px; margin: 0 0 16px;
       /* min-height:30px matches #batch-download-all-btn's own height --
          without it, the row is only as tall as the title text before that
-         button appears (hidden until the first image finishes), so its
-         vertical center shifts once the button shows up, throwing off
-         alignment with .batch-sidebar-close-btn's fixed top:20px/30px-tall
-         box. Keeping the row's height steady keeps both states aligned. */
+         button appears (hidden until the batch has at least one image),
+         so its vertical center shifts once the button shows up, throwing
+         off alignment with .batch-sidebar-close-btn's fixed
+         top:20px/30px-tall box. Keeping the row's height steady keeps both
+         states aligned. */
       min-height: 30px;
     }
     .batch-sidebar-title {
@@ -1105,7 +1106,7 @@
          to wrap on, so without this the header row refused to shrink below
          the title's full text width and instead overflowed past the
          drawer's own (fixed) edge once #batch-download-all-btn appeared
-         alongside it, which only happens once the first image finishes. */
+         alongside it, which happens as soon as the batch has any image. */
       flex: 1 1 auto; min-width: 0;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
