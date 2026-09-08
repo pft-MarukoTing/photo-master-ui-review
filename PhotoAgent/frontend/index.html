@@ -275,21 +275,22 @@
       box-shadow: var(--shadow-accent);
     }
     /* Pushes .ap-settings-run-row (#ap-advanced-settings-btn + Run) to the
-       far right of .options-card-inline's otherwise plain flex-start pill
-       row, both as one unit -- same pattern as #advanced-settings-btn/
+       far right of .ap-actions-row's otherwise plain flex-start pill row,
+       both as one unit -- same pattern as #advanced-settings-btn/
        #start-direct-btn on the upload page's .upload-actions-row.
        margin-left:auto lives on the wrapper rather than on either child
        alone so the pair moves *together* to whichever line has room and
        stays right-aligned there, instead of one getting pushed right while
        the other wraps to its own line flush left.
-       order:6 puts this wrapper on its own line *after* .ap-style-picked's
-       chip line (order:5, below) even though this wrapper comes before
-       .ap-style-picked in the DOM -- see the comment there. When there are
-       no picks, .ap-style-picked is hidden (no flex space at all), so this
-       wrapper just follows #ap-style-picker directly, same as before chips
-       existed. */
-    .options-card-inline .ap-settings-run-row {
-      order: 6;
+       order:2 (scoped to .ap-actions-row, not the outer .options-card-inline
+       -- see .ap-actions-row below) puts this wrapper on its own line
+       *after* .ap-style-picked's chip line (order:1, below) even though this
+       wrapper comes before .ap-style-picked in the DOM -- see the comment
+       there. When there are no picks, .ap-style-picked is hidden (no flex
+       space at all), so this wrapper just follows #ap-style-picker directly,
+       same as before chips existed. */
+    .ap-actions-row .ap-settings-run-row {
+      order: 2;
       display: inline-flex;
       align-items: center;
       gap: 10px;
@@ -335,23 +336,177 @@
     }
     .ap-sub-label:first-child { margin-top: 0; }
 
+    /* ── Step indicator (#ap-step-indicator): always shows 分析 as the
+       active step -- see the markup comment there for the one exception
+       (read-only historical playback hides this element entirely). A
+       sibling of #ap-options-card-inline (not one of its flex children --
+       see the order scheme below), so it can sit above the photo, full
+       width, while the options card itself still lands below it. */
+    .ap-step-indicator {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    .ap-step {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-2);
+      font-weight: 600;
+      font-size: 14px;
+    }
+    /* Ring drawn as an inset box-shadow, not a border -- a border at this
+       1.5px (sub-pixel) width toggled to transparent for the active state
+       (below) left a faint crescent where the circle's rounded corner
+       rasterized slightly differently for the border layer vs. the
+       background fill, most visible at higher zoom/DPI. box-shadow doesn't
+       carve its own separately-anti-aliased edge the way a border does, so
+       switching it off entirely for the active state (rather than just
+       recoloring it transparent) leaves a clean gradient-filled circle. */
+    .ap-step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+      background: transparent;
+      box-shadow: inset 0 0 0 1.5px var(--border-2);
+      color: var(--text-2);
+    }
+    .ap-step--active { color: var(--text); }
+    .ap-step--active .ap-step-num {
+      background: var(--mv-grad);
+      box-shadow: none;
+      color: #fff;
+    }
+    .ap-step-line {
+      flex: 1;
+      height: 2px;
+      margin: 0 10px;
+      background: var(--border-2);
+    }
+    .ap-step-line--active {
+      background: linear-gradient(90deg, var(--accent), var(--border-2));
+    }
+
+    /* ── Shared collapsible-card shell for #ap-recipe-inline (修圖建議) and
+       #ap-face-review (人像檢查) -- replaces the old #ap-recipe-picker
+       button + #ap-recipe-modal, and the old per-person face-thumb-row +
+       #ap-face-modal. One continuous box (background+border on the <details>
+       itself) instead of a summary pill sitting above a separately-framed
+       .step-list-frame -- those used to read as two stacked, unrelated
+       cards instead of one header-plus-body block. The summary is just this
+       box's own top edge (padding only, no background/border of its own);
+       a hairline border-top appears on it only once open, marking where the
+       header ends and the body begins instead of a visible gap between two
+       boxes. #ap-*-count (below) gives the collapsed state something to say
+       ("N 項"/"N 人") instead of just a plain label + chevron, which on its
+       own read as plain text rather than a control on a first visit.
+       Scoped to these two ids rather than the shared .ap-options-toggle base
+       rule, which other collapsible sections (Workflow Report, Technical
+       Details, ...) still use plain. ── */
+    .ap-toggle-card {
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .ap-toggle-card > summary {
+      padding: 10px 14px;
+      transition: background .15s;
+    }
+    .ap-toggle-card > summary:hover { background: var(--card-3); }
+    .ap-toggle-card[open] > summary { border-bottom: 1px solid var(--border-2); }
+    .ap-toggle-card > summary::before { font-size: 13px; }
+    /* The label-plus-count row -- its own flex row (not space-between on the
+       whole <summary>) because the chevron (::before) is also a flex child
+       of .ap-label/summary itself; space-between across chevron+label+count
+       together spread the label away from the chevron into the middle of
+       the row instead of flush left right after it. flex:1 lets this take
+       all the width the chevron doesn't need, so #ap-*-count still lands at
+       the box's own right edge. */
+    .ap-toggle-summary-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex: 1;
+      min-width: 0;
+    }
+    .ap-toggle-count {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text-2);
+    }
+    .ap-toggle-card-body { padding: 14px; }
+    .ap-toggle-card .step-inline-list { gap: 10px; }
+    /* #ap-face-review's summary holds an extra row (the tab thumbnails,
+       always visible even collapsed -- see its own markup comment) below
+       the label+count row. The chevron (::before) stays a direct flex child
+       of .ap-label/summary itself (row direction, unchanged) so
+       align-items:flex-start (overriding .ap-label's own center) simply
+       pins it to the top of that row instead of centering against the
+       taller two-row block below it. .ap-face-review-summary-inner is the
+       sibling that actually stacks label-row-then-tabs-row in a column. */
+    .ap-face-review-summary { align-items: flex-start; }
+    .ap-face-review-summary-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
     /* Hairline divider between each top-level section of the panel */
     .analysis-preview > .ap-row + .ap-row {
       border-top: 1px solid var(--border);
       padding-top: 16px;
     }
 
-    /* #ap-options-prompt (補充指令) is #ap-options-card-inline's own last
-       child now (see markup comment there) -- flex-basis:100% forces it onto
-       its own full-width line below the pill row instead of wrapping in
-       among the pills, since .options-card-inline is otherwise a plain
-       flex-wrap row. order:7 keeps it last even though .ap-style-picked
-       (below) also claims flex-basis:100% -- see the comment there. */
+    /* .options-card-inline is a plain flex-wrap row whose visual order is
+       driven entirely by these order: integers (not DOM position) -- four
+       full-width (flex-basis:100%) blocks, top to bottom: inline 修圖建議
+       checklist (0), per-person face review (1), 補充指令 textarea (2), then
+       the operational controls grouped together (3) -- read the recipe/face
+       review first, adjust style/portrait settings and run last.
+       #ap-step-indicator (markup comment above) is a sibling of this whole
+       element, not one of these flex children, so it's positioned above the
+       photo instead. */
+    /* IDs, not the shared .ap-toggle-card class -- when that class was
+       introduced (unifying #ap-recipe-inline/#ap-face-review's look) this
+       rule was left keyed to the old per-section class name
+       (.ap-recipe-inline), which no longer exists in either element's class
+       list, silently dropping its flex-basis:100% -- #ap-recipe-inline fell
+       back to flex-basis:auto (shrink-to-fit its own text) instead of
+       stretching to match #ap-face-review's full width right below it. */
+    #ap-recipe-inline { order: 0; flex-basis: 100%; }
+    #ap-face-review { order: 1; flex-basis: 100%; }
     .options-card-inline > .ap-options-prompt {
-      order: 7;
+      order: 2;
       flex-basis: 100%;
       margin-top: 6px;
     }
+    /* Groups #ap-style-picker + its picked-chips + .ap-settings-run-row
+       (人像設定/Run) into one full-width block, last -- order values *inside*
+       this wrapper (below) reproduce the same relative layout these elements
+       had before this restructure, just rescoped from .options-card-inline's
+       direct children to this wrapper's. */
+    .ap-actions-row {
+      order: 3;
+      flex-basis: 100%;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-top: 6px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .ap-actions-row > #ap-style-picker { order: 0; }
 
     .ap-options-toggle > summary {
       cursor: pointer;
@@ -387,12 +542,12 @@
       align-items: center;
       gap: 6px;
       height: 41px;
-      /* Explicit height (not just padding + line-height) -- #ap-recipe-picker
-         is a <button>, while every other trigger here (修圖風格選項/模型/
-         生成張數/Pose/Angle/Lighting/Size) is a <summary>; padding alone
-         happened to compute to the same height for both, but pinning it
-         directly guarantees 修圖建議 never drifts out of line with the rest
-         of the row regardless of any button-vs-summary UA quirk. */
+      /* Explicit height (not just padding + line-height) -- #ap-style-picker/
+         #ap-advanced-settings-btn are <button>s, while every other trigger
+         here (模型/生成張數/Pose/Angle/Lighting/Size) is a <summary>; padding
+         alone happened to compute to the same height for both, but pinning
+         it directly guarantees 修圖風格 never drifts out of line with the
+         rest of the row regardless of any button-vs-summary UA quirk. */
       padding: 0 16px;
       background: var(--card-2);
       border: 1px solid var(--border-2);
@@ -418,62 +573,96 @@
       box-shadow: 0 0 0 3px rgba(168,85,247,.14);
     }
     .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
-    /* flex-basis:100% (same trick as .ap-style-picked/.ap-options-prompt
-       below) forces this onto its own full-width line above the
-       #ap-recipe-picker/#ap-style-picker pill row, instead of its
-       .ap-face-thumb-btn children wrapping in among those pills -- default
-       order (0) plus being first in the DOM (see renderFaceThumbnails,
-       results.js) puts that line first. */
-    .ap-face-thumb-row {
-      flex-basis: 100%;
+    /* Tab row of every detected person's thumbnail (renderFaceTabs, results.js)
+       -- keeps the compact "縮圖" look the old #ap-face-thumb-row avatar row
+       had, but the click target now switches which person's detail shows in
+       #ap-face-detail below instead of opening #ap-face-modal. Only one
+       person's detail renders at a time, so there's no per-card expand/
+       collapse state to keep visually aligned across a row of neighbors. */
+    .ap-face-tabs {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
     }
-    .ap-face-thumb-row[hidden] { display: none; }
-    .ap-face-thumb-btn {
-      width: 41px;
-      height: 41px;
+    /* Separate wrapper around the button + badge, NOT overflow:hidden itself
+       -- .ap-face-tab below needs overflow:hidden to clip its square
+       thumbnail image into a circle, but that same property would just as
+       readily clip .ap-face-tab-badge's corner (positioned to hang slightly
+       outside the circle) if the badge were its child instead of its
+       sibling here. The active-state ring lives on this wrapper for the
+       same reason -- a box-shadow drawn on the clipped button would itself
+       get clipped right at the circle's own edge. */
+    .ap-face-tab-wrap {
+      position: relative;
+      display: inline-flex;
+      border-radius: 50%;
+    }
+    .ap-face-tab-wrap.is-active { box-shadow: 0 0 0 3px rgba(168,85,247,.18); }
+    .ap-face-tab {
+      width: 44px;
+      height: 44px;
       padding: 0;
       border: 1.5px solid var(--border-2);
       border-radius: 50%;
-      background: var(--card-2);
+      background: var(--card-3);
       cursor: pointer;
       overflow: hidden;
       transition: border-color .15s, transform .15s;
     }
-    .ap-face-thumb-btn:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
-    .ap-face-thumb-img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    /* Wider than the shared .error-modal-box's own 440px (see
-       .ap-style-modal-box above for the same override pattern) -- gives
-       #ap-face-modal-thumb below room to be a real portrait, not a tiny
-       icon crammed into a message-sized box. */
-    .ap-face-modal-box {
-      width: min(520px, calc(100vw - 40px));
-      max-height: min(90vh, 760px);
-      overflow-y: auto;
-    }
-    /* #ap-face-modal's own larger echo of whichever #ap-face-thumb-row
-       button was clicked (fillFaceIssueList, results.js) -- bigger than the
-       41px row button so it reads as "here's who this list is about", not
-       just a repeat of the same tiny icon. */
-    .ap-face-modal-thumb {
-      display: block;
-      width: 140px;
-      height: 140px;
-      object-fit: cover;
+    .ap-face-tab:hover { transform: translateY(-1px); }
+    .ap-face-tab-wrap.is-active .ap-face-tab { border-color: var(--accent); }
+    .ap-face-tab-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    /* A face beyond the local crop cap, or a subjects[] entry the model found
+       on its own with no backing local detection (results.js's sentToModel
+       !== true) -- no zoomed close-up ever reached the model for this one, so
+       dim it a touch; #ap-face-detail's own note (buildPersonIssueItems)
+       spells out the same caveat in words once this tab is selected. */
+    .ap-face-tab--local-only { opacity: .6; outline: 1.5px dashed var(--border-2); outline-offset: 1px; }
+    /* Lets the user spot which people have a flagged issue without stepping
+       through every tab -- reflects the model's own should_fix/adjust_safe
+       verdict, not the allow/deny toggle in #ap-face-detail, so it stays put
+       even after a flagged fix is turned off (still something the analysis
+       found, just no longer approved). A sibling of .ap-face-tab (see
+       .ap-face-tab-wrap above), not its child, so .ap-face-tab's own
+       overflow:hidden circle-clip doesn't cut it off. */
+    .ap-face-tab-badge {
+      /* Same subtle tinted-not-solid treatment the very first version of
+         this hint used (the old #ap-face-thumb-row avatar badge) -- a solid
+         opaque red circle read as a notification/alert bubble, more
+         attention-grabbing than this is meant to be (just "worth a look",
+         not "something's wrong"). */
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
-      border: 1.5px solid var(--border-2);
-      margin: 0 auto 14px;
+      background: rgba(239, 68, 68, .18);
+      color: var(--red);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      /* Separates the badge from whatever photo/color sits directly behind
+         it (the avatar thumbnail) without reading as its own hard outline --
+         a dark ring (var(--card-2), then a translucent black) both read as
+         a heavier outline than the badge's own translucent red fill. Same
+         light, barely-there border-2 tone the tab avatars themselves use,
+         instead of a dark one, keeps it consistent with the rest of the
+         panel's subtle-border language. */
+      box-shadow: 0 0 0 1.5px var(--border-2);
     }
-    .ap-face-modal-thumb[hidden] { display: none; }
+    .ap-face-detail-name {
+      font-weight: 700;
+      color: var(--text);
+      font-size: 15px;
+      margin: 0 0 10px;
+    }
     /* Debug-only: the analysis model's own reasoning for a flagged item
-       (fillFaceIssueList, results.js) -- its own line under the verdict
+       (buildPersonIssueItems, results.js) -- its own line under the verdict
        label, smaller/muted so it reads as supporting detail, not another
        checklist row. */
     .ap-face-issue-reason {
@@ -540,8 +729,8 @@
       max-height: 150px;
       overflow-y: auto;
     }
-    /* #ap-recipe-picker/#ap-style-picker are plain <button>s (open
-       #ap-recipe-modal/#ap-style-modal, real overlay windows), not
+    /* #ap-style-picker/#ap-advanced-settings-btn are plain <button>s (open
+       #ap-style-modal/#advanced-settings-modal, real overlay windows), not
        <details> -- no dropdown chevron to hint at. */
     .ap-recipe-trigger::after { content: none; }
     /* Removable selected-label chips for #ap-style-picker (see
@@ -549,19 +738,21 @@
        small pill per pick (e.g. "Playful", "Low Shot"), each with its own
        "x" to clear that one category back to Auto/Default without
        reopening #ap-style-modal.
-       order:5 puts this on its own line between #ap-style-picker's own line
-       (修圖建議/修圖風格選項, default order:0) and .ap-settings-run-row
-       (order:6, see its own comment above) -- flex-basis:100% forces the
-       fresh line, and sorting *before* that wrapper (despite coming before
-       it in the DOM too) means #ap-advanced-settings-btn/Run only ever drop
-       down one line when a chip appears, not two. Hidden entirely while
-       there are no picks (see updateStyleTriggerLabel), at which point it
-       takes up no flex space at all and #ap-advanced-settings-btn/Run sit
-       right after #ap-style-picker as before. The indent + left border
-       reads as "sub-items of #ap-style-picker" (the line directly above),
-       not a disconnected floating row. */
-    .options-card-inline > .ap-style-picked {
-      order: 5;
+       Scoped to .ap-actions-row (not the outer .options-card-inline) since
+       that's this element's actual parent now -- see .ap-actions-row above.
+       order:1 puts this on its own line between #ap-style-picker's own line
+       (order:0) and .ap-settings-run-row (order:2, see its own comment
+       above) -- flex-basis:100% forces the fresh line, and sorting *before*
+       that wrapper (despite coming before it in the DOM too) means
+       #ap-advanced-settings-btn/Run only ever drop down one line when a chip
+       appears, not two. Hidden entirely while there are no picks (see
+       updateStyleTriggerLabel), at which point it takes up no flex space at
+       all and #ap-advanced-settings-btn/Run sit right after #ap-style-picker
+       as before. The indent + left border reads as "sub-items of
+       #ap-style-picker" (the line directly above), not a disconnected
+       floating row. */
+    .ap-actions-row > .ap-style-picked {
+      order: 1;
       flex-basis: 100%;
       display: flex;
       flex-wrap: wrap;
@@ -604,8 +795,8 @@
     /* ── 修圖風格選項 overlay (#ap-style-modal): Pose/Angle/Lighting/Size
        shown as a row of type buttons; picking one shows that category's
        image-option grid below (showStyleGroup in app.js). Wider than the
-       plain #ap-recipe-modal/#error-modal box since it needs room for
-       thumbnail cards, not just list rows. ── */
+       plain #error-modal box since it needs room for thumbnail cards, not
+       just list rows. ── */
     /* Capped to the viewport height + flex column so the option grid (the
        part that grows with however many images a category has) scrolls
        internally instead of overflowing past the screen with no way to
@@ -617,9 +808,9 @@
       display: flex;
       flex-direction: column;
       /* Smaller than .error-modal-box's own 20px 22px -- this box holds a
-         lot more (4 pills or a whole option grid) than the plain text
-         .error-modal-box/#ap-recipe-modal use it for, so it benefits more
-         from the extra breathing room the padding would otherwise eat into. */
+         lot more (4 pills or a whole option grid) than the plain text a
+         bare .error-modal-box holds, so it benefits more from the extra
+         breathing room the padding would otherwise eat into. */
       padding: 14px 16px;
     }
     .ap-style-modal-box .step-list-frame {
@@ -1211,12 +1402,6 @@
       position: relative; width: min(440px, calc(100vw - 40px));
       background: var(--card); border: 1px solid var(--border-2);
       border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
-    }
-    @media (max-width: 560px) {
-      .ap-face-modal-box {
-        width: calc(100vw - 16px);
-        padding: 14px;
-      }
     }
     /* Divider between the header and everything below it -- originally
        scoped to just #ap-style-modal (its own inner frame border had been
@@ -2884,6 +3069,39 @@
             <div id="ap-subject-tags" class="tag-row"></div>
           </div>
 
+          <!-- Stable anchor -- moved above .compare-card (inside
+               #results-canvas-top, prepended so it lands before the photo)
+               while the inline results-page panel is open, same relocation
+               pattern as #ap-options-card-inline below -- see
+               moveOptionsCardTo/restoreOptionsCardHome in app.js. On the
+               processing screen (no .compare-card to move above) it just
+               stays here. A sibling of #ap-options-card-inline, not nested
+               inside it, so it can be relocated to the very top of the
+               canvas column while the options card itself still lands below
+               the photo. Always shows "分析" as the active step: this panel
+               only ever renders while the user is still reviewing/adjusting
+               before a run, EXCEPT the read-only historical-playback path
+               (viewHistoryRecord -> openInlineAnalysisPanel(true), app.js),
+               where openInlineAnalysisPanel hides this element entirely (an
+               already-finished job has no "current step" to show). -->
+          <div id="ap-step-indicator-home"></div>
+          <div class="ap-step-indicator" id="ap-step-indicator">
+            <div class="ap-step ap-step--active">
+              <span class="ap-step-num">1</span>
+              <span class="ap-step-name">分析</span>
+            </div>
+            <div class="ap-step-line ap-step-line--active"></div>
+            <div class="ap-step">
+              <span class="ap-step-num">2</span>
+              <span class="ap-step-name">修圖</span>
+            </div>
+            <div class="ap-step-line"></div>
+            <div class="ap-step">
+              <span class="ap-step-num">3</span>
+              <span class="ap-step-name">結果</span>
+            </div>
+          </div>
+
           <div class="ap-row">
             <!-- Stable anchor -- moved below .compare-card (inside
                  #results-canvas-top) while the inline results-page panel is
@@ -2895,142 +3113,79 @@
             <!-- Same icon+popover pill pattern as the upload page's option
                  pickers (.ap-style-item/.ap-style-trigger/.ap-style-panel,
                  wireOptionPicker in app.js) instead of .options-card's
-                 plain label/select rows. #ap-options-prompt (below) was
-                 previously a separate .ap-col-left column beside this one --
-                 now it's this element's own last child (flex-basis:100% forces
-                 it onto its own full-width line), so it travels along
-                 automatically whenever moveOptionsCardTo relocates this
-                 whole element, instead of being left behind inside
-                 #analysis-preview. -->
+                 plain label/select rows. Every child here (recipe checklist,
+                 face review, prompt, actions row) is this element's own
+                 direct child (flex-basis:100% forces each onto its own
+                 full-width line, see the CSS order scheme above), so all of
+                 it travels along automatically whenever moveOptionsCardTo
+                 relocates this whole element, instead of being left behind
+                 inside #analysis-preview. -->
             <div class="options-card-inline" id="ap-options-card-inline">
-                <!-- One thumbnail button per detect_face_crops() box, sent to
-                     the model or not (analysis._local_face_boxes -- same
-                     normalized-against-original-image convention as roi_box;
-                     the sent-to-model subset also lands in
-                     analysis._face_crop_boxes, already drawn by the
-                     #boxes-toggle-btn debug overlay). Populated by
-                     renderFaceThumbnails (results.js), which crops each
-                     thumbnail from #original-img via canvas. Only a
-                     sent-to-model face is matched against subjects[].box by
-                     overlap to find that person's blink_issue/gaze_issue/
-                     hair_issue should_fix verdicts; a face beyond the crop
-                     cap (never sent to the model as its own zoomed image)
-                     skips that match entirely and is just shown, dimmed/
-                     dashed, as "a face was detected here". Hidden entirely
-                     when no faces were detected. flex-basis:100% (see the
-                     CSS above) puts this
-                     on its own full-width line above the
-                     #ap-recipe-picker/#ap-style-picker pill row instead of
-                     wrapping in among those pills (see openFaceModal in
-                     app.js for the click handler). -->
-                <div class="ap-face-thumb-row" id="ap-face-thumb-row" hidden></div>
-                <!-- Was a plain always-visible .ap-row (label + checklist),
-                     then briefly a popover pill -- now opens #ap-recipe-modal
-                     instead (see openRecipeModal/closeRecipeModal in app.js),
-                     a real overlay window instead of a small anchored panel.
-                     #ap-recipe-list itself (still a fillCheckList-populated
-                     .step-inline-list) just moved into that modal, unchanged
-                     otherwise. -->
-                <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-recipe-picker">
-                  <span class="option-pill-icon">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                      <path d="M9 6h11M9 12h11M9 18h11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                      <path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </span>
-                  <span class="ap-style-value">修圖建議</span>
-                </button>
-                <!-- Was a <details class="ap-row"> that expanded inline
-                     (pushing everything below it down), then a nested-popover
-                     pill (Pose/Angle/Lighting/Size each their own text-only
-                     radio-list popover) -- now a plain button opening
-                     #ap-style-modal, a real overlay window listing the 4
-                     style types as buttons first, then that type's options as
-                     image thumbnail buttons (see openStyleModal/
-                     showStyleGroup in app.js). Same shape as
-                     #ap-recipe-picker/#ap-recipe-modal above. -->
-                <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-style-picker">
-                  <span class="option-pill-icon">
-                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                      <path d="M4 6h9M17 6h3M4 12h4M11 12h9M4 18h12M19 18h1"
-                        stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                      <circle cx="13" cy="6" r="2" fill="currentColor"/>
-                      <circle cx="8" cy="12" r="2" fill="currentColor"/>
-                      <circle cx="16" cy="18" r="2" fill="currentColor"/>
-                    </svg>
-                  </span>
-                  <span class="ap-style-value">修圖風格</span>
-                </button>
-                <!-- Selected Pose/Angle/Lighting/Size label(s) (e.g.
-                     "Playful"/"Low Shot" as separate chips). flex-basis:100%
-                     (.options-card-inline .ap-style-picked, same trick as
-                     .ap-options-prompt below) puts this on its own full-width
-                     line under the pill row instead of sitting inline after
-                     #ap-style-picker -- inline, a growing/shrinking chip list
-                     shoved #ap-advanced-settings-btn/#inline-analysis-continue-btn
-                     sideways (or onto a wrapped second line) every time a
-                     pick changed. Hidden entirely while everything's still
-                     Default/Auto. updateStyleTriggerLabel (results.js) keeps
-                     this in sync whenever the modal's radios change or the
-                     analysis preview re-renders. -->
-                <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
-                <!-- 模型/生成張數 pickers used to sit inline here; they now
-                     live inside #ap-settings-modal (see openApSettingsModal/
-                     closeApSettingsModal in app.js), same move as the
-                     upload page's own #settings-modal. #ap-run-count-wrap
-                     keeps its own id/hidden attribute inside that modal --
-                     showPendingResults/startInlineBatchReview etc still
-                     toggle it directly to show/hide 生成張數 for flows
-                     where it doesn't apply, unchanged. -->
-                <!-- Groups #ap-advanced-settings-btn + #inline-analysis-continue-btn
-                     as one flex item (.ap-settings-run-row) so they always
-                     wrap together and stay right-aligned as a pair -- before
-                     this they were two independent items in
-                     .options-card-inline's flex-wrap row, so a narrow
-                     container could split them across lines. margin-left:auto
-                     lives on this wrapper (see styles below) so the *pair*
-                     moves as a unit to whichever line has room, still
-                     right-aligned there. 設定 itself no longer has a trigger
-                     in this row -- it now lives in the header
-                     (#header-settings-btn, openContextSettingsModal in
-                     app.js). -->
-                <div class="ap-settings-run-row">
-                  <!-- Moved out of #ap-settings-modal (used to be the last
-                       item in .settings-modal-body) -- sits here so
-                       人像設定 is reachable without opening 設定 first.
-                       Opens the SAME #advanced-settings-modal as its
-                       upload-page twin, #advanced-settings-btn -- one shared
-                       modal, not a second copy of its markup, since it's
-                       just toggling that modal's own hidden attribute
-                       regardless of which page it was opened from (see
-                       openAdvancedSettingsModal in app.js). -->
-                  <button id="ap-advanced-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger">
-                    <span class="option-pill-icon">
-                      <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                        <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
-                        <path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                      </svg>
+                <!-- Was a button opening #ap-recipe-modal (a read-only view of
+                     this same list) -- the list itself is always populated
+                     regardless (fillCheckList(els.apRecipeList, ...) in
+                     renderAnalysisPreview, results.js), so showing it inline
+                     here instead of behind a click needed no data/logic change,
+                     just moving the <ul> out of the modal. flex-basis:100%
+                     (see the CSS above) puts this on its own full-width line.
+                     A <details> (not a plain div) so this can collapse to just
+                     the summary line -- renderAnalysisPreview (results.js)
+                     sets its `open` attribute: expanded by default for the
+                     first-time 分析 review (before any run), collapsed by
+                     default once reopened on the 結果 page/a revise (still
+                     click-to-expand there, just not spread out unasked). -->
+                <details class="ap-toggle-card ap-options-toggle" id="ap-recipe-inline" open>
+                  <summary class="ap-label">
+                    <span class="ap-toggle-summary-top">
+                      修圖建議
+                      <span class="ap-toggle-count" id="ap-recipe-count"></span>
                     </span>
-                    <span class="ap-style-value">人像設定</span>
-                  </button>
-                  <!-- Moved out of #inline-analysis-actions (which keeps
-                       just the cancel button) -- sits at the right end of
-                       this pill row instead. Own hidden attribute now (was
-                       gated by its old parent's) -- see
-                       openInlineAnalysisPanel/closeInlineAnalysisPanel/
-                       resetApp in app.js, same places that used to toggle
-                       #inline-analysis-actions alone. -->
-                  <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
-                    <span>Run</span>
-                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                      <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
-                        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                  </button>
-                </div>
+                  </summary>
+                  <div class="ap-toggle-card-body">
+                    <ul id="ap-recipe-list" class="step-inline-list"></ul>
+                  </div>
+                </details>
+
+                <!-- Tab row of every detected person's thumbnail (renderFaceTabs,
+                     results.js) lives INSIDE the summary itself, not the
+                     collapsible body -- a <details> hides everything except
+                     <summary> while closed, and the thumbnails are the point
+                     of a "縮圖" preview: they should read as "who's in this
+                     photo" at a glance even before opening this section, same
+                     as #ap-recipe-count's "N 項" does in words for the recipe
+                     checklist above. Clicking a tab (results.js) stops that
+                     click from bubbling to the summary's own native
+                     click-to-toggle, and force-opens this <details> itself if
+                     it was closed -- picking a person should always reveal
+                     their detail, never accidentally collapse the section
+                     instead. The single shared detail panel below (showing
+                     whichever tab is selected) still only renders once open:
+                     that person's own blink/gaze/hair/smile toggles and 身形調整
+                     checklist (was #ap-face-modal's fillFaceIssueList output,
+                     same toggle wiring/state, just switched by tab instead of
+                     opened one at a time in a modal). Hidden entirely when no
+                     faces were detected. This whole block is itself a
+                     <details> -- expanded by default for the first-time 分析
+                     review, collapsed (tabs still showing) once reopened on
+                     the 結果 page/a revise, same reasoning as #ap-recipe-inline
+                     above. -->
+                <details class="ap-toggle-card ap-options-toggle" id="ap-face-review" hidden>
+                  <summary class="ap-label ap-face-review-summary">
+                    <div class="ap-face-review-summary-inner">
+                      <span class="ap-toggle-summary-top">
+                        人像檢查
+                        <span class="ap-toggle-count" id="ap-face-review-count"></span>
+                      </span>
+                      <div class="ap-face-tabs" id="ap-face-tabs"></div>
+                    </div>
+                  </summary>
+                  <div class="ap-toggle-card-body">
+                    <div class="ap-face-detail" id="ap-face-detail"></div>
+                  </div>
+                </details>
+
                 <!-- flex-basis:100% (see .options-card-inline .ap-options-prompt
-                     in styles) forces this onto its own full-width line below
-                     the pill row instead of wrapping in among them. -->
+                     in styles) forces this onto its own full-width line. -->
                 <div class="form-field ap-options-prompt">
                   <div class="ap-prompt-label-row">
                     <label class="ap-label" for="prompt">補充指令</label>
@@ -3041,6 +3196,86 @@
                   </div>
                   <textarea id="prompt" class="field-ta" rows="4"
                     placeholder="例如：增加亮度，調整成冷色調，模糊背景。"></textarea>
+                </div>
+
+                <!-- Operational controls, grouped together on their own
+                     full-width line at the very bottom of the panel -- read the
+                     recipe/face review above first, then adjust style/portrait
+                     settings and run, in that order. -->
+                <div class="ap-actions-row">
+                  <!-- Was a <details class="ap-row"> that expanded inline
+                       (pushing everything below it down), then a nested-popover
+                       pill (Pose/Angle/Lighting/Size each their own text-only
+                       radio-list popover) -- now a plain button opening
+                       #ap-style-modal, a real overlay window listing the 4
+                       style types as buttons first, then that type's options as
+                       image thumbnail buttons (see openStyleModal/
+                       showStyleGroup in app.js). -->
+                  <button type="button" class="ap-style-trigger ap-recipe-trigger" id="ap-style-picker">
+                    <span class="option-pill-icon">
+                      <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                        <path d="M4 6h9M17 6h3M4 12h4M11 12h9M4 18h12M19 18h1"
+                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="13" cy="6" r="2" fill="currentColor"/>
+                        <circle cx="8" cy="12" r="2" fill="currentColor"/>
+                        <circle cx="16" cy="18" r="2" fill="currentColor"/>
+                      </svg>
+                    </span>
+                    <span class="ap-style-value">修圖風格</span>
+                  </button>
+                  <!-- Selected Pose/Angle/Lighting/Size label(s) (e.g.
+                       "Playful"/"Low Shot" as separate chips). flex-basis:100%
+                       (.ap-actions-row .ap-style-picked, same trick as
+                       .ap-options-prompt above) puts this on its own full-width
+                       line under the pill row instead of sitting inline after
+                       #ap-style-picker. Hidden entirely while everything's still
+                       Default/Auto. updateStyleTriggerLabel (results.js) keeps
+                       this in sync whenever the modal's radios change or the
+                       analysis preview re-renders. -->
+                  <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
+                  <!-- Groups #ap-advanced-settings-btn + #inline-analysis-continue-btn
+                       as one flex item (.ap-settings-run-row) so they always
+                       wrap together and stay right-aligned as a pair.
+                       margin-left:auto lives on this wrapper (see styles below)
+                       so the *pair* moves as a unit to whichever line has room,
+                       still right-aligned there. 設定 itself no longer has a
+                       trigger in this row -- it now lives in the header
+                       (#header-settings-btn, openContextSettingsModal in
+                       app.js). -->
+                  <div class="ap-settings-run-row">
+                    <!-- Moved out of #ap-settings-modal (used to be the last
+                         item in .settings-modal-body) -- sits here so
+                         人像設定 is reachable without opening 設定 first.
+                         Opens the SAME #advanced-settings-modal as its
+                         upload-page twin, #advanced-settings-btn -- one shared
+                         modal, not a second copy of its markup, since it's
+                         just toggling that modal's own hidden attribute
+                         regardless of which page it was opened from (see
+                         openAdvancedSettingsModal in app.js). -->
+                    <button id="ap-advanced-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger">
+                      <span class="option-pill-icon">
+                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                          <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
+                          <path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        </svg>
+                      </span>
+                      <span class="ap-style-value">人像設定</span>
+                    </button>
+                    <!-- Moved out of #inline-analysis-actions (which keeps
+                         just the cancel button) -- sits at the right end of
+                         this pill row instead. Own hidden attribute now (was
+                         gated by its old parent's) -- see
+                         openInlineAnalysisPanel/closeInlineAnalysisPanel/
+                         resetApp in app.js, same places that used to toggle
+                         #inline-analysis-actions alone. -->
+                    <button id="inline-analysis-continue-btn" class="analysis-preview-action analysis-preview-action-right" type="button" hidden>
+                      <span>Run</span>
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                        <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor"
+                          stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
           </div>
@@ -4302,62 +4537,9 @@
   </div>
 </div>
 
-<!-- 修圖建議 overlay: opened by #ap-recipe-picker (see openRecipeModal/
-     closeRecipeModal in app.js) -- same backdrop+box+close pattern as
-     #error-modal above, just holding the recipe checklist instead. -->
-<div id="ap-recipe-modal" class="error-modal" hidden>
-  <div class="error-modal-backdrop" data-close="1"></div>
-  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-recipe-modal-title">
-    <div class="error-modal-hdr">
-      <span id="ap-recipe-modal-title">修圖建議</span>
-      <button id="ap-recipe-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
-    </div>
-    <div class="step-list-frame">
-      <ul id="ap-recipe-list" class="step-inline-list"></ul>
-    </div>
-  </div>
-</div>
-
-<!-- Opened by clicking one of #ap-face-thumb-row's per-face thumbnail
-     buttons (openFaceModal in app.js) -- lists that person's should_fix/
-     adjust_safe verdict from every 人像設定 analysis category (閉眼偵測/眼神對焦/
-     亂髮偵測/笑容調整, i.e. blink_issue/gaze_issue/hair_issue/smile_issue nested
-     under the matching subjects[] entry) matched to this face by box overlap
-     (fillFaceIssueList, results.js). Same backdrop+box+close shape as #ap-recipe-modal above;
-     the verdict row itself is read-only (step-inline-list--readonly, same
-     look as #recipe-score-list's ✓/✕ adherence icons). Flagged items get an
-     "allow AI to fix this" switch; an unsafe smile also gets an initially-off
-     switch so the user may explicitly override the warning --
-     turning it off is what getFaceIssueOverrides/buildEffectiveAnalysis
-     (app.js) turn into should_fix=false (adjust_safe=true for smile) plus a
-     hard per-subject exclusion sent to the backend (analysis._disabled_face_
-     issues), so the edit model is not allowed to make that change for this
-     person. A separate 身形調整 section below those four rows lists
-     subjects[].body_reshape.key_points as checkboxes. Its master switch
-     collapses the list and writes analysis._disabled_body_reshape_subjects;
-     unchecked individual points are written to analysis._disabled_body_
-     reshape_key_points. Both are excluded from the edit contract.
-     #ap-face-modal-thumb mirrors the same crop shown on the row
-     button that was clicked (fillFaceIssueList sets its src), hidden
-     attribute added/removed instead of a CSS default so a canvas-tainted (no
-     thumbnail) face doesn't leave a broken-image icon in the modal. -->
-<div id="ap-face-modal" class="error-modal" hidden>
-  <div class="error-modal-backdrop" data-close="1"></div>
-  <div class="error-modal-box ap-face-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-face-modal-title">
-    <div class="error-modal-hdr">
-      <span id="ap-face-modal-title">人像分析結果</span>
-      <button id="ap-face-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
-    </div>
-    <img id="ap-face-modal-thumb" class="ap-face-modal-thumb" alt="人物縮圖" hidden>
-    <div class="step-list-frame">
-      <ul id="ap-face-issue-list" class="step-inline-list step-inline-list--readonly"></ul>
-    </div>
-  </div>
-</div>
-
 <!-- 修圖風格選項 overlay: opened by #ap-style-picker (see openStyleModal/
      closeStyleModal in app.js) -- same backdrop+box+close pattern as
-     #ap-recipe-modal above. Two-step picker: the 4 buttons below
+     #error-modal above. Two-step picker: the 4 buttons below
      (ids ap-group-pose/-angle/-lighting/-size -- results.js still hides
      ap-group-pose when the subject isn't a person, same as it hid the old
      nested Pose popover) switch which #ap-*-list image-option grid is

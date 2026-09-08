@@ -618,7 +618,7 @@ window.PhotoAgentResults = (() => {
       .map(([key, value]) => `${value === true ? "通過" : value === false ? "注意" : "未定"}：${labels[key] || key}`);
   }
 
-  // ── Face thumbnails (#ap-face-thumb-row) + should_fix modal (#ap-face-modal) ──
+  // ── Per-person face review tabs (#ap-face-tabs / #ap-face-detail) ──
   // detect_face_crops (openai_client.analyze_photo) hands back every locally-
   // detected face in analysis._local_face_boxes, normalized against the
   // original image -- same convention as subjects[].box (prompts.py's shared
@@ -643,7 +643,7 @@ window.PhotoAgentResults = (() => {
   // detect_face_crops itself, and can misfire in a tightly packed group
   // photo where people's boxes overlap each other.
   // flagField/flagWhen/flagText/okText control which issues get the "allow
-  // AI to fix this" toggle in fillFaceIssueList below: flagged means there
+  // AI to fix this" toggle in buildPersonIssueItems below: flagged means there
   // is a proposed action for the user to accept or decline. The first three
   // flag on should_fix (true = a fix is proposed). smile_issue has no
   // should_fix at all -- its equivalent field is adjust_safe, and adjust_
@@ -716,8 +716,8 @@ window.PhotoAgentResults = (() => {
   }
 
   // subjectIndex/category identify the underlying analysis.subjects[i][category]
-  // field this entry came from -- the toggle in fillFaceIssueList writes back
-  // through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
+  // field this entry came from -- the toggle in buildPersonIssueItems writes
+  // back through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
   // uses the same pair to flip should_fix/adjust_safe before submission.
   function faceIssueEntries(subject, index, advancedOptions = {}) {
     if (!subject) return [];
@@ -865,10 +865,25 @@ window.PhotoAgentResults = (() => {
     }
   }
 
-  // { box, issues }[] for the face row currently on screen -- read by
-  // fillFaceIssueList when a thumbnail button is clicked (app.js passes just
-  // the clicked button's index, not the data itself).
+  // { box, issues }[] for the face tabs currently on screen -- kept
+  // module-level (not just local to renderFaceThumbnails) because
+  // getFaceIssueOverrides/getBodyReshapeOverrides (app.js, at submit time)
+  // read the in-memory issue.allowed/point.allowed/entry.bodyReshapeEnabled
+  // state each toggle mutates directly, not the DOM.
   let faceThumbEntries = [];
+
+  // Which faceThumbEntries index #ap-face-detail currently shows -- reset to
+  // 0 whenever renderFaceThumbnails rebuilds faceThumbEntries from a fresh
+  // analysis (a different photo/person set makes any other index stale),
+  // otherwise left alone so re-renders triggered elsewhere (restoring
+  // overrides, a style pick) don't silently switch which person is showing.
+  let selectedFaceIndex = 0;
+
+  // Whether #ap-recipe-inline / #ap-face-review (both <details>) should
+  // start open -- set by renderAnalysisPreview's own `expanded` param, read
+  // by renderFaceReviewCards. See renderAnalysisPreview's doc for the full
+  // reasoning.
+  let reviewExpanded = true;
 
   // Every locally-detected face (openai_client.analyze_photo's
   // _local_face_boxes), not just the <=3 that got a zoomed crop sent to the
@@ -885,15 +900,19 @@ window.PhotoAgentResults = (() => {
   }
 
   function renderFaceThumbnails(analysis) {
-    const row = els.apFaceThumbRow;
-    if (!row) return;
+    const outer = els.apFaceReview;
+    if (!outer) return;
+    // A different photo/person set makes whatever tab was previously
+    // selected meaningless -- always land back on the first person.
+    selectedFaceIndex = 0;
     const faces = localFaceEntries(analysis);
     const bodySubjects = (Array.isArray(analysis?.subjects) ? analysis.subjects : [])
       .map((subject, subjectIndex) => ({ subject, subjectIndex }))
       .filter(({ subject }) => subject?.is_person && subject?.body_reshape && typeof subject.body_reshape === "object");
     if (!faces.length && !bodySubjects.length) {
-      row.hidden = true;
-      row.innerHTML = "";
+      outer.hidden = true;
+      if (els.apFaceTabs) els.apFaceTabs.innerHTML = "";
+      if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
       faceThumbEntries = [];
       return;
     }
@@ -919,9 +938,9 @@ window.PhotoAgentResults = (() => {
       .map(({ f, detectionIndex }) => {
         const sentToModel = f.sent_to_model !== false;
         // Matched once here (rather than left to faceIssueEntries' own
-        // internal match) so the subject's own label -- used as the face
-        // modal's title in fillFaceIssueList below -- comes from the exact
-        // same match its issues do, not a second, potentially different one.
+        // internal match) so the subject's own label -- used as this
+        // person's review-card name below -- comes from the exact same
+        // match its issues do, not a second, potentially different one.
         const { subject, index, matched } = subjectForDetection(analysis, detectionIndex, f.box);
         // When the analysis has local_face_review, its verdict is
         // authoritative: no subject means the model itself already decided
@@ -977,103 +996,142 @@ window.PhotoAgentResults = (() => {
         label: subject.label || "",
       });
     });
-    row.innerHTML = "";
+    renderFaceReviewCards();
+  }
+
+  // Rebuilds #ap-face-tabs (and #ap-face-detail for whichever tab is
+  // selected) from whatever faceThumbEntries currently holds -- split out
+  // from renderFaceThumbnails (which rebuilds faceThumbEntries itself from a
+  // fresh analysis) so a caller that mutates entries in place *after*
+  // renderAnalysisPreview already ran -- restoring a previous round's picks
+  // via applyFaceIssueOverrides/applyBodyReshapeOverrides (app.js) -- can
+  // re-render to reflect that restored state without rebuilding
+  // faceThumbEntries itself (which would discard those very overrides right
+  // back out). Exported under this name for that reason -- kept even though
+  // it now renders tabs, not per-person cards.
+  function renderFaceReviewCards() {
+    const outer = els.apFaceReview;
+    const tabs = els.apFaceTabs;
+    if (!outer || !tabs) return;
+    if (!faceThumbEntries.length) {
+      outer.hidden = true;
+      tabs.innerHTML = "";
+      if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
+      return;
+    }
+    outer.hidden = false;
+    outer.open = reviewExpanded;
+    if (els.apFaceReviewCount) els.apFaceReviewCount.textContent = `${faceThumbEntries.length} 人`;
+    if (selectedFaceIndex >= faceThumbEntries.length) selectedFaceIndex = 0;
+
+    const img = els.originalImg;
+    tabs.innerHTML = "";
     faceThumbEntries.forEach((entry, index) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ap-face-thumb-btn";
+      const dataUrl = img ? cropFaceThumbnail(img, entry.box) : "";
+      entry.thumbUrl = dataUrl;
+
+      // wrap holds the active-state ring and the badge (see .ap-face-tab-wrap's
+      // own CSS doc for why those can't live on/in .ap-face-tab itself, which
+      // needs overflow:hidden to clip its thumbnail into a circle).
+      const wrap = document.createElement("span");
+      wrap.className = "ap-face-tab-wrap";
+      if (index === selectedFaceIndex) wrap.classList.add("is-active");
+
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "ap-face-tab";
       // sentToModel is false for a locally-detected face beyond the crop cap
       // (only a coordinate hint reached the model, see detect_face_crops/
       // analyze_photo) and null for a subjects[] entry the model found on
-      // its own with no backing local detection at all (see the bodySubjects
-      // fallback below). Either way, no zoomed crop of this exact face ever
-      // reached the model, so any findings it shows came from reading the
-      // full photo alone -- dimmed + dashed here so that lower-confidence
-      // reading is visible at a glance without exposing which of the two it
-      // was (see the debug-only badge below for that detail).
-      if (entry.sentToModel !== true) btn.classList.add("ap-face-thumb-btn--local-only");
-      btn.dataset.faceIndex = String(index);
-      btn.setAttribute("aria-label", `人物 ${index + 1}`);
-      const dataUrl = img ? cropFaceThumbnail(img, entry.box) : "";
-      entry.thumbUrl = dataUrl;
+      // its own with no backing local detection at all (see the
+      // bodySubjects fallback in renderFaceThumbnails above). Either way, no
+      // zoomed crop of this exact face ever reached the model, so any
+      // findings it shows came from reading the full photo alone -- dimmed
+      // here so that lower-confidence reading is visible at a glance (see
+      // buildPersonIssueItems' own note li for the same caveat spelled out
+      // in words once this tab is selected).
+      if (entry.sentToModel !== true) tab.classList.add("ap-face-tab--local-only");
+      const label = entry.label || `人物 ${index + 1}`;
+      tab.title = label;
+      tab.setAttribute("aria-label", label);
       if (dataUrl) {
         const thumb = document.createElement("img");
-        thumb.className = "ap-face-thumb-img";
+        thumb.className = "ap-face-tab-img";
         thumb.src = dataUrl;
-        thumb.alt = `人物 ${index + 1}`;
-        btn.appendChild(thumb);
+        thumb.alt = label;
+        tab.appendChild(thumb);
       }
-      // .ap-face-thumb-btn itself is overflow:hidden (it clips the square
-      // thumbnail into its round avatar shape) -- a badge placed straight on
-      // it would get clipped along with everything else that crosses its
-      // edge, so it goes on this unclipped wrapper instead, positioned over
-      // the button rather than inside it.
-      const wrap = document.createElement("span");
-      wrap.className = "ap-face-thumb-wrap";
-      wrap.appendChild(btn);
-      // Lets the user spot which faces have an analysis-flagged issue
-      // (should_fix/adjust_safe) without opening #ap-face-modal for every
-      // thumbnail -- reflects the model's own verdict, not the allow/deny
-      // toggle in the modal, so it stays put even after the user turns a fix
-      // off (it's still something the analysis found, just no longer approved).
+      // This tab row lives inside #ap-face-review's own <summary> (see its
+      // markup comment) so the thumbnails stay visible even while the
+      // section is collapsed -- without stopPropagation, a click here would
+      // also bubble up to the summary's native click-to-toggle, sometimes
+      // collapsing the section right as the user picks a person instead of
+      // just switching tabs. Force-opening it explicitly means picking any
+      // tab always reveals that person's detail below, whether the section
+      // was already open or not.
+      tab.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!outer.open) outer.open = true;
+        if (selectedFaceIndex === index) return;
+        const prevActive = tabs.querySelector(".ap-face-tab-wrap.is-active");
+        if (prevActive) prevActive.classList.remove("is-active");
+        wrap.classList.add("is-active");
+        selectedFaceIndex = index;
+        renderFaceDetailPanel();
+      });
+      wrap.appendChild(tab);
+      // Lets the user spot which people have a flagged issue without
+      // stepping through every tab -- reflects the model's own verdict, not
+      // the allow/deny toggle in #ap-face-detail, so it stays put even after
+      // the user turns a flagged fix off (it's still something the analysis
+      // found, just no longer approved).
       if ((entry.issues || []).some((issue) => issue.flagged) || (entry.bodyKeyPoints || []).length) {
         const badge = document.createElement("span");
-        badge.className = "ap-face-thumb-badge";
+        badge.className = "ap-face-tab-badge";
         badge.textContent = "!";
         wrap.appendChild(badge);
       }
-      // Debug-only: a regular user doesn't need to know *why* a thumbnail
-      // wasn't analyzed from its own zoomed crop (detector cap vs. no
-      // detection at all) -- the dimmed/dashed style above already tells
-      // them it's a lower-confidence read. Engineers debugging a case like
-      // this still want the exact source, so it's gated on debugUiActive
-      // instead of removed outright.
-      if (entry.sentToModel !== true && debugUiActive) {
-        const localBadge = document.createElement("span");
-        localBadge.className = "ap-face-thumb-local-badge";
-        localBadge.textContent = entry.sentToModel === false ? "本機(超量)" : "AI補充";
-        localBadge.title = entry.sentToModel === false
-          ? "本機偵測到但超過裁切張數上限，僅座標文字送入模型，未做特寫判讀"
-          : "本機未偵測到，由模型自行從整張照片辨識出此人";
-        wrap.appendChild(localBadge);
-      }
-      row.appendChild(wrap);
+      tabs.appendChild(wrap);
     });
-    row.hidden = faceThumbEntries.length === 0;
+
+    renderFaceDetailPanel();
   }
 
-  // Called by app.js's #ap-face-thumb-row click handler right before it
-  // shows #ap-face-modal -- sets the modal title to that person's own
-  // subjects[].label (renderFaceThumbnails' bestSubjectMatch), falling back
-  // to a plain "人物 N" when no subject matched; mirrors that face's own
-  // thumbnail into #ap-face-modal-thumb (so the modal doesn't rely on the
-  // user remembering which small row button they clicked) and fills
-  // #ap-face-issue-list with that face's should_fix/adjust_safe verdicts,
-  // matched at renderFaceThumbnails time above. Flagged items get an
-  // "allow AI to fix this" toggle; unsafe smile gets the same toggle off by
-  // default so the user can override the warning. Changing it updates
-  // issue.allowed in place on the
-  // faceThumbEntries entry itself, which getFaceIssueOverrides reads back at
-  // submit time.
-  function fillFaceIssueList(index) {
-    const entry = faceThumbEntries[index];
-    if (els.apFaceModalTitle) {
-      els.apFaceModalTitle.textContent = `${entry?.label || `人物 ${index + 1}`} 分析結果`;
-    }
-    if (els.apFaceModalThumb) {
-      if (entry?.thumbUrl) {
-        els.apFaceModalThumb.src = entry.thumbUrl;
-        els.apFaceModalThumb.hidden = false;
-      } else {
-        els.apFaceModalThumb.hidden = true;
-        els.apFaceModalThumb.removeAttribute("src");
-      }
-    }
-    const element = els.apFaceIssueList;
-    if (!element) return;
-    element.innerHTML = "";
+  // Fills #ap-face-detail with whichever one person renderFaceReviewCards
+  // last selected (selectedFaceIndex) -- the name heading plus the same
+  // buildPersonIssueItems output a per-person card used to show directly.
+  function renderFaceDetailPanel() {
+    const detail = els.apFaceDetail;
+    if (!detail) return;
+    detail.innerHTML = "";
+    const entry = faceThumbEntries[selectedFaceIndex];
+    if (!entry) return;
+    const name = document.createElement("p");
+    name.className = "ap-face-detail-name";
+    name.textContent = entry.label || `人物 ${selectedFaceIndex + 1}`;
+    detail.appendChild(name);
+    const list = document.createElement("ul");
+    list.className = "step-inline-list step-inline-list--readonly";
+    buildPersonIssueItems(entry).forEach((li) => list.appendChild(li));
+    detail.appendChild(list);
+  }
+
+  // Builds every <li> row for one person's issue review: the not-analyzed-
+  // in-closeup caveat (sentToModel !== true), one row per blink/gaze/hair/
+  // smile issue, and a 身形調整 (body-reshape) section -- was #ap-face-modal's
+  // fillFaceIssueList, rebuilt into a single shared list for whichever one
+  // person's thumbnail was clicked; now called once per person so every
+  // detected person's own review renders inline at once (renderFaceThumbnails
+  // above). Flagged items get an "allow AI to fix this" toggle; unsafe smile
+  // gets the same toggle off by default so the user can override the
+  // warning. Changing it updates issue.allowed/point.allowed/
+  // entry.bodyReshapeEnabled in place on the faceThumbEntries entry itself,
+  // which getFaceIssueOverrides/getBodyReshapeOverrides read back at submit
+  // time.
+  function buildPersonIssueItems(entry) {
+    const items = [];
     if (entry && entry.sentToModel !== true) {
-      // This face still has its subjects[] match's findings below (see
+      // This person still has their subjects[] match's findings below (see
       // renderFaceThumbnails) -- just a caveat that they came from the model
       // reading the full photo alone, not this face's own zoomed crop.
       // Worded around the *result* (no close-up look) rather than the
@@ -1082,15 +1140,15 @@ window.PhotoAgentResults = (() => {
       const note = document.createElement("li");
       note.className = "ap-face-issue-note";
       note.textContent = "此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。";
-      element.appendChild(note);
+      items.push(note);
     }
     const issues = entry?.issues || [];
     const bodyKeyPoints = entry?.bodyKeyPoints || [];
     if (!issues.length && !entry?.bodyAnalysisAvailable) {
       const li = document.createElement("li");
       li.textContent = "此人像沒有可顯示的分析結果。";
-      element.appendChild(li);
-      return;
+      items.push(li);
+      return items;
     }
     issues.forEach((issue) => {
       const li = document.createElement("li");
@@ -1197,7 +1255,7 @@ window.PhotoAgentResults = (() => {
         li.appendChild(reason);
       }
 
-      element.appendChild(li);
+      items.push(li);
     });
 
     if (entry?.bodyAnalysisAvailable) {
@@ -1268,8 +1326,9 @@ window.PhotoAgentResults = (() => {
         refreshBodyReshape();
       });
       refreshBodyReshape();
-      element.appendChild(section);
+      items.push(section);
     }
+    return items;
   }
 
   // ── Analysis box overlay (#boxes-toggle-btn, debug UI) ────────────────────
@@ -1759,7 +1818,24 @@ window.PhotoAgentResults = (() => {
   // Shown mid-processing, right after analyze_stage finishes and before the
   // user clicks "continue" -- a lightweight subset of renderResult's fields
   // (no image/QA yet, those only exist after finish_stage runs).
-  function renderAnalysisPreview({ analysis, preset }) {
+  // expanded controls whether #ap-recipe-inline and #ap-face-review (both
+  // <details>) start open or collapsed to just their summary line:
+  // true for the first-time 分析 review (before any run), false once this
+  // same panel is reopened on the 結果 page/a revise (backToProcessFromResults/
+  // startInlineBatchReview/viewHistoryRecord's readOnly path all pass false)
+  // -- still click-to-expand there, just not spread out unasked. Stored on
+  // reviewExpanded (module-level) so renderFaceReviewCards, called both from
+  // here and later re-renders (e.g. applyBatchReviewSelections), can read the
+  // same setting without it being re-threaded through every call.
+  function renderAnalysisPreview({ analysis, preset, expanded = true }) {
+    reviewExpanded = expanded;
+    if (els.apRecipeInline) els.apRecipeInline.open = expanded;
+    // Shown right on the (collapsible) summary line itself -- collapsed, the
+    // count is the only hint there's something worth opening this for.
+    if (els.apRecipeCount) {
+      const count = Array.isArray(analysis.retouch_recipe) ? analysis.retouch_recipe.length : 0;
+      els.apRecipeCount.textContent = count ? `${count} 項` : "";
+    }
     if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
     if (els.apSubjectTags) {
       renderTags(els.apSubjectTags, [
@@ -1835,7 +1911,7 @@ window.PhotoAgentResults = (() => {
     renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
-    fillFaceIssueList, getFaceIssueOverrides, applyFaceIssueOverrides,
-    getBodyReshapeOverrides, applyBodyReshapeOverrides
+    getFaceIssueOverrides, applyFaceIssueOverrides,
+    getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards
   };
 })();

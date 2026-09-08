@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, fillFaceIssueList, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards } = window.PhotoAgentResults;
   renderBatchStyleOptions();
   renderBoxTypeMenu();
 
@@ -1334,11 +1334,6 @@
   function setAnalysisPreviewDisabled(disabled) {
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
-        // #ap-recipe-picker just opens a read-only view of the recipe list
-        // (#ap-recipe-modal) -- unlike the other controls here, it doesn't
-        // change anything about the pending/in-flight request, so it should
-        // stay clickable even while the rest of the panel is disabled.
-        if (el === els.apRecipePicker) return;
         el.disabled = disabled;
       });
     }
@@ -1369,9 +1364,21 @@
   // the same plain horizontal pill row the upload page uses -- .ap-col-right
   // (its normal home, still used as-is on the processing screen, which has
   // no .compare-card to move below) squeezes it into a narrow column instead.
+  // #ap-step-indicator moves alongside it into the very same container, but
+  // prepended instead of appended so it lands ABOVE .compare-card (already
+  // the container's only other child at that point) rather than below the
+  // options card -- see its own markup comment in index.html. Unlike the
+  // options card, the step indicator's move is NOT undone by
+  // restoreOptionsCardHome (below) -- it stays above the photo through 修圖
+  // (editing) and 結果 (the finished result) too, not just while the 分析
+  // review panel itself is open; see setStepIndicatorStep/
+  // restoreStepIndicatorHome for the rest of its lifecycle.
   function moveOptionsCardTo(container) {
-    if (!els.apOptionsCardInline || !container) return;
-    if (els.apOptionsCardInline.parentElement !== container) {
+    if (!container) return;
+    if (els.apStepIndicator && els.apStepIndicator.parentElement !== container) {
+      container.prepend(els.apStepIndicator);
+    }
+    if (els.apOptionsCardInline && els.apOptionsCardInline.parentElement !== container) {
       container.appendChild(els.apOptionsCardInline);
     }
   }
@@ -1380,6 +1387,32 @@
     if (els.apOptionsCardHome && els.apOptionsCardInline.previousElementSibling !== els.apOptionsCardHome) {
       els.apOptionsCardHome.after(els.apOptionsCardInline);
     }
+  }
+
+  // Only called when actually leaving this image's flow (a brand new
+  // submission starting, resetApp) -- NOT when the 分析 review panel closes
+  // to move into 修圖, since the indicator is meant to keep showing progress
+  // through that transition instead of disappearing (moveOptionsCardTo's own
+  // comment above).
+  function restoreStepIndicatorHome() {
+    if (els.apStepIndicatorHome && els.apStepIndicator
+      && els.apStepIndicator.previousElementSibling !== els.apStepIndicatorHome) {
+      els.apStepIndicatorHome.after(els.apStepIndicator);
+    }
+  }
+
+  // step: 1 (分析), 2 (修圖), or 3 (結果). Every step up to and including the
+  // current one gets .ap-step--active (and every connector line up to it
+  // .ap-step-line--active), so earlier steps read as "done" rather than
+  // reverting to muted once the flow moves past them.
+  function setStepIndicatorStep(step) {
+    if (!els.apStepIndicator) return;
+    els.apStepIndicator.querySelectorAll(".ap-step").forEach((el, i) => {
+      el.classList.toggle("ap-step--active", i < step);
+    });
+    els.apStepIndicator.querySelectorAll(".ap-step-line").forEach((el, i) => {
+      el.classList.toggle("ap-step-line--active", i < step - 1);
+    });
   }
 
   // ── Pause-for-review between analyze and finish, shown on results-section ──
@@ -1408,6 +1441,9 @@
       { pending: true }
     );
     moveOptionsCardTo(els.resultsCanvasTop);
+    // Reset to 分析, in case this is a fresh image after a previous one's
+    // flow advanced the indicator to 修圖/結果.
+    setStepIndicatorStep(1);
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
@@ -1458,6 +1494,7 @@
     await showPendingResults(analysis, preset);
     await waitForPendingResultsAction();
     closePendingResults();
+    setStepIndicatorStep(2); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
     // Same "editing" loading overlay backToProcessFromResults' revise flow
     // uses -- swaps the photo for the thinking-rings animation instead of
     // navigating away from the results page.
@@ -1490,6 +1527,12 @@
     // the move, it silently found nothing there anymore and those controls
     // stayed disabled forever after the first disable/regenerate cycle.
     setAnalysisPreviewDisabled(readOnly);
+    // #ap-step-indicator always shows 分析 as the active step, which is only
+    // true for a live "about to (re)run from here" flow -- read-only
+    // historical playback (viewHistoryRecord) reopens this same panel for an
+    // already-finished job, where that would be factually wrong, so hide it
+    // entirely in that one case.
+    if (els.apStepIndicator) els.apStepIndicator.hidden = readOnly;
     moveOptionsCardTo(els.resultsCanvasTop);
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = readOnly;
     // Moved out of #inline-analysis-actions (now lives at the end of
@@ -1556,7 +1599,7 @@
       // now too) -- just as real an edit as the picks above, so it needs the
       // same before/after snapshot to unblock the Run button.
       advancedOptions: readAdvancedOptionsFromDom(),
-      // #ap-face-modal's per-person "允許 AI 修正此項目" toggles -- same
+      // Per-person "允許 AI 修正此項目" toggles (#ap-face-detail) -- same
       // reasoning as advancedOptions above, otherwise flipping only a face
       // toggle (nothing else) leaves inlineReviseHasNoChanges thinking
       // nothing changed and blocks the Run click.
@@ -3166,6 +3209,8 @@
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
     closePendingResults(); // drop any stale pending-review state from an abandoned prior run
+    restoreStepIndicatorHome();
+    setStepIndicatorStep(1);
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
@@ -3354,6 +3399,7 @@
       // alone decides it here.
       if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
       showSection("results");
+      setStepIndicatorStep(3); // 結果 -- no-op for the skipReview/direct path, where the indicator was never shown to begin with
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
     };
@@ -3687,6 +3733,7 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
+    setStepIndicatorStep(3); // 結果 -- covers both a live RUN-tab switch and viewHistoryRecord jumping straight here for a finished case
     // revealDetailExtra: true only for viewHistoryRecord's admin-reports-drawer
     // call -- shows the prompts button for that one record regardless of
     // debug mode, same override resultsDetailExtra itself already gets.
@@ -3743,13 +3790,18 @@
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
 
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset });
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: false });
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyStyleSelections(lastSingleSelections);
       applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
       applyBodyReshapeOverrides(lastSingleSelections.bodyReshapeOverrides);
+      // The face review cards were already built (renderAnalysisPreview just
+      // above) before these overrides existed on faceThumbEntries -- rebuild
+      // them so the toggles on screen reflect the restored picks instead of
+      // each issue's plain default state.
+      renderFaceReviewCards();
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     openInlineAnalysisPanel();
@@ -3758,6 +3810,7 @@
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
     if (action === "cancel") return;
+    setStepIndicatorStep(2); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
 
     setAnalysisPreviewDisabled(true);
     if (els.showPromptBtn) els.showPromptBtn.disabled = true;
@@ -6379,34 +6432,6 @@
     }
   }
 
-  // 修圖建議 overlay -- same open/close shape as the error modal above,
-  // just toggling #ap-recipe-modal's own hidden attribute. #ap-recipe-list
-  // is already populated by fillCheckList (results.js) whenever analysis
-  // renders; opening this modal doesn't need to re-render anything itself.
-  function openRecipeModal() {
-    if (els.apRecipeModal) els.apRecipeModal.hidden = false;
-  }
-
-  function closeRecipeModal() {
-    if (els.apRecipeModal) els.apRecipeModal.hidden = true;
-  }
-
-  // Per-face should_fix overlay -- one #ap-face-thumb-row button per detected
-  // face (renderFaceThumbnails, results.js). fillFaceIssueList does the
-  // actual list population (it owns the box-overlap matching against
-  // subjects[].box, reads that subject's blink_issue/gaze_issue/hair_issue,
-  // and sets the modal's title to that subject's own label); this just
-  // toggles the shared modal shell.
-  function openFaceModal(index) {
-    if (!els.apFaceModal) return;
-    fillFaceIssueList(index);
-    els.apFaceModal.hidden = false;
-  }
-
-  function closeFaceModal() {
-    if (els.apFaceModal) els.apFaceModal.hidden = true;
-  }
-
   // 修圖風格選項 overlay: two-step picker inside #ap-style-modal -- a row of
   // Pose/Angle/Lighting/Size buttons (ids ap-group-pose/-angle/-lighting/
   // -size), then that type's #ap-*-list image-option grid underneath.
@@ -6718,6 +6743,11 @@
     if (els.batchMainLoadingTitle) {
       els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在修圖";
     }
+    // This loading view replaces #results-canvas-row entirely (hideAllBatchMainViews
+    // above), so the step indicator itself isn't visible right now -- still
+    // keep its state in sync so it reads correctly the moment
+    // showBatchAnalyzedMain/showBatchDoneMain reveals it again.
+    setStepIndicatorStep(analyzing ? 1 : 2);
     // Same rotating phrasings as the single-image flow (startProcSubRotation
     // et al.), just targeting #batch-main-loading-text through setProcSub
     // instead of .proc-sub/#canvas-loading-status. There's only one shared
@@ -6806,6 +6836,9 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
+    // Reset to 分析, in case this is a freshly-analyzed record after a
+    // previous batch record's flow advanced the (shared) indicator further.
+    setStepIndicatorStep(1);
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
     // Same "下載原圖" treatment as the single-image flow's own pending-review
     // screen (showPendingResults) -- no edit has run yet, so this can only
@@ -6959,6 +6992,7 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
+    setStepIndicatorStep(3); // 結果 -- batch mode's own equivalent of the single-flow revealResultsIfNeeded update
     const reviewable = settings.reviewable !== false;
     // settings.revealDetailExtra: true only for viewHistoryRecord's admin-
     // reports-drawer call -- shows the prompts button for that one record
@@ -7019,7 +7053,7 @@
       if (reviewable) {
         openInlineAnalysisForCurrentContext();
       } else {
-        renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset });
+        renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset, expanded: false });
         openInlineAnalysisPanel(true);
       }
     };
@@ -7059,7 +7093,17 @@
     hideError();
     clearInlineAnalysisWait();
 
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(record.analysis, effectiveAdvancedOptions(record)), preset: batchSettings.preset });
+    // Unlike the single-image flow (separate showPendingResults vs
+    // backToProcessFromResults functions), batch mode reuses this one
+    // function for both the first-time "analyzed" review (expanded, like
+    // showPendingResults) and a "done" record's revise (collapsed, like
+    // backToProcessFromResults) -- so the expanded/collapsed choice has to
+    // read record.status here instead of being a fixed call-site constant.
+    renderAnalysisPreview({
+      analysis: stripDisabledTopicItems(record.analysis, effectiveAdvancedOptions(record)),
+      preset: batchSettings.preset,
+      expanded: record.status !== "done"
+    });
     applyBatchReviewSelections(record);
     // Sync (display-only, no state push -- same as viewHistoryRecord below)
     // #ap-image-model-quality/#ap-image-aspect-ratio to THIS case's own
@@ -7594,8 +7638,8 @@
     const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
     const effective = { ...base };
 
-    // The per-person "allow AI to fix this" toggle in #ap-face-modal
-    // (getFaceIssueOverrides, results.js): { "subjectIndex:category": false }
+    // The per-person "allow AI to fix this" toggle (#ap-face-detail,
+    // getFaceIssueOverrides in results.js): { "subjectIndex:category": false }
     // for every should_fix/adjust_safe=true item the user turned off. Both
     // written onto a per-subject copy so the model's own original verdict on
     // `analysis` is never mutated, in case the user flips the toggle back on
@@ -7758,6 +7802,12 @@
     applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
     applyFaceIssueOverrides(record.faceIssueOverrides);
     applyBodyReshapeOverrides(record.bodyReshapeOverrides);
+    // The face review cards were already built (renderAnalysisPreview, called
+    // just before this function at its one call site) before these overrides
+    // existed on faceThumbEntries -- rebuild them so the toggles on screen
+    // reflect this record's restored picks instead of each issue's plain
+    // default state.
+    renderFaceReviewCards();
   }
 
   function resetApp() {
@@ -7807,6 +7857,8 @@
     // or it renders invisibly inside the now-hidden results section instead.
     restoreAnalysisPreviewHome();
     closePendingResults();
+    restoreStepIndicatorHome();
+    setStepIndicatorStep(1);
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of
@@ -8316,26 +8368,6 @@
     });
   }
   if (els.apAdvancedSettingsBtn) els.apAdvancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
-  if (els.apRecipePicker) els.apRecipePicker.addEventListener("click", openRecipeModal);
-  if (els.apRecipeModalClose) els.apRecipeModalClose.addEventListener("click", closeRecipeModal);
-  if (els.apRecipeModal) {
-    els.apRecipeModal.addEventListener("click", (e) => {
-      if (e.target.dataset.close) closeRecipeModal();
-    });
-  }
-  if (els.apFaceThumbRow) {
-    els.apFaceThumbRow.addEventListener("click", (e) => {
-      const btn = e.target.closest(".ap-face-thumb-btn");
-      if (!btn) return;
-      openFaceModal(Number(btn.dataset.faceIndex));
-    });
-  }
-  if (els.apFaceModalClose) els.apFaceModalClose.addEventListener("click", closeFaceModal);
-  if (els.apFaceModal) {
-    els.apFaceModal.addEventListener("click", (e) => {
-      if (e.target.dataset.close) closeFaceModal();
-    });
-  }
   if (els.apStylePicker) els.apStylePicker.addEventListener("click", openStyleModal);
   if (els.apStyleModalClose) els.apStyleModalClose.addEventListener("click", closeStyleModal);
   if (els.apStyleModal) {
@@ -8369,8 +8401,6 @@
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
-    if (els.apRecipeModal && !els.apRecipeModal.hidden) closeRecipeModal();
-    if (els.apFaceModal && !els.apFaceModal.hidden) closeFaceModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();

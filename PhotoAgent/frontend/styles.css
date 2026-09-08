@@ -731,20 +731,17 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    label reads as this row's primary heading, the verdict as its detail. */
 .ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
 .ap-face-issue-row .step-cb-label { white-space: nowrap; }
-.ap-face-issue-item--with-level { position: relative; }
-.ap-face-issue-row--with-level {
-  /* Reserve the selector plus a visible gutter from the nowrap verdict. */
-  width: calc(100% - 142px);
-}
+/* On its own row below .ap-face-issue-row (hair/smile only), indented to
+   line up under .step-cb-label (the verdict text) rather than under the
+   toggle/label/icon columns before it -- 34px toggle + 10px gap + 76px
+   .ap-face-issue-name + 10px gap + 20px .adherence-icon + 10px gap = 160px.
+   Same idea the max-width:560px override below already used (with that
+   width's own smaller toggle-row gap and shorter name column), just now
+   the default instead of a narrow-viewport-only fallback. */
 .ap-face-issue-level-row {
-  position: absolute;
-  /* Anchor to the 28px verdict row, not the full <li>. The <li> can also
-     contain a multi-line debug reason; centering against that total height
-     pushed the selector down over the reason text. */
-  top: 0;
-  right: 0;
+  position: static;
   transform: none;
-  margin: 0;
+  margin: 8px 0 2px 160px;
 }
 .ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; flex-shrink: 0; }
 .ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
@@ -754,57 +751,8 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    own disabled rows (.step-inline-list li label:has(input:disabled)). */
 .ap-face-issue-toggle:has(input:disabled) { opacity: .35; cursor: not-allowed; }
 
-/* #ap-face-thumb-row's per-face buttons: a small red badge in the corner
-   when renderFaceThumbnails finds a flagged issue on that person, so the
-   user can tell which faces are worth opening #ap-face-modal for. Badge sits
-   on this wrapper, not .ap-face-thumb-btn itself, because that button is
-   overflow:hidden (it clips the square thumbnail into its round avatar
-   shape) and would clip the badge along with it. */
-.ap-face-thumb-wrap { position: relative; display: inline-flex; }
-.ap-face-thumb-badge {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: rgba(239, 68, 68, .18);
-  color: var(--red);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  box-shadow: 0 0 0 2px var(--card);
-}
 .ap-face-issue-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
 
-/* A thumbnail whose findings never got the deeper zoomed-crop judgement --
-   either a locally-detected face beyond detect_face_crops' <=3 crop cap, or
-   a subjects[] entry the model found on its own with no backing local
-   detection at all (see results.js's sentToModel !== true). Dimmed + dashed
-   so it doesn't look equally analyzed as one that did get its own crop;
-   .ap-face-thumb-local-badge (debug UI only) spells out which of the two it
-   was. */
-.ap-face-thumb-btn--local-only { opacity: .55; outline: 1.5px dashed var(--border-2); outline-offset: 1px; }
-.ap-face-thumb-local-badge {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  padding: 0 4px;
-  height: 14px;
-  border-radius: 7px;
-  background: var(--card-2);
-  color: var(--text-2);
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 14px;
-  white-space: nowrap;
-  pointer-events: none;
-  box-shadow: 0 0 0 2px var(--card);
-}
 .ap-face-issue-note { color: var(--text-2); font-size: 13px; margin-bottom: 4px; }
 .quality-select.ap-face-issue-level-select {
   flex: 0 0 96px;
@@ -817,20 +765,12 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .ap-face-issue-level-select:disabled { opacity: .45; cursor: not-allowed; }
 
 @media (max-width: 560px) {
-  .ap-face-modal-box {
-    width: calc(100vw - 16px);
-    padding: 14px;
-  }
-  .ap-face-modal-box .step-list-frame { padding: 12px; }
   .ap-face-issue-row { gap: 6px; }
   .ap-face-issue-name { flex-basis: 64px; }
-  .ap-face-issue-row--with-level { width: 100%; }
-  /* Mobile row uses 6px gaps: 34 + 3*6 + 64 + 20 = 136. */
-  .ap-face-issue-level-row {
-    position: static;
-    transform: none;
-    margin: 8px 0 2px 136px;
-  }
+  /* Narrower toggle-row gap (6px) and .ap-face-issue-name (64px) at this
+     width shift the indent that lines .ap-face-issue-level-row up under
+     .step-cb-label: 34 + 3*6 + 64 + 20 = 136, vs. the 160px default above. */
+  .ap-face-issue-level-row { margin-left: 136px; }
 }
 
 .ap-body-reshape-section {
@@ -2268,12 +2208,16 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     min-height: 0;
     margin-top: 0;
   }
-  /* 修圖建議/修圖風格選項/人像設定 (.ap-style-trigger) and Run
+  /* 修圖風格選項/人像設定 (.ap-style-trigger) and Run
      (.analysis-preview-action) kept their normal full size above -- on a
      short viewport that reads oversized next to the rest of the compacted
      UI, and pushes more of this card past the fold than necessary. Shrink
      them to match, same proportions as .upload-actions-row's own
-     short-viewport sizing above. */
+     short-viewport sizing above. Note: the now always-visible 修圖建議
+     checklist and per-person face review cards (index.html) aren't covered
+     by this compaction pass -- they can push this card further past the
+     fold on a short viewport than the ~200-230px this block's comments
+     above assume; revisit if that proves disruptive in practice. */
   .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .ap-style-trigger {
     height: 34px;
     padding: 0 12px;
