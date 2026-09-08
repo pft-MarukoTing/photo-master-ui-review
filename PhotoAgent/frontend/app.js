@@ -1401,14 +1401,28 @@
     }
   }
 
-  // step: 1 (分析), 2 (修圖), or 3 (結果). Every step up to and including the
-  // current one gets .ap-step--active (and every connector line up to it
-  // .ap-step-line--active), so earlier steps read as "done" rather than
-  // reverting to muted once the flow moves past them.
-  function setStepIndicatorStep(step) {
+  // step: 1 (分析), 2 (修圖), or 3 (結果). Only the current step gets
+  // .ap-step--active (highlighted); every step before it gets .ap-step--done
+  // (muted, with a checkmark) so earlier steps read as "done" rather than
+  // reverting to a plain ring once the flow moves past them. Connector
+  // lines up to the current step stay .ap-step-line--active.
+  //
+  // `done` covers the current step itself: true (the default) means the
+  // work behind this step has already finished by the time we're switching
+  // to it -- e.g. showing the pending-review panel only happens once
+  // analysis returned, and reaching 結果 only happens once editing is done
+  // -- so it gets a checkmark right away, same as an earlier step. Pass
+  // `done: false` when the step's own work is what's *about* to run (e.g.
+  // kicking off the edit job for 修圖): the current step then shows a
+  // spinner instead, until a later call marks the next step current (which
+  // implicitly finishes this one) or re-calls this same step with
+  // `done: true` once its work resolves.
+  function setStepIndicatorStep(step, { done = true } = {}) {
     if (!els.apStepIndicator) return;
     els.apStepIndicator.querySelectorAll(".ap-step").forEach((el, i) => {
-      el.classList.toggle("ap-step--active", i < step);
+      el.classList.toggle("ap-step--done", i < step - 1);
+      el.classList.toggle("ap-step--active", i === step - 1);
+      el.classList.toggle("ap-step--checked", i === step - 1 && done);
     });
     els.apStepIndicator.querySelectorAll(".ap-step-line").forEach((el, i) => {
       el.classList.toggle("ap-step-line--active", i < step - 1);
@@ -1494,7 +1508,7 @@
     await showPendingResults(analysis, preset);
     await waitForPendingResultsAction();
     closePendingResults();
-    setStepIndicatorStep(2); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
+    setStepIndicatorStep(2, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
     // Same "editing" loading overlay backToProcessFromResults' revise flow
     // uses -- swaps the photo for the thinking-rings animation instead of
     // navigating away from the results page.
@@ -3210,7 +3224,7 @@
     resetSteps(); // clears completedTimings so each run's total starts fresh
     closePendingResults(); // drop any stale pending-review state from an abandoned prior run
     restoreStepIndicatorHome();
-    setStepIndicatorStep(1);
+    setStepIndicatorStep(1, { done: false }); // analysis is only just starting -- not finished yet
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
@@ -3810,7 +3824,7 @@
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
     if (action === "cancel") return;
-    setStepIndicatorStep(2); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
+    setStepIndicatorStep(2, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
 
     setAnalysisPreviewDisabled(true);
     if (els.showPromptBtn) els.showPromptBtn.disabled = true;
@@ -6747,7 +6761,7 @@
     // above), so the step indicator itself isn't visible right now -- still
     // keep its state in sync so it reads correctly the moment
     // showBatchAnalyzedMain/showBatchDoneMain reveals it again.
-    setStepIndicatorStep(analyzing ? 1 : 2);
+    setStepIndicatorStep(analyzing ? 1 : 2, { done: false }); // still running either way
     // Same rotating phrasings as the single-image flow (startProcSubRotation
     // et al.), just targeting #batch-main-loading-text through setProcSub
     // instead of .proc-sub/#canvas-loading-status. There's only one shared
@@ -7858,7 +7872,7 @@
     restoreAnalysisPreviewHome();
     closePendingResults();
     restoreStepIndicatorHome();
-    setStepIndicatorStep(1);
+    setStepIndicatorStep(1, { done: false }); // resetting to a fresh, not-yet-run state
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of

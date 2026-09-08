@@ -371,13 +371,35 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 12px;
-      font-weight: 700;
       flex-shrink: 0;
       background: transparent;
       box-shadow: inset 0 0 0 1.5px var(--border-2);
       color: var(--text-2);
     }
+    /* No digits anymore -- an untouched future step is just an empty ring.
+       The current step (.ap-step--active) fills in with a spinner while its
+       work is still running, swapping to a check the moment it's marked
+       done (.ap-step--checked, added alongside --active); a step that's
+       already behind us (.ap-step--done) goes straight to a check, but
+       stays in this same muted ring/color as a future step -- only the
+       current step gets the highlighted gradient fill below, so at most one
+       step reads as "highlighted" at a time. */
+    .ap-step-num-check { display: none; }
+    .ap-step-num-spinner {
+      display: none;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, .35);
+      border-top-color: #fff;
+      animation: ap-step-spin .7s linear infinite;
+    }
+    @keyframes ap-step-spin {
+      to { transform: rotate(360deg); }
+    }
+    .ap-step--active:not(.ap-step--checked) .ap-step-num-spinner { display: block; }
+    .ap-step--active.ap-step--checked .ap-step-num-check,
+    .ap-step--done .ap-step-num-check { display: block; }
     .ap-step--active { color: var(--text); }
     .ap-step--active .ap-step-num {
       background: var(--mv-grad);
@@ -3087,17 +3109,32 @@
           <div id="ap-step-indicator-home"></div>
           <div class="ap-step-indicator" id="ap-step-indicator">
             <div class="ap-step ap-step--active">
-              <span class="ap-step-num">1</span>
+              <span class="ap-step-num">
+                <span class="ap-step-num-spinner"></span>
+                <svg class="ap-step-num-check" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
               <span class="ap-step-name">分析</span>
             </div>
             <div class="ap-step-line ap-step-line--active"></div>
             <div class="ap-step">
-              <span class="ap-step-num">2</span>
+              <span class="ap-step-num">
+                <span class="ap-step-num-spinner"></span>
+                <svg class="ap-step-num-check" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
               <span class="ap-step-name">修圖</span>
             </div>
             <div class="ap-step-line"></div>
             <div class="ap-step">
-              <span class="ap-step-num">3</span>
+              <span class="ap-step-num">
+                <span class="ap-step-num-spinner"></span>
+                <svg class="ap-step-num-check" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
               <span class="ap-step-name">結果</span>
             </div>
           </div>
