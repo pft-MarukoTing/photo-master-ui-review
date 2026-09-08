@@ -781,10 +781,13 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 .ap-face-issue-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
 
-/* A face renderFaceThumbnails found only via the local on-device detector
-   (beyond detect_face_crops' <=3 crop cap, never sent to the model as a
-   zoomed image) -- dimmed + dashed so it doesn't look equally analyzed as a
-   thumbnail that actually got the deeper zoomed-crop judgement. */
+/* A thumbnail whose findings never got the deeper zoomed-crop judgement --
+   either a locally-detected face beyond detect_face_crops' <=3 crop cap, or
+   a subjects[] entry the model found on its own with no backing local
+   detection at all (see results.js's sentToModel !== true). Dimmed + dashed
+   so it doesn't look equally analyzed as one that did get its own crop;
+   .ap-face-thumb-local-badge (debug UI only) spells out which of the two it
+   was. */
 .ap-face-thumb-btn--local-only { opacity: .55; outline: 1.5px dashed var(--border-2); outline-offset: 1px; }
 .ap-face-thumb-local-badge {
   position: absolute;

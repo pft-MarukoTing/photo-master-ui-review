@@ -982,13 +982,16 @@ window.PhotoAgentResults = (() => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "ap-face-thumb-btn";
-      // A locally-detected face beyond the crop cap never got its own zoomed
-      // image or "Local face detector reference" text in front of the model
-      // (see detect_face_crops/analyze_photo) -- any findings it shows came
-      // from the model describing this person off the full photo alone, not
-      // the deeper zoomed-crop analysis every other thumbnail benefits from.
-      // Dimmed + dashed so that distinction is visible at a glance.
-      if (!entry.sentToModel) btn.classList.add("ap-face-thumb-btn--local-only");
+      // sentToModel is false for a locally-detected face beyond the crop cap
+      // (only a coordinate hint reached the model, see detect_face_crops/
+      // analyze_photo) and null for a subjects[] entry the model found on
+      // its own with no backing local detection at all (see the bodySubjects
+      // fallback below). Either way, no zoomed crop of this exact face ever
+      // reached the model, so any findings it shows came from reading the
+      // full photo alone -- dimmed + dashed here so that lower-confidence
+      // reading is visible at a glance without exposing which of the two it
+      // was (see the debug-only badge below for that detail).
+      if (entry.sentToModel !== true) btn.classList.add("ap-face-thumb-btn--local-only");
       btn.dataset.faceIndex = String(index);
       btn.setAttribute("aria-label", `人物 ${index + 1}`);
       const dataUrl = img ? cropFaceThumbnail(img, entry.box) : "";
@@ -1019,11 +1022,19 @@ window.PhotoAgentResults = (() => {
         badge.textContent = "!";
         wrap.appendChild(badge);
       }
-      if (!entry.sentToModel) {
+      // Debug-only: a regular user doesn't need to know *why* a thumbnail
+      // wasn't analyzed from its own zoomed crop (detector cap vs. no
+      // detection at all) -- the dimmed/dashed style above already tells
+      // them it's a lower-confidence read. Engineers debugging a case like
+      // this still want the exact source, so it's gated on debugUiActive
+      // instead of removed outright.
+      if (entry.sentToModel !== true && debugUiActive) {
         const localBadge = document.createElement("span");
         localBadge.className = "ap-face-thumb-local-badge";
-        localBadge.textContent = "本機";
-        localBadge.title = "本機偵測到的人臉，未送入分析模型做特寫判讀";
+        localBadge.textContent = entry.sentToModel === false ? "本機(超量)" : "AI補充";
+        localBadge.title = entry.sentToModel === false
+          ? "本機偵測到但超過裁切張數上限，僅座標文字送入模型，未做特寫判讀"
+          : "本機未偵測到，由模型自行從整張照片辨識出此人";
         wrap.appendChild(localBadge);
       }
       row.appendChild(wrap);
@@ -1061,13 +1072,16 @@ window.PhotoAgentResults = (() => {
     const element = els.apFaceIssueList;
     if (!element) return;
     element.innerHTML = "";
-    if (entry && entry.sentToModel === false) {
+    if (entry && entry.sentToModel !== true) {
       // This face still has its subjects[] match's findings below (see
       // renderFaceThumbnails) -- just a caveat that they came from the model
       // reading the full photo alone, not this face's own zoomed crop.
+      // Worded around the *result* (no close-up look) rather than the
+      // *source* (detector cap vs. no detection at all) -- that source
+      // distinction is debug-only, see the "本機(超量)"/"AI補充" badge above.
       const note = document.createElement("li");
       note.className = "ap-face-issue-note";
-      note.textContent = "此人臉僅由本機偵測到，未送入分析模型做特寫判讀；以下為模型從整張照片判斷的結果。";
+      note.textContent = "此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。";
       element.appendChild(note);
     }
     const issues = entry?.issues || [];
