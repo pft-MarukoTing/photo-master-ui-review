@@ -439,11 +439,6 @@
     .ap-toggle-card > summary:hover { background: var(--card-3); }
     .ap-toggle-card[open] > summary { border-bottom: 1px solid var(--border-2); }
     .ap-toggle-card > summary::before { font-size: 13px; }
-    .ap-toggle-count {
-      font-size: 12.5px;
-      font-weight: 700;
-      color: var(--text-2);
-    }
     .ap-toggle-card-body { padding: 14px; }
     .ap-toggle-card .step-inline-list { gap: 10px; }
     /* #ap-review-panel's summary holds an extra row (the per-person avatar
@@ -486,14 +481,23 @@
        variant tried in between. */
     .ap-review-tabs {
       display: flex;
-      flex-wrap: wrap;
       gap: 4px;
     }
+    /* flex:1 (not shrink-to-content) so however many tabs are actually
+       visible -- 3 when 人像檢查 is hidden (no faces detected), 4 otherwise
+       -- always split the panel's full width evenly between themselves,
+       rather than sizing to their own label and leaving the rest of the row
+       empty. min-width:0 lets a tab shrink below its label's natural width
+       on a narrow phone instead of refusing to and forcing the row to
+       overflow/wrap. */
     .ap-review-tab {
       display: flex;
       align-items: center;
+      justify-content: center;
+      flex: 1 1 0;
+      min-width: 0;
       gap: 6px;
-      padding: 7px 14px;
+      padding: 7px 10px;
       border: 1px solid var(--border-2);
       border-bottom: none;
       border-radius: 10px 10px 0 0;
@@ -514,8 +518,6 @@
       background: var(--card-2);
       color: var(--text);
     }
-    .ap-review-tab .ap-toggle-count { color: inherit; opacity: .75; }
-    .ap-review-tab.is-active .ap-toggle-count { opacity: .9; }
     /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/.ap-style-type-row/
        .ap-style-option-grid each set their own display (flex/grid)
        unconditionally -- an author rule for the same property always beats
@@ -3163,10 +3165,9 @@
                      hidden (renderFaceReviewCards) and this box behaves like a
                      plain single-section 修圖建議 card. The per-person avatar
                      row (#ap-face-tabs) still lives inside the summary, not
-                     the collapsible body, so it (like #ap-recipe-count's
-                     "N 項"/#ap-face-review-count's "N 人" on the tab buttons
-                     themselves) stays visible even while the whole box is
-                     collapsed -- but only when 人像檢查 is the active tab.
+                     the collapsible body, so it stays visible even while the
+                     whole box is collapsed -- but only when 人像檢查 is the
+                     active tab.
                      A <details> (not a plain div) so the whole merged box can
                      collapse to just its summary line -- renderAnalysisPreview
                      (results.js) sets its `open` attribute: expanded by
@@ -3178,10 +3179,10 @@
                     <div class="ap-review-summary-inner">
                       <div class="ap-review-tabs" id="ap-review-tabs">
                         <button type="button" class="ap-review-tab is-active" id="ap-review-tab-face" hidden>
-                          人像檢查<span class="ap-toggle-count" id="ap-face-review-count"></span>
+                          人像檢查
                         </button>
                         <button type="button" class="ap-review-tab" id="ap-review-tab-recipe">
-                          修圖建議<span class="ap-toggle-count" id="ap-recipe-count"></span>
+                          修圖建議
                         </button>
                         <!-- Was a standalone #ap-style-picker button opening
                              #ap-style-modal (a real overlay window) -- the

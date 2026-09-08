@@ -1024,7 +1024,6 @@ window.PhotoAgentResults = (() => {
     const tabs = els.apFaceTabs;
     if (!tabs) return;
     if (els.apReviewTabFace) els.apReviewTabFace.hidden = !faceThumbEntries.length;
-    if (els.apFaceReviewCount) els.apFaceReviewCount.textContent = faceThumbEntries.length ? `${faceThumbEntries.length} 人` : "";
     if (!faceThumbEntries.length) {
       tabs.innerHTML = "";
       if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
@@ -1892,12 +1891,6 @@ window.PhotoAgentResults = (() => {
     // same as selectedFaceIndex resetting to 0 in renderFaceThumbnails below.
     activeReviewTab = "face";
     if (els.apReviewPanel) els.apReviewPanel.open = expanded;
-    // Shown right on the (collapsible) summary line itself -- collapsed, the
-    // count is the only hint there's something worth opening this for.
-    if (els.apRecipeCount) {
-      const count = Array.isArray(analysis.retouch_recipe) ? analysis.retouch_recipe.length : 0;
-      els.apRecipeCount.textContent = count ? `${count} 項` : "";
-    }
     if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
     if (els.apSubjectTags) {
       renderTags(els.apSubjectTags, [
