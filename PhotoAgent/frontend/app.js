@@ -1331,9 +1331,16 @@
   // while finishSingleFlow's edit/QA job is in flight -- none of it applies
   // to the already-submitted job, so leaving it live just invites confusing
   // edits. Re-enabled once the panel is shown again for a fresh round.
+  // Exempts #ap-review-panel's own tab buttons (.ap-review-tab, the
+  // per-person avatar tabs .ap-face-tab) -- those only switch which content
+  // is visible, they don't change anything about the submitted job, so
+  // disabling them alongside the real data controls would leave the user
+  // unable to even browse 人像檢查/修圖建議/修圖風格/補充指令 or open a
+  // person's own card while a job is in flight or already finished.
   function setAnalysisPreviewDisabled(disabled) {
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
+        if (el.classList.contains("ap-review-tab") || el.classList.contains("ap-face-tab")) return;
         el.disabled = disabled;
       });
     }
@@ -6446,12 +6453,14 @@
     }
   }
 
-  // 修圖風格選項 overlay: two-step picker inside #ap-style-modal -- a row of
+  // 修圖風格 tab (#ap-review-style): two-step picker -- a row of
   // Pose/Angle/Lighting/Size buttons (ids ap-group-pose/-angle/-lighting/
   // -size), then that type's #ap-*-list image-option grid underneath.
   // showStyleGroup just flips which button/list pair is visible; it doesn't
   // touch which radio is checked in any of them (that's still plain radio
-  // input behavior, untouched by this).
+  // input behavior, untouched by this). Was a two-step picker inside
+  // #ap-style-modal, a real overlay window -- now inline as this tab's own
+  // body, same function, just relocated.
   const STYLE_GROUPS = ["pose", "angle", "lighting", "size"];
 
   function styleGroupListEl(group) {
@@ -6461,15 +6470,17 @@
   // group === null hides every list and clears every button's active state
   // (no g in STYLE_GROUPS ever equals null) -- also swaps which of
   // #ap-style-type-row (the 4 pills) / #ap-style-options-frame is visible,
-  // so picking a category hands the whole modal over to that category's
-  // option grid instead of splitting space with the pills. Three ways back
-  // to null: #ap-style-exit-btn (manual, no pick made), picking an actual
-  // option in the grid (the per-image ap-*-list change handler below,
-  // automatic), or -- for either -- reopening the modal fresh (openStyleModal
-  // always starts at null). #ap-style-options-title (top of that frame) is
-  // set to the same Pose/Angle/Lighting/Size text as the now-hidden pill's
-  // own .option-pill-label, since STYLE_GROUPS entries are already
-  // lowercase versions of those labels.
+  // so picking a category hands this tab's whole body over to that
+  // category's option grid instead of splitting space with the pills. Three
+  // ways back to null: #ap-style-exit-btn (manual, no pick made), picking an
+  // actual option in the grid (the per-image ap-*-list change handler below,
+  // automatic), or -- for either -- switching to this tab fresh (the
+  // #ap-review-tab-style click listener below always resets to null, same
+  // as this tab's old openStyleModal always starting there).
+  // #ap-style-options-title (top of that frame) is set to the same
+  // Pose/Angle/Lighting/Size text as the now-hidden pill's own
+  // .option-pill-label, since STYLE_GROUPS entries are already lowercase
+  // versions of those labels.
   function showStyleGroup(group) {
     STYLE_GROUPS.forEach((g) => {
       const btn = document.getElementById(`ap-group-${g}`);
@@ -6482,26 +6493,6 @@
       els.apStyleOptionsTitle.textContent = group ? group[0].toUpperCase() + group.slice(1) : "";
     }
     if (els.apStyleOptionsFrame) els.apStyleOptionsFrame.hidden = !group;
-    // #ap-style-options-frame has its own #ap-style-exit-btn (top-right of
-    // its header) for returning to the pills-only view while it's showing --
-    // hide the modal's own close button whenever that frame is showing so
-    // there aren't two dismiss/back buttons competing for the same corner.
-    if (els.apStyleModalClose) els.apStyleModalClose.hidden = !!group;
-  }
-
-  // Always opens on just the 4 Pose/Angle/Lighting/Size pills -- no
-  // auto-picked or remembered-from-last-time category, so
-  // #ap-style-options-frame stays hidden until the user clicks one of them
-  // (picking an option inside it returns here on its own -- see the
-  // per-image ap-*-list change handler below).
-  function openStyleModal() {
-    if (!els.apStyleModal) return;
-    showStyleGroup(null);
-    els.apStyleModal.hidden = false;
-  }
-
-  function closeStyleModal() {
-    if (els.apStyleModal) els.apStyleModal.hidden = true;
   }
 
   // Full-window compare view: toggles .is-fullscreen on the real
@@ -8382,13 +8373,13 @@
     });
   }
   if (els.apAdvancedSettingsBtn) els.apAdvancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
-  if (els.apStylePicker) els.apStylePicker.addEventListener("click", openStyleModal);
-  if (els.apStyleModalClose) els.apStyleModalClose.addEventListener("click", closeStyleModal);
-  if (els.apStyleModal) {
-    els.apStyleModal.addEventListener("click", (e) => {
-      if (e.target.dataset.close) closeStyleModal();
-    });
-  }
+  // Resets to the pills-only view every time this tab is switched to --
+  // same as this tab's old openStyleModal always starting there, so
+  // whichever category grid was left open on a previous visit doesn't
+  // linger. results.js's own generic tab-click listener (wired alongside
+  // #ap-review-tab-recipe/-face) handles switching which tab is actually
+  // active/visible; this is purely the extra style-specific reset.
+  if (els.apReviewTabStyle) els.apReviewTabStyle.addEventListener("click", () => showStyleGroup(null));
   document.querySelectorAll(".ap-style-type-btn").forEach((btn) => {
     btn.addEventListener("click", () => showStyleGroup(btn.dataset.styleGroup));
   });
@@ -8415,7 +8406,6 @@
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
-    if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
     if (isCompareFullscreen()) closeCompareFullscreen();

@@ -30,9 +30,9 @@ window.PhotoAgentResults = (() => {
 
   // Maps each non-default option value to its example image in
   // assets/optional_style/<group>/ -- used by fillStyleOptionList to show the
-  // #ap-style-modal overlay's option buttons as image thumbnails instead of
-  // plain text. "default"/"Auto" has no file (there's nothing to show an
-  // example image of), so it renders as a text-only placeholder card instead.
+  // 修圖風格 tab's option buttons as image thumbnails instead of plain text.
+  // "default"/"Auto" has no file (there's nothing to show an example image
+  // of), so it renders as a text-only placeholder card instead.
   const STYLE_OPTION_IMAGES = {
     pose: { playful: "pose-playful.png", candid: "pose-candid.png", strong: "pose-strong.png" },
     angle: { high: "angle-highshot.png", low: "angle-lowshot.png", eye: "angle-eyelevel.png" },
@@ -310,7 +310,7 @@ window.PhotoAgentResults = (() => {
 
   // Same picker as fillRadioList, but rendered as a grid of image-thumbnail
   // buttons instead of a plain text radio list -- used only by the per-image
-  // #ap-style-modal overlay's Pose/Angle/Lighting/Size lists (assets live in
+  // 修圖風格 tab's Pose/Angle/Lighting/Size lists (assets live in
   // assets/optional_style/<group>/, see STYLE_OPTION_IMAGES above). The batch
   // sidebar's equivalent lists keep using fillRadioList/plain text unchanged.
   function fillStyleOptionList(element, options, name, defaultValue, group) {
@@ -400,10 +400,10 @@ window.PhotoAgentResults = (() => {
   // fillRadioList/fillStyleOptionList render and by app.js after it restores
   // a saved pick or the user selects a new one. Looks for the value pill two
   // different ways: nested inside a .ap-style-item (the batch options row's
-  // always-visible list layout) or, for the per-image #ap-style-modal
-  // overlay where the type button and its option grid are siblings rather
-  // than nested, via the list's data-style-group attribute matching a
-  // .ap-style-type-btn. No-ops quietly if neither matches.
+  // always-visible list layout) or, for the per-image 修圖風格 tab where the
+  // type button and its option grid are siblings rather than nested, via the
+  // list's data-style-group attribute matching a .ap-style-type-btn.
+  // No-ops quietly if neither matches.
   function syncStyleTrigger(listElement) {
     if (!listElement) return;
     const group = listElement.dataset.styleGroup;
@@ -432,7 +432,8 @@ window.PhotoAgentResults = (() => {
   // Renders #ap-style-picker-value's picked-label row as removable chips
   // (label + an "x" button) instead of plain renderTags spans -- each chip's
   // "x" calls clearStylePick so a pick can be undone from here directly,
-  // without reopening #ap-style-modal and finding "Auto" in the grid.
+  // without switching down into #ap-style-type-row and finding "Auto" in
+  // the grid.
   function renderStylePickedChips(element, picks) {
     element.innerHTML = "";
     picks.forEach(({ name, label }) => {
@@ -455,22 +456,20 @@ window.PhotoAgentResults = (() => {
     });
   }
 
-  // Keeps #ap-style-picker-value (the removable-chip row right after the
-  // #ap-style-picker button) in sync with whatever's currently picked across
-  // the 4 ap-pose/-angle/-lighting/-size radio groups -- called whenever
-  // those radios change (app.js) or the analysis preview re-renders. Hidden
-  // entirely while everything's still Default/Auto -- the button itself
-  // always just reads "修圖風格選項", same non-default-only filtering as
-  // buildStyleOptionsText/buildStyleOptionTagLabels above. Reads the radios
-  // directly (same `input[name="..."]:checked` lookup as
+  // Keeps #ap-style-picker-value (the removable-chip row at the top of the
+  // 修圖風格 tab body) in sync with whatever's currently picked across the 4
+  // ap-pose/-angle/-lighting/-size radio groups -- called whenever those
+  // radios change (app.js) or the analysis preview re-renders. Hidden
+  // entirely while everything's still Default/Auto, same non-default-only
+  // filtering as buildStyleOptionsText/buildStyleOptionTagLabels above.
+  // Reads the radios directly (same `input[name="..."]:checked` lookup as
   // readStyleSelectionsFromDom, app.js) rather than depending on that
   // function, since results.js has no access to app.js's internals.
   // Also drives the .ap-style-type-clear "x" sitting on each Pose/Angle/
-  // Lighting/Size pill inside #ap-style-modal (index.html) -- same
-  // non-default check as the picked-chip row, just a per-category on/off
-  // instead of building a label, so the in-modal clear affordance and the
-  // outside-the-modal chip row never disagree about which categories are
-  // currently overridden.
+  // Lighting/Size pill in #ap-style-type-row -- same non-default check as
+  // the picked-chip row, just a per-category on/off instead of building a
+  // label, so the two never disagree about which categories are currently
+  // overridden.
   function updateStyleTriggerLabel() {
     if (!els.apStylePickerValue) return;
     const names = ["ap-pose", "ap-angle", "ap-lighting", "ap-size"];
@@ -879,11 +878,20 @@ window.PhotoAgentResults = (() => {
   // overrides, a style pick) don't silently switch which person is showing.
   let selectedFaceIndex = 0;
 
-  // Whether #ap-recipe-inline / #ap-face-review (both <details>) should
+  // Whether #ap-review-panel (the merged 修圖建議/人像檢查 <details>) should
   // start open -- set by renderAnalysisPreview's own `expanded` param, read
   // by renderFaceReviewCards. See renderAnalysisPreview's doc for the full
   // reasoning.
   let reviewExpanded = true;
+
+  // Which top-level tab of #ap-review-panel is showing -- "recipe" for
+  // #ap-recipe-list, "face" for the per-person avatar row (#ap-face-tabs)
+  // plus #ap-face-detail. Reset to "face" on every fresh analysis
+  // (renderAnalysisPreview) so a new photo always lands back on the
+  // per-person review first, same as selectedFaceIndex resetting to 0
+  // below -- renderFaceReviewCards falls back to "recipe" right after if
+  // this particular photo has no faces to show there.
+  let activeReviewTab = "face";
 
   // Every locally-detected face (openai_client.analyze_photo's
   // _local_face_boxes), not just the <=3 that got a zoomed crop sent to the
@@ -900,8 +908,6 @@ window.PhotoAgentResults = (() => {
   }
 
   function renderFaceThumbnails(analysis) {
-    const outer = els.apFaceReview;
-    if (!outer) return;
     // A different photo/person set makes whatever tab was previously
     // selected meaningless -- always land back on the first person.
     selectedFaceIndex = 0;
@@ -910,10 +916,11 @@ window.PhotoAgentResults = (() => {
       .map((subject, subjectIndex) => ({ subject, subjectIndex }))
       .filter(({ subject }) => subject?.is_person && subject?.body_reshape && typeof subject.body_reshape === "object");
     if (!faces.length && !bodySubjects.length) {
-      outer.hidden = true;
-      if (els.apFaceTabs) els.apFaceTabs.innerHTML = "";
-      if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
+      // No 人像檢查 tab to show -- renderFaceReviewCards (below) hides that
+      // tab button and falls back to the 修圖建議 tab, it just needs
+      // faceThumbEntries cleared first.
       faceThumbEntries = [];
+      renderFaceReviewCards();
       return;
     }
     const img = els.originalImg;
@@ -1008,20 +1015,24 @@ window.PhotoAgentResults = (() => {
   // re-render to reflect that restored state without rebuilding
   // faceThumbEntries itself (which would discard those very overrides right
   // back out). Exported under this name for that reason -- kept even though
-  // it now renders tabs, not per-person cards.
+  // it now renders tabs, not per-person cards. Also owns showing/hiding the
+  // 人像檢查 top-level tab button itself (#ap-review-tab-face) -- there's no
+  // longer a separate box to hide when there's nothing to review, so falling
+  // back to the 修圖建議 tab when the active one just lost its content is
+  // this function's job too.
   function renderFaceReviewCards() {
-    const outer = els.apFaceReview;
     const tabs = els.apFaceTabs;
-    if (!outer || !tabs) return;
+    if (!tabs) return;
+    if (els.apReviewTabFace) els.apReviewTabFace.hidden = !faceThumbEntries.length;
+    if (els.apFaceReviewCount) els.apFaceReviewCount.textContent = faceThumbEntries.length ? `${faceThumbEntries.length} 人` : "";
     if (!faceThumbEntries.length) {
-      outer.hidden = true;
       tabs.innerHTML = "";
       if (els.apFaceDetail) els.apFaceDetail.innerHTML = "";
+      if (activeReviewTab === "face") activeReviewTab = "recipe";
+      applyActiveReviewTab();
       return;
     }
-    outer.hidden = false;
-    outer.open = reviewExpanded;
-    if (els.apFaceReviewCount) els.apFaceReviewCount.textContent = `${faceThumbEntries.length} 人`;
+    if (els.apReviewPanel) els.apReviewPanel.open = reviewExpanded;
     if (selectedFaceIndex >= faceThumbEntries.length) selectedFaceIndex = 0;
 
     const img = els.originalImg;
@@ -1061,17 +1072,19 @@ window.PhotoAgentResults = (() => {
         thumb.alt = label;
         tab.appendChild(thumb);
       }
-      // This tab row lives inside #ap-face-review's own <summary> (see its
-      // markup comment) so the thumbnails stay visible even while the
-      // section is collapsed -- without stopPropagation, a click here would
-      // also bubble up to the summary's native click-to-toggle, sometimes
-      // collapsing the section right as the user picks a person instead of
-      // just switching tabs. Force-opening it explicitly means picking any
-      // tab always reveals that person's detail below, whether the section
-      // was already open or not.
+      // This tab row lives inside #ap-review-panel's own <summary> (see its
+      // markup comment) so the thumbnails stay visible even while the box
+      // is collapsed -- without stopPropagation, a click here would also
+      // bubble up to the summary's native click-to-toggle, sometimes
+      // collapsing the box right as the user picks a person instead of just
+      // switching tabs. Force-opening it explicitly means picking any tab
+      // always reveals that person's detail below, whether the box was
+      // already open or not -- otherwise, on the 結果 page (reviewExpanded
+      // false, box starts collapsed), picking a person here would silently
+      // do nothing visible at all.
       tab.addEventListener("click", (event) => {
         event.stopPropagation();
-        if (!outer.open) outer.open = true;
+        if (els.apReviewPanel && !els.apReviewPanel.open) els.apReviewPanel.open = true;
         if (selectedFaceIndex === index) return;
         const prevActive = tabs.querySelector(".ap-face-tab-wrap.is-active");
         if (prevActive) prevActive.classList.remove("is-active");
@@ -1095,7 +1108,52 @@ window.PhotoAgentResults = (() => {
     });
 
     renderFaceDetailPanel();
+    applyActiveReviewTab();
   }
+
+  // Reflects activeReviewTab onto the four top-level tab buttons' active
+  // state and shows/hides each one's content panel to match -- called after
+  // anything that could change which tab is selected or available: a tab
+  // click, or renderFaceReviewCards rebuilding faceThumbEntries (a fresh
+  // analysis, or the 人像檢查 tab's content disappearing out from under it).
+  function applyActiveReviewTab() {
+    if (els.apReviewTabRecipe) els.apReviewTabRecipe.classList.toggle("is-active", activeReviewTab === "recipe");
+    if (els.apReviewTabFace) els.apReviewTabFace.classList.toggle("is-active", activeReviewTab === "face");
+    if (els.apReviewTabStyle) els.apReviewTabStyle.classList.toggle("is-active", activeReviewTab === "style");
+    if (els.apReviewTabPrompt) els.apReviewTabPrompt.classList.toggle("is-active", activeReviewTab === "prompt");
+    if (els.apRecipeList) els.apRecipeList.hidden = activeReviewTab !== "recipe";
+    if (els.apFaceDetail) els.apFaceDetail.hidden = activeReviewTab !== "face";
+    if (els.apFaceTabs) els.apFaceTabs.hidden = activeReviewTab !== "face";
+    if (els.apReviewStyle) els.apReviewStyle.hidden = activeReviewTab !== "style";
+    if (els.apReviewPrompt) els.apReviewPrompt.hidden = activeReviewTab !== "prompt";
+  }
+
+  // Switches #ap-review-panel's active top-level tab -- wired once below to
+  // the four static tab buttons (they're plain markup, not rebuilt per
+  // render like the per-person avatar tabs above, so their listeners only
+  // need attaching once).
+  function setActiveReviewTab(tab) {
+    if (activeReviewTab === tab) return;
+    activeReviewTab = tab;
+    applyActiveReviewTab();
+  }
+  [
+    [els.apReviewTabRecipe, "recipe"],
+    [els.apReviewTabFace, "face"],
+    [els.apReviewTabStyle, "style"],
+    [els.apReviewTabPrompt, "prompt"]
+  ].forEach(([button, tab]) => {
+    if (!button) return;
+    // stopPropagation so picking a tab never also triggers the summary's
+    // own native click-to-toggle; force-opening the box means picking a tab
+    // always reveals its content, whether the box was already open or not
+    // (same reasoning as the per-person avatar tabs' own click handler).
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (els.apReviewPanel && !els.apReviewPanel.open) els.apReviewPanel.open = true;
+      setActiveReviewTab(tab);
+    });
+  });
 
   // Fills #ap-face-detail with whichever one person renderFaceReviewCards
   // last selected (selectedFaceIndex) -- the name heading plus the same
@@ -1818,10 +1876,10 @@ window.PhotoAgentResults = (() => {
   // Shown mid-processing, right after analyze_stage finishes and before the
   // user clicks "continue" -- a lightweight subset of renderResult's fields
   // (no image/QA yet, those only exist after finish_stage runs).
-  // expanded controls whether #ap-recipe-inline and #ap-face-review (both
-  // <details>) start open or collapsed to just their summary line:
-  // true for the first-time 分析 review (before any run), false once this
-  // same panel is reopened on the 結果 page/a revise (backToProcessFromResults/
+  // expanded controls whether #ap-review-panel (the merged 修圖建議/人像檢查
+  // <details>) starts open or collapsed to just its summary line: true for
+  // the first-time 分析 review (before any run), false once this same panel
+  // is reopened on the 結果 page/a revise (backToProcessFromResults/
   // startInlineBatchReview/viewHistoryRecord's readOnly path all pass false)
   // -- still click-to-expand there, just not spread out unasked. Stored on
   // reviewExpanded (module-level) so renderFaceReviewCards, called both from
@@ -1829,7 +1887,11 @@ window.PhotoAgentResults = (() => {
   // same setting without it being re-threaded through every call.
   function renderAnalysisPreview({ analysis, preset, expanded = true }) {
     reviewExpanded = expanded;
-    if (els.apRecipeInline) els.apRecipeInline.open = expanded;
+    // A fresh analysis always lands back on the 人像檢查 tab first (falls
+    // back to 修圖建議 in renderFaceReviewCards if this photo has no faces),
+    // same as selectedFaceIndex resetting to 0 in renderFaceThumbnails below.
+    activeReviewTab = "face";
+    if (els.apReviewPanel) els.apReviewPanel.open = expanded;
     // Shown right on the (collapsible) summary line itself -- collapsed, the
     // count is the only hint there's something worth opening this for.
     if (els.apRecipeCount) {
@@ -1870,8 +1932,7 @@ window.PhotoAgentResults = (() => {
     // person subject; Angle applies to any subject (product/scene shots
     // benefit from camera-angle framing too). The actual retouch behavior
     // for these selections is not wired up yet -- this is UI only for now.
-    // #ap-style-picker now opens #ap-style-modal, a real overlay window (see
-    // index.html) -- these lists render as image-thumbnail buttons
+    // The 修圖風格 tab renders these as image-thumbnail buttons
     // (fillStyleOptionList) instead of the batch sidebar's plain text
     // fillRadioList.
     fillStyleOptionList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default", "pose");
