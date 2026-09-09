@@ -16,6 +16,8 @@ import re
 from prompts import (
     _disabled_issue_subject_indices,
     _read_smile_states,
+    resolve_user_blink_request,
+    resolve_user_gaze_request,
     resolve_user_hair_request,
     body_reshape_items,
     resolve_smile_targets,
@@ -395,16 +397,27 @@ def _gaze_contracts(analysis, include_gaze):
         return []
     disabled = _disabled_issue_subject_indices(analysis, "gaze_issue")
     contracts = []
-    for item in subject_issue_items(analysis, "gaze_issue"):
-        if not item.get("should_fix") or item.get("_subject_index") in disabled:
+    for raw_item in subject_issue_items(analysis, "gaze_issue"):
+        item = resolve_user_gaze_request(raw_item)
+        # A positive automatic verdict always belongs to the automatic path;
+        # forced is reserved for a user opt-in over should_fix=false, same
+        # convention as _hair_contracts' hair_user_forced below.
+        gaze_user_forced = bool(item.get("_user_forced")) and not bool(item.get("should_fix"))
+        if not (item.get("should_fix") or gaze_user_forced) or item.get("_subject_index") in disabled:
             continue
         strategy = item.get("gaze_repair_strategy") or {}
         method = strategy.get("strategy_type") or "eyes_only"
         # A frontal face already has the required head/face alignment. Letting
         # a model-authored plan add a speculative "slight alignment if needed"
         # expands a local gaze correction into a face reprojection and is a
-        # common identity failure, especially when hair is edited nearby.
-        if method == "eyes_plus_head_face_alignment" and str(item.get("head_pose") or "").lower() == "frontal":
+        # common identity failure, especially when hair is edited nearby. Does
+        # not apply to a forced request: _FORCED_GAZE_STRATEGY deliberately
+        # asks for eyes_plus_head_face_alignment regardless of head_pose,
+        # since a forced row's starting gaze/head angle is unknown and may be
+        # far off-camera -- downgrading it here would silently zero out
+        # head_face_adjustment below and reproduce the exact "won't move"
+        # complaint that strategy was changed to fix.
+        if method == "eyes_plus_head_face_alignment" and not gaze_user_forced and str(item.get("head_pose") or "").lower() == "frontal":
             method = "eyes_only"
         direct_changes = ["gaze_direction", "iris_direction", "pupil_direction"]
         dependent_changes = ["sclera_balance", "catchlight_consistency"]
@@ -443,16 +456,25 @@ def _blink_contracts(analysis):
         return []
     disabled = _disabled_issue_subject_indices(analysis, "blink_issue")
     contracts = []
-    for item in subject_issue_items(analysis, "blink_issue"):
-        if not item.get("should_fix") or item.get("_subject_index") in disabled:
+    for raw_item in subject_issue_items(analysis, "blink_issue"):
+        item = resolve_user_blink_request(raw_item)
+        # A positive automatic verdict always belongs to the automatic path;
+        # forced is reserved for a user opt-in over should_fix=false, same
+        # convention as _hair_contracts' hair_user_forced below.
+        blink_user_forced = bool(item.get("_user_forced")) and not bool(item.get("should_fix"))
+        if not (item.get("should_fix") or blink_user_forced) or item.get("_subject_index") in disabled:
             continue
         # eye_state stays the machine-level endpoint the resolver reasons about;
         # the analysis strategy's own wording rides alongside it under keys gaze
         # never uses, so a subject carrying both features cannot collide. Only
         # luna authors a per-person blink strategy, so these stay absent (and
-        # the rendered line generic) for every other analysis model.
+        # the rendered line generic) for every other analysis model -- except
+        # a forced row, which always carries one (resolve_user_blink_request).
         strategy = item.get("blink_repair_strategy") or {}
-        endpoint = {"eye_state": "naturally_open_and_matched_to_expression"}
+        endpoint = {
+            "eye_state": "naturally_open_and_matched_to_expression",
+            "blink_user_forced": blink_user_forced,
+        }
         for key, source in (
             ("eyelid_target", "target_eye_state"),
             ("eyelid_strength", "repair_strength"),
@@ -750,6 +772,14 @@ def build_compact_editor_prompt(
                 # target eyelid state -- written against the captured
                 # expression -- is dropped here; its method still applies.
                 eyelid_text = "Shape the eyelids for the final expression first, then reopen the affected eye only enough to be naturally readable within that expression; retain natural smile narrowing rather than restoring captured openness"
+            elif state.get("blink_user_forced"):
+                # Forced means the analyzer itself found nothing to fix here --
+                # unlike the branch below, "accidentally closed/half-closed"
+                # would misdescribe the eye this row is actually about.
+                opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
+                eyelid_text = f"{opening} this person's eyes naturally into a relaxed, alert expression, matching their anatomy"
+                if eyelid_target:
+                    eyelid_text += f". Target eyelid state: {eyelid_target}"
             else:
                 opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
                 eyelid_text = f"{opening} or relax the accidentally closed/half-closed eye naturally, matching the person's anatomy"

@@ -657,6 +657,17 @@ window.PhotoAgentResults = (() => {
     { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: true, flagText: "可以調整", okText: "不建議調整" }
   ];
 
+  // Every category the user can manually switch on even when the analyzer
+  // itself found nothing to fix -- app.js's buildEffectiveAnalysis sets
+  // issue._user_forced for exactly these four when the toggle is flipped on
+  // an unflagged row, and prompts.py's resolve_user_hair_request/
+  // resolve_user_blink_request/resolve_user_gaze_request (plus smile's own
+  // explicit-level path) turn that into a real edit instruction. Unlike hair,
+  // blink/gaze have no per-person style level -- see LEVEL_SELECT_CATEGORIES
+  // below -- so they don't appear in that second list.
+  const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue"];
+  const LEVEL_SELECT_CATEGORIES = ["hair_issue", "smile_issue"];
+
   // Intersection over the SMALLER of the two boxes' own area (the
   // Szymkiewicz-Simpson overlap coefficient), not plain IoU -- faceBox and
   // a subject's own box are rarely similar in size (see the comment above),
@@ -727,7 +738,16 @@ window.PhotoAgentResults = (() => {
         && advancedOptions.smile_adjustment !== false
         && advancedOptions.smile_level
         && advancedOptions.smile_level !== "auto";
-      const isHair = category.field === "hair_issue";
+      const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(category.field);
+      // buildEffectiveAnalysis (app.js) writes _user_forced/_user_level onto
+      // this same subject[category.field] object at submit time, and the
+      // backend echoes analysis back verbatim -- so a completed record (or a
+      // freshly re-rendered revise) carries the *previous* manual-on decision
+      // right here, not just the analyzer's own should_fix/adjust_safe. Without
+      // this, reopening a record with a forced fix would recompute allowed
+      // straight from the untouched original verdict and silently show the
+      // toggle as off again.
+      const wasUserForced = !!match._user_forced;
       return {
         label: category.label,
         flagged: match[category.flagField] === category.flagWhen,
@@ -736,14 +756,14 @@ window.PhotoAgentResults = (() => {
         reason: match.reason || "",
         category: category.field,
         subjectIndex: index,
-        // Hair and smile are user-selectable transformations even when the
-        // analyzer recommends preserving them. An explicit upload-page smile level is already a manual opt-in,
-        // including for a face the analyzer marked unsafe. Auto still starts
-        // such a face off. Detection-based rows remain analysis-gated.
-        controllable: match[category.flagField] === category.flagWhen || isHair || category.field === "smile_issue",
-        allowed: match[category.flagField] === category.flagWhen || !!explicitSmileLevel,
+        // Hair, smile, blink, and gaze are all user-selectable transformations
+        // even when the analyzer recommends preserving them. An explicit
+        // upload-page smile level is already a manual opt-in, including for a
+        // face the analyzer marked unsafe. Auto still starts such a face off.
+        controllable: match[category.flagField] === category.flagWhen || isManualOverride,
+        allowed: match[category.flagField] === category.flagWhen || !!explicitSmileLevel || wasUserForced,
         level: category.field === "hair_issue"
-          ? (advancedOptions.calm_hair ? "tidy" : "dynamic")
+          ? (match._user_level || (advancedOptions.calm_hair ? "tidy" : "dynamic"))
           : category.field === "smile_issue"
             ? (advancedOptions.smile_level || "auto")
             : null
@@ -785,9 +805,13 @@ window.PhotoAgentResults = (() => {
     const overrides = {};
     faceThumbEntries.forEach((entry) => {
       (entry.issues || []).forEach((issue) => {
-        if (!issue.flagged && !["hair_issue", "smile_issue"].includes(issue.category)) return;
+        if (!issue.flagged && !MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)) return;
         if (issue.allowed === false) overrides[`${issue.subjectIndex}:${issue.category}`] = false;
         else if (issue.level) overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true, level: issue.level };
+        // blink/gaze have no level (LEVEL_SELECT_CATEGORIES) -- an on toggle
+        // with nothing else to record still has to reach app.js, or a
+        // manually-enabled unflagged row would silently vanish at submit time.
+        else if (issue.allowed) overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true };
       });
     });
     return overrides;
@@ -1223,7 +1247,7 @@ window.PhotoAgentResults = (() => {
       toggle.className = "ios-switch ap-face-issue-toggle";
       toggle.title = issue.flagged
         ? "允許 AI 修正此項目"
-        : ["hair_issue", "smile_issue"].includes(issue.category)
+        : MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)
           ? "分析判定無需或不建議調整；仍可手動開啟"
           : "模型未判定此項目需要修正，無需操作";
       const input = document.createElement("input");
@@ -1256,7 +1280,7 @@ window.PhotoAgentResults = (() => {
         icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
         icon.textContent = active ? "!" : "✓";
         resultLabel.textContent = !issue.flagged
-          ? (["hair_issue", "smile_issue"].includes(issue.category) && issue.allowed
+          ? (MANUAL_OVERRIDE_CATEGORIES.includes(issue.category) && issue.allowed
               ? `已手動開啟`
               : issue.okText)
           : (issue.allowed ? issue.flagText : "已設定不修正");
@@ -1271,7 +1295,7 @@ window.PhotoAgentResults = (() => {
       // second verdict-aligned row on mobile. Hide it whenever this person's
       // edit is off.
       let levelRow = null;
-      if (["hair_issue", "smile_issue"].includes(issue.category)) {
+      if (LEVEL_SELECT_CATEGORIES.includes(issue.category)) {
         li.classList.add("ap-face-issue-item--with-level");
         row.classList.toggle("ap-face-issue-row--with-level", issue.allowed);
         levelRow = document.createElement("div");

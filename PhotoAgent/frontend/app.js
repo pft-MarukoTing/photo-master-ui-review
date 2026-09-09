@@ -7650,9 +7650,10 @@
     // `analysis` is never mutated, in case the user flips the toggle back on
     // a later revise:
     //   1. should_fix (adjust_safe for smile_issue, opposite polarity) is
-    //      flipped to the "nothing to fix" value -- this alone is enough for
-    //      blink/hair/gaze, since build_edit_prompt already excludes a
-    //      should_fix=false item from its own per-category target list.
+    //      flipped to the "nothing to fix" value -- this alone is enough to
+    //      turn OFF a flagged blink/hair/gaze item, since build_edit_prompt
+    //      excludes a should_fix=false item from its own per-category target
+    //      list unless _user_forced (below) says otherwise.
     //   2. analysis._disabled_face_issues names the same (subjectIndex,
     //      category) pairs directly, for build_edit_prompt to hard-exclude
     //      regardless of should_fix/adjust_safe -- the belt to should_fix's
@@ -7674,13 +7675,16 @@
           if (category === "smile_issue") issue.adjust_safe = true;
           else issue.should_fix = false;
           disabledFaceIssues.push({ subject_index: subjectIndex, category });
-        } else if (override && typeof override === "object" && override.level) {
-          issue._user_level = override.level;
+        } else if (override && typeof override === "object") {
           // "Forced" means that the user overrode a negative analyzer verdict,
           // not merely that an enabled row carries a per-person level. Keep an
-          // automatically approved hair repair on its normal prompt path.
+          // automatically approved hair/blink/gaze repair on its normal prompt
+          // path. Blink/gaze carry no level at all (no style choice for them,
+          // unlike hair/smile), so this branch no longer requires one.
+          if (override.level) issue._user_level = override.level;
           if (category === "hair_issue") issue._user_forced = issue.should_fix !== true;
           else if (category === "smile_issue") issue._user_forced = true;
+          else if (category === "blink_issue" || category === "gaze_issue") issue._user_forced = issue.should_fix !== true;
         }
         subject[category] = issue;
       });

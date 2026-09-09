@@ -32,6 +32,7 @@ from prompts import (
     build_body_reshape_planning_instruction,
     eye_repair_targets,
     portrait_qc_persons,
+    resolve_user_gaze_request,
     subject_issue_items,
 )
 
@@ -114,7 +115,15 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     """
     if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
         return image_b64, None, None
-    gaze_items = [item for item in subject_issue_items(analysis, "gaze_issue") if item.get("should_fix")]
+    # resolve_user_gaze_request turns a manually-forced should_fix=false row
+    # into a real repair target -- required here too, since this pass rebuilds
+    # its own item list straight from analysis rather than reusing build_edit_
+    # prompt's gaze_items_to_fix, and a forced item that only cleared that
+    # other filter would otherwise never reach an actual edit call.
+    gaze_items = [
+        resolve_user_gaze_request(item) for item in subject_issue_items(analysis, "gaze_issue")
+        if item.get("should_fix") or item.get("_user_forced")
+    ]
     if not gaze_items:
         return image_b64, None, None
 
@@ -334,7 +343,8 @@ def finish_stage(
         # there's nothing that combination would fail to apply.
         if single_pass_edit and image_model == "gpt-image-2" and quality == "low":
             gaze_fix_approved = any(
-                item.get("should_fix") for item in subject_issue_items(analysis, "gaze_issue")
+                item.get("should_fix") or item.get("_user_forced")
+                for item in subject_issue_items(analysis, "gaze_issue")
             )
             if gaze_fix_approved:
                 edit_quality = "medium"

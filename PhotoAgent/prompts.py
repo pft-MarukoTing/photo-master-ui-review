@@ -3166,6 +3166,89 @@ def resolve_user_hair_request(issue):
     return resolved
 
 
+# Unlike hair's per-hair_state branching, blink/gaze force requests are a
+# single fixed instruction regardless of the analyzer's own eye_state/
+# gaze_state reading -- there is no "how messy" spectrum for an eyelid or a
+# gaze direction to modulate against, just open-vs-closed and on-vs-off
+# camera, so one canned repair target covers every forced row.
+_FORCED_BLINK_STRATEGY = {
+    "edit_instruction": (
+        "User-forced eye-open edit: naturally open this person's eyes into a relaxed, alert "
+        "expression consistent with their existing head pose, lighting, and facial expression."
+    ),
+    "target_eye_state": "open, matching the existing expression",
+    "eyelid_adjustment": "open the eyelids naturally, matching the existing expression",
+    "repair_strength": "moderate",
+    "success_condition": "eyes read naturally open at normal photo-viewing size",
+    "preserve_during_repair": ["identity", "iris color", "expression", "skin", "head pose"],
+    "failure_to_avoid": ["oversized or doll-like eyes", "mismatched gaze direction", "altered identity"],
+}
+
+_FORCED_GAZE_STRATEGY = {
+    "edit_instruction": (
+        "User-forced gaze-redirect edit: turn and/or tilt this person's head/face naturally "
+        "toward the exact current lens and reposition their pupils and irises so both eyes "
+        "clearly and directly look into the camera lens, with natural sclera balance and "
+        "catchlights consistent with the scene lighting. Go all the way to direct lens contact, "
+        "not partway there -- a subtle, ambiguous shift that still reads as off-camera fails "
+        "this edit."
+    ),
+    # eyes_only reads as "keep the head/face angle unchanged" downstream (see
+    # build_gaze_only_edit_prompt's execution-by-method rule), which is only
+    # valid for an already near-frontal head with a tiny miss -- too narrow a
+    # licence for a user-forced request where the actual starting gaze/head
+    # angle is unknown and may be far off-camera. eyes_plus_head_face_alignment
+    # explicitly permits the head/face turn needed to actually reach direct
+    # lens contact instead of leaving the edit model too little room to move.
+    "strategy_type": "eyes_plus_head_face_alignment",
+    "repair_strength": "strong",
+    "eye_adjustment": "reposition pupils/irises fully toward the camera lens, going all the way to direct contact",
+    "head_face_adjustment": "visibly but naturally turn and/or tilt the head/face toward the exact current lens while keeping the torso and shoulders unchanged",
+    "sclera_catchlight_adjustment": "rebalance naturally around the new eye position",
+    "target_gaze_read": "both eyes clearly and directly looking at the camera lens",
+    "preserve_during_repair": ["identity", "expression", "skin", "torso and shoulder pose"],
+    "failure_to_avoid": ["a partial or timid correction that still reads as off-camera", "mismatched pupil size", "altered identity"],
+}
+
+
+def resolve_user_blink_request(issue):
+    """Return the executable blink issue after a per-person manual opt-in.
+
+    Mirrors resolve_user_hair_request: should_fix keeps recording the
+    automatic verdict, and this only supplies a repair target for a
+    manually-enabled should_fix=false row, via the same blink_repair_strategy
+    key the rich "Accidental blink repair priority" block (build_edit_prompt)
+    already reads for a Luna-derived repair. The fixed strategy always wins
+    over whatever partial dict the analyzer wrote for a should_fix=false row,
+    since the point is a deterministic, user-authored instruction rather than
+    a refinement of the analyzer's own (here, negative) judgement.
+    """
+    resolved = dict(issue or {})
+    if not resolved.get("_user_forced") or resolved.get("should_fix"):
+        return resolved
+    resolved["blink_repair_strategy"] = dict(_FORCED_BLINK_STRATEGY)
+    return resolved
+
+
+def resolve_user_gaze_request(issue):
+    """Return the executable gaze issue after a per-person manual opt-in.
+
+    Mirrors resolve_user_blink_request: a fixed "look at the camera" repair
+    target via gaze_repair_strategy, applied only when the user manually
+    enables a should_fix=false row. Used both by build_edit_prompt's own
+    gaze_block and by pipeline._run_gaze_repair_pass's independent second
+    pass, which re-derives its own item list from analysis rather than
+    reusing build_edit_prompt's -- both call sites need this applied, or a
+    forced gaze fix silently never executes under the two-stage
+    (single_pass_edit=False) flow.
+    """
+    resolved = dict(issue or {})
+    if not resolved.get("_user_forced") or resolved.get("should_fix"):
+        return resolved
+    resolved["gaze_repair_strategy"] = dict(_FORCED_GAZE_STRATEGY)
+    return resolved
+
+
 def derive_hair_decisions(analysis):
     """Derive hair_issue.should_fix from physical observations in Python.
 
@@ -5405,16 +5488,20 @@ Approved-repair override:
     has_person = _has_person(analysis)
     blink_block = ""
     blink_disabled_indices = _disabled_issue_subject_indices(analysis, "blink_issue")
+    resolved_blink_issues = [resolve_user_blink_request(item) for item in eye_blink_issues]
     blink_items_to_fix = [
         {k: v for k, v in item.items() if k != "_subject_index"}
-        for item in eye_blink_issues
-        if isinstance(item, dict) and item.get("should_fix")
+        for item in resolved_blink_issues
+        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
         and item.get("_subject_index") not in blink_disabled_indices
     ] if eye_closed_detection_enabled else []
-    # blink_repair_strategy only exists on luna's _BLINK_DETECTION_LUNA_SCHEMA
-    # (derive_luna_blink_decisions always sets it once Call B has run); a
-    # non-luna model's blink_issue never carries this key, so this stays
-    # False there and the generic template below is byte-for-byte unchanged.
+    # blink_repair_strategy otherwise only exists on luna's
+    # _BLINK_DETECTION_LUNA_SCHEMA (derive_luna_blink_decisions always sets it
+    # once Call B has run) -- a non-luna model's blink_issue never carries
+    # this key on its own, so absent a forced row this stays False there and
+    # the generic template below is byte-for-byte unchanged. A user-forced
+    # row (resolve_user_blink_request, above) always carries the key, on any
+    # model, since it is the one place asking for it regardless of analysis.
     blink_has_repair_strategy = any(
         isinstance(item.get("blink_repair_strategy"), dict) for item in blink_items_to_fix
     )
@@ -5573,9 +5660,10 @@ Execution instructions:
 - Detected hair to tidy: """ + json.dumps(calm_hair_items, ensure_ascii=False)
 
     gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
+    resolved_gaze_issues = [resolve_user_gaze_request(item) for item in gaze_contact_issues]
     gaze_items_to_fix = [
-        item for item in gaze_contact_issues
-        if isinstance(item, dict) and item.get("should_fix")
+        item for item in resolved_gaze_issues
+        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
         and item.get("_subject_index") not in gaze_disabled_indices
     ] if gaze_contact_detection_enabled else []
     gaze_block = ""
