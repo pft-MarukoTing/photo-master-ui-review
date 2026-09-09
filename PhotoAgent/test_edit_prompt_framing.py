@@ -12,6 +12,7 @@ from prompts import (
     _canvas_shape_difference,
     _parse_ratio_label,
     build_edit_prompt,
+    build_overall_analysis_instruction,
 )
 
 # The run that motivated this: a 1122x1402 (4:5) photo, a 1088x1456 (3:4) canvas,
@@ -31,6 +32,16 @@ ANALYSIS = {
     "correction_axes": [["exposure"]],
     "subjects": [{"label": "男性", "is_person": True, "prominence": 1}],
 }
+
+
+class OverallAnalysisPrompt(unittest.TestCase):
+    def test_light_color_target_flows_into_one_execution_contract(self):
+        prompt = build_overall_analysis_instruction("original", {})
+        self.assertIn("Treat edit_intent as the single finished light-and-color target", prompt)
+        self.assertIn("Make lighting_strategy and memory_color_strategy implementation plans for that same target", prompt)
+        self.assertIn("correction_plan, correction_axes, correction_inverse, and retouch_recipe describe the same adjustments", prompt)
+        self.assertIn("Scene exposure, white balance, contrast, hue, and saturation remain available", prompt)
+        self.assertIn("Do not use preserve_rules to retain scene exposure", prompt)
 
 
 class ParseRatioLabel(unittest.TestCase):
@@ -116,6 +127,29 @@ class CropInstructionBlock(unittest.TestCase):
 
 
 class FullPrompt(unittest.TestCase):
+    def test_raw_editor_receives_one_finished_light_color_target(self):
+        analysis = {
+            **ANALYSIS,
+            "edit_intent": "明亮、通透並具有清楚的主體層次。",
+            "lighting_strategy": "提亮主體與中暗部，保留高光層次。",
+            "memory_color_strategy": "建立乾淨而有吸引力的場景配色，獨立保護膚色。",
+        }
+        prompt = build_edit_prompt(
+            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
+        )
+        target_start = prompt.index("Finished light and color target:")
+        analysis_start = prompt.index("Photo analysis:")
+        self.assertLess(target_start, analysis_start)
+        self.assertIn("- Finished visual result: 明亮、通透並具有清楚的主體層次。", prompt)
+        self.assertIn("- Lighting plan: 提亮主體與中暗部，保留高光層次。", prompt)
+        self.assertIn("- Color plan: 建立乾淨而有吸引力的場景配色，獨立保護膚色。", prompt)
+        self.assertEqual(prompt.count("提亮主體與中暗部，保留高光層次。"), 1)
+        self.assertEqual(prompt.count("建立乾淨而有吸引力的場景配色，獨立保護膚色。"), 1)
+        self.assertEqual(prompt.count("提升整體曝光"), 1)
+        self.assertIn("Realize the Finished light and color target through the approved correction plan", prompt)
+        self.assertNotIn("open shadows selectively", prompt)
+        self.assertNotIn("A face is one surface", prompt)
+
     def _prompt(self, style_options=None, **kwargs):
         analysis = {**ANALYSIS, "style_options": style_options or {}}
         return build_edit_prompt(

@@ -15,6 +15,7 @@ import re
 # including the per-person opt-out (_disabled_issue_subject_indices).
 from prompts import (
     _disabled_issue_subject_indices,
+    _has_person,
     _read_smile_states,
     resolve_user_blink_request,
     resolve_user_gaze_request,
@@ -27,7 +28,7 @@ from prompts import (
 
 _BASE_PRESERVE = {
     "identity", "underlying_facial_anatomy", "head_pose", "body_pose",
-    "skin_texture", "hair", "clothing", "scene", "lighting",
+    "skin_texture", "hair", "clothing", "scene",
 }
 _EYE_IDENTITY_PRESERVE = {
     "eye_landmark_geometry", "iris_identity", "eyelash_identity",
@@ -82,7 +83,10 @@ def _skin_identity_lines(analysis):
 
 
 def _is_skin_correction(text, axes):
-    lowered = text.lower()
+    lowered = re.sub(
+        r"非皮膚|非膚色|non[ -]skin|non[ -]complexion",
+        "", text.lower(),
+    )
     return "skin" in axes or (
         any(term in lowered for term in _SKIN_TERMS)
         and any(term in lowered for term in _SKIN_COLOR_TERMS)
@@ -102,6 +106,34 @@ def _is_hair_correction(text, axes):
     )
 
 
+def _build_visual_target(analysis, lighting_style=None):
+    """Render Call A's one photo-specific target before its execution plan."""
+    if lighting_style:
+        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(
+            lighting_style, lighting_style
+        )
+        # A user-selected lighting style is the effective light/color plan. Do
+        # not put stale analyzer lighting or palette prose ahead of it.
+        fields = (
+            ("Finished visual result", analysis.get("edit_intent")),
+            ("Lighting and color plan", f"Use the selected {lighting_label} style as the final atmosphere."),
+        )
+    else:
+        fields = (
+            ("Finished visual result", analysis.get("edit_intent")),
+            ("Lighting plan", analysis.get("lighting_strategy")),
+            ("Color plan", analysis.get("memory_color_strategy")),
+        )
+    lines = [f"- {label}: {str(value).strip()}" for label, value in fields if str(value or "").strip()]
+    if not lines:
+        lines = ["- Create a polished, visually compelling light-and-color result from the approved plan."]
+    return (
+        "Finished light and color target:\n"
+        + "\n".join(lines)
+        + "\n- Treat these as one target. The approved execution plan below must realize it."
+    )
+
+
 def _repair_strength(value, default="moderate"):
     """Collapse model prose back to the small strength vocabulary."""
     text = str(value or "").strip().lower()
@@ -112,68 +144,46 @@ def _repair_strength(value, default="moderate"):
 
 
 def _build_color_blocks(analysis, skin_corrections, face_tonal_corrections=(), lighting_style=None):
-    """Compact equivalents of the tuned legacy color and skin guidance."""
-    rejected = _axis_set(analysis.get("rejected_axes")) - _axis_set(analysis.get("correction_axes"))
-    tonal = []
-    if "shadow" not in rejected:
-        tonal.append("open shadows enough to reveal detail without flattening them")
-    if "highlight" not in rejected:
-        tonal.append("hold highlights so they roll off rather than clip")
-    if "contrast" not in rejected:
-        tonal.append("build depth through tonal separation between subject, midground, and background")
-    tonal_line = (
-        "- Work like a skilled colorist: " + "; ".join(tonal) + "."
-        if tonal else
-        "- Keep tonal rendering within the approved correction plan."
-    )
-    allowed_color = []
-    if "saturation" not in rejected:
-        allowed_color.append("saturation")
-    if "white_balance" not in rejected:
-        allowed_color.append("warm/cool balance")
+    """Render one concise execution contract beneath the photo-specific target."""
+    has_person = _has_person(analysis)
     if lighting_style:
         lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(lighting_style, lighting_style)
-        color_line = (
-            f"- The selected {lighting_label} style defines the final lighting and color atmosphere. Apply it visibly and coherently "
-            "across subject and environment while retaining believable material colors; it overrides preserving the captured light/color character."
-        )
+        scene_line = f"- Apply the selected {lighting_label} atmosphere coherently across the scene."
     else:
-        color_line = (
-            "- Draw visual presence primarily from exposure, contrast placement, and micro-contrast. "
-            f"Use {' and '.join(allowed_color)} only secondarily to refine the non-skin palette without imposing a new look."
-            if allowed_color else
-            "- Draw visual presence from light and tonal separation; preserve the original color palette."
-        )
-    memory = str(analysis.get("memory_color_strategy") or "").strip()
-    memory_line = (
-        f"\n- Scene-specific memory colors: {memory}"
-        if memory and not lighting_style else ""
-    )
-    color_block = f"""Global light and color:
-{tonal_line}
-{color_line}
-- This global grade governs the non-skin palette. Skin is graded independently under the Skin color contract below and does not have to inherit the same white-balance, hue, or saturation shift.{memory_line}"""
+        scene_line = "- Let scene exposure and palette change wherever the approved plan calls for it."
+    execution_lines = [
+        "Light and color execution:",
+        "- Realize the finished target through the approved corrections as one coherent photographic grade. Make every named adjustment clearly visible with natural tonal transitions and believable materials.",
+        scene_line,
+    ]
+
+    if not has_person:
+        return "\n".join(execution_lines), ""
 
     identities = _skin_identity_lines(analysis)
     identity_text = "\n".join(identities) if identities else "- Read each person's existing depth and undertone from the supplied photograph."
-    correction_text = "\n".join(f"- Approved skin correction: {item}" for item in skin_corrections)
-    if not correction_text:
-        correction_text = "- No local skin-color correction is approved; retain each person's native complexion under the final scene light."
+    correction_text = "\n".join(
+        f"- Approved skin correction: {item} Apply it as the named cast correction and stop at the recorded native complexion."
+        for item in skin_corrections
+    )
     face_tonal_text = "\n".join(
-        f"- Approved local face tonal correction: {item} Apply it through exposure and tonal density on the existing facial pixels only; it does not authorize redrawing facial features, contours, or hair boundaries."
+        f"- Approved local face tonal correction: {item} Apply it across the full named region, including clothing when specified; brighten skin through exposure while retaining facial geometry and complexion."
         for item in face_tonal_corrections
     )
+    execution_lines.extend([
+        "Skin boundary:",
+        identity_text,
+    ])
+    if correction_text:
+        execution_lines.append(correction_text)
     if face_tonal_text:
-        face_tonal_text += "\n"
-    skin_block = f"""Skin color contract:
-{identity_text}
-{correction_text}
-{face_tonal_text}- Preserve each person's native complexion depth, undertone, and chroma. Let skin respond naturally to the final scene light without tinting skin independently.
-- Grade skin independently from the surrounding palette. A global white-balance, hue, or saturation adjustment may change the environment without forcing the same shift onto skin; skin still responds naturally to shared exposure, contrast, and actual scene illumination.
-- Treat wording such as “slightly warmer” only as a relative correction away from a specifically identified unwanted cool/cyan/green/gray cast, stopping at that person's recorded native complexion under the existing light. It is not permission to add warmth, yellow, orange, red, rosiness, or saturation.
-- Skin work is color/tonal only. Except for facial properties explicitly changed in the Resolved subject final states, keep eye shape and lash line, iris and catchlights, brows, nostrils, lip edges, and facial structure in their source positions. Carry every authorized gaze, blink, or expression endpoint through the skin grade without adding further facial change. Keep face, neck, ears, and visible hands continuous with no patch or mismatch, preserving pores and natural tonal modelling."""
-
-    return color_block, skin_block
+        execution_lines.append(face_tonal_text)
+    execution_lines.extend([
+        "- Keep each person's native complexion depth, undertone, and chroma while skin follows the final shared exposure and actual illumination.",
+        "- Apply scene white balance, hue, and saturation to the non-skin palette independently from complexion.",
+        "- Keep tone continuous across face, neck, ears, and visible hands, with natural texture and modelling.",
+    ])
+    return "\n".join(execution_lines), ""
 
 
 def _compact_raw_crop_instruction(raw_instruction):
@@ -700,6 +710,10 @@ def build_compact_editor_prompt(
     """Render one compact execution document from resolved final states."""
     contracts = build_feature_contracts(analysis, include_gaze=include_gaze)
     resolved = resolve_feature_contracts(contracts)
+    for item in resolved:
+        if "lighting" in item["preserve"]:
+            item["preserve"].remove("lighting")
+            item["removed_preservations"] = sorted(set(item["removed_preservations"]) | {"lighting"})
     style_options, style_footprint = _style_change_footprint(analysis.get("style_options"))
     subject_style_footprint = set()
     if "pose" in style_options:
@@ -898,16 +912,21 @@ def build_compact_editor_prompt(
             # free-text hair item with tags such as hair_edge; never let that
             # unscoped copy become an Other approved correction.
             continue
+        elif _is_face_tonal_correction(item, axes) and not (
+            {"skin", "white_balance", "hue", "saturation", "tint"} & axes
+        ):
+            face_tonal_corrections.append(item)
         elif _is_skin_correction(item, axes):
             skin_corrections.append(item)
-        elif _is_face_tonal_correction(item, axes):
-            face_tonal_corrections.append(item)
         else:
             other_corrections.append(item)
     correction_block = "\n".join(f"- {item}" for item in other_corrections) or "- No additional approved local corrections."
     color_block, skin_block = _build_color_blocks(
         analysis, skin_corrections, face_tonal_corrections,
         lighting_style=style_options.get("lighting"),
+    )
+    visual_target_block = _build_visual_target(
+        analysis, lighting_style=style_options.get("lighting")
     )
     subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
     shared_face_rules = []
@@ -967,10 +986,10 @@ def build_compact_editor_prompt(
     # finishes describe only rendering qualities, leaving subject state to the
     # resolved blocks above.
     finish = {
-        "natural": "Use a restrained premium photographic finish with believable light, faithful color, controlled contrast, and natural texture.",
-        "editorial": "Use a restrained editorial finish with graceful highlight rolloff, confident tonal separation, faithful color, and no gimmicks.",
-        "product": "Use a clean commercial finish with truthful shape, material texture, color, light, and disciplined background rendering.",
-        "portrait": "Use a humane photographic portrait finish with identity, skin tone, facial geometry, and natural texture intact.",
+        "natural": "Finish with photographic realism, clean detail, and natural texture.",
+        "editorial": "Finish with editorial polish, clean detail, and natural texture.",
+        "product": "Finish with commercial clarity, truthful geometry, and material detail.",
+        "portrait": "Finish with natural portrait detail, identity, facial geometry, and skin texture intact.",
         "custom": "Keep the finish photographic, coherent, and faithful to the supplied image.",
     }.get(preset_key, preset_prompt)
     raw_style_block = str(raw_style_instruction or "").strip()
@@ -991,13 +1010,11 @@ def build_compact_editor_prompt(
         spatial_preserve.extend(["pose", "gesture", "interaction points"])
     elif "pose" not in style_options:
         spatial_preserve.extend(["gesture", "interaction points outside the named posture adjustment"])
-    if "lighting" not in style_options:
-        spatial_preserve.append("lighting logic")
     spatial_preserve_text = ", ".join(spatial_preserve)
     style_scope_text = (
         "- Selected style options may change only: " + ", ".join(sorted(style_footprint)) + "."
         if style_footprint else
-        "- No style option authorizes a change to pose, viewpoint, lighting style, or framing size."
+        "- No style option authorizes a change to pose, viewpoint, or framing size."
     )
     body_reshape_active = "body_reshape" in resolved_features
     if "pose" in style_options:
@@ -1034,13 +1051,15 @@ Act like a high-end human retoucher: restrained, photographic, detail-aware, and
 Required framing:
 {compact_crop_block}
 
+{visual_target_block}
+
+Other approved corrections:
+{correction_block}
+
 Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
 {shared_face_block}{hair_boundary_block}{body_boundary_block}
-
-Other approved corrections:
-{correction_block}
 
 {color_block}
 
@@ -1080,6 +1099,11 @@ Global preservation:
         "color_contract": {
             "skin_corrections": skin_corrections,
             "face_tonal_corrections": face_tonal_corrections,
+            "memory_color_strategy": analysis.get("memory_color_strategy") or "",
+        },
+        "visual_target": {
+            "edit_intent": analysis.get("edit_intent") or "",
+            "lighting_strategy": analysis.get("lighting_strategy") or "",
             "memory_color_strategy": analysis.get("memory_color_strategy") or "",
         },
         "crop_instruction_source": crop_instruction_source,

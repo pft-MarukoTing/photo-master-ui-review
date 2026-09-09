@@ -180,7 +180,7 @@ Analysis goal:
 Hard limits:
 - Do not change the subject into something else.
 - Do not add text, logos, watermarks, extra people, fantasy elements, or a new scene.
-- Do not rebuild, replace, or materially simplify the original environment. Preserve scene truth: recognizable background structure, surface material, perspective, lighting direction, and real spatial relationships.
+- Do not rebuild, replace, or materially simplify the original environment. Preserve scene truth: recognizable background structure, surface material, perspective, and real spatial relationships.
 - Cleanup means reducing distraction within the same scene, not turning a casual/lifestyle/documentary scene into a studio, catalog, or different location unless the user explicitly asks for that.
 - For people, preserve identity, face, body shape, pose, and natural skin texture.
 - For products, food, pets, architecture, and landscapes, preserve shape, material, and scene truth.
@@ -206,7 +206,7 @@ Return exactly this JSON shape:
   "aesthetic_diagnosis": "說明照片目前不夠精緻的原因。",
   "detected_issues": ["2 到 6 個具體問題。"],
   "edit_philosophy": "整體修圖哲學。",
-  "edit_intent": "這次修圖要達成的結果。",
+  "edit_intent": "定義成品唯一的光影與色彩目標：整體亮度、主體與環境的明暗關係、色調氛圍，以及完成後最吸引人的視覺特質。",
   "composition_mood": "完成後希望呈現的氛圍。",
   "composition_intent": "這張照片最適合的構圖意圖，例如主體展示、生活敘事、動作瞬間、環境紀實、圖形平衡、負空間、親密肖像等。",
   "framing_intent": "取景意圖，例如 detail / close-up / upper-body / half-body / three-quarter / full-body / environmental / object-complete / context-preserving。",
@@ -217,7 +217,7 @@ Return exactly this JSON shape:
   "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
   "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
   "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景，以及如何處理。",
-  "scene_preservation_strategy": "如何保留原始場景真實性、背景結構、材質、透視與光線關係。",
+  "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
@@ -319,8 +319,8 @@ Return exactly this JSON shape:
       "reason": "此區域是主體語意或構圖平衡的一部分，不應被裁掉或貼邊。"
     }
   ],
-  "lighting_strategy": "光線與明暗層次調整方向。",
-  "memory_color_strategy": "記憶色（膚色、天空、綠色、食物、材質）在這張照片的光線下應該呈現的狀態。有人物時先說明人物受光的方向與色性；整體白平衡、色相與飽和度可以調整畫面調性，但膚色須獨立保護，維持人物原生膚色與合理情境光，只移除非預期偏色。",
+  "lighting_strategy": "依 edit_intent 說明成品的整體亮度，以及主體與環境的曝光、陰影、高光和對比安排；這是實現 edit_intent 的光影計畫，不是另一個成品目標。",
+  "memory_color_strategy": "依 edit_intent 說明場景的白平衡、冷暖、色相與飽和度安排。膚色獨立保護，維持每個人的原生深淺、底調與色度，允許曝光調整並只修正非預期偏色。",
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
   "crop_box": {
@@ -366,7 +366,7 @@ Return exactly this JSON shape:
   "correction_axes": [["exposure", "highlight"]],
   "correction_inverse": ["與 correction_plan 一一對應：若使用者取消勾選這一項，改成告訴編修模型「維持原樣」的說法；例如對應上例可寫「維持原圖的整體曝光與高光亮度，不要提亮，也不要壓暗或改變高光的層次」。"],
   "retouch_recipe": ["與 correction_plan 一一對應、順序相同、項數相同，但改寫成給使用者看的簡潔白話版本；例如對應上例可寫「讓照片更明亮」。"],
-  "preserve_rules": ["必須保留的內容。"]
+  "preserve_rules": ["必須保留的身份、內容、結構、幾何或材質身分；場景曝光、白平衡、對比、色相與飽和度由 edit_intent 和 correction_plan 決定，不列為保留項目。"]
 }
 
 local_face_review must contain exactly one entry per "Face crop N" / "Local face detector reference N" you were given, in the same order, with detection_index equal to that N -- this is a completeness check, not a sample. For each entry:
@@ -938,12 +938,16 @@ Prefer precision over recall: when uncertain between neutral and gentle, choose 
 Use unclear only when the expression cannot be seen reliably. Set adjust_safe=false only when editing could overwrite distinctive dental features or when the face is obscured, too small, or turned too far away to render a reliable expression. adjust_safe measures technical edit feasibility, not whether the captured emotion should be preserved. Speaking, laughter, strong emotion, or another visible facial action does not by itself make smile adjustment unsafe.
 
 ## Analysis responsibilities
-Intent: Convert visible photographic needs into a restrained, actionable, and internally consistent analysis and correction plan.
+Intent: Translate photographic problems and opportunities for aesthetic improvement into an actionable, internally consistent correction_plan.
 
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
-- Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
+- Treat edit_intent as the single finished light-and-color target. Define a specific overall brightness, tonal relationship, and scene palette that make this photograph polished and visually compelling.
+- Make lighting_strategy and memory_color_strategy implementation plans for that same target. They must strengthen edit_intent rather than introduce a different mood, brightness target, or instruction to retain the captured scene color.
+- Translate the target into correction_plan. Each item names its region, concrete adjustment, useful strength, and visible contribution to the finished result. Include the light and color work needed to create the target, not only defect repair.
+- Protect skin color independently according to subjects[].skin. Scene exposure, white balance, contrast, hue, and saturation remain available to achieve edit_intent.
+- Size correction_plan to what the photo actually needs, choosing the few adjustments with the greatest visual benefit. An already successful photograph may need none.
 - Eye-opening is not a routine portrait enhancement. Add eye or blink repair to correction_plan only when the expression-intent rules above say should_fix=true.
 - Eye-contact repair is separate from blink repair. Analyze whether the eyes are truly lens-locked, not merely whether the face points forward. Derive each subject's gaze_issue.should_fix from the hard gaze rule, then add gaze/contact correction only when should_fix=true; do not use blink repair to solve off-camera, near-camera, cross-focused, or unfocused gaze.
 - Gaze detection recall check: before finalizing analysis, revisit every subjects[] person's eyes. If any readable eyes are not unmistakably lens-locked and that subject's gaze_issue does not yet reflect it, fix it.
@@ -957,12 +961,14 @@ Intent: Convert visible photographic needs into a restrained, actionable, and in
 - Reverse blink consistency check, same reasoning as the gaze one above: if any correction_plan item describes reopening, relaxing, or fixing someone's closed/half-closed eyes with no backing blink_issue at should_fix=true, delete that correction_plan item (and its correction_axes/correction_inverse/retouch_recipe entry) rather than leaving it in.
 - Hair analysis is observation-only. Classify the physical state and, when that state has a candidate action, keep its candidate correction_plan inside the matching person's hair_issue. Always return hair_issue.should_fix=false; Python derives the final value after analysis.
 - A candidate fix_action or correction_plan may coexist with the should_fix=false placeholder. Top-level correction_plan/correction_axes/correction_inverse/retouch_recipe must contain no hair work.
+- Write preserve_rules only for identity, content, geometry, scene structure, and material identity. Do not use preserve_rules to retain scene exposure, white balance, contrast, hue, saturation, or captured color atmosphere; those are governed by edit_intent and correction_plan. Keep eyes, blink, eye contact, gaze, hair, and smile out of preserve_rules because their structured issue fields govern them.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and its blink_issue/hair_issue/gaze_issue/smile_issue, and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
 - is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
+- Before returning JSON, read edit_intent, lighting_strategy, memory_color_strategy, correction_plan, and preserve_rules together. Make them one consistent target and execution plan; remove or rewrite any statement that weakens or preserves away an approved light or color adjustment.
 
 ## Coordinate and geometry rules
 Intent: Produce normalized subject and crop geometry that downstream framing logic can use safely and consistently.
@@ -993,7 +999,7 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 - Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
 - Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements and reduce emphasis through subtle retouching rather than rebuilding the scene.
 - Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
-- Preserve scene truth: background structure, surface material, perspective, lighting direction, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
+- Preserve scene truth: background structure, surface material, perspective, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
 - For people and animals, the face ROI alone is not automatically the whole subject. Protect the semantic subject extent and role cues required by the framing. Partial-person crops are acceptable only when intentional, clean, and supportive of the scene.
 - For action, eating, gesture, interaction, or expression-driven moments, protect expression, hands, held objects, interaction points, and relevant context. Preserve lower body, furniture, foreground objects, or peripheral context only when they support posture, story, scale, balance, or scene intent.
 - For fashion, posture, full-body portrait, dance, sports, product shape, architecture, or object-completeness tasks, preserve the full visible form more conservatively.
@@ -1891,7 +1897,7 @@ Analysis goal:
 Hard limits:
 - Do not change the subject into something else.
 - Do not add text, logos, watermarks, extra people, fantasy elements, or a new scene.
-- Do not rebuild, replace, or materially simplify the original environment. Preserve scene truth: recognizable background structure, surface material, perspective, lighting direction, and real spatial relationships.
+- Do not rebuild, replace, or materially simplify the original environment. Preserve scene truth: recognizable background structure, surface material, perspective, and real spatial relationships.
 - Cleanup means reducing distraction within the same scene, not turning a casual/lifestyle/documentary scene into a studio, catalog, or different location unless the user explicitly asks for that.
 - For people, preserve identity, face, body shape, pose, and natural skin texture.
 - For products, food, pets, architecture, and landscapes, preserve shape, material, and scene truth.
@@ -1919,7 +1925,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "aesthetic_diagnosis": "說明照片目前不夠精緻的原因。",
   "detected_issues": ["2 到 6 個具體問題。"],
   "edit_philosophy": "整體修圖哲學。",
-  "edit_intent": "這次修圖要達成的結果。",
+  "edit_intent": "定義成品唯一的光影與色彩目標：整體亮度、主體與環境的明暗關係、色調氛圍，以及完成後最吸引人的視覺特質。",
   "composition_mood": "完成後希望呈現的氛圍。",
   "composition_intent": "這張照片最適合的構圖意圖，例如主體展示、生活敘事、動作瞬間、環境紀實、圖形平衡、負空間、親密肖像等。",
   "framing_intent": "取景意圖，例如 detail / close-up / upper-body / half-body / three-quarter / full-body / environmental / object-complete / context-preserving。",
@@ -1930,7 +1936,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
   "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
   "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景，以及如何處理。",
-  "scene_preservation_strategy": "如何保留原始場景真實性、背景結構、材質、透視與光線關係。",
+  "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
@@ -1977,8 +1983,8 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
       "reason": "此區域是主體語意或構圖平衡的一部分，不應被裁掉或貼邊。"
     }
   ],
-  "lighting_strategy": "光線與明暗層次調整方向。",
-  "memory_color_strategy": "記憶色（膚色、天空、綠色、食物、材質）在這張照片的光線下應該呈現的狀態。有人物時先說明人物受光的方向與色性；整體白平衡、色相與飽和度可以調整畫面調性，但膚色須獨立保護，維持人物原生膚色與合理情境光，只移除非預期偏色。",
+  "lighting_strategy": "依 edit_intent 說明成品的整體亮度，以及主體與環境的曝光、陰影、高光和對比安排；這是實現 edit_intent 的光影計畫，不是另一個成品目標。",
+  "memory_color_strategy": "依 edit_intent 說明場景的白平衡、冷暖、色相與飽和度安排。膚色獨立保護，維持每個人的原生深淺、底調與色度，允許曝光調整並只修正非預期偏色。",
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
   "crop_box": {
@@ -2024,7 +2030,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "correction_axes": [["exposure", "highlight"]],
   "correction_inverse": ["與 correction_plan 一一對應：若使用者取消勾選這一項，改成告訴編修模型「維持原樣」的說法；例如對應上例可寫「維持原圖的整體曝光與高光亮度，不要提亮，也不要壓暗或改變高光的層次」。"],
   "retouch_recipe": ["與 correction_plan 一一對應、順序相同、項數相同，但改寫成給使用者看的簡潔白話版本；例如對應上例可寫「讓照片更明亮」。"],
-  "preserve_rules": ["必須保留的內容。"]
+  "preserve_rules": ["必須保留的身份、內容、結構、幾何或材質身分；場景曝光、白平衡、對比、色相與飽和度由 edit_intent 和 correction_plan 決定，不列為保留項目。"]
 }
 
 local_face_review must contain exactly one entry per "Face crop N" / "Local face detector reference N" you were given, in the same order, with detection_index equal to that N -- this is a completeness check, not a sample. For each entry:
@@ -2032,6 +2038,16 @@ local_face_review must contain exactly one entry per "Face crop N" / "Local face
 - is_real_face=true and matched_subject_index=-1 whenever the detection is a real face that fails the Subject inclusion rule (an incidental bystander); reason must say so and name which signal(s) from that rule apply.
 - is_real_face=true and matched_subject_index=<that subject's 0-based index> whenever you created a subjects[] entry from this detection; that subjects[] entry's own local_detection_index must equal this same detection_index, so the two arrays cross-reference each other consistently in both directions.
 Every subjects[] entry needs a local_detection_index: for a person (is_person=true) created from a local detection, set it to that detection_index; set it to -1 for a person you added yourself from the full photo with no backing detection, and -1 for any non-person subject (is_person=false), since the face detector never applies to those.
+"""
+
+_OUTPUT_ALIGNMENT_RULES_OVERALL = f"""## Execution contract
+
+- correction_plan, correction_axes, correction_inverse, and retouch_recipe describe the same adjustments in the same order and have the same number of entries.
+- Write correction_plan as the precise editor instructions that realize edit_intent. Keep each item actionable on its own.
+- Tag each correction_plan item with every axis it changes, using only this vocabulary: {_AXIS_VOCABULARY}.
+- Write retouch_recipe as the user-facing version of the same item, retaining its region, main action, and useful strength.
+- Write correction_inverse for the exact same region and properties as its correction_plan item.
+
 """
 
 _COORDINATE_GEOMETRY_RULES_OVERALL = """## Coordinate and geometry rules
@@ -2063,7 +2079,7 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 - Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
 - Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements and reduce emphasis through subtle retouching rather than rebuilding the scene.
 - Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
-- Preserve scene truth: background structure, surface material, perspective, lighting direction, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
+- Preserve scene truth: background structure, surface material, perspective, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
 - For people and animals, the face ROI alone is not automatically the whole subject. Protect the semantic subject extent and role cues required by the framing. Partial-person crops are acceptable only when intentional, clean, and supportive of the scene.
 - For action, eating, gesture, interaction, or expression-driven moments, protect expression, hands, held objects, interaction points, and relevant context. Preserve lower body, furniture, foreground objects, or peripheral context only when they support posture, story, scale, balance, or scene intent.
 - For fashion, posture, full-body portrait, dance, sports, product shape, architecture, or object-completeness tasks, preserve the full visible form more conservatively.
@@ -2071,20 +2087,25 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 """
 
 _ANALYSIS_RESPONSIBILITIES_OVERALL = """## Analysis responsibilities
-Intent: Convert visible photographic needs into a restrained, actionable, and internally consistent analysis and correction plan, leaving every eye, gaze, and hair judgment to the dedicated portrait-QC pass that runs after this one.
+Intent: Translate photographic problems and opportunities for aesthetic improvement into an actionable, internally consistent correction_plan, leaving every eye, gaze, and hair judgment to the dedicated portrait-QC pass that runs after this one.
 
 - Observe the image, identify semantic roles, and describe why the photo can improve.
 - Define the main subject, useful supporting elements, optional context, harmful distractions, ROI, subject_extent_box, and protected_regions.
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
-- Size correction_plan to what the photo actually needs. A one- or two-item plan for an already well-balanced photo is a correct and valued answer; stay near the low end of the allowed range unless the photo genuinely needs more. Listing a correction that the photo does not need is a worse outcome than listing fewer, because the editing model will carry it out and push the result past what the photo called for. This applies especially to color: do not add an exposure, white-balance, saturation, or warmth item unless you can point to a specific visible problem.
-- correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis; any approved blink/gaze repair is executed directly from that person's own blink_issue/gaze_issue, never through correction_plan. Write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering only the composition/crop/color/skin/product issues you actually found.
-- preserve_rules must not mention eyes, blink, eye contact, gaze, hair, or smile at all, in either direction -- not "must keep eyes/hair as-is" and not "must fix eyes/hair too." Exactly like correction_plan above, that topic belongs entirely to the portrait-QC pass and its own repair-planning stage, which apply their own preservation and repair instructions directly to each person who needs one; a preserve_rules item on this topic would contradict whatever that later pass decides for a specific person. Write preserve_rules only about composition, crop, color, scene structure, materials, and other subjects/objects this analysis itself is responsible for.
+- Treat edit_intent as the single finished light-and-color target. Define a specific overall brightness, tonal relationship, and scene palette that make this photograph polished and visually compelling.
+- Make lighting_strategy and memory_color_strategy implementation plans for that same target. They must strengthen edit_intent rather than introduce a different mood, brightness target, or instruction to retain the captured scene color.
+- Translate the target into correction_plan. Each item names its region, concrete adjustment, useful strength, and visible contribution to the finished result. Include the light and color work needed to create the target, not only defect repair.
+- Protect skin color independently according to subjects[].skin. Scene exposure, white balance, contrast, hue, and saturation remain available to achieve edit_intent.
+- Size correction_plan to what the photo actually needs, choosing the few adjustments with the greatest visual benefit. An already successful photograph may need none.
+- correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis; any approved blink/gaze repair is executed directly from that person's own blink_issue/gaze_issue, never through correction_plan. Write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering composition/crop/color/skin/product corrections and aesthetic improvements supported by the photo.
+- Write preserve_rules only for identity, content, geometry, scene structure, and material identity. Do not use preserve_rules to retain scene exposure, white balance, contrast, hue, saturation, or captured color atmosphere; those are governed by edit_intent and correction_plan. Keep eyes, blink, eye contact, gaze, hair, and smile out of preserve_rules because the portrait-QC pass governs them.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
 - is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
+- Before returning JSON, read edit_intent, lighting_strategy, memory_color_strategy, correction_plan, and preserve_rules together. Make them one consistent target and execution plan; remove or rewrite any statement that weakens or preserves away an approved light or color adjustment.
 
 """
 
@@ -2155,6 +2176,7 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_option
         _OVERALL_ANALYSIS_PERSONA
         + _RETURN_SHAPE_OVERALL
         + "\n\n"
+        + _OUTPUT_ALIGNMENT_RULES_OVERALL
         + _FACE_CROP_EVIDENCE_SECTION
         + "\n"
         + _ANALYSIS_RESPONSIBILITIES_OVERALL
@@ -4231,41 +4253,19 @@ Targets:
 """ + "\n".join(targets)
 
 
-# The light/color direction shared by both retouch modes. The sentence this
-# replaced ("Improve the existing photograph through light, contrast, color
-# harmony, ...") was too abstract to steer an image model: with no definition of
-# "better" and no stopping condition, the model fell back on its training prior
-# for an appealing photo -- more warmth, more saturation -- which is exactly the
-# overshoot we see. So name the craft, and say where the image's presence should
-# come from (light first, color second) rather than capping how much it may move.
+# The photo-specific target and approved plan already name the operations. This
+# block tells the image model how to execute them without adding a second grade.
 COLOR_CRAFT_DIRECTION = (
-    "Improve the existing photograph the way a skilled colorist would: open the shadows enough to reveal "
-    "detail without flattening them, hold the highlights so they roll off instead of clipping, and build "
-    "depth through tonal separation between subject, midground, and background. Draw the image's presence "
-    "primarily from light -- exposure, contrast placement, micro-contrast -- and only secondarily from "
-    "color; a modest saturation or warmth adjustment may refine the non-skin palette without imposing a new "
-    "look. Grade the overall palette and skin separately: preserve each person's complexion and skin chroma, "
-    "and correct only an unwanted skin cast."
+    "Realize the Finished light and color target through the approved correction plan and any selected style as one coherent photographic grade. "
+    "Make every named light and color adjustment clearly visible, with natural tonal transitions and believable material rendering. "
+    "Let the approved scene palette change independently from complexion; skin follows the dedicated skin instructions in this prompt."
 )
 
-# Stopping condition, not a priority -- hence its own block at the very end of
-# the edit prompt rather than another numbered item, and phrased as properties
-# the model can verify rather than "don't overdo it".
-#
-# Every clause compares against the original on purpose. An earlier version
-# mixed judgment types -- it asked whether surfaces "that should be neutral"
-# carried a tint, an absolute test -- and that misfired on photos whose grade is
-# deliberately cool: the model read the intentionally cool whites as a defect,
-# neutralized them, and warmed the whole frame. Same root cause as it desaturating
-# stained glass and lightening deep skin: with an external notion of "correct"
-# color it will edit toward that instead of toward a better rendering of this
-# photograph. One comparative rule covers those cases without having to enumerate
-# the subject matter they involve.
-COLOR_GRADE_CHECK = """Before finishing, compare your result against the original. The original defines the intended lighting and palette, not every unwanted color contamination; render the photograph better without changing its color intent:
-- a cool or warm character that was clearly deliberate is still there, pointing the same way;
-- what was vividly colored is still as vivid and what was moderate is still moderate; what was neutral is still neutral;
-- skin keeps each person's depth, undertone, and chroma while retaining plausible scene light; never increase skin saturation or push it toward yellow, orange, or red. Correct only a distracting cast that the illumination does not explain.
-Improving exposure, cleanliness, separation, and approved color correction is the work. Shifting the photograph's intentional color character is not -- that reads as a filter rather than a finish."""
+# A short end-state check is more useful than repeating the adjustment recipe.
+COLOR_GRADE_CHECK = (
+    "Before finishing, verify that the result matches the Finished light and color target, every approved light/color adjustment is visible, "
+    "and scene structures and materials remain recognizable."
+)
 
 
 # ── Rejected-axis gating ──────────────────────────────────────────────────────
@@ -4274,14 +4274,14 @@ Improving exposure, cleanliness, separation, and approved color correction is th
 # model from making that change, because the same change is requested in several
 # other places the checkbox never touched: the analysis prose (aesthetic_diagnosis,
 # detected_issues, lighting_strategy, memory_color_strategy) still describes the
-# problem, the preset still asks for a good finish, and COLOR_CRAFT_DIRECTION /
-# COLOR_GRADE_CHECK ask for shadow opening, exposure work and highlight control
-# by name. One negative sentence loses that argument on volume.
+# problem and the preset can still describe that change. One negative sentence
+# loses that argument on volume.
 #
 # So each correction_plan item carries axis tags (correction_axes), and unchecking
-# it removes that axis's "do X" clauses from the light/color direction, the grade
-# check, and the two numbered priorities that ask for distraction cleanup and
-# horizon straightening. Removal is the whole job: saying what to preserve
+# it removes generic numbered priorities that ask for distraction cleanup or
+# horizon straightening. The light/color execution sentence now authorizes only
+# named approved work, so it needs no parallel list of axis-specific operations.
+# Removal is the whole job: saying what to preserve
 # instead is correction_inverse's, written per item by the analysis model so it
 # carries that item's scope (see _build_rejected_lines). Several axes -- skin,
 # sharpen, other -- gate nothing today and are kept in the vocabulary only
@@ -4293,93 +4293,14 @@ Improving exposure, cleanliness, separation, and approved color correction is th
 # at the top of this file (AXIS_DEFINITIONS), since ANALYSIS_INSTRUCTION has to
 # hand the same list to the analysis model.
 
-# The light/color direction, decomposed so that with no rejected axis it
-# reassembles into COLOR_CRAFT_DIRECTION verbatim (asserted below) -- that text is
-# tuned, and a rewrite of the default path is not what this change is for.
-# (axis, clause) for the three craft clauses of sentence 1, in order.
-_CRAFT_CLAUSES = (
-    ("shadow", "open the shadows enough to reveal detail without flattening them"),
-    ("highlight", "hold the highlights so they roll off instead of clipping"),
-    ("contrast", "build depth through tonal separation between subject, midground, and background"),
-)
-_CRAFT_LEAD = "Improve the existing photograph the way a skilled colorist would"
-_CRAFT_LIGHT_FIRST = (
-    "Draw the image's presence primarily from light -- exposure, contrast placement, micro-contrast -- "
-    "and only secondarily from color"
-)
-_CRAFT_COLOR_TAIL = (
-    "a modest {allowed} adjustment may refine the non-skin palette without imposing a new look. Grade the "
-    "overall palette and skin separately: preserve each person's complexion and skin chroma, and correct only "
-    "an unwanted skin cast."
-)
-
-
-def _join_clauses(clauses):
-    """Oxford-comma join, matching the hand-written original's punctuation."""
-    if len(clauses) == 1:
-        return clauses[0]
-    if len(clauses) == 2:
-        return f"{clauses[0]} and {clauses[1]}"
-    return ", ".join(clauses[:-1]) + f", and {clauses[-1]}"
-
-
 def build_color_craft_direction(rejected_axes=()):
-    rejected = set(rejected_axes or ())
-    craft = [clause for axis, clause in _CRAFT_CLAUSES if axis not in rejected]
-
-    sentences = []
-    if craft:
-        sentences.append(f"{_CRAFT_LEAD}: {_join_clauses(craft)}.")
-    else:
-        # All three tonal clauses rejected: keep the framing (retouch, not
-        # reinvention) but stop naming tonal work as the job.
-        sentences.append(f"{_CRAFT_LEAD}, within the preservation limits stated below.")
-
-    # "saturation or warmth" collapses to whichever of the two survives; with
-    # both rejected the color sentence goes away entirely.
-    allowed_color = [
-        label for axis, label in (("saturation", "saturation"), ("white_balance", "warmth"))
-        if axis not in rejected
-    ]
-    color_tail = _CRAFT_COLOR_TAIL.format(allowed=" or ".join(allowed_color)) if allowed_color else ""
-
-    if "exposure" not in rejected:
-        sentences.append(f"{_CRAFT_LIGHT_FIRST}; {color_tail}" if color_tail else f"{_CRAFT_LIGHT_FIRST}.")
-    elif color_tail:
-        sentences.append(color_tail[0].upper() + color_tail[1:])
-
-    return " ".join(sentences)
-
-
-# The default path must stay byte-identical to the tuned constant; the
-# decomposition above is easy to break with a stray comma otherwise.
-assert build_color_craft_direction() == COLOR_CRAFT_DIRECTION, "COLOR_CRAFT_DIRECTION decomposition drifted"
-
-# A clause tagged with an axis the vocabulary no longer has would never be gated.
-assert all(axis in CORRECTION_AXES for axis, _ in _CRAFT_CLAUSES), "unknown axis in _CRAFT_CLAUSES"
-
-
-# Same idea for the closing grade check: its last line names exposure and
-# cleanliness as "the work", which contradicts a rejection of those axes.
-_GRADE_CHECK_HEAD, _GRADE_CHECK_LAST = COLOR_GRADE_CHECK.rsplit("\n", 1)
-_GRADE_WORK_ITEMS = (("exposure", "exposure"), ("distraction", "cleanliness"), ("contrast", "separation"))
-assert all(axis in CORRECTION_AXES for axis, _ in _GRADE_WORK_ITEMS), "unknown axis in _GRADE_WORK_ITEMS"
+    # This authorizes only changes already named by the approved plan or style,
+    # so it cannot recreate an unchecked correction through generic craft prose.
+    return COLOR_CRAFT_DIRECTION
 
 
 def build_color_grade_check(rejected_axes=()):
-    rejected = set(rejected_axes or ())
-    if not rejected.intersection(axis for axis, _ in _GRADE_WORK_ITEMS):
-        return COLOR_GRADE_CHECK
-    work = [label for axis, label in _GRADE_WORK_ITEMS if axis not in rejected]
-    opening = (
-        f"Improving {_join_clauses(work)} is the work."
-        if work else
-        "Rendering this photograph faithfully, within the preservation limits above, is the work."
-    )
-    return (
-        f"{_GRADE_CHECK_HEAD}\n{opening} Shifting the photograph's color character is not "
-        "-- that reads as a filter rather than a finish."
-    )
+    return COLOR_GRADE_CHECK
 
 
 def resolve_rejected_axes(analysis):
@@ -5375,6 +5296,25 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     has_wider_size_override = size_override_value in {"wide", "wider"}
     has_closer_size_override = size_override_value in {"close", "closer"}
 
+    edit_intent = analysis.get("edit_intent") or preset.get("intent", "")
+    selected_lighting_style = style_options.get("lighting")
+    if selected_lighting_style and selected_lighting_style != "default":
+        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(
+            selected_lighting_style, selected_lighting_style
+        )
+        effective_lighting_plan = (
+            f"Use the selected {lighting_label} style below as the final lighting and color atmosphere."
+        )
+        effective_color_plan = "Carry that selected atmosphere through the scene palette while grading skin independently."
+    else:
+        effective_lighting_plan = analysis.get("lighting_strategy") or ""
+        effective_color_plan = analysis.get("memory_color_strategy") or ""
+    light_color_target_block = f"""Finished light and color target:
+- Finished visual result: {edit_intent}
+- Lighting plan: {effective_lighting_plan}
+- Color plan: {effective_color_plan}
+- Treat these as one target. The user-approved correction plan below contains its executable adjustments and must realize this result."""
+
     size_ratio_block = ""
     if size_override_value == "wide":
         size_ratio_block = (
@@ -5456,6 +5396,7 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
 Approved-repair override:
 - Items in this correction plan are commands, not optional suggestions.
+- The photo-specific Edit intent, Lighting strategy, Memory color strategy, and this correction plan form one light-and-color target. Carry that target through to the finished image; scene-preservation wording governs content and structure, not the captured exposure or scene color.
 - Generic preservation, faithful-retouch, and minimal-change instructions must not cancel any item in this correction plan.
 - For an approved gaze repair, the editing method is defined by the analysis output itself: the matching correction_plan item, correction_inverse item, retouch_recipe item, and any per-subject gaze_repair_strategy.
 - Do not substitute a different generic gaze-repair method here. If the analysis explicitly allows local eye-direction change and/or local head/face alignment for a named subject, that allowance wins for that subject only."""
@@ -5777,24 +5718,16 @@ Execution rule:
             and "skin" not in _axis_set(analysis.get("correction_axes"))
         )
         skin_adjustment_rule = (
-            "- Skin-specific color correction was rejected by the user. Preserve each person's skin color as captured; "
-            "only let skin change insofar as an approved global lighting or color adjustment naturally changes the whole scene. "
-            "Do not locally neutralize, retint, or balance skin."
+            "- Keep skin color as captured, allowing only its natural response to approved whole-scene exposure and illumination changes."
             if skin_rejected else
-            "- Natural skin is not necessarily neutral. Retain coherent warm, cool, or colored illumination from sunset, tungsten, "
-            "stage light, neon, or reflected light on skin, teeth, and eye whites. Correct only a distracting hue cast that the "
-            "scene light does not explain, or a mismatch across face, neck, ears, and hands. Skin chroma is protected: do not "
-            "increase its saturation or push it warmer, yellower, redder, rosier, healthier-looking, or more neutral by default."
+            "- Apply a local skin-color change only when the approved correction plan names an unwanted cast; stop at that person's recorded native complexion."
         )
         skin_block = f"""Skin in the finished photograph (this photo contains people):
 {_build_skin_identity_lines(analysis)}
-- Treat skin separately from the overall grade. Global white balance, hue, and saturation may refine the non-skin palette, but they do not redefine complexion or increase skin chroma. Each face keeps the recorded depth, undertone, and chroma while showing the light that plausibly falls on it.
+- Keep each person's native complexion depth, undertone, and chroma while skin follows the final shared exposure and actual illumination.
 {skin_adjustment_rule}
-- Do not infer skin color from nearby grass, foliage, clothing, signs, or other saturated objects. Their color may remain vivid in the grade, but affects skin only when it is visibly cast onto the person as actual illumination.
-- Color is the whole of what changes on a face. Everything on it stays where the photograph put it -- the same eye shape and lash line, the same iris and catchlight position, the same nostril, lip edge, and brow -- and the skin's own texture, pores and lines and all, is still resolvable afterwards. A re-rendered feature, or a face smoothed into an even surface, is a different person, which is a worse outcome than any color it corrected.
-- A face is one surface: its tone changes only as light changes across a face, continuously and following the form, and nowhere on it do two colors meet at an edge. No part of a face is worked on apart from the rest -- skin corrected in one region carries that region's boundary with it, and a patch or seam on a face reads as damage where the color it replaced only read as unflattering. The same skin runs into the neck, ears, and hands, which match it.
-- A deep skin tone brightens by showing more of itself: texture and modelling rise out of the shadowed side and the lit side reads bright through its own sheen, while the tone stays as deep as it was. Brightness reached by moving it toward a paler complexion is an identity change, not a retouch.
-- A lighting override changes the scene light, and skin responds to that light like every other surface; it is never independently tinted to look healthier."""
+- Apply scene white balance, hue, and saturation to the non-skin palette independently from complexion.
+- Keep tone continuous across face, neck, ears, and visible hands, with natural texture and modelling."""
 
     revision_block = ""
     if revision_feedback:
@@ -5909,7 +5842,7 @@ Priority order:
 4. {color_craft_direction} Apply this only where it supports the selected overrides and the approved correction plan.
 5. {distraction_priority}
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
-7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if lighting is not selected, preserve the original lighting logic; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
+7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
 8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, change the camera viewpoint clearly as described in that angle's own instruction above, while keeping a believable same-scene result.
 9. The user-approved correction plan, analysis-approved body reshape instructions, and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
     else:
@@ -5922,10 +5855,10 @@ Priority order:
             )
         )
         edit_mode_block = """Edit mode:
-FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only the approved correction plan, analysis-approved body reshape instructions, preset finish, and user's extra direction. If an approved gaze, blink, and/or body repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."""
+FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, framing size, scene, and moment. Improve only the approved correction plan, analysis-approved body reshape instructions, preset finish, and user's extra direction. If an approved gaze, blink, and/or body repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."""
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
-2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, lighting direction, and spatial relationships.
+2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, and spatial relationships.
 3. {color_craft_direction}
 4. {distraction_priority}
 5. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
@@ -5974,6 +5907,8 @@ Crop instruction:
 
 {focus_block}
 
+{light_color_target_block}
+
 {analysis_header}
 - Summary: {analysis.get("photo_summary") or ""}
 - Main subject: {analysis.get("main_subject") or ""}
@@ -5981,7 +5916,6 @@ Crop instruction:
 - Aesthetic diagnosis: {analysis.get("aesthetic_diagnosis") or ""}
 - Detected issues: {detected_issues}
 - Edit philosophy: {analysis.get("edit_philosophy") or ""}
-- Edit intent: {analysis.get("edit_intent") or preset.get("intent", "")}
 - Desired mood: {analysis.get("composition_mood") or preset.get("label", "")}
 - Layout method: {analysis.get("layout_method") or ""}
 - Composition strategy: {analysis.get("composition_strategy") or ""}
@@ -5992,11 +5926,8 @@ Crop instruction:
 - Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
 - Recommended aspect ratio: {rec_aspect}
 - Aspect ratio reason: {aspect_ratio_reason}
-- Lighting strategy: {analysis.get("lighting_strategy") or ""}
-- Memory color strategy: {analysis.get("memory_color_strategy") or ""}
 - Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}
 - Crop intent (advisory): {crop_intent}
-- Correction plan: {correction_plan}
 - Must preserve: {preserve_rules}
 
 {framing_intent_block}
