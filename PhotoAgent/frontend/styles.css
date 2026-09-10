@@ -957,8 +957,8 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 
 .results-container {
-  padding-top: 44px;
-  padding-bottom: 40px;
+  padding-top: 20px;
+  padding-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -1235,6 +1235,20 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   height: auto;
   max-width: 100%;
   max-height: 480px;
+}
+
+/* Analysis-preview flow: #ap-options-card-inline (the review tabs + controls)
+   sits stacked directly below .compare-card in the same column here (not
+   beside it), so the photo's own fixed height is the main lever for how much
+   of that review content clears the fold without scrolling. Shrunk well
+   below the base 480px just for this flow -- the plain post-run compare view
+   (no options card below it) keeps the full-size photo. :not(.is-fullscreen)
+   leaves #compare-fullscreen-btn's own 100%-height override (above) alone. */
+.results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame {
+  height: 400px;
+}
+.results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame img {
+  max-height: 400px;
 }
 
 /* Only one of the two images is ever shown at a time, switched by
