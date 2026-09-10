@@ -150,6 +150,35 @@ class FullPrompt(unittest.TestCase):
         self.assertNotIn("open shadows selectively", prompt)
         self.assertNotIn("A face is one surface", prompt)
 
+    def test_raw_editor_rebuilds_target_after_light_item_is_unchecked(self):
+        analysis = {
+            **ANALYSIS,
+            "edit_intent": "提亮人物並建立明亮背景。",
+            "lighting_strategy": "人物與背景共同提升半級。",
+            "memory_color_strategy": "建立乾淨的藍色場景。",
+            "aesthetic_diagnosis": "人物太暗，必須提升人物與背景曝光半級。",
+            "detected_issues": ["人物與背景曝光不足。"],
+            "correction_plan": ["整理場景藍色。"],
+            "correction_axes": [["white_balance"]],
+            "rejected_corrections": ["提升人物與背景曝光半級。"],
+            "rejected_axes": [["exposure"]],
+            "rejected_preserve": ["維持原圖人物與背景的曝光。"],
+        }
+        prompt = build_edit_prompt(
+            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
+        )
+        self.assertNotIn("提亮人物並建立明亮背景", prompt)
+        self.assertNotIn("人物與背景共同提升半級", prompt)
+        self.assertNotIn("人物太暗，必須提升人物與背景曝光半級", prompt)
+        self.assertNotIn("人物與背景曝光不足", prompt)
+        self.assertNotIn("Aesthetic diagnosis:", prompt)
+        self.assertIn("Photo context after user review:", prompt)
+        self.assertIn("Color plan: 建立乾淨的藍色場景", prompt)
+        self.assertIn("Reviewed finished result", prompt)
+        self.assertIn("User-preserved choices", prompt)
+        self.assertIn("維持原圖人物與背景的曝光", prompt)
+        self.assertNotIn("提升人物與背景曝光半級", prompt)
+
     def _prompt(self, style_options=None, **kwargs):
         analysis = {**ANALYSIS, "style_options": style_options or {}}
         return build_edit_prompt(

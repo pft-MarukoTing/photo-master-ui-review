@@ -257,8 +257,8 @@ class BlockOrder(unittest.TestCase):
         self.assertLess(hair, rejected_or_skin)
 
     def test_rejected_corrections_still_override_everything_above_them(self):
-        # negative_block claims to override everything above it, so it has to stay
-        # below the blocks that argue for changes -- including the hair one.
+        # The reviewed source-state choices have priority over analyzer-derived
+        # blocks, so they stay below the blocks that may still argue for changes.
         analysis = {
             **ANALYSIS, "subjects": _subjects_from_hair_issues([CLUMPED]),
             "correction_plan": ["提升整體曝光"], "correction_axes": [["exposure"]],
@@ -266,7 +266,10 @@ class BlockOrder(unittest.TestCase):
             "rejected_preserve": ["維持背景原樣"],
         }
         prompt = build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
-        self.assertLess(prompt.index("Hair tidying priority"), prompt.index("User-rejected corrections"))
+        self.assertLess(
+            prompt.index("Hair tidying priority"),
+            prompt.index("User-preserved choices (highest priority for these scopes)"),
+        )
 
 
 class UncheckedHairItem(unittest.TestCase):

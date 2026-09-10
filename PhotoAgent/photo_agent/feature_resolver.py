@@ -17,6 +17,8 @@ from prompts import (
     _disabled_issue_subject_indices,
     _has_person,
     _read_smile_states,
+    build_reviewed_light_color_target,
+    build_user_preserved_choices,
     resolve_user_blink_request,
     resolve_user_gaze_request,
     resolve_user_hair_request,
@@ -103,34 +105,6 @@ def _is_hair_correction(text, axes):
     lowered = str(text or "").lower()
     return any("hair" in str(axis).lower() for axis in axes) or any(
         term in lowered for term in _HAIR_PLAN_TERMS
-    )
-
-
-def _build_visual_target(analysis, lighting_style=None):
-    """Render Call A's one photo-specific target before its execution plan."""
-    if lighting_style:
-        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(
-            lighting_style, lighting_style
-        )
-        # A user-selected lighting style is the effective light/color plan. Do
-        # not put stale analyzer lighting or palette prose ahead of it.
-        fields = (
-            ("Finished visual result", analysis.get("edit_intent")),
-            ("Lighting and color plan", f"Use the selected {lighting_label} style as the final atmosphere."),
-        )
-    else:
-        fields = (
-            ("Finished visual result", analysis.get("edit_intent")),
-            ("Lighting plan", analysis.get("lighting_strategy")),
-            ("Color plan", analysis.get("memory_color_strategy")),
-        )
-    lines = [f"- {label}: {str(value).strip()}" for label, value in fields if str(value or "").strip()]
-    if not lines:
-        lines = ["- Create a polished, visually compelling light-and-color result from the approved plan."]
-    return (
-        "Finished light and color target:\n"
-        + "\n".join(lines)
-        + "\n- Treat these as one target. The approved execution plan below must realize it."
     )
 
 
@@ -925,9 +899,10 @@ def build_compact_editor_prompt(
         analysis, skin_corrections, face_tonal_corrections,
         lighting_style=style_options.get("lighting"),
     )
-    visual_target_block = _build_visual_target(
+    visual_target_block = build_reviewed_light_color_target(
         analysis, lighting_style=style_options.get("lighting")
     )
+    user_preserved_block = build_user_preserved_choices(analysis)
     subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
     shared_face_rules = []
     if has_facial_edit:
@@ -1053,6 +1028,8 @@ Required framing:
 
 {visual_target_block}
 
+{user_preserved_block}
+
 Other approved corrections:
 {correction_block}
 
@@ -1106,6 +1083,7 @@ Global preservation:
             "lighting_strategy": analysis.get("lighting_strategy") or "",
             "memory_color_strategy": analysis.get("memory_color_strategy") or "",
         },
+        "user_preserved_choices": list(analysis.get("rejected_preserve") or []),
         "crop_instruction_source": crop_instruction_source,
         "raw_crop_instruction": raw_crop_block,
         "compact_crop_instruction": compact_crop_block,

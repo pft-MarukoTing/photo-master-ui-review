@@ -4283,7 +4283,7 @@ COLOR_GRADE_CHECK = (
 # named approved work, so it needs no parallel list of axis-specific operations.
 # Removal is the whole job: saying what to preserve
 # instead is correction_inverse's, written per item by the analysis model so it
-# carries that item's scope (see _build_rejected_lines). Several axes -- skin,
+# carries that item's scope. Several axes -- skin,
 # sharpen, other -- gate nothing today and are kept in the vocabulary only
 # because the model reaches for them naturally; an axis that gates nothing costs
 # nothing.
@@ -4373,6 +4373,93 @@ def _axis_set(value):
     return axes
 
 
+_LIGHT_TARGET_AXES = {"exposure", "shadow", "highlight", "contrast", "lighting"}
+_COLOR_TARGET_AXES = {"white_balance", "hue", "saturation", "tint", "skin", "color"}
+
+
+def build_reviewed_light_color_target(analysis, fallback_intent="", lighting_style=None):
+    """Build the effective target after the user reviews correction_plan.
+
+    Analyzer target fields are free prose and can combine several adjustments
+    in one sentence. When the user rejects a light/color item, suppress the
+    affected strategy wholesale instead of trying to cut a clause by keyword;
+    the still-approved correction_plan remains the executable target.
+    """
+    has_rejected = bool(analysis.get("rejected_corrections"))
+    rejected_items = list(analysis.get("rejected_corrections") or [])
+    rejected_axis_items = list(analysis.get("rejected_axes") or [])
+    rejected_axes = (
+        _axis_set(rejected_axis_items)
+        if len(rejected_axis_items) == len(rejected_items) else set()
+    )
+    # edit_intent is unstructured prose and may summarize any recipe item, so
+    # it is stale as soon as the user changes that recipe. Axis tags let the two
+    # narrower strategy fields survive only when their own domain is untouched.
+    # Old analyses without axis tags take the safe path and discard both.
+    unknown_rejection = has_rejected and not rejected_axes
+    light_rejected = unknown_rejection or bool(rejected_axes & _LIGHT_TARGET_AXES)
+    color_rejected = unknown_rejection or bool(rejected_axes & _COLOR_TARGET_AXES)
+    target_rejected = has_rejected
+
+    fields = []
+    if target_rejected:
+        fields.append((
+            "Reviewed finished result",
+            "Use the approved correction plan below as the effective light-and-color target, together with any selected style.",
+        ))
+    else:
+        intent = analysis.get("edit_intent") or fallback_intent
+        if intent:
+            fields.append(("Finished visual result", intent))
+
+    if lighting_style:
+        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(
+            lighting_style, lighting_style
+        )
+        fields.append((
+            "Lighting and color plan",
+            f"Use the selected {lighting_label} style as the final atmosphere.",
+        ))
+    else:
+        if not light_rejected and analysis.get("lighting_strategy"):
+            fields.append(("Lighting plan", analysis.get("lighting_strategy")))
+        if not color_rejected and analysis.get("memory_color_strategy"):
+            fields.append(("Color plan", analysis.get("memory_color_strategy")))
+
+    if not fields:
+        fields.append((
+            "Reviewed finished result",
+            "Use the approved correction plan below as the complete light-and-color target.",
+        ))
+    lines = [f"- {label}: {str(value).strip()}" for label, value in fields]
+    closing = (
+        "- User-preserved choices below override the original analysis for their named regions and properties."
+        if analysis.get("rejected_corrections") else
+        "- Treat these as one target. The approved correction plan below must realize it."
+    )
+    return "Finished light and color target:\n" + "\n".join(lines + [closing])
+
+
+def build_user_preserved_choices(analysis):
+    """Render unchecked recipe items as positive source-state instructions."""
+    rejected = list(analysis.get("rejected_corrections") or [])
+    if not rejected:
+        return ""
+    inverses = list(analysis.get("rejected_preserve") or [])
+    if len(inverses) == len(rejected) and all(str(item).strip() for item in inverses):
+        choices = [str(item).strip() for item in inverses]
+    else:
+        choices = [
+            f"Preserve the original state in the exact region and properties covered by this declined item: {item}"
+            for item in rejected
+        ]
+    return (
+        "User-preserved choices (highest priority for these scopes):\n"
+        + "\n".join(f"- {item}" for item in choices)
+        + "\n- Apply the approved correction plan everywhere else."
+    )
+
+
 def build_user_instruction_review_prompt(user_direction, analysis):
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     head = f"""
@@ -4416,35 +4503,6 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
   "warning": "若有被降級或轉譯的部分，簡短說明；沒有則空字串。"
 }"""
     return head + schema
-
-
-def _build_rejected_lines(analysis, rejected_corrections):
-    """(lines, has_inverse): each rejected item, with its preservation instruction.
-
-    The instruction is correction_inverse, written by the analysis model next to
-    the item it inverts, so it carries that item's scope: "brighten the subject"
-    inverts to pinning the SUBJECT's brightness. A generic per-axis rule would
-    have to say "keep the photograph's global exposure" and would suppress a
-    global lift the user never objected to.
-
-    Without it -- an analysis from before the field existed, or a model that
-    skipped it -- the items go in as bare text, which is what the negative block
-    said before correction_inverse and still beats emitting a mismatched pairing.
-    """
-    inverses = analysis.get("rejected_preserve") or []
-    if len(inverses) != len(rejected_corrections):
-        if inverses:
-            logger.warning(
-                "rejected_preserve does not match rejected_corrections (%d vs %d); "
-                "listing rejected items without their preservation instructions",
-                len(inverses), len(rejected_corrections),
-            )
-        return "\n".join(f"- {item}" for item in rejected_corrections), False
-
-    return "\n".join(
-        f"- {item}\n  Instead: {inverse}"
-        for item, inverse in zip(rejected_corrections, inverses)
-    ), True
 
 
 # The geometric invariant, in one sentence. Deliberately short and free of
@@ -5296,24 +5354,16 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     has_wider_size_override = size_override_value in {"wide", "wider"}
     has_closer_size_override = size_override_value in {"close", "closer"}
 
-    edit_intent = analysis.get("edit_intent") or preset.get("intent", "")
     selected_lighting_style = style_options.get("lighting")
-    if selected_lighting_style and selected_lighting_style != "default":
-        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(
-            selected_lighting_style, selected_lighting_style
-        )
-        effective_lighting_plan = (
-            f"Use the selected {lighting_label} style below as the final lighting and color atmosphere."
-        )
-        effective_color_plan = "Carry that selected atmosphere through the scene palette while grading skin independently."
-    else:
-        effective_lighting_plan = analysis.get("lighting_strategy") or ""
-        effective_color_plan = analysis.get("memory_color_strategy") or ""
-    light_color_target_block = f"""Finished light and color target:
-- Finished visual result: {edit_intent}
-- Lighting plan: {effective_lighting_plan}
-- Color plan: {effective_color_plan}
-- Treat these as one target. The user-approved correction plan below contains its executable adjustments and must realize this result."""
+    light_color_target_block = build_reviewed_light_color_target(
+        analysis,
+        fallback_intent=preset.get("intent", ""),
+        lighting_style=(
+            selected_lighting_style
+            if selected_lighting_style and selected_lighting_style != "default"
+            else None
+        ),
+    )
 
     size_ratio_block = ""
     if size_override_value == "wide":
@@ -5396,38 +5446,13 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
 
 Approved-repair override:
 - Items in this correction plan are commands, not optional suggestions.
-- The photo-specific Edit intent, Lighting strategy, Memory color strategy, and this correction plan form one light-and-color target. Carry that target through to the finished image; scene-preservation wording governs content and structure, not the captured exposure or scene color.
+- The Finished light and color target above and this reviewed correction plan form one effective target. User-preserved choices override the original analyzer target for their named regions and properties.
 - Generic preservation, faithful-retouch, and minimal-change instructions must not cancel any item in this correction plan.
 - For an approved gaze repair, the editing method is defined by the analysis output itself: the matching correction_plan item, correction_inverse item, retouch_recipe item, and any per-subject gaze_repair_strategy.
 - Do not substitute a different generic gaze-repair method here. If the analysis explicitly allows local eye-direction change and/or local head/face alignment for a named subject, that allowance wins for that subject only."""
 
     rejected_corrections = analysis.get("rejected_corrections") or []
-    negative_block = ""
-    if rejected_corrections:
-        # Phrased as preservation, not prohibition. "Do not brighten" still puts
-        # brightening in front of the model as the thing under discussion, and an
-        # image model given a described change tends to produce a softened version
-        # of it; "reproduce the original's exposure" gives it a target it can
-        # actually render instead.
-        rejected_lines, has_inverse = _build_rejected_lines(analysis, rejected_corrections)
-        # The header has to match what the list below actually contains -- promising
-        # an "Instead" line that isn't there reads as a truncated prompt.
-        instead_intro = (
-            'so each one\'s "Instead" line is now the instruction for that aspect of the photograph'
-            if has_inverse else
-            "so the corresponding properties of the photograph must come through unchanged from the original"
-        )
-        instead_scope = (
-            'Each "Instead" line is bounded to the region or property its item named; it does not license '
-            "changes elsewhere, and it does not override the approved correction plan. "
-            if has_inverse else
-            "Each item is bounded to the region or property it names; leaving it alone does not license changes "
-            "elsewhere, and does not override the approved correction plan. "
-        )
-        negative_block = f"""User-rejected corrections (highest priority). The user reviewed the suggested recipe and unchecked the items below, {instead_intro}. This overrides everything above that still argues for the change -- the photo analysis, the aesthetic diagnosis, the detected issues, the lighting and color strategy notes, and the preset style direction were all written before the user's review and were not updated by it:
-{rejected_lines}
-
-{instead_scope}Reproducing the original faithfully in these respects is the correct outcome, not a missed opportunity. A result that improves them anyway has failed this edit, however good it looks."""
+    negative_block = build_user_preserved_choices(analysis)
 
     # Skin is the one color in a photo that viewers have an absolute reference
     # for, so a global grade that reads fine on the background can still fail on
@@ -5867,16 +5892,36 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
 9. The user-approved correction plan and analysis-approved body reshape instructions are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
 
-    # The diagnosis lines below are the loudest remaining voice for a rejected
-    # correction, and they sit ~40 lines above the negative block. Caveat them
-    # where they are read, not only where they are overridden.
-    analysis_header = (
-        "Photo analysis (written during automatic analysis, BEFORE the user reviewed the recipe -- "
-        "wherever it diagnoses a problem the user later chose not to fix, the user's decision wins and "
-        "the diagnosis is stale):"
-        if rejected_corrections else
-        "Photo analysis:"
-    )
+    # Analyzer prose can restate a correction outside correction_plan. Once the
+    # user changes that plan, keep only descriptive context here; the reviewed
+    # plan and preserved choices below are the complete set of edit commands.
+    if rejected_corrections:
+        analysis_block = f"""Photo context after user review:
+- Summary: {analysis.get("photo_summary") or ""}
+- Main subject: {analysis.get("main_subject") or ""}
+- Scene type: {analysis.get("scene_type") or ""}
+- Must preserve: {preserve_rules}"""
+    else:
+        analysis_block = f"""Photo analysis:
+- Summary: {analysis.get("photo_summary") or ""}
+- Main subject: {analysis.get("main_subject") or ""}
+- Scene type: {analysis.get("scene_type") or ""}
+- Aesthetic diagnosis: {analysis.get("aesthetic_diagnosis") or ""}
+- Detected issues: {detected_issues}
+- Edit philosophy: {analysis.get("edit_philosophy") or ""}
+- Desired mood: {analysis.get("composition_mood") or preset.get("label", "")}
+- Layout method: {analysis.get("layout_method") or ""}
+- Composition strategy: {analysis.get("composition_strategy") or ""}
+- Visual balance strategy: {analysis.get("visual_balance_strategy") or ""}
+- Empty space strategy: {analysis.get("empty_space_strategy") or ""}
+- Alignment strategy: {analysis.get("alignment_strategy") or ""}
+- Distraction strategy: {analysis.get("distraction_strategy") or ""}
+- Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
+- Recommended aspect ratio: {rec_aspect}
+- Aspect ratio reason: {aspect_ratio_reason}
+- Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}
+- Crop intent (advisory): {crop_intent}
+- Must preserve: {preserve_rules}"""
 
     task_intro = (
         "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
@@ -5909,26 +5954,7 @@ Crop instruction:
 
 {light_color_target_block}
 
-{analysis_header}
-- Summary: {analysis.get("photo_summary") or ""}
-- Main subject: {analysis.get("main_subject") or ""}
-- Scene type: {analysis.get("scene_type") or ""}
-- Aesthetic diagnosis: {analysis.get("aesthetic_diagnosis") or ""}
-- Detected issues: {detected_issues}
-- Edit philosophy: {analysis.get("edit_philosophy") or ""}
-- Desired mood: {analysis.get("composition_mood") or preset.get("label", "")}
-- Layout method: {analysis.get("layout_method") or ""}
-- Composition strategy: {analysis.get("composition_strategy") or ""}
-- Visual balance strategy: {analysis.get("visual_balance_strategy") or ""}
-- Empty space strategy: {analysis.get("empty_space_strategy") or ""}
-- Alignment strategy: {analysis.get("alignment_strategy") or ""}
-- Distraction strategy: {analysis.get("distraction_strategy") or ""}
-- Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
-- Recommended aspect ratio: {rec_aspect}
-- Aspect ratio reason: {aspect_ratio_reason}
-- Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}
-- Crop intent (advisory): {crop_intent}
-- Must preserve: {preserve_rules}
+{analysis_block}
 
 {framing_intent_block}
 
