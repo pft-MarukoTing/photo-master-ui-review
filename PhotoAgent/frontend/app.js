@@ -6169,6 +6169,32 @@
       };
       lastSingleSelections = selections;
 
+      // #ap-options-card-inline's model/quality and aspect-ratio pickers are
+      // otherwise left showing whatever a previous record (or the upload
+      // page) had picked -- sync them to what THIS record actually used.
+      // Only the picker, not applyModelQualityChange/applyAspectRatioChange's
+      // full side effects (pushing onto singleFlowState -- already correct,
+      // just set above -- and, for aspect ratio, re-fitting the preview,
+      // which this record's own preview render below handles regardless).
+      // Must run BEFORE showSingleResult below: showSingleResult can
+      // auto-open the inline revise panel (openInlineAnalysisForCurrentContext,
+      // fire-and-forget but its snapshot capture runs synchronously), which
+      // snapshots #ap-image-model-quality's *current* value as the "nothing
+      // changed yet" baseline -- syncing the picker only after that snapshot
+      // was taken left the baseline on the previous record's stale model/
+      // quality, so picking a model that happened to match that leftover
+      // value (not this record's own) was wrongly treated as "no changes"
+      // and silently blocked Run.
+      applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+      applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
+      applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+      // singleFlowState.advancedOptions itself is left unset by the historical
+      // reconstruction above (unlike imageModel/aspectRatio) -- reading off
+      // singleFlowState.analysis._advanced_options directly, the same key a
+      // later revise's buildEffectiveAnalysis falls back to, keeps this in
+      // sync with what a revise would actually use if left untouched.
+      applyAdvancedOptionsOption(singleFlowState.analysis?._advanced_options);
+
       // Awaited (not fire-and-forget) so this function's own promise only
       // resolves once the result photo is actually showing -- callers like
       // the history-list click handler use that to keep their own "opening…"
@@ -6186,22 +6212,6 @@
       // showSingleResult itself preloads the RUN's image before painting, so
       // this doesn't return until that's done either.
       await showSingleResult({ forceReopen: true, revealDetailExtra });
-      // #ap-options-card-inline's model/quality and aspect-ratio pickers are
-      // otherwise left showing whatever a previous record (or the upload
-      // page) had picked -- sync them to what THIS record actually used.
-      // Only the picker, not applyModelQualityChange/applyAspectRatioChange's
-      // full side effects (pushing onto singleFlowState -- already correct,
-      // just set above -- and, for aspect ratio, re-fitting the preview,
-      // which needs to run after showSingleResult's own render regardless).
-      applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
-      applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
-      applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
-      // singleFlowState.advancedOptions itself is left unset by the historical
-      // reconstruction above (unlike imageModel/aspectRatio) -- reading off
-      // singleFlowState.analysis._advanced_options directly, the same key a
-      // later revise's buildEffectiveAnalysis falls back to, keeps this in
-      // sync with what a revise would actually use if left untouched.
-      applyAdvancedOptionsOption(singleFlowState.analysis?._advanced_options);
       if (historyViewToken === myToken) closeHistoryDrawer();
       return;
     }
