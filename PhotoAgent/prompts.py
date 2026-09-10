@@ -1945,7 +1945,7 @@ Subject inclusion rule (for people specifically):
 _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
 {
   "photo_summary": "一句話描述照片內容與整體觀感。",
-  "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 生活紀錄 / 其他",
+  "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 其他",
   "scene_category": "室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他",
   "main_subject": "主要主體是誰或什麼。",
   "scene_type": "更具體的場景類型。",
@@ -5057,7 +5057,7 @@ def _build_skin_identity_lines(analysis):
     return "\n".join(lines)
 
 
-# Trigger on is_person too, not just subject_category: a 生活紀錄 / 旅行 /
+# Trigger on is_person too, not just subject_category: a 旅行 /
 # 街拍 photo still has faces, and both the skin rules and the smile block are
 # about faces rather than about what the photo is nominally of.
 def _has_person(analysis):
