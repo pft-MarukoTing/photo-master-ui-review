@@ -1027,13 +1027,13 @@
     });
   }
 
-  // Advanced Settings (人像設定) live in ONE shared modal
-  // (#advanced-settings-modal), opened from either the upload page's
-  // #settings-modal or the results page's #ap-settings-modal -- reading them
-  // here (instead of inlining the same object literal at every call site)
-  // keeps the initial-submit read (startSubmit/startSubmitBatch) and a later
-  // revise's re-read (applyAdvancedOptionsChange below) sharing one source
-  // of truth.
+  // Advanced Settings (人像設定) live in ONE shared fold (#advanced-settings-fold),
+  // folded into whichever of #settings-modal (upload page) / #ap-settings-modal
+  // (results page) is currently open -- see openSettingsModal/openApSettingsModal
+  // below. Reading them here (instead of inlining the same object literal at
+  // every call site) keeps the initial-submit read (startSubmit/startSubmitBatch)
+  // and a later revise's re-read (applyAdvancedOptionsChange below) sharing one
+  // source of truth.
   function readAdvancedOptionsFromDom() {
     return {
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
@@ -1646,9 +1646,9 @@
       overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
       runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null,
-      // 人像設定 (#advanced-settings-modal, reopenable from #ap-settings-btn
-      // now too) -- just as real an edit as the picks above, so it needs the
-      // same before/after snapshot to unblock the Run button.
+      // 人像設定 (#advanced-settings-fold, folded into 設定 on either page) --
+      // just as real an edit as the picks above, so it needs the same
+      // before/after snapshot to unblock the Run button.
       advancedOptions: readAdvancedOptionsFromDom(),
       // Per-person "允許 AI 修正此項目" toggles (#ap-face-detail) -- same
       // reasoning as advancedOptions above, otherwise flipping only a face
@@ -6383,29 +6383,34 @@
     }
   }
 
+  // Moves #advanced-settings-fold (人像設定) into whichever 設定 modal's body
+  // is about to be shown, if it isn't already there -- it's one shared fold,
+  // not a separate copy of its inputs per page, so reparenting it on open is
+  // how both #settings-modal and #ap-settings-modal get to hold it without
+  // duplicating the toggles/fieldsets (and their ids) inside each.
+  // Always collapsed on open -- being one shared DOM node reparented (not
+  // rebuilt) between the two modals, its `open` state would otherwise
+  // survive both a close/reopen and a switch to the other page's modal.
+  function ensureAdvancedSettingsFoldIn(body) {
+    if (!els.advancedSettingsFold) return;
+    if (body && els.advancedSettingsFold.parentElement !== body) {
+      body.appendChild(els.advancedSettingsFold);
+    }
+    els.advancedSettingsFold.open = false;
+  }
+
   // Upload-page settings overlay -- same open/close shape as the error modal
   // above, just toggling #settings-modal's own hidden attribute. Holds the
   // 模型/長寬比/生成張數 pickers (already populated/wired above via
   // populateModelQualitySelect/populateAspectRatioSelect/wireOptionPicker),
   // so opening it doesn't need to re-render anything itself either.
   function openSettingsModal() {
+    ensureAdvancedSettingsFoldIn(els.settingsModalBody);
     if (els.settingsModal) els.settingsModal.hidden = false;
   }
 
   function closeSettingsModal() {
     if (els.settingsModal) els.settingsModal.hidden = true;
-  }
-
-  // Advanced settings overlay, opened from within #settings-modal itself --
-  // same open/close shape as openSettingsModal/closeSettingsModal above, just
-  // toggling #advanced-settings-modal's own hidden attribute. Holds the
-  // 眼睛 category (閉眼偵測/眼神對焦 toggles).
-  function openAdvancedSettingsModal() {
-    if (els.advancedSettingsModal) els.advancedSettingsModal.hidden = false;
-  }
-
-  function closeAdvancedSettingsModal() {
-    if (els.advancedSettingsModal) els.advancedSettingsModal.hidden = true;
   }
 
   // Results/analysis-preview page settings overlay -- same shape as
@@ -6415,6 +6420,7 @@
   // applyAspectRatioChange/applyRunCountChange), so a change made here applies
   // to the next edit without re-analyzing.
   function openApSettingsModal() {
+    ensureAdvancedSettingsFoldIn(els.apSettingsModalBody);
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
 
@@ -6425,10 +6431,10 @@
   // #header-settings-btn (index.html) is the single, always-visible entry
   // point into 設定 now -- picks #settings-modal or #ap-settings-modal based
   // on which section is actually showing, since the two pages' pickers
-  // (模型/長寬比/生成張數) are independent state, not a shared modal like
-  // #advanced-settings-modal. Falls back to the results-page modal for
-  // "processing" too, on the assumption the results modal is the closer
-  // match once analysis is running/done than the upload modal.
+  // (模型/長寬比/生成張數) are independent state, unlike the shared
+  // #advanced-settings-fold reparented above. Falls back to the results-page
+  // modal for "processing" too, on the assumption the results modal is the
+  // closer match once analysis is running/done than the upload modal.
   function openContextSettingsModal() {
     if (els.sections.upload?.classList.contains("visible")) {
       openSettingsModal();
@@ -7719,12 +7725,12 @@
 
     // `analysis` already carries its own _advanced_options, baked in at
     // analyze time (pipeline.py's analyze_stage) -- overwrite it with
-    // whatever the toggles in #advanced-settings-modal currently read as, so
-    // a revise from the results page (where these can now be reopened and
-    // changed, see #ap-advanced-settings-btn) actually reaches build_edit_prompt's
-    // detected_issues filtering and the gaze-repair pass, both of which read
-    // this key off the analysis object at finish time rather than off a
-    // fresh request field.
+    // whatever the toggles in #advanced-settings-fold currently read as, so
+    // a revise from the results page (where 設定 -> 人像設定 can reopen and
+    // change them) actually reaches build_edit_prompt's detected_issues
+    // filtering and the gaze-repair pass, both of which read this key off
+    // the analysis object at finish time rather than off a fresh request
+    // field.
     if (advancedOptions) effective._advanced_options = advancedOptions;
 
     if (Array.isArray(recipeChecked) && recipeChecked.length) {
@@ -8364,20 +8370,12 @@
       if (e.target.dataset.close) closeSettingsModal();
     });
   }
-  if (els.advancedSettingsBtn) els.advancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
-  if (els.advancedSettingsModalClose) els.advancedSettingsModalClose.addEventListener("click", closeAdvancedSettingsModal);
-  if (els.advancedSettingsModal) {
-    els.advancedSettingsModal.addEventListener("click", (e) => {
-      if (e.target.dataset.close) closeAdvancedSettingsModal();
-    });
-  }
   if (els.apSettingsModalClose) els.apSettingsModalClose.addEventListener("click", closeApSettingsModal);
   if (els.apSettingsModal) {
     els.apSettingsModal.addEventListener("click", (e) => {
       if (e.target.dataset.close) closeApSettingsModal();
     });
   }
-  if (els.apAdvancedSettingsBtn) els.apAdvancedSettingsBtn.addEventListener("click", openAdvancedSettingsModal);
   // Resets to the pills-only view every time this tab is switched to --
   // same as this tab's old openStyleModal always starting there, so
   // whichever category grid was left open on a previous visit doesn't
@@ -8404,10 +8402,6 @@
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
-    if (els.advancedSettingsModal && !els.advancedSettingsModal.hidden) {
-      closeAdvancedSettingsModal();
-      return;
-    }
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();

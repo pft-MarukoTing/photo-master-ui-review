@@ -274,13 +274,12 @@
       color: #fff;
       box-shadow: var(--shadow-accent);
     }
-    /* Pushes .ap-settings-run-row (#ap-advanced-settings-btn + Run) to the
-       far right of .ap-actions-row -- same pattern as #advanced-settings-btn/
-       #start-direct-btn on the upload page's .upload-actions-row.
-       margin-left:auto lives on the wrapper rather than on either child
-       alone so the pair moves *together* to whichever line has room and
-       stays right-aligned there, instead of one getting pushed right while
-       the other wraps to its own line flush left. */
+    /* Pushes .ap-settings-run-row (Run) to the far right of .ap-actions-row
+       -- used to also carry #ap-advanced-settings-btn as a pair before
+       人像設定 folded into 設定 instead (see #advanced-settings-fold),
+       margin-left:auto stayed on the wrapper rather than moving onto Run
+       itself since there's no upside to churning it now that it's a single
+       child. */
     .ap-actions-row .ap-settings-run-row {
       display: inline-flex;
       align-items: center;
@@ -763,12 +762,12 @@
       align-items: center;
       gap: 6px;
       height: 41px;
-      /* Explicit height (not just padding + line-height) --
-         #ap-advanced-settings-btn is a <button>, while every other trigger
-         here (模型/生成張數/Pose/Angle/Lighting/Size) is a <summary>; padding
-         alone happened to compute to the same height for both, but pinning
-         it directly guarantees 修圖風格 never drifts out of line with the
-         rest of the row regardless of any button-vs-summary UA quirk. */
+      /* Explicit height (not just padding + line-height) -- some triggers
+         here (模型/生成張數) are <summary>, others (Pose/Angle/Lighting/Size)
+         are plain <button>; padding alone happened to compute to the same
+         height for both, but pinning it directly guarantees they never
+         drift out of line with each other regardless of any
+         button-vs-summary UA quirk. */
       padding: 0 16px;
       background: var(--card-2);
       border: 1px solid var(--border-2);
@@ -956,10 +955,6 @@
       max-height: 150px;
       overflow-y: auto;
     }
-    /* #ap-advanced-settings-btn is a plain <button> (opens
-       #advanced-settings-modal, a real overlay window), not a <details> --
-       no dropdown chevron to hint at. */
-    .ap-recipe-trigger::after { content: none; }
     /* Removable selected-label chips for the 修圖風格 tab's picker (see
        updateStyleTriggerLabel/renderStylePickedChips, results.js) -- one
        small pill per pick (e.g. "Playful", "Low Shot"), each with its own
@@ -1550,19 +1545,6 @@
     @keyframes rc-spin { to { transform: rotate(360deg); } }
     .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
     .error-modal[hidden] { display: none; }
-    /* Triggered by #advanced-settings-btn (upload page's .upload-actions-row)
-       or #ap-advanced-settings-btn (results page's .ap-settings-run-row) --
-       both used to sit inside another already-open .error-modal
-       (#settings-modal / #ap-settings-modal) at the plain base z-index of
-       1000, which is why this needs its own higher one; now that both
-       triggers live in the main action rows instead, nothing else on the
-       page currently needs to layer above 1000, but this stays at 1003
-       rather than dropping back to the base value since there's no upside
-       to churning it.
-       1003, not 1001/1002 -- kept clear of .history-drawer/#confirm-modal's
-       own values just below even though neither is ever open at the same
-       time as this one, so this block reads as its own independent case. */
-    #advanced-settings-modal { z-index: 1003; }
     /* #confirm-modal can be triggered from inside the history drawer (its
        delete button) -- the drawer itself sits at z-index 1001 (see
        .history-drawer below), above every other .error-modal-based popup, so
@@ -1617,7 +1599,17 @@
        to wrap into, so a long value (e.g. "GPT Image 2 · Standard") would
        instead push the trigger past the modal's own edge. Stretch the
        trigger to the row and ellipsize the value instead. */
-    .settings-modal-body { display: flex; flex-direction: column; gap: 16px; }
+    /* max-height/overflow-y so an expanded #advanced-settings-fold (人像設定,
+       long enough on its own to push this past the viewport) scrolls inside
+       the modal instead of growing .error-modal-box off-screen -- same
+       pattern as .changelog-modal-body below. Only on the outer body, not
+       .settings-fold-body -- nesting a second scroll region inside this one
+       would read as two competing scrollbars for what's really one list. */
+    .settings-modal-body {
+      display: flex; flex-direction: column; gap: 16px;
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
+    }
     .settings-modal-body .ap-style-item { width: 100%; }
     .settings-modal-body .ap-style-trigger { width: 100%; box-sizing: border-box; }
     .settings-modal-body .ap-style-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1629,10 +1621,42 @@
        elsewhere it's a small caption riding along a busy pill row, but as
        the only label identifying each field in this modal it needs to read
        as a proper field title, not a caption -- scoped to
-       .settings-modal-body so the shared .option-pill-label style used
-       elsewhere (style-picker pills, analysis-preview pickers) is untouched. */
+       .settings-modal-body (and .settings-fold-body, its collapsed
+       #advanced-settings-fold counterpart -- same modal column, same
+       legends) so the shared .option-pill-label style used elsewhere
+       (style-picker pills, analysis-preview pickers) is untouched. */
     .settings-modal-title { font-size: 17px; font-weight: 800; color: var(--text); }
-    .settings-modal-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
+    .settings-modal-body .option-pill-label,
+    .settings-fold-body .option-pill-label { font-size: 13px; font-weight: 800; color: var(--text); }
+
+    /* 人像設定 (#advanced-settings-fold): collapsed by default, folded into
+       whichever 設定 modal is open rather than its own separate modal --
+       same chevron-summary shape as .ap-options-toggle (analysis-preview's
+       分析結果 fold) so a collapsible section reads the same way everywhere,
+       just re-themed for this modal's narrower column -- sized to match
+       .settings-modal-title (this modal's own header) rather than the small
+       uppercase .option-pill-label caption, so it reads as a real section
+       title, not a field label. */
+    .settings-fold { border-top: 1px solid var(--border); padding-top: 16px; }
+    .settings-fold > summary {
+      display: flex; align-items: center; gap: 8px;
+      cursor: pointer; user-select: none; list-style: none;
+      font-size: 17px; font-weight: 800; color: var(--text);
+    }
+    .settings-fold > summary::-webkit-details-marker { display: none; }
+    .settings-fold > summary::before {
+      content: '▸'; display: inline-block; font-size: 13px; color: var(--text-2);
+      transition: transform .15s;
+    }
+    .settings-fold[open] > summary::before { transform: rotate(90deg); }
+    .settings-fold > summary:hover { color: var(--accent); }
+    .settings-fold > summary:hover::before { color: var(--accent); }
+    .settings-fold-body { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+    /* Divider between #advanced-settings-fold and the debug-only 兩階段修圖/
+       Editor prompt 架構 rows below it -- same border-top+padding-top shape
+       as .settings-fold's own separator from the pickers above it, so every
+       section in this modal reads consistently. */
+    #two-stage-edit-row { border-top: 1px solid var(--border); padding-top: 16px; }
 
     /* #demo-images-modal's picker grid -- wider than the plain 440px
        .error-modal-box (that width is tuned for a message/form, not a photo
@@ -3131,9 +3155,11 @@
 
           <!-- #demo-images-btn (see openDemoImagesModal, app.js) stays
                pinned to this row's left edge (margin-right:auto, styles.css)
-               while #advanced-settings-btn/Run stay grouped at the right.
-               設定 itself now lives in the header (#header-settings-btn,
-               openContextSettingsModal in app.js) rather than in this row. -->
+               while Run stays at the right. 設定 itself lives in the header
+               (#header-settings-btn, openContextSettingsModal in app.js)
+               rather than in this row -- 人像設定 now folds into it too (see
+               #advanced-settings-fold in #settings-modal), so there's no
+               separate trigger button here anymore. -->
           <div class="upload-actions-row">
             <button id="demo-images-btn" class="btn btn-secondary" type="button">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
@@ -3142,21 +3168,6 @@
                 <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
               <span class="btn-label">範例</span>
-            </button>
-            <!-- Moved out of #settings-modal (used to be the last item in
-                 .settings-modal-body) -- sits here so 人像設定 is
-                 reachable without opening 設定 first. Opens the SAME
-                 #advanced-settings-modal as its results-page twin,
-                 #ap-advanced-settings-btn -- one shared modal, not a second
-                 copy of its markup, since it's just toggling that modal's
-                 own hidden attribute regardless of which page it was opened
-                 from (see openAdvancedSettingsModal in app.js). -->
-            <button id="advanced-settings-btn" class="btn btn-secondary" type="button">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2"/>
-                <path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-              <span class="btn-label">人像設定</span>
             </button>
             <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後，接續修圖並顯示結果">
               <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
@@ -3459,34 +3470,15 @@
                      very bottom of the panel -- read the review tabs above
                      first, then adjust portrait settings and run. -->
                 <div class="ap-actions-row">
-                  <!-- Groups #ap-advanced-settings-btn + #inline-analysis-continue-btn
-                       as one flex item (.ap-settings-run-row) so they always
-                       wrap together and stay right-aligned as a pair.
-                       margin-left:auto lives on this wrapper (see styles below)
-                       so the *pair* moves as a unit to whichever line has room,
-                       still right-aligned there. 設定 itself no longer has a
-                       trigger in this row -- it now lives in the header
-                       (#header-settings-btn, openContextSettingsModal in
-                       app.js). -->
+                  <!-- Holds #inline-analysis-continue-btn -- used to also hold
+                       #ap-advanced-settings-btn, but 人像設定 now folds into
+                       設定 instead (#advanced-settings-fold, reparented into
+                       whichever settings modal is open -- see
+                       openApSettingsModal/openSettingsModal in app.js), so
+                       there's no separate trigger button here anymore.
+                       margin-left:auto still lives on this wrapper (see
+                       styles below) to keep Run right-aligned. -->
                   <div class="ap-settings-run-row">
-                    <!-- Moved out of #ap-settings-modal (used to be the last
-                         item in .settings-modal-body) -- sits here so
-                         人像設定 is reachable without opening 設定 first.
-                         Opens the SAME #advanced-settings-modal as its
-                         upload-page twin, #advanced-settings-btn -- one shared
-                         modal, not a second copy of its markup, since it's
-                         just toggling that modal's own hidden attribute
-                         regardless of which page it was opened from (see
-                         openAdvancedSettingsModal in app.js). -->
-                    <button id="ap-advanced-settings-btn" type="button" class="ap-style-trigger ap-recipe-trigger">
-                      <span class="option-pill-icon">
-                        <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                          <circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/>
-                          <path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-                        </svg>
-                      </span>
-                      <span class="ap-style-value">人像設定</span>
-                    </button>
                     <!-- Moved out of #inline-analysis-actions (which keeps
                          just the cancel button) -- sits at the right end of
                          this pill row instead. Own hidden attribute now (was
@@ -4278,7 +4270,7 @@
       <span id="settings-modal-title" class="settings-modal-title">設定</span>
       <button id="settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
-    <div class="settings-modal-body">
+    <div id="settings-modal-body" class="settings-modal-body">
     <div class="option-pill-group">
       <span class="option-pill-label">分析模型</span>
       <details class="ap-style-item" name="upload-option-picker" id="analysis-model-picker">
@@ -4373,6 +4365,94 @@
         </select>
       </details>
     </div>
+    <!-- Collapsed by default -- these were the last item inside this same
+         .settings-modal-body once before, then got their own separate
+         #advanced-settings-modal (reachable via a dedicated 人像設定 button)
+         so they wouldn't require opening 設定 first. Folded back in here
+         now instead, just collapsed rather than always-expanded, so 設定
+         stays the single entry point without losing that at-a-glance
+         reachability -- one click on the summary below expands it.
+         This exact fold (#advanced-settings-fold) is shared with the
+         results page's #ap-settings-modal too -- openSettingsModal/
+         openApSettingsModal (app.js) reparent it into whichever modal is
+         actually open instead of keeping two copies of these inputs. -->
+    <details id="advanced-settings-fold" class="settings-fold">
+      <summary>人像設定</summary>
+      <div class="settings-fold-body">
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">閉眼偵測</span>
+            <span class="option-desc">偵測到閉眼或半閉眼時進行修正。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="eye-closed-detection-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">眼神對焦</span>
+            <span class="option-desc">修正視線方向與眼神焦點。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="eye-gaze-focus-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">亂髮偵測</span>
+            <span class="option-desc">偵測到碎髮擋臉、髮絲翹起、毛躁、被風吹亂或瀏海結塊時進行整理。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="hair-mess-detection-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <fieldset id="hair-tidiness-level" class="option-segment-group">
+          <legend class="option-pill-label">整理程度</legend>
+          <div class="option-segments">
+            <label class="option-segment">
+              <input id="hair-level-dynamic" type="radio" name="hair-tidiness-level" value="dynamic" checked>
+              <span>保留髮絲動態</span>
+            </label>
+            <label class="option-segment">
+              <input id="calm-hair-toggle" type="radio" name="hair-tidiness-level" value="tidy">
+              <span>梳整俐落</span>
+            </label>
+          </div>
+          <span id="hair-tidiness-desc" class="option-desc">保留髮絲被風吹動或人物移動時的自然飄動感。</span>
+        </fieldset>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">笑容調整</span>
+            <span class="option-desc">依所選程度調整每個人的笑容。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="smile-adjustment-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <fieldset id="smile-level-picker" class="option-segment-group option-segment-group--five">
+          <legend class="option-pill-label">笑容程度</legend>
+          <div class="option-segments">
+            <label class="option-segment"><input type="radio" name="smile-level-choice" value="auto" checked><span>自動</span></label>
+            <label class="option-segment"><input type="radio" name="smile-level-choice" value="neutral"><span>不笑</span></label>
+            <label class="option-segment"><input type="radio" name="smile-level-choice" value="gentle"><span>微笑</span></label>
+            <label class="option-segment"><input type="radio" name="smile-level-choice" value="broad"><span>開朗笑</span></label>
+            <label class="option-segment"><input type="radio" name="smile-level-choice" value="laughing"><span>大笑</span></label>
+          </div>
+          <span id="smile-level-desc" class="option-desc">為沒有笑的人加上自然笑容，已經在笑的人維持原樣。</span>
+          <select id="smile-level" hidden>
+            <option value="auto" selected>自動</option>
+            <option value="neutral">不笑</option>
+            <option value="gentle">微笑</option>
+            <option value="broad">開朗笑</option>
+            <option value="laughing">大笑</option>
+          </select>
+        </fieldset>
+      </div>
+    </details>
     <!-- Unchecking this skips pipeline.finish_stage's Step 5b (the isolated
          gaze-repair re-pass) and relies on Step 5's own bundled edit call
          alone -- one edit-model round trip instead of two. Unchecked (one
@@ -4456,90 +4536,6 @@
   </div>
 </div>
 
-<div id="advanced-settings-modal" class="error-modal" hidden>
-  <div class="error-modal-backdrop" data-close="1"></div>
-  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="advanced-settings-modal-title">
-    <div class="error-modal-hdr">
-      <span id="advanced-settings-modal-title" class="settings-modal-title">人像設定</span>
-      <button id="advanced-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
-    </div>
-    <div class="settings-modal-body">
-      <label class="option-row">
-        <div class="option-text">
-          <span class="option-label">閉眼偵測</span>
-          <span class="option-desc">偵測到閉眼或半閉眼時進行修正。</span>
-        </div>
-        <label class="ios-switch">
-          <input id="eye-closed-detection-toggle" type="checkbox" checked>
-          <span class="ios-track"><span class="ios-thumb"></span></span>
-        </label>
-      </label>
-      <label class="option-row">
-        <div class="option-text">
-          <span class="option-label">眼神對焦</span>
-          <span class="option-desc">修正視線方向與眼神焦點。</span>
-        </div>
-        <label class="ios-switch">
-          <input id="eye-gaze-focus-toggle" type="checkbox" checked>
-          <span class="ios-track"><span class="ios-thumb"></span></span>
-        </label>
-      </label>
-      <label class="option-row">
-        <div class="option-text">
-          <span class="option-label">亂髮偵測</span>
-          <span class="option-desc">偵測到碎髮擋臉、髮絲翹起、毛躁、被風吹亂或瀏海結塊時進行整理。</span>
-        </div>
-        <label class="ios-switch">
-          <input id="hair-mess-detection-toggle" type="checkbox" checked>
-          <span class="ios-track"><span class="ios-thumb"></span></span>
-        </label>
-      </label>
-      <fieldset id="hair-tidiness-level" class="option-segment-group">
-        <legend class="option-pill-label">整理程度</legend>
-        <div class="option-segments">
-          <label class="option-segment">
-            <input id="hair-level-dynamic" type="radio" name="hair-tidiness-level" value="dynamic" checked>
-            <span>保留髮絲動態</span>
-          </label>
-          <label class="option-segment">
-            <input id="calm-hair-toggle" type="radio" name="hair-tidiness-level" value="tidy">
-            <span>梳整俐落</span>
-          </label>
-        </div>
-        <span id="hair-tidiness-desc" class="option-desc">保留髮絲被風吹動或人物移動時的自然飄動感。</span>
-      </fieldset>
-      <label class="option-row">
-        <div class="option-text">
-          <span class="option-label">笑容調整</span>
-          <span class="option-desc">依所選程度調整每個人的笑容。</span>
-        </div>
-        <label class="ios-switch">
-          <input id="smile-adjustment-toggle" type="checkbox" checked>
-          <span class="ios-track"><span class="ios-thumb"></span></span>
-        </label>
-      </label>
-      <fieldset id="smile-level-picker" class="option-segment-group option-segment-group--five">
-        <legend class="option-pill-label">笑容程度</legend>
-        <div class="option-segments">
-          <label class="option-segment"><input type="radio" name="smile-level-choice" value="auto" checked><span>自動</span></label>
-          <label class="option-segment"><input type="radio" name="smile-level-choice" value="neutral"><span>不笑</span></label>
-          <label class="option-segment"><input type="radio" name="smile-level-choice" value="gentle"><span>微笑</span></label>
-          <label class="option-segment"><input type="radio" name="smile-level-choice" value="broad"><span>開朗笑</span></label>
-          <label class="option-segment"><input type="radio" name="smile-level-choice" value="laughing"><span>大笑</span></label>
-        </div>
-        <span id="smile-level-desc" class="option-desc">為沒有笑的人加上自然笑容，已經在笑的人維持原樣。</span>
-        <select id="smile-level" hidden>
-          <option value="auto" selected>自動</option>
-          <option value="neutral">不笑</option>
-          <option value="gentle">微笑</option>
-          <option value="broad">開朗笑</option>
-          <option value="laughing">大笑</option>
-        </select>
-      </fieldset>
-    </div>
-  </div>
-</div>
-
 <!-- Results/analysis-preview page settings overlay: opened by
      #header-settings-btn (see openContextSettingsModal/openApSettingsModal/
      closeApSettingsModal in app.js) -- same backdrop+box+close pattern as
@@ -4560,7 +4556,7 @@
       <span id="ap-settings-modal-title" class="settings-modal-title">設定</span>
       <button id="ap-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
-    <div class="settings-modal-body">
+    <div id="ap-settings-modal-body" class="settings-modal-body">
     <div class="option-pill-group">
       <span class="option-pill-label">分析模型</span>
       <details class="ap-style-item is-locked" name="ap-result-option-picker" id="ap-analysis-model-picker">

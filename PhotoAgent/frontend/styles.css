@@ -294,14 +294,13 @@ a { text-decoration: none; color: inherit; }
   /* Grow to fill whatever the row has left (#upload-options-card is 0-width
      outside debug mode) -- #demo-images-btn's own margin-right:auto below
      needs real slack in this box to push against, or it just sits flush
-     next to #advanced-settings-btn with nothing to separate them. */
+     next to Run with nothing to separate them. */
   flex: 1 1 auto;
 }
-/* #demo-images-btn shares this row with #advanced-settings-btn/Run
-   (index.html) but reads as a separate, lower-priority action from them --
-   margin-right:auto soaks up the row's own flex-end-driven extra space,
-   pinning this one button to the row's left edge while
-   #advanced-settings-btn/Run stay grouped and right-aligned as before. */
+/* #demo-images-btn shares this row with Run (index.html) but reads as a
+   separate, lower-priority action from it -- margin-right:auto soaks up the
+   row's own flex-end-driven extra space, pinning this one button to the
+   row's left edge while Run stays right-aligned as before. */
 .upload-actions-row #demo-images-btn {
   margin-right: auto;
 }
@@ -2118,7 +2117,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      breathing room. */
   .upload-container { padding-top: 16px; padding-bottom: 16px; }
 
-  /* Run/#advanced-settings-btn/#demo-images-btn sit side by side
+  /* Run/#demo-images-btn sit side by side
      (.upload-actions-row is a row, not a stack) all the way down -- shrink
      each button's own padding/font instead of ever going full-width, so
      they keep fitting the row as the viewport narrows (it also wraps if
