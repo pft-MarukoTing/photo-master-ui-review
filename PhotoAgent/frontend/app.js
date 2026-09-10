@@ -7387,6 +7387,10 @@
     "gpt-5.6-sol": { input: { text: 4.00, image: 4.00 }, output: { text: 20.00, image: 20.00 } },
     "gpt-image-2": { input: { text: 5.00, image: 8.00 }, output: { text: 0, image: 30.00 } },
     "gpt-image-1.5": { input: { text: 5.00, image: 8.00 }, output: { text: 10.00, image: 32.00 } },
+    // developers.openai.com's gpt-image-2.5-sunburst/-flare model cards both
+    // state "Token rates match GPT Image 2" -- no separate published rate.
+    "gpt-image-2.5-sunburst": { input: { text: 5.00, image: 8.00 }, output: { text: 0, image: 30.00 } },
+    "gpt-image-2.5-flare": { input: { text: 5.00, image: 8.00 }, output: { text: 0, image: 30.00 } },
     "nano-banana-2": { input: { text: 0.50, image: 0.50 }, output: { text: 60.00, image: 60.00 } },
     "nano-banana-lite": { input: { text: 0.25, image: 0.25 }, output: { text: 30.00, image: 30.00 } }
   };

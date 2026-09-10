@@ -482,11 +482,12 @@ _GEMINI_ASPECT_RATIO_CHOICES = [
     ("4:5", 4 / 5), ("5:4", 5 / 4), ("9:16", 9 / 16), ("16:9", 16 / 9), ("21:9", 21 / 9),
 ]
 
-# gpt-image-2 (unlike gpt-image-1.5) accepts an arbitrary "WIDTHxHEIGHT" `size`
-# instead of a fixed enum, so the source photo's exact aspect ratio can be
-# requested directly rather than snapped. The API still requires both edges
-# divisible by 16 and the ratio within 1:3..3:1.
-_OPENAI_ARBITRARY_SIZE_MODELS = {"gpt-image-2"}
+# gpt-image-2 and the gpt-image-2.5 family (unlike gpt-image-1.5) accept an
+# arbitrary "WIDTHxHEIGHT" `size` instead of a fixed enum, so the source
+# photo's exact aspect ratio can be requested directly rather than snapped.
+# The API still requires both edges divisible by 16 and the ratio within
+# 1:3..3:1.
+_OPENAI_ARBITRARY_SIZE_MODELS = {"gpt-image-2", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare"}
 _OPENAI_SIZE_GRID = 16
 _OPENAI_SIZE_MIN_RATIO = 1 / 3
 _OPENAI_SIZE_MAX_RATIO = 3.0

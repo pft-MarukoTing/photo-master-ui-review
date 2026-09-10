@@ -29,6 +29,8 @@ window.PhotoAgentConfig = {
   defaultEditorPromptStrategy: "resolved_compact",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
+    "gpt-image-2.5-sunburst": "GPT Image 2.5 Sunburst",
+    "gpt-image-2.5-flare": "GPT Image 2.5 Flare",
     "nano-banana-2": "Nano Banana 2",
     "MAI-Image-2.6": "MAI-Image-2.6"
   },
@@ -46,6 +48,10 @@ window.PhotoAgentConfig = {
   imageModelQualityOptions: [
     { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard" },
     { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced" },
+    { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard" },
+    { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced" },
+    { value: "gpt-image-2.5-flare:low", model: "gpt-image-2.5-flare", quality: "low", label: "GPT Image 2.5 Flare · Standard" },
+    { value: "gpt-image-2.5-flare:medium", model: "gpt-image-2.5-flare", quality: "medium", label: "GPT Image 2.5 Flare · Enhanced" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" },
     { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6" }
   ],

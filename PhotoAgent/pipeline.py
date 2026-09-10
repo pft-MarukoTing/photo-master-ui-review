@@ -40,6 +40,8 @@ from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
     "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
+    "gpt-image-2.5-sunburst": partial(edit_photo, model="gpt-image-2.5-sunburst"),
+    "gpt-image-2.5-flare": partial(edit_photo, model="gpt-image-2.5-flare"),
     "nano-banana-2": edit_photo_gemini,
     "nano-banana-lite": partial(edit_photo_gemini, model=NANO_BANANA_LITE_MODEL),
     "MAI-Image-2.6": partial(edit_photo_mai, model=MAI_IMAGE_26_MODEL),
@@ -53,6 +55,8 @@ EDIT_PHOTO_BY_MODEL = {
 GAZE_REPAIR_BY_MODEL = {
     "gpt-image-2": edit_gaze_only_openai,
     "gpt-image-1.5": partial(edit_gaze_only_openai, model="gpt-image-1.5"),
+    "gpt-image-2.5-sunburst": partial(edit_gaze_only_openai, model="gpt-image-2.5-sunburst"),
+    "gpt-image-2.5-flare": partial(edit_gaze_only_openai, model="gpt-image-2.5-flare"),
     "nano-banana-2": edit_gaze_only_gemini,
     "nano-banana-lite": partial(edit_gaze_only_gemini, model=NANO_BANANA_LITE_MODEL),
 }
