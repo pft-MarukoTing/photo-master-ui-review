@@ -106,14 +106,81 @@ STYLE_OPTION_INSTRUCTIONS = {
             "The result should have a more assertive visual presence, not merely a subtle posture cleanup. "
             "Create strength through the overall body language: upright posture, grounded stance, stable balance, cleaner body direction, "
             "stronger shoulder line, controlled head angle, focused gaze, and deliberate use of arms and hands. "
-            "Prefer a varied confident pose that suits the input image, such as hands relaxed by the side, hands in pockets, arms loosely crossed, "
-            "one arm resting on a nearby surface, a subtle forward lean, a wider stance, a cleaner side-facing stance, or a composed neutral arm position. "
+            "Prefer a varied confident pose that suits the input image, such as hands relaxed by the side, arms folded squarely across the chest, "
+            "one hand on the hip, one arm resting on a nearby surface, a subtle forward lean, a wider grounded stance, a cleaner side-facing stance, or a composed neutral arm position. "
             "For products, objects, architecture, or scenes, strengthen the presentation through a more deliberate orientation, clearer silhouette, "
             "more stable structure, and stronger visual hierarchy while preserving the same subject and scene. "
             "If the original already looks strong, move it into a different strong pose with a visibly changed stance, gesture, torso direction, "
             "head direction, arm position, or weight distribution rather than leaving it unchanged. "
             "Preserve identity or object form, body/object proportions, clothing/materials, location, props, and photographic realism. "
             "Avoid exaggerated fashion posing, aggressive body distortion, unrealistic anatomy, or changing the subject into a different person/object."
+        ),
+        "elegant": (
+            "Transform the subject into a clearly elegant, poised pose, not just a slightly tidier version of the original. "
+            "The result should read as refined and graceful, with a visible change in how the body is carried. "
+            "Build the elegance from line rather than effort: a lengthened neck, shoulders lowered and drawn open, a slight chin tuck, "
+            "a gentle curve through the torso, weight settled onto one leg with the other foot lightly placed, and hands placed deliberately -- "
+            "resting at the waist, grazing a collar or sleeve, holding the opposite wrist, or falling in a soft unclenched line at the side. "
+            "Keep the expression composed and quiet rather than broadly smiling. "
+            "If the main subject is not a person, express the same restraint through a more deliberate orientation, cleaner silhouette, and calmer arrangement. "
+            "If the original already looks elegant, move it into a different elegant pose with a visibly changed weight distribution, arm line, torso rotation, "
+            "or head angle rather than leaving it unchanged. "
+            "Preserve identity, body proportions, clothing/materials, location, props, and photographic realism. "
+            "Avoid runway contortion, stiff formality, an over-arched back, unnaturally lengthened neck or limbs, or changing the subject into a different person."
+        ),
+        "dynamic": (
+            "Transform the subject into a clearly dynamic pose caught mid-motion, not a static pose with a hint of movement. "
+            "The result should read as one frozen frame out of a moving moment, the body committed to an action rather than holding still. "
+            "Use a visible motion cue that suits the scene: a mid-stride step with the weight arriving on the front foot, a torso turning toward or away from the camera, "
+            "hair and clothing carried by the movement, an arm swinging through, a hand pushing hair back, or a look thrown back over the shoulder. "
+            "Keep the motion within one believable step or turn -- do not invent a jump, spin, or sprint unless the original scene already supports it. "
+            "If the main subject is not a person, convey the motion through a more active orientation or arrangement rather than by animating the object. "
+            "If the original already shows motion, move it to a different point in that movement instead of leaving it essentially unchanged. "
+            "Preserve identity, body proportions, limb count and joint direction, clothing/materials, location, props, and photographic realism. "
+            "Render it as a sharp, well-exposed frame: no motion blur, ghosting, streaked or duplicated limbs, distorted hands, floating feet, or lost ground contact."
+        ),
+        "cool": (
+            "Transform the subject into a clearly cool, effortless, self-possessed pose. "
+            "The result should read as unbothered rather than eager -- presence without performance -- and its body language should differ visibly from the original. "
+            "Build it from a relaxed, slightly asymmetric stance: weight dropped onto one hip, shoulders loose and angled a little off the camera axis, chin level or fractionally lifted, "
+            "and hands doing something casual such as one or both in pockets, a thumb hooked into a waistband or strap, an arm hanging loose, a hand at the back of the neck, "
+            "or arms folded low and easy. Let the gaze go level into the lens or off past the camera, with the expression neutral to faintly amused rather than openly smiling. "
+            "If the main subject is not a person, express the same ease through a looser, less centered, less formally staged presentation. "
+            "If the original already looks cool, move it into a different cool pose with a visibly changed stance, hand placement, torso direction, or gaze rather than leaving it unchanged. "
+            "Preserve identity, body proportions, clothing/materials, location, props, and photographic realism. "
+            "Avoid a slouch that collapses the spine, a sulky or aggressive expression, exaggerated street-style posturing, or changing the subject into a different person."
+        ),
+        "vsign": (
+            "Transform the subject into a clearly casual V-sign pose -- the everyday peace-sign gesture, thrown off without ceremony. "
+            "The result should read as offhand and unforced rather than staged: the gesture is a throwaway, not a presentation. "
+            "Raise one hand into a relaxed V near the face -- beside the cheek, at the temple, or level with the shoulder -- with a loose wrist and the elbow "
+            "bent naturally rather than held out stiffly, and let the rest of the body stay easy: weight on one leg, a small head tilt toward the raised hand, "
+            "and the free hand hanging loose, in a pocket, or resting at the hip. A lightly kicked-back foot, a small step, or a half-turn of the torso may be "
+            "added when the scene supports it. Let the expression brighten to match the gesture. "
+            "Render the hand with exactly two extended fingers, index and middle, parted, with the remaining fingers folded down and the thumb tucked across them; "
+            "keep five fingers in total, correct joint direction, and a hand size normal relative to the face. "
+            "Never let the raised hand cover an eye, an eyebrow, or the mouth. "
+            "If the main subject is not a person, this gesture does not apply -- leave the subject's arrangement unchanged rather than inventing an equivalent. "
+            "If the original already shows a V-sign, change which hand is raised, its height, or the surrounding body language rather than leaving it unchanged. "
+            "Preserve identity, body proportions, clothing/materials, location, props, and photographic realism. "
+            "Avoid a stiff arm shot straight at the camera, a mangled or extra-fingered hand, a palm pressed flat against the cheek, a cutesy childish rendition, "
+            "or changing the subject into a different person."
+        ),
+        "cheer": (
+            "Transform the subject into a clearly joyful open-armed pose, both arms lifted and opened wide in celebration. "
+            "The result should read as one unguarded happy moment, with the whole body opening up rather than the arms alone moving. "
+            "Lift both arms up and out -- overhead in a wide V, or spread open at shoulder height -- with the chest open, shoulders back and down, hands relaxed "
+            "or palms open, and the weight light on the feet, optionally with a small rise onto the toes, a step, or a slight backward tilt of the head. "
+            "Let the expression brighten to match the gesture. "
+            "Fit the gesture to the existing frame: where there is not enough room above the head, open the arms outward and lower instead of raising them until "
+            "the hands leave the frame or crowd its top edge. Do not extend the canvas, zoom out, or paint new scene to make room for them. "
+            "Keep the two arms matched in length and believable at the shoulder joint, with five fingers on each hand and correct joint direction. "
+            "If the main subject is not a person, this gesture does not apply -- leave the subject's arrangement unchanged rather than inventing an equivalent. "
+            "If the original already shows open arms, move it to a different open-armed moment with a visibly changed arm height, spread, or stance rather than "
+            "leaving it unchanged. "
+            "Preserve identity, body proportions, clothing/materials, location, props, and photographic realism. "
+            "Avoid dislocated or overlong arms, hands cut off at the wrist, a strained or forced grin, an invented mid-air jump the scene does not support, "
+            "or changing the subject into a different person."
         ),
     },
     "angle": {
@@ -248,7 +315,11 @@ STYLE_OPTION_LABELS = {
 # text above. Must match frontend/results.js's POSE_OPTIONS/ANGLE_OPTIONS/
 # LIGHTING_OPTIONS/SIZE_OPTIONS labels.
 STYLE_OPTION_VALUE_LABELS = {
-    "pose": {"playful": "Playful", "candid": "Candid", "strong": "Strong"},
+    "pose": {
+        "playful": "Playful", "candid": "Candid", "strong": "Strong",
+        "elegant": "Elegant", "dynamic": "Dynamic", "cool": "Cool",
+        "vsign": "V-Sign", "cheer": "Cheer",
+    },
     "angle": {"high": "High Shot", "low": "Low Shot", "eye": "Eye Level", "side": "Side Shot"},
     "lighting": {"gold": "Gold Tone", "soft": "Soft Glow"},
     "size": {"wide": "Wide", "wider": "Wider", "close": "Close", "closer": "Closer"},

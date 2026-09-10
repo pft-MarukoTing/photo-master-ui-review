@@ -7,7 +7,12 @@ window.PhotoAgentResults = (() => {
     DEFAULT_OPTION,
     { value: "playful", label: "Playful" },
     { value: "candid", label: "Candid" },
-    { value: "strong", label: "Strong" }
+    { value: "strong", label: "Strong" },
+    { value: "elegant", label: "Elegant" },
+    { value: "dynamic", label: "Dynamic" },
+    { value: "cool", label: "Cool" },
+    { value: "vsign", label: "V-Sign" },
+    { value: "cheer", label: "Cheer" }
   ];
   const ANGLE_OPTIONS = [
     DEFAULT_OPTION,
@@ -31,10 +36,14 @@ window.PhotoAgentResults = (() => {
   // Maps each non-default option value to its example image in
   // assets/optional_style/<group>/ -- used by fillStyleOptionList to show the
   // 修圖風格 tab's option buttons as image thumbnails instead of plain text.
-  // "default"/"Auto" has no file (there's nothing to show an example image
-  // of), so it renders as a text-only placeholder card instead.
+  // A value with no entry here -- "default"/Auto -- renders as a text-only
+  // card showing its label instead.
   const STYLE_OPTION_IMAGES = {
-    pose: { playful: "pose-playful.png", candid: "pose-candid.png", strong: "pose-strong.png" },
+    pose: {
+      playful: "pose-playful.png", candid: "pose-candid.png", strong: "pose-strong.png",
+      elegant: "pose-elegant.png", dynamic: "pose-dynamic.png", cool: "pose-cool.png",
+      vsign: "pose-vsing.png", cheer: "pose-cheer.png"
+    },
     angle: { high: "angle-highshot.png", low: "angle-lowshot.png", eye: "angle-eyelevel.png" },
     lighting: { gold: "lighting-goldtone.png", soft: "lighting-soft.png" },
     size: { wide: "size-wide.png", wider: "size-wider.png", close: "size-close.png", closer: "size-closer.png" }
@@ -358,7 +367,7 @@ window.PhotoAgentResults = (() => {
       } else {
         thumb = document.createElement("span");
         thumb.className = "ap-style-option-thumb ap-style-option-thumb-default";
-        thumb.textContent = "Auto";
+        thumb.textContent = opt.label;
       }
 
       const text = document.createElement("span");
