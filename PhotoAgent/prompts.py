@@ -243,7 +243,7 @@ Return exactly this JSON shape:
   "visual_balance_strategy": "左右與上下視覺重量如何處理。",
   "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
   "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
-  "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景，以及如何處理。",
+  "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景；針對每個判定為干擾的元素，說明具體且可執行的處理方式，避免只描述抽象的感受或意圖。",
   "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
@@ -972,7 +972,7 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
 - Treat edit_intent as the single finished light-and-color target. Define a specific overall brightness, tonal relationship, and scene palette that make this photograph polished and visually compelling.
 - Make lighting_strategy and memory_color_strategy implementation plans for that same target. They must strengthen edit_intent rather than introduce a different mood, brightness target, or instruction to retain the captured scene color.
-- Translate the target into correction_plan. Each item names its region, concrete adjustment, useful strength, and visible contribution to the finished result. Include the light and color work needed to create the target, not only defect repair.
+- Translate the target into correction_plan. Each item names its region, concrete adjustment, useful strength, and visible contribution to the finished result. Include the light and color work needed to create the target, not only defect repair. Word it concretely and executably -- if an item only conveys an abstract feeling or impression rather than an operation someone could actually carry out, rewrite it to name that operation.
 - Protect skin color independently according to subjects[].skin. Scene exposure, white balance, contrast, hue, and saturation remain available to achieve edit_intent.
 - Size correction_plan to what the photo actually needs, choosing the few adjustments with the greatest visual benefit. An already successful photograph may need none.
 - Eye-opening is not a routine portrait enhancement. Add eye or blink repair to correction_plan only when the expression-intent rules above say should_fix=true.
@@ -1024,7 +1024,7 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 - For completeness-first presentation, catalog-like, symmetrical, circular, stacked, shape-critical, food/product/object/still-life images, centered or near-centered balance is often competitive.
 - For lifestyle, story, portrait, street, travel, action, gaze, gesture, interaction, leading lines, asymmetry, or intentional negative space, off-center, thirds, diagonal, symmetry, or context-preserving framing may be stronger.
 - Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
-- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements and reduce emphasis through subtle retouching rather than rebuilding the scene.
+- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements; for each harmful element, decide a concrete and executable treatment rather than an abstract description of the desired feel. Never rebuild the scene to remove it.
 - Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
 - Preserve scene truth: background structure, surface material, perspective, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
 - For people and animals, the face ROI alone is not automatically the whole subject. Protect the semantic subject extent and role cues required by the framing. Partial-person crops are acceptable only when intentional, clean, and supportive of the scene.
@@ -1962,7 +1962,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "visual_balance_strategy": "左右與上下視覺重量如何處理。",
   "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
   "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
-  "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景，以及如何處理。",
+  "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景；針對每個判定為干擾的元素，說明具體且可執行的處理方式，避免只描述抽象的感受或意圖。",
   "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
@@ -2104,7 +2104,7 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 - For completeness-first presentation, catalog-like, symmetrical, circular, stacked, shape-critical, food/product/object/still-life images, centered or near-centered balance is often competitive.
 - For lifestyle, story, portrait, street, travel, action, gaze, gesture, interaction, leading lines, asymmetry, or intentional negative space, off-center, thirds, diagonal, symmetry, or context-preserving framing may be stronger.
 - Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
-- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements and reduce emphasis through subtle retouching rather than rebuilding the scene.
+- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements; for each harmful element, decide a concrete and executable treatment rather than an abstract description of the desired feel. Never rebuild the scene to remove it.
 - Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
 - Preserve scene truth: background structure, surface material, perspective, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
 - For people and animals, the face ROI alone is not automatically the whole subject. Protect the semantic subject extent and role cues required by the framing. Partial-person crops are acceptable only when intentional, clean, and supportive of the scene.
@@ -2121,7 +2121,7 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - Decide the composition intent and framing intent before proposing any crop. Centering, thirds, symmetry, leading lines, and negative space are candidate strategies, not fixed rules.
 - Treat edit_intent as the single finished light-and-color target. Define a specific overall brightness, tonal relationship, and scene palette that make this photograph polished and visually compelling.
 - Make lighting_strategy and memory_color_strategy implementation plans for that same target. They must strengthen edit_intent rather than introduce a different mood, brightness target, or instruction to retain the captured scene color.
-- Translate the target into correction_plan. Each item names its region, concrete adjustment, useful strength, and visible contribution to the finished result. Include the light and color work needed to create the target, not only defect repair.
+- Translate the target into correction_plan. Each item names its region, concrete adjustment, useful strength, and visible contribution to the finished result. Include the light and color work needed to create the target, not only defect repair. Word it concretely and executably -- if an item only conveys an abstract feeling or impression rather than an operation someone could actually carry out, rewrite it to name that operation.
 - Protect skin color independently according to subjects[].skin. Scene exposure, white balance, contrast, hue, and saturation remain available to achieve edit_intent.
 - Size correction_plan to what the photo actually needs, choosing the few adjustments with the greatest visual benefit. An already successful photograph may need none.
 - correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis; any approved blink/gaze repair is executed directly from that person's own blink_issue/gaze_issue, never through correction_plan. Write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering composition/crop/color/skin/product corrections and aesthetic improvements supported by the photo.
