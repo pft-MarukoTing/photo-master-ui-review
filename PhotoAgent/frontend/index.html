@@ -743,12 +743,6 @@
        buttons, each a <details> whose panel pops over the content below
        instead of expanding it -- picking an option closes the panel and
        shows the pick on the pill itself, e.g. "Pose · Playful". ── */
-    .ap-style-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 10px;
-    }
     .ap-style-item { position: relative; }
     .ap-style-trigger {
       display: flex;
@@ -2810,14 +2804,7 @@
       .batch-sidebar-header { padding-right: 36px; }
     }
 
-    /* ── Run count row (inside the batch prompt row) ── */
-    .run-count-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
-    .run-count-row .field-label { margin: 0; }
-    .run-count-hint { font-size: 12.5px; color: var(--text-3); }
-
     .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 18px; }
-    .batch-prompt-row { margin-bottom: 18px; }
-    .batch-options-row { margin-bottom: 18px; }
     .batch-lock-toggle {
       display: flex;
       align-items: center;
@@ -2844,15 +2831,6 @@
        it must stay clickable so the user can actually unlock it. */
     .ap-style-item.is-locked .step-inline-list { opacity: .45; pointer-events: none; }
     .ap-style-item.is-locked > .ap-style-trigger { opacity: .7; }
-    .ap-style-lock-badge {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--text-2);
-      background: var(--card);
-      border: 1px solid var(--border-2);
-      border-radius: 8px;
-      padding: 1px 6px;
-    }
   </style>
 </head>
 <body>
@@ -3562,99 +3540,6 @@
           </svg>
         </button>
       </div>
-      <div id="batch-prompt-row" class="form-field batch-prompt-row" hidden>
-        <span class="field-label">整批補充指令</span>
-        <textarea id="batch-prompt" class="field-ta" rows="2"
-          placeholder="套用到未單獨設定補充指令的圖片若某張在分析裡自己填了補充指令，則以該張指令為準。"></textarea>
-        <div class="run-count-row">
-          <span class="field-label">生成張數</span>
-          <select id="run-count" class="quality-select">
-            <option value="1" selected>1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-            <option value="11">11</option>
-            <option value="12">12</option>
-            <option value="13">13</option>
-            <option value="14">14</option>
-            <option value="15">15</option>
-            <option value="16">16</option>
-            <option value="17">17</option>
-            <option value="18">18</option>
-            <option value="19">19</option>
-            <option value="20">20</option>
-          </select>
-          <span class="run-count-hint">每張圖依同一份分析獨立執行 N 個 RUN</span>
-        </div>
-      </div>
-      <details class="form-field batch-options-row" id="batch-options-row" hidden>
-        <summary class="field-label">整批修圖風格（可選）</summary>
-        <div class="ap-style-row">
-          <details class="ap-style-item" name="batch-style-group" id="batch-group-pose">
-            <summary class="ap-style-trigger">
-              <span class="ap-style-name">Pose</span>
-              <span class="ap-style-value">Auto</span>
-              <span class="ap-style-lock-badge" id="batch-pose-lock-badge" hidden>已鎖定</span>
-            </summary>
-            <div class="step-list-frame ap-style-panel">
-              <label class="batch-lock-toggle" id="batch-pose-lock-row" hidden>
-                <input type="checkbox" id="batch-pose-lock">
-                <span>已有單張調整，仍要修改整批預設</span>
-              </label>
-              <ul id="batch-pose-list" class="step-inline-list"></ul>
-            </div>
-          </details>
-          <details class="ap-style-item" name="batch-style-group" id="batch-group-angle">
-            <summary class="ap-style-trigger">
-              <span class="ap-style-name">Angle</span>
-              <span class="ap-style-value">Auto</span>
-              <span class="ap-style-lock-badge" id="batch-angle-lock-badge" hidden>已鎖定</span>
-            </summary>
-            <div class="step-list-frame ap-style-panel">
-              <label class="batch-lock-toggle" id="batch-angle-lock-row" hidden>
-                <input type="checkbox" id="batch-angle-lock">
-                <span>已有單張調整，仍要修改整批預設</span>
-              </label>
-              <ul id="batch-angle-list" class="step-inline-list"></ul>
-            </div>
-          </details>
-          <details class="ap-style-item" name="batch-style-group" id="batch-group-lighting">
-            <summary class="ap-style-trigger">
-              <span class="ap-style-name">Lighting</span>
-              <span class="ap-style-value">Auto</span>
-              <span class="ap-style-lock-badge" id="batch-lighting-lock-badge" hidden>已鎖定</span>
-            </summary>
-            <div class="step-list-frame ap-style-panel">
-              <label class="batch-lock-toggle" id="batch-lighting-lock-row" hidden>
-                <input type="checkbox" id="batch-lighting-lock">
-                <span>已有單張調整，仍要修改整批預設</span>
-              </label>
-              <ul id="batch-lighting-list" class="step-inline-list"></ul>
-            </div>
-          </details>
-          <details class="ap-style-item" name="batch-style-group" id="batch-group-size">
-            <summary class="ap-style-trigger">
-              <span class="ap-style-name">Size</span>
-              <span class="ap-style-value">Auto</span>
-              <span class="ap-style-lock-badge" id="batch-size-lock-badge" hidden>已鎖定</span>
-            </summary>
-            <div class="step-list-frame ap-style-panel">
-              <label class="batch-lock-toggle" id="batch-size-lock-row" hidden>
-                <input type="checkbox" id="batch-size-lock">
-                <span>已有單張調整，仍要修改整批預設</span>
-              </label>
-              <ul id="batch-size-list" class="step-inline-list"></ul>
-            </div>
-          </details>
-        </div>
-        <p class="run-count-hint">套用到未單獨設定風格選項的圖片；若某張在分析裡自己選了 Pose/Angle/Lighting/Size，則以該張選擇為準。有單張調整過的類別，整批選項會鎖定，需勾選上方開關才能繼續修改。</p>
-      </details>
       <button id="batch-continue-all-btn" class="btn btn-grad batch-continue-all-btn" type="button" hidden>
         全部繼續處理
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">

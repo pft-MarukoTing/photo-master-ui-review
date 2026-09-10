@@ -296,45 +296,9 @@ window.PhotoAgentResults = (() => {
     rejectedEntries.forEach(renderEntry);
   }
 
-  // Same checkbox-list look as fillCheckList, but backed by radio inputs
-  // sharing one `name` -- mutually exclusive selection within the group,
-  // enforced natively by the browser rather than custom JS.
-  function fillRadioList(element, options, name, defaultValue) {
-    if (!element) return;
-    element.innerHTML = "";
-    options.forEach((opt, index) => {
-      const li = document.createElement("li");
-      const label = document.createElement("label");
-
-      const cb = document.createElement("span");
-      cb.className = "step-cb";
-      const input = document.createElement("input");
-      input.type = "radio";
-      input.name = name;
-      input.value = opt.value;
-      input.id = `${name}-${index}`;
-      input.checked = opt.value === defaultValue;
-      const box = document.createElement("span");
-      box.className = "step-cb-box";
-      cb.appendChild(input);
-      cb.appendChild(box);
-
-      const text = document.createElement("span");
-      text.className = "step-cb-label";
-      text.textContent = opt.label;
-
-      label.appendChild(cb);
-      label.appendChild(text);
-      li.appendChild(label);
-      element.appendChild(li);
-    });
-  }
-
-  // Same picker as fillRadioList, but rendered as a grid of image-thumbnail
-  // buttons instead of a plain text radio list -- used only by the per-image
+  // Renders a grid of image-thumbnail buttons -- used only by the per-image
   // 修圖風格 tab's Pose/Angle/Lighting/Size lists (assets live in
-  // assets/optional_style/<group>/, see STYLE_OPTION_IMAGES above). The batch
-  // sidebar's equivalent lists keep using fillRadioList/plain text unchanged.
+  // assets/optional_style/<group>/, see STYLE_OPTION_IMAGES above).
   function fillStyleOptionList(element, options, name, defaultValue, group) {
     if (!element) return;
     element.innerHTML = "";
@@ -418,19 +382,15 @@ window.PhotoAgentResults = (() => {
   }
 
   // Updates a style-option pill's displayed value (e.g. "Playful") to match
-  // whichever radio in its list is currently checked -- shared by the initial
-  // fillRadioList/fillStyleOptionList render and by app.js after it restores
-  // a saved pick or the user selects a new one. Looks for the value pill two
-  // different ways: nested inside a .ap-style-item (the batch options row's
-  // always-visible list layout) or, for the per-image 修圖風格 tab where the
-  // type button and its option grid are siblings rather than nested, via the
-  // list's data-style-group attribute matching a .ap-style-type-btn.
-  // No-ops quietly if neither matches.
+  // whichever radio in its list is currently checked -- called by app.js
+  // after the per-image 修圖風格 tab's Pose/Angle/Lighting/Size lists restore
+  // a saved pick or the user selects a new one. The type button and its
+  // option grid are siblings rather than nested, so the pill is found via
+  // the list's data-style-group attribute matching a .ap-style-type-btn.
   function syncStyleTrigger(listElement) {
     if (!listElement) return;
     const group = listElement.dataset.styleGroup;
-    const valueEl = listElement.closest(".ap-style-item")?.querySelector(".ap-style-value")
-      || (group && document.querySelector(`.ap-style-type-btn[data-style-group="${group}"] .ap-style-value`));
+    const valueEl = group && document.querySelector(`.ap-style-type-btn[data-style-group="${group}"] .ap-style-value`);
     if (!valueEl) return;
     const checked = listElement.querySelector("input:checked");
     const label = checked?.closest("label")?.querySelector(".step-cb-label, .ap-style-option-label")?.textContent;
@@ -441,7 +401,7 @@ window.PhotoAgentResults = (() => {
   // "default" option and fires a real `change` event on it -- app.js's
   // per-image radio change listener is delegated onto the enclosing
   // #ap-*-list <ul> (see the wireup at the bottom of app.js), so this single
-  // dispatch is all that's needed to run the exact same markOptionTouched/
+  // dispatch is all that's needed to run the exact same
   // syncStyleTrigger/updateStyleTriggerLabel path a normal click on the
   // "Auto" card would -- no separate copy of that logic here.
   function clearStylePick(name) {
@@ -1976,8 +1936,7 @@ window.PhotoAgentResults = (() => {
     // benefit from camera-angle framing too). The actual retouch behavior
     // for these selections is not wired up yet -- this is UI only for now.
     // The 修圖風格 tab renders these as image-thumbnail buttons
-    // (fillStyleOptionList) instead of the batch sidebar's plain text
-    // fillRadioList.
+    // (fillStyleOptionList).
     fillStyleOptionList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default", "pose");
     fillStyleOptionList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default", "angle");
     fillStyleOptionList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default", "lighting");
@@ -1999,20 +1958,8 @@ window.PhotoAgentResults = (() => {
     fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
   }
 
-  // Fills the batch-level Pose/Angle/Lighting/Size radio groups with the same
-  // option lists as the single-image review screen. Called once at startup --
-  // unlike renderAnalysisPreview, this isn't re-run per image, since it holds
-  // one shared default for the whole batch rather than a per-image choice.
-  function renderBatchStyleOptions() {
-    fillRadioList(els.batchPoseList, POSE_OPTIONS, "batch-pose", "default");
-    fillRadioList(els.batchAngleList, ANGLE_OPTIONS, "batch-angle", "default");
-    fillRadioList(els.batchLightingList, LIGHTING_OPTIONS, "batch-lighting", "default");
-    fillRadioList(els.batchSizeList, SIZE_OPTIONS, "batch-size", "default");
-    [els.batchPoseList, els.batchAngleList, els.batchLightingList, els.batchSizeList].forEach(syncStyleTrigger);
-  }
-
   return {
-    renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger,
+    renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides,

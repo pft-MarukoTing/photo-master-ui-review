@@ -35,8 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards } = window.PhotoAgentResults;
-  renderBatchStyleOptions();
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -226,15 +225,6 @@
   // Batch mode: populated only when more than one file is selected. While
   // batchRecords is empty the app behaves exactly as the single-image flow.
   const POLL_CONCURRENCY = 4;
-  // Batch-level Pose/Angle/Lighting/Size controls, and the per-category lock
-  // toggle each shows once any image in the batch has been individually
-  // adjusted for that category (see updateBatchOptionsLocks).
-  const BATCH_OPTION_CATEGORIES = [
-    { key: "pose", group: "batchGroupPose", list: "batchPoseList", lockRow: "batchPoseLockRow", lock: "batchPoseLock", lockBadge: "batchPoseLockBadge" },
-    { key: "angle", group: "batchGroupAngle", list: "batchAngleList", lockRow: "batchAngleLockRow", lock: "batchAngleLock", lockBadge: "batchAngleLockBadge" },
-    { key: "lighting", group: "batchGroupLighting", list: "batchLightingList", lockRow: "batchLightingLockRow", lock: "batchLightingLock", lockBadge: "batchLightingLockBadge" },
-    { key: "size", group: "batchGroupSize", list: "batchSizeList", lockRow: "batchSizeLockRow", lock: "batchSizeLock", lockBadge: "batchSizeLockBadge" }
-  ];
   let batchRecords = [];   // see makeBatchRecord for record shape
   // Monotonic, never reused even across removals/resets -- batchRecords'
   // array index alone isn't a safe key (records get spliced out, and
@@ -568,7 +558,6 @@
     if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = "900px";
     applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
-    applyRunCountOptionLimit(els.runCountSelect, isDebug);
     applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebug);
     applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebug);
     applyAnalysisModelOptionLimit(els.analysisModelSelect, isDebug);
@@ -1011,7 +1000,6 @@
     const value = String(Math.max(1, parseInt(runCount, 10) || 1));
     if (els.imageRunCountSelect) els.imageRunCountSelect.value = value;
     if (els.apRunCountSelect) els.apRunCountSelect.value = value;
-    if (els.runCountSelect) els.runCountSelect.value = value;
     // wireOptionPicker only refreshes a picker's own visible label
     // (.ap-style-value) when THAT picker itself is opened (rebuild runs on
     // its "toggle") -- so picking a count on one picker left the other
@@ -1033,10 +1021,6 @@
   if (els.apRunCountSelect) {
     els.apRunCountSelect.addEventListener("change", () =>
       applyRunCountChange(els.apRunCountSelect.value));
-  }
-  if (els.runCountSelect) {
-    els.runCountSelect.addEventListener("change", () =>
-      applyRunCountChange(els.runCountSelect.value));
   }
 
   // Advanced Settings (人像設定) live in ONE shared modal
@@ -2537,13 +2521,13 @@
     // wrong" report with nothing on screen to point at (reportJob/
     // record_report both already treat job_id as optional).
     // Whatever 補充指令 text actually produced the result currently on
-    // screen: currentBatchRecord's own effectivePrompt (its per-image
-    // override, or the batch-wide prompt) when a batch result is showing,
-    // else lastSingleSelections.userPrompt -- set by finishSingleFlow for a
-    // live single-image submission, or restored from job.user_prompt
-    // (restoreReviseSelections) when viewing a history/report record.
+    // screen: currentBatchRecord's own userPrompt when a batch result is
+    // showing, else lastSingleSelections.userPrompt -- set by
+    // finishSingleFlow for a live single-image submission, or restored from
+    // job.user_prompt (restoreReviseSelections) when viewing a
+    // history/report record.
     const userPrompt = lastResult
-      ? (currentBatchRecord ? effectivePrompt(currentBatchRecord) : (lastSingleSelections?.userPrompt || ""))
+      ? (currentBatchRecord ? (currentBatchRecord.userPrompt || "") : (lastSingleSelections?.userPrompt || ""))
       : "";
     // Attaching a screenshot is entirely optional and reporter-triggered
     // (handleReportModalScreenshotCapture, wired to
@@ -2816,7 +2800,6 @@
       analysis: null,       // step-1 result (shown in the step-2 review panel)
       analyzeJobId: null,   // local path only: the analyze job, reused by continue
       options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
-      optionsTouched: {},   // per-category: did the user actually change this image's own radio (vs. just viewing the batch-inherited default)
       recipeChecked: null,  // per-image recipe checklist state (UI-only)
       bodyReshapeOverrides: null, // unchecked per-person body key points (UI-only)
       userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
@@ -2840,7 +2823,7 @@
       // Per-image 模型/畫質 + 長寬比 overrides (UI-only), set only once this
       // image's own revise panel is used to change them -- null means
       // "still inherits the batch-level default", same override rule as
-      // options/optionsTouched above (see effectiveModelQuality/
+      // options above (see effectiveModelQuality/
       // effectiveAspectRatio). Without their own slot here, every case's
       // revise panel wrote straight into the single shared `batchSettings`,
       // so picking a model on case 1 silently carried over to case 2.
@@ -3063,11 +3046,6 @@
     if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
-    if (els.batchPromptRow) els.batchPromptRow.hidden = true;
-    if (els.batchPromptInput) els.batchPromptInput.value = "";
-    if (els.batchOptionsRow) { els.batchOptionsRow.hidden = true; els.batchOptionsRow.open = false; }
-    renderBatchStyleOptions();
-    updateBatchOptionsLocks(); // batchRecords is now empty, so this clears every category's lock/toggle
   }
 
   // Labels for the categories OpenAI's safety system has been observed to
@@ -3896,15 +3874,6 @@
 
   // ── Batch step 1: analyze every image, then show the review grid ─────────
   async function startSubmitBatch(skipReview = false) {
-    // The batch-wide 生成張數 control (#run-count, shown later in the sidebar)
-    // starts out matching whatever the user picked on the upload page
-    // (#image-run-count) -- otherwise it's left at its own independent
-    // default (1) and batch-auto mode (which never pauses at the sidebar for
-    // the user to notice/adjust it) would silently run everyone once instead
-    // of the count actually configured before clicking Run.
-    if (els.runCountSelect && els.imageRunCountSelect) {
-      els.runCountSelect.value = els.imageRunCountSelect.value;
-    }
     const presetKey = "natural";
     const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
     batchSettings = {
@@ -4065,7 +4034,7 @@
   // anything this tab orchestrates, so a phone can sleep for the whole
   // batch's duration and every image's every RUN still finishes.
   async function runCombinedBatchAuto() {
-    const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
+    const runCount = Math.max(1, parseInt(els.imageRunCountSelect?.value, 10) || 1);
     batchRecords.forEach((r) => {
       r.runs = Array.from({ length: runCount }, (_, k) => ({
         run: k + 1, jobId: null, status: "processing", imageUrl: null, result: null, timings: [], error: null
@@ -4095,8 +4064,8 @@
   // uses the normal continueJob path, reusing record.analysis/record.analyzeJobId
   // populated below once the first RUN lands.
   async function analyzeAndEditBatchRecord(record, runCount) {
-    const userPrompt = effectivePrompt(record);
-    const overwritePrompt = effectiveOverwritePrompt(record);
+    const userPrompt = (record.userPrompt || "").trim();
+    const overwritePrompt = userPrompt ? !!record.overwritePrompt : false;
     const stepStart = Date.now();
     if (!record.uploadedAt) record.uploadedAt = stepStart / 1000;
     record.modifiedAt = stepStart / 1000;
@@ -4191,49 +4160,21 @@
     updateBatchDownloadAllVisibility();
   }
 
-  // Shows/hides the bulk "全部繼續處理" button + batch-wide prompt/options rows
-  // in the sidebar, based on whether there's at least one record still
-  // awaiting its first edit -- live-updated as analyses/edits complete, not
-  // just once at the end of a whole-batch phase.
+  // Shows/hides the bulk "全部繼續處理" button, based on whether there's at
+  // least one record still awaiting its first edit -- live-updated as
+  // analyses/edits complete, not just once at the end of a whole-batch phase.
   function updateBatchHeaderControls() {
     const ready = analyzedBatchRecords().length > 0;
     els.batchContinueAllBtn.hidden = !ready;
-    els.batchPromptRow.hidden = !ready;
-    if (els.batchOptionsRow) els.batchOptionsRow.hidden = !ready;
   }
 
-  // Effective per-image prompt: the image's own (from its review) wins; else the
-  // batch-level shared prompt applies.
-  function effectivePrompt(record) {
-    const own = (record.userPrompt || "").trim();
-    if (own) return own;
-    return (els.batchPromptInput && els.batchPromptInput.value.trim()) || "";
-  }
-
-  // "取代" checkbox only exists beside the per-image 補充指令 field, not the
-  // batch-shared one -- so it only ever applies when the image's own prompt
-  // (set during its review) is what's actually being sent.
-  function effectiveOverwritePrompt(record) {
-    const own = (record.userPrompt || "").trim();
-    return own ? !!record.overwritePrompt : false;
-  }
-
-  // Effective per-image style options: same override rule as effectivePrompt,
-  // but merged key-by-key (pose/angle/lighting/size) since each is an
-  // independent pick rather than one all-or-nothing string. Whether "own"
-  // wins is decided by optionsTouched (did the user actually change this
-  // image's radio), not by own's value -- merely displaying the batch's
-  // inherited pick (applyBatchReviewSelections) writes that same value into
-  // record.options on nav-away, and if we compared values instead, a later
-  // change to the batch-level pick would silently stop reaching any image
-  // that had simply been viewed once.
+  // Effective per-image style options: each category just falls back to
+  // "default" when the image's own review never set it.
   function effectiveOptions(record) {
     const own = record.options || {};
-    const touched = record.optionsTouched || {};
-    const batchOptions = readBatchStyleOptionsFromDom();
     const merged = {};
     ["pose", "angle", "lighting", "size"].forEach((key) => {
-      merged[key] = touched[key] ? (own[key] || "default") : (batchOptions[key] || "default");
+      merged[key] = own[key] || "default";
     });
     return merged;
   }
@@ -4262,52 +4203,6 @@
     return record.advancedOptions || batchSettings.advancedOptions;
   }
 
-  // Reads the batch-level Pose/Angle/Lighting/Size radios straight from the DOM.
-  function readBatchStyleOptionsFromDom() {
-    const checked = (name) => document.querySelector(`input[name="${name}"]:checked`);
-    return {
-      pose: checked("batch-pose")?.value || "default",
-      angle: checked("batch-angle")?.value || "default",
-      lighting: checked("batch-lighting")?.value || "default",
-      size: checked("batch-size")?.value || "default"
-    };
-  }
-
-  // Fires only on a genuine user click on one of the per-image ap-*-list
-  // radios (programmatic .checked writes from renderAnalysisPreview /
-  // applyStyleSelections don't dispatch "change"). Marks that category as
-  // individually adjusted for the currently-open batch record, then re-locks
-  // the matching batch-level control.
-  function markOptionTouched(key) {
-    const record = currentBatchRecord;
-    if (!record) return;
-    if (!record.optionsTouched) record.optionsTouched = {};
-    record.optionsTouched[key] = true;
-    updateBatchOptionsLocks();
-  }
-
-  // Disables a batch-level category's radios (and shows its unlock toggle)
-  // once any image in the batch has its own adjustment for that category --
-  // otherwise changing the batch default there would silently do nothing for
-  // the already-adjusted images while still being presented as "applies to
-  // all". The unlock checkbox lets the user override that guard deliberately.
-  function updateBatchOptionsLocks() {
-    BATCH_OPTION_CATEGORIES.forEach(({ key, group, list, lockRow, lock, lockBadge }) => {
-      const hasConflict = batchRecords.some((r) => r.optionsTouched && r.optionsTouched[key]);
-      const lockRowEl = els[lockRow];
-      const lockEl = els[lock];
-      if (lockRowEl) lockRowEl.hidden = !hasConflict;
-      if (!hasConflict && lockEl) lockEl.checked = false;
-      const locked = hasConflict && !(lockEl && lockEl.checked);
-      if (els[group]) els[group].classList.toggle("is-locked", locked);
-      if (els[lockBadge]) els[lockBadge].hidden = !locked;
-      const listEl = els[list];
-      if (listEl) {
-        listEl.querySelectorAll("input[type=radio]").forEach((input) => { input.disabled = locked; });
-      }
-    });
-  }
-
   // Run step 2 (edit) for the given analyzed records via the same single-image
   // endpoints, so each image carries its own prompt -- flow identical to single.
   async function continueBatchRecords(records) {
@@ -4316,7 +4211,7 @@
 
     // N independent edit runs per image from the same analysis. Each run is
     // its own job; the pool works through (record, run) pairs.
-    const runCount = Math.max(1, parseInt(els.runCountSelect?.value, 10) || 1);
+    const runCount = Math.max(1, parseInt(els.imageRunCountSelect?.value, 10) || 1);
     const modifiedAt = Date.now() / 1000;
     targets.forEach((r) => {
       if (!r.uploadedAt) r.uploadedAt = modifiedAt;
@@ -4361,15 +4256,15 @@
   }
 
   // Step 2 for one (record, run) pair: submit via the single-image
-  // endpoint (so it carries the image's own effective prompt) -> poll ->
+  // endpoint (so it carries the image's own prompt) -> poll ->
   // fetch. Records analyze + edit sub-timings, matching the single flow's
   // nested timing display. Results land on the run entry `run`;
   // syncRecordMirror keeps the record's legacy fields pointing at the
   // selected/first-done run so all existing readers stay unchanged.
   async function editBatchItem({ record, run, actionId }) {
     try {
-      const userPrompt = effectivePrompt(record);
-      const overwritePrompt = effectiveOverwritePrompt(record);
+      const userPrompt = (record.userPrompt || "").trim();
+      const overwritePrompt = userPrompt ? !!record.overwritePrompt : false;
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked,
@@ -8246,14 +8141,7 @@
       const record = makeBatchRecord(image.file, await previewableBlob(image.file));
       record.analysis = analysis;
       record.analyzeJobId = null;    // -> rerunJob
-      // effectiveOptions only reads a record's own options for categories
-      // marked touched -- otherwise it falls back to the batch-level radios
-      // (all "default"), which would drop the picks this run was made with.
       record.options = analysis.style_options || null;
-      record.optionsTouched = {};
-      Object.entries(analysis.style_options || {}).forEach(([key, value]) => {
-        if (value && value !== "default") record.optionsTouched[key] = true;
-      });
       record.userPrompt = analysis.user_instruction?.normalized_user_direction || "";
       record.runs = image.runs;
       record.mirrorIndex = 0;
@@ -8492,28 +8380,9 @@
     .forEach(([elKey, key]) => {
       if (els[elKey]) {
         els[elKey].addEventListener("change", (e) => {
-          markOptionTouched(key);
           syncStyleTrigger(els[elKey]);
           updateStyleTriggerLabel();
           if (e.target.value !== "default") showStyleGroup(null);
-        });
-      }
-    });
-
-  BATCH_OPTION_CATEGORIES.forEach(({ lock }) => {
-    if (els[lock]) els[lock].addEventListener("change", updateBatchOptionsLocks);
-  });
-
-  // Batch-level default pills: same close-on-pick + label-sync behavior as
-  // the per-image ones, minus markOptionTouched (that only applies to a
-  // per-image record, not the batch-wide default itself).
-  [["batchPoseList"], ["batchAngleList"], ["batchLightingList"], ["batchSizeList"]]
-    .forEach(([elKey]) => {
-      if (els[elKey]) {
-        els[elKey].addEventListener("change", () => {
-          syncStyleTrigger(els[elKey]);
-          const details = els[elKey].closest(".ap-style-item");
-          if (details) details.open = false;
         });
       }
     });
