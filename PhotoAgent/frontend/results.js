@@ -97,6 +97,19 @@ window.PhotoAgentResults = (() => {
     drawAnalysisBoxes();
   }
 
+  // Body Reshape is an internal feature switch owned by the backend.  The
+  // value in config.js is only an initial default; app.js replaces it with
+  // /api/config once the page bootstraps.  Keep the gate here as well as in
+  // app.js so stale analysis objects cannot render body controls or preserve
+  // body selections when the feature is disabled.
+  let bodyReshapeEnabled = window.PhotoAgentConfig?.enableBodyReshape !== false;
+  function setBodyReshapeEnabled(enabled) {
+    const next = enabled !== false;
+    const changed = bodyReshapeEnabled !== next;
+    bodyReshapeEnabled = next;
+    if (changed) renderFaceReviewCards();
+  }
+
   // recommended_aspect_ratio on a RESULT is the ratio that result was actually
   // made at: resolve_output_aspect_ratio (backend) settles it from the user's
   // 長寬比 choice plus the proposed crop, and writes it onto the analysis
@@ -781,6 +794,7 @@ window.PhotoAgentResults = (() => {
   }
 
   function bodyReshapePointEntries(subject, subjectIndex, analysis) {
+    if (!bodyReshapeEnabled) return [];
     const points = subject?.body_reshape?.key_points;
     if (!Array.isArray(points)) return [];
     const disabled = new Set(
@@ -830,6 +844,7 @@ window.PhotoAgentResults = (() => {
   // unchecked in the per-person modal. The full analysis remains intact so
   // an unchecked point can be shown and re-enabled on a later revise.
   function getBodyReshapeOverrides() {
+    if (!bodyReshapeEnabled) return {};
     const overrides = {};
     faceThumbEntries.forEach((entry) => {
       if (entry.bodyAnalysisAvailable && entry.bodyReshapeEnabled === false) {
@@ -864,7 +879,7 @@ window.PhotoAgentResults = (() => {
   }
 
   function applyBodyReshapeOverrides(overrides) {
-    if (!overrides) return;
+    if (!bodyReshapeEnabled || !overrides) return;
     faceThumbEntries.forEach((entry) => {
       if (entry.bodyAnalysisAvailable) {
         entry.bodyReshapeEnabled = overrides[`subject:${entry.subjectIndex}`] !== false;
@@ -945,9 +960,11 @@ window.PhotoAgentResults = (() => {
     // selected meaningless -- always land back on the first person.
     selectedFaceIndex = 0;
     const faces = localFaceEntries(analysis);
-    const bodySubjects = (Array.isArray(analysis?.subjects) ? analysis.subjects : [])
-      .map((subject, subjectIndex) => ({ subject, subjectIndex }))
-      .filter(({ subject }) => subject?.is_person && subject?.body_reshape && typeof subject.body_reshape === "object");
+    const bodySubjects = bodyReshapeEnabled
+      ? (Array.isArray(analysis?.subjects) ? analysis.subjects : [])
+        .map((subject, subjectIndex) => ({ subject, subjectIndex }))
+        .filter(({ subject }) => subject?.is_person && subject?.body_reshape && typeof subject.body_reshape === "object")
+      : [];
     if (!faces.length && !bodySubjects.length) {
       // No 人像檢查 tab to show -- renderFaceReviewCards (below) hides that
       // tab button and falls back to the 修圖建議 tab, it just needs
@@ -998,7 +1015,7 @@ window.PhotoAgentResults = (() => {
           box: f.box,
           issues: faceIssueEntries(subject, index, analysis?._advanced_options || {}),
           bodyKeyPoints,
-          bodyAnalysisAvailable: !!(subject?.body_reshape && typeof subject.body_reshape === "object"),
+          bodyAnalysisAvailable: bodyReshapeEnabled && !!(subject?.body_reshape && typeof subject.body_reshape === "object"),
           bodyReshapeEnabled: bodyReshapeSubjectEnabled(index, bodyKeyPoints, analysis),
           subjectIndex: index,
           sentToModel,
@@ -1027,7 +1044,7 @@ window.PhotoAgentResults = (() => {
         box,
         issues: faceIssueEntries(subject, subjectIndex, analysis?._advanced_options || {}),
         bodyKeyPoints,
-        bodyAnalysisAvailable: true,
+        bodyAnalysisAvailable: bodyReshapeEnabled,
         bodyReshapeEnabled: bodyReshapeSubjectEnabled(subjectIndex, bodyKeyPoints, analysis),
         subjectIndex,
         // null means this is a subjects[] fallback, not a local face that
@@ -1348,7 +1365,7 @@ window.PhotoAgentResults = (() => {
       items.push(li);
     });
 
-    if (entry?.bodyAnalysisAvailable) {
+    if (bodyReshapeEnabled && entry?.bodyAnalysisAvailable) {
       const section = document.createElement("li");
       section.className = "ap-body-reshape-section";
       const masterRow = document.createElement("div");
@@ -1999,6 +2016,7 @@ window.PhotoAgentResults = (() => {
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides,
-    getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards
+    getBodyReshapeOverrides, applyBodyReshapeOverrides, setBodyReshapeEnabled,
+    renderFaceReviewCards
   };
 })();

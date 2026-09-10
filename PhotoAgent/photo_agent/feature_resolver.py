@@ -713,6 +713,7 @@ def build_compact_editor_prompt(
 
     subject_blocks = []
     resolved_features = {feature for item in resolved for feature in item["features"]}
+    body_reshape_active = "body_reshape" in resolved_features
     has_smile = "smile" in resolved_features
     has_laugh = any(item["final_state"].get("smile_level") == "laughing" for item in resolved)
     has_gaze = "gaze" in resolved_features
@@ -991,11 +992,15 @@ def build_compact_editor_prompt(
         if style_footprint else
         "- No style option authorizes a change to pose, viewpoint, or framing size."
     )
-    body_reshape_active = "body_reshape" in resolved_features
     if "pose" in style_options:
+        gaze_endpoint_text = (
+            "plus any explicitly resolved gaze or body-reshape endpoint"
+            if body_reshape_active else
+            "plus any explicitly resolved gaze endpoint"
+        )
         facial_locality = (
             "- Apply facial feature edits locally. Head/body movement is limited to the selected pose style "
-            "plus any explicitly resolved gaze or body-reshape endpoint."
+            f"{gaze_endpoint_text}."
         )
     elif has_head_aligned_gaze and body_reshape_active:
         facial_locality = (
@@ -1015,10 +1020,21 @@ def build_compact_editor_prompt(
         )
     else:
         facial_locality = "- Apply facial edits locally without moving the head, body, or surrounding content."
-    portrait_style_priority = (
-        "- Resolved subject final states remain mandatory inside the style transformation; style may coordinate surrounding pose and light but must not replace a specified smile, eye state, gaze, hair, or body-reshape endpoint."
-        if style_footprint and resolved else ""
-    )
+    if style_footprint and resolved:
+        # Keep the enabled wording compatible with the existing compact
+        # prompt; only omit the body endpoint when the feature is inactive.
+        final_state_labels = (
+            "smile, eye state, gaze, hair, or body-reshape"
+            if body_reshape_active else
+            "smile, eye state, gaze, or hair"
+        )
+        portrait_style_priority = (
+            "- Resolved subject final states remain mandatory inside the style transformation; "
+            "style may coordinate surrounding pose and light but must not replace a specified "
+            f"{final_state_labels} endpoint."
+        )
+    else:
+        portrait_style_priority = ""
 
     prompt = f"""You are editing the supplied image, not creating a new image.
 Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic.

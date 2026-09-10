@@ -30,6 +30,8 @@ from prompts import (
     build_portrait_qc_instruction,
     build_eye_repair_planning_instruction,
     build_body_reshape_planning_instruction,
+    body_reshape_enabled,
+    strip_body_reshape,
     eye_repair_targets,
     portrait_qc_persons,
     resolve_user_gaze_request,
@@ -181,6 +183,10 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
     analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model)
+    if not body_reshape_enabled():
+        # Keep the stage boundary clean even when an alternate analyzer or a
+        # retry returns an analysis object carrying a stale body plan.
+        analysis = strip_body_reshape(analysis)
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
@@ -217,7 +223,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
             ),
             "photo_analysis_body_reshape": (
                 build_body_reshape_planning_instruction(persons)
-                if persons else None
+                if persons and body_reshape_enabled() else None
             ),
         }
     else:
@@ -295,6 +301,11 @@ def finish_stage(
                                      # actually ran (see pre_edit_image_b64 below)
     }
     """
+    if not body_reshape_enabled():
+        # finish_stage may be called with a saved analysis created before the
+        # internal feature was disabled.  Strip it before any prompt, QA, or
+        # result metadata is built so no downstream path can execute it.
+        analysis = strip_body_reshape(analysis)
     prompts = dict(analysis.get("prompts") or {})
     timings = dict(analysis.get("timings") or {})
     usage = dict(analysis.get("usage") or {})

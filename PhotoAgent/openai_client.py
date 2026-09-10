@@ -50,6 +50,8 @@ from prompts import (
     merge_eye_repair_strategies,
     merge_body_reshape_plans,
     apply_default_body_reshape_plans,
+    strip_body_reshape,
+    body_reshape_enabled,
     portrait_qc_persons,
     style_option_entries,
     _apply_default_person_issues,
@@ -323,10 +325,12 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     back by prompts.merge_portrait_qc_issues's stable subject_index (never by
     response-array position).  Python then applies the exact-lens gate and an
     optional Call C creates repair strategies only for people that passed it.
-    A separate body-planning pass reviews every person and merges a concise
-    body-only report plus at most five actionable key_points by the same
-    stable subject_index. The report is review prose; downstream editing uses
-    only the short key_points so uncertain observations cannot become edits.
+    When ENABLE_BODY_RESHAPE is enabled, a separate body-planning pass reviews
+    every person and merges a concise body-only report plus at most five
+    actionable key_points by the same stable subject_index. The report is
+    review prose; downstream editing uses only the short key_points so
+    uncertain observations cannot become edits. When the internal flag is
+    disabled, that call is skipped and any stale body plan is removed.
 
     Call B (including a validation failure raised by merge_portrait_qc_issues
     itself -- a missing/duplicate/mismatched subject_index) is best-effort:
@@ -391,7 +395,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         _apply_default_person_issues(overall_analysis.get("subjects"))
         analysis = overall_analysis
 
-    if persons:
+    if persons and body_reshape_enabled():
         try:
             content_body = [
                 {"type": "input_text", "text": build_body_reshape_planning_instruction(persons)},
@@ -414,6 +418,11 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
                 "Body reshape-planning pass failed; preserving every person's original body: %s", exc,
             )
             analysis = apply_default_body_reshape_plans(analysis)
+    elif not body_reshape_enabled():
+        # A finish/retry can be fed an analysis produced before the feature was
+        # disabled.  Remove any stale body plan before it leaves the analysis
+        # stage so no downstream caller can accidentally re-enable it.
+        analysis = strip_body_reshape(analysis)
 
     repair_targets = eye_repair_targets(analysis)
     if repair_targets:

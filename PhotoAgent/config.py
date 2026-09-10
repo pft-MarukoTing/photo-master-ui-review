@@ -4,6 +4,13 @@
 
 EFFECT_NAME = 'photoAgent'
 
+# Internal feature switch for the optional per-person body-reshape pass.
+# Keep this enabled by default so existing deployments retain their current
+# behaviour; set it to False to disable body-reshape analysis, editing, and UI
+# controls.  The Flask /api/config endpoint exposes the value to the frontend
+# without making it a user-editable setting.
+ENABLE_BODY_RESHAPE = False
+
 MODELS = {
     "image": "gpt-image-2",
     "analysis": "gpt-5.6-luna",

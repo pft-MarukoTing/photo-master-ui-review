@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, renderBatchStyleOptions, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards } = window.PhotoAgentResults;
   renderBatchStyleOptions();
   renderBoxTypeMenu();
 
@@ -182,6 +182,17 @@
   // result card shows the raw model string (e.g. "gpt-4.1-mini + gpt-image-2")
   // or a plain-language stand-in a regular user actually cares about.
   let isDebugUiActive = false;
+  // Internal Body Reshape switch.  This initial value mirrors config.js and
+  // is replaced by the backend's /api/config response below.  The server
+  // still enforces the flag for every analysis/edit request; this value only
+  // controls whether the corresponding review controls are rendered and
+  // whether the client forwards body selections on submit.
+  let isBodyReshapeEnabled = window.PhotoAgentConfig?.enableBodyReshape !== false;
+
+  function applyBodyReshapeVisibility(enabled) {
+    isBodyReshapeEnabled = enabled !== false;
+    setBodyReshapeEnabled(isBodyReshapeEnabled);
+  }
 
   // Single-image flow: kept after analyze so "回到流程" (from the results page)
   // can re-show the analysis preview and resubmit steps 3-6 without re-running
@@ -564,11 +575,22 @@
     applyAnalysisModelOptionLimit(els.apAnalysisModelSelect, isDebug);
   }
 
+  // Fetch the feature flag even on a ?debug page.  Debug mode may expose
+  // inspection controls, but it must not bypass an internally disabled Body
+  // Reshape feature.
   if (window.location.href.includes("debug")) {
     applyDebugUiVisibility(true);
+    getUiConfig().then((cfg) => {
+      if (typeof cfg.enableBodyReshape === "boolean") {
+        applyBodyReshapeVisibility(cfg.enableBodyReshape);
+      }
+    });
   } else {
     getUiConfig().then((cfg) => {
       applyDebugUiVisibility(!!cfg.debugUi);
+      if (typeof cfg.enableBodyReshape === "boolean") {
+        applyBodyReshapeVisibility(cfg.enableBodyReshape);
+      }
       if (!cfg.debugUi && cfg.aipocDefault && els.processingPathSelect) {
         // Non-debug deployment started with `--aipoc`: the selector stays
         // hidden, but its value still drives the default processing path.
@@ -7647,6 +7669,23 @@
     const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
     const effective = { ...base };
 
+    // Do not let an analysis produced while Body Reshape was enabled leak
+    // stale plans into a later run after the server-side feature is disabled.
+    // This is also important for history/revise records, which can carry an
+    // older subjects[].body_reshape object in the browser.
+    if (!isBodyReshapeEnabled) {
+      if (Array.isArray(effective.subjects)) {
+        effective.subjects = effective.subjects.map((subject) => {
+          if (!subject || typeof subject !== "object") return subject;
+          const copy = { ...subject };
+          delete copy.body_reshape;
+          return copy;
+        });
+      }
+      delete effective._disabled_body_reshape_subjects;
+      delete effective._disabled_body_reshape_key_points;
+    }
+
     // The per-person "allow AI to fix this" toggle (#ap-face-detail,
     // getFaceIssueOverrides in results.js): { "subjectIndex:category": false }
     // for every should_fix/adjust_safe=true item the user turned off. Both
@@ -7700,18 +7739,20 @@
     // and send a separate deny-list for the points the user unchecked. The
     // backend's body_reshape_items() enforces this list for both legacy and
     // compact editor prompts, so an unchecked item cannot become an edit.
-    const bodyOverrideEntries = Object.entries(bodyReshapeOverrides || {});
-    effective._disabled_body_reshape_subjects = bodyOverrideEntries
-      .filter(([key, allowed]) => key.startsWith("subject:") && allowed === false)
-      .map(([key]) => Number(key.slice("subject:".length)))
-      .filter((subjectIndex) => Number.isInteger(subjectIndex));
-    effective._disabled_body_reshape_key_points = bodyOverrideEntries
-      .filter(([key, allowed]) => !key.startsWith("subject:") && allowed === false)
-      .map(([key]) => {
-        const [subjectIndex, keyPointIndex] = key.split(":").map(Number);
-        return { subject_index: subjectIndex, key_point_index: keyPointIndex };
-      })
-      .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index));
+    if (isBodyReshapeEnabled) {
+      const bodyOverrideEntries = Object.entries(bodyReshapeOverrides || {});
+      effective._disabled_body_reshape_subjects = bodyOverrideEntries
+        .filter(([key, allowed]) => key.startsWith("subject:") && allowed === false)
+        .map(([key]) => Number(key.slice("subject:".length)))
+        .filter((subjectIndex) => Number.isInteger(subjectIndex));
+      effective._disabled_body_reshape_key_points = bodyOverrideEntries
+        .filter(([key, allowed]) => !key.startsWith("subject:") && allowed === false)
+        .map(([key]) => {
+          const [subjectIndex, keyPointIndex] = key.split(":").map(Number);
+          return { subject_index: subjectIndex, key_point_index: keyPointIndex };
+        })
+        .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index));
+    }
 
     // `analysis` already carries its own _advanced_options, baked in at
     // analyze time (pipeline.py's analyze_stage) -- overwrite it with

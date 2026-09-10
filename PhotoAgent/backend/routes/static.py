@@ -4,6 +4,7 @@ import os
 from flask import Blueprint, current_app, jsonify, send_from_directory
 
 from aiserver_utils.pf_redis import pf_redis_client
+import config as photoagent_config
 
 static_bp = Blueprint("static_bp", __name__)
 
@@ -57,7 +58,11 @@ def index():
 def config():
     return jsonify({
         "debugUi": current_app.config.get("DEBUG_UI", False),
-        "aipocDefault": current_app.config.get("AIPOC_DEFAULT", False)
+        "aipocDefault": current_app.config.get("AIPOC_DEFAULT", False),
+        # Internal server-side feature switch mirrored to the UI.  The
+        # backend remains authoritative; this only prevents controls from
+        # being rendered when Body Reshape is disabled.
+        "enableBodyReshape": bool(getattr(photoagent_config, "ENABLE_BODY_RESHAPE", True)),
     })
 
 

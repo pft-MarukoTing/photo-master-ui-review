@@ -3,9 +3,36 @@ import json
 import logging
 import re
 
+import config as _photoagent_config
 from config import STYLE_OPTION_INSTRUCTIONS, STYLE_OPTION_LABELS, STYLE_OPTION_VALUE_LABELS
 
 logger = logging.getLogger(__name__)
+
+
+def body_reshape_enabled():
+    """Return the current internal Body Reshape feature flag.
+
+    Read the module attribute dynamically instead of importing the boolean by
+    value.  This keeps tests and long-running development processes able to
+    change ``config.ENABLE_BODY_RESHAPE`` without leaving a stale copy in this
+    module.
+    """
+    return bool(getattr(_photoagent_config, "ENABLE_BODY_RESHAPE", True))
+
+
+def _without_body_reshape_prompt_lines(instruction):
+    """Remove dedicated body-reshape references from an analysis prompt.
+
+    The general analysis schema no longer contains a body-reshape field, but
+    a few shared legacy bullets still mention that field as an ``is_person``
+    placeholder.  When the feature is disabled those lines must not be sent
+    to the analysis model either.  Removing complete lines keeps all other
+    analysis instructions byte-for-byte unchanged.
+    """
+    return "\n".join(
+        line for line in str(instruction).splitlines()
+        if "body_reshape" not in line.lower()
+    )
 
 
 # ── Correction axes ───────────────────────────────────────────────────────────
@@ -2185,6 +2212,8 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_option
         + _COMPOSITION_DECISION_FRAMEWORK
         + "\n"
     )
+    if not body_reshape_enabled():
+        instruction = _without_body_reshape_prompt_lines(instruction)
     return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref)
 
 
@@ -2343,6 +2372,8 @@ def build_body_reshape_planning_instruction(persons):
     ``persons`` must come from :func:`portrait_qc_persons`, which supplies the
     stable subject_index used to merge this pass back into subjects[].
     """
+    if not body_reshape_enabled():
+        return ""
     return """你是專業的人像身形修圖顧問。
 
 請只根據附上的原始照片，為下方每一位人物分別進行身形調整分析。每位人物必須獨立判斷，不可將其他人物的身形特徵或建議套用過來。
@@ -2451,6 +2482,8 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, 
     if analysis_model != "gpt-5.6-luna":
         instruction = instruction.replace(_BLINK_ANALYSIS_LUNA, _BLINK_ANALYSIS_LEGACY)
         instruction = instruction.replace(_BLINK_WINK_DEFAULT_BULLET_LUNA, _BLINK_WINK_DEFAULT_BULLET_LEGACY)
+    if not body_reshape_enabled():
+        instruction = _without_body_reshape_prompt_lines(instruction)
     if aspect_ratio_pref == "original":
         return instruction + """
 ## Aspect-ratio policy
@@ -4054,8 +4087,50 @@ def _default_body_reshape_plan(subject_index, local_detection_index=-1):
     }
 
 
+def strip_body_reshape(analysis):
+    """Return an analysis copy with all Body Reshape data removed.
+
+    This is a defensive boundary for old history records or client-supplied
+    analyses that were created while the feature was enabled.  It prevents
+    stale ``subjects[].body_reshape`` values and deny-list metadata from being
+    carried into a disabled run, while leaving every unrelated analysis field
+    untouched.
+    """
+    if not isinstance(analysis, dict):
+        return analysis
+    cleaned = dict(analysis)
+    raw_subjects = analysis.get("subjects")
+    if isinstance(raw_subjects, list):
+        subjects = []
+        for subject in raw_subjects:
+            if isinstance(subject, dict):
+                item = dict(subject)
+                item.pop("body_reshape", None)
+                subjects.append(item)
+            else:
+                subjects.append(subject)
+        cleaned["subjects"] = subjects
+    cleaned.pop("_disabled_body_reshape_subjects", None)
+    cleaned.pop("_disabled_body_reshape_key_points", None)
+    prompts = cleaned.get("prompts")
+    if isinstance(prompts, dict):
+        prompts = dict(prompts)
+        prompts["photo_analysis_body_reshape"] = None
+        cleaned["prompts"] = prompts
+    return cleaned
+
+
 def apply_default_body_reshape_plans(analysis):
     """Ensure every is_person subject has a predictable body_reshape field."""
+    if not body_reshape_enabled():
+        # This helper historically mutates and returns ``analysis``.  Keep
+        # that contract even when the feature is disabled so callers that
+        # intentionally ignore the return value cannot retain a stale plan.
+        cleaned = strip_body_reshape(analysis)
+        if isinstance(analysis, dict) and isinstance(cleaned, dict) and cleaned is not analysis:
+            analysis.clear()
+            analysis.update(cleaned)
+        return analysis
     for subject_index, subject in enumerate(analysis.get("subjects") or []):
         if not isinstance(subject, dict) or not subject.get("is_person"):
             continue
@@ -4068,6 +4143,8 @@ def apply_default_body_reshape_plans(analysis):
 
 def merge_body_reshape_plans(analysis, planning_response):
     """Validate and merge one report/key-points result into each person."""
+    if not body_reshape_enabled():
+        return strip_body_reshape(analysis)
     cleaned = dict(analysis)
     subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
     cleaned["subjects"] = subjects
@@ -4178,6 +4255,9 @@ def body_reshape_items(analysis):
     ``key_points`` are execution instructions, which prevents descriptive or
     uncertain report text from accidentally becoming a body transformation.
     """
+    if not body_reshape_enabled():
+        return []
+
     disabled_subjects = {
         index for index in (analysis.get("_disabled_body_reshape_subjects") or [])
         if isinstance(index, int) and not isinstance(index, bool)
@@ -5258,6 +5338,8 @@ def build_smile_block(analysis):
 
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False, return_sections=False):
     analysis = strip_disabled_topic_items(analysis)
+    if not body_reshape_enabled():
+        analysis = strip_body_reshape(analysis)
     rejected_axes = resolve_rejected_axes(analysis)
     color_craft_direction = build_color_craft_direction(rejected_axes)
     color_grade_check = build_color_grade_check(rejected_axes)
@@ -5306,6 +5388,36 @@ def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan
     gaze_contact_issues = subject_issue_items(analysis, "gaze_issue")
     body_reshape_block = build_body_reshape_edit_block(analysis)
     has_body_reshape = bool(body_reshape_block)
+    approved_edit_sources = (
+        "the user-approved correction plan, the analysis-approved body reshape instructions, and user's extra direction"
+        if has_body_reshape else
+        "the user-approved correction plan and user's extra direction"
+    )
+    repair_allowance = (
+        "If the analysis approved a gaze, blink, and/or body repair for a named subject, follow the analysis-defined method and allowances for that subject."
+        if has_body_reshape else
+        "If the analysis approved a gaze and/or blink repair for a named subject, follow the analysis-defined method and allowances for that subject."
+    )
+    faithful_repair_allowance = (
+        "If an approved gaze, blink, and/or body repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."
+        if has_body_reshape else
+        "If an approved gaze and/or blink repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."
+    )
+    faithful_edit_sources = (
+        "the approved correction plan, analysis-approved body reshape instructions, preset finish, and user's extra direction"
+        if has_body_reshape else
+        "the approved correction plan, preset finish, and user's extra direction"
+    )
+    definitive_edit_sources = (
+        "The user-approved correction plan, analysis-approved body reshape instructions, and any user-selected style overrides above"
+        if has_body_reshape else
+        "The user-approved correction plan and any user-selected style overrides above"
+    )
+    definitive_edit_sources_faithful = (
+        "The user-approved correction plan and analysis-approved body reshape instructions"
+        if has_body_reshape else
+        "The user-approved correction plan"
+    )
     framing_intent_block = _build_framing_intent_block(analysis)
     crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
     if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
@@ -5851,13 +5963,13 @@ Feature one subject: {focus_label}. Identify that subject in the photograph and 
             "and photographic realism. This is a same-scene reshoot: selected pose, angle, lighting, or framing-size "
             "overrides are allowed and expected to visibly change those selected aspects."
         )
-        edit_mode_block = """Edit mode:
+        edit_mode_block = f"""Edit mode:
 STYLE OVERRIDE MODE. The user selected one or more pose/angle/lighting/framing options, so treat this as a controlled same-scene reshoot rather than a conservative retouch only.
 
 Priority order:
 1. Preserve safety, identity, same subject, same location, same environment, same clothing, same props, and photographic realism.
 2. Apply user-selected style overrides visibly and deliberately for the selected aspects.
-3. Apply the user-approved correction plan, the analysis-approved body reshape instructions, and user's extra direction. If the analysis approved a gaze, blink, and/or body repair for a named subject, follow the analysis-defined method and allowances for that subject. Generic preservation rules must yield only where the analysis explicitly permits the local change.
+3. Apply {approved_edit_sources}. {repair_allowance} Generic preservation rules must yield only where the analysis explicitly permits the local change.
 4. Use the preset style as a supporting finish.
 5. Apply default preservation rules only to aspects not selected by the user."""
         retouch_priorities = f"""Retouch priorities:
@@ -5869,7 +5981,7 @@ Priority order:
 6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
 7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
 8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, change the camera viewpoint clearly as described in that angle's own instruction above, while keeping a believable same-scene result.
-9. The user-approved correction plan, analysis-approved body reshape instructions, and any user-selected style overrides above are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
+9. {definitive_edit_sources} are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
     else:
         opening_preservation_rule = (
             "Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, "
@@ -5879,8 +5991,8 @@ Priority order:
                 "facial structure, body shape, and important details."
             )
         )
-        edit_mode_block = """Edit mode:
-FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, framing size, scene, and moment. Improve only the approved correction plan, analysis-approved body reshape instructions, preset finish, and user's extra direction. If an approved gaze, blink, and/or body repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."""
+        edit_mode_block = f"""Edit mode:
+FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only {faithful_edit_sources}. {faithful_repair_allowance}"""
         retouch_priorities = f"""Retouch priorities:
 1. {crop_priority_line_faithful}
 2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure, perspective, and spatial relationships.
@@ -5890,7 +6002,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
 7. {alignment_priority}
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
-9. The user-approved correction plan and analysis-approved body reshape instructions are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
+9. {definitive_edit_sources_faithful} are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
 
     # Analyzer prose can restate a correction outside correction_plan. Once the
     # user changes that plan, keep only descriptive context here; the reviewed
@@ -6146,6 +6258,7 @@ Judge each rejected item independently and put the result in recipe_adherence.re
 
     body_qa_items = body_reshape_items(analysis)
     body_qa_block = ""
+    body_qa_score_cap = ""
     if body_qa_items:
         body_targets = []
         for item in body_qa_items:
@@ -6157,6 +6270,7 @@ Judge each rejected item independently and put the result in recipe_adherence.re
 - Clothing/body topology hard check: compare every neckline, sleeve opening, shirt/top hem, waistband, trouser/skirt top, belt, exposed-skin boundary, overlap, seam, fold, opening, garment length, and tucked/untucked state directly with the source. Their image position, shape, coverage, and front/back order must remain unchanged. Clothing may retain its existing local contour but may not gain or lose coverage.
 - Specifically fail the result if a shirt/top is extended or lowered over formerly exposed abdomen/waist, a waistband is raised, fabric is invented, exposed skin is removed or newly revealed, a garment is shortened/lengthened, or folds are rewritten to conceal body volume. If the source shows bare abdomen between a T-shirt hem and trouser waistband, the output must preserve the same bare area, hem, waistband, navel, and relative order. A body adjustment that required moving these anchors should have been skipped, not solved by changing clothing. Targets:
 {}\n""".format("\n".join(body_targets))
+        body_qa_score_cap = "- If a body-reshape output changes garment coverage, a hem/waistband/neckline/sleeve boundary, exposed-skin extent, garment length, tucked/untucked state, or the front/back relationship between clothing and body, this is a major preservation failure: pass must be false and score must be 3 or lower, even when the requested body contour otherwise looks improved.\n"
 
     framing_focus = analysis.get("_framing_focus") or {}
     closer_block = ""
@@ -6200,7 +6314,7 @@ Strict scoring rubric:
 - 1-2: severe failure; preservation damage, important missing content, artificial borders, distorted shape/perspective, or wrong/rebuilt scene.
 
 Score caps:
-- If a body-reshape output changes garment coverage, a hem/waistband/neckline/sleeve boundary, exposed-skin extent, garment length, tucked/untucked state, or the front/back relationship between clothing and body, this is a major preservation failure: pass must be false and score must be 3 or lower, even when the requested body contour otherwise looks improved.
+{body_qa_score_cap}
 - If required main subject content, protected_regions, role cues, important props, structural edges, fine details, or connected components are accidentally cut off or incomplete, score must be 3 or lower.
 - Apply the previous cap only to content required by the intended framing. Do not penalize partial portrait/person crops when they are intentional, clean, and preserve the role/story.
 - If subject shape, identity, material, anatomy, object geometry, structural continuity, fine-detail structure, or perspective relationship is changed unnaturally, score must be 3 or lower.
