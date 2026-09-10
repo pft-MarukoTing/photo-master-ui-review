@@ -1036,8 +1036,16 @@ def build_compact_editor_prompt(
     else:
         portrait_style_priority = ""
 
-    prompt = f"""You are editing the supplied image, not creating a new image.
-Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic.
+    task_intro = (
+        "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
+        "Keep the same subject identity, scene, clothing, props, and photographic realism, but visibly change "
+        "the subject's pose according to the selected pose override."
+        if "pose" in style_options else
+        "You are editing the supplied image, not creating a new image.\n"
+        "Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic."
+    )
+
+    prompt = f"""{task_intro}
 
 Required framing:
 {compact_crop_block}

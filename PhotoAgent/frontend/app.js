@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -1039,7 +1039,11 @@
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
       gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
-      calm_hair: !!(els.hairMessDetectionToggle?.checked && els.calmHairToggle?.checked),
+      // Keep the selected radio even while 亂髮偵測 is off. The backend
+      // ignores this level while disabled, but Dynamic's rule explicitly
+      // says not to alter the dormant choice; folding "off" into false here
+      // made a previously selected 梳整俐落 look like 保留髮絲動態 later.
+      calm_hair: !!els.calmHairToggle?.checked,
       smile_adjustment: els.smileAdjustmentToggle ? els.smileAdjustmentToggle.checked : true,
       smile_level: (els.smileLevelSelect && els.smileLevelSelect.value) || "auto",
       editor_prompt_strategy: els.apEditorPromptStrategySelect?.value || els.editorPromptStrategySelect?.value || DEFAULT_EDITOR_PROMPT_STRATEGY,
@@ -1115,6 +1119,125 @@
     els.smileLevelSelect.value = value || "auto";
     const radio = els.smileLevelPicker?.querySelector(`input[value="${els.smileLevelSelect.value}"]`);
     if (radio) radio.checked = true;
+  }
+
+  // Pose choices suggest compatible settings for every person in this photo.
+  // They deliberately do not touch the shared 人像設定 modal; "-" is simply
+  // absent here and therefore leaves all individual values unchanged.
+  const POSE_PERSON_SUGGESTIONS = {
+    playful: {
+      notices: [{
+        categories: ["smile_issue"],
+        setting: "笑容：開朗笑",
+        reason: "讓表情與活潑、輕鬆的姿勢一致"
+      }]
+    },
+    candid: {
+      notices: [{
+        categories: ["gaze_issue"],
+        setting: "眼神對焦：關閉",
+        reason: "保留自然、非擺拍的鏡頭外視線"
+      }]
+    },
+    elegant: {
+      notices: [{
+        categories: ["smile_issue"],
+        setting: "笑容：微笑",
+        reason: "讓表情維持優雅、自然且不過度張揚"
+      }]
+    },
+    dynamic: {
+      notices: [
+        {
+          categories: ["gaze_issue"],
+          setting: "眼神對焦：關閉",
+          reason: "讓視線配合自然的動態瞬間"
+        },
+        {
+          categories: ["hair_issue"],
+          setting: "亂髮偵測：保留髮絲動態",
+          reason: "保留人物移動時自然的髮絲方向"
+        }
+      ]
+    },
+    cool: {
+      notices: [{
+        categories: ["smile_issue"],
+        setting: "笑容：不笑",
+        reason: "維持冷靜、俐落的姿態氛圍"
+      }]
+    },
+    vsign: {
+      notices: [{
+        categories: ["smile_issue"],
+        setting: "笑容：開朗笑",
+        reason: "讓表情與 V-Sign 的輕鬆、開朗氛圍一致"
+      }]
+    },
+    cheer: {
+      notices: [{
+        categories: ["smile_issue"],
+        setting: "笑容：開朗笑",
+        reason: "讓表情與開放、歡呼的姿勢一致"
+      }]
+    }
+  };
+
+  const POSE_OPTION_LABELS = {
+    playful: "Playful", candid: "Candid", strong: "Strong", elegant: "Elegant",
+    dynamic: "Dynamic", cool: "Cool", vsign: "V-Sign", cheer: "Cheer"
+  };
+
+  const POSE_RESTORE_NOTICES = {
+    gaze_issue: "眼神對焦：已還原為原本設定",
+    hair_issue: "亂髮偵測：已還原為原本設定",
+    smile_issue: "笑容：已還原為原本設定"
+  };
+
+  function showPoseSuggestionNotice(pose, definition, changes) {
+    const restoredCategories = changes.restoredCategories || [];
+    const appliedCategories = changes.appliedCategories || [];
+    const applicable = (definition?.notices || []).filter((notice) =>
+      notice.categories.some((category) => appliedCategories.includes(category)));
+    if (!restoredCategories.length && !applicable.length) return;
+    const poseLabel = POSE_OPTION_LABELS[pose] || pose;
+    const previousPoseLabel = POSE_OPTION_LABELS[changes.previousPose] || changes.previousPose;
+    let title;
+    if (!applicable.length && previousPoseLabel) {
+      title = pose === "default"
+        ? `已取消 ${previousPoseLabel} 的自動調整`
+        : `已切換為 ${poseLabel}`;
+    } else if (restoredCategories.length) {
+      title = `已配合 ${poseLabel} 調整個人設定`;
+    } else {
+      title = `已配合 ${poseLabel} 自動調整`;
+    }
+    const lines = [title];
+    restoredCategories.forEach((category) => {
+      const notice = POSE_RESTORE_NOTICES[category];
+      if (notice) lines.push(notice);
+    });
+    applicable.forEach((notice) => {
+      lines.push(notice.setting, `原因：${notice.reason}`);
+    });
+    showNoticeModal(lines.join("\n"));
+  }
+
+  function applyPoseSuggestions(pose, { notify = true } = {}) {
+    const definition = POSE_PERSON_SUGGESTIONS[pose];
+    const changes = syncFaceReviewPoseSuggestion(definition ? pose : null);
+    if (notify && (changes.restoredCategories.length || changes.appliedCategories.length)) {
+      showPoseSuggestionNotice(pose, definition, changes);
+    }
+  }
+
+  // renderAnalysisPreview rebuilds the Pose radios, then applyStyleSelections
+  // restores a saved choice with `.checked = true`. Programmatic checked
+  // changes do not emit `change`, so explicitly rebuild the per-person
+  // suggestions too. Restoring an already-saved pick is silent.
+  function syncRestoredPoseSuggestions(pose) {
+    if (!pose) return;
+    applyPoseSuggestions(pose, { notify: false });
   }
 
   // Mirrors prompts.py's _GAZE_LEAK_KEYWORDS/_BLINK_LEAK_KEYWORDS/
@@ -1202,6 +1325,7 @@
     syncHairTidinessLevelLock();
     syncSmileLevelLock();
     syncAdvancedOptionDescriptions();
+    syncFaceReviewAdvancedOptions(advancedOptions);
   }
 
   // Lets a revise on the results page change these toggles and have it
@@ -1223,6 +1347,7 @@
     } else if (batchSettings) {
       batchSettings.advancedOptions = advancedOptions;
     }
+    syncFaceReviewAdvancedOptions(advancedOptions);
     refreshInlineRecipeList();
     updateInlineAnalysisContinueBtnState();
   }
@@ -3868,10 +3993,12 @@
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
 
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: false });
+    // Paint this record's global 人像設定 independently before restoring any
+    // per-person choices. Pose below changes only the latter.
+    applyAdvancedOptionsOption(singleFlowState.advancedOptions || singleFlowState.analysis?._advanced_options);
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
-      applyStyleSelections(lastSingleSelections);
       applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
       applyBodyReshapeOverrides(lastSingleSelections.bodyReshapeOverrides);
       // The face review cards were already built (renderAnalysisPreview just
@@ -3879,6 +4006,9 @@
       // them so the toggles on screen reflect the restored picks instead of
       // each issue's plain default state.
       renderFaceReviewCards();
+      // Apply Pose last: it is a recommendation over this photo's restored
+      // individual values, never an edit to the global 人像設定 above.
+      applyStyleSelections(lastSingleSelections);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     openInlineAnalysisPanel();
@@ -7099,6 +7229,9 @@
       preset: batchSettings.preset,
       expanded: record.status !== "done"
     });
+    // Global 人像設定 is restored independently; Pose later changes only
+    // this record's per-person controls.
+    applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
     applyBatchReviewSelections(record);
     // Sync (display-only, no state push -- same as viewHistoryRecord below)
     // #ap-image-model-quality/#ap-image-aspect-ratio to THIS case's own
@@ -7108,7 +7241,6 @@
     applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
     applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
     applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
-    applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!record.overwritePrompt;
     // Pre-fill with this image's own current RUN count (matching whatever was
@@ -7811,6 +7943,7 @@
       });
       [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
       updateStyleTriggerLabel();
+      syncRestoredPoseSuggestions(options.pose);
     }
     if (Array.isArray(recipeChecked) && els.apRecipeList) {
       const boxes = els.apRecipeList.querySelectorAll("input[type=checkbox]");
@@ -7822,7 +7955,6 @@
   // shared pick -- so the per-image Pose/Angle/Lighting/Size radios always
   // show what will actually be submitted, same merge rule as effectiveOptions.
   function applyBatchReviewSelections(record) {
-    applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
     applyFaceIssueOverrides(record.faceIssueOverrides);
     applyBodyReshapeOverrides(record.bodyReshapeOverrides);
     // The face review cards were already built (renderAnalysisPreview, called
@@ -7831,6 +7963,9 @@
     // reflect this record's restored picks instead of each issue's plain
     // default state.
     renderFaceReviewCards();
+    // Pose is layered over the restored individual values and remains
+    // independent from the batch/global 人像設定.
+    applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
   }
 
   function resetApp() {
@@ -8434,6 +8569,7 @@
         els[elKey].addEventListener("change", (e) => {
           syncStyleTrigger(els[elKey]);
           updateStyleTriggerLabel();
+          if (key === "pose") applyPoseSuggestions(e.target.value);
           if (e.target.value !== "default") showStyleGroup(null);
           updateInlineAnalysisContinueBtnState();
         });

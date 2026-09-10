@@ -747,8 +747,12 @@ window.PhotoAgentResults = (() => {
         level: category.field === "hair_issue"
           ? (match._user_level || (advancedOptions.calm_hair ? "tidy" : "dynamic"))
           : category.field === "smile_issue"
-            ? (advancedOptions.smile_level || "auto")
-            : null
+            ? (match._user_level || advancedOptions.smile_level || "auto")
+            : null,
+        levelUserTouched: !!match._user_level,
+        allowedTouchVersion: 0,
+        levelTouchVersion: 0,
+        poseSuggestedFields: {}
       };
     }).filter(Boolean);
   }
@@ -790,7 +794,9 @@ window.PhotoAgentResults = (() => {
       (entry.issues || []).forEach((issue) => {
         if (!issue.flagged && !MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)) return;
         if (issue.allowed === false) overrides[`${issue.subjectIndex}:${issue.category}`] = false;
-        else if (issue.level) overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true, level: issue.level };
+        else if (issue.level && (issue.levelUserTouched || issue.poseSuggestedFields?.level)) {
+          overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true, level: issue.level };
+        }
         // blink/gaze have no level (LEVEL_SELECT_CATEGORIES) -- an on toggle
         // with nothing else to record still has to reach app.js, or a
         // manually-enabled unflagged row would silently vanish at submit time.
@@ -829,10 +835,18 @@ window.PhotoAgentResults = (() => {
     faceThumbEntries.forEach((entry) => {
       (entry.issues || []).forEach((issue) => {
         const override = overrides[`${issue.subjectIndex}:${issue.category}`];
-        if (override === false) issue.allowed = false;
+        if (override === false) {
+          issue.allowed = false;
+          issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
+        }
         else if (override && typeof override === "object") {
           issue.allowed = override.allowed !== false;
-          if (override.level) issue.level = override.level;
+          issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
+          if (override.level) {
+            issue.level = override.level;
+            issue.levelUserTouched = true;
+            issue.levelTouchVersion = (issue.levelTouchVersion || 0) + 1;
+          }
         }
       });
     });
@@ -879,6 +893,140 @@ window.PhotoAgentResults = (() => {
   // state each toggle mutates directly, not the DOM.
   let faceThumbEntries = [];
 
+  // The global 人像設定 currently in force for the face-review rows. Kept
+  // separately from issue.allowed: manually turning a whole global category
+  // off should make every row look disabled without erasing each person's
+  // own allow/deny choice, so it can reappear unchanged when restored.
+  let reviewAdvancedOptions = {};
+
+  // Pose-owned changes inside the currently rendered per-person review.
+  // Kept separate from reviewAdvancedOptions because these values are the
+  // individual allow/level choices that get submitted as face overrides.
+  let facePoseSuggestionState = null;
+
+  const FACE_ISSUE_OPTION_KEYS = {
+    blink_issue: "eye_closed_detection",
+    gaze_issue: "gaze_contact_detection",
+    hair_issue: "hair_mess_detection",
+    smile_issue: "smile_adjustment"
+  };
+
+  function faceIssueGloballyEnabled(category) {
+    const key = FACE_ISSUE_OPTION_KEYS[category];
+    return !key || reviewAdvancedOptions[key] !== false;
+  }
+
+  // Called when the shared 人像設定 modal changes after faceThumbEntries was
+  // already built. Re-render only the selected person's detail: rebuilding
+  // from analysis would discard in-memory overrides, while rebuilding every
+  // thumbnail would needlessly re-crop all faces for a text/toggle change.
+  function syncFaceReviewAdvancedOptions(advancedOptions) {
+    reviewAdvancedOptions = { ...(advancedOptions || {}) };
+    faceThumbEntries.forEach((entry) => {
+      (entry.issues || []).forEach((issue) => {
+        if (issue.levelUserTouched) return;
+        if (issue.category === "hair_issue") {
+          issue.level = reviewAdvancedOptions.calm_hair ? "tidy" : "dynamic";
+        } else if (issue.category === "smile_issue") {
+          issue.level = reviewAdvancedOptions.smile_level || "auto";
+        }
+      });
+    });
+    renderFaceDetailPanel();
+  }
+
+  function restoreFaceReviewPoseSuggestion() {
+    const state = facePoseSuggestionState;
+    if (!state) return { pose: null, changed: false };
+    let changed = false;
+    (state.changes || []).forEach(({ issue, fields }) => {
+      Object.entries(fields || {}).forEach(([field, saved]) => {
+        const versionKey = field === "allowed" ? "allowedTouchVersion" : "levelTouchVersion";
+        // Preserve a choice made by the user after Pose supplied its value.
+        if ((issue[versionKey] || 0) !== saved.touchVersion || issue[field] !== saved.applied) return;
+        issue[field] = saved.before;
+        changed = true;
+      });
+      if (issue.poseSuggestedFields) {
+        Object.keys(fields || {}).forEach((field) => delete issue.poseSuggestedFields[field]);
+      }
+    });
+    facePoseSuggestionState = null;
+    return { pose: state.pose, changed };
+  }
+
+  // Applies the Pose recommendation only to each person's own controls; the
+  // shared 人像設定 modal is deliberately untouched. Gaze-off poses switch
+  // every person's gaze item off; explicit smile poses opt every person in
+  // at that smile level; Dynamic changes hair level only for people whose
+  // own hair item is already enabled. Returns only net-visible category
+  // changes: a category restored and then immediately set to the same value
+  // by the new Pose is omitted, which keeps the combined notice accurate.
+  function syncFaceReviewPoseSuggestion(pose) {
+    const valuesBeforeSwitch = new Map();
+    faceThumbEntries.forEach((entry) => {
+      (entry.issues || []).forEach((issue) => {
+        valuesBeforeSwitch.set(issue, { allowed: issue.allowed, level: issue.level });
+      });
+    });
+    const restored = restoreFaceReviewPoseSuggestion();
+    const rules = ({
+      playful: [{ category: "smile_issue", values: { allowed: true, level: "broad" } }],
+      candid: [{ category: "gaze_issue", values: { allowed: false } }],
+      elegant: [{ category: "smile_issue", values: { allowed: true, level: "gentle" } }],
+      dynamic: [
+        { category: "gaze_issue", values: { allowed: false } },
+        { category: "hair_issue", values: { level: "dynamic" }, onlyWhenAllowed: true }
+      ],
+      cool: [{ category: "smile_issue", values: { allowed: true, level: "neutral" } }],
+      vsign: [{ category: "smile_issue", values: { allowed: true, level: "broad" } }],
+      cheer: [{ category: "smile_issue", values: { allowed: true, level: "broad" } }]
+    })[pose] || [];
+
+    const changes = [];
+    const appliedCategoryCandidates = new Set();
+    rules.forEach(({ category, values, onlyWhenAllowed = false }) => {
+      faceThumbEntries.forEach((entry) => {
+        const issue = (entry.issues || []).find((item) => item.category === category);
+        if (!issue || (onlyWhenAllowed && !issue.allowed)) return;
+        const fields = {};
+        Object.entries(values).forEach(([field, value]) => {
+          if (issue[field] === value) return;
+          const versionKey = field === "allowed" ? "allowedTouchVersion" : "levelTouchVersion";
+          fields[field] = {
+            before: issue[field],
+            applied: value,
+            touchVersion: issue[versionKey] || 0
+          };
+          issue[field] = value;
+          issue.poseSuggestedFields = issue.poseSuggestedFields || {};
+          issue.poseSuggestedFields[field] = true;
+        });
+        if (Object.keys(fields).length) {
+          changes.push({ issue, fields });
+          appliedCategoryCandidates.add(category);
+        }
+      });
+    });
+    facePoseSuggestionState = changes.length ? { pose, changes } : null;
+    const netChangedCategories = new Set();
+    valuesBeforeSwitch.forEach((before, issue) => {
+      if (issue.allowed !== before.allowed || issue.level !== before.level) {
+        netChangedCategories.add(issue.category);
+      }
+    });
+    const appliedCategories = [...netChangedCategories].filter((category) =>
+      appliedCategoryCandidates.has(category));
+    const restoredCategories = [...netChangedCategories].filter((category) =>
+      !appliedCategoryCandidates.has(category));
+    if (restored.changed || changes.length) renderFaceDetailPanel();
+    return {
+      previousPose: restored.pose,
+      restoredCategories,
+      appliedCategories
+    };
+  }
+
   // Which faceThumbEntries index #ap-face-detail currently shows -- reset to
   // 0 whenever renderFaceThumbnails rebuilds faceThumbEntries from a fresh
   // analysis (a different photo/person set makes any other index stale),
@@ -916,6 +1064,8 @@ window.PhotoAgentResults = (() => {
   }
 
   function renderFaceThumbnails(analysis) {
+    reviewAdvancedOptions = { ...(analysis?._advanced_options || {}) };
+    facePoseSuggestionState = null;
     // A different photo/person set makes whatever tab was previously
     // selected meaningless -- always land back on the first person.
     selectedFaceIndex = 0;
@@ -1218,6 +1368,7 @@ window.PhotoAgentResults = (() => {
       return items;
     }
     issues.forEach((issue) => {
+      const globallyEnabled = faceIssueGloballyEnabled(issue.category);
       const li = document.createElement("li");
       const row = document.createElement("div");
       row.className = "ap-face-issue-row";
@@ -1231,17 +1382,20 @@ window.PhotoAgentResults = (() => {
       // ~44px left of a flagged one right above/below it.
       const toggle = document.createElement("label");
       toggle.className = "ios-switch ap-face-issue-toggle";
-      toggle.title = issue.flagged
-        ? "允許 AI 修正此項目"
-        : MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)
-          ? "分析判定無需或不建議調整；仍可手動開啟"
-          : "模型未判定此項目需要修正，無需操作";
+      toggle.title = !globallyEnabled
+        ? "此功能已在人像設定中關閉"
+        : issue.flagged
+          ? "允許 AI 修正此項目"
+          : MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)
+            ? "分析判定無需或不建議調整；仍可手動開啟"
+            : "模型未判定此項目需要修正，無需操作";
       const input = document.createElement("input");
       input.type = "checkbox";
-      input.disabled = !issue.controllable;
-      input.checked = issue.controllable && issue.allowed;
+      input.disabled = !globallyEnabled || !issue.controllable;
+      input.checked = globallyEnabled && issue.controllable && issue.allowed;
       input.addEventListener("change", () => {
         issue.allowed = input.checked;
+        issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
         refreshVerdict();
       });
       const track = document.createElement("span");
@@ -1262,10 +1416,12 @@ window.PhotoAgentResults = (() => {
       const resultLabel = document.createElement("span");
       resultLabel.className = "step-cb-label";
       const refreshVerdict = () => {
-        const active = issue.controllable && issue.allowed;
+        const active = globallyEnabled && issue.controllable && issue.allowed;
         icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
         icon.textContent = active ? "!" : "✓";
-        resultLabel.textContent = !issue.flagged
+        resultLabel.textContent = !globallyEnabled
+          ? "已在人像設定中關閉"
+          : !issue.flagged
           ? (MANUAL_OVERRIDE_CATEGORIES.includes(issue.category) && issue.allowed
               ? `已手動開啟`
               : issue.okText)
@@ -1283,7 +1439,7 @@ window.PhotoAgentResults = (() => {
       let levelRow = null;
       if (LEVEL_SELECT_CATEGORIES.includes(issue.category)) {
         li.classList.add("ap-face-issue-item--with-level");
-        row.classList.toggle("ap-face-issue-row--with-level", issue.allowed);
+        row.classList.toggle("ap-face-issue-row--with-level", globallyEnabled && issue.allowed);
         levelRow = document.createElement("div");
         levelRow.className = "ap-face-issue-level-row";
         const select = document.createElement("select");
@@ -1298,14 +1454,25 @@ window.PhotoAgentResults = (() => {
           select.appendChild(option);
         });
         select.value = issue.level || choices[0][0];
-        select.disabled = !issue.allowed;
-        select.addEventListener("change", () => { issue.level = select.value; });
+        select.disabled = !globallyEnabled || !issue.allowed;
+        select.addEventListener("change", () => {
+          issue.level = select.value;
+          issue.levelUserTouched = true;
+          issue.levelTouchVersion = (issue.levelTouchVersion || 0) + 1;
+          // Picking a smile level is also an explicit choice to keep this
+          // person's smile adjustment enabled. If Pose originally enabled
+          // the row, clearing Pose must not make the user's new level inert.
+          if (issue.category === "smile_issue") {
+            issue.allowed = true;
+            issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
+          }
+        });
         input.addEventListener("change", () => {
           select.disabled = !input.checked;
           levelRow.hidden = !input.checked;
           row.classList.toggle("ap-face-issue-row--with-level", input.checked);
         });
-        levelRow.hidden = !issue.allowed;
+        levelRow.hidden = !globallyEnabled || !issue.allowed;
         levelRow.appendChild(select);
       }
 
@@ -1964,6 +2131,7 @@ window.PhotoAgentResults = (() => {
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides,
     getBodyReshapeOverrides, applyBodyReshapeOverrides, setBodyReshapeEnabled,
-    renderFaceReviewCards
+    renderFaceReviewCards,
+    syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion
   };
 })();
