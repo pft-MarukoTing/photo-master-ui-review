@@ -426,9 +426,26 @@
        Scoped to this one id rather than the shared .ap-options-toggle base
        rule, which other collapsible sections (Workflow Report, Technical
        Details, ...) still use plain. ── */
+    /* No top border -- with it, #ap-review-panel's :has()-colored border
+       (further down) drew a second line spanning the full row above every
+       tab, floating disconnected above the active tab's own colored border
+       instead of reading as one continuous outline. Leaving the top open
+       means the active tab's own border is the only thing marking the top
+       of the whole shape, and the card's left/right/bottom borders just
+       pick up right where that tab's own bottom corners are.
+       border-color falls back to var(--active-hue, var(--border-2)) --
+       #ap-review-panel is the only element using this class, so the
+       fallback is purely defensive, but it means the color source lives on
+       the one box that actually owns border-radius. Drawing it here (not on
+       .ap-toggle-card-body, which sits flush just inside this same edge)
+       lets the browser's own border+radius rendering sweep the color
+       smoothly around all 4 rounded corners -- a border drawn on a
+       square-cornered inner box instead left the two bottom corners looking
+       like they broke right where the outer rounded mask clipped them. */
     .ap-toggle-card {
       background: var(--card-2);
-      border: 1px solid var(--border-2);
+      border: 1px solid var(--active-hue, var(--border-2));
+      border-top: none;
       border-radius: var(--radius-sm);
       overflow: hidden;
     }
@@ -439,7 +456,16 @@
     .ap-toggle-card > summary:hover { background: var(--card-3); }
     .ap-toggle-card[open] > summary { border-bottom: 1px solid var(--border-2); }
     .ap-toggle-card > summary::before { font-size: 13px; }
-    .ap-toggle-card-body { padding: 14px; }
+    /* No border of its own -- this box has no auto width, so it already
+       fills .ap-toggle-card's inner edge exactly; drawing a second border
+       here (an inset version, outline/negative-offset, was tried and
+       reverted -- see git history) just stacked a square-cornered line
+       immediately inside that outer rounded one, breaking at the two bottom
+       corners where the overflow:hidden mask clipped it. The outer card's
+       own border (above, colored via --active-hue) is the only line now. */
+    .ap-toggle-card-body {
+      padding: 14px;
+    }
     .ap-toggle-card .step-inline-list { gap: 10px; }
     /* #ap-review-panel's summary holds an extra row (the per-person avatar
        tabs, #ap-face-tabs -- visible even while the whole box is collapsed,
@@ -450,6 +476,14 @@
        is the sibling that actually stacks tab-row-then-avatar-row in a
        column. */
     .ap-review-summary { align-items: flex-start; }
+    /* Zeroes out .ap-toggle-card > summary's own bottom padding (10px) just
+       for this summary -- id selector so it actually beats that rule's own
+       specificity. Closes the gap between the tab row's bottom edge and the
+       shoulder hairline below it (#ap-review-panel[open] > summary's own
+       border-bottom, see its :has() coloring further down) so the active
+       tab's own bottom sits flush against that line instead of floating
+       10px above it with a border-less stretch in between. */
+    #ap-review-panel > summary { padding-bottom: 0; }
     /* .ap-options-toggle's shared chevron (▸, below) doubles up with the
        browser-style tab strip itself as an "expand this" cue here -- the
        tabs already read as clickable controls on their own, so the chevron
@@ -479,9 +513,29 @@
        below, inactive tabs a visibly separate muted chip sitting behind
        it) -- replaces both the earlier pill-button look and an underline
        variant tried in between. */
+    /* align-items:flex-end (not the flex default, stretch) keeps every
+       tab's bottom edge on the same shared baseline -- the active tab's own
+       extra padding-top (below) then makes it grow taller upward only,
+       poking up above its neighbors like a real 凸-shaped tab, instead of
+       stretch forcing every tab to the same height. */
+    /* gap:0 (not a visible gutter) -- a gap here left a bare stretch of the
+       card's own background between every pair of tabs with no border
+       crossing it at all, breaking the colored outline right where two
+       tabs meet. Flush neighbors let each tab's own border (gray sides,
+       active-hue bottom) touch its neighbor's directly instead.
+       margin:0 -14px bleeds this row out of <summary>'s own 14px side
+       padding, same trick as #ap-face-tabs below -- without it, whichever
+       tab sits first or last had its own colored side border sitting a
+       flat 14px inside the card's own colored edge (above), reading as two
+       parallel lines with a dark gap between them instead of one. No
+       compensating padding needed here (unlike #ap-face-tabs, whose
+       children are fixed-size avatars) since these tabs are flex:1 and
+       just grow to fill the wider row. */
     .ap-review-tabs {
       display: flex;
-      gap: 4px;
+      align-items: flex-end;
+      gap: 0;
+      margin: 0 -14px;
     }
     /* flex:1 (not shrink-to-content) so however many tabs are actually
        visible -- 3 when 人像檢查 is hidden (no faces detected), 4 otherwise
@@ -499,25 +553,124 @@
       gap: 6px;
       padding: 7px 10px;
       border: 1px solid var(--border-2);
-      border-bottom: none;
       border-radius: 10px 10px 0 0;
       background: var(--card-3);
       color: var(--text-2);
-      font-size: 14px;
+      font-size: 16px;
       font-weight: 700;
       font-family: inherit;
+      line-height: 1;
       white-space: nowrap;
       cursor: pointer;
       transition: background .15s, color .15s;
     }
+    /* line-height:1 above (not the default "normal") -- CJK glyphs pull in a
+       fallback font (Inter above has no CJK coverage), and "normal"'s
+       reserved leading for that fallback varies a lot by platform/OS font --
+       comfortable on this codebase's own dev/test environment, tight enough
+       on some real phones to visibly crowd the active tab's larger label
+       against its own bottom border. A fixed 1 makes the line box just the
+       font-size itself everywhere, so the padding around it (below) means
+       the same thing on every device instead of guessing at extra leading. */
+    /* Icon size is set via width/height attributes on the <svg> itself
+       (index.html markup, 14x14) -- CSS width/height here still wins over
+       those (presentational attributes sit at the bottom of the cascade),
+       bumping the base size up to match the tab label's own larger
+       font-size above. */
+    .ap-review-tab .ic { width: 16px; height: 16px; }
     .ap-review-tab:hover { color: var(--text); }
+    /* Every tab's own bottom border picks up the currently active tab's hue
+       (--active-hue, set on #ap-review-panel via :has() below) instead of
+       staying neutral -- this is the "shoulder" that visually connects the
+       card's colored sides across to the active tab, without needing one
+       shared border-bottom on the summary itself (which has no way to skip
+       just the segment under whichever tab happens to be active, see git
+       history). The active tab itself overrides this back to none just
+       below -- it's meant to blend straight into the card, not look boxed
+       in on all 4 sides. */
+    .ap-review-tab { border-bottom-color: var(--active-hue, var(--border-2)); }
+    .ap-review-tab.is-active { border-bottom: none; }
     /* Matches #ap-review-panel's own background (.ap-toggle-card, above) --
        the active tab visually fuses with the body content beneath it
-       instead of reading as a separate chip like the inactive tab beside it. */
+       instead of reading as a separate chip like the inactive tab beside it.
+       padding-top/bottom close to the same 7px every tab uses (the colored
+       border/bottom-hairline system, further down, already answers "which
+       tab is active" on its own, so this no longer needs to poke up taller
+       than its neighbors to say the same thing) -- just a couple more px on
+       both sides than that 7px, since this tab's own font-size is larger
+       than its neighbors' and 7px alone left its label sitting right up
+       against the bottom border instead of clear of it. */
     .ap-review-tab.is-active {
       background: var(--card-2);
       color: var(--text);
+      padding-top: 9px;
+      padding-bottom: 9px;
+      font-size: 17px;
     }
+    /* Grows further still than the base .ic bump above -- the active tab's
+       icon ends up a little larger than every inactive one's, same as its
+       label text. Only 1px over each -- a real phone's own CJK fallback
+       font still ran this right up against the tab's own border even after
+       line-height:1 and the extra padding above, so the gap between active
+       and inactive sizing is deliberately small now, not the earlier
+       18px/19px. */
+    .ap-review-tab.is-active .ic { width: 17px; height: 17px; }
+    /* These larger sizes are what actually clip/overlap 修圖建議 and friends
+       on a real phone (flex:1 with min-width:0 lets a tab shrink to fit, but
+       white-space:nowrap keeps the label one line, so past a point it just
+       visibly runs past its own tab into the next one's background instead
+       of wrapping) -- the active tab's own extra padding-top/font-size make
+       it the first to overflow, confirmed as high up as 412-414px (a common
+       real phone width, not just the ~360px this was first caught at) --
+       step back down toward the original sizing there. 520px comfortably
+       covers every phone-class width (the widest common phones are
+       ~430-480px logical), leaving the bump for genuinely wide contexts. */
+    @media (max-width: 520px) {
+      .ap-review-tab { font-size: 14px; }
+      .ap-review-tab .ic { width: 14px; height: 14px; }
+      .ap-review-tab.is-active { font-size: 14.5px; }
+      .ap-review-tab.is-active .ic { width: 14.5px; height: 14.5px; }
+    }
+    /* Each tab carries its own hue (--hue, set per id below) instead of one
+       shared gray/purple -- the icon shows that hue at low opacity even at
+       rest (some color identity before you've touched anything), full
+       saturation once active, and the active tab's whole border picks up
+       the same color -- "which tab is active" and "what kind of tab this
+       is" answered by one color instead of two separate cues. The four raw
+       values live once on #ap-review-panel itself (inherited down to every
+       tab) so the :has() rule below can reuse them for the card's own
+       border instead of repeating the hex literals a second time.
+       One coordinated pink -> fuchsia -> violet -> indigo sweep (an early
+       version mixed in an amber/gold for 修圖建議, which read as an odd
+       warm outlier against the other three cool/magenta tones) -- violet
+       stays the app's own --accent, the other three are evenly spaced
+       around it on the same wheel so the set reads as one family. */
+    #ap-review-panel {
+      --hue-face: #F472B6;
+      --hue-recipe: #E879F9;
+      --hue-style: #A855F7;
+      --hue-prompt: #818CF8;
+    }
+    #ap-review-tab-face   { --hue: var(--hue-face); }
+    #ap-review-tab-recipe { --hue: var(--hue-recipe); }
+    #ap-review-tab-style  { --hue: var(--hue-style); }
+    #ap-review-tab-prompt { --hue: var(--hue-prompt); }
+    .ap-review-tab .ic { color: var(--hue); opacity: .5; flex-shrink: 0; transition: opacity .15s; }
+    .ap-review-tab.is-active .ic { opacity: 1; }
+    .ap-review-tab.is-active {
+      border-color: var(--hue);
+    }
+    /* --active-hue mirrors whichever tab is currently .is-active -- read by
+       .ap-toggle-card-body's own border (below), #ap-face-tabs's border,
+       and every inactive tab's own border-bottom (above), so all of them
+       stay in sync off one source instead of separate copies of the same
+       4-way mapping. :has() (already used elsewhere in this file, see
+       .option-pill-group:has(...) below) reads straight off the DOM, no JS
+       needed. */
+    #ap-review-panel:has(#ap-review-tab-face.is-active)   { --active-hue: var(--hue-face); }
+    #ap-review-panel:has(#ap-review-tab-recipe.is-active) { --active-hue: var(--hue-recipe); }
+    #ap-review-panel:has(#ap-review-tab-style.is-active)  { --active-hue: var(--hue-style); }
+    #ap-review-panel:has(#ap-review-tab-prompt.is-active) { --active-hue: var(--hue-prompt); }
     /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/.ap-style-type-row/
        .ap-style-option-grid each set their own display (flex/grid)
        unconditionally -- an author rule for the same property always beats
@@ -639,10 +792,16 @@
        #ap-face-detail below instead of opening #ap-face-modal. Only one
        person's detail renders at a time, so there's no per-card expand/
        collapse state to keep visually aligned across a row of neighbors. */
+    /* Only ever visible when 人像檢查 is the active tab (see its own
+       applyActiveReviewTab hidden-toggle, results.js). No border of its own
+       -- the outer card's own colored sides (above) already run past this
+       row on their way down to .ap-toggle-card-body, so a second colored
+       border here was redundant, not connective. */
     .ap-face-tabs {
       display: flex;
       flex-wrap: wrap;
       gap: 10px;
+      padding: 0 10px;
     }
     /* Separate wrapper around the button + badge, NOT overflow:hidden itself
        -- .ap-face-tab below needs overflow:hidden to clip its square
@@ -3179,9 +3338,11 @@
                     <div class="ap-review-summary-inner">
                       <div class="ap-review-tabs" id="ap-review-tabs">
                         <button type="button" class="ap-review-tab is-active" id="ap-review-tab-face" hidden>
+                          <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
                           人像檢查
                         </button>
                         <button type="button" class="ap-review-tab" id="ap-review-tab-recipe">
+                          <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5l1.8 1.8L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16l1.8 1.8L14.5 13.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                           修圖建議
                         </button>
                         <!-- Was a standalone #ap-style-picker button opening
@@ -3192,12 +3353,14 @@
                              fillStyleOptionList/showStyleGroup wiring
                              (app.js/results.js), just relocated. -->
                         <button type="button" class="ap-review-tab" id="ap-review-tab-style">
+                          <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3.5 20.5L12 12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M16 2.5l1.7 4L21.5 8l-3.8 1.5L16 13.5l-1.7-4L10.5 8l3.8-1.5L16 2.5z" fill="currentColor"/></svg>
                           修圖風格
                         </button>
                         <!-- Was its own full-width block below this panel --
                              the body markup (#ap-review-prompt) is unchanged,
                              just moved in as this tab's content. -->
                         <button type="button" class="ap-review-tab" id="ap-review-tab-prompt">
+                          <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 4h16v12H8l-4 4V4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
                           補充指令
                         </button>
                       </div>
