@@ -800,8 +800,10 @@
       applyModelQualityChange(els.imageModelQualitySelect.value));
   }
   if (els.apImageModelQualitySelect) {
-    els.apImageModelQualitySelect.addEventListener("change", () =>
-      applyModelQualityChange(els.apImageModelQualitySelect.value));
+    els.apImageModelQualitySelect.addEventListener("change", () => {
+      applyModelQualityChange(els.apImageModelQualitySelect.value);
+      updateInlineAnalysisContinueBtnState();
+    });
   }
 
   // Unchecking 兩階段修圖 (i.e. enabling single_pass_edit) skips Step 5b's
@@ -1019,8 +1021,10 @@
       applyRunCountChange(els.imageRunCountSelect.value));
   }
   if (els.apRunCountSelect) {
-    els.apRunCountSelect.addEventListener("change", () =>
-      applyRunCountChange(els.apRunCountSelect.value));
+    els.apRunCountSelect.addEventListener("change", () => {
+      applyRunCountChange(els.apRunCountSelect.value);
+      updateInlineAnalysisContinueBtnState();
+    });
   }
 
   // Advanced Settings (人像設定) live in ONE shared modal
@@ -1220,6 +1224,7 @@
       batchSettings.advancedOptions = advancedOptions;
     }
     refreshInlineRecipeList();
+    updateInlineAnalysisContinueBtnState();
   }
 
   // Re-filters whichever analysis the (currently open) inline revise panel
@@ -1343,6 +1348,11 @@
   // disabling them alongside the real data controls would leave the user
   // unable to even browse 人像檢查/修圖建議/修圖風格/補充指令 or open a
   // person's own card while a job is in flight or already finished.
+  // #inline-analysis-continue-btn's OWN "nothing changed yet" state
+  // (updateInlineAnalysisContinueBtnState) is a separate, purely visual
+  // .is-blocked class rather than the native disabled attribute -- see that
+  // function's own comment for why -- so this blanket disabled=true/false
+  // toggle applies to it normally, same as every other control here.
   function setAnalysisPreviewDisabled(disabled) {
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
@@ -1473,7 +1483,16 @@
     setStepIndicatorStep(1);
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
-    if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = false;
+    if (els.inlineAnalysisContinueBtn) {
+      els.inlineAnalysisContinueBtn.hidden = false;
+      // No baseline to diff against yet for a fresh image's very first
+      // review -- accepting the AI's own suggestions as-is is the normal
+      // first action here, not something updateInlineAnalysisContinueBtnState
+      // should block. Also clears any stale .is-blocked state a prior
+      // image's finished revise round left on this same shared button.
+      els.inlineAnalysisContinueBtn.classList.remove("is-blocked");
+      inlineReviseSnapshot = null;
+    }
     pendingResultsActive = true;
     if (els.downloadLink) {
       // selectedFile is null for a history record reopened at this same
@@ -1535,6 +1554,11 @@
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
       setAnalysisPreviewDisabled(false);
+      // Re-derives Run's own .is-blocked state -- finishSingleFlow's own
+      // auto-opened revise panel (showSingleResult -> backToProcessFromResults)
+      // already set this correctly moments ago, but this covers the rarer
+      // case where that never ran (e.g. an error before analysis.data landed).
+      updateInlineAnalysisContinueBtnState();
     }
   }
 
@@ -1635,10 +1659,26 @@
     };
   }
 
+  // Each value here is either the primitive `false`, or a flat one-level
+  // object like {allowed:true} / {allowed:true, level:"dynamic"} -- see
+  // getFaceIssueOverrides/getBodyReshapeOverrides (results.js). A plain
+  // `===` on those object values compared a fresh instance built just now
+  // against the one captured in the snapshot, which are never the same
+  // reference even when their contents match -- silently reporting "changed"
+  // on every revise that involved any face-issue/body-reshape override at
+  // all, not just an actual change to one. sameValue below compares that one
+  // level of object contents instead of identity.
   function sameFaceIssueOverrides(a, b) {
+    const sameValue = (va, vb) => {
+      if (va === vb) return true;
+      if (!va || !vb || typeof va !== "object" || typeof vb !== "object") return false;
+      const vKeysA = Object.keys(va);
+      const vKeysB = Object.keys(vb);
+      return vKeysA.length === vKeysB.length && vKeysA.every((k) => va[k] === vb[k]);
+    };
     const keysA = Object.keys(a || {});
     const keysB = Object.keys(b || {});
-    return keysA.length === keysB.length && keysA.every((key) => (b || {})[key] === a[key]);
+    return keysA.length === keysB.length && keysA.every((key) => sameValue(a[key], (b || {})[key]));
   }
 
   // True if the inline revise panel's Run button would submit an unchanged
@@ -1671,6 +1711,22 @@
       getBodyReshapeOverrides(), inlineReviseSnapshot.bodyReshapeOverrides);
     return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount
       && sameAdvancedOptions && sameFaceIssues && sameBodyReshape;
+  }
+
+  // Keeps the Run button visually flagged whenever inlineReviseHasNoChanges()
+  // would block it, instead of only surfacing that at click time (the alert
+  // in waitForInlineAnalysisAction below) with no warning beforehand. A CSS
+  // class (.is-blocked), not the native disabled attribute -- a genuinely
+  // disabled button can't dispatch "click" at all, which would silently
+  // swallow that same alert instead of ever showing it. Wired onto every
+  // control inlineReviseHasNoChanges reads (see call sites below), plus once
+  // right after captureInlineReviseSnapshot itself. A no-op (stays clear)
+  // outside a revise round -- inlineReviseHasNoChanges already returns false
+  // with no snapshot, so there's nothing to flag for an image's very first
+  // review.
+  function updateInlineAnalysisContinueBtnState() {
+    if (!els.inlineAnalysisContinueBtn) return;
+    els.inlineAnalysisContinueBtn.classList.toggle("is-blocked", inlineReviseHasNoChanges());
   }
 
   // Resolves "continue" or "cancel" depending on which inline button the user
@@ -3827,6 +3883,7 @@
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     openInlineAnalysisPanel();
     captureInlineReviseSnapshot();
+    updateInlineAnalysisContinueBtnState();
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
@@ -7066,6 +7123,7 @@
     } else {
       inlineReviseSnapshot = null;
     }
+    updateInlineAnalysisContinueBtnState();
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
@@ -8383,9 +8441,31 @@
           syncStyleTrigger(els[elKey]);
           updateStyleTriggerLabel();
           if (e.target.value !== "default") showStyleGroup(null);
+          updateInlineAnalysisContinueBtnState();
         });
       }
     });
+
+  // Remaining pieces inlineReviseHasNoChanges reads that don't already have a
+  // listener of their own: the recipe checklist (individual checkboxes are
+  // rebuilt on every render, but this delegated listener on the stable
+  // container survives that) and #ap-face-detail (delegated -- covers every
+  // per-person face-issue toggle/level-select and body-reshape toggle/
+  // checkbox it contains, all of which mutate faceThumbEntries in place
+  // rather than exposing their own individual change hooks). 補充指令 and its
+  // "取代" checkbox have no other listener at all yet.
+  if (els.apRecipeList) {
+    els.apRecipeList.addEventListener("change", updateInlineAnalysisContinueBtnState);
+  }
+  if (els.apFaceDetail) {
+    els.apFaceDetail.addEventListener("change", updateInlineAnalysisContinueBtnState);
+  }
+  if (els.promptInput) {
+    els.promptInput.addEventListener("input", updateInlineAnalysisContinueBtnState);
+  }
+  if (els.promptOverwriteToggle) {
+    els.promptOverwriteToggle.addEventListener("change", updateInlineAnalysisContinueBtnState);
+  }
 
   for (const eventName of ["dragenter", "dragover"]) {
     els.dropZone.addEventListener(eventName, (event) => {

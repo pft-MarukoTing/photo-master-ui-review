@@ -292,6 +292,20 @@
       transform: translateY(-1px);
     }
     .analysis-preview-action:active { transform: scale(.96); }
+    /* #inline-analysis-continue-btn's "nothing changed yet" state
+       (updateInlineAnalysisContinueBtnState, app.js) -- a class, not the
+       native disabled attribute, since this button must stay clickable for
+       waitForInlineAnalysisAction's own alert to actually fire on click.
+       Same visual language as .btn:disabled elsewhere in this app. */
+    .analysis-preview-action-right.is-blocked {
+      opacity: .4;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    .analysis-preview-action-right.is-blocked:hover {
+      box-shadow: none;
+      transform: none;
+    }
     .ap-row p { margin: 6px 0 0; }
 
     /* ── Analysis-preview label hierarchy ──
