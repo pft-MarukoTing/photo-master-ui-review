@@ -573,65 +573,6 @@ a { text-decoration: none; color: inherit; }
   color: var(--accent);
 }
 
-.option-segment-group {
-  margin: -5px 16px 12px;
-  padding: 0;
-  border: 0;
-  min-width: 0;
-  transition: opacity .16s ease;
-}
-.option-segments {
-  display: flex;
-  gap: 6px;
-  margin: 4px 0 5px;
-  padding: 3px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgba(255,255,255,.035);
-}
-.option-segment { flex: 1; cursor: pointer; }
-.option-segment input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-.option-segment span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 30px;
-  padding: 3px 8px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  color: var(--text-2);
-  background: transparent;
-  opacity: .68;
-  font-size: 13px;
-  font-weight: 650;
-  text-align: center;
-  transition: color .18s ease, background .18s ease, border-color .18s ease,
-    box-shadow .18s ease, opacity .18s ease;
-}
-.option-segment:hover span {
-  color: var(--text);
-  background: rgba(168,85,247,.10);
-  opacity: 1;
-}
-.option-segment input:checked + span {
-  color: #fff;
-  background: var(--accent);
-  border-color: rgba(255,255,255,.28);
-  box-shadow: 0 0 0 2px rgba(168,85,247,.22), 0 3px 9px rgba(0,0,0,.24);
-  opacity: 1;
-}
-.option-segment input:focus-visible + span {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-.option-segment-group.is-collapsed { display: none; }
-.option-segment-group--five .option-segment span { padding-inline: 5px; }
-.option-segment-group > .option-desc { font-size: 13px; }
-
 /* Options card */
 .options-card {
   background: var(--card);
@@ -749,6 +690,14 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    fix to allow/deny. Same dim+not-allowed treatment as the option pickers'
    own disabled rows (.step-inline-list li label:has(input:disabled)). */
 .ap-face-issue-toggle:has(input:disabled) { opacity: .35; cursor: not-allowed; }
+/* Globally locked by #advanced-settings-fold (results.js sets this class
+   directly off issue.controllable, the same live-checked flag that also
+   drives input.disabled just above) -- an explicit class instead of relying
+   on :has(input:disabled) alone, so the dim+not-allowed feedback doesn't
+   depend on that selector's own support/specificity resolving the same way
+   in every environment this runs in. Declared after .ap-face-issue-toggle.
+   ios-switch's own cursor:pointer above so it wins at equal specificity. */
+.ap-face-issue-toggle.is-locked { opacity: .35; cursor: not-allowed; }
 
 .ap-face-issue-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
 
@@ -1759,6 +1708,15 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .adherence-icon.is-pending {
   background: rgba(239, 68, 68, .14);
   color: var(--red);
+}
+
+/* Locked (人像設定's category toggle is off, results.js's refreshVerdict) --
+   deliberately neither .is-done's green nor .is-pending's red, so it doesn't
+   misread as "no issue" or "will be fixed" while the row itself is a
+   disabled, uninteractive toggle. */
+.adherence-icon.is-locked {
+  background: rgba(255, 255, 255, .08);
+  color: var(--text-2);
 }
 
 .vs-label {

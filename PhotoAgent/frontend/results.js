@@ -728,15 +728,11 @@ window.PhotoAgentResults = (() => {
   // field this entry came from -- the toggle in buildPersonIssueItems writes
   // back through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
   // uses the same pair to flip should_fix/adjust_safe before submission.
-  function faceIssueEntries(subject, index, advancedOptions = {}) {
+  function faceIssueEntries(subject, index) {
     if (!subject) return [];
     return FACE_ISSUE_CATEGORIES.map((category) => {
       const match = subject[category.field];
       if (!match || typeof match !== "object") return null;
-      const explicitSmileLevel = category.field === "smile_issue"
-        && advancedOptions.smile_adjustment !== false
-        && advancedOptions.smile_level
-        && advancedOptions.smile_level !== "auto";
       const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(category.field);
       // buildEffectiveAnalysis (app.js) writes _user_forced/_user_level onto
       // this same subject[category.field] object at submit time, and the
@@ -747,6 +743,10 @@ window.PhotoAgentResults = (() => {
       // straight from the untouched original verdict and silently show the
       // toggle as off again.
       const wasUserForced = !!match._user_forced;
+      // The "set all" global lock (#advanced-settings-fold's toggle for this
+      // category) is applied at render time in buildPersonIssueItems below,
+      // via faceIssueGloballyEnabled/reviewAdvancedOptions -- not baked in
+      // here. So this stays the plain per-analysis verdict.
       return {
         label: category.label,
         flagged: match[category.flagField] === category.flagWhen,
@@ -756,15 +756,13 @@ window.PhotoAgentResults = (() => {
         category: category.field,
         subjectIndex: index,
         // Hair, smile, blink, and gaze are all user-selectable transformations
-        // even when the analyzer recommends preserving them. An explicit
-        // upload-page smile level is already a manual opt-in, including for a
-        // face the analyzer marked unsafe. Auto still starts such a face off.
+        // even when the analyzer recommends preserving them.
         controllable: match[category.flagField] === category.flagWhen || isManualOverride,
-        allowed: match[category.flagField] === category.flagWhen || !!explicitSmileLevel || wasUserForced,
+        allowed: match[category.flagField] === category.flagWhen || wasUserForced,
         level: category.field === "hair_issue"
-          ? (match._user_level || (advancedOptions.calm_hair ? "tidy" : "dynamic"))
+          ? (match._user_level || "dynamic")
           : category.field === "smile_issue"
-            ? (match._user_level || advancedOptions.smile_level || "auto")
+            ? (match._user_level || "auto")
             : null,
         levelUserTouched: !!match._user_level,
         allowedTouchVersion: 0,
@@ -885,6 +883,34 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  // "Set all" action for one category's own #advanced-settings-fold toggle,
+  // called from that toggle's own "change" handler (app.js's
+  // ADVANCED_OPTION_FACE_CATEGORIES wiring) right before applyAdvancedOptionsChange
+  // -- which reads the fresh DOM state and calls syncFaceReviewAdvancedOptions
+  // below, the thing that actually keeps reviewAdvancedOptions (and so
+  // faceIssueGloballyEnabled/globallyEnabled at every render) in sync. This
+  // function only owns the DATA side of the toggle, `issue.allowed`: turning
+  // the category OFF forces every person's allowed to false immediately, so
+  // getFaceIssueOverrides (read at submit time) is correct even before the
+  // next render; turning it back ON restores every person's allowed to the
+  // analyzer's own verdict (issue.flagged, i.e. should_fix/adjust_safe) --
+  // discarding the bulk-off and any earlier manual per-person pick, rather
+  // than leaving everyone still unchecked, which is what merely unlocking
+  // without resetting would do. Never touches `issue.controllable` -- that
+  // stays purely the analyzer/manual-override verdict faceIssueEntries
+  // already computed; the lock itself is applied at render time via
+  // globallyEnabled (buildPersonIssueItems below), combined with
+  // controllable at each use site, not baked into controllable itself.
+  function setFaceIssueCategoryLock(category, enabled) {
+    faceThumbEntries.forEach((entry) => {
+      (entry.issues || []).forEach((issue) => {
+        if (issue.category !== category) return;
+        issue.allowed = enabled ? issue.flagged : false;
+        issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
+      });
+    });
+  }
+
   function applyBodyReshapeOverrides(overrides) {
     if (!bodyReshapeEnabled || !overrides) return;
     faceThumbEntries.forEach((entry) => {
@@ -927,7 +953,7 @@ window.PhotoAgentResults = (() => {
   // state each toggle mutates directly, not the DOM.
   let faceThumbEntries = [];
 
-  // The global 人像設定 currently in force for the face-review rows. Kept
+  // The global 人像修正設定 currently in force for the face-review rows. Kept
   // separately from issue.allowed: manually turning a whole global category
   // off should make every row look disabled without erasing each person's
   // own allow/deny choice, so it can reappear unchanged when restored.
@@ -950,22 +976,12 @@ window.PhotoAgentResults = (() => {
     return !key || reviewAdvancedOptions[key] !== false;
   }
 
-  // Called when the shared 人像設定 modal changes after faceThumbEntries was
+  // Called when the shared 人像修正設定 modal changes after faceThumbEntries was
   // already built. Re-render only the selected person's detail: rebuilding
   // from analysis would discard in-memory overrides, while rebuilding every
   // thumbnail would needlessly re-crop all faces for a text/toggle change.
   function syncFaceReviewAdvancedOptions(advancedOptions) {
     reviewAdvancedOptions = { ...(advancedOptions || {}) };
-    faceThumbEntries.forEach((entry) => {
-      (entry.issues || []).forEach((issue) => {
-        if (issue.levelUserTouched) return;
-        if (issue.category === "hair_issue") {
-          issue.level = reviewAdvancedOptions.calm_hair ? "tidy" : "dynamic";
-        } else if (issue.category === "smile_issue") {
-          issue.level = reviewAdvancedOptions.smile_level || "auto";
-        }
-      });
-    });
     renderFaceDetailPanel();
   }
 
@@ -990,7 +1006,7 @@ window.PhotoAgentResults = (() => {
   }
 
   // Applies the Pose recommendation only to each person's own controls; the
-  // shared 人像設定 modal is deliberately untouched. Gaze-off poses switch
+  // shared 人像修正設定 modal is deliberately untouched. Gaze-off poses switch
   // every person's gaze item off; explicit smile poses opt every person in
   // at that smile level; Dynamic changes hair level only for people whose
   // own hair item is already enabled. Returns only net-visible category
@@ -1160,7 +1176,7 @@ window.PhotoAgentResults = (() => {
         const bodyKeyPoints = bodyReshapePointEntries(bodySubject, bodyIndex, analysis);
         return {
           box: f.box,
-          issues: faceIssueEntries(subject, index, analysis?._advanced_options || {}),
+          issues: faceIssueEntries(subject, index),
           bodyKeyPoints,
           bodyAnalysisAvailable: bodyReshapeEnabled && !!(bodySubject?.body_reshape && typeof bodySubject.body_reshape === "object"),
           bodyReshapeEnabled: bodyReshapeSubjectEnabled(bodyIndex, bodyKeyPoints, analysis),
@@ -1190,7 +1206,7 @@ window.PhotoAgentResults = (() => {
       const bodyKeyPoints = bodyReshapePointEntries(subject, subjectIndex, analysis);
       faceThumbEntries.push({
         box,
-        issues: faceIssueEntries(subject, subjectIndex, analysis?._advanced_options || {}),
+        issues: faceIssueEntries(subject, subjectIndex),
         bodyKeyPoints,
         bodyAnalysisAvailable: bodyReshapeEnabled,
         bodyReshapeEnabled: bodyReshapeSubjectEnabled(subjectIndex, bodyKeyPoints, analysis),
@@ -1407,6 +1423,15 @@ window.PhotoAgentResults = (() => {
       return items;
     }
     issues.forEach((issue) => {
+      // Sole source of truth for whether this category is globally locked --
+      // read fresh every render off reviewAdvancedOptions (kept in sync by
+      // syncFaceReviewAdvancedOptions, called from app.js whenever a
+      // #advanced-settings-fold toggle changes or a record/photo is
+      // (re)opened), not a flag baked onto `issue` itself. `issue.controllable`
+      // stays purely the analyzer/manual-override verdict faceIssueEntries
+      // computed -- the lock is combined with it at each use site below
+      // instead, so it can never leave `issue` itself in a stale locked
+      // state the way mutating `controllable` here would.
       const globallyEnabled = faceIssueGloballyEnabled(issue.category);
       const li = document.createElement("li");
       const row = document.createElement("div");
@@ -1419,20 +1444,46 @@ window.PhotoAgentResults = (() => {
       // label/icon/text after it land in the same column on every row
       // instead of an unflagged row (previously no toggle at all) sitting
       // ~44px left of a flagged one right above/below it.
+      const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(issue.category);
+      // A manual-override category (blink/gaze/hair/smile) is only ever
+      // locked when its #advanced-settings-fold toggle is off -- build_edit_
+      // prompt's global veto would ignore a per-person re-enable regardless,
+      // so this says so instead of the normal "仍可手動開啟", which would be
+      // untrue here.
       const toggle = document.createElement("label");
       toggle.className = "ios-switch ap-face-issue-toggle";
+      // Explicit class (styles.css), not relying on :has(input:disabled)
+      // alone -- see that rule's own comment for why.
+      toggle.classList.toggle("is-locked", !globallyEnabled);
       toggle.title = !globallyEnabled
-        ? "此功能已在人像設定中關閉"
+        ? "此項目已在人像修正設定中關閉，需先在設定中開啟才能個別調整"
         : issue.flagged
           ? "允許 AI 修正此項目"
-          : MANUAL_OVERRIDE_CATEGORIES.includes(issue.category)
+          : isManualOverride
             ? "分析判定無需或不建議調整；仍可手動開啟"
             : "模型未判定此項目需要修正，無需操作";
+      // Capture-phase click guard on the LABEL itself (not just input.disabled
+      // below) -- a click anywhere in this label (including the track/thumb
+      // spans appended below, which aren't the input) normally activates its
+      // associated checkbox even though the click target isn't the input. A
+      // disabled input is supposed to make the browser skip that activation
+      // entirely, but capturing here and calling preventDefault/stopPropagation
+      // whenever the row is locked guarantees it regardless of that native
+      // behavior -- this row must be completely unclickable while locked, not
+      // just visually dimmed. Same combined condition as input.disabled below.
+      toggle.addEventListener("click", (event) => {
+        if (!globallyEnabled || !issue.controllable) { event.preventDefault(); event.stopPropagation(); }
+      }, true);
       const input = document.createElement("input");
       input.type = "checkbox";
       input.disabled = !globallyEnabled || !issue.controllable;
       input.checked = globallyEnabled && issue.controllable && issue.allowed;
       input.addEventListener("change", () => {
+        // input.disabled (and the capture-phase click guard above) already
+        // block a real user click while locked -- this is the last backstop
+        // so a locked row can never end up allowed=true no matter how the
+        // change event got dispatched.
+        if (!globallyEnabled || !issue.controllable) { input.checked = false; return; }
         issue.allowed = input.checked;
         issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
         refreshVerdict();
@@ -1456,15 +1507,19 @@ window.PhotoAgentResults = (() => {
       resultLabel.className = "step-cb-label";
       const refreshVerdict = () => {
         const active = globallyEnabled && issue.controllable && issue.allowed;
-        icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
-        icon.textContent = active ? "!" : "✓";
-        resultLabel.textContent = !globallyEnabled
-          ? "已在人像設定中關閉"
+        // Locked (globally disabled) is neither "done"/no-issue (green ✓)
+        // nor "pending"/will-fix (red !) -- a third, muted state so it
+        // doesn't misread as either while the row itself is uninteractive.
+        const locked = !globallyEnabled;
+        icon.className = `adherence-icon ${locked ? "is-locked" : active ? "is-pending" : "is-done"}`;
+        icon.textContent = locked ? "–" : active ? "!" : "✓";
+        resultLabel.textContent = locked
+          ? "已於人像修正設定關閉"
           : !issue.flagged
-          ? (MANUAL_OVERRIDE_CATEGORIES.includes(issue.category) && issue.allowed
-              ? `已手動開啟`
-              : issue.okText)
-          : (issue.allowed ? issue.flagText : "已設定不修正");
+            ? (isManualOverride && issue.allowed
+                ? `已手動開啟`
+                : issue.okText)
+            : (issue.allowed ? issue.flagText : "已設定不修正");
       };
       refreshVerdict();
       row.appendChild(icon);
@@ -2174,7 +2229,7 @@ window.PhotoAgentResults = (() => {
   }
 
   // Narrow re-fill of just #ap-recipe-list -- for when the panel is already
-  // open and only the recipe items need to change (flipping a 人像設定
+  // open and only the recipe items need to change (flipping a 人像修正設定
   // toggle re-filters correction_plan/retouch_recipe, see
   // refreshInlineRecipeList in app.js), without re-running the rest of
   // renderAnalysisPreview and disturbing whatever Pose/Angle/Lighting/Size
@@ -2187,7 +2242,7 @@ window.PhotoAgentResults = (() => {
     renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
-    getFaceIssueOverrides, applyFaceIssueOverrides,
+    getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock,
     getBodyReshapeOverrides, applyBodyReshapeOverrides, setBodyReshapeEnabled,
     renderFaceReviewCards,
     syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion

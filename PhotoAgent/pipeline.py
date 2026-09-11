@@ -38,6 +38,7 @@ from prompts import (
     portrait_qc_persons,
     resolve_user_gaze_request,
     subject_issue_items,
+    _disabled_issue_subject_indices,
 )
 
 from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
@@ -149,6 +150,15 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     regardless of the toggle); this plain dict lookup, plus build_edit_prompt's
     own strip_disabled_topic_items call on correction_plan, are the only two
     places the toggle is actually enforced, both at edit time.
+
+    Also skips (falls through to the empty-gaze_items return below) once
+    every subject with an approved gaze fix has been individually opted out
+    via _disabled_issue_subject_indices -- the same per-person "允許 AI 修正此
+    項目" toggle build_edit_prompt's own blink/hair/gaze_items_to_fix already
+    honor. Without this, a person the user explicitly excluded on the review
+    screen would still get their gaze redirected here, since this pass
+    rebuilds its own item list straight from analysis rather than reusing
+    build_edit_prompt's already-filtered list.
     """
     if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
         return image_b64, None, None
@@ -157,9 +167,11 @@ def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
     # its own item list straight from analysis rather than reusing build_edit_
     # prompt's gaze_items_to_fix, and a forced item that only cleared that
     # other filter would otherwise never reach an actual edit call.
+    gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
     gaze_items = [
         resolve_user_gaze_request(item) for item in subject_issue_items(analysis, "gaze_issue")
-        if item.get("should_fix") or item.get("_user_forced")
+        if (item.get("should_fix") or item.get("_user_forced"))
+        and item.get("_subject_index") not in gaze_disabled_indices
     ]
     if not gaze_items:
         return image_b64, None, None

@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -1027,7 +1027,7 @@
     });
   }
 
-  // Advanced Settings (人像設定) live in ONE shared fold (#advanced-settings-fold),
+  // Advanced Settings (人像修正設定) live in ONE shared fold (#advanced-settings-fold),
   // folded into whichever of #settings-modal (upload page) / #ap-settings-modal
   // (results page) is currently open -- see openSettingsModal/openApSettingsModal
   // below. Reading them here (instead of inlining the same object literal at
@@ -1039,13 +1039,7 @@
       eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
       gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
       hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
-      // Keep the selected radio even while 亂髮偵測 is off. The backend
-      // ignores this level while disabled, but Dynamic's rule explicitly
-      // says not to alter the dormant choice; folding "off" into false here
-      // made a previously selected 梳整俐落 look like 保留髮絲動態 later.
-      calm_hair: !!els.calmHairToggle?.checked,
       smile_adjustment: els.smileAdjustmentToggle ? els.smileAdjustmentToggle.checked : true,
-      smile_level: (els.smileLevelSelect && els.smileLevelSelect.value) || "auto",
       editor_prompt_strategy: els.apEditorPromptStrategySelect?.value || els.editorPromptStrategySelect?.value || DEFAULT_EDITOR_PROMPT_STRATEGY,
     };
   }
@@ -1067,62 +1061,8 @@
   }));
   syncEditorPromptStrategy();
 
-  // 笑容程度 only means anything while 笑容調整 is on, so it dims with the
-  // switch (same .is-locked treatment the results page's read-only 分析模型
-  // picker uses) instead of silently accepting a level nothing will apply.
-  function syncSmileLevelLock() {
-    if (!els.smileLevelPicker) return;
-    const enabled = !els.smileAdjustmentToggle || els.smileAdjustmentToggle.checked;
-    els.smileLevelPicker.classList.toggle("is-collapsed", !enabled);
-  }
-
-  function syncHairTidinessLevelLock() {
-    if (!els.hairTidinessLevel) return;
-    const enabled = !els.hairMessDetectionToggle || els.hairMessDetectionToggle.checked;
-    els.hairTidinessLevel.classList.toggle("is-collapsed", !enabled);
-  }
-
-  const HAIR_TIDINESS_DESCRIPTIONS = {
-    dynamic: "保留髮絲被風吹動或人物移動時的自然飄動感。",
-    tidy: "將被風吹動的頭髮完整梳整、自然放下。",
-  };
-  const SMILE_LEVEL_DESCRIPTIONS = {
-    auto: "為沒有笑的人加上自然笑容，已經在笑的人維持原樣。",
-    neutral: "調整為自然、放鬆且沒有明顯笑意的表情。",
-    gentle: "調整為清楚、柔和而自然的微笑。",
-    broad: "調整為強烈、愉快而自然的開朗笑。",
-    laughing: "調整為強度最高的自然大笑。",
-  };
-
-  function syncAdvancedOptionDescriptions() {
-    const hairLevel = els.calmHairToggle?.checked ? "tidy" : "dynamic";
-    if (els.hairTidinessDesc) {
-      els.hairTidinessDesc.textContent = HAIR_TIDINESS_DESCRIPTIONS[hairLevel];
-    }
-    const smileLevel = els.smileLevelSelect?.value || "auto";
-    if (els.smileLevelDesc) {
-      els.smileLevelDesc.textContent = SMILE_LEVEL_DESCRIPTIONS[smileLevel];
-    }
-  }
-
-  // Mirrors applyModelQualityOption: sets the select AND the popover's own
-  // visible label, which wireOptionPicker otherwise only refreshes when the
-  // user opens that picker themselves.
-  function applySmileLevelOption(value) {
-    if (!els.smileLevelSelect) return;
-    value = ({
-      no_smile: "neutral",
-      closed_smile: "gentle",
-      toothy_smile: "broad",
-      bright_smile: "broad",
-    })[value] || value;
-    els.smileLevelSelect.value = value || "auto";
-    const radio = els.smileLevelPicker?.querySelector(`input[value="${els.smileLevelSelect.value}"]`);
-    if (radio) radio.checked = true;
-  }
-
   // Pose choices suggest compatible settings for every person in this photo.
-  // They deliberately do not touch the shared 人像設定 modal; "-" is simply
+  // They deliberately do not touch the shared 人像修正設定 modal; "-" is simply
   // absent here and therefore leaves all individual values unchanged.
   const POSE_PERSON_SUGGESTIONS = {
     playful: {
@@ -1312,8 +1252,6 @@
     if (els.eyeClosedDetectionToggle) els.eyeClosedDetectionToggle.checked = !!advancedOptions.eye_closed_detection;
     if (els.eyeGazeFocusToggle) els.eyeGazeFocusToggle.checked = !!advancedOptions.gaze_contact_detection;
     if (els.hairMessDetectionToggle) els.hairMessDetectionToggle.checked = !!advancedOptions.hair_mess_detection;
-    if (els.calmHairToggle) els.calmHairToggle.checked = !!advancedOptions.calm_hair;
-    if (els.hairLevelDynamic) els.hairLevelDynamic.checked = !advancedOptions.calm_hair;
     // Defaulted the way the backend defaults it (`.get(key, True)`) rather
     // than with !!: a record analyzed before 笑容調整 existed carries no such
     // key, and showing the switch off there would misreport what a revise of
@@ -1321,10 +1259,6 @@
     if (els.smileAdjustmentToggle) els.smileAdjustmentToggle.checked = advancedOptions.smile_adjustment !== false;
     if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = advancedOptions.editor_prompt_strategy || DEFAULT_EDITOR_PROMPT_STRATEGY;
     syncEditorPromptStrategy("upload");
-    applySmileLevelOption(advancedOptions.smile_level);
-    syncHairTidinessLevelLock();
-    syncSmileLevelLock();
-    syncAdvancedOptionDescriptions();
     syncFaceReviewAdvancedOptions(advancedOptions);
   }
 
@@ -1336,9 +1270,6 @@
   // applyModelQualityChange in that window (singleFlowState/batchSettings
   // are both still null).
   function applyAdvancedOptionsChange() {
-    syncHairTidinessLevelLock();
-    syncSmileLevelLock();
-    syncAdvancedOptionDescriptions();
     const advancedOptions = readAdvancedOptionsFromDom();
     if (singleFlowState) singleFlowState.advancedOptions = advancedOptions;
     const batchRecord = currentDetailBatchRecord();
@@ -1372,21 +1303,36 @@
     refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom()));
   }
 
-  [els.eyeClosedDetectionToggle, els.eyeGazeFocusToggle, els.hairMessDetectionToggle,
-   els.hairLevelDynamic, els.calmHairToggle,
-   els.smileAdjustmentToggle, els.smileLevelSelect].forEach((control) => {
-    if (control) control.addEventListener("change", applyAdvancedOptionsChange);
-  });
-  els.smileLevelPicker?.querySelectorAll('input[type="radio"]').forEach((radio) => {
-    radio.addEventListener("change", () => {
-      if (!radio.checked || !els.smileLevelSelect) return;
-      els.smileLevelSelect.value = radio.value;
-      els.smileLevelSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  // "Set all" concept: flipping one of these OFF is the same as the user
+  // opening the per-person review and disabling that category for every
+  // person currently shown there. Whether a row is actually LOCKED is
+  // results.js's own concern -- faceIssueGloballyEnabled/reviewAdvancedOptions,
+  // kept in sync by applyAdvancedOptionsChange below (which reads the fresh
+  // DOM state and calls syncFaceReviewAdvancedOptions) -- this handler only
+  // owns the DATA side via setFaceIssueCategoryLock: OFF forces everyone's
+  // issue.allowed to false immediately (so getFaceIssueOverrides is correct
+  // even before the next render); ON restores every person's allow-toggle to
+  // the analyzer's own verdict (should_fix/adjust_safe), discarding the
+  // bulk-off and any earlier manual per-person pick -- the only way back is
+  // flipping this same toggle back on. renderFaceReviewCards redraws the
+  // (already mutated) faceThumbEntries in place -- it does not re-derive
+  // them from `analysis`, so it never touches any other category's unsaved
+  // per-person picks the way a full renderAnalysisPreview/renderFaceThumbnails
+  // would.
+  const ADVANCED_OPTION_FACE_CATEGORIES = [
+    { control: els.eyeClosedDetectionToggle, category: "blink_issue" },
+    { control: els.eyeGazeFocusToggle, category: "gaze_issue" },
+    { control: els.hairMessDetectionToggle, category: "hair_issue" },
+    { control: els.smileAdjustmentToggle, category: "smile_issue" },
+  ];
+  ADVANCED_OPTION_FACE_CATEGORIES.forEach(({ control, category }) => {
+    if (!control) return;
+    control.addEventListener("change", () => {
+      setFaceIssueCategoryLock(category, control.checked);
+      renderFaceReviewCards();
+      applyAdvancedOptionsChange();
     });
   });
-  syncHairTidinessLevelLock();
-  syncSmileLevelLock();
-  syncAdvancedOptionDescriptions();
 
   // Backend step timings are seconds (float) or null (step skipped);
   // addTiming/appendTimingRow expect ms or a non-number sentinel.
@@ -1771,7 +1717,7 @@
       overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
       runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null,
-      // 人像設定 (#advanced-settings-fold, folded into 設定 on either page) --
+      // 人像修正設定 (#advanced-settings-fold, folded into 設定 on either page) --
       // just as real an edit as the picks above, so it needs the same
       // before/after snapshot to unblock the Run button.
       advancedOptions: readAdvancedOptionsFromDom(),
@@ -3994,7 +3940,7 @@
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
 
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: false });
-    // Paint this record's global 人像設定 independently before restoring any
+    // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
     applyAdvancedOptionsOption(singleFlowState.advancedOptions || singleFlowState.analysis?._advanced_options);
     if (lastSingleSelections) {
@@ -4008,7 +3954,7 @@
       // each issue's plain default state.
       renderFaceReviewCards();
       // Apply Pose last: it is a recommendation over this photo's restored
-      // individual values, never an edit to the global 人像設定 above.
+      // individual values, never an edit to the global 人像修正設定 above.
       applyStyleSelections(lastSingleSelections);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
@@ -6514,7 +6460,7 @@
     }
   }
 
-  // Moves #advanced-settings-fold (人像設定) into whichever 設定 modal's body
+  // Moves #advanced-settings-fold (人像修正設定) into whichever 設定 modal's body
   // is about to be shown, if it isn't already there -- it's one shared fold,
   // not a separate copy of its inputs per page, so reparenting it on open is
   // how both #settings-modal and #ap-settings-modal get to hold it without
@@ -7219,6 +7165,16 @@
     hideError();
     clearInlineAnalysisWait();
 
+    // Sync (display-only, no state push -- same as viewHistoryRecord below)
+    // #ap-image-model-quality/#ap-image-aspect-ratio/人像修正設定 to THIS case's
+    // own effective pick BEFORE rendering, not whatever another case's
+    // revise panel last left them showing.
+    const effMq = effectiveModelQuality(record);
+    applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
+    applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
+    applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
+    applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
+
     // Unlike the single-image flow (separate showPendingResults vs
     // backToProcessFromResults functions), batch mode reuses this one
     // function for both the first-time "analyzed" review (expanded, like
@@ -7230,18 +7186,16 @@
       preset: batchSettings.preset,
       expanded: record.status !== "done"
     });
-    // Global 人像設定 is restored independently; Pose later changes only
-    // this record's per-person controls.
-    applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
+    // renderAnalysisPreview above (via renderFaceThumbnails, results.js)
+    // just reset reviewAdvancedOptions to this analysis's own frozen
+    // _advanced_options -- correct for a record analyzed and never revised,
+    // but stale if a later revise on THIS record already changed a toggle
+    // since. Re-sync to the live value here, before applyBatchReviewSelections
+    // restores this record's own per-person picks, so 人像修正設定's globally-
+    // locked check (results.js's faceIssueGloballyEnabled) reflects reality
+    // rather than analyze-time history.
+    syncFaceReviewAdvancedOptions(effectiveAdvancedOptions(record));
     applyBatchReviewSelections(record);
-    // Sync (display-only, no state push -- same as viewHistoryRecord below)
-    // #ap-image-model-quality/#ap-image-aspect-ratio to THIS case's own
-    // effective pick, not whatever another case's revise panel last left
-    // them showing.
-    const effMq = effectiveModelQuality(record);
-    applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
-    applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
-    applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!record.overwritePrompt;
     // Pre-fill with this image's own current RUN count (matching whatever was
@@ -7862,7 +7816,7 @@
     // `analysis` already carries its own _advanced_options, baked in at
     // analyze time (pipeline.py's analyze_stage) -- overwrite it with
     // whatever the toggles in #advanced-settings-fold currently read as, so
-    // a revise from the results page (where 設定 -> 人像設定 can reopen and
+    // a revise from the results page (where 設定 -> 人像修正設定 can reopen and
     // change them) actually reaches build_edit_prompt's detected_issues
     // filtering and the gaze-repair pass, both of which read this key off
     // the analysis object at finish time rather than off a fresh request
@@ -7968,7 +7922,7 @@
     // default state.
     renderFaceReviewCards();
     // Pose is layered over the restored individual values and remains
-    // independent from the batch/global 人像設定.
+    // independent from the batch/global 人像修正設定.
     applyStyleSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked });
   }
 
