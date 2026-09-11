@@ -4694,8 +4694,8 @@
          gaze-repair re-pass) and relies on Step 5's own bundled edit call
          alone -- one edit-model round trip instead of two. Unchecked (one
          stage) is the real default here just like it is with no toggle at
-         all; the model/quality picker itself still defaults to gpt-image-2
-         low regardless -- pipeline.finish_stage bumps its own edit call up
+         all; the model/quality picker itself defaults to gpt-image-2.5
+         sunburst medium regardless -- pipeline.finish_stage bumps its own edit call up
          to medium only when this photo's analysis has an approved gaze fix
          to bundle, not unconditionally. Manually unchecking still bumps the
          picker to GPT Image 2 medium when it's currently on gpt-image-2 low,

@@ -61,7 +61,7 @@ window.PhotoAgentConfig = {
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" },
     { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6" }
   ],
-  defaultImageModelQuality: "gpt-image-2:low",
+  defaultImageModelQuality: "gpt-image-2.5-sunburst:medium",
   // User-facing aspect-ratio choices (upload page + analyze-preview, above
   // 生成張數) -- "auto" takes the output ratio from the framing the analysis
   // proposed (measured off its crop rectangle on the backend, not picked by
