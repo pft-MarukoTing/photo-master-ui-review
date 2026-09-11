@@ -1472,6 +1472,24 @@ window.PhotoAgentResults = (() => {
     });
   });
 
+  // #ap-analysis-shell and #ap-review-panel are two independent native
+  // <details> (the outer wraps the inner's whole markup -- see
+  // #ap-analysis-shell's own doc comment in index.html), so opening one does
+  // not natively open the other. renderAnalysisPreview/renderFaceReviewCards
+  // only sync them at render time; a manual click on the outer summary (e.g.
+  // re-opening it on the 結果 page) is a pure native toggle with no render in
+  // between, so without this listener it revealed #ap-review-panel's own
+  // <summary> (the tab row, always visible, already showing whichever tab
+  // renderFaceReviewCards last picked as active) while the still-closed
+  // inner <details> kept that tab's actual content hidden underneath --
+  // looking like an already-selected tab with nothing under it. Mirrored
+  // both ways so the two always behave as one control, never drifting apart.
+  if (els.apAnalysisShell && els.apReviewPanel) {
+    els.apAnalysisShell.addEventListener("toggle", () => {
+      els.apReviewPanel.open = els.apAnalysisShell.open;
+    });
+  }
+
   // Fills #ap-face-detail with whichever one person renderFaceReviewCards
   // last selected (selectedFaceIndex) -- the name heading plus the same
   // buildPersonIssueItems output a per-person card used to show directly.
