@@ -1523,13 +1523,16 @@ window.PhotoAgentResults = (() => {
   // time.
   function buildPersonIssueItems(entry) {
     const items = [];
-    if (entry && entry.sentToModel !== true) {
+    if (entry && entry.sentToModel !== true && debugUiActive) {
       // This person still has their subjects[] match's findings below (see
       // renderFaceThumbnails) -- just a caveat that they came from the model
       // reading the full photo alone, not this face's own zoomed crop.
       // Worded around the *result* (no close-up look) rather than the
       // *source* (detector cap vs. no detection at all) -- that source
-      // distinction is debug-only, see the "本機(超量)"/"AI補充" badge above.
+      // distinction is debug-only (gated on debugUiActive, same flag
+      // setDebugUi/app.js's applyDebugUiVisibility drives elsewhere in this
+      // file), since a regular user has no use for an internal detector-cap
+      // detail and no way to act on it.
       const note = document.createElement("li");
       note.className = "ap-face-issue-note";
       note.textContent = "此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。";
