@@ -2259,6 +2259,7 @@
 
   const PROMPT_KEYS = [
     "photo_analysis", "photo_analysis_portrait_qc", "photo_analysis_eye_repair_planning",
+    "photo_analysis_body_reshape",
     "user_instruction_review", "crop_validation",
     "image_edit_raw", "image_edit",
     "image_edit_resolution", "image_edit_strategy",
@@ -7786,6 +7787,9 @@
       delete effective._disabled_body_reshape_subjects;
       delete effective._disabled_body_reshape_key_points;
     }
+    // Execution conclusions are request-scoped. The backend rebuilds them
+    // after applying the latest checkbox, instruction, and overwrite state.
+    delete effective._body_reshape_execution_plan;
 
     // The per-person "allow AI to fix this" toggle (#ap-face-detail,
     // getFaceIssueOverrides in results.js): { "subjectIndex:category": false }

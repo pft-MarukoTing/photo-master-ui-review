@@ -1,4 +1,5 @@
 import base64
+import inspect
 import logging
 import time
 from functools import partial
@@ -30,6 +31,7 @@ from prompts import (
     build_portrait_qc_instruction,
     build_eye_repair_planning_instruction,
     build_body_reshape_planning_instruction,
+    build_body_reshape_execution_plan,
     body_reshape_enabled,
     strip_body_reshape,
     eye_repair_targets,
@@ -64,6 +66,35 @@ GAZE_REPAIR_BY_MODEL = {
 }
 
 logger = logging.getLogger(__name__)
+
+
+def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *, aspect_ratio, single_pass_edit):
+    """Call an editor while keeping compatibility with legacy/test adapters.
+
+    Provider editors in this repository accept ``single_pass_edit``.  A few
+    integrations (and lightweight test doubles) still expose the older
+    five-argument contract, so do not make that optional control parameter a
+    hard requirement for every callable placed in ``EDIT_PHOTO_BY_MODEL``.
+    Built-in editors continue to receive the flag unchanged.
+    """
+    kwargs = {"aspect_ratio": aspect_ratio}
+    try:
+        signature = inspect.signature(editor)
+    except (TypeError, ValueError):
+        # Some extension callables do not expose an inspectable signature;
+        # preserve the current behavior and pass the complete contract.
+        accepts_single_pass = True
+    else:
+        accepts_single_pass = (
+            "single_pass_edit" in signature.parameters
+            or any(
+                parameter.kind is inspect.Parameter.VAR_KEYWORD
+                for parameter in signature.parameters.values()
+            )
+        )
+    if accepts_single_pass:
+        kwargs["single_pass_edit"] = single_pass_edit
+    return editor(image_bytes, analysis, quality, preset_key, **kwargs)
 
 
 def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
@@ -154,6 +185,113 @@ def _quality_check_fallback(error: Exception) -> dict:
         "warnings": [str(error) or "品質檢查失敗"],
         "recommendation": "請人工快速比對原圖與輸出圖。",
     }
+
+
+def _normalize_quality_check_result(result, analysis, execution_plan, *, status="completed"):
+    """Normalize QA state and reconcile body details with actual endpoints.
+
+    A model response is allowed to omit the new optional body detail while old
+    fixtures/mocks are still in use, but an omitted target is never promoted to
+    a successful check.  ``pass`` is deliberately nullable for skipped/error
+    states so UI/statistics cannot treat an unexamined image as a pass.
+    """
+    qa = dict(result or {})
+    plan = execution_plan if isinstance(execution_plan, dict) else {}
+    # Keep the baseline QA payload untouched for requests that do not contain
+    # any body-reshape review points.  The extra status/adherence fields belong
+    # only to the body execution path and must not alter ordinary eye, hair,
+    # smile, style, or colour results.
+    if not plan.get("review_point_count"):
+        return qa
+    qa_status = qa.get("qa_status") if qa.get("qa_status") in {"completed", "skipped", "error"} else status
+    qa["qa_status"] = qa_status
+    checks = qa.get("checks")
+    qa["checks"] = dict(checks) if isinstance(checks, dict) else {}
+    warnings = qa.get("warnings")
+    qa["warnings"] = list(warnings) if isinstance(warnings, list) else []
+    expected = [
+        entry for entry in plan.get("points") or []
+        if entry.get("executable")
+    ]
+    if qa_status != "completed":
+        qa["pass"] = None
+        # A skipped/error run may still carry a legacy mock's boolean check
+        # values.  They describe no completed inspection, so expose them as
+        # unknown instead of allowing UI truthiness to present a pass/fail
+        # claim for work that never ran.
+        qa["checks"] = {key: None for key in qa["checks"]}
+    elif not isinstance(qa.get("pass"), bool):
+        qa["pass"] = None
+
+    adherence = qa.get("body_adherence")
+    adherence = list(adherence) if isinstance(adherence, list) else []
+    indexed = {}
+    for item in adherence:
+        if not isinstance(item, dict):
+            continue
+        if (
+            isinstance(item.get("subject_index"), bool)
+            or not isinstance(item.get("subject_index"), int)
+            or isinstance(item.get("source_key_point_index"), bool)
+            or not isinstance(item.get("source_key_point_index"), int)
+        ):
+            continue
+        key = (item.get("subject_index"), item.get("source_key_point_index"))
+        if key not in indexed:
+            indexed[key] = item
+    normalized_adherence = []
+    missing = False
+    for entry in expected:
+        key = (entry.get("subject_index"), entry.get("key_point_index"))
+        item = dict(indexed.get(key) or {})
+        if not item:
+            missing = True
+            item = {
+                "subject_index": entry.get("subject_index"),
+                "source_key_point_index": entry.get("key_point_index"),
+                "endpoint": entry.get("canonical_text") or entry.get("raw_text") or "",
+                "status": "not_evaluated",
+                "measured_change_pct": None,
+                "minimum_threshold_verified": None,
+                "assessment": "visual assessment unavailable",
+                "note": "QA did not return a result for this actual endpoint.",
+            }
+        else:
+            # The request plan is authoritative for identity and endpoint
+            # text.  Do not let a QA model's stale label/index redirect a
+            # result to another person or make a duplicate look like a new
+            # target.
+            item["subject_index"] = entry.get("subject_index")
+            item["source_key_point_index"] = entry.get("key_point_index")
+            item["endpoint"] = entry.get("canonical_text") or entry.get("raw_text") or ""
+            # No reliable contour/mask measurement is implemented in this
+            # pipeline.  Keep these fields explicitly unknown even if a model
+            # guesses a number; the requested target is not an achieved
+            # percentage and must never be presented as one.
+            item["measured_change_pct"] = None
+            item["minimum_threshold_verified"] = None
+            item["assessment"] = item.get("assessment") if isinstance(item.get("assessment"), str) else "visual assessment"
+            item["note"] = item.get("note") if isinstance(item.get("note"), str) else ""
+            if item.get("status") not in {"not_applicable", "not_evaluated", "passed", "failed", "unjudgeable"}:
+                item["status"] = "not_evaluated"
+                missing = True
+        normalized_adherence.append(item)
+    qa["body_adherence"] = normalized_adherence
+    if qa_status == "completed" and expected:
+        statuses = {item.get("status") for item in normalized_adherence}
+        if missing or statuses & {"not_applicable", "not_evaluated", "failed", "unjudgeable"}:
+            qa["pass"] = False
+            qa["checks"]["user_intent_followed"] = False
+            if qa.get("overall_status") in {None, "可展示", "通過"}:
+                qa["overall_status"] = "需人工複查"
+            warning = "body reshape QA did not verify every executable endpoint"
+            if warning not in qa["warnings"]:
+                qa["warnings"].append(warning)
+        elif qa["checks"].get("user_intent_followed") is False:
+            # A model cannot report an overall pass while explicitly saying
+            # the user-approved body intent was not followed.
+            qa["pass"] = False
+    return qa
 
 
 def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"]) -> dict:
@@ -253,6 +391,9 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # genuine finding and a later revise can turn a toggle back on without
     # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
+    body_plan = build_body_reshape_execution_plan(analysis)
+    if body_plan.get("review_point_count"):
+        analysis["_body_reshape_execution_plan"] = body_plan
     return analysis
 
 
@@ -328,7 +469,29 @@ def finish_stage(
         step3_usage = None
     else:
         user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis, analysis_model=analysis_model)
+    has_body_review_points = any(
+        isinstance(subject, dict)
+        and isinstance(subject.get("body_reshape"), dict)
+        and bool(
+            subject.get("body_reshape", {}).get("key_points")
+            or subject.get("body_reshape", {}).get("raw_key_points")
+        )
+        for subject in (analysis.get("subjects") or [])
+    )
+    if has_body_review_points:
+        user_instruction = dict(user_instruction or {})
+    if has_body_review_points and (user_prompt or "").strip():
+        user_instruction["original_user_direction"] = user_prompt.strip()
     analysis = {**analysis, "user_instruction": user_instruction}
+    analysis.pop("_body_reshape_execution_plan", None)
+    body_execution_plan = build_body_reshape_execution_plan(analysis)
+    if not ai_photo_editing and body_execution_plan.get("review_point_count"):
+        body_execution_plan = dict(body_execution_plan)
+        body_execution_plan["body_active"] = False
+        body_execution_plan["no_executable_reason"] = "AI photo editing is disabled"
+    body_review_active = bool(body_execution_plan.get("review_point_count"))
+    if body_review_active:
+        analysis["_body_reshape_execution_plan"] = body_execution_plan
     prompts["user_instruction_review"] = review_prompt
     usage["Step 3 - user_instruction_review"] = step3_usage
     timings["Step 3 - user_instruction_review"] = time.time() - t0
@@ -347,6 +510,7 @@ def finish_stage(
     # runs and this stays whatever was requested; overwritten just below when
     # an edit call actually happens.
     edit_quality = quality
+    promotion_reasons = []
 
     if ai_photo_editing:
         # Step 5 — AI edit
@@ -356,6 +520,15 @@ def finish_stage(
         # docstring) -- bump up from the requested "low" here, but only when
         # this photo actually has one, since with no gaze fix to bundle
         # there's nothing that combination would fail to apply.
+        if (
+            body_reshape_enabled()
+            and image_model == "gpt-image-2"
+            and quality == "low"
+            and body_execution_plan.get("body_active")
+            and body_execution_plan.get("executable_point_count", 0)
+        ):
+            edit_quality = "medium"
+            promotion_reasons.append("body_reshape_requires_medium")
         if single_pass_edit and image_model == "gpt-image-2" and quality == "low":
             gaze_fix_approved = any(
                 item.get("should_fix") or item.get("_user_forced")
@@ -365,7 +538,15 @@ def finish_stage(
                 edit_quality = "medium"
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
-        edit_result, edit_prompt = run_edit_photo(image_bytes, analysis, edit_quality, preset_key, aspect_ratio=aspect_ratio, single_pass_edit=single_pass_edit)
+        edit_result, edit_prompt = _run_edit_photo_compat(
+            run_edit_photo,
+            image_bytes,
+            analysis,
+            edit_quality,
+            preset_key,
+            aspect_ratio=aspect_ratio,
+            single_pass_edit=single_pass_edit,
+        )
         prompts["image_edit_raw"] = edit_result.get("raw_prompt") or edit_prompt
         prompts["image_edit"] = edit_prompt
         prompts["image_edit_resolution"] = edit_result.get("prompt_resolution")
@@ -408,6 +589,9 @@ def finish_stage(
             logger.info("Step 6: running quality check")
             try:
                 qa, qa_prompt, qa_usage = quality_check_photo(image_bytes, image_b64, analysis, analysis_model=analysis_model)
+                qa = _normalize_quality_check_result(
+                    qa, analysis, body_execution_plan, status="completed"
+                )
                 prompts["quality_check"] = qa_prompt
                 usage["Step 6 - quality_check"] = qa_usage
                 timings["Step 6 - quality_check"] = time.time() - t0
@@ -416,6 +600,9 @@ def finish_stage(
                 timings["Step 6 - quality_check"] = time.time() - t0
                 logger.warning("Step 6 QA failed in %.2fs: %s", timings["Step 6 - quality_check"], exc)
                 qa = _quality_check_fallback(exc)
+                qa = _normalize_quality_check_result(
+                    qa, analysis, body_execution_plan, status="error"
+                )
                 prompts["quality_check"] = None
                 usage["Step 6 - quality_check"] = None
         else:
@@ -429,6 +616,9 @@ def finish_stage(
                 "warnings": [],
                 "recommendation": "",
             }
+            qa = _normalize_quality_check_result(
+                qa, analysis, body_execution_plan, status="skipped"
+            )
             prompts["quality_check"] = None
             usage["Step 6 - quality_check"] = None
             timings["Step 6 - quality_check"] = None
@@ -473,6 +663,9 @@ def finish_stage(
             "warnings": [],
             "recommendation": "若要檢查生成式修圖品質，請開啟 AI 修圖。",
         }
+        qa = _normalize_quality_check_result(
+            qa, analysis, body_execution_plan, status="skipped"
+        )
         prompts["quality_check"] = None
         usage["Step 6 - quality_check"] = None
         timings["Step 6 - quality_check"] = None
@@ -480,6 +673,30 @@ def finish_stage(
     analysis = {**analysis, "prompts": prompts}
     analysis.pop("timings", None)
     analysis.pop("usage", None)
+
+    extra_info = {
+        "image_model": image_model if ai_photo_editing else None,
+        "image_quality": edit_quality,
+        "analysis_model": analysis_model,
+        "timings": timings,
+    }
+    if body_review_active:
+        extra_info.update({
+            "requested_quality": quality,
+            "effective_quality": edit_quality,
+            "promotion_reason": ",".join(promotion_reasons) if promotion_reasons else None,
+            "body_reshape_execution_plan": body_execution_plan,
+            "body_reshape_execution": {
+                key: body_execution_plan.get(key)
+                for key in (
+                    "body_active", "no_executable_reason", "review_point_count",
+                    "selected_point_count", "executable_point_count", "excluded_point_count",
+                    "disabled_point_count", "duplicate_point_count", "conflict_point_count",
+                    "user_override_point_count", "resolved_subject_count", "rendered_endpoint_count",
+                    "planner_default_target_pct", "planner_min_target_pct", "planner_max_target_pct",
+                )
+            },
+        })
 
     return {
         "result_image": image_b64,
@@ -489,12 +706,7 @@ def finish_stage(
             "analysis": analysis,
             "quality_check": qa,
             "token_usage": usage,
-            "extra-info": {
-                "image_model": image_model if ai_photo_editing else None,
-                "image_quality": edit_quality,
-                "analysis_model": analysis_model,
-                "timings": timings,
-            },
+            "extra-info": extra_info,
         },
     }
 

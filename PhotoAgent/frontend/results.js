@@ -707,6 +707,23 @@ window.PhotoAgentResults = (() => {
     return { ...bestSubjectMatch(analysis?.subjects, faceBox), matched: false };
   }
 
+  function bodySubjectForDetection(analysis, detectionIndex) {
+    const review = (analysis?.local_face_review || []).find((r) => r?.detection_index === detectionIndex);
+    if (review) {
+      const idx = review.matched_subject_index;
+      const subjects = Array.isArray(analysis?.subjects) ? analysis.subjects : [];
+      const subject = Number.isInteger(idx) && idx >= 0 && idx < subjects.length ? subjects[idx] : null;
+      return { subject, index: subject ? idx : -1, matched: true, unresolved: !subject };
+    }
+    const subjects = Array.isArray(analysis?.subjects) ? analysis.subjects : [];
+    const candidates = subjects
+      .map((subject, index) => ({ subject, index }))
+      .filter(({ subject }) => Number.isInteger(subject?.local_detection_index)
+        && subject.local_detection_index === detectionIndex);
+    if (candidates.length === 1) return { ...candidates[0], matched: false, unresolved: false };
+    return { subject: null, index: -1, matched: false, unresolved: true };
+  }
+
   // subjectIndex/category identify the underlying analysis.subjects[i][category]
   // field this entry came from -- the toggle in buildPersonIssueItems writes
   // back through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
@@ -767,12 +784,28 @@ window.PhotoAgentResults = (() => {
         .filter((item) => Number.isInteger(item?.subject_index) && Number.isInteger(item?.key_point_index))
         .map((item) => `${item.subject_index}:${item.key_point_index}`)
     );
-    return points.map((point, keyPointIndex) => ({
-      text: typeof point === "string" ? point.trim() : "",
-      subjectIndex,
-      keyPointIndex,
-      allowed: !disabled.has(`${subjectIndex}:${keyPointIndex}`)
-    })).filter((point) => point.text);
+    const executionPoints = Array.isArray(analysis?._body_reshape_execution_plan?.points)
+      ? analysis._body_reshape_execution_plan.points : [];
+    return points.map((point, keyPointIndex) => {
+      const execution = executionPoints.find((item) =>
+        Number(item?.subject_index) === subjectIndex
+        && Number(item?.key_point_index) === keyPointIndex
+      );
+      const executable = execution ? execution.reason_code === "executable" && execution.executable !== false : true;
+      const sourceText = typeof point === "string" ? point.trim() : "";
+      return {
+        text: executable ? (execution?.canonical_text || sourceText) : sourceText,
+        sourceText,
+        subjectIndex,
+        keyPointIndex,
+        allowed: !disabled.has(`${subjectIndex}:${keyPointIndex}`) && executable,
+        executable,
+        reasonCode: execution?.reason_code || null,
+        reason: execution?.reason || "",
+        targetPct: execution?.effective_target_pct ?? execution?.target_pct ?? null,
+        canonicalText: execution?.canonical_text || sourceText
+      };
+    }).filter((point) => point.text);
   }
 
   function bodyReshapeSubjectEnabled(subjectIndex, points, analysis) {
@@ -781,7 +814,7 @@ window.PhotoAgentResults = (() => {
       ? analysis._disabled_body_reshape_subjects : [];
     return !disabledSubjects.some(
       (index) => Number.isInteger(index) && index === subjectIndex
-    );
+    ) && points.some((point) => point.executable !== false && point.allowed !== false);
   }
 
   // Flattened { "subjectIndex:category": false } for every flagged issue the
@@ -814,10 +847,10 @@ window.PhotoAgentResults = (() => {
     const overrides = {};
     faceThumbEntries.forEach((entry) => {
       if (entry.bodyAnalysisAvailable && entry.bodyReshapeEnabled === false) {
-        overrides[`subject:${entry.subjectIndex}`] = false;
+        overrides[`subject:${entry.bodySubjectIndex ?? entry.subjectIndex}`] = false;
       }
       (entry.bodyKeyPoints || []).forEach((point) => {
-        if (point.allowed === false) {
+        if (point.executable !== false && point.allowed === false) {
           overrides[`${point.subjectIndex}:${point.keyPointIndex}`] = false;
         }
       });
@@ -856,7 +889,8 @@ window.PhotoAgentResults = (() => {
     if (!bodyReshapeEnabled || !overrides) return;
     faceThumbEntries.forEach((entry) => {
       if (entry.bodyAnalysisAvailable) {
-        entry.bodyReshapeEnabled = overrides[`subject:${entry.subjectIndex}`] !== false;
+        const subjectIndex = entry.bodySubjectIndex ?? entry.subjectIndex;
+        entry.bodyReshapeEnabled = overrides[`subject:${subjectIndex}`] !== false;
       }
       (entry.bodyKeyPoints || []).forEach((point) => {
         point.allowed = overrides[`${point.subjectIndex}:${point.keyPointIndex}`] !== false;
@@ -1120,14 +1154,18 @@ window.PhotoAgentResults = (() => {
         // for it, since the model may have described this exact person from
         // its coordinate-only text hint alone.
         if (!subject && (matched || !sentToModel)) return null;
-        const bodyKeyPoints = bodyReshapePointEntries(subject, index, analysis);
+        const bodyMatch = bodySubjectForDetection(analysis, detectionIndex);
+        const bodySubject = bodyMatch.subject;
+        const bodyIndex = bodyMatch.index;
+        const bodyKeyPoints = bodyReshapePointEntries(bodySubject, bodyIndex, analysis);
         return {
           box: f.box,
           issues: faceIssueEntries(subject, index, analysis?._advanced_options || {}),
           bodyKeyPoints,
-          bodyAnalysisAvailable: bodyReshapeEnabled && !!(subject?.body_reshape && typeof subject.body_reshape === "object"),
-          bodyReshapeEnabled: bodyReshapeSubjectEnabled(index, bodyKeyPoints, analysis),
+          bodyAnalysisAvailable: bodyReshapeEnabled && !!(bodySubject?.body_reshape && typeof bodySubject.body_reshape === "object"),
+          bodyReshapeEnabled: bodyReshapeSubjectEnabled(bodyIndex, bodyKeyPoints, analysis),
           subjectIndex: index,
+          bodySubjectIndex: bodyIndex,
           sentToModel,
           label: (subject && subject.label) || "",
         };
@@ -1142,7 +1180,7 @@ window.PhotoAgentResults = (() => {
     // reach edit without ever being exposed as user-selectable checkboxes.
     const representedSubjectIndexes = new Set(
       faceThumbEntries
-        .map((entry) => entry.subjectIndex)
+        .map((entry) => entry.bodySubjectIndex)
         .filter((index) => Number.isInteger(index) && index >= 0)
     );
     bodySubjects.forEach(({ subject, subjectIndex }) => {
@@ -1157,6 +1195,7 @@ window.PhotoAgentResults = (() => {
         bodyAnalysisAvailable: bodyReshapeEnabled,
         bodyReshapeEnabled: bodyReshapeSubjectEnabled(subjectIndex, bodyKeyPoints, analysis),
         subjectIndex,
+        bodySubjectIndex: subjectIndex,
         // null means this is a subjects[] fallback, not a local face that
         // missed the zoomed-crop cap (false retains that existing meaning).
         sentToModel: null,
@@ -1500,11 +1539,12 @@ window.PhotoAgentResults = (() => {
 
       const toggle = document.createElement("label");
       toggle.className = "ios-switch ap-face-issue-toggle";
-      toggle.title = bodyKeyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
+      const actionableBodyPoints = bodyKeyPoints.filter((point) => point.executable !== false);
+      toggle.title = actionableBodyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
       const masterInput = document.createElement("input");
       masterInput.type = "checkbox";
-      masterInput.disabled = !bodyKeyPoints.length;
-      masterInput.checked = bodyKeyPoints.length && entry.bodyReshapeEnabled !== false;
+      masterInput.disabled = !actionableBodyPoints.length;
+      masterInput.checked = actionableBodyPoints.length && entry.bodyReshapeEnabled !== false;
       const track = document.createElement("span");
       track.className = "ios-track";
       const thumb = document.createElement("span");
@@ -1534,23 +1574,41 @@ window.PhotoAgentResults = (() => {
           label.className = "ap-body-reshape-option";
           const input = document.createElement("input");
           input.type = "checkbox";
-          input.checked = point.allowed !== false;
+          input.disabled = point.executable === false;
+          input.checked = point.executable !== false && point.allowed !== false;
           input.addEventListener("change", () => { point.allowed = input.checked; });
           const text = document.createElement("span");
           text.textContent = point.text;
           label.appendChild(input);
           label.appendChild(text);
+          if (point.targetPct != null || (point.sourceText && point.sourceText !== point.text)) {
+            const metadata = document.createElement("small");
+            metadata.className = "ap-body-reshape-option-meta";
+            const details = [];
+            if (point.targetPct != null) details.push(`有效目標 ${point.targetPct}%`);
+            if (point.sourceText && point.sourceText !== point.text) details.push(`原始：${point.sourceText}`);
+            metadata.textContent = details.join(" · ");
+            label.appendChild(metadata);
+          }
+          if (point.executable === false && point.reason) {
+            label.title = `此項不會送入 edit：${point.reason}`;
+            label.classList.add("is-unavailable");
+            const reason = document.createElement("small");
+            reason.className = "ap-body-reshape-option-meta";
+            reason.textContent = `不執行：${point.reason}`;
+            label.appendChild(reason);
+          }
           list.appendChild(label);
         });
       }
       section.appendChild(list);
 
       const refreshBodyReshape = () => {
-        const active = bodyKeyPoints.length > 0 && entry.bodyReshapeEnabled !== false;
+        const active = actionableBodyPoints.length > 0 && entry.bodyReshapeEnabled !== false;
         masterInput.checked = active;
         icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
         icon.textContent = active ? "!" : "✓";
-        verdict.textContent = !bodyKeyPoints.length
+        verdict.textContent = !actionableBodyPoints.length
           ? "無需調整"
           : (active ? "可以調整" : "不執行");
         list.hidden = !active;

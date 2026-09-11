@@ -52,6 +52,7 @@ from prompts import (
     apply_default_body_reshape_plans,
     strip_body_reshape,
     body_reshape_enabled,
+    body_reshape_execution_plan,
     portrait_qc_persons,
     style_option_entries,
     _apply_default_person_issues,
@@ -734,6 +735,39 @@ QUALITY_CHECK_SCHEMA = {
 }
 
 
+def _quality_check_schema(analysis):
+    """Add body adherence only when this request actually has body review data."""
+    plan = body_reshape_execution_plan(analysis)
+    if not plan.get("review_point_count"):
+        return QUALITY_CHECK_SCHEMA
+    schema = copy.deepcopy(QUALITY_CHECK_SCHEMA)
+    schema["schema"]["properties"]["body_adherence"] = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "subject_index": {"type": "integer"},
+                "source_key_point_index": {"type": "integer"},
+                "endpoint": {"type": "string"},
+                "status": {"type": "string", "enum": [
+                    "not_applicable", "not_evaluated", "passed", "failed", "unjudgeable",
+                ]},
+                "measured_change_pct": {"type": ["number", "null"]},
+                "minimum_threshold_verified": {"type": ["boolean", "null"]},
+                "assessment": {"type": "string"},
+                "note": {"type": "string"},
+            },
+            "required": [
+                "subject_index", "source_key_point_index", "endpoint", "status",
+                "measured_change_pct", "minimum_threshold_verified", "assessment", "note",
+            ],
+            "additionalProperties": False,
+        },
+    }
+    schema["schema"]["required"].insert(6, "body_adherence")
+    return schema
+
+
 def _relabel_style_items(result: dict, analysis: dict) -> None:
     """Overwrites recipe_adherence.style_items[].item with the known short
     label (e.g. "Pose: Strong") instead of trusting the QA model to echo it
@@ -762,7 +796,7 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict, ana
         {"type": "input_image", "image_url": original_data_url},
         {"type": "input_text", "text": "Edited output"},
         {"type": "input_image", "image_url": output_data_url},
-    ], text_format=QUALITY_CHECK_SCHEMA, reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model))
+    ], text_format=_quality_check_schema(analysis), reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model))
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
     result = _parse_json_from_text(_extract_output_text(data))
     _relabel_style_items(result, analysis)

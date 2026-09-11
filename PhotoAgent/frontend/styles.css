@@ -797,6 +797,18 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   margin: 3px 0 0;
   accent-color: var(--accent);
 }
+.ap-body-reshape-option.is-unavailable {
+  opacity: .58;
+  cursor: not-allowed;
+}
+.ap-body-reshape-option-meta {
+  color: var(--text-3);
+  display: block;
+  font-size: 12px;
+  margin-left: auto;
+  max-width: 45%;
+  text-align: right;
+}
 /* Quality select */
 .quality-select {
   background: var(--card-2)
