@@ -1270,9 +1270,14 @@
        wide viewport spreads the same cards out across it (minmax(140px, ...)
        collapsing any surplus track's space into the ones that exist keeps
        them centered and evenly spaced, not stretched past their own
-       max-width) while a narrow one still falls back to 1-2 columns instead
-       of squeezing 3-4 options into increasingly narrow cards -- no
-       per-category exception (like #ap-size-list used to need) either way. */
+       max-width). Below the 560px breakpoint this reverts to the old fixed
+       repeat(2, 1fr) instead (see the media query further down) -- by that
+       width, everything nested above this grid (.container/.analysis-preview/
+       .ap-analysis-shell-body/.ap-toggle-card-body/.step-list-frame's own
+       paddings) leaves well under 2*140px+gap to work with, so auto-fit's
+       140px floor would collapse to a single column instead of the
+       side-by-side pair a phone used to get -- fixed 2 columns lets the
+       cards themselves shrink below 140px instead, same as before. */
     .ap-style-option-grid {
       list-style: none;
       display: grid;
@@ -1295,6 +1300,13 @@
          gradient overlay) it's painted on the box itself, not the scrolling
          content, so it never moves as the grid scrolls. */
       transition: box-shadow .15s;
+    }
+    /* See .ap-style-option-grid's own doc above -- below this width there
+       just isn't 2*140px+gap of room left once every ancestor wrapper's own
+       padding is subtracted out, so auto-fit would otherwise leave a phone
+       with a single column where it used to get two (if narrower ones). */
+    @media (max-width: 560px) {
+      .ap-style-option-grid { grid-template-columns: repeat(2, 1fr); }
     }
     /* updateStyleOptionScrollCue (app.js) toggles these on scroll/whenever a
        category's list becomes the visible one -- max-height alone left a
