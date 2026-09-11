@@ -738,7 +738,7 @@ QUALITY_CHECK_SCHEMA = {
 def _quality_check_schema(analysis):
     """Add body adherence only when this request actually has body review data."""
     plan = body_reshape_execution_plan(analysis)
-    if not plan.get("review_point_count"):
+    if not plan.get("executable_point_count"):
         return QUALITY_CHECK_SCHEMA
     schema = copy.deepcopy(QUALITY_CHECK_SCHEMA)
     schema["schema"]["properties"]["body_adherence"] = {

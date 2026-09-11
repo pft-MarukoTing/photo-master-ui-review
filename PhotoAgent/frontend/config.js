@@ -2,6 +2,9 @@ window.PhotoAgentConfig = {
   // Internal backend feature switch.  /api/config is authoritative after
   // startup; this default avoids a visible UI flash before that response.
   enableBodyReshape: true,
+  // Manual amount control for already-approved Body Reshape endpoints.  The
+  // backend /api/config response replaces this fallback at startup.
+  bodyReshapeSlider: { default: 12, min: 0, max: 30, step: 1 },
   // Base URL of the PhotoAgent Flask backend. Empty string = auto-detect from
   // the page's own directory (works both unprefixed locally and behind the
   // /mt-testbed-PhotoAgent reverse-proxy prefix in prod). Set explicitly only

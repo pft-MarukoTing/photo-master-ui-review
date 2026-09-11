@@ -11,6 +11,43 @@ EFFECT_NAME = 'photoAgent'
 # without making it a user-editable setting.
 ENABLE_BODY_RESHAPE = False
 
+# User-controlled amount slider for already-approved Body Reshape endpoints.
+# This is deliberately separate from the planner's automatic safety policy
+# (which still lives in prompts.py and remains 10--15%).  The backend exposes
+# this value through /api/config and validates request metadata against it so
+# the browser, manual API callers, execution plan and QA share one contract.
+BODY_RESHAPE_SLIDER_CONFIG = {
+    "default": 12,
+    "min": 0,
+    "max": 30,
+    "step": 1,
+}
+
+
+def get_body_reshape_slider_config():
+    """Return a validated copy of the public manual slider policy."""
+    raw = BODY_RESHAPE_SLIDER_CONFIG
+    if not isinstance(raw, dict):
+        raise ValueError("BODY_RESHAPE_SLIDER_CONFIG must be an object")
+    required = ("default", "min", "max", "step")
+    if any(key not in raw for key in required):
+        raise ValueError("BODY_RESHAPE_SLIDER_CONFIG is missing a required field")
+    import math
+
+    values = {key: raw[key] for key in required}
+    if any(isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value)
+           for value in values.values()):
+        raise ValueError("BODY_RESHAPE_SLIDER_CONFIG values must be finite numbers")
+    if values["step"] <= 0 or values["min"] < 0 or values["max"] < values["min"] or values["max"] >= 100:
+        raise ValueError("BODY_RESHAPE_SLIDER_CONFIG has invalid bounds")
+    if values["default"] < values["min"] or values["default"] > values["max"]:
+        raise ValueError("BODY_RESHAPE_SLIDER_CONFIG default is outside its bounds")
+    for key in ("default", "min", "max"):
+        if abs((values[key] - values["min"]) / values["step"] -
+               round((values[key] - values["min"]) / values["step"])) > 1e-9:
+            raise ValueError("BODY_RESHAPE_SLIDER_CONFIG values must align to step")
+    return values
+
 MODELS = {
     "image": "gpt-image-2",
     "analysis": "gpt-5.6-luna",

@@ -213,7 +213,11 @@ def _normalize_quality_check_result(result, analysis, execution_plan, *, status=
     # any body-reshape review points.  The extra status/adherence fields belong
     # only to the body execution path and must not alter ordinary eye, hair,
     # smile, style, or colour results.
-    if not plan.get("review_point_count"):
+    # A 0% slider keeps the review point visible but is an explicit stop, not
+    # an endpoint QA must inspect.  Only positive executable points opt into
+    # body adherence normalization; ordinary features keep their legacy QA
+    # shape when every body point is stopped.
+    if not plan.get("executable_point_count"):
         return qa
     qa_status = qa.get("qa_status") if qa.get("qa_status") in {"completed", "skipped", "error"} else status
     qa["qa_status"] = qa_status
@@ -703,9 +707,10 @@ def finish_stage(
                 for key in (
                     "body_active", "no_executable_reason", "review_point_count",
                     "selected_point_count", "executable_point_count", "excluded_point_count",
-                    "disabled_point_count", "duplicate_point_count", "conflict_point_count",
+                    "disabled_point_count", "amount_zero_point_count", "duplicate_point_count", "conflict_point_count",
                     "user_override_point_count", "resolved_subject_count", "rendered_endpoint_count",
                     "planner_default_target_pct", "planner_min_target_pct", "planner_max_target_pct",
+                    "slider_config",
                 )
             },
         })

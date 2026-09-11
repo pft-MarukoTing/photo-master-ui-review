@@ -56,6 +56,11 @@ def index():
 
 @static_bp.get("/api/config")
 def config():
+    # The same validated object is used by request metadata validation and
+    # frontend controls.  Do not silently fall back here: a malformed policy
+    # must be fixed rather than leaving the browser and backend with different
+    # bounds.
+    body_reshape_slider = photoagent_config.get_body_reshape_slider_config()
     return jsonify({
         "debugUi": current_app.config.get("DEBUG_UI", False),
         "aipocDefault": current_app.config.get("AIPOC_DEFAULT", False),
@@ -63,6 +68,7 @@ def config():
         # backend remains authoritative; this only prevents controls from
         # being rendered when Body Reshape is disabled.
         "enableBodyReshape": bool(getattr(photoagent_config, "ENABLE_BODY_RESHAPE", True)),
+        "bodyReshapeSlider": body_reshape_slider,
     })
 
 

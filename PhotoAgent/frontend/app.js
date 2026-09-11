@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -191,6 +191,17 @@
   function applyBodyReshapeVisibility(enabled) {
     isBodyReshapeEnabled = enabled !== false;
     setBodyReshapeEnabled(isBodyReshapeEnabled);
+  }
+
+  function applyBodyReshapeSliderConfig(slider) {
+    if (!slider || typeof slider !== "object") return;
+    const values = ["default", "min", "max", "step"].map((key) => Number(slider[key]));
+    if (values.some((value) => !Number.isFinite(value))) return;
+    const [defaultValue, min, max, step] = values;
+    if (!(step > 0) || min < 0 || max < min || max >= 100 || defaultValue < min || defaultValue > max) return;
+    if (![defaultValue, min, max].every((value) => Math.abs((value - min) / step - Math.round((value - min) / step)) < 1e-9)) return;
+    window.PhotoAgentConfig = window.PhotoAgentConfig || {};
+    window.PhotoAgentConfig.bodyReshapeSlider = { default: defaultValue, min, max, step };
   }
 
   // Single-image flow: kept after analyze so "回到流程" (from the results page)
@@ -570,12 +581,14 @@
   if (window.location.href.includes("debug")) {
     applyDebugUiVisibility(true);
     getUiConfig().then((cfg) => {
+      applyBodyReshapeSliderConfig(cfg.bodyReshapeSlider);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
       }
     });
   } else {
     getUiConfig().then((cfg) => {
+      applyBodyReshapeSliderConfig(cfg.bodyReshapeSlider);
       applyDebugUiVisibility(!!cfg.debugUi);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
@@ -1726,7 +1739,8 @@
       // toggle (nothing else) leaves inlineReviseHasNoChanges thinking
       // nothing changed and blocks the Run click.
       faceIssueOverrides: getFaceIssueOverrides(),
-      bodyReshapeOverrides: getBodyReshapeOverrides()
+      bodyReshapeOverrides: getBodyReshapeOverrides(),
+      bodyReshapeAmountOverrides: getBodyReshapeAmountOverrides()
     };
   }
 
@@ -1750,6 +1764,24 @@
     const keysA = Object.keys(a || {});
     const keysB = Object.keys(b || {});
     return keysA.length === keysB.length && keysA.every((key) => sameValue(a[key], (b || {})[key]));
+  }
+
+  function sameBodyReshapeAmountOverrides(a, b) {
+    const normalize = (values) => (Array.isArray(values) ? values : [])
+      .map((item) => ({
+        subject_index: Number(item?.subject_index),
+        key_point_index: Number(item?.key_point_index),
+        target_pct: Number(item?.target_pct)
+      }))
+      .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index) && Number.isFinite(item.target_pct))
+      .sort((left, right) => left.subject_index - right.subject_index || left.key_point_index - right.key_point_index);
+    const left = normalize(a);
+    const right = normalize(b);
+    return left.length === right.length && left.every((item, index) =>
+      item.subject_index === right[index].subject_index
+      && item.key_point_index === right[index].key_point_index
+      && item.target_pct === right[index].target_pct
+    );
   }
 
   // True if the inline revise panel's Run button would submit an unchanged
@@ -1780,8 +1812,10 @@
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
     const sameBodyReshape = sameFaceIssueOverrides(
       getBodyReshapeOverrides(), inlineReviseSnapshot.bodyReshapeOverrides);
+    const sameBodyReshapeAmounts = sameBodyReshapeAmountOverrides(
+      getBodyReshapeAmountOverrides(), inlineReviseSnapshot.bodyReshapeAmountOverrides);
     return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount
-      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape;
+      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape && sameBodyReshapeAmounts;
   }
 
   // Keeps the Run button visually flagged whenever inlineReviseHasNoChanges()
@@ -2930,6 +2964,7 @@
       options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
       recipeChecked: null,  // per-image recipe checklist state (UI-only)
       bodyReshapeOverrides: null, // unchecked per-person body key points (UI-only)
+      bodyReshapeAmountOverrides: null, // touched per-key-point amounts (UI-only)
       userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
       overwritePrompt: false, // "取代最終送給編輯模型的完整指令" checkbox, alongside userPrompt
       analyzeTimings: [],   // step-1 timing rows, merged into the detail view
@@ -3482,13 +3517,14 @@
     const selections = readStyleSelectionsFromDom();
     const faceIssueOverrides = getFaceIssueOverrides();
     const bodyReshapeOverrides = getBodyReshapeOverrides();
+    const bodyReshapeAmountOverrides = getBodyReshapeAmountOverrides();
     const userPrompt = els.promptInput.value.trim();
     const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
-    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides, bodyReshapeOverrides };
+    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides, bodyReshapeOverrides, bodyReshapeAmountOverrides };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
     const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(
-      analysis, { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeOverrides });
+      analysis, { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeOverrides, bodyReshapeAmountOverrides });
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -3946,6 +3982,7 @@
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
       applyBodyReshapeOverrides(lastSingleSelections.bodyReshapeOverrides);
+      applyBodyReshapeAmountOverrides(lastSingleSelections.bodyReshapeAmountOverrides);
       // The face review cards were already built (renderAnalysisPreview just
       // above) before these overrides existed on faceThumbEntries -- rebuild
       // them so the toggles on screen reflect the restored picks instead of
@@ -3962,7 +3999,21 @@
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
-    if (action === "cancel") return;
+    if (action === "cancel") {
+      // Preserve unsent local review edits for the next time the panel is
+      // opened; this includes slider amounts and does not submit a request.
+      const currentSelections = readStyleSelectionsFromDom();
+      lastSingleSelections = {
+        userPrompt: els.promptInput ? els.promptInput.value.trim() : "",
+        overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
+        ...currentSelections,
+        advancedOptions: readAdvancedOptionsFromDom(),
+        faceIssueOverrides: getFaceIssueOverrides(),
+        bodyReshapeOverrides: getBodyReshapeOverrides(),
+        bodyReshapeAmountOverrides: getBodyReshapeAmountOverrides()
+      };
+      return;
+    }
     setStepIndicatorStep(2, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
 
     setAnalysisPreviewDisabled(true);
@@ -4400,7 +4451,8 @@
         recipeChecked: record.recipeChecked,
         advancedOptions: effectiveAdvancedOptions(record),
         faceIssueOverrides: record.faceIssueOverrides,
-        bodyReshapeOverrides: record.bodyReshapeOverrides
+        bodyReshapeOverrides: record.bodyReshapeOverrides,
+        bodyReshapeAmountOverrides: record.bodyReshapeAmountOverrides
       });
       const modelQuality = effectiveModelQuality(record);
       const analysisModel = effectiveAnalysisModel(record);
@@ -5776,7 +5828,28 @@
       lighting: styleOptions.lighting || "default",
       size: styleOptions.size || "default"
     };
-    return { analysis: restoredAnalysis, selections: { userPrompt: userPrompt || "", overwritePrompt: !!overwritePrompt, options, recipeChecked } };
+    const bodyReshapeOverrides = {};
+    (analysis._disabled_body_reshape_subjects || []).forEach((subjectIndex) => {
+      if (Number.isInteger(subjectIndex)) bodyReshapeOverrides[`subject:${subjectIndex}`] = false;
+    });
+    (analysis._disabled_body_reshape_key_points || []).forEach((item) => {
+      if (Number.isInteger(item?.subject_index) && Number.isInteger(item?.key_point_index)) {
+        bodyReshapeOverrides[`${item.subject_index}:${item.key_point_index}`] = false;
+      }
+    });
+    const bodyReshapeAmountOverrides = Array.isArray(analysis._body_reshape_amount_overrides)
+      ? analysis._body_reshape_amount_overrides.map((item) => ({ ...item })) : [];
+    return {
+      analysis: restoredAnalysis,
+      selections: {
+        userPrompt: userPrompt || "",
+        overwritePrompt: !!overwritePrompt,
+        options,
+        recipeChecked,
+        bodyReshapeOverrides,
+        bodyReshapeAmountOverrides
+      }
+    };
   }
 
   // A "Run" click with run_count > 1 (two-stage manual path) submits N
@@ -6630,6 +6703,10 @@
     // promise), which would race against the render we're about to do for
     // the newly selected record.
     if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+      // Preserve in-progress review controls (including touched body amounts)
+      // before replacing the panel with another batch photo. This is a local
+      // snapshot only; no analyze/edit request is triggered.
+      if (currentBatchRecord) captureBatchReviewSelections(currentBatchRecord);
       clearInlineAnalysisWait();
       closeInlineAnalysisPanel();
     }
@@ -7216,7 +7293,12 @@
 
     const action = await waitForInlineAnalysisAction();
     closeInlineAnalysisPanel();
-    if (action === "cancel") return;
+    if (action === "cancel") {
+      // Keep local review edits when the user closes the panel without
+      // submitting; reopening this batch photo should not reset a slider.
+      captureBatchReviewSelections(record);
+      return;
+    }
 
     captureBatchReviewSelections(record);
     if (!record.uploadedAt) record.uploadedAt = Date.now() / 1000;
@@ -7710,7 +7792,8 @@
   // the same change anyway. Any non-default pose/angle/lighting/size pick is
   // attached as style_options for the edit prompt.
   function buildEffectiveAnalysis(analysis, {
-    options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeOverrides
+    options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeOverrides,
+    bodyReshapeAmountOverrides
   } = {}) {
     // Applied BEFORE the recipeChecked split below, and on the same
     // `advancedOptions` #ap-recipe-list was just rendered/refreshed with
@@ -7736,6 +7819,7 @@
       }
       delete effective._disabled_body_reshape_subjects;
       delete effective._disabled_body_reshape_key_points;
+      delete effective._body_reshape_amount_overrides;
     }
     // Execution conclusions are request-scoped. The backend rebuilds them
     // after applying the latest checkbox, instruction, and overwrite state.
@@ -7807,6 +7891,16 @@
           return { subject_index: subjectIndex, key_point_index: keyPointIndex };
         })
         .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index));
+      effective._body_reshape_amount_overrides = (Array.isArray(bodyReshapeAmountOverrides)
+        ? bodyReshapeAmountOverrides : [])
+        .map((item) => ({
+          subject_index: Number(item?.subject_index),
+          key_point_index: Number(item?.key_point_index),
+          target_pct: Number(item?.target_pct)
+        }))
+        .filter((item) => Number.isInteger(item.subject_index)
+          && Number.isInteger(item.key_point_index)
+          && Number.isFinite(item.target_pct));
     }
 
     // `analysis` already carries its own _advanced_options, baked in at
@@ -7881,6 +7975,7 @@
     if (recipeChecked) record.recipeChecked = recipeChecked;
     record.faceIssueOverrides = getFaceIssueOverrides();
     record.bodyReshapeOverrides = getBodyReshapeOverrides();
+    record.bodyReshapeAmountOverrides = getBodyReshapeAmountOverrides();
   }
 
   // Restores previously-captured pose/angle/lighting/size radios + recipe
@@ -7911,6 +8006,7 @@
   function applyBatchReviewSelections(record) {
     applyFaceIssueOverrides(record.faceIssueOverrides);
     applyBodyReshapeOverrides(record.bodyReshapeOverrides);
+    applyBodyReshapeAmountOverrides(record.bodyReshapeAmountOverrides);
     // The face review cards were already built (renderAnalysisPreview, called
     // just before this function at its one call site) before these overrides
     // existed on faceThumbEntries -- rebuild them so the toggles on screen

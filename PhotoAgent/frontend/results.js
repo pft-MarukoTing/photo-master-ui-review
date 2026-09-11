@@ -772,10 +772,51 @@ window.PhotoAgentResults = (() => {
     }).filter(Boolean);
   }
 
+  function bodyReshapeSliderConfig() {
+    const fallback = { default: 12, min: 0, max: 30, step: 1 };
+    const raw = window.PhotoAgentConfig?.bodyReshapeSlider;
+    if (!raw || typeof raw !== "object") return fallback;
+    const values = ["default", "min", "max", "step"].map((key) => Number(raw[key]));
+    if (values.some((value) => !Number.isFinite(value))) return fallback;
+    const [defaultValue, min, max, step] = values;
+    if (!(step > 0) || min < 0 || max < min || max >= 100 || defaultValue < min || defaultValue > max) return fallback;
+    if (![defaultValue, min, max].every((value) => Math.abs((value - min) / step - Math.round((value - min) / step)) < 1e-9)) return fallback;
+    return { default: defaultValue, min, max, step };
+  }
+
+  function bodyReshapeTargetFromText(text, fallback) {
+    const match = String(text || "").match(/(?:^|[^0-9.])([0-9]+(?:\.[0-9]+)?)\s*[%％]/);
+    const value = match ? Number(match[1]) : Number(fallback);
+    return Number.isFinite(value) ? value : bodyReshapeSliderConfig().default;
+  }
+
+  function bodyReshapeDisplayText(text) {
+    return String(text || "").replace(/\s*[+＋]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*[%％]/, "").trim();
+  }
+
+  function bodyReshapeAmountLabel(value) {
+    const number = Number(value);
+    return number === 0 ? "0%（不調整）" : `${number}%`;
+  }
+
+  function bodyReshapeAmountMap(analysis) {
+    const map = new Map();
+    const overrides = Array.isArray(analysis?._body_reshape_amount_overrides)
+      ? analysis._body_reshape_amount_overrides : [];
+    overrides.forEach((item) => {
+      if (!Number.isInteger(item?.subject_index) || !Number.isInteger(item?.key_point_index)) return;
+      const value = Number(item.target_pct);
+      if (Number.isFinite(value)) map.set(`${item.subject_index}:${item.key_point_index}`, value);
+    });
+    return map;
+  }
+
   function bodyReshapePointEntries(subject, subjectIndex, analysis) {
     if (!bodyReshapeEnabled) return [];
     const points = subject?.body_reshape?.key_points;
     if (!Array.isArray(points)) return [];
+    const sliderConfig = bodyReshapeSliderConfig();
+    const amountMap = bodyReshapeAmountMap(analysis);
     const disabled = new Set(
       (Array.isArray(analysis?._disabled_body_reshape_key_points)
         ? analysis._disabled_body_reshape_key_points : [])
@@ -789,18 +830,33 @@ window.PhotoAgentResults = (() => {
         Number(item?.subject_index) === subjectIndex
         && Number(item?.key_point_index) === keyPointIndex
       );
-      const executable = execution ? execution.reason_code === "executable" && execution.executable !== false : true;
+      const reasonCode = execution?.reason_code || null;
+      const structurallySelectable = execution
+        ? execution.amount_control_available !== false
+          && !["invalid_syntax_or_semantics", "target_out_of_policy", "conflicting_endpoint", "duplicate_of", "subject_unresolved", "not_applicable", "overwrite_prompt"].includes(reasonCode)
+        : true;
+      const executable = execution ? reasonCode === "executable" && execution.executable !== false : structurallySelectable;
       const sourceText = typeof point === "string" ? point.trim() : "";
+      const executionTarget = execution?.effective_target_pct ?? execution?.target_pct;
+      const sourceTarget = bodyReshapeTargetFromText(execution?.canonical_text || sourceText, sliderConfig.default);
+      const amountTouched = amountMap.has(`${subjectIndex}:${keyPointIndex}`)
+        || execution?.amount_override_touched === true;
+      const targetPct = amountMap.has(`${subjectIndex}:${keyPointIndex}`)
+        ? amountMap.get(`${subjectIndex}:${keyPointIndex}`)
+        : (executionTarget != null ? Number(executionTarget) : sourceTarget);
       return {
-        text: executable ? (execution?.canonical_text || sourceText) : sourceText,
+        text: executable || structurallySelectable ? (execution?.canonical_text || sourceText) : sourceText,
         sourceText,
         subjectIndex,
         keyPointIndex,
-        allowed: !disabled.has(`${subjectIndex}:${keyPointIndex}`) && executable,
+        allowed: structurallySelectable && !disabled.has(`${subjectIndex}:${keyPointIndex}`),
         executable,
-        reasonCode: execution?.reason_code || null,
+        selectable: structurallySelectable,
+        reasonCode,
         reason: execution?.reason || "",
-        targetPct: execution?.effective_target_pct ?? execution?.target_pct ?? null,
+        targetPct: Number.isFinite(targetPct) ? targetPct : sliderConfig.default,
+        plannerTargetPct: execution?.planner_target_pct ?? sourceTarget,
+        amountTouched,
         canonicalText: execution?.canonical_text || sourceText
       };
     }).filter((point) => point.text);
@@ -812,7 +868,7 @@ window.PhotoAgentResults = (() => {
       ? analysis._disabled_body_reshape_subjects : [];
     return !disabledSubjects.some(
       (index) => Number.isInteger(index) && index === subjectIndex
-    ) && points.some((point) => point.executable !== false && point.allowed !== false);
+    ) && points.some((point) => point.selectable !== false && point.allowed !== false);
   }
 
   // Flattened { "subjectIndex:category": false } for every flagged issue the
@@ -848,9 +904,34 @@ window.PhotoAgentResults = (() => {
         overrides[`subject:${entry.bodySubjectIndex ?? entry.subjectIndex}`] = false;
       }
       (entry.bodyKeyPoints || []).forEach((point) => {
-        if (point.executable !== false && point.allowed === false) {
+        if (point.selectable !== false && point.allowed === false) {
           overrides[`${point.subjectIndex}:${point.keyPointIndex}`] = false;
         }
+      });
+    });
+    return overrides;
+  }
+
+  // Only explicitly touched amounts are sent.  An untouched slider inherits
+  // the analyzed endpoint (including a legacy explicit amount), while 0 is a
+  // real, serialized stop rather than an omitted/default value.
+  function getBodyReshapeAmountOverrides() {
+    if (!bodyReshapeEnabled) return [];
+    const overrides = [];
+    const seen = new Set();
+    faceThumbEntries.forEach((entry) => {
+      (entry.bodyKeyPoints || []).forEach((point) => {
+        if (point.selectable === false || !point.amountTouched) return;
+        const value = Number(point.targetPct);
+        if (!Number.isFinite(value)) return;
+        const key = `${point.subjectIndex}:${point.keyPointIndex}`;
+        if (seen.has(key)) return;
+        seen.add(key);
+        overrides.push({
+          subject_index: point.subjectIndex,
+          key_point_index: point.keyPointIndex,
+          target_pct: value
+        });
       });
     });
     return overrides;
@@ -919,7 +1000,28 @@ window.PhotoAgentResults = (() => {
         entry.bodyReshapeEnabled = overrides[`subject:${subjectIndex}`] !== false;
       }
       (entry.bodyKeyPoints || []).forEach((point) => {
-        point.allowed = overrides[`${point.subjectIndex}:${point.keyPointIndex}`] !== false;
+        if (point.selectable !== false) {
+          point.allowed = overrides[`${point.subjectIndex}:${point.keyPointIndex}`] !== false;
+        }
+      });
+    });
+  }
+
+  function applyBodyReshapeAmountOverrides(overrides) {
+    if (!bodyReshapeEnabled || !Array.isArray(overrides)) return;
+    const values = new Map();
+    overrides.forEach((item) => {
+      if (!Number.isInteger(item?.subject_index) || !Number.isInteger(item?.key_point_index)) return;
+      const value = Number(item.target_pct);
+      if (Number.isFinite(value)) values.set(`${item.subject_index}:${item.key_point_index}`, value);
+    });
+    faceThumbEntries.forEach((entry) => {
+      (entry.bodyKeyPoints || []).forEach((point) => {
+        const key = `${point.subjectIndex}:${point.keyPointIndex}`;
+        if (point.selectable !== false && values.has(key)) {
+          point.targetPct = values.get(key);
+          point.amountTouched = true;
+        }
       });
     });
   }
@@ -1595,7 +1697,8 @@ window.PhotoAgentResults = (() => {
 
       const toggle = document.createElement("label");
       toggle.className = "ios-switch ap-face-issue-toggle";
-      const actionableBodyPoints = bodyKeyPoints.filter((point) => point.executable !== false);
+      const sliderConfig = bodyReshapeSliderConfig();
+      const actionableBodyPoints = bodyKeyPoints.filter((point) => point.selectable !== false);
       toggle.title = actionableBodyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
       const masterInput = document.createElement("input");
       masterInput.type = "checkbox";
@@ -1624,37 +1727,76 @@ window.PhotoAgentResults = (() => {
 
       const list = document.createElement("div");
       list.className = "ap-body-reshape-list";
+      const pointControls = [];
       if (bodyKeyPoints.length) {
         bodyKeyPoints.forEach((point) => {
-          const label = document.createElement("label");
-          label.className = "ap-body-reshape-option";
+          const row = document.createElement("div");
+          row.className = "ap-body-reshape-option";
           const input = document.createElement("input");
           input.type = "checkbox";
-          input.disabled = point.executable === false;
-          input.checked = point.executable !== false && point.allowed !== false;
-          input.addEventListener("change", () => { point.allowed = input.checked; });
+          input.disabled = point.selectable === false;
+          input.checked = point.selectable !== false && point.allowed !== false;
+          input.addEventListener("change", () => {
+            point.allowed = input.checked;
+            if (typeof refreshBodyReshape === "function") refreshBodyReshape();
+          });
+          const textLabel = document.createElement("label");
+          textLabel.className = "ap-body-reshape-option-label";
+          textLabel.appendChild(input);
           const text = document.createElement("span");
-          text.textContent = point.text;
-          label.appendChild(input);
-          label.appendChild(text);
+          text.textContent = bodyReshapeDisplayText(point.text);
+          textLabel.appendChild(text);
+          row.appendChild(textLabel);
+          let metadata = null;
           if (point.targetPct != null || (point.sourceText && point.sourceText !== point.text)) {
-            const metadata = document.createElement("small");
+            metadata = document.createElement("small");
             metadata.className = "ap-body-reshape-option-meta";
             const details = [];
-            if (point.targetPct != null) details.push(`有效目標 ${point.targetPct}%`);
+            if (point.targetPct != null) details.push(`目前目標 ${bodyReshapeAmountLabel(point.targetPct)}`);
             if (point.sourceText && point.sourceText !== point.text) details.push(`原始：${point.sourceText}`);
             metadata.textContent = details.join(" · ");
-            label.appendChild(metadata);
+            row.appendChild(metadata);
           }
-          if (point.executable === false && point.reason) {
-            label.title = `此項不會送入 edit：${point.reason}`;
-            label.classList.add("is-unavailable");
+          const sliderRow = document.createElement("div");
+          sliderRow.className = "ap-body-reshape-slider-row";
+          const sliderLabel = document.createElement("span");
+          sliderLabel.className = "ap-body-reshape-slider-label";
+          sliderLabel.textContent = "調整幅度";
+          const slider = document.createElement("input");
+          slider.type = "range";
+          slider.className = "ap-body-reshape-slider";
+          slider.min = String(sliderConfig.min);
+          slider.max = String(sliderConfig.max);
+          slider.step = String(sliderConfig.step);
+          slider.value = String(Math.min(sliderConfig.max, Math.max(sliderConfig.min, Number(point.targetPct))));
+          slider.setAttribute("aria-label", `${bodyReshapeDisplayText(point.text)} 調整幅度`);
+          const sliderValue = document.createElement("output");
+          sliderValue.className = "ap-body-reshape-slider-value";
+          sliderValue.textContent = bodyReshapeAmountLabel(point.targetPct);
+          slider.addEventListener("input", () => {
+            point.targetPct = Number(slider.value);
+            point.amountTouched = true;
+            sliderValue.textContent = bodyReshapeAmountLabel(point.targetPct);
+            if (metadata) {
+              const details = [`目前目標 ${bodyReshapeAmountLabel(point.targetPct)}`];
+              if (point.sourceText && point.sourceText !== point.text) details.push(`原始：${point.sourceText}`);
+              metadata.textContent = details.join(" · ");
+            }
+          });
+          sliderRow.appendChild(sliderLabel);
+          sliderRow.appendChild(slider);
+          sliderRow.appendChild(sliderValue);
+          row.appendChild(sliderRow);
+          pointControls.push({ point, input, slider, sliderValue, row });
+          if (point.selectable === false && point.reason) {
+            row.title = `此項不會送入 edit：${point.reason}`;
+            row.classList.add("is-unavailable");
             const reason = document.createElement("small");
             reason.className = "ap-body-reshape-option-meta";
             reason.textContent = `不執行：${point.reason}`;
-            label.appendChild(reason);
+            row.appendChild(reason);
           }
-          list.appendChild(label);
+          list.appendChild(row);
         });
       }
       section.appendChild(list);
@@ -1667,7 +1809,13 @@ window.PhotoAgentResults = (() => {
         verdict.textContent = !actionableBodyPoints.length
           ? "無需調整"
           : (active ? "可以調整" : "不執行");
-        list.hidden = !active;
+        list.hidden = actionableBodyPoints.length > 0 ? !active : false;
+        pointControls.forEach(({ point, input, slider }) => {
+          const enabled = active && point.selectable !== false;
+          input.disabled = !enabled;
+          input.checked = enabled && point.allowed !== false;
+          slider.disabled = !enabled || point.allowed === false;
+        });
       };
       masterInput.addEventListener("change", () => {
         entry.bodyReshapeEnabled = masterInput.checked;
@@ -2249,7 +2397,8 @@ window.PhotoAgentResults = (() => {
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock,
-    getBodyReshapeOverrides, applyBodyReshapeOverrides, setBodyReshapeEnabled,
+    getBodyReshapeOverrides, applyBodyReshapeOverrides,
+    getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, setBodyReshapeEnabled,
     renderFaceReviewCards,
     syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion
   };

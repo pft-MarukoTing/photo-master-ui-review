@@ -1,6 +1,7 @@
 import copy
 import json
 import logging
+import math
 import re
 
 import config as _photoagent_config
@@ -2444,10 +2445,130 @@ _BODY_RESHAPE_NON_EXECUTABLE_TERMS = (
 # Body-shape magnitude is a policy, not part of the text parser.  The parser
 # preserves whatever the planner or user supplied (including the legacy 10%)
 # and the execution plan records whether that value is inside this policy.
-BODY_RESHAPE_TARGET_PCT = 12.0
+# Kept as a compatibility export for integrations that import the planner
+# constant; runtime prompt/plan construction reads the validated config helper
+# below so changing the public default does not require editing this module.
+BODY_RESHAPE_TARGET_PCT = _photoagent_config.get_body_reshape_slider_config()["default"]
 BODY_RESHAPE_MIN_PCT = 10.0
 BODY_RESHAPE_MAX_PCT = 15.0
 BODY_RESHAPE_KEY_POINT_MAX_LENGTH = 30
+
+
+def _body_reshape_slider_config():
+    """Return the validated policy for manual, per-endpoint amounts.
+
+    The automatic planner deliberately keeps its own 10--15% policy above;
+    this configuration is only for a user changing an already-approved
+    endpoint in the review UI.  Read the module dynamically so a deployment
+    or test can change the public maximum without re-importing prompts.py.
+    """
+    getter = getattr(_photoagent_config, "get_body_reshape_slider_config", None)
+    if callable(getter):
+        values = getter()
+    else:  # compatibility with a minimal config module used by integrations
+        values = getattr(_photoagent_config, "BODY_RESHAPE_SLIDER_CONFIG", {
+            "default": 12, "min": 0, "max": 30, "step": 1,
+        })
+        if not isinstance(values, dict):
+            raise ValueError("BODY_RESHAPE_SLIDER_CONFIG must be an object")
+        values = {key: values.get(key) for key in ("default", "min", "max", "step")}
+    return {
+        key: int(value) if isinstance(value, float) and value.is_integer() else value
+        for key, value in values.items()
+    }
+
+
+def _body_reshape_validate_manual_target(value, *, field="target_pct"):
+    """Validate one numeric slider amount and return its canonical number."""
+    config = _body_reshape_slider_config()
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"body reshape {field} must be a number")
+    if not math.isfinite(value):
+        raise ValueError(f"body reshape {field} must be finite")
+    minimum, maximum, step = config["min"], config["max"], config["step"]
+    if value < minimum or value > maximum:
+        raise ValueError(
+            f"body reshape {field} must be between {minimum:g} and {maximum:g}"
+        )
+    units = (value - minimum) / step
+    if abs(units - round(units)) > 1e-9:
+        raise ValueError(f"body reshape {field} must align to step {step:g}")
+    return int(value) if float(value).is_integer() else float(value)
+
+
+def _body_reshape_amount_overrides(analysis):
+    """Validate and index request-scoped manual amount metadata.
+
+    Missing metadata is the legacy/untouched state.  An empty array is an
+    explicit, valid state.  ``None`` and malformed entries are rejected so a
+    client cannot silently turn an invalid amount into the planner default.
+    """
+    if not isinstance(analysis, dict) or "_body_reshape_amount_overrides" not in analysis:
+        return {}
+    raw_overrides = analysis.get("_body_reshape_amount_overrides")
+    if raw_overrides is None or not isinstance(raw_overrides, list):
+        raise ValueError("_body_reshape_amount_overrides must be an array")
+    subjects = analysis.get("subjects") if isinstance(analysis.get("subjects"), list) else []
+    result = {}
+    for raw in raw_overrides:
+        if not isinstance(raw, dict):
+            raise ValueError("body reshape amount override entries must be objects")
+        subject_index = raw.get("subject_index")
+        key_point_index = raw.get("key_point_index")
+        if (isinstance(subject_index, bool) or not isinstance(subject_index, int)
+                or subject_index < 0):
+            raise ValueError("body reshape amount override subject_index must be a non-negative integer")
+        if (isinstance(key_point_index, bool) or not isinstance(key_point_index, int)
+                or key_point_index < 0):
+            raise ValueError("body reshape amount override key_point_index must be a non-negative integer")
+        key = (subject_index, key_point_index)
+        if key in result:
+            raise ValueError(
+                "duplicate body reshape amount override for subject_index={} key_point_index={}"
+                .format(subject_index, key_point_index)
+            )
+        if subject_index >= len(subjects) or not isinstance(subjects[subject_index], dict):
+            raise ValueError("body reshape amount override references an unknown subject_index")
+        subject = subjects[subject_index]
+        if not subject.get("is_person"):
+            raise ValueError("body reshape amount override subject_index is not a person")
+        body_plan = subject.get("body_reshape")
+        points = body_plan.get("key_points") if isinstance(body_plan, dict) else None
+        if not isinstance(points, list) or key_point_index >= len(points):
+            raise ValueError("body reshape amount override references an unknown key_point_index")
+        if "target_pct" not in raw:
+            raise ValueError("body reshape amount override target_pct is required")
+        result[key] = _body_reshape_validate_manual_target(raw.get("target_pct"))
+    return result
+
+
+def _body_reshape_retarget_text(text, target_pct):
+    """Replace the single displayed percentage without changing endpoint text."""
+    if not isinstance(text, str):
+        return text
+    rendered = f"{target_pct:g}%"
+    replaced, count = re.subn(
+        r"[+＋]?\s*(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*[%％]",
+        rendered,
+        text,
+        count=1,
+    )
+    return replaced if count else text
+
+
+def _body_reshape_apply_manual_target(parsed, target_pct):
+    """Copy parsed endpoint metadata while changing only its amount."""
+    adjusted = dict(parsed or {})
+    adjusted["target_pct"] = target_pct
+    adjusted["canonical_text"] = _body_reshape_retarget_text(
+        adjusted.get("canonical_text") or adjusted.get("raw_text"), target_pct
+    )
+    # The source endpoint was already validated using the planner parser; the
+    # manual policy is intentionally wider than BODY_RESHAPE_MAX_PCT.
+    adjusted["policy_valid"] = True
+    adjusted["reason_code"] = None
+    adjusted["reason"] = None
+    return adjusted
 
 _BODY_RESHAPE_MEASUREMENT_ALIASES = (
     ("visible total width", ("可見總寬", "總寬", "visible total width", "total width")),
@@ -2895,7 +3016,7 @@ def build_body_reshape_planning_instruction(persons):
     """
     if not body_reshape_enabled():
         return ""
-    return """You are a professional portrait body-shape retouching consultant.
+    return ("""You are a professional portrait body-shape retouching consultant.
 
 Using only the attached original photograph, analyze body-shape adjustments independently for every person listed below. Never transfer one person's body traits or recommendations to another person.
 
@@ -2989,7 +3110,9 @@ JSON format:
 }
 
 People to review:
-""" + _person_list_text(persons)
+""" + _person_list_text(persons)).replace(
+        "12%", f"{_body_reshape_slider_config()['default']:g}%"
+    )
 
 
 
@@ -4645,6 +4768,7 @@ def strip_body_reshape(analysis):
         cleaned["subjects"] = subjects
     cleaned.pop("_disabled_body_reshape_subjects", None)
     cleaned.pop("_disabled_body_reshape_key_points", None)
+    cleaned.pop("_body_reshape_amount_overrides", None)
     cleaned.pop("_body_reshape_execution_plan", None)
     prompts = cleaned.get("prompts")
     if isinstance(prompts, dict):
@@ -4816,6 +4940,11 @@ def _body_reshape_plan_signature(analysis):
         "subjects": subjects,
         "disabled_subjects": analysis.get("_disabled_body_reshape_subjects") or [],
         "disabled_points": analysis.get("_disabled_body_reshape_key_points") or [],
+        # Amount metadata is request-scoped state just like the checkbox deny
+        # lists.  Include the live policy too, so changing a deployment from
+        # max=30 to max=40 cannot reuse a plan built under the old ceiling.
+        "amount_overrides": analysis.get("_body_reshape_amount_overrides"),
+        "slider_config": _body_reshape_slider_config(),
         "user_instruction": analysis.get("user_instruction") or {},
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
@@ -4831,13 +4960,15 @@ def build_body_reshape_execution_plan(analysis):
     and is called again after user settings are applied for every request.
     """
     analysis = analysis if isinstance(analysis, dict) else {}
+    slider_config = _body_reshape_slider_config()
     if not body_reshape_enabled():
         return {
             "version": 1,
             "request_signature": _body_reshape_plan_signature(strip_body_reshape(analysis)),
-            "planner_default_target_pct": BODY_RESHAPE_TARGET_PCT,
+            "planner_default_target_pct": slider_config["default"],
             "planner_min_target_pct": BODY_RESHAPE_MIN_PCT,
             "planner_max_target_pct": BODY_RESHAPE_MAX_PCT,
+            "slider_config": slider_config,
             "body_active": False,
             "points": [],
             "items": [],
@@ -4845,6 +4976,7 @@ def build_body_reshape_execution_plan(analysis):
             "selected_point_count": 0,
             "executable_point_count": 0,
             "disabled_point_count": 0,
+            "amount_zero_point_count": 0,
             "excluded_point_count": 0,
             "duplicate_point_count": 0,
             "conflict_point_count": 0,
@@ -4854,6 +4986,7 @@ def build_body_reshape_execution_plan(analysis):
             "no_executable_reason": "body reshape feature is disabled",
         }
     overwrite = bool((analysis.get("user_instruction") or {}).get("overwrite_prompt"))
+    amount_overrides = _body_reshape_amount_overrides(analysis)
     disabled_subjects = {
         value for value in (analysis.get("_disabled_body_reshape_subjects") or [])
         if isinstance(value, int) and not isinstance(value, bool) and value >= 0
@@ -4917,6 +5050,14 @@ def build_body_reshape_execution_plan(analysis):
                     # source index, but use the explicit amount/direction for
                     # execution, QA and metadata.
                     parsed = dict(override)
+            parsed_before_amount = parsed
+            amount_override_present = (subject_index, key_point_index) in amount_overrides
+            amount_override = amount_overrides.get((subject_index, key_point_index))
+            if amount_override_present and parsed.get("syntax_valid"):
+                # The slider changes only the approved endpoint's amount.  It
+                # never changes the parsed region, side, segment, operation,
+                # or source/provenance identity.
+                parsed = _body_reshape_apply_manual_target(parsed, amount_override)
             prohibition = next(
                 (
                 item for item in user_prohibitions
@@ -4951,15 +5092,18 @@ def build_body_reshape_execution_plan(analysis):
                 "operation": parsed.get("operation"),
                 "target_pct": parsed.get("target_pct"),
                 "planner_target_pct": planner_parsed.get("target_pct"),
-                "planner_default_target_pct": BODY_RESHAPE_TARGET_PCT,
+                "planner_default_target_pct": slider_config["default"],
                 "effective_target_pct": parsed.get("target_pct"),
                 "policy_valid": parsed.get("policy_valid"),
-                "policy_reason_code": parsed.get("reason_code") if parsed.get("reason_code") == "target_below_default_minimum" else None,
-                "policy_reason": parsed.get("reason") if parsed.get("reason_code") == "target_below_default_minimum" else None,
+                "policy_reason_code": planner_parsed.get("reason_code") if planner_parsed.get("reason_code") == "target_below_default_minimum" else None,
+                "policy_reason": planner_parsed.get("reason") if planner_parsed.get("reason_code") == "target_below_default_minimum" else None,
                 "planner_canonical_text": planner_parsed.get("canonical_text") or raw_text.strip(),
                 "source": "user_instruction" if override else "analysis_body_reshape",
-                "target_source": "user_instruction" if override else "analysis_body_reshape",
+                "target_source": "user_slider" if amount_override_present and parsed.get("syntax_valid") else ("user_instruction" if override else "analysis_body_reshape"),
                 "override_raw_text": override.get("raw_text") if override else None,
+                "amount_override_touched": amount_override_present,
+                "amount_override_pct": amount_override if amount_override_present else None,
+                "amount_control_available": bool(parsed_before_amount.get("syntax_valid")),
                 "selected": not overwrite and subject_index not in disabled_subjects and (subject_index, key_point_index) not in disabled_points,
                 "executable": False,
                 "reason_code": None,
@@ -4991,13 +5135,23 @@ def build_body_reshape_execution_plan(analysis):
             elif not isinstance(raw_point, str):
                 entry.update(reason_code="invalid_syntax_or_semantics", reason="key point must be a string")
             else:
+                # Validate the planner/user-authored endpoint before applying
+                # a manual amount.  A 20% or 30% slider value is valid under
+                # the manual policy, but must not be re-parsed through the
+                # planner's legacy <=15% ceiling (and 0% is intentionally not
+                # sent to the positive-target parser at all).
                 validation_error = _body_reshape_key_point_validation_error(
-                    parsed.get("canonical_text") or raw_text
+                    parsed_before_amount.get("canonical_text") or raw_text
                 )
                 if validation_error:
                     entry.update(
-                        reason_code=(parsed.get("reason_code") or "invalid_syntax_or_semantics"),
+                        reason_code=(parsed_before_amount.get("reason_code") or "invalid_syntax_or_semantics"),
                         reason=validation_error,
+                    )
+                elif amount_override_present and amount_override == 0:
+                    entry.update(
+                        reason_code="amount_zero",
+                        reason="manual amount is 0%; keep this review point but do not execute it",
                     )
                 else:
                     entry.update(reason_code="executable", reason=None, executable=True)
@@ -5118,6 +5272,7 @@ def build_body_reshape_execution_plan(analysis):
         "selected_point_count": sum(1 for item in points if item.get("selected") and item.get("executable")),
         "executable_point_count": sum(1 for item in points if item.get("executable")),
         "disabled_point_count": sum(1 for item in points if item.get("reason_code") == "disabled_by_user"),
+        "amount_zero_point_count": sum(1 for item in points if item.get("reason_code") == "amount_zero"),
         "excluded_point_count": sum(1 for item in points if item.get("reason_code") in {
             "invalid_syntax_or_semantics", "target_out_of_policy",
             "conflicting_endpoint", "subject_unresolved", "not_applicable", "overwrite_prompt",
@@ -5131,9 +5286,10 @@ def build_body_reshape_execution_plan(analysis):
     plan = {
         "version": 1,
         "request_signature": _body_reshape_plan_signature(analysis),
-        "planner_default_target_pct": BODY_RESHAPE_TARGET_PCT,
+        "planner_default_target_pct": slider_config["default"],
         "planner_min_target_pct": BODY_RESHAPE_MIN_PCT,
         "planner_max_target_pct": BODY_RESHAPE_MAX_PCT,
+        "slider_config": slider_config,
         "body_active": bool(items) and not overwrite,
         "points": points,
         "items": items,
@@ -5171,7 +5327,7 @@ def body_reshape_items(analysis):
     """
     plan = body_reshape_execution_plan(analysis)
     for entry in plan.get("points") or []:
-        if entry.get("reason_code") not in {None, "executable", "duplicate_of"} and entry.get("reason"):
+        if entry.get("reason_code") not in {None, "executable", "duplicate_of", "amount_zero", "disabled_by_user", "overwrite_prompt"} and entry.get("reason"):
             logger.warning(
                 "Ignoring non-executable body reshape key_point at subject_index=%s key_point_index=%s: %r (%s)",
                 entry.get("subject_index"), entry.get("key_point_index"), entry.get("raw_text"), entry.get("reason"),
@@ -5205,11 +5361,15 @@ def build_body_reshape_edit_block(analysis):
     if not targets:
         return ""
 
-    return """Body reshape execution instructions (analysis-approved):
+    planner_default = _body_reshape_slider_config()["default"]
+    manual_max = _body_reshape_slider_config()["max"]
+    instructions = """Body reshape execution instructions (analysis-approved):
 - Every listed key point is a mandatory geometric endpoint for the named person. Apply no unlisted body-shape change; body-reshape authority itself never authorizes a posture, action, gesture, joint-angle, or body-direction change. A separately selected pose style remains authoritative for its own pose transformation.
 - Locations identify people only; do not move a person to the box coordinates or treat the box as a target silhouette.
-- Complete the named increase/decrease so its local contour difference is clearly recognizable at normal viewing size. Natural means believable anatomy, continuous contours, and faithful texture; it does not mean subtle, restrained, barely visible, or the minimum possible change. A no-op, near-no-op, tonal-only edit, blur, sharpening, or fold-only change does not complete a body endpoint.
+- Complete each named increase/decrease at the exact numeric target printed for that endpoint. Do not enlarge a 1% or 5% request to make it more conspicuous, and do not treat a low requested amount as a request for the planner default. A true no-op, opposite-direction change, tonal-only edit, blur, sharpening, or fold-only change does not complete a body endpoint; all positive amounts still require the corresponding geometric direction.
 - Interpret each percentage against the named region's visible 2D local measurement in the input. It is the total dimensional change, not that percentage per side and not a percentage of the person, bounding box, canvas, weight, circumference, hidden depth, or hidden anatomy. For the planner's default symmetric 12% width decrease, target 0.88 of the source width by moving each side inward about 6% of the source width; preserve any other explicit target exactly.
+- The numeric percentage printed on each listed endpoint is its final effective target. Follow that number exactly, including a manually selected amount such as 1%, 5%, 20%, or the configured upper limit; never substitute the planner default or apply the percentage twice.
+- When a reviewed endpoint also has a user slider amount, that printed effective amount is authoritative for the endpoint's magnitude; retain any higher-priority prohibition or full prompt overwrite semantics, but do not apply a second user-text percentage.
 - If the user's explicit direction gives a different amount or prohibits this same body-region change, that explicit user instruction overrides the planner's default 12% endpoint; never replace an explicit user amount with the default or silently clamp it.
 - Do not accumulate the same percentage twice for duplicate references to one measurement. Blend adjacent waist/abdomen changes into one continuous contour without double-shrinking their overlap.
 - Preserve garment identity, type, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method. Within an approved body region, allow the existing garment silhouette, fabric, texture, pattern, seams, folds, and local clothing/skin boundary to move continuously with the approved body geometry; this follow-through is required and is not a separate clothing edit.
@@ -5221,7 +5381,17 @@ def build_body_reshape_edit_block(analysis):
 - This block authorizes body changes only. A person or body region not listed below is out of scope for body reshape, but separately approved feature or style endpoints for that person remain active and must not be cancelled by this body-only scope.
 
 Targets:
-""" + "\n".join(targets)
+"""
+    instructions = instructions.replace(
+        "12%", f"{planner_default:g}%"
+    ).replace(
+        "0.88", f"{1 - planner_default / 100:g}"
+    ).replace(
+        "6%", f"{planner_default / 2:g}%"
+    ).replace(
+        "the configured upper limit", f"{manual_max:g}%"
+    )
+    return instructions + "\n".join(targets)
 
 
 # The photo-specific target and approved plan already name the operations. This
@@ -7191,9 +7361,9 @@ Judge each rejected item independently and put the result in recipe_adherence.re
                 f'- subject_index={item["subject_index"]}, source_key_point_indices={source_indices}, '
                 f'{item["subject_label"]} at {json.dumps(item["box"], ensure_ascii=False)}: {points}'
             )
-        body_qa_block = """- Approved body reshape endpoints: judge every listed target for the correct person, named region, visible measurement, increase/decrease direction, and clearly visible local geometric change. Compare at normal viewing size. A clear no-op, near-no-op, opposite-direction change, or a result achieved only through exposure, shadow, smoothing, sharpening, blur, or fold redrawing means that endpoint was not completed; set checks.user_intent_followed=false, pass=false, and explain the failed endpoint in summary/warnings/recommendation instead of letting better global color hide the failure.
+        body_qa_block = """- Approved body reshape endpoints: judge every listed target for the correct person, named region, visible measurement, increase/decrease direction, and a geometric change consistent with the exact numeric target. Compare at normal viewing size without demanding a larger change merely because the target is 1% or 5%. A true no-op, opposite-direction change, or a result achieved only through exposure, shadow, smoothing, sharpening, blur, or fold redrawing means that endpoint was not completed; set checks.user_intent_followed=false, pass=false, and explain the failed endpoint in summary/warnings/recommendation instead of letting better global color hide the failure. The legacy phrase \"clear no-op, near-no-op, or moves in the opposite direction\" is not a fixed minimum threshold: a small requested amount must be judged at its own target.
 - Percentage comparison: compare the named local 2D measurement before and after while excluding crop and uniform whole-image scaling. The percentage is total dimensional change, not per-side movement and not subject-box/canvas/weight/circumference/hidden-depth change. If pose or viewpoint changed enough to prevent a reliable comparison, say it is not reliably judgeable; never claim an exact percentage without sufficient visual evidence. ``target_pct`` is the requested endpoint, not a measured result.
-- If the user's explicit direction supplied a different amount or prohibited the same body-region change, judge against that user instruction rather than silently replacing it with the planner's 12% default.
+- Judge each endpoint against the final numeric percentage printed in the target list. If the user's explicit direction supplied a different amount or prohibited the same body-region change, judge against that user instruction where applicable, while still honoring the effective slider target and never silently replacing it with a planner default.
 - Legal garment follow-through: an approved body change may locally move the existing garment silhouette, fabric, texture, pattern, seams, folds, and clothing/skin boundary with that body geometry. Do not fail merely because those authorized local pixels or edge shapes moved. Verify that texture and pattern remain continuous and that only the narrow necessary background strip beside a moved outer contour was continued.
 - Garment identity and coverage failure: fail unauthorized redesign or semantic coverage changes, including changing garment type/design/color/material/pattern/construction/openings/layering/front-back order/wearing method, lengthening or lowering a top to cover abdomen, raising a waistband to cover waist, adding/removing fabric, changing neckline/sleeve design, changing which body area is clothed or exposed, or using clothing rearrangement to fake shaping. Also fail warped nearby people, objects, background structures, or perspective.
 - Preserve every unlisted body region, identity, face, skin texture, hair, hands, feet, pose, action, gesture, joint angle, camera viewpoint, and unlisted person. Do not accumulate duplicate percentages on one measurement; adjacent waist/abdomen targets must form one continuous contour without double-shrinking their overlap. Return one structured ``body_adherence`` entry per actual endpoint, with its subject_index and source_key_point_index, and use only ``not_applicable``, ``not_evaluated``, ``passed``, ``failed``, or ``unjudgeable``. For visual-only judgement set measured_change_pct and minimum_threshold_verified to null; never turn the requested percentage into a fabricated measurement. Targets:
@@ -7204,8 +7374,8 @@ Judge each rejected item independently and put the result in recipe_adherence.re
         body_qa_block = ""
     body_qa_score_cap = (
         "- For body reshape, authorized local garment/skin boundary motion that continuously follows an approved geometric endpoint is not itself a failure. If the output instead redesigns a garment, changes its semantic coverage or wearing relationship, lengthens/lowers a top to cover abdomen, raises a waistband to cover waist, invents/removes fabric, damages pattern/texture continuity, or warps surrounding content, this is a major preservation failure: pass must be false and score must be 3 or lower.\n"
-        "- If an approved, visually judgeable body endpoint is a clear no-op, near-no-op, or moves in the opposite direction, pass must be false and score must be 4 or lower, and checks.user_intent_followed must be false. Do not apply this cap when the comparison is genuinely unjudgeable; report that uncertainty explicitly instead.\n"
-        if body_plan.get("review_point_count") else ""
+        "- If an approved, visually judgeable body endpoint is a true no-op or moves in the opposite direction, pass must be false and score must be 4 or lower, and checks.user_intent_followed must be false. Do not apply this cap when the comparison is genuinely unjudgeable; report that uncertainty explicitly instead.\n"
+        if body_plan.get("executable_point_count") else ""
     )
 
     framing_focus = analysis.get("_framing_focus") or {}
@@ -7296,8 +7466,8 @@ Original analysis:
 Return only valid JSON. User-visible values must be Traditional Chinese.
 """
     body_adherence_property = (
-        '  "body_adherence": [\n    {"subject_index": 0, "source_key_point_index": 0, "endpoint": "腰部：可見總寬向內收窄12%", "status": "passed", "measured_change_pct": null, "minimum_threshold_verified": null, "assessment": "visual assessment", "note": "局部輪廓有可見變化。"}\n  ],\n'
-        if body_plan.get("review_point_count") else ""
+        f'  "body_adherence": [\n    {{"subject_index": 0, "source_key_point_index": 0, "endpoint": "腰部：可見總寬向內收窄{_body_reshape_slider_config()["default"]:g}%", "status": "passed", "measured_change_pct": null, "minimum_threshold_verified": null, "assessment": "visual assessment", "note": "局部輪廓有可見變化。"}}\n  ],\n'
+        if body_plan.get("executable_point_count") else ""
     )
     schema = """{
   "pass": true,

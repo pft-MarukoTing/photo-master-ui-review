@@ -29,7 +29,7 @@ from prompts import (
     _body_reshape_endpoint_identity,
     _body_reshape_overlap_identity,
     _body_reshape_measurement_identity,
-    BODY_RESHAPE_MAX_PCT,
+    _body_reshape_slider_config,
     resolve_smile_targets,
     smile_level,
     subject_issue_items,
@@ -432,7 +432,7 @@ def _body_endpoint_record(value, source_item, source_index=0, entry_value=None):
     parsed = _body_reshape_parse_key_point(text)
     identity = _body_reshape_endpoint_identity(parsed)
     metadata_identity = None
-    if identity is None and metadata:
+    if metadata:
         region = metadata.get("region_id") or metadata.get("region")
         measurement = metadata.get("measurement")
         if region and measurement:
@@ -454,13 +454,14 @@ def _body_endpoint_record(value, source_item, source_index=0, entry_value=None):
         metadata_target = None
     metadata_valid = bool(
         metadata_identity
+        and (identity is None or identity == metadata_identity)
         and metadata.get("executable") is not False
         and metadata.get("policy_valid") is True
         and metadata.get("operation") in {"increase", "decrease"}
         and metadata_target is not None
         and math.isfinite(metadata_target)
         and 0 < metadata_target < 100
-        and metadata_target <= BODY_RESHAPE_MAX_PCT
+        and metadata_target <= _body_reshape_slider_config()["max"]
     )
     valid = bool(parsed.get("syntax_valid") and parsed.get("policy_valid")) or metadata_valid
     if identity is None and metadata_valid:

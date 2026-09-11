@@ -782,14 +782,18 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   margin-top: 10px;
 }
 .ap-body-reshape-option {
+  display: grid;
+  gap: 4px 9px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.ap-body-reshape-option-label {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  color: var(--text-2);
   cursor: pointer;
-  line-height: 1.45;
 }
-.ap-body-reshape-option input {
+.ap-body-reshape-option-label input {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
@@ -799,6 +803,30 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 .ap-body-reshape-option.is-unavailable {
   opacity: .58;
   cursor: not-allowed;
+}
+.ap-body-reshape-slider-row {
+  display: grid;
+  grid-template-columns: 64px minmax(90px, 1fr) minmax(42px, 92px);
+  align-items: center;
+  gap: 8px;
+  margin-left: 25px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.ap-body-reshape-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.ap-body-reshape-slider:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+.ap-body-reshape-slider-value {
+  min-width: 42px;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
 }
 .ap-body-reshape-option-meta {
   color: var(--text-3);
