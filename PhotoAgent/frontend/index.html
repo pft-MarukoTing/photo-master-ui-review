@@ -1262,16 +1262,21 @@
     .ap-style-type-btn.is-picked .ap-style-value {
       color: var(--accent);
     }
-    /* Fixed 2-column grid for every category (not the single shrink-to-fit
-       row this used to be) -- 2 per row reads as more balanced than
-       squeezing 3-4 options into one row of increasingly narrow cards, and
-       wraps to as many rows as a category needs (1 row for Lighting's 2
-       options, 2 rows for Pose/Angle's 3 and Size's 4) instead of needing a
-       per-category exception like #ap-size-list used to be. */
+    /* auto-fit, not a fixed column count -- a fixed repeat(2, 1fr) left this
+       panel's own #ap-options-card-inline column (wide on a PC-width
+       screen, since nothing here caps it the way .ap-style-option-btn caps
+       each card) mostly empty beside two 140px cards. auto-fit instead grows
+       the column count to whatever the actual available width fits, so a
+       wide viewport spreads the same cards out across it (minmax(140px, ...)
+       collapsing any surplus track's space into the ones that exist keeps
+       them centered and evenly spaced, not stretched past their own
+       max-width) while a narrow one still falls back to 1-2 columns instead
+       of squeezing 3-4 options into increasingly narrow cards -- no
+       per-category exception (like #ap-size-list used to need) either way. */
     .ap-style-option-grid {
       list-style: none;
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       justify-items: center;
       gap: 12px;
       /* Capped + scrollable on its own -- a category with enough options to
