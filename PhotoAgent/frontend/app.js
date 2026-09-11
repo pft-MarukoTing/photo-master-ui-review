@@ -3353,7 +3353,6 @@
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
-    if (els.startDirectBtn) els.startDirectBtn.disabled = true;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
@@ -3443,7 +3442,6 @@
       if (els.analysisPreview) els.analysisPreview.hidden = true;
     } finally {
       els.startButton.disabled = false;
-      if (els.startDirectBtn) els.startDirectBtn.disabled = false;
       // Only a safety net for an abandoned pending-review (e.g. an error
       // thrown while showPendingResults/waitForPendingResultsAction was still
       // in play) -- the normal "continue" path already calls this itself
@@ -4026,7 +4024,6 @@
     };
 
     els.startButton.disabled = true;
-    if (els.startDirectBtn) els.startDirectBtn.disabled = true;
     resetSteps(); // clears completedTimings so each run's total starts fresh
     const uploadedAt = Date.now() / 1000;
     batchRecords.forEach((r) => {
@@ -4154,7 +4151,6 @@
       }
     } finally {
       els.startButton.disabled = false;
-      if (els.startDirectBtn) els.startDirectBtn.disabled = false;
     }
   }
 
@@ -5178,8 +5174,8 @@
           jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch(() => ({ status: "error" })))
         );
         // job.stage === "analyze" (see api.py's /analyze, account.py's
-        // record_history) -- a manual-review (Run (Manual)) upload that
-        // hasn't been continued past yet. Its one job_id's own "success"
+        // record_history) -- a paused-for-review upload (#one-shot-toggle
+        // off) that hasn't been continued past yet. Its one job_id's own "success"
         // means "analysis ready", not "edit done", so it needs its own
         // badge/handler instead of falling into the done/processing checks
         // below, which assume a real generated result.
@@ -5811,7 +5807,7 @@
     return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
   }
 
-  // Resumes a manual-review upload (the "Run (Manual)" button) that had only
+  // Resumes a paused-for-review upload (#one-shot-toggle off) that had only
   // reached /analyze last time the history list was fetched -- job.stage ===
   // "analyze" flags this (see api.py's /analyze, account.py's
   // record_history). Shows the same "正在分析照片" placeholder if analysis
@@ -7981,7 +7977,6 @@
     // clicking continue (waitForPendingResultsAction's promise is left
     // pending), so re-enable Start explicitly here too.
     els.startButton.disabled = false;
-    if (els.startDirectBtn) els.startDirectBtn.disabled = false;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps();
@@ -8341,8 +8336,19 @@
       if (e.target.dataset.close) closeDemoImagesModal();
     });
   }
-  els.startButton.addEventListener("click", startSubmit);
-  if (els.startDirectBtn) els.startDirectBtn.addEventListener("click", () => startSubmit({ skipReview: true }));
+  els.startButton.addEventListener("click", () => startSubmit({ skipReview: els.oneShotToggle ? els.oneShotToggle.checked : true }));
+  if (els.oneShotToggle) {
+    // Keeps Run's own tooltip in sync with #one-shot-toggle so hovering it
+    // always names the flow it's about to run, not just the row's static
+    // "一次完成" label.
+    const updateRunButtonTitle = () => {
+      els.startButton.title = els.oneShotToggle.checked
+        ? "分析完成後，直接修圖並顯示結果"
+        : "分析完成後會先暫停，讓你確認、調整，再手動繼續修圖";
+    };
+    els.oneShotToggle.addEventListener("change", updateRunButtonTitle);
+    updateRunButtonTitle();
+  }
   els.showPromptBtn.addEventListener("click", openPromptsModal);
   if (els.promptsModalClose) els.promptsModalClose.addEventListener("click", closePromptsModal);
   if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.addEventListener("click", togglePromptsModalImageCompare);

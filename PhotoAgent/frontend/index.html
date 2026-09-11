@@ -3173,11 +3173,21 @@
 
           <!-- #demo-images-btn (see openDemoImagesModal, app.js) stays
                pinned to this row's left edge (margin-right:auto, styles.css)
-               while Run stays at the right. 設定 itself lives in the header
-               (#header-settings-btn, openContextSettingsModal in app.js)
-               rather than in this row -- 人像修正設定 now folds into it too (see
-               #advanced-settings-fold in #settings-modal), so there's no
-               separate trigger button here anymore. -->
+               while .run-controls stays at the right. 設定 itself lives in
+               the header (#header-settings-btn, openContextSettingsModal in
+               app.js) rather than in this row -- 人像修正設定 now folds into it
+               too (see #advanced-settings-fold in #settings-modal), so
+               there's no separate trigger button here anymore.
+
+               One Run button covers both flows now (was two side-by-side
+               buttons, "Run" vs "Run (Manual)", indistinguishable at a
+               glance beyond button color) -- #one-shot-toggle picks the flow
+               instead: checked (default) goes straight through to
+               finishSingleFlow, unchecked pauses at the analysis-preview
+               panel for review first (see skipReview in startSubmit,
+               app.js). Stacked above Run (not beside it) so the toggle reads
+               as "set the mode" for the button directly below, rather than
+               a third, equally-weighted action in the row. -->
           <div class="upload-actions-row">
             <button id="demo-images-btn" class="btn btn-secondary" type="button">
               <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
@@ -3187,18 +3197,21 @@
               </svg>
               <span class="btn-label">範例</span>
             </button>
-            <button id="start-direct-btn" class="btn btn-grad" type="button" title="分析完成後，接續修圖並顯示結果">
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              Run
-            </button>
-            <button id="start-btn" class="btn btn-secondary" type="button">
-              <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              Run (Manual)
-            </button>
+            <div class="run-controls">
+              <label id="one-shot-row" class="run-one-shot-toggle" title="開啟後，分析完成會直接修圖並顯示結果；關閉後，會先暫停讓你確認、調整，再手動繼續修圖">
+                <label class="ios-switch">
+                  <input id="one-shot-toggle" type="checkbox" checked>
+                  <span class="ios-track"><span class="ios-thumb"></span></span>
+                </label>
+                <span class="run-one-shot-toggle-label">一鍵完成分析與修圖</span>
+              </label>
+              <button id="start-btn" class="btn btn-grad" type="button" title="分析完成後，直接修圖並顯示結果">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                Run
+              </button>
+            </div>
           </div>
 
           <p id="error-msg" class="error-banner" hidden></p>

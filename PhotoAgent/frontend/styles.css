@@ -290,6 +290,12 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  /* .run-controls stacks the toggle above Run, so it's taller than the
+     plain #demo-images-btn beside it -- center (default stretch would
+     top-align a fixed-height button) keeps #demo-images-btn vertically
+     centered against that whole stack instead of pinned to its bottom
+     edge, which read as unbalanced once the stack grew a second row. */
+  align-items: center;
   gap: 10px;
   /* Grow to fill whatever the row has left (#upload-options-card is 0-width
      outside debug mode) -- #demo-images-btn's own margin-right:auto below
@@ -304,6 +310,50 @@ a { text-decoration: none; color: inherit; }
 .upload-actions-row #demo-images-btn {
   margin-right: auto;
 }
+
+/* Groups #one-shot-toggle with Run (index.html), stacked instead of side by
+   side, so the toggle reads as "set Run's mode" rather than a third action
+   competing with Run and #demo-images-btn for attention in the row.
+   align-items:stretch (not flex-end) makes Run match the toggle row's own
+   width -- .run-one-shot-toggle's content is the widest child here, so it
+   still drives the block's width; Run just grows to fill it instead of
+   staying its own, narrower content width. */
+.run-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+/* #one-shot-toggle's row (index.html) -- sits right above Run so the single
+   Run button's flow reads from this switch's state rather than from a
+   second, similarly-styled Run button. Checked (the default) skips straight
+   to the edited result; unchecked pauses after analysis for review. Compact
+   ios-switch sizing borrowed from .ap-face-issue-toggle (results.js) so it
+   doesn't compete with Run's own 44px button height. justify-content:flex-end
+   (not the default flex-start) keeps switch+label pinned to this row's right
+   edge now that .run-controls stretches it to Run's full width. */
+.run-one-shot-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  cursor: pointer;
+}
+.run-one-shot-toggle-label {
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  /* Longer copy ("一鍵完成分析與修圖") no longer fits on one line at narrow
+     widths -- wraps and right-aligns instead of forcing the row wider or
+     overflowing. */
+  max-width: 200px;
+  text-align: right;
+  line-height: 1.3;
+}
+.run-one-shot-toggle .ios-switch { width: 34px; height: 20px; flex-shrink: 0; }
+.run-one-shot-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
+.run-one-shot-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
 
 /* Upload grid: drop zone full-width on top, options + run buttons below it
    (was a side-by-side drop-zone/form-column grid). Capped to 80% of the

@@ -60,7 +60,7 @@ window.PhotoAgentDom = (() => {
     changelogModalBody: document.querySelector("#changelog-modal-body"),
     procThumb: document.querySelector("#proc-thumb"),
     startButton: document.querySelector("#start-btn"),
-    startDirectBtn: document.querySelector("#start-direct-btn"),
+    oneShotToggle: document.querySelector("#one-shot-toggle"),
     resetButton: document.querySelector("#reset-btn"),
     logoHomeBtn: document.querySelector("#logo-home-btn"),
     showPromptBtn: document.querySelector("#show-prompt-btn"),
