@@ -131,7 +131,7 @@
   // Lifecycle metadata for the case currently shown in the shared result
   // canvas. Backend history uses snake_case; live records use camelCase.
   // Values are Unix seconds so both paths can share the same renderer.
-  let currentCaseTimes = { uploadedAt: null, modifiedAt: null };
+  let currentCaseTimes = { uploadedAt: null, modifiedAt: null, revealExtra: false };
 
   function timestampValue(value) {
     const number = Number(value);
@@ -146,8 +146,13 @@
 
   function renderCurrentCaseTimes() {
     if (!els.resultCaseTimes) return;
-    const { uploadedAt, modifiedAt } = currentCaseTimes;
-    els.resultCaseTimes.hidden = !uploadedAt;
+    const { uploadedAt, modifiedAt, revealExtra } = currentCaseTimes;
+    // Upload/modified timestamps are testbed/admin detail, not something a
+    // regular user's own result view needs -- same isDebugUiActive-or-
+    // revealDetailExtra gate #show-prompt-btn/#results-detail-extra already
+    // use elsewhere, so an admin reviewing a flagged case (viewHistoryRecord's
+    // admin-reports-drawer call) still sees it outside debug mode.
+    els.resultCaseTimes.hidden = !uploadedAt || !(isDebugUiActive || revealExtra);
     if (els.resultUploadedTime) {
       els.resultUploadedTime.textContent = uploadedAt ? formatCaseTimestamp(uploadedAt) : "";
       els.resultUploadedTime.dateTime = uploadedAt ? new Date(uploadedAt * 1000).toISOString() : "";
@@ -159,10 +164,11 @@
     }
   }
 
-  function setCurrentCaseTimes(source = {}) {
+  function setCurrentCaseTimes(source = {}, revealExtra = false) {
     currentCaseTimes = {
       uploadedAt: timestampValue(source.uploaded_at ?? source.uploadedAt ?? source.ts),
-      modifiedAt: timestampValue(source.modified_at ?? source.modifiedAt)
+      modifiedAt: timestampValue(source.modified_at ?? source.modifiedAt),
+      revealExtra
     };
     renderCurrentCaseTimes();
   }
@@ -6202,7 +6208,7 @@
   async function viewHistoryRecord(job, { revealDetailExtra = false, report = null } = {}) {
     historyViewToken += 1;
     const myToken = historyViewToken;
-    setCurrentCaseTimes(job);
+    setCurrentCaseTimes(job, revealDetailExtra);
     const runs = await fetchAllHistoryRuns(job);
     if (!runs.length) {
       showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
@@ -7303,7 +7309,7 @@
     captureBatchReviewSelections(record);
     if (!record.uploadedAt) record.uploadedAt = Date.now() / 1000;
     record.modifiedAt = Date.now() / 1000;
-    setCurrentCaseTimes(record);
+    setCurrentCaseTimes(record, settings.revealDetailExtra);
     setAnalysisPreviewDisabled(true);
 
     // N fresh runs (N = the count just confirmed above) -- drop the previous
