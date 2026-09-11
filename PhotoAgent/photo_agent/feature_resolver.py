@@ -304,7 +304,9 @@ def _compact_raw_style_instruction(raw_instruction, style_options=None):
     if "Pose override requirement:" in raw:
         requirements.append(
             "A pose selection must visibly change body language through posture, gesture, hand placement, body/head direction, "
-            "or weight shift; color, lighting, or expression changes alone do not satisfy it."
+            "or weight shift; color, lighting, or expression changes alone do not satisfy it. The re-posed body ends "
+            "anatomically sound: joints bend within natural range, each hand keeps five fingers with correct joint "
+            "direction, and limbs stay attached, matched in length, and unduplicated."
         )
     if "Angle override requirement (vertical only):" in raw:
         if options.get("size"):
@@ -1801,7 +1803,8 @@ def build_compact_editor_prompt(
     )
     pose_completion_guard = (
         "\n- The result is incomplete if the selected subject keeps essentially the original body pose and only the "
-        "expression, gaze, lighting, or color changes."
+        "expression, gaze, lighting, or color changes, or if the new pose carries a joint bent outside natural range, "
+        "a duplicated, detached, or mismatched limb, or a hand without five correctly jointed fingers."
         if "pose" in style_options else ""
     )
     # Each block carries the blank lines it needs: both slots sit flush against
