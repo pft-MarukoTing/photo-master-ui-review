@@ -117,6 +117,7 @@ window.PhotoAgentDom = (() => {
     apAngleList: document.querySelector("#ap-angle-list"),
     apLightingList: document.querySelector("#ap-lighting-list"),
     apSizeList: document.querySelector("#ap-size-list"),
+    apStyleScrollHint: document.querySelector("#ap-style-scroll-hint"),
     apFaceTabs: document.querySelector("#ap-face-tabs"),
     apFaceDetail: document.querySelector("#ap-face-detail"),
     errorMsg: document.querySelector("#error-msg"),

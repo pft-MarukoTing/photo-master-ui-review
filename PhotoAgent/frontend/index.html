@@ -790,17 +790,18 @@
     #ap-review-panel:has(#ap-review-tab-style.is-active)  { --active-hue: var(--hue-style); }
     #ap-review-panel:has(#ap-review-tab-prompt.is-active) { --active-hue: var(--hue-prompt); }
     /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/.ap-style-type-row/
-       .ap-style-option-grid each set their own display (flex/grid)
-       unconditionally -- an author rule for the same property always beats
-       the browser's own [hidden]{display:none} UA rule regardless of
-       specificity (the exact bug .ap-recipe-inline's stale selector caused
-       once already, see git history), so each gets its own explicit
-       [hidden] override here instead. */
+       .ap-style-option-grid/.ap-style-scroll-hint each set their own display
+       (flex/grid) unconditionally -- an author rule for the same property
+       always beats the browser's own [hidden]{display:none} UA rule
+       regardless of specificity (the exact bug .ap-recipe-inline's stale
+       selector caused once already, see git history), so each gets its own
+       explicit [hidden] override here instead. */
     .ap-review-tab[hidden],
     .ap-face-tabs[hidden],
     #ap-recipe-list[hidden],
     .ap-style-type-row[hidden],
-    .ap-style-option-grid[hidden] { display: none; }
+    .ap-style-option-grid[hidden],
+    .ap-style-scroll-hint[hidden] { display: none; }
 
     /* Hairline divider between each top-level section of the panel */
     .analysis-preview > .ap-row + .ap-row {
@@ -1136,6 +1137,40 @@
       font-weight: 700;
       color: var(--text);
     }
+    /* Positioning root for #ap-style-scroll-hint, which pins to this frame's
+       own bottom edge rather than #ap-style-options-frame's scrollable child
+       list -- see that element's own markup comment. */
+    #ap-style-options-frame { position: relative; }
+    /* Spelled-out fallback for the option grid's own inset-shadow scroll cue
+       (too subtle on its own to register as "this scrolls" at a glance) --
+       a small pill anchored over the bottom edge of whichever category list
+       is currently showing. hidden/shown by updateStyleOptionScrollCue
+       (app.js) in lockstep with that list's own has-more-below state, so it
+       only ever appears while there's actually more to scroll to. */
+    .ap-style-scroll-hint {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: var(--card-3);
+      border: 1px solid var(--border-2);
+      color: var(--text-2);
+      font-size: 11.5px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0,0,0,.25);
+      animation: apStyleScrollHintBob 1.4s ease-in-out infinite;
+    }
+    @keyframes apStyleScrollHintBob {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(3px); }
+    }
     /* Fixed 2-column grid (not flex-wrap) -- Pose/Angle/Lighting/Size's own
        .ap-style-value text changes length with whatever's picked ("Pose" vs
        "Pose · Playful"), which made a flex-wrap row reflow/reorder the pills
@@ -1247,6 +1282,24 @@
          it stays put as the anchor while only the cards scroll under it. */
       max-height: 440px;
       overflow-y: auto;
+      /* An inset shadow, not a background-colored fade -- this grid has no
+         solid background of its own (its parent .step-list-frame's tint
+         shows through), so a color-matched fade gradient would need to
+         duplicate that translucent tint exactly. A shadow reads as "more
+         content this way" regardless of what's behind it, and (unlike a
+         gradient overlay) it's painted on the box itself, not the scrolling
+         content, so it never moves as the grid scrolls. */
+      transition: box-shadow .15s;
+    }
+    /* updateStyleOptionScrollCue (app.js) toggles these on scroll/whenever a
+       category's list becomes the visible one -- max-height alone left a
+       hard, unannounced cut mid-row that read as "that's all of them", not
+       "scroll for more" (the plain OS scrollbar it otherwise relies on can
+       be thin/overlay-only and easy to miss entirely). */
+    .ap-style-option-grid.has-more-below { box-shadow: inset 0 -24px 16px -18px rgba(0,0,0,.45); }
+    .ap-style-option-grid.has-more-above { box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45); }
+    .ap-style-option-grid.has-more-above.has-more-below {
+      box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45), inset 0 -24px 16px -18px rgba(0,0,0,.45);
     }
     .ap-style-option-btn {
       position: relative;
@@ -3628,6 +3681,19 @@
                         <ul id="ap-angle-list" class="ap-style-option-grid" data-style-group="angle" hidden></ul>
                         <ul id="ap-lighting-list" class="ap-style-option-grid" data-style-group="lighting" hidden></ul>
                         <ul id="ap-size-list" class="ap-style-option-grid" data-style-group="size" hidden></ul>
+                        <!-- The inset shadow on .ap-style-option-grid itself
+                             is a subtle cue easy to miss outright -- this
+                             spells the same "more below" state out in words,
+                             overlaid on the currently-visible list (whichever
+                             one that is) and toggled alongside it by
+                             updateStyleOptionScrollCue (app.js). Lives outside
+                             the scrolling <ul> itself so it stays pinned to
+                             the frame's bottom edge rather than scrolling
+                             away with the cards under it. -->
+                        <div class="ap-style-scroll-hint" id="ap-style-scroll-hint" hidden aria-hidden="true">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          往下滑看更多
+                        </div>
                       </div>
                     </div>
                     <div class="form-field ap-options-prompt" id="ap-review-prompt" hidden>

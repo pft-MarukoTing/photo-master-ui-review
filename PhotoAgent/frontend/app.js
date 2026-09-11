@@ -6609,6 +6609,22 @@
     return els[`ap${group[0].toUpperCase()}${group.slice(1)}List`];
   }
 
+  // .ap-style-option-grid's own inset-shadow scroll cue (index.html) is easy
+  // to miss on its own, so #ap-style-scroll-hint spells it out in words --
+  // both are driven off the same has-more-below/has-more-above read here.
+  // Called whenever the visible list's scroll position changes (the `scroll`
+  // listeners below) and whenever showStyleGroup swaps in a different list
+  // (a different content height, freshly scrolled to the top).
+  function updateStyleOptionScrollCue(list) {
+    if (!list) return;
+    const canScroll = list.scrollHeight > list.clientHeight + 1;
+    const hasMoreAbove = canScroll && list.scrollTop > 0;
+    const hasMoreBelow = canScroll && list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+    list.classList.toggle("has-more-above", hasMoreAbove);
+    list.classList.toggle("has-more-below", hasMoreBelow);
+    if (els.apStyleScrollHint) els.apStyleScrollHint.hidden = !hasMoreBelow;
+  }
+
   // group === null hides every list and clears every button's active state
   // (no g in STYLE_GROUPS ever equals null) -- also swaps which of
   // #ap-style-type-row (the 4 pills) / #ap-style-options-frame is visible,
@@ -6635,6 +6651,19 @@
       els.apStyleOptionsTitle.textContent = group ? group[0].toUpperCase() + group.slice(1) : "";
     }
     if (els.apStyleOptionsFrame) els.apStyleOptionsFrame.hidden = !group;
+    // Freshly shown list starts scrolled to the top regardless of where a
+    // previous visit to this same category left it -- re-read the cue for
+    // that state rather than leaving it holding whichever group's stale
+    // has-more-below it last computed.
+    if (group) {
+      const list = styleGroupListEl(group);
+      if (list) {
+        list.scrollTop = 0;
+        updateStyleOptionScrollCue(list);
+      }
+    } else if (els.apStyleScrollHint) {
+      els.apStyleScrollHint.hidden = true;
+    }
   }
 
   // Full-window compare view: toggles .is-fullscreen on the real
@@ -8588,6 +8617,13 @@
     btn.addEventListener("click", () => showStyleGroup(btn.dataset.styleGroup));
   });
   if (els.apStyleExitBtn) els.apStyleExitBtn.addEventListener("click", () => showStyleGroup(null));
+  // Keeps the has-more-above/-below scroll cue (and #ap-style-scroll-hint)
+  // honest as the user actually scrolls each category's list, not just at
+  // the moment showStyleGroup first shows it.
+  STYLE_GROUPS.forEach((g) => {
+    const list = styleGroupListEl(g);
+    if (list) list.addEventListener("scroll", () => updateStyleOptionScrollCue(list));
+  });
   // The in-modal clear "x" on each Pose/Angle/Lighting/Size pill (a sibling
   // of the pill's own button, not nested inside it -- see the CSS comment
   // in index.html for why) -- same clearStylePick reset-to-default path the
