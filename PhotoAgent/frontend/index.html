@@ -489,14 +489,19 @@
        is the sibling that actually stacks tab-row-then-avatar-row in a
        column. */
     .ap-review-summary { align-items: flex-start; }
-    /* Zeroes out .ap-toggle-card > summary's own bottom padding (10px) just
-       for this summary -- id selector so it actually beats that rule's own
-       specificity. Closes the gap between the tab row's bottom edge and the
-       shoulder hairline below it (#ap-review-panel[open] > summary's own
-       border-bottom, see its :has() coloring further down) so the active
-       tab's own bottom sits flush against that line instead of floating
-       10px above it with a border-less stretch in between. */
-    #ap-review-panel > summary { padding-bottom: 0; }
+    /* Zeroes out .ap-toggle-card > summary's own top+bottom padding (10px
+       each) just for this summary -- id selector so it actually beats that
+       rule's own specificity. Bottom: closes the gap between the tab row's
+       bottom edge and the shoulder hairline below it (#ap-review-panel[open]
+       > summary's own border-bottom, see its :has() coloring further down)
+       so the active tab's own bottom sits flush against that line instead of
+       floating 10px above it with a border-less stretch in between. Top:
+       #ap-review-panel now sits nested inside #ap-analysis-shell's own
+       padded body (14px, see .ap-analysis-shell-body below) instead of
+       sitting directly on .options-card-inline, so its own extra 10px on
+       top of that stacked into a 24px gap under the shell's divider --
+       zeroed so the shell body's 14px is the only top spacing left. */
+    #ap-review-panel > summary { padding: 0 14px; }
     /* .ap-options-toggle's shared chevron (▸, below) doubles up with the
        browser-style tab strip itself as an "expand this" cue here -- the
        tabs already read as clickable controls on their own, so the chevron
