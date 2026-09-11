@@ -805,7 +805,7 @@ Wording requirements:
 - Prefer concrete commands such as: "Move both pupils/irises toward the camera-lens center and moderately turn the face toward camera until the viewer reads direct eye contact."
 - success_condition must be stricter than "improved": it should state the final viewer read, for example "subject clearly looks straight at the camera lens" or "do not stop at near-camera gaze".
 - preserve_during_repair should list only gaze-local identity and appearance protections, such as clothing, mouth expression, identity, and background. Never list body pose, shoulder direction, hands, stance, gesture, interaction points, or camera framing; later user-selected pose/framing options own those properties.
-- failure_to_avoid should name likely failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "changed body pose".
+- failure_to_avoid should name likely gaze/face failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "unrequested face reconstruction".
 
 Example strategy for a clear off-camera seated portrait:
 {
@@ -819,7 +819,7 @@ Example strategy for a clear off-camera seated portrait:
   "edit_instruction": "Redirect the named subject's gaze to the camera lens using pupil/iris repositioning plus a moderate face yaw toward camera. Do not stop at near-camera; the final viewer read must be direct eye contact.",
   "success_condition": "Subject clearly looks straight at the camera lens.",
   "preserve_during_repair": ["mouth expression", "identity", "clothing", "scene"],
-  "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "changed body pose"]
+  "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "unrequested face reconstruction"]
 }
 - Judge this score by:
   - whether the required eye rotation is small enough to look natural;
@@ -1668,7 +1668,7 @@ Wording requirements:
 - Prefer concrete commands such as: "Move both pupils/irises toward the camera-lens center and moderately turn the face toward camera until the viewer reads direct eye contact."
 - success_condition must be stricter than "improved": it should state the final viewer read, for example "subject clearly looks straight at the camera lens" or "do not stop at near-camera gaze".
 - preserve_during_repair should list only gaze-local identity and appearance protections, such as clothing, mouth expression, identity, and background. Never list body pose, shoulder direction, hands, stance, gesture, interaction points, or camera framing; later user-selected pose/framing options own those properties.
-- failure_to_avoid should name likely failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "changed body pose".
+- failure_to_avoid should name likely gaze/face failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "unrequested face reconstruction".
 
 Example strategy for a clear off-camera seated portrait:
 {
@@ -1682,7 +1682,7 @@ Example strategy for a clear off-camera seated portrait:
   "edit_instruction": "Redirect the named subject's gaze to the camera lens using pupil/iris repositioning plus a moderate face yaw toward camera. Do not stop at near-camera; the final viewer read must be direct eye contact.",
   "success_condition": "Subject clearly looks straight at the camera lens.",
   "preserve_during_repair": ["mouth expression", "identity", "clothing", "scene"],
-  "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "changed body pose"]
+  "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "unrequested face reconstruction"]
 }
 - Judge this score by:
   - whether the required eye rotation is small enough to look natural;
@@ -1919,7 +1919,7 @@ Analyze the uploaded photo and return only valid JSON. Keep the JSON keys in Eng
 Analysis goal:
 - Help a user understand how their photo can be improved.
 - Recommend a tasteful retouch that preserves the same subject, same scene, and same moment.
-- Decide whether a simple crop/reframe is useful.
+- Choose the strongest final framing by actively comparing the captured frame with at least one viable alternative crop.
 - Identify every subject in the photo (people, animals, products, food, objects) so a separate, dedicated pass can judge each person's blink/hair/gaze/smile state -- your own output does not include those four fields at all.
 
 Hard limits:
@@ -2089,7 +2089,8 @@ Intent: Produce normalized subject and crop geometry that downstream framing log
 - For a person-type subject whose face is visible anywhere in the photo, subjects[].box must include that entire visible head. A box that starts at or below the chin/neck/shoulders and excludes the face -- even if it otherwise fits the rest of the visible body tightly and looks "correct" by itself -- is wrong and must be corrected; the head is not an optional part of a person subject's box.
 """ + "\n" + """- For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
 - protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
-- If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
+- Choose "original" with crop_box.enabled=false when the captured boundaries support the intended subject emphasis, balance, context, and edge cleanliness as well as any viable crop.
+- A same-ratio or near-full crop remains valid when it visibly improves alignment, removes an edge distraction, strengthens the subject anchor, or gives the frame a cleaner visual endpoint.
 - The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
 - Changing the outer canvas ratio never permits changing the internal proportions of the photographed content. Plan the new frame only by cropping/recomposition; never stretch or squash the original scene to fill it.
 - The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
@@ -2105,9 +2106,9 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 - For completeness-first presentation, catalog-like, symmetrical, circular, stacked, shape-critical, food/product/object/still-life images, centered or near-centered balance is often competitive.
 - For lifestyle, story, portrait, street, travel, action, gaze, gesture, interaction, leading lines, asymmetry, or intentional negative space, off-center, thirds, diagonal, symmetry, or context-preserving framing may be stronger.
 - Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
-- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual/neutral elements; for each harmful element, decide a concrete and executable treatment rather than an abstract description of the desired feel. Never rebuild the scene to remove it.
+- Reassess distractions after the proposed crop. A visible element may be harmful, contextual, or neutral depending on the final frame. Preserve contextual and neutral elements. For a harmful distraction touching an outer edge, place it outside the crop when the subject and useful context remain comfortably protected; use local de-emphasis when cropping would sacrifice more important content.
 - Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
-- Preserve scene truth: background structure, surface material, perspective, spatial relationships, and real-world context. Do not turn casual, lifestyle, documentary, travel, street, or memory photos into studio/catalog scenes unless requested.
+- Preserve scene identity, background structure, surface material, perspective, spatial relationships, and real-world context. The captured outer boundaries remain independently editable.
 - For people and animals, the face ROI alone is not automatically the whole subject. Protect the semantic subject extent and role cues required by the framing. Partial-person crops are acceptable only when intentional, clean, and supportive of the scene.
 - For action, eating, gesture, interaction, or expression-driven moments, protect expression, hands, held objects, interaction points, and relevant context. Preserve lower body, furniture, foreground objects, or peripheral context only when they support posture, story, scale, balance, or scene intent.
 - For fashion, posture, full-body portrait, dance, sports, product shape, architecture, or object-completeness tasks, preserve the full visible form more conservatively.
@@ -2128,11 +2129,14 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - correction_plan, correction_axes, correction_inverse, and retouch_recipe must not include any eye/blink repair, gaze/eye-contact repair, or hair correction. A separate portrait-QC pass judges each person's blink_issue/hair_issue/gaze_issue/smile_issue after this analysis; any approved blink/gaze repair is executed directly from that person's own blink_issue/gaze_issue, never through correction_plan. Write correction_plan here as if every subject's eyes, gaze, and hair are already fine, covering composition/crop/color/skin/product corrections and aesthetic improvements supported by the photo.
 - Write preserve_rules only for identity, content, geometry, scene structure, and material identity. Do not use preserve_rules to retain scene exposure, white balance, contrast, hue, saturation, or captured color atmosphere; those are governed by edit_intent and correction_plan. Keep eyes, blink, eye contact, gaze, hair, and smile out of preserve_rules because the portrait-QC pass governs them.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
-- Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
+- In auto mode, evaluate at least one materially different viable crop before choosing the final framing. Compare subject emphasis, edge distractions, empty-space function, balance, and protected content. Select the crop when it produces a clearly stronger composition; select original when the captured frame is equally strong or better. Return crop_candidates for the viable alternatives, with each candidate explaining its composition intent and tradeoffs.
+- Make an approved composition crop visibly consequential: normally remove at least 8% of the original span on one axis (w <= 0.92 or h <= 0.92) and change subject scale, placement, or edge content. Use original for smaller cosmetic trims; alignment may still use its minimal cleanup crop.
+- Populate subject_extent_box and protected_regions for the selected final composition. Cover the semantic subject and must-retain role cues only; keep optional context and intended-to-remove edge content outside these protection boxes so crop validation can honor the chosen frame.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
 - is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
+- Make the framing decision decisive and consistent. When composition_strategy, distraction_strategy, alignment_strategy, or detected_issues identifies a framing improvement to execute, express it through crop_box and a crop-tagged correction_plan item. When crop_box.enabled is false, describe the original frame as the selected final composition with a definitive preserve decision.
 - Before returning JSON, read edit_intent, lighting_strategy, memory_color_strategy, correction_plan, and preserve_rules together. Make them one consistent target and execution plan; remove or rewrite any statement that weakens or preserves away an approved light or color adjustment.
 
 """
@@ -2294,14 +2298,14 @@ Every free-text field you write (edit_instruction, target_eye_state, target_gaze
 
 Gaze repair (only for a target with needs_gaze_repair true):
 Use the full photo and matching Face crop N to choose an anatomically plausible method that produces an unmistakable, normally visible correction to the exact current lens. The correction must be obvious at normal photo-viewing size, not only when the face is highly enlarged:
-- eyes_plus_head_face_alignment is the default for near_camera, off_camera, upward_side, downward, unfocused_camera, and cross_focused whenever head yaw/pitch or face orientation contributes to the miss. Require a visible but natural head/face alignment together with the eye correction. Keep the torso, shoulders, body pose, and camera framing unchanged;
-- eyes_only is a narrow exception. Choose it only when ALL of these are true: the head and face are already naturally aligned to the current lens; the miss is extremely small; both visible eyes can reach exact lens contact without side-eye, strain, crossed axes, or excessive sclera; and the result will still be clearly visible at normal viewing size. Ordinary near_camera is not enough by itself;
+- eyes_plus_head_face_alignment is used only when the captured head yaw/pitch or face orientation itself materially prevents natural direct lens contact. Require a visible but bounded head/face alignment together with the iris/pupil correction;
+- eyes_only is the correct method whenever the head and face are already naturally aligned to the current lens and both visible eyes can reach exact lens contact without side-eye, strain, crossed axes, or excessive sclera. The miss need not be tiny: a frontal face looking sideways may still need a clearly visible iris/pupil movement while its eyelids, eye shape, head pose, and facial projection remain fixed;
 - not_safe_to_repair only when the pixels or geometry cannot support a reliable correction. In that case write a conservative plan and explicitly name the limitation.
-For each gaze strategy, provide concrete English instructions. Name the current pupil/iris direction, exact target, required pupil/iris movement, natural sclera/catchlight rebalancing, required bounded head/face alignment, repair strength, success condition, preservation rules, and likely failure modes. Use moderate strength by default; use subtle only for a genuinely tiny eyes_only miss whose completed correction remains obvious at normal viewing size. For off-camera, upward, or downward gaze, explicitly describe the needed head yaw and/or pitch as well as eye movement. Preserve identity, eyelid openness, eye shape/color, expression, glasses, skin, torso, shoulders, body pose, clothing, scene, and every unlisted person. Do not stop at near-camera gaze.
+For each gaze strategy, provide concrete English instructions. Name the current pupil/iris direction, exact target, required pupil/iris movement, natural sclera/catchlight rebalancing, any genuinely required bounded head/face alignment, repair strength, success condition, preservation rules, and likely failure modes. Describe this as repositioning the person's existing irises and pupils inside unchanged eye openings—never use reconstruct, rebuild, replace, regenerate, or redraw for the eyes or face. Use moderate strength by default; use subtle only for a genuinely tiny eyes_only miss whose completed correction remains obvious at normal viewing size. Preserve identity, eyelid openness, eye shape/color, canthi, lash lines, expression, glasses, skin, head pose unless the selected method explicitly requires it, clothing, scene, and every unlisted person. Do not stop at near-camera gaze.
 Do not write any instruction that preserves, freezes, or restores the named person's torso, shoulders, body pose, stance, gesture, interaction points, or camera framing. Those properties are outside this local gaze plan and may be owned by a later user-selected pose or framing override.
 
 Blink repair (only for a target with needs_blink_repair true):
-Choose a method that naturally reopens or relaxes the closed/half-closed eyelids to match this person's existing expression and the photo's moment -- never a generic wide-open or symmetrical look, and never copied from another person. Name the target eyelid state, the eyelid adjustment itself, repair strength, success condition, preservation rules, and likely failure modes. When this same person also needs a gaze repair, describe the eyelid opening as part of one coherent local eye reconstruction together with the final approved gaze direction, not as an independent step performed before or after it. Preserve identity, gaze direction (unless this person's own gaze repair specifies a new direction), facial structure, expression style, skin texture, glasses, makeup, lighting, and every unlisted person. Never describe converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into neutral open eyes.
+Choose a method that naturally reopens or relaxes the closed/half-closed eyelids to match this person's existing expression and the photo's moment -- never a generic wide-open or symmetrical look, and never copied from another person. Name the target eyelid state, the eyelid adjustment itself, repair strength, success condition, preservation rules, and likely failure modes. When this same person also needs a gaze repair, describe the eyelid opening and final approved gaze as one coordinated local eye edit, not as independent steps performed before or after each other. Preserve identity, gaze direction (unless this person's own gaze repair specifies a new direction), facial structure, expression style, skin texture, glasses, makeup, lighting, and every unlisted person. Never describe converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into neutral open eyes.
 
 Targets:
 """ + json.dumps(compact_targets, ensure_ascii=False, indent=2)
@@ -5765,6 +5769,17 @@ _CANVAS_SHAPE_CONSEQUENCE = {
 }
 
 
+def _crop_has_visible_trim(w, h, axis_threshold=0.08, area_threshold=0.12):
+    """A composition crop is visible by either axis span or total removed area."""
+    width = max(0.0, min(1.0, w))
+    height = max(0.0, min(1.0, h))
+    return (
+        (1 - width) >= axis_threshold
+        or (1 - height) >= axis_threshold
+        or (1 - width * height) >= area_threshold
+    )
+
+
 def _describe_crop_tightness(w, h):
     """How tight the proposed region is, qualitatively.
 
@@ -5776,7 +5791,7 @@ def _describe_crop_tightness(w, h):
     is misplaced.
     """
     kept = max(0.0, w) * max(0.0, h)
-    if kept >= 0.85:
+    if not _crop_has_visible_trim(w, h):
         return "close to the full frame; little more than the outer edges come off"
     if kept >= 0.6:
         return "a moderate tightening of the original frame"
@@ -5810,6 +5825,11 @@ def _build_crop_instruction_block(
     ]
     if shape_difference:
         consequence = _CANVAS_SHAPE_CONSEQUENCE[shape_difference]
+        if shape_difference == "same" and _crop_has_visible_trim(crop_plan["w"], crop_plan["h"]):
+            consequence = (
+                "This frame keeps the photograph's canvas shape while visibly tightening the composition. "
+                "Execute the approved crop and let the selected outer content leave the final frame."
+            )
         if has_body_reshape:
             consequence = consequence.replace(
                 "rather than narrowing the people and objects in it.",

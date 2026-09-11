@@ -41,7 +41,7 @@ _BASE_PRESERVE = {
 }
 _EYE_IDENTITY_PRESERVE = {
     "eye_landmark_geometry", "iris_identity", "eyelash_identity",
-    "eye_makeup", "glasses_and_reflections",
+    "eyelid_crease_identity", "eye_makeup", "glasses_and_reflections",
 }
 _HAIR_IDENTITY_PRESERVE = {
     "hair_parting", "hair_length", "hair_volume", "hair_density",
@@ -167,7 +167,25 @@ def _build_color_blocks(analysis, skin_corrections, face_tonal_corrections=(), l
     return "\n".join(execution_lines), ""
 
 
-def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False):
+def _crop_plan_has_visible_trim(crop_plan, axis_threshold=0.08, area_threshold=0.12):
+    """Return whether the resolved frame visibly tightens an axis or total area."""
+    if not isinstance(crop_plan, dict):
+        return False
+    try:
+        width = float(crop_plan.get("w", 1))
+        height = float(crop_plan.get("h", 1))
+    except (TypeError, ValueError):
+        return False
+    width = max(0.0, min(1.0, width))
+    height = max(0.0, min(1.0, height))
+    return (
+        (1 - width) >= axis_threshold
+        or (1 - height) >= axis_threshold
+        or (1 - width * height) >= area_threshold
+    )
+
+
+def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False, crop_plan=None):
     """Keep the raw builder's crop decision while removing explanatory prose."""
     raw = str(raw_instruction or "").strip()
     if not raw:
@@ -213,7 +231,8 @@ def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False):
         tightness = tightness_match.group(1).strip() if tightness_match else "use the stated crop tightness"
         same_shape = "same shape as the photograph" in raw and "nothing has to be given up" in raw
         near_full_frame = "close to the full frame" in tightness.lower()
-        if same_shape and near_full_frame and "Closer framing was requested" not in raw:
+        visible_trim = _crop_plan_has_visible_trim(crop_plan)
+        if same_shape and near_full_frame and "Closer framing was requested" not in raw and not visible_trim:
             if not has_body_reshape:
                 return (
                     "Keep the supplied framing and subject scale; at most trim a small amount from the outer edges if needed. "
@@ -225,6 +244,8 @@ def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False):
                 "Do not zoom out, outpaint, or recompose. Scale the whole canvas uniformly only—never stretch content. Resizing a single axis is not available."
                 + local_shape_exception
             )
+        if same_shape and near_full_frame and visible_trim:
+            tightness = "a visible tightening of the original frame"
         consequence = ""
         if "left and right edges cannot both be inside" in raw:
             consequence = (
@@ -242,12 +263,12 @@ def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False):
             )
         closer = " Come in visibly closer than the original." if "Closer framing was requested" in raw else ""
         result = (
-            f"Target output aspect ratio: {aspect}. Reframe to {aspect}; {tightness}.{consequence}{closer} Choose frame edges from the visible main subject, "
-            "keeping faces, hands, held objects, and meaningful context comfortably inside. Crop and scale uniformly only; "
+            f"Reframe to {aspect}; {tightness}.{consequence}{closer} Frame the visible main subject and meaningful "
+            "context comfortably inside. Crop and scale uniformly. "
             + (
-                "never stretch or squash the whole image. Resizing a single axis is not available."
+                "Preserve tilt, relative placement, and unlisted proportions while completing approved local body endpoints."
                 if has_body_reshape else
-                "never stretch content. Resizing a single axis is not available. Everything inside the frame keeps the proportions, the tilt, and the relative sizes and spacing it has in the input photograph; preserve overlap."
+                "Preserve internal proportions, tilt, relative sizes, spacing, and overlap."
             )
         )
         return result + local_shape_exception if has_body_reshape else result
@@ -255,6 +276,116 @@ def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False):
     # A new raw-builder shape should remain correct before this compactor is
     # taught its semantics; verbosity is safer than silently dropping a rule.
     return raw
+
+
+def _compact_crop_goal_text(raw_goal, resolved_ratio):
+    """Keep crop semantics while normalizing stale ratios and dropping box coordinates."""
+    text = str(raw_goal or "").strip()
+    if not text:
+        return ""
+
+    # Geometry validation may move or grow the proposed box. Keep the named
+    # edge/content intent, but do not forward obsolete numeric trim amounts.
+    text = re.sub(
+        r"(?i)(?:by\s+)?(?:approximately|about|roughly|around|約|大約)?\s*"
+        r"\d+(?:\.\d+)?\s*%\s*(?:of\s+the\s+|的)?",
+        "",
+        text,
+    )
+
+    ratio = str(resolved_ratio or "").strip()
+    if ratio and ratio != "original":
+        spoken_ratios = (
+            "一比一", "三比二", "二比三", "三比四", "四比三", "四比五", "五比四",
+            "九比十六", "十六比九", "二十一比九", "一比四", "四比一", "一比八", "八比一",
+        )
+        text = re.sub(r"(?<!\d)\d+\s*:\s*\d+(?!\d)", ratio, text)
+        for spoken_ratio in spoken_ratios:
+            text = text.replace(spoken_ratio, ratio)
+
+    clauses = re.split(r"(?<=[，；。;])", text)
+    semantic_clauses = []
+    for clause in clauses:
+        coordinate_count = sum(
+            bool(re.search(rf"(?i)(?<![a-z]){name}\s*=", clause))
+            for name in ("x", "y", "w", "h")
+        )
+        if coordinate_count >= 2:
+            continue
+        semantic_clauses.append(clause)
+    return "".join(semantic_clauses).strip(" ，；;")
+
+
+def _compact_analysis_crop_guidance(analysis):
+    """Render the approved semantic crop intent without stale geometry."""
+    resolved_ratio = analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio")
+    crop_items = []
+    axes = analysis.get("correction_axes") or []
+    for index, raw_item in enumerate(analysis.get("correction_plan") or []):
+        item_axes = _axis_set([axes[index]]) if index < len(axes) else set()
+        if "crop" in item_axes and str(raw_item or "").strip():
+            crop_items.append(_compact_crop_goal_text(raw_item, resolved_ratio))
+
+    crop_box = analysis.get("crop_box") or {}
+    goal = " ".join(crop_items).strip()
+    has_approved_goal = bool(goal)
+    if not goal:
+        goal = _compact_crop_goal_text(
+            crop_box.get("reason") or analysis.get("crop_recommendation"), resolved_ratio,
+        )
+
+    intent = analysis.get("crop_intent") or {}
+    trimmed_edges = [
+        edge for edge in ("left", "right", "top", "bottom")
+        if intent.get(f"trim_{edge}") is True
+    ]
+    distractions = [
+        str(item).strip() for item in (intent.get("remove_edge_distractions") or [])
+        if str(item or "").strip()
+    ]
+    anchor = str(intent.get("subject_anchor") or analysis.get("roi_anchor") or "").strip()
+
+    keep = list(dict.fromkeys(
+        str(region.get("label") or "").strip()
+        for region in (analysis.get("protected_regions") or [])
+        if isinstance(region, dict) and str(region.get("label") or "").strip()
+    ))
+    extent = analysis.get("subject_extent_box") or {}
+    extent_reason = str(extent.get("reason") or "").strip()
+    if extent_reason and not keep:
+        keep.append(extent_reason)
+
+    lines = []
+    if goal:
+        lines.append(f"- Framing goal: {goal}")
+    # The reviewed correction is authoritative. Structured fields fill only
+    # details it did not already state, keeping one crop plan in the prompt.
+    if trimmed_edges and not has_approved_goal:
+        lines.append(f"- Set the final frame by trimming the {', '.join(trimmed_edges)} edges.")
+    if distractions and not has_approved_goal:
+        lines.append(f"- Place outside the final frame: {'; '.join(distractions)}.")
+    if anchor:
+        lines.append(f"- Main visual anchor: {anchor}.")
+    if keep:
+        lines.append(f"- Keep comfortably inside the final frame: {'; '.join(keep)}.")
+    return "\n".join(lines)
+
+
+def _analysis_has_alignment_correction(analysis):
+    """Return whether an approved crop-axis item changes tilt or perspective."""
+    alignment_terms = (
+        "rotate", "rotation", "straighten", "level the horizon",
+        "horizon correction", "perspective correction", "keystone",
+        "旋轉", "水平校正", "修正水平", "校正地平", "地平線校正", "透視校正",
+        "垂直校正", "拉直", "扶正",
+    )
+    axes = analysis.get("correction_axes") or []
+    for index, raw_item in enumerate(analysis.get("correction_plan") or []):
+        item_axes = _axis_set([axes[index]]) if index < len(axes) else set()
+        item = str(raw_item or "").strip().lower()
+        if "crop" in item_axes and any(term in item for term in alignment_terms):
+            return True
+    return False
 
 
 def _compact_raw_style_instruction(raw_instruction, style_options=None):
@@ -1382,22 +1513,50 @@ def build_compact_editor_prompt(
             item["preserve"] = sorted(set(item["preserve"]) - body_style_footprint)
             item["removed_preservations"] = sorted(set(item["removed_preservations"]) | removed)
     ratio = analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio") or "original"
-    crop_text = json.dumps(crop_plan or {}, ensure_ascii=False)
     raw_crop_block = str(raw_crop_instruction or "").strip()
     compact_crop_block = _compact_raw_crop_instruction(
-        raw_crop_block, has_body_reshape=body_reshape_active,
+        raw_crop_block, has_body_reshape=body_reshape_active, crop_plan=crop_plan,
     )
     crop_instruction_source = "raw_edit_prompt" if compact_crop_block else "compact_fallback"
     if not compact_crop_block:
         compact_crop_block = (
-            f"- Output aspect ratio: {ratio}.\n"
-            "- Crop/reframe by choosing the frame and scaling uniformly; never stretch or squash image content.\n"
-            + (
-                "- Preserve tilt, relative placement, and every unlisted proportion; approved local body measurements remain authorized to reach their geometric endpoints.\n"
-                if body_reshape_active else ""
-            )
-            + f"- Resolved crop plan: {crop_text}"
+            f"Use the approved crop to create the {ratio} final frame. Choose the frame around the visible subject "
+            "and scale uniformly, preserving internal geometry and spatial relationships."
+            if crop_plan else
+            "Keep the supplied image boundaries as the final frame and scale uniformly."
         )
+
+    raw_reframe_active = raw_crop_block.startswith(("Reframing:", "Wider framing requested."))
+    composition_reframe_active = bool(crop_plan) if not raw_crop_block else raw_reframe_active
+    framing_change_active = composition_reframe_active
+    if compact_crop_block.startswith("Keep the supplied framing and subject scale"):
+        framing_change_active = False
+
+    size_override = style_options.get("size")
+    size_reframe_active = size_override in {"close", "closer", "wide", "wider"}
+    alignment_change_active = _analysis_has_alignment_correction(analysis)
+    alignment_only_active = (
+        alignment_change_active
+        and not composition_reframe_active
+        and not size_reframe_active
+    )
+    if alignment_only_active:
+        compact_crop_block = (
+            "Use the supplied image boundaries as the base frame. Apply the approved alignment correction, "
+            "then trim only the exposed outer wedges needed for a clean rectangular canvas. Scale uniformly "
+            "and preserve internal proportions, relative sizes, spacing, and overlap."
+        )
+    elif alignment_change_active:
+        compact_crop_block = compact_crop_block.replace(
+            "Preserve internal proportions, tilt, relative sizes",
+            "Preserve internal proportions, relative sizes",
+        ).replace("Preserve tilt, relative placement", "Preserve relative placement")
+    framing_change_active = framing_change_active or size_reframe_active or alignment_change_active
+    compact_crop_guidance = ""
+    if framing_change_active and not size_reframe_active:
+        compact_crop_guidance = _compact_analysis_crop_guidance(analysis)
+        if compact_crop_guidance:
+            compact_crop_block += "\n" + compact_crop_guidance
 
     subject_blocks = []
     resolved_features = {feature for item in resolved for feature in item["features"]}
@@ -1568,7 +1727,7 @@ def build_compact_editor_prompt(
             + f"\n- Preserve: {preserve}."
         )
 
-    feature_terms = ("視線", "眼神", "虹膜", "瞳孔", "direct_camera", "gaze", "閉眼", "眼皮", "blink", "笑", "smile", "laugh")
+    feature_terms = ("眼神", "虹膜", "瞳孔", "direct_camera", "gaze", "閉眼", "眼皮", "blink", "笑", "smile", "laugh")
     other_corrections = []
     skin_corrections = []
     face_tonal_corrections = []
@@ -1613,7 +1772,7 @@ def build_compact_editor_prompt(
             if has_head_aligned_gaze else ""
         )
         shared_face_rules.append(
-            "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, ear shape, and natural asymmetry. Preserve lashes/brows, makeup, and all landmarks outside an explicitly authorized local movement."
+            "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, ear shape, and natural asymmetry. Preserve each eye's original upper-eyelid crease topology—including monolid versus double-lid structure, crease count, height, depth, and continuity—and never create a new fold. Preserve lashes/brows, makeup, and all landmarks outside an explicitly authorized local movement."
             + projection_exception
         )
     if has_smile:
@@ -1629,7 +1788,7 @@ def build_compact_editor_prompt(
         )
     if has_joint_smile_gaze:
         shared_face_rules.append(
-            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter narrow the eyelids modestly through natural cheek lift while retaining canthi, lid folds, recognizable eye openness, and iris visibility; avoid both fixed-open staring and exaggerated squinting."
+            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter narrow the eyelids modestly through natural cheek lift while retaining canthi, the exact original upper-eyelid crease topology, recognizable eye openness, and iris visibility; avoid both fixed-open staring and exaggerated squinting."
         )
     if has_gaze:
         shared_face_rules.append(
@@ -1703,22 +1862,29 @@ def build_compact_editor_prompt(
         ]
         if "angle" not in style_options:
             spatial_preserve.append("camera viewpoint")
-        if "size" not in style_options:
+        if "size" not in style_options and not framing_change_active:
             spatial_preserve.append("final framing")
     else:
         spatial_preserve = ["relative positions", "depth order", "spacing", "overlap"]
         if "angle" in style_options:
             spatial_preserve = ["underlying scene layout"]
-        if "size" not in style_options:
+        if "size" not in style_options and not framing_change_active:
             spatial_preserve.extend(["scale", "visible extent", "framing"])
+        elif alignment_only_active:
+            spatial_preserve.append("scale")
     if "pose" not in style_options:
         spatial_preserve.extend(["pose", "gesture", "interaction points"])
     spatial_preserve_text = ", ".join(spatial_preserve)
-    style_scope_text = (
-        "- Selected style options may change only: " + ", ".join(sorted(style_footprint)) + "."
-        if style_footprint else
-        "- No style option authorizes a change to pose, viewpoint, or framing size."
-    )
+    if style_footprint:
+        style_scope_text = "- Selected style options may change only: " + ", ".join(sorted(style_footprint)) + "."
+    elif alignment_change_active and composition_reframe_active:
+        style_scope_text = "- Required framing owns the final frame edges, frame-relative subject scale, and visible extent; approved alignment owns tilt and perspective. Preserve the source pose and viewpoint."
+    elif alignment_only_active:
+        style_scope_text = "- Approved alignment owns tilt, perspective, and the minimal edge trim it requires; preserve the source subject scale, pose, and viewpoint."
+    elif framing_change_active:
+        style_scope_text = "- Required framing owns the final frame edges, frame-relative subject scale, and visible extent; preserve the source pose and viewpoint."
+    else:
+        style_scope_text = "- Preserve the source pose, viewpoint, subject scale, visible extent, and framing."
     if "pose" in style_options:
         gaze_endpoint_text = (
             "plus any explicitly resolved gaze or body-reshape endpoint"
@@ -1746,7 +1912,11 @@ def build_compact_editor_prompt(
             "including only its necessary garment and adjacent-background follow-through; do not move the head or unlisted regions."
         )
     else:
-        facial_locality = "- Apply facial edits locally without moving the head, body, or surrounding content."
+        facial_locality = (
+            "- Apply facial edits locally within the required final frame; keep the visible head, body, and scene content source-matched."
+            if framing_change_active else
+            "- Apply facial edits locally while keeping the head, body, and surrounding content source-matched."
+        )
     if style_footprint and resolved:
         # Keep the enabled wording compatible with the existing compact
         # prompt; only omit the body endpoint when the feature is inactive.
@@ -1884,6 +2054,9 @@ Global preservation:
         "crop_instruction_source": crop_instruction_source,
         "raw_crop_instruction": raw_crop_block,
         "compact_crop_instruction": compact_crop_block,
+        "compact_crop_guidance": compact_crop_guidance,
+        "framing_change_active": framing_change_active,
+        "alignment_change_active": alignment_change_active,
         "style_instruction_source": style_instruction_source,
         "raw_style_instruction": raw_style_block,
         "compact_style_instruction": compact_style_block,

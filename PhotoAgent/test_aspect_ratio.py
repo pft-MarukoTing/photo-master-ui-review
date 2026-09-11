@@ -292,8 +292,8 @@ class OpenAIAspectRatioTests(unittest.TestCase):
         self.assertNotEqual(size_param, "auto")
         width, height = (int(value) for value in size_param.split("x"))
         self.assertAlmostEqual(width / height, 4 / 5, delta=0.02)
-        self.assertIn("Resizing a single axis is not available", prompt)
-        self.assertIn("keeps the proportions, the tilt", prompt)
+        self.assertIn("Crop and scale uniformly.", prompt)
+        self.assertIn("Preserve internal proportions, tilt, relative sizes, spacing, and overlap.", prompt)
         self.assertEqual(analysis, original_analysis)
 
     @patch.object(
@@ -337,8 +337,8 @@ class GeminiAspectRatioTests(unittest.TestCase):
         # Gemini's actual 1K raster for 4:5 is 928x1152, so prompt/crop
         # geometry follows that physical ratio rather than the approximate
         # API label.
-        self.assertIn("Target output aspect ratio: 928:1152", prompt)
-        self.assertIn("Resizing a single axis is not available", prompt)
+        self.assertIn("Reframe to 928:1152", prompt)
+        self.assertIn("Preserve internal proportions, tilt, relative sizes, spacing, and overlap.", prompt)
         self.assertEqual(analysis, original_analysis)
 
     @patch.object(
@@ -383,7 +383,7 @@ class GeometryWarningWiringTests(unittest.TestCase):
     def test_finish_stage_merges_geometry_warnings_into_qa(self):
         import pipeline
 
-        def _fake_edit(image_bytes, analysis, quality, preset_key, aspect_ratio="auto"):
+        def _fake_edit(image_bytes, analysis, quality, preset_key, **kwargs):
             return {"image_b64": "x", "usage": None, "geometry_warnings": ["測試用幾何警告"]}, "prompt"
 
         with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": _fake_edit}), \
@@ -396,7 +396,7 @@ class GeometryWarningWiringTests(unittest.TestCase):
     def test_finish_stage_reports_geometry_even_when_qa_is_skipped(self):
         import pipeline
 
-        def _fake_edit(image_bytes, analysis, quality, preset_key, aspect_ratio="auto"):
+        def _fake_edit(image_bytes, analysis, quality, preset_key, **kwargs):
             return {"image_b64": "x", "usage": None, "geometry_warnings": ["測試用幾何警告"]}, "prompt"
 
         with patch.dict(pipeline.EDIT_PHOTO_BY_MODEL, {"gpt-image-2": _fake_edit}), \

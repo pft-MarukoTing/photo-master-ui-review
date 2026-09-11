@@ -43,6 +43,13 @@ class OverallAnalysisPrompt(unittest.TestCase):
         self.assertIn("Scene exposure, white balance, contrast, hue, and saturation remain available", prompt)
         self.assertIn("Do not use preserve_rules to retain scene exposure", prompt)
 
+    def test_auto_crop_requires_visible_change_and_selection_aware_protection(self):
+        prompt = build_overall_analysis_instruction("original", {})
+        self.assertIn("normally remove at least 8% of the original span on one axis", prompt)
+        self.assertIn("change subject scale, placement, or edge content", prompt)
+        self.assertIn("Cover the semantic subject and must-retain role cues only", prompt)
+        self.assertIn("intended-to-remove edge content outside these protection boxes", prompt)
+
 
 class ParseRatioLabel(unittest.TestCase):
     def test_numeric_labels(self):
@@ -100,9 +107,17 @@ class CropInstructionBlock(unittest.TestCase):
         self.assertNotIn("a small trim is a fine answer", block)
 
     def test_matching_shape_is_the_only_case_that_reassures(self):
-        block = _build_crop_instruction_block({**CROP_PLAN, "aspectRatio": "4:5"}, source_size=SOURCE)
+        crop_plan = {**CROP_PLAN, "w": .96, "h": .96, "aspectRatio": "4:5"}
+        block = _build_crop_instruction_block(crop_plan, source_size=SOURCE)
         self.assertIn("the same shape as the photograph", block)
         self.assertIn("a small trim is a fine answer", block)
+
+    def test_matching_shape_visible_axis_trim_is_still_a_reframe(self):
+        crop_plan = {**CROP_PLAN, "w": .9275, "h": .9275, "aspectRatio": "4:5"}
+        block = _build_crop_instruction_block(crop_plan, source_size=SOURCE)
+        self.assertIn("visibly tightening the composition", block)
+        self.assertIn("let the selected outer content leave the final frame", block)
+        self.assertNotIn("a small trim is a fine answer", block)
 
     def test_unknown_source_size_omits_the_consequence_rather_than_guessing(self):
         block = _build_crop_instruction_block(CROP_PLAN)
@@ -219,6 +234,25 @@ class FullPrompt(unittest.TestCase):
         prompt = build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
         self.assertIn("Resizing a single axis is not available", prompt)
         self.assertNotIn("cannot both be inside it", prompt)
+
+    def test_raw_builder_exposes_the_exact_crop_section_for_compact_renderer(self):
+        prompt, sections = build_edit_prompt(
+            {**ANALYSIS, "style_options": {}}, PRESET, "自然風格", "",
+            CROP_PLAN, source_size=SOURCE, return_sections=True,
+        )
+        self.assertTrue(sections["crop_instruction"])
+        self.assertIn(f'Crop instruction:\n{sections["crop_instruction"]}', prompt)
+
+    def test_raw_builder_exposes_the_exact_style_section_for_compact_renderer(self):
+        prompt, sections = build_edit_prompt(
+            {**ANALYSIS, "style_options": {"pose": "playful", "lighting": "soft"}},
+            PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
+            return_sections=True,
+        )
+        self.assertTrue(sections["style_instruction"])
+        self.assertIn(sections["style_instruction"], prompt)
+        self.assertIn("Pose: Playful", sections["style_instruction"])
+        self.assertIn("Lighting: Soft Glow", sections["style_instruction"])
 
 
 if __name__ == "__main__":
