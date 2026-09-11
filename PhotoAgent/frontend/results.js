@@ -1055,6 +1055,18 @@ window.PhotoAgentResults = (() => {
   // state each toggle mutates directly, not the DOM.
   let faceThumbEntries = [];
 
+  // Drops any face-review state left over from a previously selected photo.
+  // Needed because renderFaceThumbnails (which normally repopulates
+  // faceThumbEntries from scratch) doesn't run until the review panel is
+  // actually built for the new photo -- the skip-review "一鍵" flow instead
+  // calls getFaceIssueOverrides() from finishSingleFlow() before that ever
+  // happens, so without this it silently returns the previous photo's
+  // allowed/flagged state and gets stamped onto the new one's (see
+  // setSelectedFile's call to this in app.js).
+  function resetFaceReviewState() {
+    faceThumbEntries = [];
+  }
+
   // The global 人像修正設定 currently in force for the face-review rows. Kept
   // separately from issue.allowed: manually turning a whole global category
   // off should make every row look disabled without erasing each person's
@@ -2417,7 +2429,7 @@ window.PhotoAgentResults = (() => {
     renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger,
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
-    getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock,
+    getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     getBodyReshapeOverrides, applyBodyReshapeOverrides,
     getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, setBodyReshapeEnabled,
     renderFaceReviewCards,

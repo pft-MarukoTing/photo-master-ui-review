@@ -35,7 +35,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, getBodyReshapeOverrides, applyBodyReshapeOverrides, getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, getBodyReshapeOverrides, applyBodyReshapeOverrides, getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -2187,6 +2187,15 @@
     [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach((list) => {
       if (list) list.innerHTML = "";
     });
+    // Same class of bug as above, but for face-issue/body-reshape overrides:
+    // that state lives in results.js's faceThumbEntries (an in-memory array,
+    // not the DOM), which finishSingleFlow's getFaceIssueOverrides() reads
+    // directly. Without this, the previous photo's allowed/flagged state
+    // (e.g. an ordinary should_fix:true item, never touched by the user)
+    // gets captured as this photo's "override" and later stamped onto its
+    // own freshly-analyzed (and possibly should_fix:false) issues, showing
+    // as a phantom "已手動開啟".
+    resetFaceReviewState();
 
     // Switch to the preview shell right away, with its loading hover up --
     // a HEIC photo's decode (previewableBlob's libheif WASM call, below) can
