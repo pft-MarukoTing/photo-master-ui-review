@@ -301,7 +301,7 @@ Return exactly this JSON shape:
           "repair_strength": "subtle / moderate / strong",
           "edit_instruction": "一到兩句可直接給 edit model 執行的英文命令，必須包含 subject、eyes_only 或 eyes_plus_head_face_alignment、pupil/iris movement、必要的 head/face alignment、以及 final direct-lens-contact endpoint。",
           "success_condition": "這張圖修完後應該如何判斷成功，例如 兩眼明確直視鏡頭，不停在 near-camera。",
-          "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "scene"],
+          "preserve_during_repair": ["mouth expression", "identity", "scene"],
           "failure_to_avoid": ["near-camera only", "sharpen-only", "uncomfortable side-eye"]
         },
         "should_fix": true,
@@ -803,7 +803,7 @@ Wording requirements:
 - Do not write "將瞳孔輕微調整向鏡頭中心" for clear off_camera cases unless the gaze is already nearly direct. That wording is too weak.
 - Prefer concrete commands such as: "Move both pupils/irises toward the camera-lens center and moderately turn the face toward camera until the viewer reads direct eye contact."
 - success_condition must be stricter than "improved": it should state the final viewer read, for example "subject clearly looks straight at the camera lens" or "do not stop at near-camera gaze".
-- preserve_during_repair should list what must stay unchanged for this image, such as body pose, shoulder direction, hands, clothing, mouth expression, identity, background, and object interaction.
+- preserve_during_repair should list only gaze-local identity and appearance protections, such as clothing, mouth expression, identity, and background. Never list body pose, shoulder direction, hands, stance, gesture, interaction points, or camera framing; later user-selected pose/framing options own those properties.
 - failure_to_avoid should name likely failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "changed body pose".
 
 Example strategy for a clear off-camera seated portrait:
@@ -813,11 +813,11 @@ Example strategy for a clear off-camera seated portrait:
   "target_gaze_read": "Both pupils/irises aim at the camera lens; viewer reads direct eye contact.",
   "eye_adjustment": "Move both pupils/irises toward the camera-lens center, not merely closer to it.",
   "sclera_catchlight_adjustment": "Rebalance sclera naturally around the new iris position and keep catchlights consistent with the original lighting.",
-  "head_face_adjustment": "moderate yaw toward camera while preserving body pose and shoulders",
+  "head_face_adjustment": "moderate yaw toward camera while preserving facial proportions",
   "repair_strength": "moderate",
   "edit_instruction": "Redirect the named subject's gaze to the camera lens using pupil/iris repositioning plus a moderate face yaw toward camera. Do not stop at near-camera; the final viewer read must be direct eye contact.",
   "success_condition": "Subject clearly looks straight at the camera lens.",
-  "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "clothing", "scene"],
+  "preserve_during_repair": ["mouth expression", "identity", "clothing", "scene"],
   "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "changed body pose"]
 }
 - Judge this score by:
@@ -1666,7 +1666,7 @@ Wording requirements:
 - Do not write "將瞳孔輕微調整向鏡頭中心" for clear off_camera cases unless the gaze is already nearly direct. That wording is too weak.
 - Prefer concrete commands such as: "Move both pupils/irises toward the camera-lens center and moderately turn the face toward camera until the viewer reads direct eye contact."
 - success_condition must be stricter than "improved": it should state the final viewer read, for example "subject clearly looks straight at the camera lens" or "do not stop at near-camera gaze".
-- preserve_during_repair should list what must stay unchanged for this image, such as body pose, shoulder direction, hands, clothing, mouth expression, identity, background, and object interaction.
+- preserve_during_repair should list only gaze-local identity and appearance protections, such as clothing, mouth expression, identity, and background. Never list body pose, shoulder direction, hands, stance, gesture, interaction points, or camera framing; later user-selected pose/framing options own those properties.
 - failure_to_avoid should name likely failure modes for this image, such as "near-camera only", "pupil shift without face alignment", "pupil shift without direct lens contact", "uncomfortable side-eye", "sharpen-only", or "changed body pose".
 
 Example strategy for a clear off-camera seated portrait:
@@ -1676,11 +1676,11 @@ Example strategy for a clear off-camera seated portrait:
   "target_gaze_read": "Both pupils/irises aim at the camera lens; viewer reads direct eye contact.",
   "eye_adjustment": "Move both pupils/irises toward the camera-lens center, not merely closer to it.",
   "sclera_catchlight_adjustment": "Rebalance sclera naturally around the new iris position and keep catchlights consistent with the original lighting.",
-  "head_face_adjustment": "moderate yaw toward camera while preserving body pose and shoulders",
+  "head_face_adjustment": "moderate yaw toward camera while preserving facial proportions",
   "repair_strength": "moderate",
   "edit_instruction": "Redirect the named subject's gaze to the camera lens using pupil/iris repositioning plus a moderate face yaw toward camera. Do not stop at near-camera; the final viewer read must be direct eye contact.",
   "success_condition": "Subject clearly looks straight at the camera lens.",
-  "preserve_during_repair": ["body pose", "shoulder direction", "mouth expression", "identity", "clothing", "scene"],
+  "preserve_during_repair": ["mouth expression", "identity", "clothing", "scene"],
   "failure_to_avoid": ["near-camera only", "pupil shift without face alignment", "sharpen-only", "changed body pose"]
 }
 - Judge this score by:
@@ -2297,6 +2297,7 @@ Use the full photo and matching Face crop N to choose an anatomically plausible 
 - eyes_only is a narrow exception. Choose it only when ALL of these are true: the head and face are already naturally aligned to the current lens; the miss is extremely small; both visible eyes can reach exact lens contact without side-eye, strain, crossed axes, or excessive sclera; and the result will still be clearly visible at normal viewing size. Ordinary near_camera is not enough by itself;
 - not_safe_to_repair only when the pixels or geometry cannot support a reliable correction. In that case write a conservative plan and explicitly name the limitation.
 For each gaze strategy, provide concrete English instructions. Name the current pupil/iris direction, exact target, required pupil/iris movement, natural sclera/catchlight rebalancing, required bounded head/face alignment, repair strength, success condition, preservation rules, and likely failure modes. Use moderate strength by default; use subtle only for a genuinely tiny eyes_only miss whose completed correction remains obvious at normal viewing size. For off-camera, upward, or downward gaze, explicitly describe the needed head yaw and/or pitch as well as eye movement. Preserve identity, eyelid openness, eye shape/color, expression, glasses, skin, torso, shoulders, body pose, clothing, scene, and every unlisted person. Do not stop at near-camera gaze.
+Do not write any instruction that preserves, freezes, or restores the named person's torso, shoulders, body pose, stance, gesture, interaction points, or camera framing. Those properties are outside this local gaze plan and may be owned by a later user-selected pose or framing override.
 
 Blink repair (only for a target with needs_blink_repair true):
 Choose a method that naturally reopens or relaxes the closed/half-closed eyelids to match this person's existing expression and the photo's moment -- never a generic wide-open or symmetrical look, and never copied from another person. Name the target eyelid state, the eyelid adjustment itself, repair strength, success condition, preservation rules, and likely failure modes. When this same person also needs a gaze repair, describe the eyelid opening as part of one coherent local eye reconstruction together with the final approved gaze direction, not as an independent step performed before or after it. Preserve identity, gaze direction (unless this person's own gaze repair specifies a new direction), facial structure, expression style, skin texture, glasses, makeup, lighting, and every unlisted person. Never describe converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into neutral open eyes.
@@ -3795,10 +3796,10 @@ _FORCED_GAZE_STRATEGY = {
     "strategy_type": "eyes_plus_head_face_alignment",
     "repair_strength": "strong",
     "eye_adjustment": "reposition pupils/irises fully toward the camera lens, going all the way to direct contact",
-    "head_face_adjustment": "visibly but naturally turn and/or tilt the head/face toward the exact current lens while keeping the torso and shoulders unchanged",
+    "head_face_adjustment": "visibly but naturally turn and/or tilt the head/face toward the exact current lens while preserving facial proportions",
     "sclera_catchlight_adjustment": "rebalance naturally around the new eye position",
     "target_gaze_read": "both eyes clearly and directly looking at the camera lens",
-    "preserve_during_repair": ["identity", "expression", "skin", "torso and shoulder pose"],
+    "preserve_during_repair": ["identity", "expression", "skin"],
     "failure_to_avoid": ["a partial or timid correction that still reads as off-camera", "mismatched pupil size", "altered identity"],
 }
 

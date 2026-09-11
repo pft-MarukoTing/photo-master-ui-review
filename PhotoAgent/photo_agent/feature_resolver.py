@@ -341,7 +341,10 @@ def _style_change_footprint(style_options):
     }
     footprint = set()
     if "pose" in options:
-        footprint.update({"body pose", "head pose", "gesture", "body language"})
+        footprint.update({
+            "body pose", "head pose", "gesture", "body language", "limb placement",
+            "subject silhouette", "within-subject spacing", "within-subject overlap",
+        })
     if "angle" in options:
         footprint.update({"camera viewpoint", "scene perspective", "projected overlap"})
     if "lighting" in options:
@@ -1029,6 +1032,50 @@ def _analysis_has_body_plan(analysis):
         return False
 
 
+def _safe_gaze_head_face_adjustment(value, *, allow_pose_change=False):
+    """Drop stale Call C prose that would freeze a selected pose.
+
+    Older analyses may already contain planner-authored sentences such as
+    "Keep the torso, shoulders, seated pose, and camera framing unchanged."
+    Structured preservation is resolved elsewhere, so forwarding that prose
+    during a pose override would reintroduce a conflict the resolver removed.
+    """
+    text = str(value or "").strip()
+    if not text or not allow_pose_change:
+        return text
+
+    pose_terms = re.compile(
+        r"\b(?:torso|shoulders?|body[ -]?pose|seated[ -]?pose|stance|gesture|"
+        r"interaction points?|camera framing)\b",
+        re.IGNORECASE,
+    )
+    preserve_terms = re.compile(
+        r"\b(?:keep|keeping|preserve|preserving|retain|retaining|leave|leaving|"
+        r"hold|holding|maintain|maintaining|freeze|freezing|restore|restoring|"
+        r"do not (?:change|move|alter)|without (?:changing|moving|altering))\b",
+        re.IGNORECASE,
+    )
+    kept = []
+    for sentence in re.split(r"(?<=[.!?;])\s+", text):
+        if pose_terms.search(sentence) and preserve_terms.search(sentence):
+            # Keep a real head/face action that precedes a trailing
+            # "while keeping the body..." clause; discard only that clause.
+            sentence = re.sub(
+                r"(?:,\s*|\s+)(?:while\s+)?(?:keeping|preserving|retaining|leaving|"
+                r"without (?:changing|moving|altering))\b[^.!?;]*"
+                r"(?:torso|shoulders?|body[ -]?pose|seated[ -]?pose|stance|gesture|"
+                r"interaction points?|camera framing)[^.!?;]*[.!?;]?",
+                "",
+                sentence,
+                flags=re.IGNORECASE,
+            ).strip()
+            if pose_terms.search(sentence) and preserve_terms.search(sentence):
+                continue
+        if sentence:
+            kept.append(sentence)
+    return " ".join(kept).strip()
+
+
 def build_feature_contracts(analysis, *, include_gaze=True):
     """Return active, editor-stage feature contracts from analysis/options."""
     contracts = (
@@ -1420,7 +1467,10 @@ def build_compact_editor_prompt(
             gaze_method = state.get("method") or "eyes_only"
             gaze_strength = state.get("strength") or "moderate"
             eye_adjustment = _safe_gaze_eye_adjustment(state.get("eye_adjustment"))
-            head_face_adjustment = str(state.get("head_face_adjustment") or "").strip()
+            head_face_adjustment = _safe_gaze_head_face_adjustment(
+                state.get("head_face_adjustment"),
+                allow_pose_change="pose" in style_options,
+            )
             if gaze_method == "eyes_only":
                 gaze_method_text = (
                     f"Use a {gaze_strength} eyes-only correction and keep the original head/face angle fixed"
@@ -1625,11 +1675,39 @@ def build_compact_editor_prompt(
     style_instruction_source = "raw_edit_prompt" if compact_style_block else "none"
     style_text = compact_style_block or "No style override."
 
-    spatial_preserve = ["relative positions", "depth order", "spacing", "overlap"]
-    if "angle" in style_options:
-        spatial_preserve = ["underlying scene layout"]
-    if "size" not in style_options:
-        spatial_preserve.extend(["scale", "visible extent", "framing"])
+    pose_target_boundary = (
+        "\nPose ownership boundary:\n"
+        "- Any captured pose, action, stillness, mood, or body-language wording inside the light/color target is "
+        "descriptive context only. It must not preserve or restore the original pose against the selected pose override."
+        if "pose" in style_options else ""
+    )
+    pose_execution_order = (
+        "\nPose-first execution order:\n"
+        "- Establish the visibly different pose, gesture, head/body direction, limb placement, and silhouette first. "
+        "Then render the resolved local smile, eye, gaze, hair, and body-detail endpoints inside that new pose. "
+        "A changed expression or gaze alone does not complete the pose transformation."
+        if "pose" in style_options else ""
+    )
+
+    if "pose" in style_options:
+        # A pose necessarily changes within-subject spacing, overlaps,
+        # silhouette, and sometimes visible extent. Preserve only scene-level
+        # relationships here; the style footprint owns the subject internally.
+        spatial_preserve = [
+            "scene geometry outside the selected subject",
+            "positions of unselected people and objects",
+            "scene-level depth order",
+        ]
+        if "angle" not in style_options:
+            spatial_preserve.append("camera viewpoint")
+        if "size" not in style_options:
+            spatial_preserve.append("final framing")
+    else:
+        spatial_preserve = ["relative positions", "depth order", "spacing", "overlap"]
+        if "angle" in style_options:
+            spatial_preserve = ["underlying scene layout"]
+        if "size" not in style_options:
+            spatial_preserve.extend(["scale", "visible extent", "framing"])
     if "pose" not in style_options:
         spatial_preserve.extend(["pose", "gesture", "interaction points"])
     spatial_preserve_text = ", ".join(spatial_preserve)
@@ -1674,11 +1752,18 @@ def build_compact_editor_prompt(
             if body_reshape_active else
             "smile, eye state, gaze, or hair"
         )
-        portrait_style_priority = (
-            "- Resolved subject final states remain mandatory inside the style transformation; "
-            "style may coordinate surrounding pose and light but must not replace a specified "
-            f"{final_state_labels} endpoint."
-        )
+        if "pose" in style_options:
+            portrait_style_priority = (
+                "- Resolved subject final states remain mandatory local endpoints inside the style transformation, but they "
+                "must not preserve, restore, or substitute for the selected pose. Apply each specified "
+                f"{final_state_labels} endpoint within the visibly changed pose."
+            )
+        else:
+            portrait_style_priority = (
+                "- Resolved subject final states remain mandatory inside the style transformation; "
+                "style may coordinate surrounding pose and light but must not replace a specified "
+                f"{final_state_labels} endpoint."
+            )
     else:
         portrait_style_priority = ""
 
@@ -1714,18 +1799,39 @@ def build_compact_editor_prompt(
         if body_reshape_active else
         "- Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform, add, or erase people/objects; authorized framing may place existing content outside the output frame."
     )
+    pose_completion_guard = (
+        "\n- The result is incomplete if the selected subject keeps essentially the original body pose and only the "
+        "expression, gaze, lighting, or color changes."
+        if "pose" in style_options else ""
+    )
+    # Each block carries the blank lines it needs: both slots sit flush against
+    # their neighbours in the template below, so a no-pose prompt keeps the
+    # original layout with style and user direction after Finish.
+    if "pose" in style_options:
+        style_before_states_block = (
+            f"\nUser direction:\n{user_text}"
+            f"\n\nMandatory style overrides:\n{style_text}{pose_execution_order}\n"
+        )
+        style_after_finish_block = ""
+    else:
+        style_before_states_block = ""
+        style_after_finish_block = (
+            f"\n\nMandatory style overrides:\n{style_text}"
+            f"\n\nUser direction:\n{user_text}"
+        )
+
     prompt = f"""{task_intro}
 
 Required framing:
 {compact_crop_block}
 
-{visual_target_block}
+{visual_target_block}{pose_target_boundary}
 
 {user_preserved_block}
 
 Other approved corrections:
 {correction_block}
-
+{style_before_states_block}
 Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
@@ -1736,13 +1842,7 @@ Locations identify subjects only; they are not target positions.
 {skin_block}
 
 Finish:
-{finish_text}
-
-Mandatory style overrides:
-{style_text}
-
-User direction:
-{user_text}
+{finish_text}{style_after_finish_block}
 
 Global preservation:
 {global_preservation}
@@ -1752,7 +1852,7 @@ Global preservation:
 {facial_locality}
 {portrait_style_priority}
 - Preserve natural skin and material texture. Do not add text, logos, watermarks, people, props, or a different background.
-- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.{revision_text}
+- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.{pose_completion_guard}{revision_text}
 """
     metadata = {
         "strategy": "resolved_compact",
