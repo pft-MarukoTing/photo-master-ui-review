@@ -505,6 +505,106 @@
        class into the match) so this reliably wins regardless of source
        order. */
     .ap-options-toggle > summary.ap-review-summary::before { content: none; }
+
+    /* ── #ap-analysis-shell: the outer title+collapse frame wrapping
+       #ap-review-panel (see its own markup comment for why). Its own full
+       card (background+4-sided border+radius), not the shared
+       .ap-toggle-card class -- that class's border-top:none relies on
+       #ap-review-panel's own tab strip to supply the top edge's only
+       visible line (see that class's doc comment); this plain title
+       summary has no tab strip, so reusing it verbatim would leave the top
+       edge with no border at all. Giving the title row its own enclosing
+       box (instead of floating loose above #ap-review-panel's separately
+       framed one) is what makes the whole area read as one block instead
+       of two disconnected pieces stacked with a gap between them --
+       #ap-review-panel keeps its own border/background nested inside,
+       reading as a highlighted sub-card rather than a second competing
+       outer box (same fill color, just its own border). ── */
+    .ap-analysis-shell {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+    }
+    .ap-analysis-shell > summary {
+      padding: 10px 14px;
+      transition: background .15s;
+    }
+    .ap-analysis-shell > summary:hover { background: var(--card-3); }
+    .ap-analysis-shell[open] > summary { border-bottom: 1px solid var(--border-2); }
+    /* Stacked column, not .ap-label's own single row -- title+description
+       block on top (left-aligned, untouched), the expand chevron in its own
+       full-width row underneath, centered -- same "arrow centered below the
+       label" idiom as a typical 載入更多/show-more control, just keeping
+       this card's own icon+title+description intact above it instead of
+       replacing them with that control's usual centered-text-plus-dividers
+       look. align-items:stretch (the flex default, restated here since
+       .ap-label's own center would otherwise win) lets both the title block
+       and the chevron row size to the summary's full width -- the title
+       block still reads left-aligned since its own content just sits at
+       that width's left edge, and the chevron row needs the full width for
+       justify-content:center to center against the card, not just against
+       the title text above it. */
+    .ap-analysis-shell-summary {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 6px;
+    }
+    /* .ap-options-toggle's shared chevron (▸, further up) sits to the LEFT
+       of whatever it's attached to -- fine next to a single-line title, but
+       parked beside this summary's two-line title+description block it read
+       as a stray mark with no clear line to belong to. Dropped (same
+       content:none technique as .ap-review-summary above) in favor of the
+       centered row below (.ap-analysis-shell-chevron-row, markup below). A
+       real <svg> (same line-icon style as the #ap-review-tabs icons below),
+       not a text-character pseudo-element -- a glyph like ▸ or > only has
+       whatever weight/crispness that font happens to render at this size,
+       where an outlined SVG stays crisp and reads unambiguously as a
+       chevron at any size. */
+    .ap-options-toggle > summary.ap-analysis-shell-summary::before { content: none; }
+    .ap-analysis-shell-chevron-row {
+      display: flex;
+      justify-content: center;
+    }
+    /* Points down at rest (collapsed -- "more content below"), flips to
+       pointing up once open ("collapse it back") -- rotate(180deg), not the
+       trailing-chevron's old rotate(90deg), since the SVG's own resting
+       path (markup below) now points down instead of right. */
+    .ap-analysis-shell-chevron {
+      color: var(--text-2);
+      transition: transform .15s, color .15s;
+    }
+    .ap-analysis-shell-summary:hover .ap-analysis-shell-chevron { color: var(--accent); }
+    .ap-analysis-shell[open] > summary.ap-analysis-shell-summary .ap-analysis-shell-chevron { transform: rotate(180deg); }
+    .ap-analysis-shell-summary-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    /* Small sparkle icon ahead of the title text -- a quick "this came from
+       the model" cue, same reasoning as the title/description text
+       themselves (see the markup comment above #ap-analysis-shell): this
+       whole area reads as AI-generated analysis the user can still adjust,
+       not just another plain section label. Accent-colored (the same hue
+       used for .ap-label's own dot elsewhere) so it doesn't read as a
+       generic bullet. */
+    .ap-analysis-shell-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .ap-analysis-shell-icon { color: var(--accent); flex-shrink: 0; }
+    .ap-analysis-shell-desc {
+      /* 20px = the title's own icon width (14px) + its gap (6px) -- lines
+         this description up under the title TEXT, not under the icon. */
+      margin-left: 20px;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--text-3);
+      letter-spacing: 0;
+    }
+    .ap-analysis-shell-body { padding: 14px; }
+
     .ap-review-summary-inner {
       display: flex;
       flex-direction: column;
@@ -717,8 +817,12 @@
        themselves merged into this single panel) a same-named rule was once
        left keyed to a stale per-section class instead, silently dropping
        its flex-basis:100%. Keeping this one keyed to the id avoids
-       repeating that. */
-    #ap-review-panel { order: 0; flex-basis: 100%; }
+       repeating that.
+       Keyed to #ap-analysis-shell (the outer title+collapse frame), not
+       #ap-review-panel any more -- #ap-review-panel is now nested one level
+       inside it, so #ap-analysis-shell is the actual flex child of
+       .options-card-inline that needs the order/flex-basis. */
+    #ap-analysis-shell { order: 0; flex-basis: 100%; }
     /* Holds .ap-settings-run-row (人像修正設定/Run) on its own full-width block,
        last -- 修圖風格/補充指令 used to sit here too (a trigger button and a
        textarea) before both became tabs of #ap-review-panel above. */
@@ -3367,6 +3471,36 @@
                      default for the first-time 分析 review, collapsed by
                      default once reopened on the 結果 page/a revise (still
                      click-to-expand there, just not spread out unasked). -->
+                <!-- Outer semantic frame around #ap-review-panel: labels the
+                     whole 人像檢查/修圖建議/修圖風格/補充指令 block as the
+                     model's own analysis output -- something the user can
+                     still adjust here -- instead of it reading as part of
+                     the original/result photo beside it. Own enclosing card
+                     (background+border, see its CSS) so the title and
+                     #ap-review-panel below read as one cohesive block
+                     instead of a title floating loose above a separately
+                     framed box; #ap-review-panel keeps its own
+                     .ap-toggle-card border/background nested inside, now
+                     reading as a highlighted sub-card rather than a second
+                     competing outer box. Its `open` mirrors #ap-review-panel's
+                     own -- renderAnalysisPreview (results.js) sets both from
+                     the same `expanded` flag: open together for the
+                     first-time 分析 review, collapsed together once reopened
+                     on the 結果 page/a revise. -->
+                <details class="ap-options-toggle ap-analysis-shell" id="ap-analysis-shell" open>
+                  <summary class="ap-label ap-analysis-shell-summary">
+                    <div class="ap-analysis-shell-summary-inner">
+                      <span class="ap-analysis-shell-title">
+                        <svg class="ap-analysis-shell-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
+                        分析與調整
+                      </span>
+                      <span class="ap-analysis-shell-desc">這是 AI 分析出的建議，你可以在這裡調整設定</span>
+                    </div>
+                    <div class="ap-analysis-shell-chevron-row">
+                      <svg class="ap-analysis-shell-chevron" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                  </summary>
+                  <div class="ap-analysis-shell-body">
                 <details class="ap-toggle-card ap-options-toggle" id="ap-review-panel" open>
                   <summary class="ap-label ap-review-summary">
                     <div class="ap-review-summary-inner">
@@ -3494,6 +3628,8 @@
                       <textarea id="prompt" class="field-ta" rows="4"
                         placeholder="例如：增加亮度，調整成冷色調，模糊背景。"></textarea>
                     </div>
+                  </div>
+                </details>
                   </div>
                 </details>
 

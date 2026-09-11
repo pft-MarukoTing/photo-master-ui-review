@@ -1246,6 +1246,7 @@ window.PhotoAgentResults = (() => {
       applyActiveReviewTab();
       return;
     }
+    if (els.apAnalysisShell) els.apAnalysisShell.open = reviewExpanded;
     if (els.apReviewPanel) els.apReviewPanel.open = reviewExpanded;
     if (selectedFaceIndex >= faceThumbEntries.length) selectedFaceIndex = 0;
 
@@ -2180,6 +2181,11 @@ window.PhotoAgentResults = (() => {
     // back to 修圖建議 in renderFaceReviewCards if this photo has no faces),
     // same as selectedFaceIndex resetting to 0 in renderFaceThumbnails below.
     activeReviewTab = "face";
+    // #ap-analysis-shell (the outer title+collapse frame) mirrors
+    // #ap-review-panel's own open state -- both start open for the
+    // first-time 分析 review, both collapsed once reopened on the 結果
+    // page/a revise.
+    if (els.apAnalysisShell) els.apAnalysisShell.open = expanded;
     if (els.apReviewPanel) els.apReviewPanel.open = expanded;
     if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
     if (els.apSubjectTags) {

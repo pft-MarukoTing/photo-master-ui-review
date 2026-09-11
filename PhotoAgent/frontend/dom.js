@@ -95,6 +95,7 @@ window.PhotoAgentDom = (() => {
     apDiagnosis: document.querySelector("#ap-diagnosis"),
     apComposition: document.querySelector("#ap-composition"),
     apRecipeList: document.querySelector("#ap-recipe-list"),
+    apAnalysisShell: document.querySelector("#ap-analysis-shell"),
     apReviewPanel: document.querySelector("#ap-review-panel"),
     apReviewTabRecipe: document.querySelector("#ap-review-tab-recipe"),
     apReviewTabFace: document.querySelector("#ap-review-tab-face"),
