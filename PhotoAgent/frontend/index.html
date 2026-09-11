@@ -1239,6 +1239,14 @@
       grid-template-columns: repeat(2, 1fr);
       justify-items: center;
       gap: 12px;
+      /* Capped + scrollable on its own -- a category with enough options to
+         fill 3+ rows of these (portrait-thumbnail) cards used to push the
+         whole #ap-review-panel tab open that far, growing the page instead
+         of staying put. #ap-style-options-hdr (title + exit button) sits
+         above this as this grid's own sibling, outside the scroll area, so
+         it stays put as the anchor while only the cards scroll under it. */
+      max-height: 440px;
+      overflow-y: auto;
     }
     .ap-style-option-btn {
       position: relative;
