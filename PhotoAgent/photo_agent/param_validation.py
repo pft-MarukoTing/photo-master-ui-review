@@ -13,7 +13,7 @@ from .utils import optional_bool, optional_text
 EFFECT_NAME = "photoAgent"
 VALID_PRESETS = ("natural", "editorial", "product", "portrait", "custom")
 VALID_QUALITIES = ("low", "medium", "high")
-VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "nano-banana-2", "nano-banana-lite")
+VALID_IMAGE_MODELS = ("gpt-image-2", "gpt-image-1.5", "gpt-image-2.5-sunburst", "nano-banana-2", "nano-banana-lite")
 VALID_ANALYSIS_MODELS = ("gpt-4.1-mini", "gpt-5.6-luna")
 # "auto" (from the proposed crop) / "original" (the source frame) / one fixed
 # W:H frame. The label list mirrors image_tools.USER_SELECTABLE_ASPECT_RATIO_LABELS,
