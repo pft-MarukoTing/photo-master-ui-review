@@ -7347,7 +7347,18 @@
     captureBatchReviewSelections(record);
     if (!record.uploadedAt) record.uploadedAt = Date.now() / 1000;
     record.modifiedAt = Date.now() / 1000;
-    setCurrentCaseTimes(record, settings.revealDetailExtra);
+    // No second argument, matching renderBatchMain's own setCurrentCaseTimes(record).
+    // This read `settings.revealDetailExtra`, copied from showBatchDoneMain -- but
+    // there `settings` is a PARAMETER (`showBatchDoneMain(record, settings = batchSettings)`)
+    // and it does not exist in this function's scope, so the line threw
+    // "ReferenceError: settings is not defined" on every batch revise. Because
+    // startInlineBatchReview is dispatched unawaited (see openInlineAnalysis-
+    // ForCurrentContext), that rejection was swallowed: the panel had already
+    // closed one line earlier, the record never reached "processing", and the
+    // edit never started -- the UI just sat there doing nothing. revealDetailExtra
+    // is the admin history/report view flag (viewHistoryRecord); batchSettings
+    // never carries it, so it is always false for a live revise anyway.
+    setCurrentCaseTimes(record);
     setAnalysisPreviewDisabled(true);
 
     // N fresh runs (N = the count just confirmed above) -- drop the previous
@@ -7408,7 +7419,22 @@
     if (!forceReopen && els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) return;
     const record = currentDetailBatchRecord();
     if (record) {
-      startInlineBatchReview(record);
+      // Dispatched without await on purpose -- this function is called from
+      // render paths that must not block on a panel the user may never submit.
+      // But that also means an exception anywhere inside it (after the panel has
+      // closed and before the edit is queued) becomes an unhandled rejection and
+      // the UI is left sitting on a closed panel with nothing running, which is
+      // exactly how the `settings is not defined` bug at setCurrentCaseTimes
+      // presented: a dead Run button and no error anywhere the user could see.
+      // Surface it and put the controls back instead of failing silently.
+      startInlineBatchReview(record).catch((err) => {
+        console.error("startInlineBatchReview failed", err);
+        setAnalysisPreviewDisabled(false);
+        if (record.status === "processing") record.status = "done";
+        updateBatchSidebarItem(record);
+        refreshIfSelected(record);
+        showError("重新處理時發生錯誤，請再試一次。");
+      });
     } else {
       backToProcessFromResults();
     }
