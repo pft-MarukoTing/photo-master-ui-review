@@ -1366,6 +1366,20 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     flex: 0 0 auto;
     align-self: flex-start;
   }
+  /* container-type:normal, undoing #ap-options-card-inline's own
+     container-type:inline-size (.options-card-inline) -- that property
+     also turns on size containment, which stops this element (and this
+     flex:0 0 auto slot around it, above) from sizing itself off its own
+     content's natural width at all costs, computing to 0 instead of
+     shrink-wrapping the 44px tab. Only a problem here: the collapsed
+     drawer-tab is the one shape in this whole layout that NEEDS that
+     shrink-to-fit sizing (every other state has an explicit width from its
+     own flex-basis/height chain instead), and it never shows the tab strip
+     that container-type exists to respond to in the first place (see
+     .ap-review-tab's own @container rule, index.html). */
+  body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) #ap-options-card-inline {
+    container-type: normal;
+  }
   /* #ap-options-card-inline's own base gap:10px (styles.css, .options-card-
      inline) was the actual remaining gap between the tab and Run once
      .results-canvas-row's own gap (above) was already zeroed -- they're
