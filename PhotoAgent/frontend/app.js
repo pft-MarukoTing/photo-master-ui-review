@@ -1646,11 +1646,16 @@
   // anything: #results-canvas-top stays the target, same as today.
   const SIDE_PANEL_LAYOUT_KEY = "photoagent.sidePanelLayout";
 
+  // Defaults on (a user who's never touched this setting gets the side
+  // panel) -- distinguishes "never set" (null) from an explicit "0" (user
+  // turned it off), so that opt-out still sticks across reloads instead of
+  // this default silently overriding it every time.
   function isSidePanelLayoutEnabled() {
     try {
-      return localStorage.getItem(SIDE_PANEL_LAYOUT_KEY) === "1";
+      const stored = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
+      return stored === null ? true : stored === "1";
     } catch {
-      return false;
+      return true;
     }
   }
 
