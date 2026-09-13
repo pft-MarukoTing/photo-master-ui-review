@@ -561,7 +561,10 @@
     // renders, since a record opened via viewHistoryRecord's revealDetailExtra
     // (admin reports drawer) must show the button regardless of debug mode.
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebug;
-    if (els.analysisPreview) els.analysisPreview.style.display = isDebug ? "" : "none";
+    // #analysis-preview's own display (like #results-analysis-slot's, right
+    // below) depends on 分析面板顯示於預覽右側 too, not just isDebug -- see
+    // syncResultsAnalysisSlotForSidePanelLayout's own doc comment, which sets
+    // it alongside the slot so both stay in sync however either input changes.
     // #results-analysis-slot otherwise only hosts #analysis-preview, which
     // (like #results-detail-extra above) no longer shows on the analyze/
     // results page at all -- keep it hidden and let #results-canvas-col
@@ -1692,8 +1695,23 @@
   // Called both from applyDebugUiVisibility itself (so it's right from
   // first paint) and from the toggle's own change handler (so flipping it
   // mid-session doesn't leave yesterday's inline styles stuck until reload).
+  //
+  // #analysis-preview itself is also gated here, not just its slot: with
+  // this layout on, moveAnalysisPreviewTo/moveOptionsCardTo (both above)
+  // leave #analysis-preview appended into #results-analysis-slot BEFORE
+  // #ap-options-card-inline, so a debug session (where applyDebugUiVisibility
+  // lifts display:none off #analysis-preview for its own leftover content --
+  // the 取消 button, subject tags) would otherwise render that leftover strip
+  // above 分析與調整 instead of beside the photo. In the stacked/vertical
+  // layout (this function's else branch) #results-analysis-slot itself is
+  // display:none, which already hides #analysis-preview regardless of its
+  // own display value -- keeping it hidden here too when the side panel is on
+  // just keeps that same "not actually shown" position instead of exposing it
+  // above the real panel now that the slot is visible.
   function syncResultsAnalysisSlotForSidePanelLayout() {
-    if (isSidePanelLayoutEnabled()) {
+    const sidePanelOn = isSidePanelLayoutEnabled();
+    if (els.analysisPreview) els.analysisPreview.style.display = isDebugUiActive && !sidePanelOn ? "" : "none";
+    if (sidePanelOn) {
       if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = "";
       if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = "";
       if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = "";
