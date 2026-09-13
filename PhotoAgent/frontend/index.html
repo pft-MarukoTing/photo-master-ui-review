@@ -476,8 +476,18 @@
        immediately inside that outer rounded one, breaking at the two bottom
        corners where the overflow:hidden mask clipped it. The outer card's
        own border (above, colored via --active-hue) is the only line now. */
+    /* overflow:hidden, not auto -- JS (syncAnalysisPanelHeights, app.js)
+       sets this element's real height directly, and giving it its OWN
+       scrollbar on top of each tab's already-independently-scrollable
+       list/grid (#ap-recipe-list/#ap-face-detail/.ap-style-option-grid,
+       each already capped + scrollable, see their own comments) produced
+       two nested scrollbars at once. The rules on those elements make each
+       fill this element's real height instead, so there's ever only one
+       scrollable layer, and overflow:hidden here is purely a safety net
+       for anything that still doesn't fit. */
     .ap-toggle-card-body {
       padding: 14px;
+      overflow: hidden;
     }
     .ap-toggle-card .step-inline-list { gap: 10px; }
     /* #ap-review-panel's summary holds an extra row (the per-person avatar
@@ -537,6 +547,19 @@
     }
     .ap-analysis-shell > summary:hover { background: var(--card-3); }
     .ap-analysis-shell[open] > summary { border-bottom: 1px solid var(--border-2); }
+    /* Fixed, not auto -- without this, switching 人像檢查/修圖建議/修圖風格/
+       補充指令 (whichever tab has more or less content) reflowed this whole
+       card to a different height each time, shifting Run and everything
+       below it. 494px matches side-panel-layout's own #ap-analysis-shell[open]
+       target (styles.css) -- same inner content (#ap-review-panel's tab
+       strip + each tab's own 260px-capped list), just sized via `height`
+       here instead of `flex-basis` there, since this element is a
+       flex-wrap ROW item (cross-axis = height) rather than a column one
+       (main-axis = flex-basis). Shorter tabs just leave blank space below
+       instead of shrinking the card -- see syncAnalysisPanelHeights (app.js)
+       for how that space actually gets distributed down through
+       #ap-review-panel/.ap-toggle-card-body. */
+    #ap-analysis-shell[open] { height: 494px; }
     /* Stacked column, not .ap-label's own single row -- title+description
        block on top (left-aligned, untouched), the expand chevron in its own
        full-width row underneath, centered -- same "arrow centered below the
@@ -608,7 +631,11 @@
       color: var(--text-3);
       letter-spacing: 0;
     }
-    .ap-analysis-shell-body { padding: 14px; }
+    /* min-height:0 so JS (syncAnalysisPanelHeights, app.js) can force this
+       shorter than its own content's natural size, not just taller --
+       needed once #ap-analysis-shell[open]'s own height is fixed (above)
+       rather than however tall this body happens to want to be. */
+    .ap-analysis-shell-body { padding: 14px; min-height: 0; }
 
     .ap-review-summary-inner {
       display: flex;
@@ -769,6 +796,11 @@
       --hue-style: #A855F7;
       --hue-prompt: #818CF8;
     }
+    /* Floor, not the actual size -- JS (syncAnalysisPanelHeights, app.js)
+       sets this panel's real height directly from #ap-analysis-shell's own
+       fixed height (above), this is just a fallback so it never collapses
+       to something unusably small before that first runs. */
+    #ap-review-panel[open] { min-height: 160px; }
     #ap-review-tab-face   { --hue: var(--hue-face); }
     #ap-review-tab-recipe { --hue: var(--hue-recipe); }
     #ap-review-tab-style  { --hue: var(--hue-style); }
@@ -838,9 +870,13 @@
        風格 tab's own option grid) can grow taller than that on its own.
        Pinning this row to the scroll container's own bottom edge keeps Run
        reachable without scrolling past it whenever that happens, instead of
-       it just sliding out of view under a tall tab body. Own background
-       (matching #analysis-preview's solid layer) since sticky content
-       otherwise scrolls underneath it, showing through transparently. */
+       it just sliding out of view under a tall tab body. No background:
+       an earlier version had one here (matching #analysis-preview's solid
+       layer) to stop sticky content bleeding through underneath it, but
+       that read as a stray extra box behind the Run pill, so it was
+       dropped in favor of a plain border-top divider instead. padding-top:
+       0 to match -- 16px of top padding only made sense stacked against
+       that same background box. */
     .ap-actions-row {
       order: 3;
       flex-basis: 100%;
@@ -849,12 +885,11 @@
       align-items: center;
       gap: 10px;
       margin-top: 6px;
-      padding-top: 16px;
+      padding-top: 0;
       border-top: 1px solid var(--border);
       position: sticky;
       bottom: 0;
       z-index: 2;
-      background: var(--card);
     }
 
     .ap-options-toggle > summary {
@@ -1027,10 +1062,15 @@
        whole, not per-tab. Without their own cap, a long tab body reads the
        same as the style grid used to: it just keeps growing until Run
        (#analysis-preview's sticky-bottom .ap-actions-row) is many scrolls
-       away instead of one short scroll inside the tab itself. */
+       away instead of one short scroll inside the tab itself.
+       max-height:100%, not a flat px value -- fills .ap-toggle-card-body's
+       real, JS-computed height (syncAnalysisPanelHeights, app.js) exactly,
+       so .ap-toggle-card-body itself never needs its own second scrollbar,
+       while still capping+scrolling internally whenever a tab's content is
+       actually longer than that. */
     #ap-recipe-list,
     #ap-face-detail {
-      max-height: 260px;
+      max-height: 100%;
       overflow-y: auto;
     }
     /* Same has-more-above/has-more-below inset-shadow cue as
@@ -1160,9 +1200,12 @@
        a row of type buttons; picking one shows that category's image-option
        grid below (showStyleGroup in app.js). Was its own overlay window
        (#ap-style-modal, capped to the viewport height with its own
-       internal scroll) before becoming a plain tab body -- now it just
-       flows with the rest of the panel like #ap-recipe-list/#ap-face-detail
-       do, no special sizing of its own needed. ── */
+       internal scroll) before becoming a plain tab body. height:100% so its
+       own children (#ap-style-type-row/#ap-style-options-frame, only one
+       ever visible) have something real to fill in turn, down to
+       .ap-toggle-card-body's own JS-computed height (syncAnalysisPanelHeights,
+       app.js). ── */
+    .ap-review-style { height: 100%; }
     /* Header row for #ap-style-options-frame: category name top-left (set
        from showStyleGroup, app.js, since the pill row that would otherwise
        say so is hidden while this frame is open), exit button top-right
@@ -1182,8 +1225,17 @@
     }
     /* Positioning root for #ap-style-scroll-hint, which pins to this frame's
        own bottom edge rather than #ap-style-options-frame's scrollable child
-       list -- see that element's own markup comment. */
-    #ap-style-options-frame { position: relative; }
+       list -- see that element's own markup comment. Flex column filling
+       .ap-review-style's own 100% (above), so the header stays a fixed-size
+       anchor (its own natural height, never scrolled away) and the grid --
+       flex:1, not a flat max-height guess -- takes exactly whatever's left
+       under it instead. */
+    #ap-style-options-frame {
+      position: relative;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
     /* Spelled-out fallback for the option grid's own inset-shadow scroll cue
        (too subtle on its own to register as "this scrolls" at a glance) --
        a small pill anchored over the bottom edge of whichever category list
@@ -1327,17 +1379,20 @@
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       justify-items: center;
       gap: 12px;
-      /* Capped + scrollable on its own -- a category with enough options to
-         fill 3+ rows of these (portrait-thumbnail) cards used to push the
-         whole #ap-review-panel tab open that far, growing the page instead
-         of staying put. #ap-style-options-hdr (title + exit button) sits
-         above this as this grid's own sibling, outside the scroll area, so
-         it stays put as the anchor while only the cards scroll under it.
-         Capped at 260px (was 440px) -- kept small enough that opening a
-         category still reads as a compact embedded panel within the tab,
-         not something that dominates #analysis-preview's own viewport-height
-         scroll area (see that class's comment) on a shorter screen. */
-      max-height: 260px;
+      /* Scrollable, capped by flex, not a flat max-height guess -- a
+         category with enough options to fill 3+ rows of these
+         (portrait-thumbnail) cards used to push the whole #ap-review-panel
+         tab open that far, growing the page instead of staying put.
+         #ap-style-options-hdr (title + exit button) sits above this as this
+         grid's own sibling, outside the scroll area, so it stays put as the
+         anchor while only the cards scroll under it. flex:1/min-height:0
+         (#ap-style-options-frame, above) fills exactly whatever's left under
+         that header inside .ap-toggle-card-body's own JS-computed height
+         (syncAnalysisPanelHeights, app.js), instead of a flat px guess that
+         doesn't track the real available space. */
+      flex: 1;
+      min-height: 0;
+      max-height: none;
       overflow-y: auto;
       /* An inset shadow, not a background-colored fade -- this grid has no
          solid background of its own (its parent .step-list-frame's tint

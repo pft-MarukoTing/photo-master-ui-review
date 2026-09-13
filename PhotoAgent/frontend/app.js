@@ -1548,7 +1548,7 @@
     const panelSummary = panel.querySelector(":scope > summary");
     const toggleBody = panel.querySelector(":scope > .ap-toggle-card-body");
     if (!shellSummary || !shellBody || !panelSummary || !toggleBody) return;
-    if (!document.body.classList.contains("side-panel-layout") || !shell.open) {
+    if (!shell.open) {
       shellBody.style.height = "";
       panel.style.height = "";
       toggleBody.style.height = "";
@@ -1567,6 +1567,28 @@
 
     const panelSummaryHeight = panelSummary.getBoundingClientRect().height;
     toggleBody.style.height = `${Math.max(0, panelHeight - panelSummaryHeight)}px`;
+
+    // #ap-recipe-list/#ap-face-detail/.ap-style-option-grid each size
+    // themselves off THIS element's real height (max-height:100%,
+    // index.html) -- their own has-more-below/-above cue (updateListScrollCue/
+    // updateStyleOptionScrollCue, further down) only ever recomputes on a
+    // content mutation or a scroll, neither of which fires just because
+    // toggleBody's real height changed (e.g. the panel going from hidden to
+    // visible for the first time, well after its content was already
+    // injected). Without this, a list's cue could get computed once against
+    // a stale (often 0, pre-first-layout) toggleBody height and never again,
+    // permanently stuck showing "more below" even once the real height
+    // (and thus real available space) made that untrue. Harmless to call on
+    // whichever tab/category isn't currently visible -- a hidden list's own
+    // scrollHeight/clientHeight are both 0, so canScroll is false and
+    // neither cue class gets set. updateListScrollCue/updateStyleOptionScrollCue
+    // are plain function declarations (hoisted), safe to call here even
+    // though this function itself runs once before their own source line is
+    // reached -- unlike STYLE_GROUPS itself (a const, still in its temporal
+    // dead zone at that point), which is why this reaches every style grid
+    // via a plain class query instead of iterating that array.
+    [els.apRecipeList, els.apFaceDetail].forEach(updateListScrollCue);
+    document.querySelectorAll(".ap-style-option-grid").forEach(updateStyleOptionScrollCue);
   }
   // ResizeObserver on both <summary> elements (not a handful of manual
   // calls from whichever moment happened to seem right -- an earlier

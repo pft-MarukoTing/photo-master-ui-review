@@ -1245,16 +1245,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   body.side-panel-layout .ap-analysis-shell[open] > summary.ap-analysis-shell-summary .ap-analysis-shell-chevron {
     transform: rotate(-90deg);
   }
-  /* .ap-actions-row's own background:var(--card) (styles.css) exists so
-     its position:sticky (also that rule) doesn't show scrolled-past
-     content bleeding through underneath it -- moot here, since nothing in
-     this layout scrolls past Run in the first place (see the floating-card
-     model's own comment, further up), so it just reads as an extra plain
-     box sitting behind the Run pill for no reason. */
-  body.side-panel-layout .results-canvas-row.showing-analysis:has(#ap-analysis-shell[open]) .ap-actions-row {
-    background: none;
-    padding-top: 0;
-  }
   /* The actual flex item needing a shrinkable size is #ap-analysis-shell
      (a direct child of #ap-options-card-inline, which is what's genuinely
      stretched, above) -- #ap-review-panel is nested one level deeper,
@@ -1282,77 +1272,25 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
     flex: 0 1 494px;
     min-height: 74px;
   }
-  /* .ap-analysis-shell-body/#ap-review-panel/.ap-toggle-card-body: all
-     three get a real pixel height set directly from JS
-     (syncAnalysisPanelHeights, app.js), not a CSS percentage/calc() at
-     any level -- turns out a <details> element's own non-summary child
-     ignores percentage heights too, not just flex-grow/grid 1fr (the part
-     of this Chromium limitation the rest of this codebase already knew
-     about): height:calc(100% - X) here was confirmed (via computed
-     styles) to resolve "100%" against #ap-analysis-shell's flex-basis
-     (494px, above), not its actual post-flex-shrink rendered height --
-     wrong on any viewport short enough to actually shrink the shell, no
-     matter how the percentage was written (calc(), plain height:100%, a
-     custom property none of it changes which base value Chromium uses).
-     min-height:0/overflow-y:auto stay here since JS only ever sets
-     `height` (see that function's own comment for why .ap-toggle-card-body
-     still needs overflow-y:auto as a genuine content fallback, not just
-     an overshoot clip). */
-  body.side-panel-layout #results-analysis-slot .ap-analysis-shell-body {
-    min-height: 0;
-  }
-  body.side-panel-layout #results-analysis-slot #ap-review-panel[open] {
-    min-height: 160px;
-  }
-  /* overflow:hidden, not auto -- .ap-toggle-card-body's own JS-set height
-     (syncAnalysisPanelHeights, app.js) is a genuine fallback (this
-     element's content can legitimately be taller than what it's given),
-     but giving it its OWN scrollbar on top of each tab's already-
-     independently-scrollable list/grid (#ap-recipe-list/#ap-face-detail/
-     .ap-style-option-grid, each already capped + scrollable, see their own
-     comments) produced two nested scrollbars at once -- scroll the outer
-     one to reveal more, then the inner one scrolls again within that. The
-     rules below make each of those fill this element's real height
-     instead (min(their own natural cap, whatever's actually available)),
-     so there's ever only one scrollable layer, and overflow:hidden here is
-     purely a safety net for anything that still doesn't fit. */
-  body.side-panel-layout #results-analysis-slot .ap-toggle-card-body {
-    overflow: hidden;
-  }
-  /* #ap-recipe-list/#ap-face-detail: max-height:100% instead of their own
-     base 260px (index.html) -- fills .ap-toggle-card-body's real,
-     JS-computed height exactly (never taller, so .ap-toggle-card-body
-     itself never needs to scroll), while still capping+scrolling
-     internally whenever the content is actually longer than that -- same
-     idea as the base rule, just responsive to the real available space
-     instead of a flat guess. */
-  body.side-panel-layout #results-analysis-slot #ap-recipe-list,
-  body.side-panel-layout #results-analysis-slot #ap-face-detail {
-    max-height: 100%;
-  }
-  /* .ap-review-style (the 修圖風格 tab's own wrapper): height:100% so its
-     own children (#ap-style-type-row/#ap-style-options-frame, only one
-     ever visible) have something real to fill in turn. */
-  body.side-panel-layout #results-analysis-slot .ap-review-style {
-    height: 100%;
-  }
-  /* #ap-style-options-frame (a category's own title+exit-button header,
-     plus its image grid): flex column filling that same 100%, so the
-     header stays a fixed-size anchor (its own natural height, never
-     scrolled away) and the grid -- flex:1, not its own base max-height:
-     260px (index.html) -- takes exactly whatever's left under it instead
-     of a flat guess that could be taller than what's actually available
-     here. */
-  body.side-panel-layout #results-analysis-slot #ap-style-options-frame {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-  body.side-panel-layout #results-analysis-slot .ap-style-option-grid {
-    flex: 1;
-    min-height: 0;
-    max-height: none;
-  }
+  /* .ap-analysis-shell-body/#ap-review-panel/.ap-toggle-card-body all get a
+     real pixel height set directly from JS (syncAnalysisPanelHeights,
+     app.js), not a CSS percentage/calc() at any level -- turns out a
+     <details> element's own non-summary child ignores percentage heights
+     too, not just flex-grow/grid 1fr (the part of this Chromium limitation
+     the rest of this codebase already knew about): height:calc(100% - X)
+     here was confirmed (via computed styles) to resolve "100%" against
+     #ap-analysis-shell's flex-basis (494px, above), not its actual
+     post-flex-shrink rendered height -- wrong on any viewport short enough
+     to actually shrink the shell, no matter how the percentage was written
+     (calc(), plain height:100%, a CSS custom property none of it changes
+     which base value Chromium uses). The rest of this same chain
+     (.ap-analysis-shell-body's own min-height:0, #ap-review-panel[open]'s
+     min-height:160px floor, .ap-toggle-card-body's overflow:hidden safety
+     net, #ap-recipe-list/#ap-face-detail/.ap-review-style/
+     #ap-style-options-frame/.ap-style-option-grid all filling their real
+     available space instead of a flat guess) is unconditional (index.html)
+     now that the stacked-below-photo layout got this exact same
+     fixed-height treatment too -- nothing further needed here. */
   /* flex:0 0 auto -- the OTHER half of #ap-review-panel's own flex:0 1 420px
      (above) actually working: on a short viewport, all the shrinking needs
      to land on the panel, not partly on Run too (flex-shrink:1 is every
