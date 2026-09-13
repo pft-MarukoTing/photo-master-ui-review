@@ -1108,8 +1108,27 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 #results-body.batch-mode .results-canvas-row.showing-analysis .results-analysis-slot {
   flex: 30 1 0%;
 }
-#results-body.batch-mode.showing-analysis #batch-sidebar {
-  flex: 0 0 20%;
+/* max-width:280px caps this at .batch-sidebar's own plain (analysis-panel-
+   closed) width, above -- flex-basis:15% alone keeps growing with the
+   viewport (e.g. 384px on a 2560px-wide monitor), well past what a thumbnail
+   list actually needs, squeezing #results-analysis-slot for no benefit --
+   on a real photo, that's the difference between .ap-style-option-grid
+   (auto-fit, minmax(140px,1fr)) fitting 2+ columns of option cards or
+   collapsing to a single one.
+   Keyed to .batch-mode alone, not .showing-analysis too (an earlier version
+   of this did) -- .showing-analysis only covers the review panel actually
+   being open, but batch-mode's OWN loading animation (#batch-main-loading,
+   between a record's analyzing/processing and its review panel showing)
+   and its done canvas both live inside this same row regardless, and every
+   one of those states is one continuous "looking at a batch photo's detail"
+   session from the user's own perspective. Squeezing only sometimes made
+   the sidebar visibly snap wide every time a record left "reviewing" for
+   "processing" (Run clicked) or "analyzing" (a fresh upload), then narrow
+   again once its own review panel reopened -- pure flicker, since nothing
+   about the sidebar's own content changes across any of these states. */
+#results-body.batch-mode #batch-sidebar {
+  flex: 0 0 15%;
+  max-width: 280px;
 }
 @media (max-width: 900px) {
   .results-canvas-row { flex-direction: column; }

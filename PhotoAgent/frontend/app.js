@@ -4432,7 +4432,7 @@
 
       updateBatchDownloadAllVisibility();
       if (skipReview) {
-        // Straight through, no stop: same as clicking "全部繼續處理" myself,
+        // Straight through, no stop: same as clicking "Run all" myself,
         // so every analyzed image goes straight to editing with its default
         // recipe/style options (no per-image review ever happened to set
         // overrides). Records that failed to analyze are simply excluded --
@@ -4582,7 +4582,7 @@
     updateBatchDownloadAllVisibility();
   }
 
-  // Shows/hides the bulk "全部繼續處理" button, based on whether there's at
+  // Shows/hides the bulk "Run all" button, based on whether there's at
   // least one record still awaiting its first edit -- live-updated as
   // analyses/edits complete, not just once at the end of a whole-batch phase.
   function updateBatchHeaderControls() {
@@ -6980,18 +6980,25 @@
   // separate-review-screen split entirely -- one page, one selection model. ──
   async function selectBatchRecord(record) {
     if (!record) return;
-    // If a done record's inline revise-panel is open, close it directly
-    // rather than simulating a click on its cancel button -- that click's
-    // continuation runs as a microtask (via waitForInlineAnalysisAction's
-    // promise), which would race against the render we're about to do for
-    // the newly selected record.
+    // If a done record's inline revise-panel is open, cancel its pending
+    // wait directly rather than simulating a click on its cancel button --
+    // that click's continuation runs as a microtask (via
+    // waitForInlineAnalysisAction's promise), which would race against the
+    // render we're about to do for the newly selected record.
+    // Deliberately NOT closeInlineAnalysisPanel() here (an earlier version
+    // of this did) -- renderBatchMain(record, true) below reopens the panel
+    // for the new record regardless, via forceReopen, so closing it first
+    // just meant #results-body briefly lost then regained .showing-analysis
+    // for no reason, and #batch-sidebar's width split keys off exactly that
+    // class -- every case switch visibly flickered the sidebar wide (its
+    // plain, panel-closed width) then narrow again as the new record's
+    // panel reopened, purely from this now-removed round trip.
     if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
       // Preserve in-progress review controls (including touched body amounts)
       // before replacing the panel with another batch photo. This is a local
       // snapshot only; no analyze/edit request is triggered.
       if (currentBatchRecord) captureBatchReviewSelections(currentBatchRecord);
       clearInlineAnalysisWait();
-      closeInlineAnalysisPanel();
     }
     const previous = currentBatchRecord;
     currentBatchRecord = record;
@@ -7007,7 +7014,7 @@
     const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
     try {
-      await renderBatchMain(record);
+      await renderBatchMain(record, true);
     } finally {
       if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
     }
@@ -7046,7 +7053,7 @@
     currentBatchRecord = record;
     updateBatchSidebarItem(previous);
     updateBatchSidebarItem(record);
-    renderBatchMain(record);
+    renderBatchMain(record, true);
     return true;
   }
 
@@ -7120,7 +7127,20 @@
   // following it.
   window.addEventListener("resize", syncReportBtnPosition);
 
-  async function renderBatchMain(record) {
+  // forceReopen: true only from a genuine switch to a different record
+  // (selectBatchRecord/maybeAutoAdvanceToBatchResult) -- threaded down to
+  // showBatchDoneMain's own openInlineAnalysisForCurrentContext call so a
+  // switch always loads the newly-selected record's own review state,
+  // without selectBatchRecord having to closeInlineAnalysisPanel() first
+  // just to defeat that function's "already showing, no-op" guard. That
+  // close-then-reopen round trip was the actual cause of #batch-sidebar's
+  // width visibly flickering wide-then-narrow on every case switch (see
+  // that class's own comment, styles.css) -- #results-body loses and
+  // immediately regains .showing-analysis, which is what its width split
+  // keys off. refreshIfSelected's own background-refresh call leaves this
+  // at its default false, since that's the SAME record re-rendering in
+  // place, not a switch.
+  async function renderBatchMain(record, forceReopen = false) {
     if (!record) return;
     setCurrentCaseTimes(record);
     updateApSubjectTags(record);
@@ -7143,7 +7163,7 @@
     // null then, so fall through to the loading view instead of crashing.
     } else if (record.status === "done" && record.result) {
       if (wasThisRecordRotating) await finishProcSubRotation();
-      await showBatchDoneMain(record);
+      await showBatchDoneMain(record, batchSettings, forceReopen);
     } else if (record.status === "error") {
       if (wasThisRecordRotating) await finishProcSubRotation();
       showBatchMainError(record);
@@ -7392,7 +7412,7 @@
   // like a live, revisable result (back-to-process + inline analysis) or a
   // read-only historical one -- re-running a job from another session
   // through the live single/batch revise flow doesn't apply here.
-  async function showBatchDoneMain(record, settings = batchSettings) {
+  async function showBatchDoneMain(record, settings = batchSettings, forceReopen = false) {
     // Load this record/RUN's image into #generated-img itself while it's
     // hidden, before touching anything else -- same reasoning as
     // showSingleResult's identical guard: keeps whatever was on screen (a
@@ -7471,15 +7491,20 @@
       });
       populateTimingSection(record.timings);
       // Analysis-preview shows by default alongside the canvas -- no-ops if
-      // it's already open (e.g. just switching RUN tabs on the same record).
-      // Read-only historical playback shows the very same panel (recipe/
-      // style picks, diagnosis) but with every control disabled and no
-      // Run/Cancel actions -- re-running a past job through this flow
-      // doesn't apply, but the information itself is exactly what's asked
-      // for. Re-rendered on every RUN switch too, since each RUN of a
-      // multi-RUN job carries its own analysis.
+      // it's already open (e.g. just switching RUN tabs on the same record),
+      // UNLESS forceReopen (a genuine switch to a different record,
+      // selectBatchRecord/maybeAutoAdvanceToBatchResult) says otherwise --
+      // "already showing-analysis" there means the PREVIOUS record's panel,
+      // not this one's, and needs a real reopen to load this record's own
+      // recipe/style/prompt state instead of silently no-op-ing and leaving
+      // the old record's picks on screen. Read-only historical playback
+      // shows the very same panel (recipe/style picks, diagnosis) but with
+      // every control disabled and no Run/Cancel actions -- re-running a
+      // past job through this flow doesn't apply, but the information
+      // itself is exactly what's asked for. Re-rendered on every RUN switch
+      // too, since each RUN of a multi-RUN job carries its own analysis.
       if (reviewable) {
-        openInlineAnalysisForCurrentContext();
+        openInlineAnalysisForCurrentContext(forceReopen);
       } else {
         renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset, expanded: false });
         openInlineAnalysisPanel(true);
