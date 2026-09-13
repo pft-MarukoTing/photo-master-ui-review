@@ -831,7 +831,16 @@
     #ap-analysis-shell { order: 0; flex-basis: 100%; }
     /* Holds .ap-settings-run-row (人像修正設定/Run) on its own full-width block,
        last -- 修圖風格/補充指令 used to sit here too (a trigger button and a
-       textarea) before both became tabs of #ap-review-panel above. */
+       textarea) before both became tabs of #ap-review-panel above.
+       Sticky, not static -- #analysis-preview (this row's scrolling
+       ancestor, see its own max-height/overflow-y comment) caps the whole
+       panel to the viewport, and #ap-review-panel's content (e.g. the 修圖
+       風格 tab's own option grid) can grow taller than that on its own.
+       Pinning this row to the scroll container's own bottom edge keeps Run
+       reachable without scrolling past it whenever that happens, instead of
+       it just sliding out of view under a tall tab body. Own background
+       (matching #analysis-preview's solid layer) since sticky content
+       otherwise scrolls underneath it, showing through transparently. */
     .ap-actions-row {
       order: 3;
       flex-basis: 100%;
@@ -842,6 +851,10 @@
       margin-top: 6px;
       padding-top: 16px;
       border-top: 1px solid var(--border);
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+      background: var(--card);
     }
 
     .ap-options-toggle > summary {
@@ -1006,6 +1019,36 @@
       font-size: 12.5px;
       line-height: 1.4;
       color: var(--text-2);
+    }
+    /* Capped + scrollable, same "小視窗" treatment as .ap-style-option-grid
+       (below) -- 修圖建議/人像檢查 can each run long (many recipe items, or a
+       person with several flagged issues + reasons), and #analysis-preview
+       (this pair's own scrolling ancestor) only caps to the viewport as a
+       whole, not per-tab. Without their own cap, a long tab body reads the
+       same as the style grid used to: it just keeps growing until Run
+       (#analysis-preview's sticky-bottom .ap-actions-row) is many scrolls
+       away instead of one short scroll inside the tab itself. */
+    #ap-recipe-list,
+    #ap-face-detail {
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    /* Same has-more-above/has-more-below inset-shadow cue as
+       .ap-style-option-grid (below), driven by the same generic
+       updateListScrollCue (app.js) -- without it, content actually cut off
+       by the max-height cap above read as a layout bug (a flush edge with
+       no visual sign there's more below), not "this scrolls". */
+    #ap-recipe-list.has-more-below,
+    #ap-face-detail.has-more-below {
+      box-shadow: inset 0 -24px 16px -18px rgba(0,0,0,.45);
+    }
+    #ap-recipe-list.has-more-above,
+    #ap-face-detail.has-more-above {
+      box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45);
+    }
+    #ap-recipe-list.has-more-above.has-more-below,
+    #ap-face-detail.has-more-above.has-more-below {
+      box-shadow: inset 0 24px 16px -18px rgba(0,0,0,.45), inset 0 -24px 16px -18px rgba(0,0,0,.45);
     }
     .ap-style-name {
       font-weight: 700;
@@ -1289,8 +1332,12 @@
          whole #ap-review-panel tab open that far, growing the page instead
          of staying put. #ap-style-options-hdr (title + exit button) sits
          above this as this grid's own sibling, outside the scroll area, so
-         it stays put as the anchor while only the cards scroll under it. */
-      max-height: 440px;
+         it stays put as the anchor while only the cards scroll under it.
+         Capped at 260px (was 440px) -- kept small enough that opening a
+         category still reads as a compact embedded panel within the tab,
+         not something that dominates #analysis-preview's own viewport-height
+         scroll area (see that class's comment) on a shorter screen. */
+      max-height: 260px;
       overflow-y: auto;
       /* An inset shadow, not a background-colored fade -- this grid has no
          solid background of its own (its parent .step-list-frame's tint
@@ -4062,8 +4109,13 @@
         </div>
 
         <!-- #analysis-preview (from the processing section) is moved in here
-             on demand -- see openInlineAnalysisPanel in app.js. -->
-        <div class="results-analysis-slot" id="results-analysis-slot"></div>
+             on demand -- see openInlineAnalysisPanel in app.js. #ap-panel-top-
+             spacer is this slot's only permanent child (never moved) -- zero
+             height unless 分析面板顯示於預覽右側 (side-panel-layout-toggle,
+             #settings-modal) is on, where it gives the panel the same blank
+             margin above it that the Run button's own height already reads as
+             below (see styles.css, "side-panel layout" section). -->
+        <div class="results-analysis-slot" id="results-analysis-slot"><div id="ap-panel-top-spacer"></div></div>
       </div>
 
       <!-- Everything below the before/after images: hidden entirely unless
@@ -4629,6 +4681,27 @@
         </select>
       </details>
     </div>
+    <!-- Shared with #ap-settings-modal the same way #advanced-settings-fold
+         below is -- one toggle, reparented into whichever 設定 modal is open
+         (ensureSidePanelLayoutRowIn, app.js), not a separate copy per page.
+         Persisted client-side (localStorage, SIDE_PANEL_LAYOUT_KEY in app.js)
+         since it's a display preference, not a per-request option like the
+         pickers above -- applies immediately to an already-open review panel
+         via getOptionsCardTarget/moveOptionsCardTo, no reload needed. Only
+         changes anything at >900px width (see styles.css's "side-panel
+         layout" section) -- narrower viewports keep today's stacked-below
+         layout regardless of this toggle, same breakpoint .showing-analysis
+         already collapses at. -->
+    <label id="side-panel-layout-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">分析面板顯示於預覽右側</span>
+        <span class="option-desc">寬螢幕時，將修圖建議面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。</span>
+      </div>
+      <label class="ios-switch">
+        <input id="side-panel-layout-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
     <!-- Collapsed by default -- these were the last item inside this same
          .settings-modal-body once before, then got their own separate
          #advanced-settings-modal (reachable via a dedicated 人像修正設定 button)

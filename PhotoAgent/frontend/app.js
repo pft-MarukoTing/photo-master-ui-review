@@ -562,17 +562,16 @@
     // (admin reports drawer) must show the button regardless of debug mode.
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebug;
     if (els.analysisPreview) els.analysisPreview.style.display = isDebug ? "" : "none";
-    // #results-analysis-slot only ever hosts #analysis-preview, which (like
-    // #results-detail-extra above) no longer shows on the analyze/results
-    // page at all -- keep it hidden unconditionally rather than sitting
-    // there as a blank 35%-wide column once .showing-analysis adds its
-    // flex-grow, and let #results-canvas-col recenter at a fixed width
-    // instead of stretching to fill the whole freed-up row (900px matches
-    // .proc-container, the same single-column canvas width used pre-results
-    // on the processing screen).
-    if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = "none";
-    if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = "center";
-    if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = "900px";
+    // #results-analysis-slot otherwise only hosts #analysis-preview, which
+    // (like #results-detail-extra above) no longer shows on the analyze/
+    // results page at all -- keep it hidden and let #results-canvas-col
+    // recenter at a fixed width instead of stretching to fill the whole
+    // freed-up row (900px matches .proc-container, the same single-column
+    // canvas width used pre-results on the processing screen), UNLESS
+    // 分析面板顯示於預覽右側 relocates #ap-options-card-inline into that same
+    // slot for real -- see syncResultsAnalysisSlotForSidePanelLayout's own
+    // doc comment.
+    syncResultsAnalysisSlotForSidePanelLayout();
     applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
     applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebug);
@@ -1488,11 +1487,193 @@
   // restoreStepIndicatorHome for the rest of its lifecycle.
   function moveOptionsCardTo(container) {
     if (!container) return;
-    if (els.apStepIndicator && els.apStepIndicator.parentElement !== container) {
-      container.prepend(els.apStepIndicator);
+    // #ap-step-indicator does NOT follow `container` -- unlike the options
+    // card, it's meant to stay visible above the photo through 修圖/結果
+    // too, not just while a review panel is open (see this function's own
+    // doc comment above), so #results-analysis-slot (whose opacity/width
+    // both collapse back to 0 as soon as .showing-analysis comes off,
+    // closePendingResults/closeInlineAnalysisPanel) is never a safe home for
+    // it regardless of what getOptionsCardTarget picked for the options
+    // card. getStepIndicatorTarget below picks its own target: normally
+    // #results-canvas-top (display:contents, inside the always-visible
+    // .results-canvas-col), or -- once 分析面板顯示於預覽右側 relocates the
+    // options card beside the photo -- #results-detail itself, so the
+    // indicator spans full width above BOTH columns instead of sitting
+    // inside just one of them.
+    const stepTarget = getStepIndicatorTarget();
+    if (els.apStepIndicator && stepTarget && els.apStepIndicator.parentElement !== stepTarget) {
+      stepTarget.prepend(els.apStepIndicator);
     }
     if (els.apOptionsCardInline && els.apOptionsCardInline.parentElement !== container) {
       container.appendChild(els.apOptionsCardInline);
+    }
+  }
+
+  // #ap-analysis-shell/#ap-review-panel are both <details> elements, and a
+  // <details>'s own non-summary child ignores percentage heights too, not
+  // just flex-grow/grid 1fr (the part of this Chromium limitation the
+  // rest of this codebase already knew about) -- it turns out
+  // height:calc(100% - X) on such a child resolves "100%" against the
+  // <details>'s flex-basis (494px, #ap-analysis-shell's own rule further
+  // down), not its actual post-flex-shrink rendered height (368px on a
+  // shortish viewport) -- confirmed directly via computed styles: shell
+  // height 368px, .ap-analysis-shell-body computed to 395px, which only
+  // matches 494(basis) - 71(summary) - 28(this element's own padding), not
+  // 368 - 71 - 28. So on any viewport short enough to actually shrink the
+  // shell, every "overshoot-then-clip" percentage trick down this whole
+  // chain was silently computing against the WRONG (pre-shrink) height,
+  // no matter how it was written -- calc(), plain height:100%, a CSS
+  // custom property, none of it changes which base value Chromium uses.
+  // The only way to actually get this right is to sidestep percentage/
+  // calc() entirely and set real pixel heights from JS, using each
+  // element's own true getBoundingClientRect() -- .ap-analysis-shell-body
+  // gets (shell's real height - its own <summary>'s real height),
+  // #ap-review-panel then gets (that body's real content-box height -
+  // its own <summary>'s real height), and .ap-toggle-card-body is left to
+  // its own height:100% (styles.css) since it's a plain div, not a
+  // <details>, so ordinary percentage-height rules actually apply to it.
+  // All three levels (.ap-analysis-shell-body, #ap-review-panel,
+  // .ap-toggle-card-body) get a real JS-computed pixel height, not a CSS
+  // percentage/calc() at any level -- .ap-toggle-card-body is a plain div
+  // (not a <details>), so ordinary percentage math would actually work
+  // fine for IT specifically, but computing it here too keeps the whole
+  // chain in one place instead of splitting it across JS and CSS in a way
+  // that's easy to lose track of again.
+  function syncAnalysisPanelHeights() {
+    const shell = els.apAnalysisShell;
+    const panel = els.apReviewPanel;
+    if (!shell || !panel) return;
+    const shellSummary = shell.querySelector(":scope > summary");
+    const shellBody = shell.querySelector(":scope > .ap-analysis-shell-body");
+    const panelSummary = panel.querySelector(":scope > summary");
+    const toggleBody = panel.querySelector(":scope > .ap-toggle-card-body");
+    if (!shellSummary || !shellBody || !panelSummary || !toggleBody) return;
+    if (!document.body.classList.contains("side-panel-layout") || !shell.open) {
+      shellBody.style.height = "";
+      panel.style.height = "";
+      toggleBody.style.height = "";
+      return;
+    }
+    const shellHeight = shell.getBoundingClientRect().height;
+    const shellSummaryHeight = shellSummary.getBoundingClientRect().height;
+    const bodyHeight = Math.max(0, shellHeight - shellSummaryHeight);
+    shellBody.style.height = `${bodyHeight}px`;
+
+    const shellBodyStyle = getComputedStyle(shellBody);
+    const shellBodyPadding =
+      (parseFloat(shellBodyStyle.paddingTop) || 0) + (parseFloat(shellBodyStyle.paddingBottom) || 0);
+    const panelHeight = Math.max(0, bodyHeight - shellBodyPadding);
+    panel.style.height = `${panelHeight}px`;
+
+    const panelSummaryHeight = panelSummary.getBoundingClientRect().height;
+    toggleBody.style.height = `${Math.max(0, panelHeight - panelSummaryHeight)}px`;
+  }
+  // ResizeObserver on both <summary> elements (not a handful of manual
+  // calls from whichever moment happened to seem right -- an earlier
+  // version of this did that, and missed real-world cases) -- catches
+  // every reason either one's real height can change: #ap-analysis-shell's
+  // own collapsed <-> open swap (a completely different summary layout/
+  // height), a live re-render, font loading, anything -- without needing
+  // to know every possible cause in advance.
+  // Deliberately NOT also observing #ap-analysis-shell itself -- an
+  // earlier version of this did, on the theory that its own flex-shrink
+  // on a short viewport needed watching too, but this function sets an
+  // inline height on shell's own CHILD (.ap-analysis-shell-body), and on
+  // narrow/mobile viewports (more frequent reflow from text wrapping,
+  // scrollbar-width changes, etc.) that occasionally nudged shell's own
+  // rendered height by a sub-pixel amount, which re-fired this same
+  // observer, which set the child's height again, which nudged shell
+  // again -- a slow-motion ResizeObserver feedback loop that read as the
+  // panel's height "continuously growing". A plain resize listener still
+  // catches the actual reason shell's size needs re-checking (the
+  // viewport changing) without ever being triggered by this function's
+  // own writes.
+  (() => {
+    const shell = els.apAnalysisShell;
+    const panel = els.apReviewPanel;
+    if (!shell || !panel) return;
+    const shellSummary = shell.querySelector(":scope > summary");
+    const panelSummary = panel.querySelector(":scope > summary");
+    if (shellSummary) new ResizeObserver(syncAnalysisPanelHeights).observe(shellSummary);
+    if (panelSummary) new ResizeObserver(syncAnalysisPanelHeights).observe(panelSummary);
+    window.addEventListener("resize", syncAnalysisPanelHeights);
+    syncAnalysisPanelHeights();
+  })();
+
+  // #results-detail (.results-container) is already display:flex;
+  // flex-direction:column -- prepending the indicator there (instead of
+  // into #results-canvas-top, nested one level inside the canvas column)
+  // makes it the row's own first flex child, full width, above both
+  // #results-canvas-row and everything in it.
+  function getStepIndicatorTarget() {
+    return isSidePanelLayoutEnabled() && els.resultsDetail ? els.resultsDetail : els.resultsCanvasTop;
+  }
+
+  // ── 分析面板顯示於預覽右側 (side-panel-layout-toggle, #settings-modal) ───────
+  // A display preference, not a per-request option -- persisted client-side
+  // rather than sent to the backend. When on, moveOptionsCardTo's two call
+  // sites (showPendingResults/openInlineAnalysisPanel below) target
+  // #results-analysis-slot instead of #results-canvas-top, so
+  // #ap-options-card-inline (the #ap-analysis-shell/#ap-review-panel tabs)
+  // lands beside the photo instead of stacked below it -- #ap-step-indicator
+  // is NOT part of this move (moveOptionsCardTo above keeps it in
+  // #results-canvas-top unconditionally regardless of this setting). The
+  // actual repositioning is CSS (styles.css's "side-panel layout" section,
+  // gated to width > 900px), this just decides which container to move
+  // into. Below 900px (and with the toggle off) nothing here changes
+  // anything: #results-canvas-top stays the target, same as today.
+  const SIDE_PANEL_LAYOUT_KEY = "photoagent.sidePanelLayout";
+
+  function isSidePanelLayoutEnabled() {
+    try {
+      return localStorage.getItem(SIDE_PANEL_LAYOUT_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function setSidePanelLayoutEnabled(enabled) {
+    try {
+      localStorage.setItem(SIDE_PANEL_LAYOUT_KEY, enabled ? "1" : "0");
+    } catch {
+      // Private-browsing/storage-disabled: falls back to session-only via
+      // the body class below, just doesn't survive a reload.
+    }
+    document.body.classList.toggle("side-panel-layout", enabled);
+  }
+
+  function getOptionsCardTarget() {
+    return isSidePanelLayoutEnabled() && els.resultsAnalysisSlot ? els.resultsAnalysisSlot : els.resultsCanvasTop;
+  }
+
+  // Shared with #ap-settings-modal the same way ensureAdvancedSettingsFoldIn
+  // (below) shares #advanced-settings-fold -- one toggle reparented into
+  // whichever 設定 modal is open, not a separate copy per page.
+  function ensureSidePanelLayoutRowIn(body) {
+    if (!els.sidePanelLayoutRow) return;
+    if (body && els.sidePanelLayoutRow.parentElement !== body) {
+      body.appendChild(els.sidePanelLayoutRow);
+    }
+  }
+
+  // applyDebugUiVisibility (above in this file) otherwise hides
+  // #results-analysis-slot with an inline style permanently, on the
+  // assumption that it only ever holds the now-debug-only #analysis-preview
+  // leftovers -- undo that (and the compensating centered/900px-capped
+  // canvas column) while this setting is on, since getOptionsCardTarget
+  // then relocates #ap-options-card-inline into that same slot for real.
+  // Called both from applyDebugUiVisibility itself (so it's right from
+  // first paint) and from the toggle's own change handler (so flipping it
+  // mid-session doesn't leave yesterday's inline styles stuck until reload).
+  function syncResultsAnalysisSlotForSidePanelLayout() {
+    if (isSidePanelLayoutEnabled()) {
+      if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = "";
+      if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = "";
+      if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = "";
+    } else {
+      if (els.resultsAnalysisSlot) els.resultsAnalysisSlot.style.display = "none";
+      if (els.resultsCanvasRow) els.resultsCanvasRow.style.justifyContent = "center";
+      if (els.resultsCanvasCol) els.resultsCanvasCol.style.maxWidth = "900px";
     }
   }
 
@@ -1567,7 +1748,7 @@
       { data: {}, analysis, preset, imageModel: singleFlowState.imageModel, hasOriginal: true },
       { pending: true }
     );
-    moveOptionsCardTo(els.resultsCanvasTop);
+    moveOptionsCardTo(getOptionsCardTarget());
     // Reset to 分析, in case this is a fresh image after a previous one's
     // flow advanced the indicator to 修圖/結果.
     setStepIndicatorStep(1);
@@ -1674,7 +1855,7 @@
     // already-finished job, where that would be factually wrong, so hide it
     // entirely in that one case.
     if (els.apStepIndicator) els.apStepIndicator.hidden = readOnly;
-    moveOptionsCardTo(els.resultsCanvasTop);
+    moveOptionsCardTo(getOptionsCardTarget());
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = readOnly;
     // Moved out of #inline-analysis-actions (now lives at the end of
     // #ap-options-card-inline) -- toggled alongside it here since it lost
@@ -6567,6 +6748,7 @@
   // so opening it doesn't need to re-render anything itself either.
   function openSettingsModal() {
     ensureAdvancedSettingsFoldIn(els.settingsModalBody);
+    ensureSidePanelLayoutRowIn(els.settingsModalBody);
     if (els.settingsModal) els.settingsModal.hidden = false;
   }
 
@@ -6582,6 +6764,7 @@
   // to the next edit without re-analyzing.
   function openApSettingsModal() {
     ensureAdvancedSettingsFoldIn(els.apSettingsModalBody);
+    ensureSidePanelLayoutRowIn(els.apSettingsModalBody);
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
 
@@ -6618,6 +6801,22 @@
     return els[`ap${group[0].toUpperCase()}${group.slice(1)}List`];
   }
 
+  // Generic has-more-above/has-more-below inset-shadow scroll cue -- reused
+  // by #ap-recipe-list/#ap-face-detail (their own listeners, further down)
+  // as well as .ap-style-option-grid (updateStyleOptionScrollCue below,
+  // which also drives #ap-style-scroll-hint, a text cue specific to that
+  // one picker -- kept split out so this generic version doesn't reach for
+  // an element that has nothing to do with whichever list called it).
+  function updateListScrollCue(list) {
+    if (!list) return false;
+    const canScroll = list.scrollHeight > list.clientHeight + 1;
+    const hasMoreAbove = canScroll && list.scrollTop > 0;
+    const hasMoreBelow = canScroll && list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+    list.classList.toggle("has-more-above", hasMoreAbove);
+    list.classList.toggle("has-more-below", hasMoreBelow);
+    return hasMoreBelow;
+  }
+
   // .ap-style-option-grid's own inset-shadow scroll cue (index.html) is easy
   // to miss on its own, so #ap-style-scroll-hint spells it out in words --
   // both are driven off the same has-more-below/has-more-above read here.
@@ -6625,12 +6824,7 @@
   // listeners below) and whenever showStyleGroup swaps in a different list
   // (a different content height, freshly scrolled to the top).
   function updateStyleOptionScrollCue(list) {
-    if (!list) return;
-    const canScroll = list.scrollHeight > list.clientHeight + 1;
-    const hasMoreAbove = canScroll && list.scrollTop > 0;
-    const hasMoreBelow = canScroll && list.scrollTop + list.clientHeight < list.scrollHeight - 1;
-    list.classList.toggle("has-more-above", hasMoreAbove);
-    list.classList.toggle("has-more-below", hasMoreBelow);
+    const hasMoreBelow = updateListScrollCue(list);
     if (els.apStyleScrollHint) els.apStyleScrollHint.hidden = !hasMoreBelow;
   }
 
@@ -8641,6 +8835,24 @@
       if (e.target.dataset.close) closeApSettingsModal();
     });
   }
+  // Applied immediately on load (not just once the settings modal is first
+  // opened) since a review panel can already be showing by the time the
+  // user ever opens 設定.
+  document.body.classList.toggle("side-panel-layout", isSidePanelLayoutEnabled());
+  syncResultsAnalysisSlotForSidePanelLayout();
+  if (els.sidePanelLayoutToggle) {
+    els.sidePanelLayoutToggle.checked = isSidePanelLayoutEnabled();
+    els.sidePanelLayoutToggle.addEventListener("change", () => {
+      setSidePanelLayoutEnabled(els.sidePanelLayoutToggle.checked);
+      syncResultsAnalysisSlotForSidePanelLayout();
+      // An already-open review panel (first-time 分析 pause, or an
+      // in-progress revise) re-parents right away instead of waiting for
+      // the next time it opens.
+      if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+        moveOptionsCardTo(getOptionsCardTarget());
+      }
+    });
+  }
   // Resets to the pills-only view every time this tab is switched to --
   // same as this tab's old openStyleModal always starting there, so
   // whichever category grid was left open on a previous visit doesn't
@@ -8658,6 +8870,30 @@
   STYLE_GROUPS.forEach((g) => {
     const list = styleGroupListEl(g);
     if (list) list.addEventListener("scroll", () => updateStyleOptionScrollCue(list));
+  });
+  // #ap-recipe-list/#ap-face-detail get the same cue, minus the text hint
+  // (updateListScrollCue, not updateStyleOptionScrollCue -- see that
+  // function's own comment) -- each is independently capped + scrollable
+  // (see their own max-height comment, styles.css), so a long recipe list
+  // or a person with several flagged issues reads as "scroll for more"
+  // instead of looking like it's just cut off. MutationObserver, not a
+  // call from results.js (a separate IIFE that can't reach into this
+  // file's own scope) -- and not ResizeObserver either: both lists stay
+  // pinned at their own max-height regardless of content (that's the whole
+  // point), so their own border-box size never actually changes; what
+  // needs watching is content being swapped in/out inside that same fixed
+  // box (a fresh render replacing <li>s, or the `hidden` toggle when
+  // applyActiveReviewTab switches tabs), which only a childList/attribute
+  // observer -- not a resize one -- would ever see.
+  [els.apRecipeList, els.apFaceDetail].forEach((list) => {
+    if (!list) return;
+    list.addEventListener("scroll", () => updateListScrollCue(list));
+    new MutationObserver(() => updateListScrollCue(list)).observe(list, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["hidden"],
+    });
   });
   // The in-modal clear "x" on each Pose/Angle/Lighting/Size pill (a sibling
   // of the pill's own button, not nested inside it -- see the CSS comment

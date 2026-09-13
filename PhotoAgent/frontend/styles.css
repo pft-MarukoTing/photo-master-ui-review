@@ -1119,6 +1119,415 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   margin-top: 0;
 }
 
+/* ── Side-panel layout (分析面板顯示於預覽右側, #settings-modal) ──
+   Opt-in, persisted client-side (getOptionsCardTarget/isSidePanelLayoutEnabled,
+   app.js): when on, #ap-step-indicator + #ap-options-card-inline (holding
+   #ap-analysis-shell/#ap-review-panel) move into #results-analysis-slot
+   instead of stacking below .compare-card in #results-canvas-top. Everything
+   below is purely how that already-relocated content is laid out -- gated to
+   width > 900px, the exact complement of this file's own
+   @media (max-width: 900px) collapse above, so a narrower viewport falls
+   straight back to a single stacked column with no extra coordination: the
+   panel just lives in #results-analysis-slot either way, and that query
+   already flattens both slots to width:100% below this breakpoint. */
+@media (min-width: 901px) {
+  /* The photo fills the actual viewport height (matching how tall
+     #results-detail/.results-canvas-row are made below), regardless of
+     whether the panel is open or the collapsed drawer-tab -- its own size
+     never depends on the panel's state. The panel side, by contrast, is
+     never stretched -- it just sizes to its own content (each tab's own
+     list already caps + scrolls internally well within a reasonable
+     height, see #ap-recipe-list/#ap-face-detail/.ap-style-option-grid's
+     own comments) and floats vertically centered next to the photo
+     (align-self:center on #results-analysis-slot, further down, overrides
+     this row's own align-items:stretch for just that one side). */
+  body.side-panel-layout #results-detail:has(.results-canvas-row.showing-analysis) {
+    height: calc(100vh - var(--header-h));
+  }
+  body.side-panel-layout .results-canvas-row.showing-analysis {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+  /* .results-canvas-col/.compare-card/.photo-frame-wrap: plain stretch
+     chain (none of these are <details> elements, so -- unlike
+     #ap-analysis-shell/#ap-review-panel in an earlier version of this, see
+     git history -- flex:1 just works here) down to .photo-frame itself,
+     whose own fixed height (400px, below) is what actually needs
+     overriding to let the photo grow into that space. */
+  body.side-panel-layout .results-canvas-row.showing-analysis .results-canvas-col {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+  }
+  body.side-panel-layout .results-canvas-row.showing-analysis .compare-card {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body.side-panel-layout .results-canvas-row.showing-analysis .compare-card .photo-frame-wrap {
+    flex: 1;
+    min-height: 0;
+  }
+  /* Overrides this same file's own fixed-400px rule (higher specificity,
+     the added body.side-panel-layout class) -- height:100% of the now-tall
+     .photo-frame-wrap (flex:1 above; .photo-frame-wrap's own default
+     align-items:stretch, a row flex container, is what actually stretches
+     this child to match its height, same as any other flex cross-axis
+     stretch). The <img> itself (max-height:100%, below) still preserves
+     its own aspect ratio and just letterboxes/pillarboxes within this
+     taller box instead of distorting to fill it. */
+  body.side-panel-layout .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame {
+    height: 100%;
+  }
+  body.side-panel-layout .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame img {
+    max-height: 100%;
+  }
+  /* align-self:stretch (not center, not flex-start) -- gives
+     #results-analysis-slot the row's own REAL height (the same one
+     .compare-card/.photo-frame already stretch to fill, further up), so
+     #ap-review-panel (further down) has an actual, exact height budget to
+     shrink against on a short/wide viewport instead of an estimated
+     calc(100vh - ...) guess that doesn't precisely track every real
+     ingredient (description text wrapping, tab count, etc.) -- close but
+     not exact was still overflowing in practice. Content inside still
+     reads as top-aligned, not stretched -- #ap-options-card-inline (further
+     down) just doesn't use all of this height on a tall screen, same look
+     as before there. */
+  body.side-panel-layout .results-canvas-row.showing-analysis .results-analysis-slot {
+    align-self: stretch;
+  }
+  /* Only matches once getStepIndicatorTarget (app.js) has actually
+     relocated it to be #results-detail's own direct child (full width,
+     above both columns) -- #results-detail's own flex gap (24px) already
+     spaces it from the row below, so its own margin-bottom (20px, meant for
+     sitting inside #results-canvas-top instead) would otherwise just add
+     20px more on top of that. */
+  body.side-panel-layout #results-detail > .ap-step-indicator {
+    margin-bottom: 0;
+  }
+  /* Moves the chevron onto .ap-analysis-shell-desc's own line, right-
+     aligned, instead of its own separate centered row below both title and
+     description -- a grid (title spanning both columns on row 1; desc +
+     chevron-row sharing row 2, auto-placed into column 1/2 respectively)
+     rather than restructuring the actual markup, so the default (non
+     side-panel) layout -- which still wants the chevron on its own
+     centered row -- is untouched. display:contents on
+     .ap-analysis-shell-summary-inner dissolves that wrapper for layout
+     purposes only, letting its own children (title/desc) become direct
+     grid items alongside .ap-analysis-shell-chevron-row (a sibling of the
+     wrapper, not nested inside it) instead of being trapped one grid level
+     too deep to sit beside it. */
+  body.side-panel-layout .ap-analysis-shell-summary {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+  }
+  body.side-panel-layout .ap-analysis-shell-summary-inner {
+    display: contents;
+  }
+  body.side-panel-layout .ap-analysis-shell-title {
+    grid-column: 1 / -1;
+  }
+  body.side-panel-layout .ap-analysis-shell-chevron-row {
+    justify-content: flex-end;
+  }
+  /* #ap-analysis-shell's own chevron (index.html) rests pointing down and
+     rotates 180deg (pointing up) once open -- a "collapses back upward"
+     cue that made sense for the old stacked-below layout, but reads wrong
+     once collapsing instead means "becomes the right-edge drawer-tab" (see
+     #ap-analysis-shell:not([open]), further down) -- rotate(-90deg) here
+     points it right instead, matching that actual collapse direction. Only
+     matters while open (this chevron-row is hidden outright in the
+     collapsed tab, see its own comment below), so no separate rule is
+     needed for the collapsed state itself. */
+  body.side-panel-layout .ap-analysis-shell[open] > summary.ap-analysis-shell-summary .ap-analysis-shell-chevron {
+    transform: rotate(-90deg);
+  }
+  /* .ap-actions-row's own background:var(--card) (styles.css) exists so
+     its position:sticky (also that rule) doesn't show scrolled-past
+     content bleeding through underneath it -- moot here, since nothing in
+     this layout scrolls past Run in the first place (see the floating-card
+     model's own comment, further up), so it just reads as an extra plain
+     box sitting behind the Run pill for no reason. */
+  body.side-panel-layout .results-canvas-row.showing-analysis:has(#ap-analysis-shell[open]) .ap-actions-row {
+    background: none;
+    padding-top: 0;
+  }
+  /* The actual flex item needing a shrinkable size is #ap-analysis-shell
+     (a direct child of #ap-options-card-inline, which is what's genuinely
+     stretched, above) -- #ap-review-panel is nested one level deeper,
+     inside .ap-analysis-shell-body (a plain div, not a flex container), so
+     giving IT flex properties directly (an earlier version of this rule
+     did) is simply ignored: not a flex item of anything, it just falls
+     back to auto/content-sized regardless, unaffected by viewport height
+     entirely. flex:0 1 494px overrides this same element's own base
+     flex-basis:100% (index.html, written for #ap-options-card-inline's
+     normal flex-wrap ROW layout, same "meant width%, now means real
+     height%" issue .ap-actions-row's own flex-basis had, further down) --
+     494px = #ap-review-panel's own 420px target + this shell's own
+     <summary> height (~74px, title+desc+chevron). flex-shrink resolves
+     against #ap-options-card-inline's own REAL height (height:100% of the
+     now genuinely stretched #results-analysis-slot, above) -- an exact
+     layout fact, not an estimated calc() guess at "everything else sharing
+     this space" that doesn't precisely track every real ingredient
+     (description text wrapping, tab count, etc.) and so was still
+     overflowing in practice on a short/wide viewport. .ap-actions-row's
+     own flex:0 0 auto (further down) is what makes this the ONLY one of
+     the two that actually shrinks, so Run itself never compresses;
+     min-height is a floor so this doesn't collapse to something unusably
+     small first. */
+  body.side-panel-layout #results-analysis-slot #ap-analysis-shell[open] {
+    flex: 0 1 494px;
+    min-height: 74px;
+  }
+  /* .ap-analysis-shell-body/#ap-review-panel/.ap-toggle-card-body: all
+     three get a real pixel height set directly from JS
+     (syncAnalysisPanelHeights, app.js), not a CSS percentage/calc() at
+     any level -- turns out a <details> element's own non-summary child
+     ignores percentage heights too, not just flex-grow/grid 1fr (the part
+     of this Chromium limitation the rest of this codebase already knew
+     about): height:calc(100% - X) here was confirmed (via computed
+     styles) to resolve "100%" against #ap-analysis-shell's flex-basis
+     (494px, above), not its actual post-flex-shrink rendered height --
+     wrong on any viewport short enough to actually shrink the shell, no
+     matter how the percentage was written (calc(), plain height:100%, a
+     custom property none of it changes which base value Chromium uses).
+     min-height:0/overflow-y:auto stay here since JS only ever sets
+     `height` (see that function's own comment for why .ap-toggle-card-body
+     still needs overflow-y:auto as a genuine content fallback, not just
+     an overshoot clip). */
+  body.side-panel-layout #results-analysis-slot .ap-analysis-shell-body {
+    min-height: 0;
+  }
+  body.side-panel-layout #results-analysis-slot #ap-review-panel[open] {
+    min-height: 160px;
+  }
+  /* overflow:hidden, not auto -- .ap-toggle-card-body's own JS-set height
+     (syncAnalysisPanelHeights, app.js) is a genuine fallback (this
+     element's content can legitimately be taller than what it's given),
+     but giving it its OWN scrollbar on top of each tab's already-
+     independently-scrollable list/grid (#ap-recipe-list/#ap-face-detail/
+     .ap-style-option-grid, each already capped + scrollable, see their own
+     comments) produced two nested scrollbars at once -- scroll the outer
+     one to reveal more, then the inner one scrolls again within that. The
+     rules below make each of those fill this element's real height
+     instead (min(their own natural cap, whatever's actually available)),
+     so there's ever only one scrollable layer, and overflow:hidden here is
+     purely a safety net for anything that still doesn't fit. */
+  body.side-panel-layout #results-analysis-slot .ap-toggle-card-body {
+    overflow: hidden;
+  }
+  /* #ap-recipe-list/#ap-face-detail: max-height:100% instead of their own
+     base 260px (index.html) -- fills .ap-toggle-card-body's real,
+     JS-computed height exactly (never taller, so .ap-toggle-card-body
+     itself never needs to scroll), while still capping+scrolling
+     internally whenever the content is actually longer than that -- same
+     idea as the base rule, just responsive to the real available space
+     instead of a flat guess. */
+  body.side-panel-layout #results-analysis-slot #ap-recipe-list,
+  body.side-panel-layout #results-analysis-slot #ap-face-detail {
+    max-height: 100%;
+  }
+  /* .ap-review-style (the 修圖風格 tab's own wrapper): height:100% so its
+     own children (#ap-style-type-row/#ap-style-options-frame, only one
+     ever visible) have something real to fill in turn. */
+  body.side-panel-layout #results-analysis-slot .ap-review-style {
+    height: 100%;
+  }
+  /* #ap-style-options-frame (a category's own title+exit-button header,
+     plus its image grid): flex column filling that same 100%, so the
+     header stays a fixed-size anchor (its own natural height, never
+     scrolled away) and the grid -- flex:1, not its own base max-height:
+     260px (index.html) -- takes exactly whatever's left under it instead
+     of a flat guess that could be taller than what's actually available
+     here. */
+  body.side-panel-layout #results-analysis-slot #ap-style-options-frame {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  body.side-panel-layout #results-analysis-slot .ap-style-option-grid {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+  }
+  /* flex:0 0 auto -- the OTHER half of #ap-review-panel's own flex:0 1 420px
+     (above) actually working: on a short viewport, all the shrinking needs
+     to land on the panel, not partly on Run too (flex-shrink:1 is every
+     flex item's own default otherwise) -- Run staying its full natural
+     size is the whole point, it's the one thing that must never disappear
+     or get squeezed illegibly small. flex-basis:auto overrides this same
+     element's own base flex-basis:100% (index.html, written for
+     #ap-options-card-inline's normal flex-wrap ROW layout, where it meant
+     "one full-width wrapped line") -- harmless there since that container
+     was never a real height, but #ap-options-card-inline now genuinely is
+     one (height:100%, above), so 100% here suddenly meant 100% of that
+     real height too -- Run claiming the entire column for itself, full
+     stop, instead of its own handful of pixels. */
+  body.side-panel-layout #results-analysis-slot .ap-actions-row {
+    flex: 0 0 auto;
+  }
+  /* #ap-panel-top-spacer (index.html) stays at its base 0 height here --
+     it used to match .analysis-preview-action's own height, balancing the
+     Run button's space below with an equal margin above; no longer needed
+     now that neither side is stretched/aligned against the other's edge. */
+  body.side-panel-layout #results-analysis-slot #ap-options-card-inline {
+    flex-wrap: nowrap;
+    flex-direction: column;
+    /* .options-card-inline's own align-items:flex-end (styles.css) was
+       written for its normal flex-wrap ROW layout, where it centers each
+       full-width "line" vertically against its own row -- as a column's
+       cross-axis (width) alignment instead, it shrink-wrapped both
+       #ap-analysis-shell and .ap-actions-row down to their own content width
+       and pinned them to the column's right edge, rather than letting
+       either stretch to the panel's actual width. */
+    align-items: stretch;
+    margin-top: 0;
+    /* height:100% of #results-analysis-slot's own (now genuinely stretched,
+       see that rule's own comment) height -- percentage heights only
+       resolve against a definite ancestor, which #results-analysis-slot
+       only actually has in the open case (align-self:stretch there vs.
+       flex:0 0 auto when collapsed, further down), so this is a no-op
+       (falls back to auto/content-sized) for the collapsed drawer-tab.
+       min-height:0 lets it shrink below its own content's natural size,
+       the same override every other link in this shrink chain needs --
+       #ap-review-panel's own flex:0 1 420px (below) is the actual point of
+       this whole chain, and needs a real, non-auto parent height to shrink
+       against. */
+    height: 100%;
+    min-height: 0;
+  }
+  /* Collapsed #ap-analysis-shell: redesigned as a narrow vertical
+     drawer-tab attached to the photo's right edge instead of a shrunk
+     horizontal card (user-provided reference mockup, "方案B") -- the photo
+     itself is completely unaffected either way (its own height now comes
+     from the viewport-fill chain above, unrelated to the panel's own
+     width/state). Reopening is still the plain native <details>
+     click-to-toggle on this same <summary> -- only its CONTENT/appearance
+     changes here, not the open/close mechanism. .ap-actions-row (Run)
+     stays visible and stacks below the tab (#ap-options-card-inline's own
+     flex-direction:column, above) instead of hiding along with the rest of
+     the panel's content -- Run needs to stay reachable without reopening
+     the panel first. */
+  body.side-panel-layout .results-canvas-row.showing-analysis:has(#ap-analysis-shell:not([open])) {
+    gap: 0;
+  }
+  body.side-panel-layout .results-canvas-row.showing-analysis:has(#ap-analysis-shell:not([open])) .results-analysis-slot {
+    flex: 0 0 auto;
+    align-self: flex-start;
+  }
+  /* #ap-options-card-inline's own base gap:10px (styles.css, .options-card-
+     inline) was the actual remaining gap between the tab and Run once
+     .results-canvas-row's own gap (above) was already zeroed -- they're
+     column-direction flex siblings of THIS container, not of the row
+     itself. */
+  body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) #ap-options-card-inline {
+    gap: 0;
+  }
+  /* Run itself, narrowed to match the 44px tab above it instead of staying
+     its normal wide pill shape -- .ap-actions-row's own border-top (a
+     full-width divider line, meant for the wide open-panel layout) reads
+     as a stray line wider than either element once both are this narrow,
+     so it's dropped here in favor of the two touching directly (margin/
+     padding both zeroed, no gap between them). */
+  body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-actions-row {
+    width: 44px;
+    border-top: none;
+    padding-top: 0;
+    margin-top: 0;
+    justify-content: center;
+  }
+  body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-settings-run-row {
+    margin-left: 0;
+    width: 100%;
+    justify-content: center;
+  }
+  /* border-radius rounds only the two OUTER corners (bottom, since this
+     sits directly under the tab with no gap -- see .ap-actions-row above)
+     -- the top ones stay square so it reads as one continuous connected
+     shape with the tab, not two separately-rounded pieces stacked with a
+     visible seam. */
+  body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .analysis-preview-action-right {
+    flex-direction: column;
+    width: 44px;
+    height: auto;
+    padding: 12px 0;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    gap: 4px;
+  }
+  /* Stacks "Run" one upright letter per line (R / U / N) instead of
+     rotating the whole word sideways -- width:1ch (~one character wide)
+     forces a wrap after every glyph regardless of the font's actual
+     per-letter width, word-break:break-all is the fallback for whichever
+     letter doesn't quite fit that estimate. Arrow icon (below) stays
+     unrotated too, on its own line under the letters. */
+  body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .analysis-preview-action-right span {
+    width: 1ch;
+    word-break: break-all;
+    text-align: center;
+    line-height: 1.3;
+    text-transform: uppercase;
+    font-size: 16px;
+  }
+  /* border-radius: only the top-right corner -- bottom stays square since
+     Run (.analysis-preview-action-right, below) sits directly under this
+     with no gap, rounded only on its OWN bottom corners; together the two
+     read as one continuous connected shape, not two separately-rounded
+     pieces. */
+  /* Dashed, and the same purple tone as .compare-card's own border (styles.
+     css) -- reads as a continuation of the photo's own dashed frame rather
+     than a visually distinct box just sitting next to it. margin-top
+     offsets this below .compare-card's own top-right corner radius
+     (var(--radius-lg), 26px) -- without it, this tab's square top-left
+     corner sat right where the photo's border curves inward, leaving a
+     sliver of the page background visible in that gap instead of the two
+     borders meeting cleanly. */
+  body.side-panel-layout #ap-analysis-shell:not([open]) {
+    width: 44px;
+    margin-top: 26px;
+    border-radius: 0 var(--radius-sm) 0 0;
+    border-left: none;
+    border-bottom: none;
+    border-color: rgba(168,85,247,.45);
+    border-style: dashed;
+    border-width: 1.5px;
+  }
+  body.side-panel-layout #ap-analysis-shell:not([open]) > summary {
+    height: 150px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* .ap-analysis-shell-summary's own flex-direction:column (styles.css) --
+     for the two-line title+description block above the chevron row -- has
+     nothing left to stack once both of those are hidden below; row-ish
+     centering here just keeps the lone title span centered in the tab. */
+  body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-summary-inner {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+  }
+  body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-icon,
+  body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-desc,
+  body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-chevron-row {
+    display: none;
+  }
+  /* writing-mode, not a rotate() transform -- lets the CJK label actually
+     flow top-to-bottom (text-orientation:mixed's default already keeps
+     CJK glyphs upright, unlike Latin text) instead of just visually
+     sideways, and sizes/wraps normally within the tab's own fixed width. */
+  body.side-panel-layout #ap-analysis-shell:not([open]) .ap-analysis-shell-title {
+    writing-mode: vertical-rl;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: var(--text);
+  }
+}
+
 /* Reuses .proc-visual/.think-ring/.proc-thumb (styles.css above, the
    upload-flow processing screen's rings animation) as a column stack --
    a sibling of #photo-frame-wrap (not an overlay inside it, see the markup
@@ -2235,8 +2644,21 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      height-scrolling flex column here -- that nested a second scrollbar
      inside the page's own -- so #results-canvas-top just stacks the two
      at their natural size and lets the page itself scroll to reach
-     whatever runs past the fold, same as any other tall page content. */
-  .results-canvas-row.showing-analysis #results-canvas-top {
+     whatever runs past the fold, same as any other tall page content.
+     body:not(.side-panel-layout) -- this pair's own ID selector
+     (#results-canvas-top) gave it higher specificity than that layout's
+     own .compare-card rule (body.side-panel-layout ... .compare-card,
+     further up), even though #results-canvas-top still wraps .compare-card
+     there too (just not #ap-options-card-inline, moved out to
+     #results-analysis-slot instead) -- silently winning back flex:0 0 auto
+     over that layout's own flex:1, so the photo stopped filling its real
+     available height and just rendered at its image's own full intrinsic
+     size instead, however large that happened to be. This tier's whole
+     "let the page scroll past the fold" strategy is specific to the old
+     stacked layout anyway -- side-panel-layout's own short-viewport
+     handling (shrinking the panel instead of scrolling the page, further
+     up) needs to be the only one in effect there. */
+  body:not(.side-panel-layout) .results-canvas-row.showing-analysis #results-canvas-top {
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -2252,8 +2674,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      is-fullscreen above) would otherwise lose to these on specificity
      (ID + 2 classes beats their plain 2-3 classes), breaking the full-
      window compare view whenever it's opened during the inline revise
-     flow on a short screen. */
-  .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) {
+     flow on a short screen. body:not(.side-panel-layout) -- see this
+     block's own opening comment (further up) for why this needs excluding
+     there now too. */
+  body:not(.side-panel-layout) .results-canvas-row.showing-analysis #results-canvas-top .compare-card:not(.is-fullscreen) {
     flex: 0 0 auto;
     margin: 0;
     display: flex;
