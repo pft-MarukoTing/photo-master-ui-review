@@ -776,6 +776,19 @@
       .ap-review-tab.is-active { font-size: 14.5px; }
       .ap-review-tab.is-active .ic { width: 14.5px; height: 14.5px; }
     }
+    /* Same shrink, keyed to #ap-options-card-inline's own real width
+       (container-type/-name, styles.css) rather than the viewport's --
+       batch mode's .batch-sidebar eats into the canvas column's width
+       without the viewport itself ever narrowing, so a wide-viewport-but-
+       squeezed panel there never matched the @media rule above and kept
+       these tabs at full size, overflowing into each other exactly like a
+       narrow phone does. */
+    @container options-card-inline (max-width: 520px) {
+      .ap-review-tab { font-size: 14px; }
+      .ap-review-tab .ic { width: 14px; height: 14px; }
+      .ap-review-tab.is-active { font-size: 14.5px; }
+      .ap-review-tab.is-active .ic { width: 14.5px; height: 14.5px; }
+    }
     /* Each tab carries its own hue (--hue, set per id below) instead of one
        shared gray/purple -- the icon shows that hue at low opacity even at
        rest (some color identity before you've touched anything), full

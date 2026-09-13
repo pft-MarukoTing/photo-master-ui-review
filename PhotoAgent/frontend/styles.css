@@ -592,6 +592,14 @@ a { text-decoration: none; color: inherit; }
    used as-is inside .ap-col-right) -- the dev-only toggle rows (processing
    path/QA/AI-edit) are unaffected, still .option-row and still
    display:none in production. */
+/* container-type/-name: lets .ap-review-tab's own narrow-width rule (index.html)
+   respond to THIS element's real rendered width via @container instead of
+   only the viewport's (plain @media) -- moveOptionsCardTo (app.js) relocates
+   this same element between several very differently-constrained homes
+   (the plain upload/processing column, #results-canvas-top, the side-panel
+   layout's narrower #results-analysis-slot, and -- batch mode -- whatever's
+   left of the canvas once .batch-sidebar's own fixed width is subtracted),
+   so a wide viewport no longer guarantees this element itself is wide. */
 .options-card-inline {
   display: flex;
   flex-wrap: wrap;
@@ -603,6 +611,8 @@ a { text-decoration: none; color: inherit; }
      little space below the (invisible, zero-height) #ap-options-card-home
      anchor. */
   margin-top: 16px;
+  container-type: inline-size;
+  container-name: options-card-inline;
 }
 .option-pill-group {
   display: flex;
