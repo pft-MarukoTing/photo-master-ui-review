@@ -2,7 +2,7 @@ window.PhotoAgentResults = (() => {
   const { els } = window.PhotoAgentDom;
   const { resolveCropBoxForDisplay, resolveCropBoxWithReport } = window.PhotoAgentImageTools;
 
-  const DEFAULT_OPTION = { value: "default", label: "自動" };
+  const DEFAULT_OPTION = { value: "default", label: "不指定" };
   const POSE_OPTIONS = [
     DEFAULT_OPTION,
     { value: "playful", label: "俏皮" },
@@ -394,7 +394,7 @@ window.PhotoAgentResults = (() => {
     if (!valueEl) return;
     const checked = listElement.querySelector("input:checked");
     const label = checked?.closest("label")?.querySelector(".step-cb-label, .ap-style-option-label")?.textContent;
-    valueEl.textContent = label || "自動";
+    valueEl.textContent = label || "不指定";
   }
 
   // Resets one ap-pose/-angle/-lighting/-size radio group back to its
