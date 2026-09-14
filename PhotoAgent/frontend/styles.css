@@ -220,6 +220,10 @@ a { text-decoration: none; color: inherit; }
 .upload-hero {
   position: relative;
   flex: 0 0 10%;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid transparent;
+  border-image: linear-gradient(90deg, var(--border) 0%, transparent 85%) 1;
   /* Floor so the heading/sub-copy never get squeezed unreadable on a very
      short viewport -- 10% only wins once it's actually taller than this. */
   /* min-height: 100px; */
@@ -266,14 +270,6 @@ a { text-decoration: none; color: inherit; }
   margin-bottom: 8px;
 }
 
-/* Sub-copy row, divider sits below it */
-.upload-sub-row {
-  padding-bottom: 12px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid transparent;
-  border-image: linear-gradient(90deg, var(--border) 0%, transparent 85%) 1;
-}
-
 .upload-sub {
   /* Same min(vw, vh) shrink as .upload-headline, one step smaller. */
   font-size: clamp(14px, min(1.8vw, 2vh), 18px);
@@ -283,89 +279,104 @@ a { text-decoration: none; color: inherit; }
   letter-spacing: -.17px;
 }
 
-/* Run buttons sit inline below the drop zone (see .upload-below-zone), not
-   stacked full-width in a side column anymore -- right-aligned as a group
-   instead of hugging the row's left edge. */
+/* Full-width settings block sitting inline below the drop zone. The Run
+   split button lives inside this block after the selector pills. */
 .upload-actions-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-end;
-  /* .run-controls stacks the toggle above Run, so it's taller than the
-     plain #demo-images-btn beside it -- center (default stretch would
-     top-align a fixed-height button) keeps #demo-images-btn vertically
-     centered against that whole stack instead of pinned to its bottom
-     edge, which read as unbalanced once the stack grew a second row. */
+  width: 100%;
+}
+.upload-actions-row > #error-msg {
+  /* Match the natural width of upload-inline-settings-row-1 (the three
+     selector pills), rather than stretching to the full drop-zone width. */
+  flex: 0 1 650px;
+  width: 650px;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin: 0 auto;
+}
+/* Two explicit rows: 分析模型/生成模型/長寬比 on top, then 人像修正設定
+   beside Run below. The whole block remains as wide as the drop zone. */
+.upload-actions-row #upload-inline-settings {
+  width: 100%;
+  flex: 0 0 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  margin-top: 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-rows: auto auto;
+  justify-content: center;
   align-items: center;
   gap: 10px;
-  /* Grow to fill whatever the row has left (#upload-options-card is 0-width
-     outside debug mode) -- #demo-images-btn's own margin-right:auto below
-     needs real slack in this box to push against, or it just sits flush
-     next to Run with nothing to separate them. */
-  flex: 1 1 auto;
 }
-/* #demo-images-btn shares this row with Run (index.html) but reads as a
-   separate, lower-priority action from it -- margin-right:auto soaks up the
-   row's own flex-end-driven extra space, pinning this one button to the
-   row's left edge while Run stays right-aligned as before. */
-.upload-actions-row #demo-images-btn {
-  margin-right: auto;
-}
-
-/* Groups #one-shot-toggle with Run (index.html), stacked instead of side by
-   side, so the toggle reads as "set Run's mode" rather than a third action
-   competing with Run and #demo-images-btn for attention in the row.
-   align-items:stretch (not flex-end) makes Run match the toggle row's own
-   width -- .run-one-shot-toggle's content is the widest child here, so it
-   still drives the block's width; Run just grows to fill it instead of
-   staying its own, narrower content width. */
-.run-controls {
+.upload-inline-settings-row-1 {
   display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  grid-column: 1 / -1;
+  justify-self: center;
 }
-
-/* #one-shot-toggle's row (index.html) -- sits right above Run so the single
-   Run button's flow reads from this switch's state rather than from a
-   second, similarly-styled Run button. Checked (the default) skips straight
-   to the edited result; unchecked pauses after analysis for review. Compact
-   ios-switch sizing borrowed from .ap-face-issue-toggle (results.js) so it
-   doesn't compete with Run's own 44px button height. justify-content:flex-end
-   (not the default flex-start) keeps switch+label pinned to this row's right
-   edge now that .run-controls stretches it to Run's full width. */
-.run-one-shot-toggle {
+#upload-inline-settings-row-2 {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  cursor: pointer;
+  justify-content: center;
+  gap: 10px;
+  grid-column: 1 / -1;
+  width: 100%;
 }
-.run-one-shot-toggle-label {
-  font-size: 14.5px;
-  font-weight: 600;
-  color: var(--text-2);
-  /* Longer copy ("一鍵完成分析與修圖") no longer fits on one line at narrow
-     widths -- wraps and right-aligns instead of forcing the row wider or
-     overflowing. */
-  max-width: 200px;
-  text-align: right;
-  line-height: 1.3;
+#upload-inline-settings-row-2 > #advanced-settings-fold,
+#upload-inline-settings-row-2 > .split-run {
+  width: fit-content;
+  justify-self: center;
+  align-self: center;
 }
-.run-one-shot-toggle .ios-switch { width: 34px; height: 20px; flex-shrink: 0; }
-.run-one-shot-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
-.run-one-shot-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
+.upload-inline-settings-menu-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.upload-inline-settings-menu-panel > .option-pill-group {
+  align-items: stretch;
+}
+.upload-selector-modal-box {
+  width: min(520px, calc(100vw - 40px));
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+}
+.upload-selector-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+.upload-selector-modal-body #advanced-settings-fold.standalone-modal {
+  border: none;
+  padding: 0;
+}
+.upload-selector-modal-body #advanced-settings-fold.standalone-modal > summary {
+  display: none;
+}
+.upload-selector-modal-body #advanced-settings-fold.standalone-modal .settings-fold-body {
+  position: static;
+  width: auto;
+  margin: 0;
+  background: transparent;
+  border-color: var(--border);
+  box-shadow: none;
+}
 
-/* Upload grid: drop zone full-width on top, options + run buttons below it
-   (was a side-by-side drop-zone/form-column grid). Capped to 80% of the
-   container and centered -- at full container width it read as too wide
-   once it was just this one column instead of sharing the row with the
-   old 340px form column. */
+/* Upload grid: one row (gallery sidebar + main column), capped to 80% of
+   the container and centered -- at full container width it read as too
+   wide once it was just this one row instead of sharing space with the old
+   340px form column. */
 .upload-grid {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  gap: 12px;
   max-width: 80%;
   margin: 0 auto;
   /* Breathing room below the Run row -- .upload-grid's flex-grow otherwise
@@ -375,21 +386,143 @@ a { text-decoration: none; color: inherit; }
   width: 100%;
 }
 
-/* Options pills + run buttons, spread across the row under the drop zone --
-   natural height (flex-grow:0, the default), so .upload-zone below is the
-   one piece that actually grows/shrinks to fill whatever's left of
-   .upload-grid's 90% share. */
+/* .upload-gallery-col (example photos) runs the full height of
+   .upload-main-col beside it (drop zone + settings + Run stacked) --
+   align-items:stretch makes the sidebar match that column's real height
+   instead of just its own (short) content. */
+.upload-content-row {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.upload-gallery-col {
+  flex: 0 0 148px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upload-main-col {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  /* Gallery stacks above the drop zone instead of beside it, and switches
+     to a horizontal scroll strip -- a fixed 148px sidebar column left too
+     little width for both it and the drop zone side by side once the
+     viewport itself narrows this far. */
+  .upload-content-row { flex-direction: column; }
+  .upload-gallery-col { flex: 0 0 auto; }
+  .upload-gallery-col .demo-images-grid {
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    grid-auto-columns: 96px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 0 0 auto;
+    padding-bottom: 8px;
+  }
+}
+
+/* Options pills + Run row, stacked instead of side by side (was one row
+   split between a debug options card and .upload-actions-row) -- the new
+   .upload-inline-settings pill row (index.html) needs its own full-width
+   line above Run, not squeezed into the same row. */
 .upload-below-zone {
   display: flex;
-  /* flex-end, not center -- the option pills now carry a label above them
-     (see .option-pill-group) so they're taller than the plain run buttons;
-     bottom-aligning keeps the pills/buttons reading as one toolbar row. */
-  align-items: flex-end;
-  justify-content: space-between;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
   flex-shrink: 0;
-  gap: 10px;
+  gap: 14px;
 }
+
+/* Run split-button (#start-btn + its mode menu, index.html) -- replaces the
+   old single Run button with #one-shot-toggle stacked above it (a small
+   label + switch that was easy to miss, so it wasn't obvious the button's
+   own behavior depended on it). #start-btn (.btn.btn-grad.split-main) is
+   always the button you actually click to run; the chevron beside it just
+   opens a menu that sets WHICH of the two flows that is, and #start-btn's
+   own icon/label swap immediately to name it, via :has() below -- no JS
+   needed to keep the button in sync with the menu's pick. #start-btn keeps
+   its normal .btn/.btn-grad classes (not a bespoke size/color of its own)
+   so it still shrinks at every .upload-actions-row .btn breakpoint below --
+   .split-menu's own chevron half is kept in sync with those same
+   breakpoints right after each one, since it isn't a .btn itself but still
+   has to match #start-btn's height to read as one connected control. */
+/* Paint the gradient once on the shared outer box and keep both halves
+   transparent, so the connected control has one continuous surface. */
+.split-run {
+  position: relative;
+  display: inline-flex;
+  height: 41px;
+  border-radius: 20px;
+  background: var(--mv-grad);
+  box-shadow: var(--shadow-accent);
+  transition: box-shadow .2s, transform .15s;
+  /* Keep the control at its natural width beside the portrait-settings pill. */
+  flex-shrink: 0;
+}
+/* Hovering/focusing either half lifts the whole control together -- both
+   children opt out of .btn-grad's own per-element hover feedback (further
+   down) so only this one, shared transform+shadow ever fires. */
+.split-run:hover,
+.split-run:focus-within {
+  box-shadow: 0 14px 36px rgba(168,85,247,.34);
+  transform: translateY(-1px);
+}
+/* #start-btn.split-main (not just .split-main) -- .btn/.btn-grad's own
+   rules (further down) share .split-main's specificity (one class each) and
+   come later in the file, so they were winning the cascade back. The id
+   bump makes this win regardless of source order: the shared split-run
+   gradient shows through and only the outer left corners are rounded, while
+   hover lift is handled by the whole control above. */
+#start-btn.split-main {
+  height: 41px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 20px 0 0 20px;
+}
+#start-btn.split-main:hover {
+  box-shadow: none;
+  transform: none;
+}
+/* Defaults to showing "分析" (#run-mode-analyze, checked by default in
+   index.html) -- flips to the one-shot label/icon only once
+   #run-mode-full is the checked radio inside this same .split-run. */
+.split-main .lbl-full { display: none; }
+.split-run:has(#run-mode-full:checked) .split-main .lbl-full { display: inline; }
+.split-run:has(#run-mode-full:checked) .split-main .lbl-analyze { display: none; }
+.split-menu { position: relative; }
+.split-menu > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 41px;
+  border-radius: 0 20px 20px 0;
+  color: #fff;
+  cursor: pointer;
+  /* A subtle divider keeps the two click targets readable while the shared
+     outer background makes them one connected button. */
+  border-left: 1px solid rgba(255,255,255,.25);
+}
+.split-menu > summary::-webkit-details-marker,
+.split-menu > summary::marker { display: none; content: ''; }
+/* Reuses .ap-style-item/.ap-style-panel's floating-panel chrome (index.html)
+   for the mode list itself -- only the anchor side needs overriding: the
+   shared rule anchors a panel's LEFT edge to its own (usually much wider)
+   trigger, but here the trigger is this narrow 32px chevron sitting at the
+   split-button's right end, so left:0 would run the panel off past the
+   button toward the row's own right edge (.upload-actions-row right-aligns
+   this whole control). Anchoring the panel's right edge instead keeps it
+   fully on-screen, hanging down-left of the chevron. */
+.split-menu.ap-style-item .ap-style-panel { left: auto; right: 0; }
 
 /* Drop zone -- flex:1 makes it the piece that grows/shrinks to fill
    .upload-grid's remaining space; min-height is just the floor for very
@@ -2519,7 +2652,9 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    RESPONSIVE
 ════════════════════════════════════════ */
 @media (max-width: 900px) {
-  .upload-grid { max-width: 100%; }
+  /* Keep the same 80% width rule as wider screens so crossing 900px does
+     not suddenly make the upload area wider and flip selector layout. */
+  .upload-grid { max-width: 80%; }
   .upload-below-zone { flex-direction: column; align-items: stretch; gap: 10px; }
   .upload-zone { min-height: 160px; }
 
@@ -2567,7 +2702,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      breathing room. */
   .upload-container { padding-top: 16px; padding-bottom: 16px; }
 
-  /* Run/#demo-images-btn sit side by side
+  /* #upload-portrait-fix-slot's pill and Run sit side by side
      (.upload-actions-row is a row, not a stack) all the way down -- shrink
      each button's own padding/font instead of ever going full-width, so
      they keep fitting the row as the viewport narrows (it also wraps if
@@ -2575,6 +2710,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   .upload-actions-row { gap: 8px; }
   .upload-actions-row .btn { height: 40px; padding: 0 14px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 18px; height: 18px; }
+  /* .split-menu's chevron isn't a .btn, but has to match #start-btn's own
+     height at every tier above (it sits flush against it) to still read as
+     one connected control instead of a taller sliver bolted on. */
+  .upload-actions-row .split-menu > summary { height: 40px; }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
   .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
@@ -2597,6 +2736,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 @media (max-width: 380px) {
   .upload-actions-row .btn { height: 36px; padding: 0 10px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 16px; height: 16px; }
+  .upload-actions-row .split-menu > summary { height: 36px; }
 }
 
 /* Short viewports (small/un-maximized browser windows, not just narrow
@@ -2625,6 +2765,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      doesn't also shrink unrelated buttons elsewhere in the app. */
   .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 18px; height: 18px; }
+  .upload-actions-row .split-menu > summary { height: 36px; }
 
   /* Results page, inline revise flow: .compare-card's photo-frame is a
      fixed 480px (see styles.css above) so once #ap-options-card-inline is
@@ -2742,6 +2883,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
   #dz-preview { min-height: 130px; }
   .upload-actions-row .btn { height: 30px; padding: 0 12px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 15px; height: 15px; }
+  .upload-actions-row .split-menu > summary { height: 30px; }
 }
 
 /* Landscape phones/small tablets (narrow width *and* short height at once):
@@ -2754,7 +2896,6 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    this specific narrow+short case. */
 @media (max-width: 900px) and (max-height: 700px) {
   .upload-headline { font-size: 16px; margin-bottom: 4px; }
-  .upload-sub-row { padding-bottom: 4px; margin-bottom: 6px; }
   .upload-sub { font-size: 12px; }
   .upload-grid { gap: 6px; margin-bottom: 6px; }
   .upload-below-zone { gap: 6px; }
@@ -2768,10 +2909,10 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    without falling back to .upload-left's scroll. */
 @media (max-width: 900px) and (max-height: 450px) {
   .upload-headline { font-size: 14px; margin-bottom: 2px; }
-  .upload-sub-row { padding-bottom: 2px; margin-bottom: 4px; }
   .upload-sub { font-size: 11px; }
   .upload-zone { min-height: 50px; }
   #dz-preview { min-height: 50px; }
   .upload-actions-row .btn { height: 24px; padding: 0 10px; font-size: 12px; gap: 3px; }
   .upload-actions-row .btn svg { width: 14px; height: 14px; }
+  .upload-actions-row .split-menu > summary { height: 24px; }
 }

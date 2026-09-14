@@ -651,6 +651,19 @@
     // window.innerHeight and the user has to scroll the page to see it.
     const repositionPanel = () => {
       if (!panel) return;
+      if (details.closest(".upload-selector-modal-body")) {
+        const rect = details.getBoundingClientRect();
+        panel.classList.remove("open-upward");
+        panel.style.left = `${rect.left}px`;
+        // Keep the panel below the trigger when possible, but reserve a
+        // small minimum viewport area so even a trigger near the bottom can
+        // never place the panel outside the window.
+        const panelTop = Math.min(rect.bottom + 8, window.innerHeight - 96);
+        panel.style.top = `${Math.max(8, panelTop)}px`;
+        panel.style.bottom = "auto";
+        panel.style.maxHeight = `${Math.max(40, window.innerHeight - Math.max(8, panelTop) - 16)}px`;
+        return;
+      }
       panel.classList.remove("open-upward");
       const anchorRect = details.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
@@ -726,6 +739,7 @@
       repositionPanel();
     });
     window.addEventListener("resize", () => { if (details.open) repositionPanel(); });
+    window.addEventListener("scroll", () => { if (details.open) repositionPanel(); }, true);
     // Native <details> only closes on picking an option (the "change"
     // listener above sets details.open = false itself) or re-clicking its
     // own summary -- clicking anywhere else on the page left it sitting
@@ -735,6 +749,103 @@
     document.addEventListener("click", (e) => {
       if (details.open && !details.contains(e.target)) details.open = false;
     });
+  }
+
+  // When the three upload selectors no longer fit on one line, move the
+  // existing selector groups (and their live picker state) into one compact
+  // menu. They move back automatically once the row has room again.
+  function setupCompactUploadSelectors() {
+    const row = document.querySelector(".upload-inline-settings-row-1");
+    const secondRow = document.querySelector("#upload-inline-settings-row-2");
+    const menu = document.querySelector("#upload-inline-settings-menu");
+    const portraitFold = document.querySelector("#advanced-settings-fold");
+    const panel = menu?.querySelector(".upload-inline-settings-menu-panel");
+    const modal = document.querySelector("#upload-selector-modal");
+    const modalTitle = document.querySelector("#upload-selector-modal-title");
+    const modalBody = document.querySelector("#upload-selector-modal-body");
+    if (!row || !secondRow || !menu || !panel || !portraitFold || !modal || !modalBody) return;
+    const groups = Array.from(row.children).filter((el) => el.classList.contains("option-pill-group"));
+    if (!groups.length) return;
+    let compact = false;
+
+    const closeModal = () => {
+      if (modal.hidden) return;
+      portraitFold.open = false;
+      portraitFold.classList.remove("standalone-modal");
+      groups.forEach((group) => panel.appendChild(group));
+      if (compact) row.appendChild(portraitFold);
+      else {
+        const runControl = secondRow.querySelector(".split-run");
+        if (runControl) secondRow.insertBefore(portraitFold, runControl);
+        else secondRow.appendChild(portraitFold);
+      }
+      modal.hidden = true;
+    };
+    const openModal = (kind) => {
+      closeModal();
+      modalTitle.textContent = kind === "model" ? "模型設定" : "人像修正設定";
+      if (kind === "model") groups.forEach((group) => modalBody.appendChild(group));
+      else {
+        modalBody.appendChild(portraitFold);
+        // The standalone portrait-settings modal is an editor window, so
+        // show its setting rows immediately instead of requiring a second
+        // click on the fold summary.
+        portraitFold.open = true;
+        portraitFold.classList.add("standalone-modal");
+      }
+      modal.hidden = false;
+    };
+
+    const restoreGroups = () => {
+      closeModal();
+      groups.forEach((group) => row.insertBefore(group, menu));
+      const runControl = secondRow.querySelector(".split-run");
+      if (portraitFold.parentElement !== secondRow) {
+        if (runControl) secondRow.insertBefore(portraitFold, runControl);
+        else secondRow.appendChild(portraitFold);
+      }
+      menu.open = false;
+      // Hide the compact menu before measuring the restored groups. If it
+      // remains visible during measurement, it consumes row width and can
+      // falsely make the groups wrap again, causing compact/expanded flicker
+      // while the window is being resized.
+      menu.hidden = true;
+      compact = false;
+    };
+    const refresh = () => {
+      if (compact) restoreGroups();
+      const firstTop = groups[0].getBoundingClientRect().top;
+      const wrapped = groups.some((group) => group.getBoundingClientRect().top > firstTop + 2);
+      if (wrapped) {
+        groups.forEach((group) => panel.appendChild(group));
+        // In compact mode the portrait control joins the compact selector
+        // button in the first row, after the model-settings menu; Run remains
+        // in the second row.
+        row.appendChild(portraitFold);
+        compact = true;
+      }
+      menu.hidden = !wrapped;
+    };
+
+    menu.querySelector("summary")?.addEventListener("click", (e) => {
+      if (compact) {
+        e.preventDefault();
+        openModal("model");
+      }
+    });
+    portraitFold.querySelector("summary")?.addEventListener("click", (e) => {
+      if (compact && portraitFold.parentElement === row) {
+        e.preventDefault();
+        openModal("portrait");
+      }
+    });
+    modal.querySelector("#upload-selector-modal-close")?.addEventListener("click", closeModal);
+    modal.querySelector(".error-modal-backdrop")?.addEventListener("click", closeModal);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !modal.hidden) closeModal();
+    });
+    window.addEventListener("resize", refresh);
+    refresh();
   }
 
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
@@ -2322,8 +2433,8 @@
             // Demo-picker thumbnails (renderDemoImagesGrid) set img.loading
             // = "lazy" for real on-page perf. That's fine live, but
             // WebKit/iOS Safari never starts a lazy <img>'s load at all
-            // while its ancestor is display:none (e.g. #demo-images-modal
-            // closed) -- html2canvas has to wait for every <img> in the
+            // while its ancestor is display:none (e.g. any closed modal) --
+            // html2canvas has to wait for every <img> in the
             // clone to finish loading before it can rasterize anything, so
             // that image never resolves and never errors, hanging the whole
             // capture forever. Forcing eager here (only on this throwaway
@@ -5518,8 +5629,9 @@
           jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch(() => ({ status: "error" })))
         );
         // job.stage === "analyze" (see api.py's /analyze, account.py's
-        // record_history) -- a paused-for-review upload (#one-shot-toggle
-        // off) that hasn't been continued past yet. Its one job_id's own "success"
+        // record_history) -- a paused-for-review upload (Run's own
+        // #run-mode-analyze picked, see .split-run in index.html) that
+        // hasn't been continued past yet. Its one job_id's own "success"
         // means "analysis ready", not "edit done", so it needs its own
         // badge/handler instead of falling into the done/processing checks
         // below, which assume a real generated result.
@@ -6172,8 +6284,9 @@
     return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
   }
 
-  // Resumes a paused-for-review upload (#one-shot-toggle off) that had only
-  // reached /analyze last time the history list was fetched -- job.stage ===
+  // Resumes a paused-for-review upload (Run's own #run-mode-analyze picked)
+  // that had only reached /analyze last time the history list was fetched --
+  // job.stage ===
   // "analyze" flags this (see api.py's /analyze, account.py's
   // record_history). Shows the same "正在分析照片" placeholder if analysis
   // hasn't finished yet, then reconstructs singleFlowState from the entry's
@@ -6656,14 +6769,14 @@
     if (historyViewToken === myToken) closeHistoryDrawer();
   }
 
-  // Demo photo picker -- lazily fetched once (getDemoImages) and cached here,
-  // since the list is static server-side content that can't change mid-session.
+  // Example-photo gallery (.upload-gallery-col, always visible) -- fetched
+  // once (getDemoImages) and cached here, since the list is static
+  // server-side content that can't change mid-session.
   let demoImagesCache = null;
   // Filenames currently toggled on (see toggleDemoImageSelection) -- persists
-  // across the modal being closed and reopened (e.g. the user backed out
-  // without confirming, or wants to review/adjust the picks they already
-  // confirmed into the upload area), and is only cleared by resetApp -- a
-  // real fresh start, not just a closed dialog.
+  // across toggling tiles back and forth before confirming (e.g. the user
+  // wants to review/adjust the picks they already confirmed into the upload
+  // area), and is only cleared by resetApp -- a real fresh start.
   let demoSelectedNames = new Set();
 
   function renderDemoImagesGrid(names) {
@@ -6724,23 +6837,16 @@
     updateDemoImagesConfirmBtn();
   }
 
-  function openDemoImagesModal() {
-    if (!els.demoImagesModal) return;
+  // Gallery is always visible now (.upload-gallery-col, index.html) rather
+  // than behind #demo-images-btn opening a modal -- fetches once on
+  // startup instead of on first open.
+  function initDemoImagesGallery() {
+    if (!els.demoImagesGrid) return;
     updateDemoImagesConfirmBtn();
-    els.demoImagesModal.hidden = false;
-    if (demoImagesCache) {
-      renderDemoImagesGrid(demoImagesCache);
-      return;
-    }
     getDemoImages().then((names) => {
       demoImagesCache = names;
-      // The modal may have been closed again before this resolves.
-      if (!els.demoImagesModal.hidden) renderDemoImagesGrid(names);
+      renderDemoImagesGrid(names);
     });
-  }
-
-  function closeDemoImagesModal() {
-    if (els.demoImagesModal) els.demoImagesModal.hidden = true;
   }
 
   // Version history -- lazily fetched once from changelog.json (a static
@@ -6814,7 +6920,6 @@
         const blob = await response.blob();
         return new File([blob], name, { type: blob.type || "image/jpeg" });
       }));
-      closeDemoImagesModal();
       routeSelectedFiles(files);
     } catch (error) {
       showError(`載入範例照片失敗：${error.message || error}`);
@@ -6824,18 +6929,24 @@
     }
   }
 
-  // Moves #advanced-settings-fold (人像修正設定) into whichever 設定 modal's body
-  // is about to be shown, if it isn't already there -- it's one shared fold,
-  // not a separate copy of its inputs per page, so reparenting it on open is
-  // how both #settings-modal and #ap-settings-modal get to hold it without
-  // duplicating the toggles/fieldsets (and their ids) inside each.
-  // Always collapsed on open -- being one shared DOM node reparented (not
-  // rebuilt) between the two modals, its `open` state would otherwise
-  // survive both a close/reopen and a switch to the other page's modal.
+  // Moves #advanced-settings-fold (人像修正設定) into whichever of its three
+  // homes should hold it right now, if it isn't already there -- it's one
+  // shared fold, not a separate copy of its inputs per page: by default it
+  // sits inline under the upload page's drop zone (#upload-inline-settings,
+  // re-themed into a pill there -- see index.html), and #ap-settings-modal
+  // (below) borrows it into its own body while that modal is open, same as
+  // it always has. Always collapsed when moved -- being one shared DOM node
+  // reparented (not rebuilt), its `open` state would otherwise survive both
+  // a close/reopen and a move to a different home.
   function ensureAdvancedSettingsFoldIn(body) {
     if (!els.advancedSettingsFold) return;
     if (body && els.advancedSettingsFold.parentElement !== body) {
-      body.appendChild(els.advancedSettingsFold);
+      // On the upload page this row also contains Run. Keep the portrait
+      // settings pill first so the two controls read as one left-to-right
+      // toolbar; modal bodies simply append the shared fold as before.
+      const runControl = body.querySelector('.split-run');
+      if (runControl) body.insertBefore(els.advancedSettingsFold, runControl);
+      else body.appendChild(els.advancedSettingsFold);
     }
     els.advancedSettingsFold.open = false;
   }
@@ -6850,12 +6961,12 @@
   }
 
   // Upload-page settings overlay -- same open/close shape as the error modal
-  // above, just toggling #settings-modal's own hidden attribute. Holds the
-  // 模型/長寬比/生成張數 pickers (already populated/wired above via
-  // populateModelQualitySelect/populateAspectRatioSelect/wireOptionPicker),
-  // so opening it doesn't need to re-render anything itself either.
+  // above, just toggling #settings-modal's own hidden attribute. Holds only
+  // 生成張數 + debug-only rows now (already populated/wired above via
+  // wireOptionPicker) -- 分析模型/生成模型/長寬比/人像修正 sit inline under the
+  // drop zone instead (#upload-inline-settings), so opening this doesn't
+  // need to reparent anything itself anymore.
   function openSettingsModal() {
-    ensureAdvancedSettingsFoldIn(els.settingsModalBody);
     ensureTwoStageEditRowIn(els.settingsModalBody);
     ensureSidePanelLayoutRowIn(els.settingsModalBody);
     if (els.settingsModal) els.settingsModal.hidden = false;
@@ -6867,10 +6978,13 @@
 
   // Results/analysis-preview page settings overlay -- same shape as
   // openSettingsModal/closeSettingsModal above, just toggling
-  // #ap-settings-modal's own hidden attribute instead. Its 模型/長寬比/生成張數
-  // pickers mirror the upload page's (applyModelQualityChange/
+  // #ap-settings-modal's own hidden attribute instead. Its 分析模型/生成模型/
+  // 長寬比/生成張數 pickers mirror the upload page's (applyModelQualityChange/
   // applyAspectRatioChange/applyRunCountChange), so a change made here applies
-  // to the next edit without re-analyzing.
+  // to the next edit without re-analyzing. Still the one other home
+  // #advanced-settings-fold reparents into (ensureAdvancedSettingsFoldIn
+  // above) -- resetApp moves it back to the upload page's inline row once
+  // this modal (and the results screen it belongs to) is left behind.
   function openApSettingsModal() {
     ensureAdvancedSettingsFoldIn(els.apSettingsModalBody);
     ensureTwoStageEditRowIn(els.apSettingsModalBody);
@@ -8436,12 +8550,17 @@
     setCurrentCaseTimes();
     singleRuns = null;
     singleMirrorIndex = null;
-    // A real fresh start (unlike just closing #demo-images-modal without
+    // A real fresh start (unlike just toggling tiles in the gallery without
     // confirming, which leaves the picks in place -- see demoSelectedNames'
-    // own doc above) -- next time the picker opens it should show nothing
-    // checked, not whatever an unrelated earlier upload had picked.
+    // own doc above) -- the gallery should show nothing checked afterward,
+    // not whatever an unrelated earlier upload had picked.
     demoSelectedNames.clear();
     updateDemoImagesConfirmBtn();
+    // #advanced-settings-fold (人像修正設定) may currently be on loan inside
+    // #ap-settings-modal-body (see openApSettingsModal) if the results page's
+    // own 設定 was opened -- move it back to its default home, inline under
+    // the upload page's drop zone, now that resetApp is returning there.
+    ensureAdvancedSettingsFoldIn(els.uploadInlineSettingsRow2);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
     if (previewThumbUrl) URL.revokeObjectURL(previewThumbUrl);
@@ -8829,25 +8948,46 @@
     els.fileInput.click();
   });
   if (els.dzClearAllBtn) els.dzClearAllBtn.addEventListener("click", resetApp);
-  if (els.demoImagesBtn) els.demoImagesBtn.addEventListener("click", openDemoImagesModal);
-  if (els.demoImagesModalClose) els.demoImagesModalClose.addEventListener("click", closeDemoImagesModal);
   if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.addEventListener("click", confirmDemoImageSelection);
-  if (els.demoImagesModal) {
-    els.demoImagesModal.addEventListener("click", (e) => {
-      if (e.target.dataset.close) closeDemoImagesModal();
-    });
-  }
-  els.startButton.addEventListener("click", () => startSubmit({ skipReview: els.oneShotToggle ? els.oneShotToggle.checked : true }));
-  if (els.oneShotToggle) {
-    // Keeps Run's own tooltip in sync with #one-shot-toggle so hovering it
-    // always names the flow it's about to run, not just the row's static
-    // "一次完成" label.
+  initDemoImagesGallery();
+  // #advanced-settings-fold's static markup (index.html) still sits inside
+  // #settings-modal-body as written -- move it to its real default home
+  // (#upload-inline-settings-row-2, right after that row's own caption)
+  // right away, since the app always starts on the upload screen.
+  ensureAdvancedSettingsFoldIn(els.uploadInlineSettingsRow2);
+  setupCompactUploadSelectors();
+  // The portrait-settings panel is a popover on the upload page. Close it
+  // when the user clicks anywhere outside the shared fold, while allowing
+  // clicks inside the panel (including its toggles) to pass through.
+  document.addEventListener("click", (e) => {
+    const fold = els.advancedSettingsFold;
+    if (fold && fold.open && !fold.contains(e.target)) fold.open = false;
+  });
+  els.startButton.addEventListener("click", () => startSubmit({ skipReview: els.runModeFullRadio ? els.runModeFullRadio.checked : false }));
+  // #run-mode-analyze/#run-mode-full (the split-menu's own two radios) pick
+  // Run's flow. Two things need to happen on every pick, neither of which
+  // wireOptionPicker provides here since this is a fixed 2-item list, not a
+  // <select>-backed picker built through it: close the panel (native
+  // details/summary only does that for a re-click on the summary itself,
+  // same reason a click anywhere else on the page needs its own listener
+  // below), and refresh Run's tooltip (its icon/label already stay in sync
+  // via the :has() rules in styles.css, but a title attribute can't be
+  // driven by CSS).
+  if (els.runModeMenu && els.runModeFullRadio) {
     const updateRunButtonTitle = () => {
-      els.startButton.title = els.oneShotToggle.checked
+      els.startButton.title = els.runModeFullRadio.checked
         ? "分析完成後，直接修圖並顯示結果"
         : "分析完成後會先暫停，讓你確認、調整，再手動繼續修圖";
     };
-    els.oneShotToggle.addEventListener("change", updateRunButtonTitle);
+    document.querySelectorAll('input[name="run-mode"]').forEach((radio) => {
+      radio.addEventListener("change", () => {
+        els.runModeMenu.open = false;
+        updateRunButtonTitle();
+      });
+    });
+    document.addEventListener("click", (e) => {
+      if (els.runModeMenu.open && !els.runModeMenu.contains(e.target)) els.runModeMenu.open = false;
+    });
     updateRunButtonTitle();
   }
   els.showPromptBtn.addEventListener("click", openPromptsModal);
@@ -9052,7 +9192,6 @@
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
-    if (els.demoImagesModal && !els.demoImagesModal.hidden) closeDemoImagesModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();

@@ -16,12 +16,19 @@
       position: relative;
       display: flex;
       flex-direction: column;
-      /* Grows to fill .upload-grid's remaining space (see .upload-container/
-         .upload-hero/.upload-grid in styles.css) -- without this, only
-         .upload-zone below flexed, but its own parent stayed auto-height and
-         never actually offered it anything to grow into. */
+      /* Grows to fill .upload-main-col's remaining space (see
+         .upload-container/.upload-hero/.upload-grid/.upload-main-col in
+         styles.css) -- without this, only .upload-zone below flexed, but its
+         own parent stayed auto-height and never actually offered it anything
+         to grow into. */
       flex: 1 1 auto;
       min-height: 0;
+      /* Narrower than the full main column now that the example-photo
+         gallery sits beside it instead of only .upload-below-zone's pills
+         underneath -- centered so it doesn't hug the gallery's edge. */
+      width: 100%;
+      max-width: 760px;
+      margin: 0 auto;
       /* Safety net for narrow+short combos (e.g. a phone in landscape) that
          fall between the max-height/max-width breakpoints in styles.css:
          once .upload-zone's min-height floor genuinely doesn't fit the
@@ -623,9 +630,9 @@
     }
     .ap-analysis-shell-icon { color: var(--accent); flex-shrink: 0; }
     .ap-analysis-shell-desc {
-      /* 20px = the title's own icon width (14px) + its gap (6px) -- lines
-         this description up under the title TEXT, not under the icon. */
-      margin-left: 20px;
+      /* The description belongs to the expanded selector content, above the
+         tabs/options, rather than in the collapsed selector trigger. */
+      margin: 0 0 12px;
       font-size: 13px;
       font-weight: 400;
       color: var(--text-3);
@@ -1142,6 +1149,26 @@
     .ap-style-item .ap-style-panel.open-upward {
       top: auto;
       bottom: calc(100% + 8px);
+    }
+    /* On a wide upload page, keep every home-page picker above its trigger
+       so opening one does not cover the controls below it. Narrow layouts
+       retain the normal downward behavior to use the available upper space. */
+    @media (min-width: 901px) {
+      #upload-section .ap-style-item .ap-style-panel {
+        top: auto;
+        bottom: calc(100% + 8px);
+      }
+    }
+    /* Selector panels inside the standalone upload modal always open below
+       their trigger. The modal has its own scroll container, so a long list
+       can scroll inside the window instead of escaping above the header. */
+    .upload-selector-modal-body .ap-style-item .ap-style-panel,
+    .upload-selector-modal-body .ap-style-item .ap-style-panel.open-upward {
+      position: fixed;
+      z-index: 2005;
+      max-height: calc(100vh - 32px);
+      box-sizing: border-box;
+      overflow-y: auto;
     }
     /* 生成張數 (up to 20 options) and 長寬比 (Auto/原圖 plus every fixed W:H)
        -- unlike every other picker here (a handful of options at most),
@@ -1962,14 +1989,10 @@
     .settings-fold > summary:hover { color: var(--accent); }
     .settings-fold > summary:hover::before { color: var(--accent); }
     /* Shared "set all" caveat, once per fold instead of repeated on each row
-       below -- indented to roughly line up under the summary's own title
-       text (not the chevron), so it reads as a caption on the section
-       title, not a stray line flush against the fold's left edge. Smaller
-       than the four rows' own descriptions below (overriding .option-desc's
-       15px, declared later here so it wins at equal specificity) so it
-       reads as a distinct aside, not just another item description --
-       color stays .option-desc's plain --text-2, same as everything else. */
-    .settings-fold-note { margin: 4px 0 0; padding-left: 16px; font-size: 13px; }
+       below -- now the first item inside the bordered settings list, where
+       its own divider separates it from the four toggle rows. Smaller than
+       the rows' own descriptions so it reads as a distinct aside. */
+    .settings-fold-note { font-size: 13px; }
     /* Smaller than .option-label's plain 17.5px default -- scoped to just
        these four rows so every other .option-row elsewhere is untouched. */
     .settings-fold-body .option-label { font-size: 15px; }
@@ -1983,27 +2006,90 @@
       overflow: hidden;
     }
     .settings-fold-body .option-row + .option-row { border-top: 1px solid var(--border); }
+    .settings-fold-body .settings-fold-note {
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
     /* Divider between #advanced-settings-fold and the debug-only 兩階段修圖/
        Editor prompt 架構 rows below it -- same border-top+padding-top shape
        as .settings-fold's own separator from the pickers above it, so every
        section in this modal reads consistently. */
     #two-stage-edit-row { border-top: 1px solid var(--border); padding-top: 16px; }
 
-    /* #demo-images-modal's picker grid -- wider than the plain 440px
-       .error-modal-box (that width is tuned for a message/form, not a photo
-       grid). CSS grid (not flex-wrap: a computed flex-basis has to guess
-       the exact px width 3 tiles + their gaps will render at, and rounding
-       there was enough to tip the 3rd tile onto its own row) -- `repeat(3,
-       minmax(0, 1fr))` always divides the row into exactly 3 equal columns,
-       no guessing involved. Capped to roughly 2 full rows at a time (a plain
-       vh, not an exact px derived from a --custom-property calc(min(...)) --
-       that nested a custom property inside calc()/min() deeply enough that
-       real Safari silently dropped the whole max-height declaration, making
-       the grid grow unbounded instead of capping/scrolling), the rest
-       reachable by scrolling down. Same cube-tile look as .history-cube
-       (history-drawer), just without its status badge/remove button since a
-       demo photo has neither. */
-    .demo-images-modal-box { width: min(560px, calc(100vw - 40px)); }
+    /* #advanced-settings-fold (人像修正設定) re-themed into a pill -- it's one
+       shared node reparented between three homes now (see
+       ensureAdvancedSettingsFoldIn, app.js): #settings-modal-body/
+       #ap-settings-modal-body (still want .settings-fold's plain section
+       look above, full "人像修正設定" text and all) and, by default,
+       #upload-inline-settings-row-2, sitting inline as the same icon+text
+       pill treatment as 分析模型/生成模型/長寬比 above it. The summary keeps
+       both its icon and "人像修正設定" text in the upload context, while the
+       modal homes retain the same plain-text section title. Scoped
+       to .upload-below-zone (which wraps every inline-on-the-upload-page
+       home this fold could be in) rather than that one specific container
+       id, so nudging exactly where within the row it lands doesn't also
+       require touching this. A live CSS descendant selector (not a class
+       toggled by JS) so it re-themes correctly the moment app.js moves it,
+       in either direction, with no extra JS needed. */
+    .upload-below-zone #advanced-settings-fold {
+      border: none;
+      padding: 0;
+      position: relative;
+    }
+    .upload-below-zone #advanced-settings-fold > summary .fold-summary-text { display: inline; }
+    .upload-below-zone #advanced-settings-fold > summary {
+      height: 41px;
+      min-width: 180px;
+      box-sizing: border-box;
+      padding: 0 16px;
+      background: var(--card-2);
+      border: 1px solid var(--border-2);
+      border-radius: 20px;
+      font-size: 15px;
+      justify-content: center;
+      transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
+    }
+    .upload-below-zone #advanced-settings-fold > summary:hover {
+      border-color: rgba(168,85,247,.4);
+      transform: translateY(-1px);
+      color: var(--text);
+    }
+    .upload-below-zone #advanced-settings-fold > summary::before { content: none; }
+    .upload-below-zone #advanced-settings-fold > summary::after {
+      content: '▾'; font-size: 19px; color: var(--text-2); transition: transform .15s;
+    }
+    .upload-below-zone #advanced-settings-fold[open] > summary {
+      border-color: var(--accent);
+      background: rgba(168,85,247,.14);
+      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+    }
+    .upload-below-zone #advanced-settings-fold[open] > summary::after { transform: rotate(180deg); }
+    /* Opens upward (bottom-anchored), not down from top:100% like the other
+       three pills default to -- this is the settings block's own bottom row
+       (below 分析模型/生成模型/長寬比), close enough to the viewport's bottom
+       edge in practice that a downward panel this tall (note + 4 toggle
+       rows) regularly ran off the bottom of the window. Unlike those three
+       (wireOptionPicker's own JS measures real available space and only
+       flips up when it has to, app.js), this one isn't built through
+       wireOptionPicker -- simplest fix here is just always opening upward,
+       since it's always the bottom-most pill regardless of viewport size. */
+    .upload-below-zone #advanced-settings-fold .settings-fold-body {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      z-index: 20;
+      width: 340px;
+      margin-top: 0;
+      background: var(--card-3);
+      border-color: var(--border-2);
+      box-shadow: 0 16px 40px rgba(0,0,0,.55);
+      padding: 6px;
+    }
+    .upload-below-zone #advanced-settings-fold .settings-fold-body .settings-fold-note {
+      padding: 8px;
+    }
+
     /* #changelog-modal -- a scrollable list of dated entries, each a
        <details> (see renderChangelog, app.js) so only the newest one is
        open by default and older ones fold away instead of piling up.
@@ -2152,14 +2238,21 @@
       padding: 0 12px;
       font-size: 13px;
     }
+    /* Single column now that this lives inline in .upload-gallery-col (a
+       narrow sidebar beside the drop zone) instead of #demo-images-modal's
+       wide 3-column grid -- flex:1 (not a fixed max-height) so it fills
+       whatever height .upload-gallery-col actually has (matching the drop
+       zone + settings + Run column beside it) and scrolls internally past
+       that. */
     .demo-images-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
       align-content: flex-start;
       gap: 10px;
       overflow-x: hidden;
       overflow-y: auto;
-      max-height: 46vh;
+      flex: 1 1 auto;
+      min-height: 0;
       /* Room for the scrollbar itself so it doesn't sit flush against the
          tiles (browsers that don't reserve this, e.g. macOS overlay
          scrollbars, just see a harmless bit of empty space instead). */
@@ -2244,11 +2337,6 @@
        tiles mid-fetch instead of letting the selection change out from
        under a request that's already in progress. */
     .demo-images-grid.is-loading { pointer-events: none; opacity: .6; }
-    .demo-images-modal-footer {
-      display: flex;
-      justify-content: flex-end;
-      margin-top: 14px;
-    }
     /* Tinted with the same accent purple as .demo-image-tile.selected's own
        border/checkmark (#A855F7, --accent) instead of .btn-secondary's plain
        gray -- ties the confirm action back to the selection it's acting on,
@@ -2264,10 +2352,18 @@
       background: rgba(168, 85, 247, .22);
       border-color: rgba(168, 85, 247, .6);
     }
+    /* Inline in the narrow gallery sidebar now (no modal footer to right-align
+       it for us) -- full width reads better in a single-column column than a
+       flush-right button with empty space beside it. */
+    .upload-gallery-col #demo-images-confirm-btn {
+      width: 100%;
+      justify-content: center;
+      flex-shrink: 0;
+    }
 
-    /* #report-screenshot-modal -- wider still than #demo-images-modal-box's
-       560px, since a captured results panel is a full desktop-width photo+
-       panels layout, not a single square tile. */
+    /* #report-screenshot-modal -- wider than the plain 440px .error-modal-box
+       (tuned for a message/form), since a captured results panel is a full
+       desktop-width photo+panels layout, not a single square tile. */
     .report-screenshot-modal-box { width: min(900px, calc(100vw - 40px)); }
     .report-screenshot-modal-body {
       max-height: 78vh;
@@ -2373,7 +2469,7 @@
        of its own z-index here. Escaping <header> entirely is what makes
        z-index:2000 actually win against a modal appended as a true
        body-level sibling (e.g. a dynamically-launched one like
-       #demo-images-modal), and also means #history-drawer/#reports-drawer
+       #changelog-modal), and also means #history-drawer/#reports-drawer
        opening (both start below the header) never reaches it either.
 
        top/left aren't set here -- being outside .header-actions' own flex
@@ -3317,7 +3413,7 @@
      inside .header-actions, this button's "fixed" position would actually
      resolve against .site-header's own box, trapped inside its stacking
      context (z-index:100) same as everything else in the header -- a
-     dynamically-launched modal (e.g. #demo-images-modal, appended as a true
+     dynamically-launched modal (e.g. #changelog-modal, appended as a true
      body-level sibling) would still paint over it regardless of this
      button's own z-index. It must always stay reachable even then (that's
      the whole point of a report button), so it can't just live inside
@@ -3370,12 +3466,27 @@
           <span class="btn-label">版本紀錄</span>
         </button>
         <h1 class="upload-headline">讓每張照片都有專屬修圖師</h1>
-        <div class="upload-sub-row">
-          <p class="upload-sub">上傳照片，AI調整光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
-        </div>
       </div>
 
       <div class="upload-grid">
+       <div class="upload-content-row">
+
+        <!-- Example-photo gallery: was #demo-images-btn opening
+             #demo-images-modal, now always visible in its own single-column
+             sidebar beside the drop zone instead of behind a click -- same
+             #demo-images-grid/#demo-images-empty/#demo-images-confirm-btn
+             elements and multi-select behavior (renderDemoImagesGrid/
+             toggleDemoImageSelection/confirmDemoImageSelection, app.js),
+             just relocated and fetched eagerly on load instead of on open
+             (initDemoImagesGallery, app.js) rather than behind a modal. -->
+        <div class="upload-gallery-col">
+          <p class="option-pill-label">範例照片</p>
+          <div id="demo-images-grid" class="demo-images-grid"></div>
+          <p id="demo-images-empty" class="history-empty" hidden>目前沒有範例照片。</p>
+          <button id="demo-images-confirm-btn" class="btn btn-secondary btn-sm" type="button" disabled>使用所選照片</button>
+        </div>
+
+        <div class="upload-main-col">
 
         <!-- Left: Drop zone -->
         <div class="upload-left">
@@ -3392,7 +3503,7 @@
                 </svg>
               </div>
               <p class="dz-title">拖拉或點選上傳照片</p>
-              <p class="dz-hint">支援 JPG、PNG、WebP、HEIC/HEIF</p>
+              <p class="upload-sub">上傳照片，AI調整光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
               <!-- Testbed-only, shown by applyDebugUiVisibility: dropping an
                    exported result folder re-runs its edit from the stored
                    analysis (see importResultFolder in app.js). -->
@@ -3485,52 +3596,139 @@
             </label>
           </div>
 
-          <!-- #demo-images-btn (see openDemoImagesModal, app.js) stays
-               pinned to this row's left edge (margin-right:auto, styles.css)
-               while .run-controls stays at the right. 設定 itself lives in
-               the header (#header-settings-btn, openContextSettingsModal in
-               app.js) rather than in this row -- 人像修正設定 now folds into it
-               too (see #advanced-settings-fold in #settings-modal), so
-               there's no separate trigger button here anymore.
+          <!-- #upload-inline-settings spans the same width as the drop zone
+               (分析模型/生成模型/長寬比 on top, 人像修正設定 and Run side by
+               side below, see .upload-inline-settings-row-1 in styles.css).
 
-               One Run button covers both flows now (was two side-by-side
-               buttons, "Run" vs "Run (Manual)", indistinguishable at a
-               glance beyond button color) -- #one-shot-toggle picks the flow
-               instead: checked (default) goes straight through to
-               finishSingleFlow, unchecked pauses at the analysis-preview
-               panel for review first (see skipReview in startSubmit,
-               app.js). Stacked above Run (not beside it) so the toggle reads
-               as "set the mode" for the button directly below, rather than
-               a third, equally-weighted action in the row. -->
+               分析模型/生成模型/長寬比 -- moved out of #settings-modal (still
+               populated/wired by populateAnalysisModelSelect/
+               populateModelQualitySelect/populateAspectRatioSelect/
+               wireOptionPicker in app.js, untouched by this move since those
+               all look elements up by id, not by parent) so they sit inline
+               right under the drop zone instead of behind 設定. 生成張數 and
+               the debug-only rows stay behind 設定 -- #header-settings-btn's
+               modal still holds those. 人像修正設定 (#advanced-settings-fold)
+               is this block's 2nd row -- #upload-inline-settings-row-2 is the
+               pill's container, and the pill/panel itself is appended in
+               right after it by
+               ensureAdvancedSettingsFoldIn (app.js), not static markup --
+               it's one shared fold, not a separate copy of these toggles
+               per page (see that function's own doc, app.js). Its trigger
+               keeps both the icon and text (the fold's own
+               .fold-summary-text remains visible in this pill context -- see
+               .upload-below-zone #advanced-settings-fold, above). -->
           <div class="upload-actions-row">
-            <button id="demo-images-btn" class="btn btn-secondary" type="button">
-              <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-                <rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor"/>
-                <path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span class="btn-label">範例</span>
-            </button>
-            <div class="run-controls">
-              <label id="one-shot-row" class="run-one-shot-toggle" title="開啟後，分析完成會直接修圖並顯示結果；關閉後，會先暫停讓你確認、調整，再手動繼續修圖">
-                <label class="ios-switch">
-                  <input id="one-shot-toggle" type="checkbox" checked>
-                  <span class="ios-track"><span class="ios-thumb"></span></span>
-                </label>
-                <span class="run-one-shot-toggle-label">一鍵完成分析與修圖</span>
-              </label>
-              <button id="start-btn" class="btn btn-grad" type="button" title="分析完成後，直接修圖並顯示結果">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+            <div class="options-card-inline" id="upload-inline-settings">
+            <div class="upload-inline-settings-row-1">
+            <div class="option-pill-group">
+              <span class="option-pill-label">分析模型</span>
+              <details class="ap-style-item" name="upload-option-picker" id="analysis-model-picker">
+                <summary class="ap-style-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value"></span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list"></ul>
+                </div>
+                <select id="analysis-model" class="quality-select" hidden></select>
+              </details>
+            </div>
+            <div class="option-pill-group">
+              <span class="option-pill-label">生成模型</span>
+              <details class="ap-style-item" name="upload-option-picker" id="image-model-quality-picker">
+                <summary class="ap-style-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                        stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value"></span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list"></ul>
+                </div>
+                <select id="image-model-quality" class="quality-select model-quality-select" hidden></select>
+              </details>
+            </div>
+            <div class="option-pill-group">
+              <span class="option-pill-label">長寬比</span>
+              <details class="ap-style-item" name="upload-option-picker" id="image-aspect-ratio-picker">
+                <summary class="ap-style-trigger">
+                  <span class="option-pill-icon">
+                    <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                      <path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"
+                        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  <span class="ap-style-value"></span>
+                </summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list"></ul>
+                </div>
+                <select id="image-aspect-ratio" class="quality-select aspect-ratio-select" hidden></select>
+              </details>
+            </div>
+            <details class="ap-style-item upload-inline-settings-menu" id="upload-inline-settings-menu" hidden>
+              <summary class="ap-style-trigger">
+                <span class="option-pill-icon">
+                  <svg width="15" height="15" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
+                      stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                <span>模型設定</span>
+              </summary>
+              <div class="step-list-frame ap-style-panel upload-inline-settings-menu-panel"></div>
+            </details>
+            </div>
+            <!-- The second row groups 人像修正設定 and Run together, just as
+                 the first row groups the three selectors above. The shared
+                 portrait-settings fold is inserted into this row by app.js. -->
+            <div class="upload-inline-settings-row-2" id="upload-inline-settings-row-2">
+            <div class="split-run">
+              <button id="start-btn" class="btn btn-grad split-main" type="button">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" class="lbl-analyze">
+                  <path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.06-1.06-4.75-4.75A6 6 0 0010 4zm0 1.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z"/>
+                </svg>
+                <span class="lbl-analyze">分析</span>
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" class="lbl-full">
                   <path d="M8 5v14l11-7z"/>
                 </svg>
-                Run
+                <span class="lbl-full">修圖</span>
               </button>
+              <details id="run-mode-menu" class="split-menu ap-style-item">
+                <summary title="切換 Run 要執行的流程">▾</summary>
+                <div class="step-list-frame ap-style-panel">
+                  <ul class="step-inline-list">
+                    <li>
+                      <label>
+                        <span class="step-cb"><input type="radio" name="run-mode" id="run-mode-analyze" value="analyze" checked><span class="step-cb-box"></span></span>
+                        <span class="step-cb-label">只分析，稍後手動確認再修圖</span>
+                      </label>
+                    </li>
+                    <li>
+                      <label>
+                        <span class="step-cb"><input type="radio" name="run-mode" id="run-mode-full" value="full"><span class="step-cb-box"></span></span>
+                        <span class="step-cb-label">一鍵到底：分析＋修圖</span>
+                      </label>
+                    </li>
+                  </ul>
+                </div>
+              </details>
+            </div>
             </div>
           </div>
-
           <p id="error-msg" class="error-banner" hidden></p>
 
         </div>
+        </div>
+       </div>
       </div>
 
     </div>
@@ -3704,13 +3902,13 @@
                         <svg class="ap-analysis-shell-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
                         分析與調整
                       </span>
-                      <span class="ap-analysis-shell-desc">這是 AI 分析出的建議，你可以在這裡調整設定</span>
                     </div>
                     <div class="ap-analysis-shell-chevron-row">
                       <svg class="ap-analysis-shell-chevron" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                   </summary>
                   <div class="ap-analysis-shell-body">
+                    <p class="ap-analysis-shell-desc">這是 AI 分析出的建議，你可以在這裡調整設定</p>
                 <details class="ap-toggle-card ap-options-toggle" id="ap-review-panel" open>
                   <summary class="ap-label ap-review-summary">
                     <div class="ap-review-summary-inner">
@@ -4651,13 +4849,28 @@
   </div>
 </div>
 
+<!-- Compact upload selector modal: opened by the merged first-row buttons. -->
+<div id="upload-selector-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box upload-selector-modal-box" role="dialog" aria-modal="true" aria-labelledby="upload-selector-modal-title">
+    <div class="error-modal-hdr">
+      <span id="upload-selector-modal-title" class="settings-modal-title">設定</span>
+      <button id="upload-selector-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div id="upload-selector-modal-body" class="settings-modal-body upload-selector-modal-body"></div>
+  </div>
+</div>
+
 <!-- Upload-page settings overlay: opened by #header-settings-btn (see
      openContextSettingsModal/openSettingsModal/closeSettingsModal in
-     app.js) -- same backdrop+box+close pattern as #error-modal above. Holds
-     the 模型/長寬比/生成張數 pickers that used to sit inline under the drop
-     zone; moving them here didn't require any changes to wireOptionPicker/
-     populateModelQualitySelect/populateAspectRatioSelect/applyRunCountChange
-     in app.js since those all look elements up by id via dom.js. -->
+     app.js) -- same backdrop+box+close pattern as #error-modal above. Now
+     holds only 生成張數 + debug-only rows -- 分析模型/生成模型/長寬比 (and
+     #advanced-settings-fold, 人像修正設定) moved out to sit inline under the
+     upload page's drop zone instead (#upload-inline-settings, this same
+     .upload-section markup) since those are only ever relevant pre-analysis;
+     this modal is still their shared home whenever the results page's own
+     #ap-settings-modal reparents #advanced-settings-fold out of that inline
+     row temporarily (ensureAdvancedSettingsFoldIn, app.js). -->
 <div id="settings-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
@@ -4666,60 +4879,6 @@
       <button id="settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="settings-modal-body" class="settings-modal-body">
-    <div class="option-pill-group">
-      <span class="option-pill-label">分析模型</span>
-      <details class="ap-style-item" name="upload-option-picker" id="analysis-model-picker">
-        <summary class="ap-style-trigger">
-          <span class="option-pill-icon">
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-              <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
-                stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
-          <span class="ap-style-value"></span>
-        </summary>
-        <div class="step-list-frame ap-style-panel">
-          <ul class="step-inline-list"></ul>
-        </div>
-        <select id="analysis-model" class="quality-select" hidden></select>
-      </details>
-    </div>
-    <div class="option-pill-group">
-      <span class="option-pill-label">生成模型</span>
-      <details class="ap-style-item" name="upload-option-picker" id="image-model-quality-picker">
-        <summary class="ap-style-trigger">
-          <span class="option-pill-icon">
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-              <path d="M5 3v4M3 5h4M6 17v4M4 19h4M13 3l2.3 5.7L21 11l-5.7 2.3L13 19l-2.3-5.7L5 11l5.7-2.3L13 3z"
-                stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
-          <span class="ap-style-value"></span>
-        </summary>
-        <div class="step-list-frame ap-style-panel">
-          <ul class="step-inline-list"></ul>
-        </div>
-        <select id="image-model-quality" class="quality-select model-quality-select" hidden></select>
-      </details>
-    </div>
-    <div class="option-pill-group">
-      <span class="option-pill-label">長寬比</span>
-      <details class="ap-style-item" name="upload-option-picker" id="image-aspect-ratio-picker">
-        <summary class="ap-style-trigger">
-          <span class="option-pill-icon">
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-              <path d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </span>
-          <span class="ap-style-value"></span>
-        </summary>
-        <div class="step-list-frame ap-style-panel">
-          <ul class="step-inline-list"></ul>
-        </div>
-        <select id="image-aspect-ratio" class="quality-select aspect-ratio-select" hidden></select>
-      </details>
-    </div>
     <div class="option-pill-group">
       <span class="option-pill-label">生成張數</span>
       <details class="ap-style-item" name="upload-option-picker" id="image-run-count-picker">
@@ -4760,26 +4919,35 @@
         </select>
       </details>
     </div>
-    <!-- Collapsed by default -- these were the last item inside this same
-         .settings-modal-body once before, then got their own separate
-         #advanced-settings-modal (reachable via a dedicated 人像修正設定 button)
-         so they wouldn't require opening 設定 first. Folded back in here
-         now instead, just collapsed rather than always-expanded, so 設定
-         stays the single entry point without losing that at-a-glance
-         reachability -- one click on the summary below expands it.
-         This exact fold (#advanced-settings-fold) is shared with the
-         results page's #ap-settings-modal too -- openSettingsModal/
-         openApSettingsModal (app.js) reparent it into whichever modal is
-         actually open instead of keeping two copies of these inputs. -->
+    <!-- Static markup position only -- ensureAdvancedSettingsFoldIn (app.js)
+         moves this out of here on load, into its real default home inline
+         under the upload page's drop zone (#upload-inline-settings, re-themed
+         into a pill there), since it's only ever relevant pre-analysis. Still
+         one shared fold, not a separate copy of these toggles per page: the
+         results page's own #ap-settings-modal borrows it back in
+         (openApSettingsModal, app.js) while that modal is open, and resetApp
+         moves it back to the upload row once the results screen is left
+         behind. Always collapsed when moved, regardless of which home it's
+         in. -->
     <details id="advanced-settings-fold" class="settings-fold">
-      <summary>人像修正設定</summary>
-      <!-- Shared "set all" caveat -- once per fold rather than repeated on
-           each of the four rows below (they only describe what each one
-           does). Turning any of these off is a hard veto in build_edit_prompt
-           regardless of any per-person override in the review screen, so a
-           locked row there can only be unlocked by coming back here. -->
-      <p class="option-desc settings-fold-note">關閉後將鎖定所有人此項，需回到這裡重新開啟才能個別調整。</p>
+      <summary>
+        <!-- Shown in both homes: as the modal section title or as the upload
+             page's icon+text pill trigger. -->
+        <span class="option-pill-icon">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M4 20c.5-4 3.5-6 8-6s7.5 2 8 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="fold-summary-text">人像修正設定</span>
+      </summary>
       <div class="settings-fold-body">
+        <!-- Shared "set all" caveat -- once per fold rather than repeated on
+             each of the four rows below (they only describe what each one
+             does). Turning any of these off is a hard veto in build_edit_prompt
+             regardless of any per-person override in the review screen, so a
+             locked row there can only be unlocked by coming back here. -->
+        <p class="option-desc settings-fold-note">關閉後將鎖定所有人此項，需回到這裡重新開啟才能個別調整。</p>
         <label class="option-row">
           <div class="option-text">
             <span class="option-label">閉眼修正</span>
@@ -4891,35 +5059,10 @@
   </div>
 </div>
 
-<!-- Demo photo picker: opened by #demo-images-btn (see openDemoImagesModal/
-     closeDemoImagesModal in app.js) -- same backdrop+box+close pattern as
-     #settings-modal below. Grid is populated lazily on first open from
-     GET /api/photo-agent/demo-images (backend/routes/api.py), each tile
-     serving the demo file straight off ./demo_images. Tiles toggle a
-     selected state on click (see toggleDemoImageSelection, app.js) rather
-     than using the photo immediately -- #demo-images-confirm-btn below
-     fetches every selected photo and hands them all to routeSelectedFiles
-     at once, so picking several demo photos gets the same batch handling a
-     real multi-file picker selection would. -->
-<div id="demo-images-modal" class="error-modal" hidden>
-  <div class="error-modal-backdrop" data-close="1"></div>
-  <div class="error-modal-box demo-images-modal-box" role="dialog" aria-modal="true" aria-labelledby="demo-images-modal-title">
-    <div class="error-modal-hdr">
-      <span id="demo-images-modal-title" class="settings-modal-title">範例</span>
-      <button id="demo-images-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
-    </div>
-    <div id="demo-images-grid" class="demo-images-grid"></div>
-    <p id="demo-images-empty" class="history-empty" hidden>目前沒有範例照片。</p>
-    <div class="demo-images-modal-footer">
-      <button id="demo-images-confirm-btn" class="btn btn-secondary btn-sm" type="button" disabled>使用所選照片</button>
-    </div>
-  </div>
-</div>
-
 <!-- Admin-only: shows one report's screenshot (captureReportScreenshot,
      app.js) in-app instead of a new tab -- opened by the "查看回報截圖"
      button in #reports-list (renderReportsList, app.js). Same shared
-     backdrop+box modal shape as #demo-images-modal above, just wider still
+     backdrop+box modal shape as #confirm-modal above, just wider still
      since a results-panel screenshot is taller/wider than a photo tile. -->
 <div id="report-screenshot-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
