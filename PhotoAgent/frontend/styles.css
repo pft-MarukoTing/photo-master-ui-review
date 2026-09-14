@@ -1189,12 +1189,14 @@ a { text-decoration: none; color: inherit; }
   height: 32px;
 }
 .upload-zone .dz-title {
-  font-size: 24px;
+  font-size: 20px;
+  font-weight: 650;
+  color: rgba(211, 211, 217, .78);
 }
 @media (max-width: 720px) {
   .upload-zone .upload-icon-wrap { width: 72px; height: 72px; }
   .upload-zone .upload-icon-wrap svg { width: 28px; height: 28px; }
-  .upload-zone .dz-title { font-size: 21px; }
+  .upload-zone .dz-title { font-size: 19px; }
   .upload-main-copy {
     flex: 0 0 auto;
     width: 100%;
