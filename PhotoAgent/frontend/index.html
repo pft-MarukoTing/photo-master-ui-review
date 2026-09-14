@@ -17,7 +17,7 @@
       display: flex;
       flex-direction: column;
       /* Grows to fill .upload-main-col's remaining space (see
-         .upload-container/.upload-hero/.upload-grid/.upload-main-col in
+         .upload-container/.upload-grid/.upload-main-col in
          styles.css) -- without this, only .upload-zone below flexed, but its
          own parent stayed auto-height and never actually offered it anything
          to grow into. */
@@ -3324,6 +3324,13 @@
         </svg>
         <span class="btn-label">上傳照片</span>
       </button>
+      <button id="changelog-btn" class="btn btn-secondary btn-sm" type="button">
+        <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
+          <path d="M6 4h9l3 3v13a1 1 0 01-1 1H6a1 1 0 01-1-1V5a1 1 0 011-1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 10h6M9 14h6M9 18h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="btn-label">版本紀錄</span>
+      </button>
       <!-- Global settings entry point -- used to be two separate per-page
            gear buttons (#settings-btn in .upload-actions-row, #ap-settings-btn
            in .ap-settings-run-row); consolidated here as a single always-
@@ -3451,25 +3458,61 @@
   ══════════════════════════════════ -->
   <section id="upload-section" class="section visible">
     <div class="container upload-container">
-      <div class="upload-hero">
-        <!-- Opens #changelog-modal (see openChangelogModal, app.js), which
-             fetches changelog.json lazily on first open and caches it the
-             same way openDemoImagesModal does for demo photos. Absolutely
-             positioned against .upload-hero itself (position:relative,
-             styles.css) so it sits in this section's own top-right corner
-             regardless of how tall the headline/sub-copy render. -->
-        <button id="changelog-btn" class="btn btn-secondary btn-sm" type="button">
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
-            <path d="M6 4h9l3 3v13a1 1 0 01-1 1H6a1 1 0 01-1-1V5a1 1 0 011-1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M9 10h6M9 14h6M9 18h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-          <span class="btn-label">版本紀錄</span>
-        </button>
-        <h1 class="upload-headline">讓每張照片都有專屬修圖師</h1>
-      </div>
-
       <div class="upload-grid">
-       <div class="upload-content-row">
+      <div class="upload-content-row">
+
+        <div class="upload-main-copy">
+          <p class="upload-intro-eyebrow">AI 個人化修圖分析</p>
+          <h1 class="upload-headline">一張照片，開啟專屬修圖體驗</h1>
+          <p class="upload-intro-description">
+            <span>AI 先理解人物、光線、構圖與畫面細節，</span>
+            <span>再依照片特性規劃表情、姿勢、視角與修圖方向，</span>
+            <span>讓每次調整都更貼近你期待的效果。</span>
+          </p>
+          <div class="upload-flow" aria-label="修圖流程">
+            <div class="upload-flow-card">
+              <span class="upload-flow-icon" aria-hidden="true">
+                <svg width="27" height="27" fill="none" viewBox="0 0 24 24">
+                  <path d="M12 15V3M12 3L7 8M12 3l5 5M4 20h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="upload-flow-text"><strong>上傳照片</strong><small>拖曳或選擇照片，開始專屬修圖</small></span>
+            </div>
+            <div class="upload-flow-card">
+              <span class="upload-flow-icon" aria-hidden="true">
+                <svg width="27" height="27" fill="none" viewBox="0 0 24 24">
+                  <circle cx="10.5" cy="10.5" r="6.5" stroke="currentColor" stroke-width="2"/>
+                  <path d="M15.5 15.5L21 21" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+              </span>
+              <span class="upload-flow-text"><strong>AI 全面分析</strong><small>辨識人物、光線、構圖與畫面細節</small></span>
+            </div>
+            <div class="upload-flow-card">
+              <span class="upload-flow-icon" aria-hidden="true">
+                <svg width="27" height="27" fill="none" viewBox="0 0 24 24">
+                  <rect x="5.5" y="4.5" width="13" height="16" rx="1.8" stroke="currentColor" stroke-width="1.7"/>
+                  <path d="M9 4.5V3.5h6v1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                  <rect x="8" y="7" width="2.5" height="2.5" rx=".5" stroke="currentColor" stroke-width="1.4"/>
+                  <rect x="8" y="11.5" width="2.5" height="2.5" rx=".5" stroke="currentColor" stroke-width="1.4"/>
+                  <rect x="8" y="16" width="2.5" height="2.5" rx=".5" stroke="currentColor" stroke-width="1.4"/>
+                  <path d="M12.5 8.25h3.5M12.5 12.75h3.5M12.5 17.25h2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                  <path d="M8.45 8.15l.55.55 1-1.1M8.45 12.65l.55.55 1-1.1" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="upload-flow-text"><strong>客製化調整</strong><small>依照片特性，提供合適的調整建議</small></span>
+            </div>
+            <div class="upload-flow-card">
+              <span class="upload-flow-icon" aria-hidden="true">
+                <svg width="27" height="27" fill="none" viewBox="0 0 24 24">
+                  <rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="1.8"/>
+                  <circle cx="9" cy="8" r="1.5" stroke="currentColor" stroke-width="1.6"/>
+                  <path d="M5 18l5-5 3 3 2-2 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="upload-flow-text"><strong>完成修圖</strong><small>產出精修版本，可比較並下載</small></span>
+            </div>
+          </div>
+        </div>
 
         <!-- Example-photo gallery: was #demo-images-btn opening
              #demo-images-modal, now always visible in its own single-column
@@ -3481,10 +3524,17 @@
              (initDemoImagesGallery, app.js) rather than behind a modal. -->
         <div class="upload-gallery-col">
           <div class="upload-gallery-heading">
-            <span class="upload-gallery-heading-icon" aria-hidden="true">
+            <span class="upload-gallery-heading-icon upload-gallery-heading-icon--demo" aria-hidden="true">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
                 <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.8"/>
                 <path d="M8 15l2.5-3 2 2 1.5-2 2 3M8 9.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span class="upload-gallery-heading-icon upload-gallery-heading-icon--history" aria-hidden="true">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </span>
             <span id="upload-gallery-title">範例照片</span>
@@ -3492,7 +3542,7 @@
           <div class="upload-gallery-scroll-frame">
             <div id="demo-images-grid" class="demo-images-grid"></div>
             <div id="history-load-more-btn" class="ap-style-scroll-hint history-load-more-hint" hidden aria-live="polite">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               <span class="history-load-more-label">載入更多</span>
             </div>
           </div>
@@ -3517,7 +3567,6 @@
                 </svg>
               </div>
               <p class="dz-title">拖拉或點選上傳照片</p>
-              <p class="upload-sub">上傳照片，先由 AI 分析，再客製化調整表情、姿勢、視角與畫面細節，輸出專屬修圖師等級版本。</p>
               <!-- Testbed-only, shown by applyDebugUiVisibility: dropping an
                    exported result folder re-runs its edit from the stored
                    analysis (see importResultFolder in app.js). -->
@@ -4845,7 +4894,7 @@
   </div>
 </div>
 
-<!-- Opened by #changelog-btn (.upload-hero, upload page) -- see
+<!-- Opened by #changelog-btn (header, upload page) -- see
      openChangelogModal/closeChangelogModal in app.js. Content isn't baked
      into this markup: it's fetched once from changelog.json (a static file
      shipped alongside index.html, not a backend endpoint) and cached the
@@ -4953,7 +5002,7 @@
             <path d="M4 20c.5-4 3.5-6 8-6s7.5 2 8 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
           </svg>
         </span>
-        <span class="fold-summary-text">人像修正設定</span>
+        <span class="fold-summary-text">人像設定</span>
       </summary>
       <div class="settings-fold-body">
         <!-- Shared "set all" caveat -- once per fold rather than repeated on

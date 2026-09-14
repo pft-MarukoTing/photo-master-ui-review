@@ -701,11 +701,12 @@
         input.addEventListener("change", () => {
           select.value = opt.value;
           select.dispatchEvent(new Event("change", { bubbles: true }));
-          valueEl.textContent = opt.textContent;
+          valueEl.textContent = opt.dataset.displayLabel || opt.textContent;
           details.open = false;
         });
       });
-      valueEl.textContent = select.selectedOptions[0]?.textContent || "";
+      const selected = select.selectedOptions[0];
+      valueEl.textContent = selected?.dataset.displayLabel || selected?.textContent || "";
     };
 
     rebuild();
@@ -773,9 +774,14 @@
       portraitFold.open = false;
       portraitFold.classList.remove("standalone-modal");
       groups.forEach((group) => panel.appendChild(group));
-      if (compact) row.appendChild(portraitFold);
+      if (compact) {
+        row.appendChild(portraitFold);
+        const runControl = row.querySelector(".split-run") || secondRow.querySelector(".split-run");
+        if (runControl) row.appendChild(runControl);
+      }
       else {
-        const runControl = secondRow.querySelector(".split-run");
+        const runControl = row.querySelector(".split-run") || secondRow.querySelector(".split-run");
+        if (runControl && runControl.parentElement !== secondRow) secondRow.appendChild(runControl);
         if (runControl) secondRow.insertBefore(portraitFold, runControl);
         else secondRow.appendChild(portraitFold);
       }
@@ -799,7 +805,8 @@
     const restoreGroups = () => {
       closeModal();
       groups.forEach((group) => row.insertBefore(group, menu));
-      const runControl = secondRow.querySelector(".split-run");
+      const runControl = row.querySelector(".split-run") || secondRow.querySelector(".split-run");
+      if (runControl && runControl.parentElement !== secondRow) secondRow.appendChild(runControl);
       if (portraitFold.parentElement !== secondRow) {
         if (runControl) secondRow.insertBefore(portraitFold, runControl);
         else secondRow.appendChild(portraitFold);
@@ -818,10 +825,11 @@
       const wrapped = groups.some((group) => group.getBoundingClientRect().top > firstTop + 2);
       if (wrapped) {
         groups.forEach((group) => panel.appendChild(group));
-        // In compact mode the portrait control joins the compact selector
-        // button in the first row, after the model-settings menu; Run remains
-        // in the second row.
+        // In compact mode the portrait control and Run join the compact
+        // selector button in the first row, in that order.
         row.appendChild(portraitFold);
+        const runControl = secondRow.querySelector(".split-run");
+        if (runControl) row.appendChild(runControl);
         compact = true;
       }
       menu.hidden = !wrapped;
@@ -880,6 +888,7 @@
       const optionEl = document.createElement("option");
       optionEl.value = opt.value;
       optionEl.textContent = opt.label;
+      if (opt.displayLabel) optionEl.dataset.displayLabel = opt.displayLabel;
       select.appendChild(optionEl);
     });
     select.value = window.PhotoAgentConfig.defaultImageModelQuality || select.value;
@@ -907,7 +916,7 @@
     if (els.apImageModelQualitySelect) els.apImageModelQualitySelect.value = opt.value;
     [els.imageModelQualityPicker, els.apImageModelQualityPicker].forEach((picker) => {
       const valueEl = picker?.querySelector(".ap-style-value");
-      if (valueEl) valueEl.textContent = opt.label;
+      if (valueEl) valueEl.textContent = opt.displayLabel || opt.label;
     });
   }
 
@@ -5597,6 +5606,11 @@
     }
   }
 
+  function historyMediaMarkup(src) {
+    if (!src) return "";
+    return `<img class="history-cube-bg" src="${src}" alt="" aria-hidden="true"><img class="history-cube-main" src="${src}" alt="">`;
+  }
+
   async function renderHistoryList(jobs, { container = els.historyList, append = false } = {}) {
     if (!container) return;
     const isDrawer = container === els.historyList;
@@ -5643,7 +5657,7 @@
       // class already dims .rc-media img (see styles.css), so this reads as
       // "not final yet" rather than the actual done result.
       const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
-      const referenceThumb = job.path === "local" ? `<img src="${sourceThumbnailUrl(jobIds[0])}" alt="">` : "";
+      const referenceThumb = job.path === "local" ? historyMediaMarkup(sourceThumbnailUrl(jobIds[0])) : "";
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
         <span class="rc-badge">處理中</span>
@@ -5728,7 +5742,7 @@
           const doneThumbSrc = job.path === "local"
             ? resultThumbnailUrl(jobIds[doneIdx])
             : resultImageUrl(jobIds[doneIdx], { path: job.path });
-          if (media) media.innerHTML = `<img src="${doneThumbSrc}" alt="">`;
+          if (media) media.innerHTML = historyMediaMarkup(doneThumbSrc);
           // viewHistoryRecord fetches the full record and preloads its result
           // image before showing anything (see its own/showSingleResult's
           // preload guard) -- without feedback here, the tap on this tile
@@ -6894,6 +6908,7 @@
 
   function refreshUploadGallery(user) {
     if (!els.demoImagesGrid) return;
+    if (els.uploadGalleryCol) els.uploadGalleryCol.classList.toggle("is-history", !!user);
     if (user) {
       if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = "最近照片";
       if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = true;

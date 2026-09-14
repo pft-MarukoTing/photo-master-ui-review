@@ -52,6 +52,7 @@ window.PhotoAgentDom = (() => {
     demoImagesEmpty: document.querySelector("#demo-images-empty"),
     demoImagesConfirmBtn: document.querySelector("#demo-images-confirm-btn"),
     uploadGalleryTitle: document.querySelector("#upload-gallery-title"),
+    uploadGalleryCol: document.querySelector(".upload-gallery-col"),
     historyLoadMoreBtn: document.querySelector("#history-load-more-btn"),
     changelogBtn: document.querySelector("#changelog-btn"),
     changelogModal: document.querySelector("#changelog-modal"),

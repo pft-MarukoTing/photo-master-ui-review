@@ -128,7 +128,7 @@ a { text-decoration: none; color: inherit; }
 }
 
 .header-inner {
-  max-width: 1500px;
+  max-width: 1720px;
   margin: 0 auto;
   padding: 0 28px;
   height: 100%;
@@ -199,34 +199,98 @@ a { text-decoration: none; color: inherit; }
 ════════════════════════════════════════ */
 /* Fills exactly the viewport height below the sticky header (which stays a
    fixed --header-h bar, not part of this split) so the screen never needs a
-   scroll regardless of resolution -- .upload-hero takes a fixed 10% slice,
-   .upload-grid (drop zone + options/Run row) grows into the rest, and
-   .upload-zone itself is the flexible piece inside that (see below) so it's
-   the drop zone that grows/shrinks with screen height, not the option pills. */
+   scroll regardless of resolution -- .upload-grid contains the left copy
+   column and the right upload/gallery area, while .upload-zone itself is
+   the flexible piece inside that (see below) so it grows/shrinks with the
+   available height, not the option pills. */
 .upload-container {
   height: calc(100vh - var(--header-h));
+  max-width: 1720px;
   display: flex;
   flex-direction: column;
-  padding-top: 8px;
+  padding-top: 10px;
   /* Plus .upload-grid's own 32px margin-bottom below -- together these are
      the only fixed gap between the Run button and the viewport edge (the
      drop zone is the flexible piece that otherwise eats any extra space),
      so a small value here left the button sitting right at the bottom on
      tall viewports. Pulled back down in the short-viewport breakpoints
      below, where that budget is already tight. */
-  padding-bottom: 68px;
+  padding-bottom: 24px;
 }
 
-.upload-hero {
+.upload-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 0 0 auto;
+  width: 100%;
+  margin: 0;
+  margin-inline: auto;
+  align-self: center;
+}
+.upload-flow-card {
   position: relative;
-  flex: 0 0 10%;
-  padding-bottom: 12px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid transparent;
-  border-image: linear-gradient(90deg, var(--border) 0%, transparent 85%) 1;
-  /* Floor so the heading/sub-copy never get squeezed unreadable on a very
-     short viewport -- 10% only wins once it's actually taller than this. */
-  /* min-height: 100px; */
+  display: grid;
+  grid-template-columns: var(--flow-icon-size) minmax(0, 250px);
+  align-items: center;
+  --flow-card-pad-x: 0px;
+  --flow-icon-size: 36px;
+  --flow-gap: 10px;
+  gap: var(--flow-gap);
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 8px 0 15px;
+  width: min(100%, 300px);
+  margin-inline: auto;
+  justify-content: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.upload-flow-card:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 56px;
+  height: 1px;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, rgba(216,180,254,.42), rgba(216,180,254,.08));
+}
+.upload-flow-icon {
+  display: inline-flex;
+  align-self: center;
+  align-items: center;
+  justify-content: center;
+  width: var(--flow-icon-size);
+  height: var(--flow-icon-size);
+  flex: 0 0 var(--flow-icon-size);
+  border: 1px solid rgba(168,85,247,.3);
+  border-radius: 50%;
+  color: rgba(216,180,254,.82);
+  background: radial-gradient(circle at 35% 25%, rgba(168,85,247,.1), rgba(168,85,247,.025));
+  box-shadow: 0 6px 16px rgba(168,85,247,.05);
+}
+.upload-flow-text {
+  display: flex;
+  align-self: center;
+  flex-direction: column;
+  min-width: 0;
+  gap: 3px;
+  text-align: left;
+}
+.upload-flow-text strong {
+  color: var(--text);
+  font-size: clamp(16px, 1.15vw, 20px);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.upload-flow-text small {
+  color: var(--text-4);
+  font-size: clamp(12px, .85vw, 15px);
+  line-height: 1.45;
 }
 /* #changelog-btn (index.html) -- pinned to this section's own top-right
    corner rather than flowing inline with .upload-headline/.upload-sub, so
@@ -235,9 +299,8 @@ a { text-decoration: none; color: inherit; }
    in the header), so it gets their same compact-pill size instead of
    .btn-sm's larger default. */
 #changelog-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
+  position: static;
+  flex: 0 0 auto;
   height: 26px;
   padding: 0 11px;
   gap: 5px;
@@ -256,9 +319,9 @@ a { text-decoration: none; color: inherit; }
 
 .upload-headline {
   max-width: 600px;
-  /* min(vw, vh) instead of plain vw -- .upload-hero is now a fixed ~10% (see
-     .upload-container/.upload-hero above), so a short viewport needs this to
-     shrink too, not just a narrow one, or it can overflow the hero's box. */
+  /* min(vw, vh) instead of plain vw -- the headline now lives beside the
+     drop zone, so a short viewport needs this to shrink too, not just a
+     narrow one. */
   font-size: clamp(20px, min(4.5vw, 4.2vh), 32px);
   font-weight: 800;
   background: var(--mv-grad);
@@ -368,37 +431,66 @@ a { text-decoration: none; color: inherit; }
   box-shadow: none;
 }
 
-/* Upload grid: one row (gallery sidebar + main column), capped to 80% of
-   the container and centered -- at full container width it read as too
-   wide once it was just this one row instead of sharing space with the old
-   340px form column. */
+/* Upload grid: the content row owns the three-column composition -- copy,
+   upload controls, and recent photos. The flow cards live inside the copy
+   column and stack below its description. */
 .upload-grid {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
-  max-width: 80%;
+  max-width: 100%;
   margin: 0 auto;
   /* Breathing room below the Run row -- .upload-grid's flex-grow otherwise
      stretches it flush to .upload-container's own bottom edge (the
      viewport's), leaving the button sitting right on the edge. */
-  margin-bottom: 32px;
+  margin-bottom: 0;
   width: 100%;
 }
+@media (min-width: 1201px) {
+  .upload-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .upload-grid > .upload-content-row {
+    grid-column: 1;
+    grid-row: 1;
+    width: 100%;
+    min-width: 0;
+  }
+}
 
-/* .upload-gallery-col (example photos) runs the full height of
-   .upload-main-col beside it (drop zone + settings + Run stacked) --
-   align-items:stretch makes the sidebar match that column's real height
-   instead of just its own (short) content. */
+/* Keep the three content columns vertically centered. On wide screens the
+   upload and gallery columns share the same capped height so they remain a
+   balanced pair beside the copy column. */
 .upload-content-row {
   display: flex;
-  align-items: stretch;
-  gap: 18px;
+  align-items: center;
+  justify-content: center;
+  column-gap: 40px;
+  row-gap: 24px;
   flex: 1 1 auto;
   min-height: 0;
+  order: 2;
+}
+@media (min-width: 1201px) {
+  .upload-content-row {
+    align-items: center;
+  }
+  .upload-content-row > .upload-main-copy {
+    flex: 0 1 380px;
+    max-width: 400px;
+  }
+  .upload-content-row > .upload-main-col,
+  .upload-content-row > .upload-gallery-col {
+    align-self: center;
+    height: min(520px, 100%);
+    max-height: 520px;
+  }
 }
 .upload-gallery-col {
-  flex: 0 0 180px;
+  flex: 0 0 240px;
   order: 2;
   box-sizing: border-box;
   min-height: 0;
@@ -406,8 +498,8 @@ a { text-decoration: none; color: inherit; }
   display: flex;
   flex-direction: column;
   gap: 8px;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 20px;
+  border: 0;
+  border-radius: 22px;
   background:
     linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.012) 46%, rgba(168,85,247,.025)),
     rgba(13,13,17,.58);
@@ -416,23 +508,39 @@ a { text-decoration: none; color: inherit; }
 .upload-gallery-heading {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   min-height: 22px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
   color: var(--text);
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
 }
 .upload-gallery-heading-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  border: 1px solid rgba(168,85,247,.35);
-  border-radius: 8px;
-  color: #c084fc;
-  background: rgba(168,85,247,.12);
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border: 1px solid rgba(168,85,247,.22);
+  border-radius: 7px;
+  color: rgba(216,180,254,.68);
+  background: rgba(168,85,247,.055);
+}
+.upload-gallery-heading-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.upload-gallery-heading-icon--history {
+  display: none;
+}
+.upload-gallery-col.is-history .upload-gallery-heading-icon--demo {
+  display: none;
+}
+.upload-gallery-col.is-history .upload-gallery-heading-icon--history {
+  display: inline-flex;
 }
 .upload-gallery-scroll-frame {
   position: relative;
@@ -441,13 +549,90 @@ a { text-decoration: none; color: inherit; }
   min-height: 0;
   width: 100%;
 }
+.upload-main-copy {
+  order: 0;
+  flex: 0 1 380px;
+  min-width: 200px;
+  max-width: 400px;
+  align-self: center;
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  text-align: center;
+}
+.upload-main-copy > .upload-flow {
+  gap: 0;
+  margin-top: 2px;
+}
+.upload-intro-eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: .06em;
+}
+.upload-intro-eyebrow::before {
+  content: '';
+  width: 34px;
+  height: 1px;
+  background: currentColor;
+  opacity: .7;
+}
+.upload-intro-eyebrow::after {
+  content: '';
+  width: 34px;
+  height: 1px;
+  background: currentColor;
+  opacity: .7;
+}
+.upload-intro-description {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 38ch;
+  margin: 0;
+  color: var(--text-2);
+  font-size: clamp(15px, 1.15vw, 17px);
+  line-height: 1.55;
+  letter-spacing: .015em;
+  text-wrap: pretty;
+  text-align: center;
+}
+.upload-intro-description span {
+  display: block;
+}
+.upload-main-copy .upload-headline {
+  max-width: 400px;
+  margin: 0 auto;
+  font-size: clamp(24px, 2vw, 32px);
+  font-weight: 700;
+  background: linear-gradient(110deg, #f5f3ff 0%, #e9d5ff 68%, #d8b4fe 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1.25;
+  letter-spacing: -.02em;
+  text-align: center;
+}
 .upload-gallery-col .demo-images-grid {
   display: block;
   width: 100%;
   flex: 1 1 auto;
   min-height: 0;
   scrollbar-width: thin;
-  scrollbar-color: rgba(168,85,247,.45) transparent;
+  scrollbar-color: rgba(186,170,205,.28) transparent;
+}
+.upload-gallery-col .demo-images-grid::-webkit-scrollbar-thumb {
+  background-color: rgba(186,170,205,.28);
+}
+.upload-gallery-col .demo-images-grid::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(186,170,205,.4);
 }
 .upload-gallery-col .history-day-group + .history-day-group {
   margin-top: 8px;
@@ -461,9 +646,33 @@ a { text-decoration: none; color: inherit; }
 }
 .upload-gallery-col .history-cube {
   width: 100%;
-  border: 1px solid rgba(255,255,255,.12);
+  aspect-ratio: 1 / 1;
+  border: 0;
   box-shadow: 0 8px 20px rgba(0,0,0,.18);
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+.upload-gallery-col .demo-image-tile {
+  border: 0;
+}
+.upload-gallery-col .history-cube .rc-media img {
+  object-fit: contain;
+  background: var(--card-2);
+}
+.upload-gallery-col .history-cube .rc-media .history-cube-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  object-fit: cover;
+  filter: blur(18px) brightness(.65);
+  transform: scale(1.15);
+  background: transparent;
+}
+.upload-gallery-col .history-cube .rc-media .history-cube-main {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  object-fit: contain;
+  background: transparent;
 }
 .upload-gallery-col .history-cube:hover {
   border-color: rgba(192,132,252,.75);
@@ -532,17 +741,282 @@ a { text-decoration: none; color: inherit; }
   order: 1;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
+  width: auto;
+  height: min(520px, 100%);
+  aspect-ratio: 1.25 / 1;
   min-width: 0;
   min-height: 0;
-  gap: 12px;
+  max-width: 100%;
+  max-height: 520px;
+  gap: 0;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 26px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.04), rgba(255,255,255,.012) 48%, rgba(168,85,247,.025)),
+    rgba(13,13,17,.58);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 16px 34px rgba(0,0,0,.14);
+}
+.upload-main-col > .upload-left {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  overflow-x: hidden;
+  align-items: stretch;
+  justify-content: stretch;
+}
+.upload-main-col > .upload-left .upload-zone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: auto;
+  flex: 1 1 auto;
+  aspect-ratio: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0;
+  border: 1.5px dashed rgba(255,255,255,.18);
+  border-radius: 25px 25px 0 0;
+  background: transparent;
+  box-shadow: none;
+}
+.upload-main-col > .upload-left .upload-zone:hover {
+  box-shadow: none;
+  transform: none;
+  background: rgba(168,85,247,.035);
+}
+@media (max-width: 720px) {
+  .upload-main-col {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    max-height: none;
+  }
+  .upload-main-col > .upload-left .upload-zone {
+    width: 100%;
+    height: auto;
+    max-width: none;
+  }
+}
+@media (min-width: 721px) and (max-width: 1100px) {
+  .upload-main-col {
+    aspect-ratio: 4 / 3;
+  }
+  .upload-main-col > .upload-left .upload-zone {
+    aspect-ratio: auto;
+  }
+}
+.upload-main-col > .upload-below-zone {
+  flex: 0 0 auto;
+  padding: 8px;
+  border-top: 1px solid rgba(255,255,255,.1);
+}
+.upload-main-col .ap-style-trigger {
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 9px;
+  gap: 4px;
+  border-radius: 15px;
+  font-size: 13px;
+  justify-content: center;
+}
+.upload-main-col .upload-actions-row .btn {
+  height: 30px;
+  padding: 0 11px;
+  gap: 4px;
+  font-size: 13.5px;
+}
+.upload-main-col .split-run {
+  height: 30px;
+  border-radius: 15px;
+}
+.upload-main-col #start-btn.split-main {
+  height: 30px;
+  border-radius: 15px 0 0 15px;
+}
+.upload-main-col .upload-actions-row .split-menu > summary {
+  width: 24px;
+  height: 30px;
+  border-radius: 0 15px 15px 0;
+}
+.upload-main-col .upload-below-zone #advanced-settings-fold > summary {
+  height: 30px;
+  min-width: 145px;
+  padding: 0 9px;
+  border-radius: 15px;
+  font-size: 13px;
+}
+.upload-main-col .upload-inline-settings-row-1 {
+  gap: 7px;
+}
+
+@media (min-width: 1101px) {
+  .upload-main-col {
+    width: 580px;
+    min-width: 580px;
+    height: auto;
+  }
+  .upload-main-col .upload-actions-row #upload-inline-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .upload-main-col .upload-inline-settings-row-1 {
+    display: grid;
+    grid-template-columns: minmax(145px, 1fr) minmax(245px, 1.45fr) minmax(130px, .9fr);
+    align-items: end;
+    width: 100%;
+    gap: 7px;
+  }
+  .upload-main-col .upload-inline-settings-row-1 > .option-pill-group,
+  .upload-main-col .upload-inline-settings-row-1 > .option-pill-group > .ap-style-item {
+    width: 100%;
+    min-width: 0;
+  }
+  .upload-main-col .upload-inline-settings-row-1 > .option-pill-group > .ap-style-item,
+  .upload-main-col .upload-inline-settings-row-1 > .option-pill-group > .ap-style-item > .ap-style-trigger {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+  }
+  .upload-main-col .upload-inline-settings-row-1 > .option-pill-group > .ap-style-item > .ap-style-trigger {
+    width: 100%;
+  }
+  .upload-main-col #upload-inline-settings-row-2 {
+    display: flex;
+    justify-content: space-between;
+  }
+  .upload-main-col #upload-inline-settings-row-2 > #advanced-settings-fold {
+    width: 31%;
+  }
+}
+@media (max-width: 1200px) {
+  .upload-container {
+    height: auto;
+    min-height: calc(100vh - var(--header-h));
+    overflow-y: auto;
+  }
+  .upload-grid {
+    flex: 0 0 auto;
+  }
+  .upload-content-row {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 18px;
+  }
+  .upload-content-row > .upload-main-copy {
+    display: contents;
+    max-width: 520px;
+  }
+  .upload-content-row > .upload-main-copy > .upload-intro-eyebrow,
+  .upload-content-row > .upload-main-copy > .upload-headline,
+  .upload-content-row > .upload-main-copy > .upload-intro-description {
+    width: 100%;
+    max-width: 520px;
+    order: 0;
+  }
+  .upload-content-row > .upload-main-col {
+    order: 1;
+    width: min(100%, 580px);
+    min-width: 0;
+    height: auto;
+    max-width: 100%;
+  }
+  .upload-content-row > .upload-gallery-col {
+    order: 2;
+    flex: 0 0 auto;
+    width: min(100%, 580px);
+    max-width: 100%;
+    height: auto;
+    max-height: none;
+  }
+  .upload-content-row > .upload-main-copy > .upload-flow {
+    order: 3;
+    width: 100%;
+    max-width: 520px;
+    margin-top: 0;
+  }
+  .upload-flow-card {
+    grid-template-columns: var(--flow-icon-size) minmax(0, 250px);
+    min-height: 44px;
+    padding: 5px 8px;
+    --flow-card-pad-x: 8px;
+    --flow-icon-size: 34px;
+    --flow-gap: 7px;
+    gap: 7px;
+  }
+  .upload-flow-icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+  }
+  .upload-flow-text strong { font-size: 15px; }
+  .upload-flow-text small { font-size: 11.5px; }
+  .upload-gallery-col { flex-basis: 220px; }
+  .upload-gallery-col .demo-images-grid,
+  .upload-gallery-col .demo-images-grid:has(.history-day-group) {
+    display: grid;
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 120px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 0 0 auto;
+    width: 100%;
+    gap: 10px;
+  }
+  .upload-gallery-col .history-day-group {
+    display: contents;
+  }
+  .upload-gallery-col .history-day-group::before {
+    display: none;
+  }
+  .upload-gallery-col .history-grid {
+    display: contents;
+  }
+  .upload-gallery-col .history-load-more-hint {
+    left: auto;
+    right: 0;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+  }
+  .upload-gallery-col .history-load-more-hint:hover,
+  .upload-gallery-col .history-load-more-hint:focus-visible {
+    transform: translateY(-50%);
+  }
+}
+@media (max-width: 900px) {
+  .upload-main-copy > .upload-flow { gap: 0; }
+}
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+}
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold,
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run {
+  flex: 0 1 auto;
+  width: fit-content;
+  min-width: 0;
 }
 @media (max-width: 720px) {
   /* Gallery stacks below the drop zone instead of beside it, and switches
      to a horizontal scroll strip -- a fixed 180px sidebar column left too
      little width for both it and the drop zone side by side once the
      viewport itself narrows this far. */
-  .upload-content-row { flex-direction: column; }
+  .upload-content-row {
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 24px;
+  }
   .upload-gallery-col { flex: 0 0 auto; }
   .upload-gallery-col .demo-images-grid {
     grid-auto-flow: column;
@@ -686,12 +1160,40 @@ a { text-decoration: none; color: inherit; }
 .upload-zone.dragging { transform: scale(1.008); }
 
 .dz-empty {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   padding: 40px 32px;
   text-align: center;
+}
+.upload-zone .upload-icon-wrap {
+  width: 84px;
+  height: 84px;
+  border-radius: 24px;
+  margin-bottom: 10px;
+  box-shadow: 0 10px 28px rgba(168,85,247,.12);
+}
+.upload-zone .upload-icon-wrap svg {
+  width: 32px;
+  height: 32px;
+}
+.upload-zone .dz-title {
+  font-size: 24px;
+}
+@media (max-width: 720px) {
+  .upload-zone .upload-icon-wrap { width: 72px; height: 72px; }
+  .upload-zone .upload-icon-wrap svg { width: 28px; height: 28px; }
+  .upload-zone .dz-title { font-size: 21px; }
+  .upload-main-copy {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: 520px;
+    align-items: center;
+    text-align: center;
+  }
 }
 
 .upload-icon-wrap {
@@ -2778,9 +3280,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
    RESPONSIVE
 ════════════════════════════════════════ */
 @media (max-width: 900px) {
-  /* Keep the same 80% width rule as wider screens so crossing 900px does
-     not suddenly make the upload area wider and flip selector layout. */
-  .upload-grid { max-width: 80%; }
+  .upload-grid { max-width: 100%; }
   .upload-below-zone { flex-direction: column; align-items: stretch; gap: 10px; }
   .upload-zone { min-height: 160px; }
 
@@ -2823,7 +3323,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
      height (see the base rule above), so that padding was eating straight
-     into the same vertical budget .upload-hero/.upload-grid need, working
+     into the same vertical budget .upload-grid needs, working
      against the portrait-phone compaction below instead of just adding
      breathing room. */
   .upload-container { padding-top: 16px; padding-bottom: 16px; }
@@ -3013,7 +3513,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
 }
 
 /* Landscape phones/small tablets (narrow width *and* short height at once):
-   .upload-hero's headline/sub-copy don't shrink past their own font-size
+   the upload copy's headline/sub-copy don't shrink past their own font-size
    floors (20px/14px), and .upload-below-zone stacks into a much taller
    column at this width (see the max-width:900px block above) -- neither is
    accounted for by the max-height-only tiers above, so .upload-options-card
