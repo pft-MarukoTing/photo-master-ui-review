@@ -2,35 +2,35 @@ window.PhotoAgentResults = (() => {
   const { els } = window.PhotoAgentDom;
   const { resolveCropBoxForDisplay, resolveCropBoxWithReport } = window.PhotoAgentImageTools;
 
-  const DEFAULT_OPTION = { value: "default", label: "Auto" };
+  const DEFAULT_OPTION = { value: "default", label: "自動" };
   const POSE_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "playful", label: "Playful" },
-    { value: "candid", label: "Candid" },
-    { value: "strong", label: "Strong" },
-    { value: "elegant", label: "Elegant" },
-    { value: "dynamic", label: "Dynamic" },
-    { value: "cool", label: "Cool" },
-    { value: "vsign", label: "V-Sign" },
-    { value: "cheer", label: "Cheer" }
+    { value: "playful", label: "俏皮" },
+    { value: "candid", label: "自然抓拍" },
+    { value: "strong", label: "強勢" },
+    { value: "elegant", label: "優雅" },
+    { value: "dynamic", label: "動感" },
+    { value: "cool", label: "酷帥" },
+    { value: "vsign", label: "勝利手勢" },
+    { value: "cheer", label: "歡呼" }
   ];
   const ANGLE_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "high", label: "High Shot" },
-    { value: "low", label: "Low Shot" },
-    { value: "eye", label: "Eye Level" }
+    { value: "high", label: "俯拍" },
+    { value: "low", label: "仰拍" },
+    { value: "eye", label: "平視" }
   ];
   const LIGHTING_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "gold", label: "Gold Tone" },
-    { value: "soft", label: "Soft Glow" }
+    { value: "gold", label: "金色光調" },
+    { value: "soft", label: "柔光" }
   ];
   const SIZE_OPTIONS = [
     DEFAULT_OPTION,
-    { value: "wide", label: "Wide" },
-    { value: "wider", label: "Wider" },
-    { value: "close", label: "Close" },
-    { value: "closer", label: "Closer" }
+    { value: "wide", label: "遠景" },
+    { value: "wider", label: "廣角" },
+    { value: "close", label: "近景" },
+    { value: "closer", label: "特寫" }
   ];
 
   // Maps each non-default option value to its example image in
@@ -53,10 +53,10 @@ window.PhotoAgentResults = (() => {
   // (the raw {pose, angle, lighting, size} values the user picked on the review
   // screen) back into human-readable text on the results page.
   const STYLE_OPTION_GROUPS = {
-    pose: { options: POSE_OPTIONS, label: "Pose" },
-    angle: { options: ANGLE_OPTIONS, label: "Angle" },
-    lighting: { options: LIGHTING_OPTIONS, label: "Lighting" },
-    size: { options: SIZE_OPTIONS, label: "Framing size" }
+    pose: { options: POSE_OPTIONS, label: "姿勢" },
+    angle: { options: ANGLE_OPTIONS, label: "拍攝角度" },
+    lighting: { options: LIGHTING_OPTIONS, label: "光線" },
+    size: { options: SIZE_OPTIONS, label: "取景範圍" }
   };
 
   function buildStyleOptionsText(styleOptions) {
@@ -394,7 +394,7 @@ window.PhotoAgentResults = (() => {
     if (!valueEl) return;
     const checked = listElement.querySelector("input:checked");
     const label = checked?.closest("label")?.querySelector(".step-cb-label, .ap-style-option-label")?.textContent;
-    valueEl.textContent = label || "Default";
+    valueEl.textContent = label || "自動";
   }
 
   // Resets one ap-pose/-angle/-lighting/-size radio group back to its
