@@ -7158,6 +7158,12 @@
   // #ap-style-modal, a real overlay window -- now inline as this tab's own
   // body, same function, just relocated.
   const STYLE_GROUPS = ["pose", "angle", "lighting", "size"];
+  // Chinese labels for #ap-style-options-title (showStyleGroup below) --
+  // kept in sync by hand with the .option-pill-label text above each pill
+  // (index.html) and with STYLE_OPTION_GROUPS' own labels in results.js,
+  // since that map is private to results.js's module closure and isn't
+  // exported for reuse here.
+  const STYLE_GROUP_TITLES = { pose: "姿勢", angle: "拍攝角度", lighting: "光線", size: "取景範圍" };
 
   function styleGroupListEl(group) {
     return els[`ap${group[0].toUpperCase()}${group.slice(1)}List`];
@@ -7201,9 +7207,8 @@
   // #ap-review-tab-style click listener below always resets to null, same
   // as this tab's old openStyleModal always starting there).
   // #ap-style-options-title (top of that frame) is set to the same
-  // Pose/Angle/Lighting/Size text as the now-hidden pill's own
-  // .option-pill-label, since STYLE_GROUPS entries are already lowercase
-  // versions of those labels.
+  // 姿勢/拍攝角度/光線/取景範圍 text as the now-hidden pill's own
+  // .option-pill-label (see STYLE_GROUP_TITLES above).
   function showStyleGroup(group) {
     STYLE_GROUPS.forEach((g) => {
       const btn = document.getElementById(`ap-group-${g}`);
@@ -7213,7 +7218,7 @@
     });
     if (els.apStyleTypeRow) els.apStyleTypeRow.hidden = !!group;
     if (els.apStyleOptionsTitle) {
-      els.apStyleOptionsTitle.textContent = group ? group[0].toUpperCase() + group.slice(1) : "";
+      els.apStyleOptionsTitle.textContent = group ? (STYLE_GROUP_TITLES[group] || group) : "";
     }
     if (els.apStyleOptionsFrame) els.apStyleOptionsFrame.hidden = !group;
     // Freshly shown list starts scrolled to the top regardless of where a
