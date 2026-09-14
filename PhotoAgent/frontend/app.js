@@ -4674,7 +4674,16 @@
       clearInlineAnalysisWait();
       closeInlineAnalysisPanel();
     }
-    continueBatchRecords(analyzedBatchRecords());
+    // Belt-and-suspenders alongside updateBatchHeaderControls() hiding this
+    // button once no "analyzed" record is left: if it's ever clicked with
+    // nothing eligible (a stale render, a race with a per-item run), say so
+    // instead of continueBatchRecords's own silent empty-targets return.
+    const targets = analyzedBatchRecords();
+    if (!targets.length) {
+      showNoticeModal("目前沒有可批次執行的案例。");
+      return;
+    }
+    continueBatchRecords(targets);
   }
 
   // Step 2 for one (record, run) pair: submit via the single-image
@@ -7638,6 +7647,11 @@
     record.mirrorIndex = newRuns.length - 1;
     record.status = "processing";
     updateBatchSidebarItem(record);
+    // Unlike continueBatchRecords, this path runs a single record outside any
+    // "Run all" batch -- so it's the only place that can take the LAST
+    // "analyzed" record off the board. Refresh here too, or "Run all" stays
+    // visible (stale) after every case has already been run one by one.
+    updateBatchHeaderControls();
     // Replaces the canvas/run switcher with the same processing view a
     // first-time edit shows (renderBatchMain routes "processing" there) --
     // rather than leaving the old (now-stale) canvas up with a spinner
