@@ -1150,6 +1150,55 @@
     previewAspectRatio(opt.value);
   }
 
+  // Only composition reframing owns the aspect-ratio picker. Whole-frame
+  // alignment/straightening is a separate review item; its unavoidable wedge
+  // trim must not make unchecking it behave like rejecting a composition crop.
+  const CROP_AXIS_NAMES = new Set(["crop", "cropping", "framing", "reframing"]);
+
+  function correctionAxesIncludeCrop(entry) {
+    const axes = Array.isArray(entry) ? entry : [entry];
+    return axes.some((axis) => CROP_AXIS_NAMES.has(String(axis || "").trim().toLowerCase()));
+  }
+
+  // Reframing and a changed output ratio are presented as one recipe item.
+  // Keep the visible ratio control in sync as soon as that item is declined;
+  // the backend independently enforces the same decision at finish time.
+  function applyRejectedReframingRatio(event) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") return;
+    const boxes = Array.from(els.apRecipeList?.querySelectorAll("input[type=checkbox]") || []);
+    const index = boxes.indexOf(input);
+    if (index < 0) return;
+    const batchRecord = currentDetailBatchRecord();
+    const rawAnalysis = batchRecord ? batchRecord.analysis : singleFlowState?.analysis;
+    if (!rawAnalysis) return;
+    const shownAnalysis = stripDisabledTopicItems(rawAnalysis, readAdvancedOptionsFromDom());
+    if (!correctionAxesIncludeCrop((shownAnalysis.correction_axes || [])[index])) return;
+    const owner = batchRecord || singleFlowState;
+    if (!input.checked) {
+      if (owner) {
+        owner.reframingAspectRatioBeforeReject =
+          els.apImageAspectRatioSelect?.value || owner.aspectRatio || "auto";
+      }
+      applyAspectRatioChange("original");
+      return;
+    }
+
+    // Re-approving the combined framing item restores the choice that was in
+    // force before it was declined. A restored/history result has no in-memory
+    // value, but its saved source proposal still tells us that Auto should be
+    // active again instead of leaving the forced "original" selection behind.
+    const savedProposal = rawAnalysis._rejected_reframing_source || {};
+    let restoredPref = owner?.reframingAspectRatioBeforeReject;
+    if (!restoredPref) {
+      restoredPref = savedProposal.recommended_aspect_ratio
+        && savedProposal.recommended_aspect_ratio !== "original"
+        ? "auto"
+        : (rawAnalysis._aspect_ratio_pref_at_analysis || "auto");
+    }
+    applyAspectRatioChange(restoredPref);
+  }
+
   if (els.imageAspectRatioSelect) {
     els.imageAspectRatioSelect.addEventListener("change", () =>
       applyAspectRatioChange(els.imageAspectRatioSelect.value));
@@ -8467,6 +8516,18 @@
       effective.rejected_preserve = dropChecked(base.correction_inverse);
     }
 
+    // A previous rejected-reframe run keeps the analyzer's original crop
+    // proposal in a private snapshot.  Restore it only when the crop recipe is
+    // approved again; while it remains unchecked, the backend's original-frame
+    // resolver stays authoritative.
+    const keptCrop = (effective.correction_axes || []).some(correctionAxesIncludeCrop);
+    const rejectedCrop = (effective.rejected_axes || []).some(correctionAxesIncludeCrop);
+    if (keptCrop && !rejectedCrop && effective._rejected_reframing_source) {
+      Object.assign(effective, effective._rejected_reframing_source);
+      delete effective._rejected_reframing_source;
+      delete effective._preserve_original_composition;
+    }
+
     const styleOptions = {};
     Object.entries(options || {}).forEach(([key, value]) => {
       if (value && value !== "default") styleOptions[key] = value;
@@ -9238,7 +9299,10 @@
   // rather than exposing their own individual change hooks). 補充指令 and its
   // "取代" checkbox have no other listener at all yet.
   if (els.apRecipeList) {
-    els.apRecipeList.addEventListener("change", updateInlineAnalysisContinueBtnState);
+    els.apRecipeList.addEventListener("change", (event) => {
+      applyRejectedReframingRatio(event);
+      updateInlineAnalysisContinueBtnState();
+    });
   }
   if (els.apFaceDetail) {
     els.apFaceDetail.addEventListener("change", updateInlineAnalysisContinueBtnState);

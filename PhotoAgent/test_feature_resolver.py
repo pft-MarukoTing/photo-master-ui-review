@@ -340,7 +340,7 @@ Frame the photograph on what it is actually of."""
         alignment_item = "將照片逆時針旋轉約2至3度，以海平面為水平基準並自動裁切邊緣。"
         analysis.update({
             "correction_plan": [alignment_item, "提升岩壁中間調。"],
-            "correction_axes": [["crop"], ["exposure"]],
+            "correction_axes": [["alignment"], ["exposure"]],
             "crop_box": {"enabled": False, "reason": "保留原始比例。"},
             "protected_regions": [{"label": "遠方島岸"}],
         })
@@ -358,10 +358,9 @@ Frame the photograph on what it is actually of."""
             if line.startswith("- Preserve these unselected properties")
         )
         self.assertIn("Use the supplied image boundaries as the base frame", framing)
-        self.assertIn(f"Framing goal: {alignment_item}", framing)
         self.assertIn("trim only the exposed outer wedges", framing)
         self.assertNotIn("preserve internal proportions, tilt", framing.lower())
-        self.assertNotIn(alignment_item, other)
+        self.assertIn(alignment_item, other)
         self.assertIn("scale", preserve)
         self.assertNotIn("visible extent", preserve)
         self.assertNotIn("framing", preserve)

@@ -58,7 +58,8 @@ AXIS_DEFINITIONS = {
     "skin": "skin tone or complexion specifically",
     "sharpen": "acuity, clarity, noise",
     "distraction": "toning down, blurring, or cleaning up scene elements",
-    "crop": "reframing, straightening",
+    "crop": "composition reframing: crop boundaries, output aspect ratio, frame-relative subject scale or placement",
+    "alignment": "whole-frame rotation, horizon/vertical straightening, or keystone/perspective correction",
     "expression": "facial expression repair, eye openness, accidental blink or half-closed eyes",
     "hair": "hair tidiness: stray or windblown strands, disturbed bangs, frizz, a standing tuft",
     "other": "anything the list above does not cover",
@@ -84,7 +85,9 @@ AXIS_ALIASES = {
     "colour_harmony": "saturation", "color_grading": "saturation",
     "skin_tone": "skin", "complexion": "skin",
     "distractions": "distraction", "cleanup": "distraction",
-    "cropping": "crop", "framing": "crop", "alignment": "crop", "straighten": "crop",
+    "cropping": "crop", "framing": "crop", "reframing": "crop",
+    "straighten": "alignment", "straightening": "alignment", "rotation": "alignment",
+    "horizon": "alignment", "perspective": "alignment", "keystone": "alignment",
     "eyes": "expression", "eye": "expression", "blink": "expression", "blinking": "expression",
     "closed_eyes": "expression", "half_closed_eyes": "expression", "squint": "expression",
     "facial_expression": "expression", "expression": "expression",
@@ -414,6 +417,14 @@ correction_inverse[i] is what the editing model will be told instead if the user
 - Name the same region, element, or 整體 that the item named.
 - It has to stand on its own, because the editing model may be shown it without the original item next to it.
 This is the only thing standing between an unchecked item and the editing model carrying it out anyway -- the rest of this analysis still describes the problem the item was going to fix, and the editing model reads all of it. A vague inverse fails to prevent the change; an over-broad one suppresses work the user wanted.
+
+Reframing is one reviewable decision, including its output shape, but alignment is a separate decision:
+- If reframing is beneficial, put every composition crop, edge trim, frame-relative subject repositioning/scale change, and aspect-ratio change into exactly ONE correction_plan item tagged with ["crop"]. Never create a separate item for changing the aspect ratio.
+- Its matching retouch_recipe item must start with "重新構圖：" and summarize the complete visible result in one item. If the final frame changes shape, include the ratio in that same item, for example: "重新構圖：裁成4:3，收窄左右空間，讓家庭更集中。"
+- Its matching correction_inverse must say to keep the original photo's aspect ratio, outer boundaries, subject scale and placement, and empty-space balance, with no composition crop, expansion, or recomposition. It must not preserve tilt or perspective, because those belong to the independent alignment item. This inverse is the authoritative fallback when the user unchecks the item.
+- If no reframing is beneficial, do not add a crop-tagged correction_plan/retouch_recipe item merely to restate that the original frame is good.
+- If whole-frame rotation, horizon/vertical straightening, or keystone/perspective correction is beneficial, write a separate correction_plan item tagged with ["alignment"]. Its retouch_recipe must start with "水平／透視校正：" and its correction_inverse must preserve the original tilt, horizon/vertical alignment, and perspective without blocking any separately approved crop/reframing.
+- The small edge trim needed to remove exposed wedges after rotation/perspective correction is a technical consequence of alignment, not composition reframing. Keep the output aspect ratio and frame-relative subject scale/placement as close to the selected composition as possible, and do not tag the alignment item with "crop" merely because this cleanup trim is required.
 
 """ + f"""correction_axes[i] is the machine-readable tag set for correction_plan[i]: which properties of the photograph that item changes. Pick every axis the item actually moves, from exactly this vocabulary, and nothing else: {_AXIS_VOCABULARY}. Most items need one or two axes; use the narrowest set that is true. The example above shows an item that raises overall brightness and recovers the bright end, hence ["exposure", "highlight"]. These tags let the user's recipe choices switch the corresponding instructions off precisely, so an inaccurate tag causes the wrong part of the edit to be suppressed.
 """ + """
@@ -992,6 +1003,7 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - Write preserve_rules only for identity, content, geometry, scene structure, and material identity. Do not use preserve_rules to retain scene exposure, white balance, contrast, hue, saturation, or captured color atmosphere; those are governed by edit_intent and correction_plan. Keep eyes, blink, eye contact, gaze, hair, and smile out of preserve_rules because their structured issue fields govern them.
 - Prioritize natural-looking skin over global color neutrality. Preserve each person's complexion, skin chroma, and intentional scene illumination; correct only a cast that is distracting, inconsistent across connected skin, or not plausibly explained by the light. Never write a correction_plan item that makes skin warmer, yellower, rosier, healthier-looking, more vivid, or more saturated. If correction is needed, name the unwanted hue, affected skin area, and corrective direction. When subjects[].skin says no unexpected cast, write no skin temperature, hue, or saturation adjustment. A global white-balance, hue, or saturation adjustment may refine the image palette, but it must not force skin to follow the background grade.
 - Propose AI-authored crop_candidates only when reframing may improve the photo. Each candidate must explain its composition intent and tradeoffs. Include a safer/context-preserving option when the decision is ambiguous, and include original-frame when preserving the original may be best.
+- Reframing consistency check: if crop_box.enabled=true, verify that exactly one correction_plan item owns all composition reframing and any aspect-ratio change, its correction_axes includes "crop", its retouch_recipe starts with "重新構圖：", and its correction_inverse restores the original ratio and complete composition without preserving tilt/perspective. If any composition-framing part is split across items, merge those parts and their aligned arrays before returning JSON. Keep any horizon/vertical/perspective correction in its own "alignment" item.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and its blink_issue/hair_issue/gaze_issue/smile_issue, and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
 - is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
@@ -2075,6 +2087,12 @@ _OUTPUT_ALIGNMENT_RULES_OVERALL = f"""## Execution contract
 - Tag each correction_plan item with every axis it changes, using only this vocabulary: {_AXIS_VOCABULARY}.
 - Write retouch_recipe as the user-facing version of the same item, retaining its region, main action, and useful strength.
 - Write correction_inverse for the exact same region and properties as its correction_plan item.
+- Treat reframing and its output aspect ratio as one reviewable decision. When reframing is beneficial, write exactly one crop-tagged correction_plan item containing every composition crop/trim/frame-relative subject repositioning or scale action and any aspect-ratio change; never split the ratio into another item.
+- The matching retouch_recipe item must start with "重新構圖：" and include the ratio in the same sentence when it changes, for example "重新構圖：裁成4:3，收窄左右空間，讓家庭更集中。"
+- The matching correction_inverse must preserve the original aspect ratio, outer boundaries, subject scale and placement, and empty-space balance, with no composition crop, expansion, or recomposition. It must not preserve tilt or perspective.
+- When the original frame is selected, do not add a crop-tagged review item just to say that it is unchanged.
+- Whole-frame rotation, horizon/vertical straightening, and keystone/perspective correction are not reframing. When beneficial, put them in one separate correction_plan item tagged with ["alignment"]; its retouch_recipe starts with "水平／透視校正：" and its inverse preserves the original tilt/alignment/perspective without blocking a separately approved crop.
+- The minimal edge trim needed to remove exposed wedges after alignment correction belongs to the alignment item. Keep the selected output ratio and composition as close as possible, and do not add the "crop" axis solely for that technical trim.
 
 """
 
@@ -2090,7 +2108,7 @@ Intent: Produce normalized subject and crop geometry that downstream framing log
 """ + "\n" + """- For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
 - protected_regions are important subject parts, structural edges, fine details, connected components, role cues, props, or supporting elements needed for the intended story, action, presentation, or scene truth.
 - Choose "original" with crop_box.enabled=false when the captured boundaries support the intended subject emphasis, balance, context, and edge cleanliness as well as any viable crop.
-- A same-ratio or near-full crop remains valid when it visibly improves alignment, removes an edge distraction, strengthens the subject anchor, or gives the frame a cleaner visual endpoint.
+- A same-ratio or near-full composition crop remains valid when it removes an edge distraction, strengthens the subject anchor, or gives the frame a cleaner visual endpoint. Do not enable crop_box only to straighten the horizon or correct perspective; alignment owns its own minimal cleanup trim.
 - The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
 - Changing the outer canvas ratio never permits changing the internal proportions of the photographed content. Plan the new frame only by cropping/recomposition; never stretch or squash the original scene to fill it.
 - The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
@@ -2136,7 +2154,9 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
 - is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
-- Make the framing decision decisive and consistent. When composition_strategy, distraction_strategy, alignment_strategy, or detected_issues identifies a framing improvement to execute, express it through crop_box and a crop-tagged correction_plan item. When crop_box.enabled is false, describe the original frame as the selected final composition with a definitive preserve decision.
+- Make the composition-framing decision decisive and consistent. When composition_strategy, distraction_strategy, or detected_issues identifies a composition crop/reframe to execute, express it through crop_box and a crop-tagged correction_plan item. When crop_box.enabled is false, describe the original frame as the selected final composition with a definitive preserve decision. An alignment_strategy correction alone must not enable crop_box.
+- Consolidate the entire composition-framing decision into that one crop-tagged item: its crop/trim/frame-relative repositioning or scale actions and any change to recommended_aspect_ratio must never become separate review items. The paired retouch_recipe starts with "重新構圖："; its correction_inverse explicitly restores the original ratio and composition but says nothing about tilt or perspective.
+- Keep alignment independently reviewable. If alignment_strategy calls for whole-frame rotation, horizon/vertical straightening, or keystone/perspective correction, create a separate alignment-tagged item whose retouch_recipe starts with "水平／透視校正：". Do not merge it into the crop item; any minimal wedge-removal trim is part of alignment and must preserve the selected ratio and composition as closely as possible.
 - Before returning JSON, read edit_intent, lighting_strategy, memory_color_strategy, correction_plan, and preserve_rules together. Make them one consistent target and execution plan; remove or rewrite any statement that weakens or preserves away an approved light or color adjustment.
 
 """
@@ -5458,9 +5478,10 @@ def resolve_rejected_axes(analysis):
     tags are missing or untrustworthy, which leaves the previous behavior --
     rejected item text only -- intact.
     """
+    forced_original_composition = bool(analysis.get("_preserve_original_composition"))
     rejected = _axis_set(analysis.get("rejected_axes"))
     if not rejected or not _axes_aligned(analysis):
-        return []
+        return ["crop"] if forced_original_composition else []
     kept = _axis_set(analysis.get("correction_axes"))
     # An unrecognized tag on a KEPT item is not symmetric with one on a rejected
     # item: unknown rejected axes simply fall out of the CORRECTION_AXES loop
@@ -5475,8 +5496,85 @@ def resolve_rejected_axes(analysis):
             "approved corrections carry unrecognized axes %s; skipping axis gating for this edit "
             "(add them to AXIS_DEFINITIONS or AXIS_ALIASES)", sorted(unknown_kept),
         )
-        return []
-    return [axis for axis in CORRECTION_AXES if axis in rejected and axis not in kept]
+        return ["crop"] if forced_original_composition else []
+    return [
+        axis for axis in CORRECTION_AXES
+        if (axis in rejected and axis not in kept) or (axis == "crop" and forced_original_composition)
+    ]
+
+
+_ORIGINAL_COMPOSITION_PRESERVE = (
+    "維持原圖的長寬比、完整畫面邊界、主體大小與位置及留白平衡；"
+    "不做構圖裁切、不擴圖，也不重新構圖。水平與透視由獨立的校正項目決定。"
+)
+
+
+def apply_rejected_reframing(analysis, aspect_ratio):
+    """Turn an unchecked crop recipe into one effective original-frame edit.
+
+    Removing the crop item from ``correction_plan`` is insufficient: the
+    analyzer's crop_box and recommended_aspect_ratio would still drive the
+    provider canvas and local crop path. Resolve the rejection once at the
+    finish-stage boundary so every editor, QA, and local-only execution sees
+    the same no-reframe decision.
+    """
+    # This decision is narrower than the general resolve_rejected_axes gate:
+    # an unrelated kept item carrying an unknown model-invented axis must not
+    # allow a clearly aligned, explicitly rejected crop to survive.  Only a
+    # still-approved crop item can keep reframing active.
+    rejected_crop = "crop" in _axis_set(analysis.get("rejected_axes"))
+    kept_crop = "crop" in _axis_set(analysis.get("correction_axes"))
+    prior_source = analysis.get("_rejected_reframing_source")
+    if kept_crop and not rejected_crop and isinstance(prior_source, dict):
+        # Re-checking the recipe has to restore the proposal that was active
+        # before the declined run. Merely removing rejected_axes leaves the
+        # previous result's crop_box.enabled=false and recommended ratio at
+        # "original", which turns the newly-approved item into a no-op.
+        effective = copy.deepcopy(analysis)
+        effective.update(copy.deepcopy(prior_source))
+        effective.pop("_rejected_reframing_source", None)
+        effective.pop("_preserve_original_composition", None)
+        effective.pop("applied_crop_plan", None)
+        effective["_aspect_ratio_pref_at_edit"] = aspect_ratio
+        return effective, aspect_ratio
+    if not (_axes_aligned(analysis) and rejected_crop and not kept_crop):
+        effective = dict(analysis)
+        effective["_aspect_ratio_pref_at_edit"] = aspect_ratio
+        return effective, aspect_ratio
+
+    effective = copy.deepcopy(analysis)
+    effective["_rejected_reframing_source"] = copy.deepcopy(prior_source) if isinstance(prior_source, dict) else {
+        key: copy.deepcopy(analysis.get(key))
+        for key in (
+            "recommended_aspect_ratio", "aspect_ratio_reason", "crop_box",
+            "crop_candidates", "crop_intent", "crop_recommendation",
+        )
+        if key in analysis
+    }
+    effective["recommended_aspect_ratio"] = "original"
+    effective["aspect_ratio_reason"] = "使用者取消「重新構圖」，本次維持原圖長寬比與完整畫面邊界。"
+    source_crop = effective.get("crop_box") or {}
+    effective["crop_box"] = {
+        **source_crop,
+        "enabled": False,
+        "aspect_ratio": "original",
+        "reason": _ORIGINAL_COMPOSITION_PRESERVE,
+    }
+    effective["crop_candidates"] = []
+    effective["crop_intent"] = {
+        "trim_left": False,
+        "trim_right": False,
+        "trim_top": False,
+        "trim_bottom": False,
+        "subject_anchor": "center",
+        "looking_direction": "unknown",
+        "remove_edge_distractions": [],
+    }
+    effective["crop_recommendation"] = _ORIGINAL_COMPOSITION_PRESERVE
+    effective["applied_crop_plan"] = None
+    effective["_preserve_original_composition"] = True
+    effective["_aspect_ratio_pref_at_edit"] = "original"
+    return effective, "original"
 
 
 def _axes_aligned(analysis):
@@ -5516,6 +5614,32 @@ def _axis_set(value):
                 name = axis.strip().lower()
                 axes.add(AXIS_ALIASES.get(name, name))
     return axes
+
+
+_ALIGNMENT_CORRECTION_TERMS = (
+    "rotate", "rotation", "straighten", "level the horizon",
+    "horizon correction", "perspective correction", "keystone",
+    "旋轉", "水平校正", "修正水平", "校正地平", "地平線校正", "透視校正",
+    "垂直校正", "拉直", "扶正",
+)
+
+
+def has_approved_alignment_correction(analysis):
+    """Whether the reviewed plan still approves whole-frame alignment work.
+
+    New analyses use the dedicated ``alignment`` axis. The crop+keyword branch
+    keeps historical analyses executable without making ordinary crop items an
+    implicit licence to straighten the image.
+    """
+    axes = analysis.get("correction_axes") or []
+    for index, raw_item in enumerate(analysis.get("correction_plan") or []):
+        item_axes = _axis_set([axes[index]]) if index < len(axes) else set()
+        if "alignment" in item_axes:
+            return True
+        item = str(raw_item or "").strip().lower()
+        if "crop" in item_axes and any(term in item for term in _ALIGNMENT_CORRECTION_TERMS):
+            return True
+    return False
 
 
 _LIGHT_TARGET_AXES = {"exposure", "shadow", "highlight", "contrast", "lighting"}
@@ -5598,6 +5722,19 @@ def build_user_preserved_choices(analysis):
             f"Preserve the original state in the exact region and properties covered by this declined item: {item}"
             for item in rejected
         ]
+    if analysis.get("_preserve_original_composition"):
+        # Deterministic backstop for old/vague correction_inverse values.  The
+        # finish-stage resolver also disables crop geometry and forces the
+        # original canvas ratio; this line makes the same decision explicit to
+        # both legacy and compact edit prompts.
+        choices.insert(
+            0,
+            "Keep the source photo's exact aspect ratio and complete outer boundaries. Reproduce the original "
+            "subject scale, placement, and empty-space balance; do not apply a composition crop, expand, or "
+            "recompose the frame. A separately approved alignment correction may still change tilt or perspective "
+            "and trim only the exposed outer wedges it creates. When such an alignment correction remains approved, "
+            "it overrides any tilt/perspective-preservation wording inherited from the declined reframing item.",
+        )
     return (
         "User-preserved choices (highest priority for these scopes):\n"
         + "\n".join(f"- {item}" for item in choices)
@@ -7055,13 +7192,24 @@ Feature one subject: {focus_label}. Identify that subject in the photograph and 
         "removed from this edit's plan by the user; the scene's elements stay as the original presents them, "
         "except where an approved correction above asks otherwise."
     )
-    alignment_priority = (
-        "If credible horizontal/vertical references are unintentionally unstable, correct them subtly. Preserve "
-        "intentional slant only when it clearly supports motion, intimacy, tension, or expression."
-        if "crop" not in rejected_axes else
-        "Preserve the original alignment exactly. Do not level horizons, straighten verticals, correct tilt, or "
-        "adjust perspective, even where they read as unstable -- the user removed that from this edit's plan."
-    )
+    alignment_approved = has_approved_alignment_correction(analysis)
+    if alignment_approved:
+        alignment_priority = (
+            "Apply the separately approved whole-frame alignment correction subtly and completely. Change only "
+            "the requested tilt, horizon/vertical alignment, or perspective; use only the minimal edge trim needed "
+            "to remove exposed wedges, while retaining the selected aspect ratio and composition as closely as possible."
+        )
+    elif "alignment" in rejected_axes:
+        alignment_priority = (
+            "Preserve the original whole-frame alignment exactly. Do not level horizons, straighten verticals, "
+            "correct tilt, or adjust perspective -- the user removed the independent alignment item from this edit's plan."
+        )
+    else:
+        alignment_priority = (
+            "No whole-frame alignment correction is approved. Preserve the original tilt, horizon/vertical alignment, "
+            "and perspective; do not infer one from a crop/reframing item. A user-selected camera-angle style may still "
+            "change viewpoint within its own explicit scope."
+        )
 
     if has_style_overrides:
         opening_preservation_rule = (

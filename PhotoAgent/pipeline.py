@@ -37,6 +37,7 @@ from prompts import (
     eye_repair_targets,
     portrait_qc_persons,
     resolve_user_gaze_request,
+    apply_rejected_reframing,
     subject_issue_items,
     _disabled_issue_subject_indices,
 )
@@ -499,6 +500,11 @@ def finish_stage(
     if has_body_review_points and (user_prompt or "").strip():
         user_instruction["original_user_direction"] = user_prompt.strip()
     analysis = {**analysis, "user_instruction": user_instruction}
+    # A declined framing recipe owns both decisions the analyzer bundled into
+    # it: the crop/recomposition and its output shape.  Resolve that review
+    # choice before body planning, editing, local cropping, and QA so no later
+    # consumer can revive the stale crop_box or ratio recommendation.
+    analysis, aspect_ratio = apply_rejected_reframing(analysis, aspect_ratio)
     analysis.pop("_body_reshape_execution_plan", None)
     body_execution_plan = build_body_reshape_execution_plan(analysis)
     if not ai_photo_editing and body_execution_plan.get("review_point_count"):

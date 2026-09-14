@@ -135,7 +135,21 @@ window.PhotoAgentResults = (() => {
 
   function previewAspectRatio(pref) {
     if (!lastRender || !pref) return;
-    const { analysis } = lastRender;
+    const resultAnalysis = lastRender.analysis;
+    const reframeChecked = Array.from(
+      els.apRecipeList?.querySelectorAll("li") || []
+    ).some((item) =>
+      /^重新構圖\s*[:：]/.test(item.querySelector(".step-cb-label")?.textContent || "")
+      && item.querySelector('input[type="checkbox"]')?.checked
+    );
+    // A rejected run keeps the pre-rejection crop proposal privately. When
+    // the user checks that recipe again, preview the same restored geometry
+    // the backend will execute instead of previewing the rejected run's
+    // deliberately disabled crop_box.
+    const savedReframing = resultAnalysis?._rejected_reframing_source;
+    const analysis = pref !== "original" && reframeChecked && savedReframing
+      ? { ...resultAnalysis, ...savedReframing }
+      : resultAnalysis;
     const label = aspectRatioForPref(analysis, pref);
     const width = els.originalImg?.naturalWidth;
     const height = els.originalImg?.naturalHeight;
@@ -224,7 +238,17 @@ window.PhotoAgentResults = (() => {
 
       const text = document.createElement("span");
       text.className = "step-cb-label";
-      text.textContent = item;
+      const reframe = String(item || "").match(/^(重新構圖\s*[:：])\s*(.+)$/);
+      if (reframe) {
+        // Keep the framing decision visually recognizable as one recipe row:
+        // the label stays plain and the combined ratio/crop result is bold.
+        text.appendChild(document.createTextNode(`${reframe[1]} `));
+        const detail = document.createElement("strong");
+        detail.textContent = reframe[2];
+        text.appendChild(detail);
+      } else {
+        text.textContent = item;
+      }
 
       label.appendChild(cb);
       label.appendChild(text);

@@ -20,6 +20,7 @@ from prompts import (
     _read_smile_states,
     build_reviewed_light_color_target,
     build_user_preserved_choices,
+    has_approved_alignment_correction,
     resolve_user_blink_request,
     resolve_user_gaze_request,
     resolve_user_hair_request,
@@ -372,20 +373,8 @@ def _compact_analysis_crop_guidance(analysis):
 
 
 def _analysis_has_alignment_correction(analysis):
-    """Return whether an approved crop-axis item changes tilt or perspective."""
-    alignment_terms = (
-        "rotate", "rotation", "straighten", "level the horizon",
-        "horizon correction", "perspective correction", "keystone",
-        "旋轉", "水平校正", "修正水平", "校正地平", "地平線校正", "透視校正",
-        "垂直校正", "拉直", "扶正",
-    )
-    axes = analysis.get("correction_axes") or []
-    for index, raw_item in enumerate(analysis.get("correction_plan") or []):
-        item_axes = _axis_set([axes[index]]) if index < len(axes) else set()
-        item = str(raw_item or "").strip().lower()
-        if "crop" in item_axes and any(term in item for term in alignment_terms):
-            return True
-    return False
+    """Return whether reviewed work changes whole-frame tilt or perspective."""
+    return has_approved_alignment_correction(analysis)
 
 
 def _compact_raw_style_instruction(raw_instruction, style_options=None):
