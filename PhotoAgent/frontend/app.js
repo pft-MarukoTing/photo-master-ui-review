@@ -1338,8 +1338,8 @@
   };
 
   const POSE_OPTION_LABELS = {
-    playful: "Playful", candid: "Candid", strong: "Strong", elegant: "Elegant",
-    dynamic: "Dynamic", cool: "Cool", vsign: "V-Sign", cheer: "Cheer"
+    playful: "俏皮", candid: "自然抓拍", strong: "強勢", elegant: "優雅",
+    dynamic: "動感", cool: "酷帥", vsign: "勝利手勢", cheer: "歡呼"
   };
 
   const POSE_RESTORE_NOTICES = {
