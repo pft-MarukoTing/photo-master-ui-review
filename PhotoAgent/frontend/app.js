@@ -7164,14 +7164,13 @@
     }
   }
 
-  // 修圖風格 tab (#ap-review-style): two-step picker -- a row of
+  // 修圖風格 picker (#ap-style-modal): two-step picker -- a row of
   // Pose/Angle/Lighting/Size buttons (ids ap-group-pose/-angle/-lighting/
-  // -size), then that type's #ap-*-list image-option grid underneath.
+  // -size), then that type's #ap-*-list example-image grid underneath.
   // showStyleGroup just flips which button/list pair is visible; it doesn't
   // touch which radio is checked in any of them (that's still plain radio
-  // input behavior, untouched by this). Was a two-step picker inside
-  // #ap-style-modal, a real overlay window -- now inline as this tab's own
-  // body, same function, just relocated.
+  // input behavior, untouched by this). The trigger remains in the review
+  // tab, while this picker is a standalone modal.
   const STYLE_GROUPS = ["pose", "angle", "lighting", "size"];
   // Chinese labels for #ap-style-options-title (showStyleGroup below) --
   // kept in sync by hand with the .option-pill-label text above each pill
@@ -7211,16 +7210,10 @@
     if (els.apStyleScrollHint) els.apStyleScrollHint.hidden = !hasMoreBelow;
   }
 
-  // group === null hides every list and clears every button's active state
-  // (no g in STYLE_GROUPS ever equals null) -- also swaps which of
-  // #ap-style-type-row (the 4 pills) / #ap-style-options-frame is visible,
-  // so picking a category hands this tab's whole body over to that
-  // category's option grid instead of splitting space with the pills. Three
-  // ways back to null: #ap-style-exit-btn (manual, no pick made), picking an
-  // actual option in the grid (the per-image ap-*-list change handler below,
-  // automatic), or -- for either -- switching to this tab fresh (the
-  // #ap-review-tab-style click listener below always resets to null, same
-  // as this tab's old openStyleModal always starting there).
+  // group === null hides every list and clears every category button's active
+  // state (no g in STYLE_GROUPS ever equals null). A concrete group opens its
+  // image list in the standalone modal while the category row remains inline
+  // in the 修圖風格 tab.
   // #ap-style-options-title (top of that frame) is set to the same
   // 姿勢/拍攝角度/光線/取景範圍 text as the now-hidden pill's own
   // .option-pill-label (see STYLE_GROUP_TITLES above).
@@ -7231,7 +7224,6 @@
       if (btn) btn.classList.toggle("is-active", g === group);
       if (list) list.hidden = g !== group;
     });
-    if (els.apStyleTypeRow) els.apStyleTypeRow.hidden = !!group;
     if (els.apStyleOptionsTitle) {
       els.apStyleOptionsTitle.textContent = group ? (STYLE_GROUP_TITLES[group] || group) : "";
     }
@@ -7249,6 +7241,18 @@
     } else if (els.apStyleScrollHint) {
       els.apStyleScrollHint.hidden = true;
     }
+  }
+
+  // The category buttons stay inline in the 修圖風格 tab. Opening one sends
+  // only its example-image list to this standalone modal.
+  function openStyleModal(group) {
+    if (!els.apStyleModal) return;
+    showStyleGroup(group || null);
+    els.apStyleModal.hidden = false;
+  }
+
+  function closeStyleModal() {
+    if (els.apStyleModal) els.apStyleModal.hidden = true;
   }
 
   // Full-window compare view: toggles .is-fullscreen on the real
@@ -9322,10 +9326,15 @@
   // #ap-review-tab-recipe/-face) handles switching which tab is actually
   // active/visible; this is purely the extra style-specific reset.
   if (els.apReviewTabStyle) els.apReviewTabStyle.addEventListener("click", () => showStyleGroup(null));
+  if (els.apStyleModalClose) els.apStyleModalClose.addEventListener("click", closeStyleModal);
+  if (els.apStyleModal) {
+    els.apStyleModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeStyleModal();
+    });
+  }
   document.querySelectorAll(".ap-style-type-btn").forEach((btn) => {
-    btn.addEventListener("click", () => showStyleGroup(btn.dataset.styleGroup));
+    btn.addEventListener("click", () => openStyleModal(btn.dataset.styleGroup));
   });
-  if (els.apStyleExitBtn) els.apStyleExitBtn.addEventListener("click", () => showStyleGroup(null));
   // Keeps the has-more-above/-below scroll cue (and #ap-style-scroll-hint)
   // honest as the user actually scrolls each category's list, not just at
   // the moment showStyleGroup first shows it.
@@ -9376,6 +9385,7 @@
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
+    if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
     if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();
@@ -9390,13 +9400,11 @@
   // Per-image ap-*-list radios: their <ul> elements are stable across
   // renderAnalysisPreview's re-fills (only the <li> children get replaced),
   // so a delegated listener attached once here keeps working for every
-  // future render. Picking an actual option returns straight to the
-  // pills-only view (showStyleGroup(null)), same as #ap-style-type-row's own
-  // click-away -- the modal itself stays open so the user can go pick
-  // another category next. Clearing one back to "Auto" instead (a card/
-  // chip's own "x" -- clearStylePick, results.js, dispatches this same
-  // "change" event with value "default") deliberately stays in this grid,
-  // so the user can immediately pick a different option in it.
+  // future render. Picking an actual option closes the image modal and leaves
+  // the selected value on its inline category button. Clearing one back to
+  // "Auto" instead (a card/chip's own "x" -- clearStylePick, results.js,
+  // dispatches this same "change" event with value "default") stays in the
+  // current modal so another option can be picked immediately.
   [["apPoseList", "pose"], ["apAngleList", "angle"], ["apLightingList", "lighting"], ["apSizeList", "size"]]
     .forEach(([elKey, key]) => {
       if (els[elKey]) {
@@ -9404,7 +9412,7 @@
           syncStyleTrigger(els[elKey]);
           updateStyleTriggerLabel();
           if (key === "pose") applyPoseSuggestions(e.target.value);
-          if (e.target.value !== "default") showStyleGroup(null);
+          if (e.target.value !== "default") closeStyleModal();
           updateInlineAnalysisContinueBtnState();
         });
       }

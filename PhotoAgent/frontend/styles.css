@@ -687,7 +687,7 @@ a { text-decoration: none; color: inherit; }
   background: linear-gradient(180deg, rgba(8,8,12,.02) 45%, rgba(8,8,12,.62) 100%);
 }
 .upload-gallery-col .history-cube-remove {
-  display: none;
+  display: flex;
 }
 .upload-gallery-col .history-cube .rc-badge {
   left: 7px;

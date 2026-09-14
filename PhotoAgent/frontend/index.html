@@ -1237,22 +1237,53 @@
     }
     .ap-style-picked-chip-remove:hover { background: rgba(255,38,0,.14); color: var(--red); }
 
-    /* ── 修圖風格 tab (#ap-review-style): Pose/Angle/Lighting/Size shown as
-       a row of type buttons; picking one shows that category's image-option
-       grid below (showStyleGroup in app.js). Was its own overlay window
-       (#ap-style-modal, capped to the viewport height with its own
-       internal scroll) before becoming a plain tab body. height:100% so its
-       own children (#ap-style-type-row/#ap-style-options-frame, only one
-       ever visible) have something real to fill in turn, down to
-       .ap-toggle-card-body's own JS-computed height (syncAnalysisPanelHeights,
-       app.js). ── */
+    /* ── 修圖風格 tab (#ap-review-style): keep the review panel compact and
+       open the example-image choices in the standalone #ap-style-modal below. ── */
     .ap-review-style { height: 100%; }
+    .error-modal-box.ap-style-modal-box {
+      width: min(560px, calc(100vw - 40px));
+      max-height: calc(100vh - 40px);
+      display: flex;
+      flex-direction: column;
+      padding: 14px 16px;
+    }
+    .ap-style-modal-box .error-modal-hdr {
+      flex: 0 0 auto;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .ap-style-modal-box #ap-style-options-frame {
+      height: auto;
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow: hidden;
+      margin-top: 12px;
+      padding: 12px 14px;
+    }
+    .ap-style-modal-box #ap-style-options-frame[hidden],
+    .ap-style-modal-box .ap-style-option-grid[hidden] { display: none; }
+    .ap-style-modal-box .ap-style-option-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .ap-style-modal-box .ap-style-option-btn {
+      width: 100%;
+      max-width: 140px;
+      padding: 10px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--radius);
+      background: var(--card-2);
+    }
+    .ap-style-modal-box .ap-style-option-btn:has(.ap-style-option-input:checked) {
+      border-color: var(--accent);
+      background: rgba(168,85,247,.14);
+      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+    }
+    .ap-style-modal-box .ap-style-option-thumb { width: 100%; }
+    .ap-style-modal-box .ap-style-scroll-hint { bottom: 10px; }
     /* Header row for #ap-style-options-frame: category name top-left (set
-       from showStyleGroup, app.js, since the pill row that would otherwise
-       say so is hidden while this frame is open), exit button top-right
-       (#ap-style-exit-btn -- manually returns to the pills-only view
-       without picking anything; picking an actual option already does that
-       on its own, see the per-image ap-*-list change handler in app.js). */
+       from showStyleGroup, app.js, since the category row is hidden while
+       this frame is open), return button top-right. */
     .ap-style-options-hdr {
       display: flex;
       align-items: center;
@@ -2918,6 +2949,7 @@
        reused as-is, not duplicated here. */
     .history-cube {
       position: relative;
+      isolation: isolate;
       aspect-ratio: 1 / 1;
       border-radius: var(--radius);
       overflow: hidden;
@@ -2931,6 +2963,7 @@
       width: 100%;
       height: 100%;
       border-radius: 0;
+      z-index: 0;
     }
     /* Overlaid on the photo's bottom-left corner instead of sitting beside
        it (the old row layout's own arrangement) -- a cube has no room for
@@ -2940,6 +2973,7 @@
       left: 6px;
       bottom: 6px;
       max-width: calc(100% - 12px);
+      z-index: 3;
       background: rgba(9,9,11,.65);
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
@@ -2953,6 +2987,7 @@
       position: absolute;
       top: 5px;
       right: 5px;
+      z-index: 4;
       width: 20px;
       height: 20px;
       border: none;
@@ -2981,6 +3016,7 @@
       position: absolute;
       top: 5px;
       right: 5px;
+      z-index: 5;
       width: 20px;
       height: 20px;
       border-radius: 50%;
@@ -3021,6 +3057,11 @@
       opacity: .5;
       pointer-events: none;
     }
+    /* Keep the loading indicator above the main image layer. The homepage
+       reuses the same cube markup as the history drawer, but its portrait
+       image explicitly sits at z-index:1, which otherwise paints over this
+       absolutely-positioned spinner. */
+    .history-cube .rc-media .rc-spinner { z-index: 2; }
     .history-empty { color: var(--text-3); font-size: 15px; }
     /* #reports-drawer's own list -- plain rows (not the day-grouped cube
        grid #history-list uses) since reports have no per-day grouping and
@@ -3995,13 +4036,9 @@
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5l1.8 1.8L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16l1.8 1.8L14.5 13.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
                           修圖建議
                         </button>
-                        <!-- Was a standalone #ap-style-picker button opening
-                             #ap-style-modal (a real overlay window) -- the
-                             two-step Pose/Angle/Lighting/Size picker that used
-                             to live in that modal now renders inline as this
-                             tab's own body (#ap-review-style below), same
-                             fillStyleOptionList/showStyleGroup wiring
-                             (app.js/results.js), just relocated. -->
+                        <!-- 修圖風格分類按鈕留在 tab 內；點選分類後，
+                             由 app.js 開啟 #ap-style-modal 顯示該分類的
+                             example images。 -->
                         <button type="button" class="ap-review-tab" id="ap-review-tab-style">
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3.5 20.5L12 12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M16 2.5l1.7 4L21.5 8l-3.8 1.5L16 13.5l-1.7-4L10.5 8l3.8-1.5L16 2.5z" fill="currentColor"/></svg>
                           修圖風格
@@ -4021,26 +4058,9 @@
                     <ul id="ap-recipe-list" class="step-inline-list" hidden></ul>
                     <div class="ap-face-detail" id="ap-face-detail"></div>
                     <div class="ap-review-style" id="ap-review-style" hidden>
-                      <!-- Selected Pose/Angle/Lighting/Size label(s) (e.g.
-                           "Playful"/"Low Shot" as separate chips), each with
-                           its own "x" to clear that one category back to
-                           Auto/Default. Hidden entirely while everything's
-                           still Default/Auto. updateStyleTriggerLabel
-                           (results.js) keeps this in sync whenever a radio
-                           below changes or the analysis preview re-renders. -->
-                      <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
-                      <!-- Pose/Angle/Lighting/Size buttons -- picking one
-                           swaps to that category's image-option grid below
-                           (showStyleGroup, app.js) instead of splitting space
-                           with it. Category name is a plain label above the
-                           button (same .option-pill-group/.option-pill-label
-                           pattern as 模型/長寬比/生成張數 elsewhere), not text
-                           inside the button itself -- the button only ever
-                           shows the current pick ("Default"/"Playful"/...).
-                           The `hidden` toggle on Pose (non-person subjects) is
-                           read directly by showStyleGroup/updateStyleTriggerLabel
-                           in app.js/results.js; .option-pill-group:has below
-                           hides the label along with it. -->
+                      <!-- Keep the four category buttons in the 修圖風格 tab;
+                           clicking one opens the standalone modal with only
+                           that category's example-image choices. -->
                       <div class="ap-style-type-row" id="ap-style-type-row">
                         <div class="option-pill-group">
                           <span class="option-pill-label">姿勢</span>
@@ -4054,7 +4074,7 @@
                         <div class="option-pill-group">
                           <span class="option-pill-label">拍攝角度</span>
                           <div class="ap-style-type-btn-wrap">
-                            <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-angle" data-style-group="angle" hidden>
+                            <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-angle" data-style-group="angle">
                               <span class="ap-style-value">不指定</span>
                             </button>
                             <button type="button" class="ap-style-type-clear" data-style-group="angle" aria-label="清除拍攝角度" hidden>×</button>
@@ -4079,38 +4099,7 @@
                           </div>
                         </div>
                       </div>
-                      <!-- Hidden whenever no Pose/Angle/Lighting/Size button is
-                           active (see showStyleGroup, app.js) --
-                           #ap-style-options-title (top-left) names whichever
-                           category's grid is showing, since the pill row above
-                           is hidden for the duration. #ap-style-exit-btn
-                           (top-right) is the manual way back to the pills-only
-                           view -- picking an actual option auto-returns there
-                           on its own (see the per-image ap-*-list change
-                           handler in app.js). -->
-                      <div class="step-list-frame" id="ap-style-options-frame" hidden>
-                        <div class="ap-style-options-hdr">
-                          <span class="ap-style-options-title" id="ap-style-options-title"></span>
-                          <button type="button" class="error-modal-close" id="ap-style-exit-btn" aria-label="返回類別選擇">×</button>
-                        </div>
-                        <ul id="ap-pose-list" class="ap-style-option-grid" data-style-group="pose" hidden></ul>
-                        <ul id="ap-angle-list" class="ap-style-option-grid" data-style-group="angle" hidden></ul>
-                        <ul id="ap-lighting-list" class="ap-style-option-grid" data-style-group="lighting" hidden></ul>
-                        <ul id="ap-size-list" class="ap-style-option-grid" data-style-group="size" hidden></ul>
-                        <!-- The inset shadow on .ap-style-option-grid itself
-                             is a subtle cue easy to miss outright -- this
-                             spells the same "more below" state out in words,
-                             overlaid on the currently-visible list (whichever
-                             one that is) and toggled alongside it by
-                             updateStyleOptionScrollCue (app.js). Lives outside
-                             the scrolling <ul> itself so it stays pinned to
-                             the frame's bottom edge rather than scrolling
-                             away with the cards under it. -->
-                        <div class="ap-style-scroll-hint" id="ap-style-scroll-hint" hidden aria-hidden="true">
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                          往下滑看更多
-                        </div>
-                      </div>
+                      <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
                     </div>
                     <div class="form-field ap-options-prompt" id="ap-review-prompt" hidden>
                       <div class="ap-prompt-label-row">
@@ -4932,6 +4921,33 @@
       <button id="upload-selector-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="upload-selector-modal-body" class="settings-modal-body upload-selector-modal-body"></div>
+  </div>
+</div>
+
+<!-- Standalone 修圖風格 image picker: the category buttons stay in the
+     review tab; clicking one opens this modal directly on that category's
+     example-image grid. The radio lists stay here so the tab remains compact
+     while the image choices get a dedicated, scrollable viewing area. -->
+<div id="ap-style-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box ap-style-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-style-modal-title">
+    <div class="error-modal-hdr">
+      <span id="ap-style-modal-title" class="settings-modal-title">修圖風格</span>
+      <button id="ap-style-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div class="step-list-frame" id="ap-style-options-frame" hidden>
+      <div class="ap-style-options-hdr">
+        <span class="ap-style-options-title" id="ap-style-options-title"></span>
+      </div>
+      <ul id="ap-pose-list" class="ap-style-option-grid" data-style-group="pose" hidden></ul>
+      <ul id="ap-angle-list" class="ap-style-option-grid" data-style-group="angle" hidden></ul>
+      <ul id="ap-lighting-list" class="ap-style-option-grid" data-style-group="lighting" hidden></ul>
+      <ul id="ap-size-list" class="ap-style-option-grid" data-style-group="size" hidden></ul>
+      <div class="ap-style-scroll-hint" id="ap-style-scroll-hint" hidden aria-hidden="true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        往下滑看更多
+      </div>
+    </div>
   </div>
 </div>
 
