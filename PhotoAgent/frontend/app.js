@@ -1942,7 +1942,7 @@
     }
   }
 
-  // step: 1 (分析), 2 (修圖), or 3 (結果). Only the current step gets
+  // step: 1 (上傳), 2 (分析), 3 (修圖), or 4 (結果). Only the current step gets
   // .ap-step--active (highlighted); every step before it gets .ap-step--done
   // (muted, with a checkmark) so earlier steps read as "done" rather than
   // reverting to a plain ring once the flow moves past them. Connector
@@ -1998,7 +1998,7 @@
     moveOptionsCardTo(getOptionsCardTarget());
     // Reset to 分析, in case this is a fresh image after a previous one's
     // flow advanced the indicator to 修圖/結果.
-    setStepIndicatorStep(1);
+    setStepIndicatorStep(2);
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
     if (els.inlineAnalysisContinueBtn) {
@@ -2058,7 +2058,7 @@
     await showPendingResults(analysis, preset);
     await waitForPendingResultsAction();
     closePendingResults();
-    setStepIndicatorStep(2, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
+    setStepIndicatorStep(3, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
     // Same "editing" loading overlay backToProcessFromResults' revise flow
     // uses -- swaps the photo for the thinking-rings animation instead of
     // navigating away from the results page.
@@ -3836,7 +3836,7 @@
     resetSteps(); // clears completedTimings so each run's total starts fresh
     closePendingResults(); // drop any stale pending-review state from an abandoned prior run
     restoreStepIndicatorHome();
-    setStepIndicatorStep(1, { done: false }); // analysis is only just starting -- not finished yet
+    setStepIndicatorStep(2, { done: false }); // analysis is only just starting -- not finished yet
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
@@ -4030,7 +4030,7 @@
       // alone decides it here.
       if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
       showSection("results");
-      setStepIndicatorStep(3); // 結果 -- no-op for the skipReview/direct path, where the indicator was never shown to begin with
+      setStepIndicatorStep(4); // 結果 -- no-op for the skipReview/direct path, where the indicator was never shown to begin with
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
     };
@@ -4364,7 +4364,7 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
-    setStepIndicatorStep(3); // 結果 -- covers both a live RUN-tab switch and viewHistoryRecord jumping straight here for a finished case
+    setStepIndicatorStep(4); // 結果 -- covers both a live RUN-tab switch and viewHistoryRecord jumping straight here for a finished case
     // revealDetailExtra: true only for viewHistoryRecord's admin-reports-drawer
     // call -- shows the prompts button for that one record regardless of
     // debug mode, same override resultsDetailExtra itself already gets.
@@ -4462,7 +4462,7 @@
       };
       return;
     }
-    setStepIndicatorStep(2, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
+    setStepIndicatorStep(3, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
 
     setAnalysisPreviewDisabled(true);
     if (els.showPromptBtn) els.showPromptBtn.disabled = true;
@@ -7532,7 +7532,7 @@
     // above), so the step indicator itself isn't visible right now -- still
     // keep its state in sync so it reads correctly the moment
     // showBatchAnalyzedMain/showBatchDoneMain reveals it again.
-    setStepIndicatorStep(analyzing ? 1 : 2, { done: false }); // still running either way
+    setStepIndicatorStep(analyzing ? 2 : 3, { done: false }); // still running either way
     // Same rotating phrasings as the single-image flow (startProcSubRotation
     // et al.), just targeting #batch-main-loading-text through setProcSub
     // instead of .proc-sub/#canvas-loading-status. There's only one shared
@@ -7623,7 +7623,7 @@
     els.resultsCanvasRow.hidden = false;
     // Reset to 分析, in case this is a freshly-analyzed record after a
     // previous batch record's flow advanced the (shared) indicator further.
-    setStepIndicatorStep(1);
+    setStepIndicatorStep(2);
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
     // Same "下載原圖" treatment as the single-image flow's own pending-review
     // screen (showPendingResults) -- no edit has run yet, so this can only
@@ -7777,7 +7777,7 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
-    setStepIndicatorStep(3); // 結果 -- batch mode's own equivalent of the single-flow revealResultsIfNeeded update
+    setStepIndicatorStep(4); // 結果 -- batch mode's own equivalent of the single-flow revealResultsIfNeeded update
     const reviewable = settings.reviewable !== false;
     // settings.revealDetailExtra: true only for viewHistoryRecord's admin-
     // reports-drawer call -- shows the prompts button for that one record
@@ -8759,7 +8759,7 @@
     restoreAnalysisPreviewHome();
     closePendingResults();
     restoreStepIndicatorHome();
-    setStepIndicatorStep(1, { done: false }); // resetting to a fresh, not-yet-run state
+    setStepIndicatorStep(2, { done: false }); // resetting to a fresh, not-yet-run state
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of

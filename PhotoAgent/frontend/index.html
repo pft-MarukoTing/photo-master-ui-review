@@ -347,8 +347,9 @@
     }
     .ap-sub-label:first-child { margin-top: 0; }
 
-    /* ── Step indicator (#ap-step-indicator): always shows 分析 as the
-       active step -- see the markup comment there for the one exception
+    /* ── Step indicator (#ap-step-indicator): always shows 上傳 as the
+       completed first step and 分析 as the active step -- see the markup
+       comment there for the one exception
        (read-only historical playback hides this element entirely). A
        sibling of #ap-options-card-inline (not one of its flex children --
        see the order scheme below), so it can sit above the photo, full
@@ -362,10 +363,10 @@
     .ap-step {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
       color: var(--text-2);
       font-weight: 600;
-      font-size: 14px;
+      font-size: 16px;
     }
     /* Ring drawn as an inset box-shadow, not a border -- a border at this
        1.5px (sub-pixel) width toggled to transparent for the active state
@@ -376,8 +377,8 @@
        switching it off entirely for the active state (rather than just
        recoloring it transparent) leaves a clean gradient-filled circle. */
     .ap-step-num {
-      width: 24px;
-      height: 24px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -398,8 +399,8 @@
     .ap-step-num-check { display: none; }
     .ap-step-num-spinner {
       display: none;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 50%;
       border: 2px solid rgba(255, 255, 255, .35);
       border-top-color: #fff;
@@ -420,7 +421,7 @@
     .ap-step-line {
       flex: 1;
       height: 2px;
-      margin: 0 10px;
+      margin: 0 12px;
       background: var(--border-2);
     }
     .ap-step-line--active {
@@ -3862,7 +3863,8 @@
                stays here. A sibling of #ap-options-card-inline, not nested
                inside it, so it can be relocated to the very top of the
                canvas column while the options card itself still lands below
-               the photo. Always shows "分析" as the active step: this panel
+               the photo. Always shows "上傳" as the completed first step and
+               "分析" as the active step: this panel
                only ever renders while the user is still reviewing/adjusting
                before a run, EXCEPT the read-only historical-playback path
                (viewHistoryRecord -> openInlineAnalysisPanel(true), app.js),
@@ -3870,10 +3872,20 @@
                already-finished job has no "current step" to show). -->
           <div id="ap-step-indicator-home"></div>
           <div class="ap-step-indicator" id="ap-step-indicator">
+            <div class="ap-step ap-step--done">
+              <span class="ap-step-num">
+                <span class="ap-step-num-spinner"></span>
+                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
+                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span class="ap-step-name">上傳</span>
+            </div>
+            <div class="ap-step-line ap-step-line--active"></div>
             <div class="ap-step ap-step--active">
               <span class="ap-step-num">
                 <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
                   <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
@@ -3883,7 +3895,7 @@
             <div class="ap-step">
               <span class="ap-step-num">
                 <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
                   <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
@@ -3893,7 +3905,7 @@
             <div class="ap-step">
               <span class="ap-step-num">
                 <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="12" height="12" fill="none" viewBox="0 0 24 24">
+                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
                   <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </span>
