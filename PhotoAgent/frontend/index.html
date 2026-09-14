@@ -630,9 +630,9 @@
     }
     .ap-analysis-shell-icon { color: var(--accent); flex-shrink: 0; }
     .ap-analysis-shell-desc {
-      /* The description belongs to the expanded selector content, above the
-         tabs/options, rather than in the collapsed selector trigger. */
-      margin: 0 0 12px;
+      /* The description belongs to the summary's title block, directly below
+         the title and above the selector body. */
+      margin: 0;
       font-size: 13px;
       font-weight: 400;
       color: var(--text-3);
@@ -3956,8 +3956,7 @@
                      competing outer box. Its `open` mirrors #ap-review-panel's
                      own -- renderAnalysisPreview (results.js) sets both from
                      the same `expanded` flag: open together for the
-                     first-time 分析 review, collapsed together once reopened
-                     on the 結果 page/a revise. -->
+                     first-time 分析 review and for the 結果 page/a revise. -->
                 <details class="ap-options-toggle ap-analysis-shell" id="ap-analysis-shell" open>
                   <summary class="ap-label ap-analysis-shell-summary">
                     <div class="ap-analysis-shell-summary-inner">
@@ -3965,13 +3964,13 @@
                         <svg class="ap-analysis-shell-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
                         分析與調整
                       </span>
+                      <span class="ap-analysis-shell-desc">這是 AI 分析出的建議，你可以在這裡調整設定</span>
                     </div>
                     <div class="ap-analysis-shell-chevron-row">
                       <svg class="ap-analysis-shell-chevron" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                   </summary>
                   <div class="ap-analysis-shell-body">
-                    <p class="ap-analysis-shell-desc">這是 AI 分析出的建議，你可以在這裡調整設定</p>
                 <details class="ap-toggle-card ap-options-toggle" id="ap-review-panel" open>
                   <summary class="ap-label ap-review-summary">
                     <div class="ap-review-summary-inner">

@@ -4421,7 +4421,7 @@
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
 
-    renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: false });
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
     applyAdvancedOptionsOption(singleFlowState.advancedOptions || singleFlowState.analysis?._advanced_options);
@@ -7843,7 +7843,7 @@
       if (reviewable) {
         openInlineAnalysisForCurrentContext(forceReopen);
       } else {
-        renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset, expanded: false });
+        renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset, expanded: true });
         openInlineAnalysisPanel(true);
       }
     };
@@ -7896,14 +7896,13 @@
 
     // Unlike the single-image flow (separate showPendingResults vs
     // backToProcessFromResults functions), batch mode reuses this one
-    // function for both the first-time "analyzed" review (expanded, like
-    // showPendingResults) and a "done" record's revise (collapsed, like
-    // backToProcessFromResults) -- so the expanded/collapsed choice has to
-    // read record.status here instead of being a fixed call-site constant.
+    // function for both the first-time "analyzed" review and a "done"
+    // record's revise. Both are results-page analysis views, so keep the
+    // panel expanded by default in either state.
     renderAnalysisPreview({
       analysis: stripDisabledTopicItems(record.analysis, effectiveAdvancedOptions(record)),
       preset: batchSettings.preset,
-      expanded: record.status !== "done"
+      expanded: true
     });
     // renderAnalysisPreview above (via renderFaceThumbnails, results.js)
     // just reset reviewAdvancedOptions to this analysis's own frozen

@@ -2372,14 +2372,12 @@ window.PhotoAgentResults = (() => {
   // user clicks "continue" -- a lightweight subset of renderResult's fields
   // (no image/QA yet, those only exist after finish_stage runs).
   // expanded controls whether #ap-review-panel (the merged 修圖建議/人像檢查
-  // <details>) starts open or collapsed to just its summary line: true for
-  // the first-time 分析 review (before any run), false once this same panel
-  // is reopened on the 結果 page/a revise (backToProcessFromResults/
-  // startInlineBatchReview/viewHistoryRecord's readOnly path all pass false)
-  // -- still click-to-expand there, just not spread out unasked. Stored on
-  // reviewExpanded (module-level) so renderFaceReviewCards, called both from
-  // here and later re-renders (e.g. applyBatchReviewSelections), can read the
-  // same setting without it being re-threaded through every call.
+  // <details>) starts open or collapsed to just its summary line. Result-page
+  // views and the first-time 分析 review both pass true so the analysis is
+  // immediately visible; reviewExpanded is stored at module level so
+  // renderFaceReviewCards, called both from here and later re-renders (e.g.
+  // applyBatchReviewSelections), can read the same setting without it being
+  // re-threaded through every call.
   function renderAnalysisPreview({ analysis, preset, expanded = true }) {
     reviewExpanded = expanded;
     // A fresh analysis always lands back on the 人像檢查 tab first (falls
@@ -2387,9 +2385,8 @@ window.PhotoAgentResults = (() => {
     // same as selectedFaceIndex resetting to 0 in renderFaceThumbnails below.
     activeReviewTab = "face";
     // #ap-analysis-shell (the outer title+collapse frame) mirrors
-    // #ap-review-panel's own open state -- both start open for the
-    // first-time 分析 review, both collapsed once reopened on the 結果
-    // page/a revise.
+    // #ap-review-panel's own open state -- both are opened by default for
+    // the first-time 分析 review and the 結果 page/a revise.
     if (els.apAnalysisShell) els.apAnalysisShell.open = expanded;
     if (els.apReviewPanel) els.apReviewPanel.open = expanded;
     if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
