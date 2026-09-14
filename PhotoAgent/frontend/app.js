@@ -5165,15 +5165,15 @@
     badge.className = "rc-badge";
     badge.textContent = {
       analyzing: "分析中",
-      analyzed: "已分析",
-      processing: "處理中",
-      done: "完成",
+      analyzed: "待修圖",
+      processing: "修圖中",
+      done: "修圖完成",
       error: "失敗"
     }[record.status] || "";
     if (runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
-      if (runsRunning) badge.textContent = `處理中 (${runsDone}/${runs.length})`;
-      else if (runsDone) badge.textContent = `完成 (${runsDone}/${runs.length})`;
+      if (runsRunning) badge.textContent = `修圖中 (${runsDone}/${runs.length})`;
+      else if (runsDone) badge.textContent = `修圖完成 (${runsDone}/${runs.length})`;
     }
 
     // Unlike the old grid (badge overlaid on a large square thumbnail), the
@@ -5648,19 +5648,21 @@
       // history-cube layers the square/grid-cell layout on top of
       // batch-sidebar-item's existing status-driven styling (done/error/
       // processing colors, dimming) -- reused as-is rather than duplicated.
-      li.className = "history-cube batch-sidebar-item processing";
+      const isAnalyzingJob = job.stage === "analyze";
+      li.className = `history-cube batch-sidebar-item ${isAnalyzingJob ? "analyzing" : "processing"}`;
       // Local-path jobs keep their srcKeys forever (see account.py), so the
       // original photo is available immediately -- no need to wait for the
       // status check below just to show *something* here. AIPoC-path jobs
       // have no recoverable original (same reason the before/after compare
-      // skips them elsewhere), so those stay spinner-only. The .processing
-      // class already dims .rc-media img (see styles.css), so this reads as
-      // "not final yet" rather than the actual done result.
+      // skips them elsewhere), so those stay image-empty while processing.
+      // Analyze-stage and edit-stage jobs both get the cube-level spinner;
+      // the status response below removes/replaces it once a result is ready.
       const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
       const referenceThumb = job.path === "local" ? historyMediaMarkup(sourceThumbnailUrl(jobIds[0])) : "";
+      const processingSpinner = '<div class="rc-spinner"></div>';
       li.innerHTML = `
-        <div class="rc-media">${referenceThumb}<div class="rc-spinner"></div></div>
-        <span class="rc-badge">處理中</span>
+        <div class="rc-media">${referenceThumb}${processingSpinner}</div>
+        <span class="rc-badge">${isAnalyzingJob ? "分析中" : "修圖中"}</span>
         <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
         <span class="history-cube-check">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
@@ -5713,8 +5715,9 @@
             });
           } else {
             if (analyzed) {
-              li.className = "history-cube batch-sidebar-item done";
-              if (badge) badge.textContent = "待審核";
+              li.className = "history-cube batch-sidebar-item analyzed";
+              if (badge) badge.textContent = "待修圖";
+              media?.querySelector(".rc-spinner")?.remove();
             } else if (badge) {
               badge.textContent = "分析中";
             }
@@ -5735,7 +5738,7 @@
           li.className = "history-cube batch-sidebar-item done";
           markHistoryTileSelectable(li, job);
           const doneCount = statuses.filter((s) => s.status === "success").length;
-          if (badge) badge.textContent = jobIds.length > 1 ? `完成（${doneCount}/${jobIds.length}）` : "完成";
+          if (badge) badge.textContent = jobIds.length > 1 ? `修圖完成（${doneCount}/${jobIds.length}）` : "修圖完成";
           // Thumbnail route only exists for the local path (see
           // photo-agent-api.js's resultThumbnailUrl) -- AIPoC-path jobs fall
           // back to the full-res image, same as before this change.
@@ -5767,16 +5770,12 @@
             }
             if (li.classList.contains("opening")) return;
             li.classList.add("opening");
-            const spinner = document.createElement("div");
-            spinner.className = "rc-spinner";
-            media?.appendChild(spinner);
             const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
             if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
             try {
               await viewHistoryRecord(job);
             } finally {
               li.classList.remove("opening");
-              spinner.remove();
               if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
             }
           });
@@ -5799,7 +5798,7 @@
             if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
           });
         } else {
-          if (badge) badge.textContent = "處理中";
+          if (badge) badge.textContent = "修圖中";
           // Still clickable -- otherwise there's no way to come back and
           // check on a record that was still processing last time this list
           // was fetched (see viewProcessingHistoryRecord). The opening guard

@@ -1887,13 +1887,37 @@
        text to fit without wrapping). */
     .rc-badge {
       display: inline-flex; align-self: flex-start; max-width: 100%;
-      padding: 2px 9px; border-radius: 20px;
-      font-size: 10.5px; font-weight: 700; white-space: nowrap;
+      padding: 3px 10px; border-radius: 20px;
+      font-size: 12px; font-weight: 700; white-space: nowrap;
+      line-height: 1.2; letter-spacing: .01em;
       overflow: hidden; text-overflow: ellipsis;
       background: rgba(255,255,255,.12); color: var(--text-2);
     }
-    .batch-sidebar-item.analyzed .rc-badge { background: rgba(168,85,247,.25); color: #d8b4fe; }
-    .batch-sidebar-item.done .rc-badge { background: rgba(1,179,123,.22); color: #6ee7b7; }
+    .rc-badge::before {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      margin-right: 5px;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .batch-sidebar-item.analyzing .rc-badge::before,
+    .batch-sidebar-item.processing .rc-badge::before { content: "◌"; }
+    .batch-sidebar-item.analyzed .rc-badge::before { content: "✦"; }
+    .batch-sidebar-item.done .rc-badge::before { content: "✓"; }
+    .batch-sidebar-item.error .rc-badge::before { content: "!"; }
+    .batch-sidebar-item.analyzed .rc-badge {
+      background: rgba(168,85,247,.25);
+      border: 1px solid rgba(192,132,252,.55);
+      color: #e9d5ff;
+    }
+    .batch-sidebar-item.done .rc-badge {
+      background: rgba(1,179,123,.22);
+      border: 1px solid rgba(52,211,153,.55);
+      color: #a7f3d0;
+    }
     .batch-sidebar-item.error .rc-badge { background: rgba(220,60,60,.25); color: #fca5a5; }
     .rc-spinner {
       position: absolute; top: 50%; left: 50%;
