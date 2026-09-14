@@ -3480,9 +3480,23 @@
              just relocated and fetched eagerly on load instead of on open
              (initDemoImagesGallery, app.js) rather than behind a modal. -->
         <div class="upload-gallery-col">
-          <p class="option-pill-label">範例照片</p>
-          <div id="demo-images-grid" class="demo-images-grid"></div>
-          <p id="demo-images-empty" class="history-empty" hidden>目前沒有範例照片。</p>
+          <div class="upload-gallery-heading">
+            <span class="upload-gallery-heading-icon" aria-hidden="true">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+                <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.8"/>
+                <path d="M8 15l2.5-3 2 2 1.5-2 2 3M8 9.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span id="upload-gallery-title">範例照片</span>
+          </div>
+          <div class="upload-gallery-scroll-frame">
+            <div id="demo-images-grid" class="demo-images-grid"></div>
+            <div id="history-load-more-btn" class="ap-style-scroll-hint history-load-more-hint" hidden aria-live="polite">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="history-load-more-label">載入更多</span>
+            </div>
+          </div>
+          <p id="demo-images-empty" class="history-empty" hidden>目前沒有可顯示的照片。</p>
           <button id="demo-images-confirm-btn" class="btn btn-secondary btn-sm" type="button" disabled>使用所選照片</button>
         </div>
 
@@ -3503,7 +3517,7 @@
                 </svg>
               </div>
               <p class="dz-title">拖拉或點選上傳照片</p>
-              <p class="upload-sub">上傳照片，AI調整光線、色彩、構圖，輸出專屬修圖師等級版本。</p>
+              <p class="upload-sub">上傳照片，先由 AI 分析，再客製化調整表情、姿勢、視角與畫面細節，輸出專屬修圖師等級版本。</p>
               <!-- Testbed-only, shown by applyDebugUiVisibility: dropping an
                    exported result folder re-runs its edit from the stored
                    analysis (see importResultFolder in app.js). -->
@@ -4572,7 +4586,7 @@
   </button>
   <div class="history-header">
     <div class="history-header-top">
-      <h2>處理紀錄</h2>
+      <h2>最近照片</h2>
       <div class="history-header-actions">
         <!-- Enters multi-select mode (enterHistorySelectMode, app.js) --
              swaps out for #history-download-selected-btn/

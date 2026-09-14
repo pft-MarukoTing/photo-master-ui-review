@@ -5293,6 +5293,7 @@
       els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
     }
     if (els.registerAccountBtn) els.registerAccountBtn.hidden = !!user;
+    refreshUploadGallery(user);
     syncReportBtnPosition();
   }
 
@@ -5596,15 +5597,16 @@
     }
   }
 
-  async function renderHistoryList(jobs) {
-    if (!els.historyList) return;
-    exitHistorySelectMode();
+  async function renderHistoryList(jobs, { container = els.historyList, append = false } = {}) {
+    if (!container) return;
+    const isDrawer = container === els.historyList;
+    if (isDrawer) exitHistorySelectMode();
     historyJobsByKey.clear();
     historyTileElsByKey.clear();
-    els.historyList.innerHTML = "";
-    if (els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
-    if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = jobs.length === 0;
-    if (els.historySelectBtn) els.historySelectBtn.hidden = jobs.length === 0;
+    if (!append) container.innerHTML = "";
+    if (isDrawer && els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
+    if (isDrawer && els.historyClearAllBtn) els.historyClearAllBtn.hidden = jobs.length === 0;
+    if (isDrawer && els.historySelectBtn) els.historySelectBtn.hidden = jobs.length === 0;
     if (!jobs.length) return;
 
     // One heading + grid per calendar day, cube tiles instead of full-width
@@ -5625,7 +5627,7 @@
         currentGrid = document.createElement("ul");
         currentGrid.className = "history-grid";
         group.appendChild(currentGrid);
-        els.historyList.appendChild(group);
+        container.appendChild(group);
       }
 
       const li = document.createElement("li");
@@ -6827,6 +6829,84 @@
   // wants to review/adjust the picks they already confirmed into the upload
   // area), and is only cleared by resetApp -- a real fresh start.
   let demoSelectedNames = new Set();
+  const UPLOAD_HISTORY_PAGE_SIZE = 20;
+  let uploadHistoryOffset = 0;
+  let uploadHistoryRequestToken = 0;
+  let uploadHistoryLoading = false;
+  let uploadHistoryHasMore = false;
+
+  function setUploadHistoryMoreState({ hidden = true, loading = false } = {}) {
+    const button = els.historyLoadMoreBtn;
+    if (!button) return;
+    uploadHistoryLoading = loading;
+    button.hidden = hidden;
+    button.classList.toggle("is-loading", loading);
+    button.setAttribute("aria-busy", String(loading));
+    const label = button.querySelector(".history-load-more-label");
+    if (label) label.textContent = loading ? "載入中…" : "載入更多";
+  }
+
+  async function loadUploadHistoryPage({ reset = false } = {}) {
+    const user = getCurrentUser();
+    if (!user || !els.demoImagesGrid || uploadHistoryLoading) return;
+    const token = ++uploadHistoryRequestToken;
+    if (reset) {
+      uploadHistoryOffset = 0;
+      uploadHistoryHasMore = false;
+      els.demoImagesGrid.innerHTML = "";
+      if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = true;
+    }
+    setUploadHistoryMoreState({ hidden: reset, loading: true });
+    try {
+      const page = await getHistory(user, {
+        limit: UPLOAD_HISTORY_PAGE_SIZE,
+        offset: uploadHistoryOffset
+      });
+      if (token !== uploadHistoryRequestToken || getCurrentUser() !== user) return;
+      const returnedJobs = Array.isArray(page.jobs) ? page.jobs : [];
+      // Keep the thumbnail cap effective even while an older backend is
+      // still serving the endpoint and ignoring limit/offset. In that case
+      // the response contains the full (or legacy-capped) list; slice the
+      // requested window locally before renderHistoryList creates any img
+      // elements. Once the paginated backend is live, returnedJobs is already
+      // at most 20 and this is simply a no-op.
+      const jobs = returnedJobs.length > UPLOAD_HISTORY_PAGE_SIZE
+        ? returnedJobs.slice(uploadHistoryOffset, uploadHistoryOffset + UPLOAD_HISTORY_PAGE_SIZE)
+        : returnedJobs;
+      await renderHistoryList(jobs, { container: els.demoImagesGrid, append: !reset && uploadHistoryOffset > 0 });
+      uploadHistoryOffset += jobs.length;
+      const legacyHasMore = returnedJobs.length > UPLOAD_HISTORY_PAGE_SIZE
+        && uploadHistoryOffset < returnedJobs.length;
+      const hasMore = page.has_more === true || legacyHasMore;
+      uploadHistoryHasMore = hasMore;
+      setUploadHistoryMoreState({ hidden: !hasMore });
+      if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = uploadHistoryOffset > 0;
+    } catch {
+      if (token !== uploadHistoryRequestToken) return;
+      uploadHistoryHasMore = false;
+      setUploadHistoryMoreState({ hidden: true });
+      if (!uploadHistoryOffset && els.demoImagesEmpty) {
+        els.demoImagesEmpty.hidden = false;
+        els.demoImagesEmpty.textContent = "目前無法取得處理紀錄。";
+      }
+    }
+  }
+
+  function refreshUploadGallery(user) {
+    if (!els.demoImagesGrid) return;
+    if (user) {
+      if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = "最近照片";
+      if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = true;
+      loadUploadHistoryPage({ reset: true });
+      return;
+    }
+    ++uploadHistoryRequestToken;
+    uploadHistoryHasMore = false;
+    if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = "範例照片";
+    if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = false;
+    setUploadHistoryMoreState({ hidden: true });
+    initDemoImagesGallery();
+  }
 
   function renderDemoImagesGrid(names) {
     if (!els.demoImagesGrid) return;
@@ -6891,8 +6971,17 @@
   // startup instead of on first open.
   function initDemoImagesGallery() {
     if (!els.demoImagesGrid) return;
+    // A linked account is identifiable from the URL before the async
+    // decrypt/resolve round trip completes. Treat that as history mode
+    // immediately, otherwise a slow account bootstrap can briefly start the
+    // anonymous demo gallery and issue one request per demo thumbnail.
+    if (getCurrentUser() || new URLSearchParams(window.location.search).has("user_id")) return;
     updateDemoImagesConfirmBtn();
     getDemoImages().then((names) => {
+      // Account bootstrap can finish while the anonymous demo list is still
+      // in flight. Do not let that stale response replace the user's history
+      // gallery after the page has switched modes.
+      if (getCurrentUser()) return;
       demoImagesCache = names;
       renderDemoImagesGrid(names);
     });
@@ -9010,7 +9099,19 @@
   });
   if (els.dzClearAllBtn) els.dzClearAllBtn.addEventListener("click", resetApp);
   if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.addEventListener("click", confirmDemoImageSelection);
-  initDemoImagesGallery();
+  if (els.demoImagesGrid) {
+    els.demoImagesGrid.addEventListener("scroll", () => {
+      if (uploadHistoryLoading || !uploadHistoryHasMore) return;
+      const nearBottom = els.demoImagesGrid.scrollTop + els.demoImagesGrid.clientHeight
+        >= els.demoImagesGrid.scrollHeight - 24;
+      if (nearBottom) loadUploadHistoryPage();
+    });
+  }
+  // Account bootstrap above is asynchronous. Do not initialize the demo
+  // gallery unconditionally here: doing so can render every demo thumbnail
+  // before ?user_id has resolved, then waste requests even though the page
+  // is about to switch this area to the user's recent photos. The resolved
+  // account path calls refreshUploadGallery(), which chooses the right mode.
   // #advanced-settings-fold's static markup (index.html) still sits inside
   // #settings-modal-body as written -- move it to its real default home
   // (#upload-inline-settings-row-2, right after that row's own caption)

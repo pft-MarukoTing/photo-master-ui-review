@@ -143,7 +143,7 @@ def _prune_oldest(key):
         pf_redis_client.hdel(key, *stale_fields)
 
 
-def get_history(username, limit=50):
+def get_history(username, limit=50, offset=0):
     key = USER_HISTORY_KEY_FORMAT.format(user=username)
     raw_entries = pf_redis_client.hgetall(key)
     entries = []
@@ -165,7 +165,12 @@ def get_history(username, limit=50):
             entry["modified_at"] = None if entry.get("stage") == "analyze" else entry.get("ts")
         entries.append(entry)
     entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
-    return entries[:limit]
+    try:
+        offset = max(0, int(offset))
+        limit = max(0, int(limit))
+    except (TypeError, ValueError):
+        offset, limit = 0, 50
+    return entries[offset:offset + limit]
 
 
 def get_history_entry_for_job(username, job_id):

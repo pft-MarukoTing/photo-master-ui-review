@@ -502,8 +502,9 @@ window.PhotoAgentApi = (() => {
     return data; // { user, created }
   }
 
-  async function getHistory(user) {
-    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}`);
+  async function getHistory(user, { limit = 50, offset = 0 } = {}) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}?${params}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(data.error || `取得處理紀錄失敗：HTTP ${response.status}`);

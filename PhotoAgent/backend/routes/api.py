@@ -224,7 +224,18 @@ def history(user):
         name = normalize_username(user)
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify({"user": name, "jobs": get_history(name, limit=HISTORY_MAX_LEN)})
+    try:
+        limit = min(max(int(request.args.get("limit", 50)), 0), HISTORY_MAX_LEN)
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit and offset must be integers"}), 400
+    all_jobs = get_history(name, limit=HISTORY_MAX_LEN)
+    jobs = all_jobs[offset:offset + limit]
+    return jsonify({
+        "user": name,
+        "jobs": jobs,
+        "has_more": offset + len(jobs) < len(all_jobs),
+    })
 
 
 @api_bp.delete("/history/<user>")
