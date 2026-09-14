@@ -1281,7 +1281,7 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      giving IT flex properties directly (an earlier version of this rule
      did) is simply ignored: not a flex item of anything, it just falls
      back to auto/content-sized regardless, unaffected by viewport height
-     entirely. flex:0 1 494px overrides this same element's own base
+     entirely. flex:1 1 494px overrides this same element's own base
      flex-basis:100% (index.html, written for #ap-options-card-inline's
      normal flex-wrap ROW layout, same "meant width%, now means real
      height%" issue .ap-actions-row's own flex-basis had, further down) --
@@ -1294,11 +1294,19 @@ label.option-row:hover { background: rgba(255,255,255,.025); }
      (description text wrapping, tab count, etc.) and so was still
      overflowing in practice on a short/wide viewport. .ap-actions-row's
      own flex:0 0 auto (further down) is what makes this the ONLY one of
-     the two that actually shrinks, so Run itself never compresses;
-     min-height is a floor so this doesn't collapse to something unusably
-     small first. */
+     the two that actually shrinks OR grows, so Run itself never
+     compresses (or stretches taller than its own content); min-height is
+     a floor so this doesn't collapse to something unusably small first.
+     flex-grow:1 (not 0) is what makes this shell, not leftover blank
+     space, absorb any extra room on a viewport taller than 494px+Run --
+     since Run is the only other item in this column and never grows
+     itself, giving growth to just this one item means its final rendered
+     height is always exactly "container height - Run's own height",
+     which in turn is exactly what pins Run flush to the container's
+     bottom edge instead of floating right below wherever this shell's
+     content happened to end. */
   body.side-panel-layout #results-analysis-slot #ap-analysis-shell[open] {
-    flex: 0 1 494px;
+    flex: 1 1 494px;
     min-height: 74px;
   }
   /* .ap-analysis-shell-body/#ap-review-panel/.ap-toggle-card-body all get a
