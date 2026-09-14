@@ -481,12 +481,19 @@ a { text-decoration: none; color: inherit; }
   .upload-content-row > .upload-main-copy {
     flex: 0 1 380px;
     max-width: 400px;
+    height: min(520px, 100%);
+    max-height: 520px;
+    justify-content: flex-start;
   }
   .upload-content-row > .upload-main-col,
   .upload-content-row > .upload-gallery-col {
     align-self: center;
     height: min(520px, 100%);
     max-height: 520px;
+  }
+  .upload-content-row > .upload-main-col {
+    margin-left: -16px;
+    margin-right: 16px;
   }
 }
 .upload-gallery-col {
@@ -563,7 +570,7 @@ a { text-decoration: none; color: inherit; }
 }
 .upload-main-copy > .upload-flow {
   gap: 0;
-  margin-top: 2px;
+  margin-top: 24px;
 }
 .upload-intro-eyebrow {
   display: flex;
