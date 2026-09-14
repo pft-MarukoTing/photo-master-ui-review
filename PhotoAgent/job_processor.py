@@ -131,7 +131,7 @@ class PhotoAgentJobProcessor:
 
         params = request["params"]
         self.logger.info(task_id, f'[{EFFECT_NAME}] Start job: src={len(request["src_keys"])}, dst_key={request["dst_key"]}')
-        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} analysis_model={params["analysis_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} overwrite_prompt={params.get("overwrite_prompt", False)} advanced_options={params.get("advanced_options", {})} single_pass_edit={params.get("single_pass_edit", False)} has_prompt={bool(params.get("user_prompt"))}')
+        self.logger.info(task_id, f'[{EFFECT_NAME}] Params: preset={params["preset"]} image_quality={params["image_quality"]} image_model={params["image_model"]} analysis_model={params["analysis_model"]} aspect_ratio={params.get("aspect_ratio", "auto")} ai_photo_editing={params["ai_photo_editing"]} run_qa={params.get("run_qa", True)} overwrite_prompt={params.get("overwrite_prompt", False)} advanced_options={params.get("advanced_options", {})} single_pass_edit={params.get("single_pass_edit", True)} has_prompt={bool(params.get("user_prompt"))}')
         if (bool(params.get("user_prompt"))):
             self.logger.info(task_id, f'[{EFFECT_NAME}] User prompt: {params.get("user_prompt")}')
         self.logger.info(task_id, f'[{EFFECT_NAME}] Metadata: {build_job_metadata(task_info)}')
@@ -180,7 +180,7 @@ class PhotoAgentJobProcessor:
                     run_qa=params.get("run_qa", True),
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                     overwrite_prompt=params.get("overwrite_prompt", False),
-                    single_pass_edit=params.get("single_pass_edit", False),
+                    single_pass_edit=params.get("single_pass_edit", True),
                 )
 
                 derived_dst_keys = derive_dst_keys(request["dst_key"], include_pre_edit=bool(result.get("pre_edit_image")))
@@ -231,7 +231,7 @@ class PhotoAgentJobProcessor:
                     run_qa=params.get("run_qa", True),
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                     overwrite_prompt=params.get("overwrite_prompt", False),
-                    single_pass_edit=params.get("single_pass_edit", False),
+                    single_pass_edit=params.get("single_pass_edit", True),
                 )
 
                 run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index, include_pre_edit=bool(result.get("pre_edit_image")))

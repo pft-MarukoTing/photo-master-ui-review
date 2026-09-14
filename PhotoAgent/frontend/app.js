@@ -1,4 +1,10 @@
 (() => {
+  // Product default: analysis followed by ONE image-edit call.  Step 5b is an
+  // optional second image edit, not the analysis stage. Keep this explicit
+  // instead of deriving the default from an HTML checkbox, since browsers may
+  // restore checkbox state across reloads.
+  const DEFAULT_SINGLE_PASS_EDIT = true;
+
   const { els, showSection, showError, hideError, resetSteps, addTiming, getTimings } = window.PhotoAgentDom;
   const { presets } = window.PhotoAgentConfig;
   const {
@@ -854,21 +860,48 @@
     if (els.twoStageEditDesc) els.twoStageEditDesc.hidden = !els.twoStageEditToggle?.checked;
   }
 
-  if (els.twoStageEditToggle) {
+  function applySinglePassEditOption(singlePassEdit) {
+    const normalized = singlePassEdit !== false;
+    const twoStageEnabled = !normalized;
+    if (els.twoStageEditToggle) els.twoStageEditToggle.checked = twoStageEnabled;
     applyTwoStageEditDescVisibility();
-    els.twoStageEditToggle.addEventListener("change", () => {
-      applyTwoStageEditDescVisibility();
-      const current = findModelQualityOption(els.imageModelQualitySelect?.value);
-      if (!current || current.model !== "gpt-image-2") return;
-      if (!els.twoStageEditToggle.checked && current.quality === "low") {
-        const medium = findModelQualityOptionByPair("gpt-image-2", "medium");
-        if (medium) applyModelQualityChange(medium.value);
-      } else if (els.twoStageEditToggle.checked && current.quality === "medium") {
-        const low = findModelQualityOptionByPair("gpt-image-2", "low");
-        if (low) applyModelQualityChange(low.value);
-      }
-    });
+    return normalized;
   }
+
+  function resolvedSinglePassEdit(...candidates) {
+    const stored = candidates.find((value) => typeof value === "boolean");
+    return stored == null ? DEFAULT_SINGLE_PASS_EDIT : stored;
+  }
+
+  function readSinglePassEditOption() {
+    if (!els.twoStageEditToggle) return DEFAULT_SINGLE_PASS_EDIT;
+    return applySinglePassEditOption(!els.twoStageEditToggle.checked);
+  }
+
+  function applyTwoStageEditChange(enabled) {
+    const singlePassEdit = applySinglePassEditOption(!enabled);
+
+    if (singleFlowState) singleFlowState.singlePassEdit = singlePassEdit;
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) batchRecord.singlePassEdit = singlePassEdit;
+    if (batchSettings) batchSettings.singlePassEdit = singlePassEdit;
+
+    const current = findModelQualityOption(els.imageModelQualitySelect?.value);
+    if (!current || current.model !== "gpt-image-2") return;
+    if (!enabled && current.quality === "low") {
+      const medium = findModelQualityOptionByPair("gpt-image-2", "medium");
+      if (medium) applyModelQualityChange(medium.value);
+    } else if (enabled && current.quality === "medium") {
+      const low = findModelQualityOptionByPair("gpt-image-2", "low");
+      if (low) applyModelQualityChange(low.value);
+    }
+  }
+
+  // Always start from the product default. Do not trust browser-restored form
+  // state or one checkbox's HTML default to decide whether Step 5b runs.
+  applySinglePassEditOption(DEFAULT_SINGLE_PASS_EDIT);
+  els.twoStageEditToggle?.addEventListener("change", () =>
+    applyTwoStageEditChange(els.twoStageEditToggle.checked));
 
   // 分析模型 selector (Steps 2/3/6's shared model) -- only #analysis-model
   // (upload page) is actually selectable; #ap-analysis-model (analyze-preview
@@ -3620,7 +3653,7 @@
     const aspectRatio = els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto";
     const aiPhotoEditing = els.aiEditToggle.checked;
     const runQa = els.runQaToggle ? els.runQaToggle.checked : false;
-    const singlePassEdit = els.twoStageEditToggle ? !els.twoStageEditToggle.checked : false;
+    const singlePassEdit = readSinglePassEditOption();
     // Advanced Settings toggles (Eyes category, and whatever joins it later)
     // -- bundled into one object instead of one variable per toggle, so a new
     // toggle only needs a new key here, not a new argument threaded through
@@ -3754,7 +3787,12 @@
     // This is the common entry point for the first edit and every later
     // revise. Analysis-only views intentionally never set modifiedAt.
     markCurrentCaseModified();
-    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
+    const { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, advancedOptions, processingPath, analyzeTimings, useCombinedJob } = singleFlowState;
+    // Read the live checkbox at submission time. The result-page control can
+    // change after singleFlowState was created during analysis; the visible
+    // selection, not that earlier snapshot, is authoritative for this edit.
+    const singlePassEdit = readSinglePassEditOption();
+    singleFlowState.singlePassEdit = singlePassEdit;
     const selections = readStyleSelectionsFromDom();
     const faceIssueOverrides = getFaceIssueOverrides();
     const bodyReshapeOverrides = getBodyReshapeOverrides();
@@ -4310,7 +4348,7 @@
       aspectRatio: els.imageAspectRatioSelect?.value || window.PhotoAgentConfig.defaultAspectRatio || "auto",
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
-      singlePassEdit: els.twoStageEditToggle ? !els.twoStageEditToggle.checked : false,
+      singlePassEdit: readSinglePassEditOption(),
       advancedOptions: readAdvancedOptionsFromDom(),
       path: els.processingPathSelect?.value || "local"
     };
@@ -4707,6 +4745,10 @@
       const modelQuality = effectiveModelQuality(record);
       const analysisModel = effectiveAnalysisModel(record);
       const aspectRatio = effectiveAspectRatio(record);
+      // Same live-value rule as finishSingleFlow: a per-image revise may
+      // change the result-page toggle after batchSettings was first created.
+      const singlePassEdit = readSinglePassEditOption();
+      batchSettings.singlePassEdit = singlePassEdit;
       let stepStart = Date.now();
       if (batchSettings.path === "aipoc") {
         run.jobId = await submitJob({
@@ -4718,7 +4760,7 @@
           aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
-          singlePassEdit: batchSettings.singlePassEdit,
+          singlePassEdit,
           userPrompt,
           overwritePrompt,
           analysis: effectiveAnalysis,
@@ -4736,7 +4778,7 @@
           aspectRatio,
           aiPhotoEditing: batchSettings.aiPhotoEditing,
           runQa: batchSettings.runQa,
-          singlePassEdit: batchSettings.singlePassEdit,
+          singlePassEdit,
           userPrompt,
           overwritePrompt,
           user: getCurrentUser(),
@@ -6193,12 +6235,13 @@
       aspectRatio: job.aspect_ratio || "auto",
       aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : true,
       runQa: job.run_qa != null ? job.run_qa : true,
-      singlePassEdit: !!job.single_pass_edit,
+      singlePassEdit: resolvedSinglePassEdit(job.single_pass_edit),
       advancedOptions: job.advanced_options || {},
       processingPath: "local",
       analyzeTimings: [],
       useCombinedJob: false
     };
+    applySinglePassEditOption(singleFlowState.singlePassEdit);
 
     await setImgSrcPreloaded(els.originalImg, selectedFileSourceUrl);
     if (historyViewToken !== myToken) return; // navigated away meanwhile
@@ -6338,11 +6381,12 @@
             aspectRatio: job.aspect_ratio || "auto",
             aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
             runQa: job.run_qa != null ? job.run_qa : true,
-            singlePassEdit: !!job.single_pass_edit,
+            singlePassEdit: resolvedSinglePassEdit(job.single_pass_edit, extraInfo.single_pass_edit),
             processingPath: "local",
             analyzeTimings: [],
             useCombinedJob: false
           };
+          applySinglePassEditOption(singleFlowState.singlePassEdit);
           lastSingleSelections = selections;
         }
         const applyRender = () => {
@@ -6510,11 +6554,12 @@
         aspectRatio: job.aspect_ratio || "auto",
         aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
         runQa: job.run_qa != null ? job.run_qa : true,
-        singlePassEdit: !!job.single_pass_edit,
+        singlePassEdit: resolvedSinglePassEdit(job.single_pass_edit, extraInfo.single_pass_edit),
         processingPath: "local",
         analyzeTimings: [],
         useCombinedJob: false
       };
+      applySinglePassEditOption(singleFlowState.singlePassEdit);
       lastSingleSelections = selections;
 
       // #ap-options-card-inline's model/quality and aspect-ratio pickers are
@@ -6795,6 +6840,15 @@
     els.advancedSettingsFold.open = false;
   }
 
+  // One shared request setting, moved into whichever page's settings modal
+  // is open. Keeping one checkbox avoids mirrored state and duplicate IDs.
+  function ensureTwoStageEditRowIn(body) {
+    if (!els.twoStageEditRow) return;
+    if (body && els.twoStageEditRow.parentElement !== body) {
+      body.appendChild(els.twoStageEditRow);
+    }
+  }
+
   // Upload-page settings overlay -- same open/close shape as the error modal
   // above, just toggling #settings-modal's own hidden attribute. Holds the
   // 模型/長寬比/生成張數 pickers (already populated/wired above via
@@ -6802,6 +6856,7 @@
   // so opening it doesn't need to re-render anything itself either.
   function openSettingsModal() {
     ensureAdvancedSettingsFoldIn(els.settingsModalBody);
+    ensureTwoStageEditRowIn(els.settingsModalBody);
     ensureSidePanelLayoutRowIn(els.settingsModalBody);
     if (els.settingsModal) els.settingsModal.hidden = false;
   }
@@ -6818,6 +6873,7 @@
   // to the next edit without re-analyzing.
   function openApSettingsModal() {
     ensureAdvancedSettingsFoldIn(els.apSettingsModalBody);
+    ensureTwoStageEditRowIn(els.apSettingsModalBody);
     ensureSidePanelLayoutRowIn(els.apSettingsModalBody);
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
@@ -7560,6 +7616,7 @@
     // own effective pick BEFORE rendering, not whatever another case's
     // revise panel last left them showing.
     const effMq = effectiveModelQuality(record);
+    applySinglePassEditOption(resolvedSinglePassEdit(record.singlePassEdit, batchSettings?.singlePassEdit));
     applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
     applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
     applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
@@ -8641,12 +8698,10 @@
       // A skipped QA writes an empty `checks` object; a QA that ran (or ran and
       // failed into the fallback report) always has keys in it.
       runQa: Object.keys(result.quality_check?.checks || {}).length > 0,
-      // Not recoverable from the export: a null Step 5b usage entry means
-      // either single_pass_edit was on OR there was simply no approved gaze
-      // fix to repair, and result.json can't tell those apart. Always
-      // re-runs an imported folder through the (safer) two-call default
-      // rather than guessing.
-      singlePassEdit: false,
+      // New exports record the actual mode directly. Older exports predate
+      // that field and use the product default: one image-edit call, with no
+      // implicit Step 5b merely because metadata is missing.
+      singlePassEdit: resolvedSinglePassEdit(extraInfo.single_pass_edit),
       path: "local"                  // /rerun is a local-queue route only
     };
   }
@@ -8696,6 +8751,7 @@
       analyzeTimings: [],
       useCombinedJob: false
     };
+    applySinglePassEditOption(singleFlowState.singlePassEdit);
     // Restores the style picks and prompt the imported run was produced with,
     // so the review panel opens showing them rather than defaults.
     lastSingleSelections = {
@@ -8728,6 +8784,7 @@
       singlePassEdit: settings.singlePassEdit,
       path: settings.path
     };
+    applySinglePassEditOption(batchSettings.singlePassEdit);
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
     applyAspectRatioChange(settings.aspectRatio);
 

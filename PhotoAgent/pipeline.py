@@ -694,6 +694,7 @@ def finish_stage(
         "image_model": image_model if ai_photo_editing else None,
         "image_quality": edit_quality,
         "analysis_model": analysis_model,
+        "single_pass_edit": single_pass_edit,
         "timings": timings,
     }
     if body_review_active:
