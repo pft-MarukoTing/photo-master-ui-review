@@ -6443,19 +6443,15 @@
     setCurrentCaseTimes(job);
     const analyzeJobId = Array.isArray(job.runs) && job.runs.length ? job.runs[0] : job.job_id;
     const previewUrl = sourceImageUrl(analyzeJobId);
-    showSection("results");
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = true;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-    showBatchMainLoading({
-      previewUrl,
-      status: "analyzing",
-      aiPhotoEditing: job.ai_photo_editing,
-      imageModel: job.image_model
-    });
+    // This history entry is already analyzed (the tile is only wired to
+    // this handler after its analyze job succeeds). Keep the upload page
+    // visible while its analysis and source image are being reconstructed.
 
     try {
       await pollJobStatus(analyzeJobId, { path: "local" });
@@ -6503,17 +6499,10 @@
     await setImgSrcPreloaded(els.originalImg, selectedFileSourceUrl);
     if (historyViewToken !== myToken) return; // navigated away meanwhile
     els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
-    // Undoes what showBatchMainLoading (above) itself did: hid
-    // #results-canvas-row (via hideAllBatchMainViews) and left
-    // #batch-main-loading showing. showPendingResults -- unlike
-    // showSingleResult -- never touches either of these itself (it was never
-    // previously called after that placeholder had been shown; startSubmit's
-    // own manual path reaches showPendingResults straight from
-    // #processing-section, not from here), so without this the review panel
-    // it's about to render stays hidden underneath the still-visible
-    // placeholder.
-    if (els.batchMainLoading) els.batchMainLoading.hidden = true;
-    if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
+    showSection("results");
+    // showPendingResults will now switch to results only after the source
+    // image has finished preloading, so the upload page remains intact until
+    // the review view can be painted without a broken image flash.
     closeHistoryDrawer();
     try {
       await runPendingReviewFlow(analysis, preset);
