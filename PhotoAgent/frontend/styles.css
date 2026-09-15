@@ -4397,14 +4397,14 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
        translucent panel -- backdrop-filter itself would do nothing here
        since the photo fills the card edge-to-edge, leaving nothing behind
        the border to blur. */
-    border: 1px solid rgba(255, 255, 255, .38);
+    border: 1px solid rgba(255, 255, 255, .26);
     border-radius: 12px;
     background: var(--card-2);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, .7),
-      inset 0 0 0 1px rgba(255, 255, 255, .16),
-      inset 0 -1px 0 rgba(0, 0, 0, .2),
-      0 0 0 1px rgba(255, 255, 255, .07),
+      inset 0 1px 0 rgba(255, 255, 255, .48),
+      inset 0 0 0 1px rgba(255, 255, 255, .1),
+      inset 0 -1px 0 rgba(0, 0, 0, .18),
+      0 0 0 1px rgba(255, 255, 255, .05),
       0 10px 24px rgba(0, 0, 0, .3);
     transition: transform .18s ease, box-shadow .18s ease;
   }
@@ -4414,12 +4414,12 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
      dark theme. Turn it down there. */
   body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .demo-image-tile,
   body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .history-cube {
-    border-color: rgba(255, 255, 255, .18);
+    border-color: rgba(255, 255, 255, .12);
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, .35),
-      inset 0 0 0 1px rgba(255, 255, 255, .08),
-      inset 0 -1px 0 rgba(0, 0, 0, .25),
-      0 0 0 1px rgba(255, 255, 255, .03),
+      inset 0 1px 0 rgba(255, 255, 255, .24),
+      inset 0 0 0 1px rgba(255, 255, 255, .05),
+      inset 0 -1px 0 rgba(0, 0, 0, .22),
+      0 0 0 1px rgba(255, 255, 255, .02),
       0 10px 24px rgba(0, 0, 0, .35);
   }
   /* Two-part glass reflection: a bright, narrow streak near the top-left
@@ -4429,7 +4429,11 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
      flat highlight. mix-blend-mode: overlay lightens/darkens the photo
      underneath instead of painting a flat tinted layer over it. Sits above
      the photo layers (z-index: 2) but below the badge/delete button
-     (z-index: 3-4) so it never dims their own contrast. */
+     (z-index: 3-4) so it never dims their own contrast. Both this and the
+     border/inset rim above were toned down a second time (first pass only
+     fixed dark themes; both light and dark still read as too glossy at the
+     card's actual on-page size) -- roughly another 30% down from the first
+     revision, on top of the earlier dark-theme-only reduction below. */
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile::before,
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube::before {
     content: "";
@@ -4438,8 +4442,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     z-index: 2;
     pointer-events: none;
     background:
-      linear-gradient(122deg, rgba(255, 255, 255, .75) 0%, rgba(255, 255, 255, .32) 6%, rgba(255, 255, 255, .06) 14%, transparent 26%),
-      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .22), transparent 50%);
+      linear-gradient(122deg, rgba(255, 255, 255, .52) 0%, rgba(255, 255, 255, .22) 6%, rgba(255, 255, 255, .04) 14%, transparent 26%),
+      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .16), transparent 50%);
     mix-blend-mode: overlay;
   }
   /* On a light theme the white streak is landing on an already-light photo
@@ -4449,8 +4453,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .demo-image-tile::before,
   body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .history-cube::before {
     background:
-      linear-gradient(122deg, rgba(255, 255, 255, .38) 0%, rgba(255, 255, 255, .16) 6%, rgba(255, 255, 255, .03) 14%, transparent 26%),
-      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .22), transparent 50%);
+      linear-gradient(122deg, rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, .11) 6%, rgba(255, 255, 255, .02) 14%, transparent 26%),
+      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .16), transparent 50%);
   }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:first-child,
   body.gallery-card-style #upload-section .upload-gallery-col .history-grid > .history-cube:first-child {
