@@ -177,15 +177,15 @@
       transition: border-color .15s, background .15s;
     }
     .step-cb input:checked + .step-cb-box {
-      border-color: var(--green);
-      background: rgba(1,179,123,.18);
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.18);
     }
     .step-cb-box::after {
       content: '';
       display: block;
       position: absolute; left: 6px; top: 3px;
       width: 6px; height: 10px;
-      border: 2px solid var(--green);
+      border: 2px solid var(--accent);
       border-top: none; border-left: none;
       transform: rotate(45deg) scale(0);
       transition: transform .15s;
@@ -5199,6 +5199,7 @@
         <button type="button" class="theme-option" data-theme="peach" aria-pressed="false"><span class="theme-swatch theme-swatch-peach"></span><span>淺色・暖橘</span></button>
         <button type="button" class="theme-option" data-theme="lilac" aria-pressed="false"><span class="theme-swatch theme-swatch-lilac"></span><span>淺色・紫丁香</span></button>
         <button type="button" class="theme-option" data-theme="caramel" aria-pressed="false"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
+        <button type="button" class="theme-option" data-theme="caramel" aria-pressed="false"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
       </div>
     </div>
     <div class="option-pill-group">
@@ -5448,6 +5449,7 @@
         <button type="button" class="theme-option is-selected" data-theme="default" aria-pressed="true"><span class="theme-swatch theme-swatch-purple"></span><span>深色・紫</span></button>
         <button type="button" class="theme-option" data-theme="peach" aria-pressed="false"><span class="theme-swatch theme-swatch-peach"></span><span>淺色・暖橘</span></button>
         <button type="button" class="theme-option" data-theme="lilac" aria-pressed="false"><span class="theme-swatch theme-swatch-lilac"></span><span>淺色・紫丁香</span></button>
+        <button type="button" class="theme-option" data-theme="caramel" aria-pressed="false"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
         <button type="button" class="theme-option" data-theme="caramel" aria-pressed="false"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
       </div>
     </div>

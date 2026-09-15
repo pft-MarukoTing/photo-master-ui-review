@@ -263,6 +263,14 @@ body {
 button, input, select, textarea { font: inherit; }
 a { text-decoration: none; color: inherit; }
 
+/* Native checkboxes (box-type-row, step-cb, prompt-overwrite,
+   ap-body-reshape, ...) have no explicit accent-color, so they fall back
+   to the browser's own default tint -- a green that stays fixed across
+   every theme instead of following each theme's --accent. */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+}
+
 /* Scrollbars: the browser default (light gray, square) reads jarringly out
    of place against this dark, rounded, brand-purple UI -- restyle every
    scrollable element (main page, .batch-sidebar, #analysis-preview, popover
