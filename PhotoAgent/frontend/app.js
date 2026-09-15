@@ -7235,6 +7235,7 @@
     forest: "深色・森林",
     paper: "淺色・紙張",
     peach: "淺色・暖橘",
+    lilac: "淺色・紫丁香",
   };
   function applyTheme(theme, persist = true) {
     const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "default";

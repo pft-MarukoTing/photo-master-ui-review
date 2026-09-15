@@ -129,6 +129,42 @@ body[data-theme="peach"] {
   --mv-grad: linear-gradient(135deg, #F3C262 0%, #E36255 52%, #BC2A1A 100%);
   --bg-glow-1: rgba(227,98,85,.09); --bg-glow-2: rgba(236,154,134,.08); --shadow-accent: 0 10px 30px rgba(227,98,85,.18);
 }
+/* "淺色・紫丁香" -- built from a single given purple-to-pink hue sweep
+   (#6a398c darkest -> #804595 -> #9c539c -> #c967a2 -> #d876a9 lightest,
+   average hue ~303°), unlike peach's three separate named brand hues. The
+   n04-n100 neutral scale reuses peach's own L/S curve per stop (same
+   lightness ladder, same saturation magnitude at each step) with only the
+   hue rotated to this palette's ~303°, so contrast/spacing stays in step
+   with the rest of the app. --n09 is a distinct near-white card (paper's
+   pattern: card lighter than page bg) rather than peach's n09==n04, so
+   this theme doesn't need peach's .field-input/.field-ta patch below.
+   Role assignment by measured white-text contrast (WCAG relative
+   luminance): --accent uses #9c539c (5.08:1, the app's usual accent+white
+   floor), --accent-2 the lighter #c967a2 (3.53:1, same floor peach's own
+   salmon sits at), --accent-soft-rgb the lightest #d876a9 (2.96:1 --
+   too low for solid white-text buttons, same role gold played for peach:
+   pale/decorative only). #6a398c (8.15:1) anchors --mv-grad's dark end
+   and --hue-prompt, both roles that need the deepest, most legible stop.
+   #804595 fills --hue-recipe so the four review-tab icon hues stay
+   visually distinct. Every given color sits in the same family (no cool
+   outlier like peach's dusty teal), so nothing needed an isolated
+   decorative-only use elsewhere (e.g. .think-ring:nth-child(3) is left on
+   its generic on-surface-rgb ring, same as ocean/forest/paper). */
+body[data-theme="lilac"] {
+  --n04: #FAF4FA; --n09: #FEFDFE; --n14: #F6E9F5; --n24: #EFD7EE;
+  --n34: #E0BDDE; --n44: #B988B7; --n54: #8F5B8C; --n64: #784A76;
+  --n74: #5F355D; --n84: #492247; --n100: #331431;
+  --bg: var(--n04); --card: var(--n09); --card-2: var(--n14); --card-3: var(--n24);
+  --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
+  --border: rgba(51,20,49,.10); --border-2: rgba(51,20,49,.18);
+  --accent: #9C539C; --accent-2: #C967A2; --accent-rgb: 156,83,156; --accent-2-rgb: 201,103,162;
+  --accent-soft-rgb: 216,118,169; --on-surface-rgb: 51,20,49; --on-surface-color: #331431;
+  --glass-rgb: 255,255,255;
+  --accent-pale-color: #F5E6EF; --accent-pale-grad: linear-gradient(110deg, #FAF7F9 0%, #F5E6EF 68%, #C967A2 100%);
+  --header-bg: rgba(250,244,250,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
+  --mv-grad: linear-gradient(135deg, #D876A9 0%, #9C539C 52%, #6A398C 100%);
+  --bg-glow-1: rgba(156,83,156,.09); --bg-glow-2: rgba(201,103,162,.08); --shadow-accent: 0 10px 30px rgba(156,83,156,.18);
+}
 
 /* The review tabs have their own small icon palette; keep that palette in
    the same color family as the selected application theme too. */
@@ -145,6 +181,7 @@ body[data-theme="paper"] #ap-review-panel { --hue-face: #06b6d4; --hue-recipe: #
    role (its other three hues sit around 1.7-2.3:1 contrast at .5 opacity
    on this card color; #F3C262 was only ~1.3, #7E5207 is ~2.2). */
 body[data-theme="peach"] #ap-review-panel { --hue-face: #EC9A86; --hue-recipe: #7E5207; --hue-style: #E36255; --hue-prompt: #BC2A1A; }
+body[data-theme="lilac"] #ap-review-panel { --hue-face: #C967A2; --hue-recipe: #804595; --hue-style: #9C539C; --hue-prompt: #6A398C; }
 
 /* .field-input/.field-ta (further down) default to background: var(--card)
    -- on every other theme --card is a step lighter/darker than --bg, but
@@ -155,6 +192,13 @@ body[data-theme="peach"] #ap-review-panel { --hue-face: #EC9A86; --hue-recipe: #
    of a blank patch of page background. */
 body[data-theme="peach"] .field-input,
 body[data-theme="peach"] .field-ta { background: var(--card-2); }
+/* lilac hits the same "field looks like a blank white patch" problem for a
+   different reason than peach: its --card (n09) is a genuine near-white
+   #FEFDFE, only ~3% lighter than --bg (n04), so a var(--card) field barely
+   read as tinted at all against the page. --card-2 (n14) is a visibly
+   deeper lilac step, same fix as peach for the same visual result. */
+body[data-theme="lilac"] .field-input,
+body[data-theme="lilac"] .field-ta { background: var(--card-2); }
 
 /* ════════════════════════════════════════
    BASE
@@ -1795,7 +1839,7 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 }
 .theme-picker-heading .option-pill-label { padding-left: 0; color: var(--text); }
 .theme-picker-current { color: var(--text-2); font-size: 12px; }
-.theme-options { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 7px; }
+.theme-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
 .theme-option {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   min-width: 0; padding: 8px 4px 7px; border: 1px solid var(--border);
@@ -1810,6 +1854,7 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 .theme-swatch-forest { background: linear-gradient(135deg, #a3e635, #34d399 52%, #059669); }
 .theme-swatch-paper { background: linear-gradient(135deg, #dbeafe, #60a5fa 52%, #0891b2); }
 .theme-swatch-peach { background: linear-gradient(135deg, #f3c262, #e36255 52%, #bc2a1a); }
+.theme-swatch-lilac { background: linear-gradient(135deg, #d876a9, #9c539c 52%, #6a398c); }
 @media (max-width: 430px) {
   .theme-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
@@ -1817,14 +1862,17 @@ body[data-theme="paper"] .site-header,
 /* rgba(var(--on-surface-rgb)) instead of a hardcoded navy -- paper's own
    on-surface-rgb (23,32,51) was already that same navy in disguise, but
    the literal value silently stayed navy for peach's warm brown too. */
-body[data-theme="peach"] .site-header { box-shadow: 0 8px 24px rgba(var(--on-surface-rgb),.08); }
+body[data-theme="peach"] .site-header,
+body[data-theme="lilac"] .site-header { box-shadow: 0 8px 24px rgba(var(--on-surface-rgb),.08); }
 body[data-theme="paper"] .upload-gallery-col,
-body[data-theme="peach"] .upload-gallery-col {
+body[data-theme="peach"] .upload-gallery-col,
+body[data-theme="lilac"] .upload-gallery-col {
   background: var(--card-sheen), var(--card);
   box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.12), 0 16px 34px rgba(var(--on-surface-rgb),.08);
 }
 body[data-theme="paper"] .proc-wrap,
-body[data-theme="peach"] .proc-wrap {
+body[data-theme="peach"] .proc-wrap,
+body[data-theme="lilac"] .proc-wrap {
   background: radial-gradient(ellipse 600px 420px at 82% 18%, var(--bg-glow-2) 0%, transparent 60%), var(--bg);
 }
 * { scrollbar-color: rgba(var(--accent-rgb),.4) transparent; }
