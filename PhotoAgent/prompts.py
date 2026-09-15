@@ -1530,6 +1530,7 @@ Physical fields:
 - half_closed means an eyelid unusually covers the iris or pupil, or the aperture looks droopy, uneven, glassy, or transitional. Do not demote it to narrowed_open because the person is smiling.
 - fully_closed means the eyelids meet with no iris, pupil, or sclera visible.
 - physical_eye_state summarizes the two per-eye states without interpreting intention.
+- When one eye is closed and the other is half-closed or open, describe them as mismatched transitional eyelid states. Natural anatomical variation applies to stable eye contour and crease structure, not to this captured difference in eyelid openness.
 - eye_closure_confidence is confidence from 0 to 1 that at least one eye is physically half_closed or fully_closed. It is not confidence that the closure was accidental.
 
 Record the following exception evidence separately; never use it to rewrite the physical states:
@@ -2328,7 +2329,7 @@ For each gaze strategy, provide concrete English instructions. Name the current 
 Do not write any instruction that preserves, freezes, or restores the named person's torso, shoulders, body pose, stance, gesture, interaction points, or camera framing. Those properties are outside this local gaze plan and may be owned by a later user-selected pose or framing override.
 
 Blink repair (only for a target with needs_blink_repair true):
-Choose a method that naturally reopens or relaxes the closed/half-closed eyelids to match this person's existing expression and the photo's moment -- never a generic wide-open or symmetrical look, and never copied from another person. Name the target eyelid state, the eyelid adjustment itself, repair strength, success condition, preservation rules, and likely failure modes. When this same person also needs a gaze repair, describe the eyelid opening and final approved gaze as one coordinated local eye edit, not as independent steps performed before or after each other. Preserve identity, gaze direction (unless this person's own gaze repair specifies a new direction), facial structure, expression style, skin texture, glasses, makeup, lighting, and every unlisted person. Never describe converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into neutral open eyes.
+Set the endpoint from a natural, clearly open resting eye state, not by averaging or preserving the captured eyelid openings. Both eyes must look clearly and comfortably open, with closely matched perceived aperture and iris exposure at normal viewing size; any remaining aperture variation must not read as a smaller eye. Preserve every clearly readable original difference in monolid/double-lid type, fold count, crease height, depth, and continuity. Only when one eye's crease is unreadable because it is closed or half-closed and the source shows no evidence of a genuine left/right crease difference, use the clearer eye as a fallback structural reference so the repair does not invent a new mismatch. Open the eye by repositioning the eyelid margin, keeping upper-lid tissue volume and each side's brow-to-eye contour source-matched; the repair must not add puffiness, swelling, bulging skin, or a high/deep crease. A source-supported natural one-monolid/one-double-lid pattern must remain unchanged. Use strong repair strength when either source eye is fully closed or both eyes require opening; strength controls completion, not eyelid thickness. Name the target, adjustment, strength, success condition, preservation rules, and likely failure modes. When this person also needs gaze repair, describe both changes as one coordinated local eye edit. Preserve identity, expression, skin texture, glasses, makeup, lighting, and every unlisted person. Keep intentional winks, laugh-squints, emotional closed-eye reactions, sleep, and deliberate closed-eye expressions unchanged.
 
 Targets:
 """ + json.dumps(compact_targets, ensure_ascii=False, indent=2)
@@ -3916,13 +3917,17 @@ def resolve_user_hair_request(issue):
 # camera, so one canned repair target covers every forced row.
 _FORCED_BLINK_STRATEGY = {
     "edit_instruction": (
-        "User-forced eye-open edit: naturally open this person's eyes into a relaxed, alert "
-        "expression consistent with their existing head pose, lighting, and facial expression."
+        "User-forced eye-open edit: open both eyes clearly and comfortably from their captured states "
+        "into a natural open resting state with closely matched perceived aperture and iris exposure. "
+        "Preserve any clearly visible original left/right difference in upper-eyelid crease structure."
     ),
-    "target_eye_state": "open, matching the existing expression",
-    "eyelid_adjustment": "open the eyelids naturally, matching the existing expression",
+    "target_eye_state": "both eyes clearly open with closely matched perceived aperture and iris exposure",
+    "eyelid_adjustment": (
+        "balance eyelid openness while preserving each readable crease type and fold count; use the clearer eye "
+        "only when the other crease is hidden by closure and no genuine source difference is visible"
+    ),
     "repair_strength": "moderate",
-    "success_condition": "eyes read naturally open at normal photo-viewing size",
+    "success_condition": "both eyes read clearly open and equally awake, with neither eye visibly smaller",
     "preserve_during_repair": ["identity", "iris color", "expression", "skin", "head pose"],
     "failure_to_avoid": ["oversized or doll-like eyes", "mismatched gaze direction", "altered identity"],
 }
@@ -4394,26 +4399,35 @@ def _fallback_blink_repair_strategy(issue, label):
     behavior is unchanged the moment this ships, before Call C ever
     authors something better for a given person.
     """
+    per_eye_states = (issue.get("left_eye_state"), issue.get("right_eye_state"))
+    repair_strength = (
+        "strong"
+        if "fully_closed" in per_eye_states
+        or sum(state == "half_closed" for state in per_eye_states) == 2
+        else "moderate"
+    )
     return {
-        "target_eye_state": "open, matching {}'s existing expression and the photo's moment".format(label),
+        "target_eye_state": (
+            "both eyes clearly and comfortably open with closely matched perceived aperture and iris "
+            "exposure in {}'s existing expression"
+        ).format(label),
         "eyelid_adjustment": (
-            "Naturally reopen or relax the closed or half-closed eyelids. Render realistic eyelids, "
-            "iris, pupil, catchlights, and eyelashes, with gaze direction matching the head angle and "
-            "the photo's lighting, unless a separately approved gaze repair for this same person "
-            "specifies a different target direction, in which case follow that instead."
+            "Set both eyelids from a natural, clearly open resting state rather than either captured closure "
+            "level. Closely match perceived aperture and iris exposure. Preserve every readable original crease "
+            "difference. Use the clearer eye as a fallback only when the other crease is hidden by closure and "
+            "the source shows no genuine difference. Reposition the eyelid margin while keeping upper-lid "
+            "thickness, tissue volume, and each side's brow-to-eye contour source-matched."
         ),
-        "repair_strength": "moderate",
+        "repair_strength": repair_strength,
         "edit_instruction": (
-            "Naturally reopen or relax {}'s closed or half-closed eyes to match their existing "
-            "expression and the photo's moment. Avoid making the eyes too large, symmetrical, "
-            "doll-like, or copied from another person. Render realistic eyelids, iris, pupil, "
-            "catchlights, and eyelashes, with gaze direction matching the head angle and lighting. "
-            "Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this."
+            "Open both of {}'s eyes clearly and comfortably, using a natural fully open resting state as the "
+            "endpoint rather than averaging their captured closure levels. Closely match perceived aperture "
+            "and iris exposure while preserving any clearly visible original left/right difference in upper-eyelid "
+            "crease structure and without adding eyelid volume."
         ).format(label),
         "success_condition": (
-            "At normal photo-viewing size, {}'s eyes read naturally open, matching their original "
-            "expression and the photo's moment, with no doll-like, oversized, symmetrical, or "
-            "copied appearance."
+            "At normal photo-viewing size, both of {}'s eyes read clearly open and equally awake; neither eye "
+            "looks smaller, droopier, less open, puffy, or swollen, and no new crease-type mismatch has been introduced."
         ).format(label),
         "preserve_during_repair": [
             "identity", "gaze direction unless a separately approved gaze repair says otherwise",
@@ -4421,7 +4435,10 @@ def _fallback_blink_repair_strategy(issue, label):
             "unlisted people",
         ],
         "failure_to_avoid": [
-            "oversized or doll-like eyes", "symmetrical eyes copied from another person",
+            "residual unequal eyelid openness from the captured blink", "oversized or doll-like eyes",
+            "new crease-type mismatch unsupported by the source", "extra or discontinuous eyelid folds",
+            "puffy or swollen upper eyelid", "increased eyelid tissue volume", "high or overly deep crease",
+            "exactly mirrored or cloned eye geometry",
             "reshaped face or smoothed skin",
             "converting an intentional wink, laugh-squint, crying/pained/dramatic closed-eye "
             "reaction, sleeping/napping closed eyes, or deliberate closed-eye expression into "
@@ -6866,6 +6883,7 @@ Approved-repair override:
 - Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
 - Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
 - Execute the approved repair using only the execution instructions below. Do not read confidence scores or reasons to decide whether to be more conservative.
+- For every named person, use a natural, clearly open resting eye state as the endpoint rather than either captured closure level. Both eyes must look clearly and comfortably open, with closely matched perceived aperture and iris exposure at normal viewing size. Preserve every clearly readable original left/right crease difference, including a genuine one-monolid/one-double-lid pattern. Use the clearer eye as a fallback only when the other crease is hidden by closure and the source shows no genuine difference, so the repair does not invent a new mismatch. Open by repositioning the eyelid margin while keeping tissue volume and each side's brow-to-eye contour source-matched. Do not add puffiness, swelling, bulging skin, or a high/deep crease. This final target overrides weaker execution wording.
 - When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
 
@@ -6876,7 +6894,7 @@ Execution instructions:
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
 - Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
 - Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
-- Reopen or relax the eyes naturally so they match the person's existing expression and the photo's moment. Avoid making the eyes too large, symmetrical, doll-like, or copied from another person.
+- Use a natural, clearly open resting eye state as the endpoint rather than either captured closure level. Make both eyes clearly and comfortably open with closely matched perceived aperture and iris exposure. Preserve every clearly visible original left/right crease difference. Use the clearer eye only when the other crease is hidden by closure and no genuine source difference is visible. Open by repositioning the eyelid margin without adding tissue volume, puffiness, swelling, bulging skin, or a high/deep crease.
 - Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting -- unless a separately approved gaze repair for this same person specifies a different target direction, in which case follow that instead. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
 - When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.

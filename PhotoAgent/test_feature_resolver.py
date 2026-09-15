@@ -8,7 +8,11 @@ from photo_agent.feature_resolver import (
     build_feature_contracts,
     resolve_feature_contracts,
 )
-from prompts import build_body_reshape_edit_block, build_eye_repair_planning_instruction
+from prompts import (
+    _BLINK_DETECTION_LUNA_SECTION,
+    build_body_reshape_edit_block,
+    build_eye_repair_planning_instruction,
+)
 
 
 def interaction_analysis():
@@ -160,13 +164,35 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertIn("Apply a subtle eyelid correction", prompt)
         self.assertIn("Target eyelid state: open, matching the left man's existing expression", prompt)
         self.assertIn("Eyelid method: Lift the upper lids to the captured lash line", prompt)
+        self.assertIn("into a natural open resting state", prompt)
+        self.assertIn("leaving neither eye puffy or visibly smaller", prompt)
+        self.assertIn("Preserve all clearly visible natural left/right crease differences", prompt)
+        self.assertIn("If closure hides one crease and no genuine difference is visible, use the clearer eye as reference", prompt)
+        self.assertIn("Reposition only the eyelid margin; preserve upper-lid volume", prompt)
+
+    def test_full_closed_and_half_closed_pair_uses_strong_repair(self):
+        analysis = blink_analysis()
+        analysis["subjects"][0]["blink_issue"].update({
+            "left_eye_state": "fully_closed",
+            "right_eye_state": "half_closed",
+            "blink_repair_strategy": blink_strategy(),
+        })
+        prompt, _ = build_compact_editor_prompt(analysis, "", "", {})
+        self.assertIn("Apply a strong eyelid correction", prompt)
+
+    def test_planner_sentence_endings_do_not_create_double_periods(self):
+        analysis = blink_analysis()
+        analysis["subjects"][0]["blink_issue"]["blink_repair_strategy"] = blink_strategy()
+        prompt, _ = build_compact_editor_prompt(analysis, "", "", {})
+        self.assertNotIn("where they are.. Final eyelid target", prompt)
 
     def test_no_strategy_keeps_the_generic_sentence(self):
         prompt, _ = build_compact_editor_prompt(blink_analysis(), "", "", {})
         self.assertIn(
-            "- Open or relax the accidentally closed/half-closed eye naturally, matching the person's anatomy.",
+            "- Open both eyes clearly and comfortably from the captured blink into a natural open resting state.",
             prompt,
         )
+        self.assertIn("make both eyes clearly and comfortably open", prompt)
         self.assertNotIn("Apply a", prompt)
         self.assertNotIn("Eyelid method:", prompt)
 
@@ -180,7 +206,32 @@ class BlinkRepairStrategy(unittest.TestCase):
         prompt, _ = build_compact_editor_prompt(analysis, "", "", {})
         self.assertIn("Shape the eyelids for the final expression first", prompt)
         self.assertIn("Eyelid method: Lift the upper lids to the captured lash line", prompt)
+        self.assertIn("make both eyes clearly and comfortably open", prompt)
         self.assertNotIn("Target eyelid state:", prompt)
+
+    def test_analyzer_treats_closed_half_closed_difference_as_capture_state(self):
+        self.assertIn("mismatched transitional eyelid states", _BLINK_DETECTION_LUNA_SECTION)
+        self.assertIn("not to this captured difference in eyelid openness", _BLINK_DETECTION_LUNA_SECTION)
+
+    def test_blink_planner_targets_balanced_openness_without_geometric_cloning(self):
+        instruction = build_eye_repair_planning_instruction([{
+            "subject_index": 0,
+            "label": "central woman",
+            "needs_gaze_repair": False,
+            "needs_blink_repair": True,
+            "blink_issue": {
+                "left_eye_state": "fully_closed",
+                "right_eye_state": "half_closed",
+            },
+        }])
+        self.assertIn("not by averaging or preserving the captured eyelid openings", instruction)
+        self.assertIn("closely matched perceived aperture and iris exposure", instruction)
+        self.assertIn("must not read as a smaller eye", instruction)
+        self.assertIn("Use strong repair strength when either source eye is fully closed", instruction)
+        self.assertIn("Preserve every clearly readable original difference in monolid/double-lid type", instruction)
+        self.assertIn("A source-supported natural one-monolid/one-double-lid pattern must remain unchanged", instruction)
+        self.assertIn("keeping upper-lid tissue volume and each side's brow-to-eye contour source-matched", instruction)
+        self.assertIn("must not add puffiness, swelling, bulging skin", instruction)
 
     def test_blink_and_gaze_render_one_coordinated_eye_edit(self):
         analysis = blink_analysis()
@@ -716,7 +767,8 @@ Framing-size override requirement: This is a true wider-framing transformation. 
         self.assertIn("skeletal jaw/chin contour, cheekbone placement", prompt)
         self.assertIn("baseline eye–nose–mouth landmark layout", prompt)
         self.assertIn("eye-globe size and interocular/canthus positions", prompt)
-        self.assertIn("monolid versus double-lid structure, crease count, height, depth", prompt)
+        self.assertIn("Preserve every source-visible upper-eyelid difference", prompt)
+        self.assertIn("including a genuine one-monolid/one-double-lid pattern", prompt)
         self.assertIn("never create a new fold", prompt)
         self.assertIn("nose bridge/tip/nostril geometry, philtrum length, ear shape", prompt)
         self.assertIn("limit expression movement to mouth-corner position and opening", prompt)
@@ -776,15 +828,16 @@ Framing-size override requirement: This is a true wider-framing transformation. 
         self.assertIn("brow/periocular tension, and eyelid aperture over the fixed landmarks", prompt)
         self.assertIn("Keep the captured iris/pupil direction, sclera balance, and catchlights", prompt)
 
-    def test_laugh_and_blink_resolve_to_readable_natural_squint(self):
+    def test_laugh_and_blink_resolve_to_balanced_natural_openness(self):
         analysis = interaction_analysis()
         analysis["subjects"][0]["blink_issue"] = {
             "should_fix": True, "reason": "accidental half blink",
         }
         prompt, audit = build_compact_editor_prompt(analysis, "", "", {})
         self.assertIn("Shape the eyelids for the final expression first", prompt)
-        self.assertIn("reopen the affected eye only enough to be naturally readable", prompt)
-        self.assertIn("retain natural smile narrowing rather than restoring captured openness", prompt)
+        self.assertIn("naturally open both eyes within that expression", prompt)
+        self.assertIn("make both eyes clearly and comfortably open", prompt)
+        self.assertIn("leaving neither eye puffy or visibly smaller", prompt)
         self.assertNotIn("preserve eyelid aperture", prompt.lower())
         self.assertEqual(
             set(audit["resolved_features"][0]["features"]),
