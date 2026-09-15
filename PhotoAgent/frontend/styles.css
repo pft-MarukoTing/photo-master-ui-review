@@ -1772,7 +1772,13 @@ input[type="checkbox"] {
 label.option-row { cursor: pointer; }
 label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 
-.option-text { flex: 1; }
+/* min-width: 0 -- a flex item's default min-width: auto refuses to shrink
+   below its content's min-content width, so without this a long enough
+   .option-label pushes the whole row wider than the modal instead of the
+   text column giving way. That showed up as a horizontal scrollbar on
+   #settings-modal-body and, because only the rows with long labels grew,
+   their .ios-switch no longer lined up with the switches above them. */
+.option-text { flex: 1; min-width: 0; }
 
 .option-label {
   display: block;
@@ -1780,7 +1786,12 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
   font-weight: 600;
   color: var(--text);
   letter-spacing: -.14px;
-  white-space: nowrap;
+  /* Wraps rather than nowrap (what this used to be): a label only ever
+     takes a second line when it genuinely doesn't fit on one, which
+     previously meant overflowing the row instead -- so nothing that fit
+     before moves, and every row stays bounded by the modal's width at any
+     viewport size, however long a future label gets. */
+  overflow-wrap: break-word;
 }
 .option-desc {
   display: block;
