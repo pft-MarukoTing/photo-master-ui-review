@@ -814,13 +814,43 @@ window.PhotoAgentResults = (() => {
     return Number.isFinite(value) ? value : bodyReshapeSliderConfig().default;
   }
 
-  function bodyReshapeDisplayText(text) {
-    return String(text || "").replace(/\s*[+＋]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*[%％]/, "").trim();
+  // The review UI deliberately exposes three semantic strengths instead of
+  // the backend's continuous percentage policy.  Keep the percentage on the
+  // strength object so selecting a tick still writes the exact numeric target
+  // consumed by the execution plan and Editor prompt.
+  const BODY_RESHAPE_STRENGTHS = [
+    { key: "weak", label: "弱", targetPct: 5 },
+    { key: "medium", label: "中", targetPct: 15 },
+    { key: "strong", label: "強", targetPct: 30 },
+  ];
+
+  function bodyReshapeStrengthIndex(value) {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return 1;
+    // This conversion only chooses the visible tick.  Until the user moves
+    // the control, the original numeric amount (including the legacy 12%
+    // planner target) remains untouched and is not sent as a new override.
+    let selected = 0;
+    let distance = Infinity;
+    BODY_RESHAPE_STRENGTHS.forEach((strength, index) => {
+      const nextDistance = Math.abs(amount - strength.targetPct);
+      // Resolve an exact midpoint toward the stronger tick so the planner's
+      // legacy 12% default is represented by the middle UI strength.
+      if (nextDistance <= distance) {
+        selected = index;
+        distance = nextDistance;
+      }
+    });
+    return selected;
   }
 
-  function bodyReshapeAmountLabel(value) {
-    const number = Number(value);
-    return number === 0 ? "0%（不調整）" : `${number}%`;
+  function bodyReshapeStrengthAt(index) {
+    const numericIndex = Number(index);
+    return BODY_RESHAPE_STRENGTHS[numericIndex] || BODY_RESHAPE_STRENGTHS[1];
+  }
+
+  function bodyReshapeDisplayText(text) {
+    return String(text || "").replace(/\s*[+＋]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*[%％]/, "").trim();
   }
 
   function bodyReshapeAmountMap(analysis) {
@@ -1754,7 +1784,6 @@ window.PhotoAgentResults = (() => {
 
       const toggle = document.createElement("label");
       toggle.className = "ios-switch ap-face-issue-toggle";
-      const sliderConfig = bodyReshapeSliderConfig();
       const actionableBodyPoints = bodyKeyPoints.filter((point) => point.selectable !== false);
       toggle.title = actionableBodyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
       const masterInput = document.createElement("input");
@@ -1804,47 +1833,45 @@ window.PhotoAgentResults = (() => {
           text.textContent = bodyReshapeDisplayText(point.text);
           textLabel.appendChild(text);
           row.appendChild(textLabel);
-          let metadata = null;
-          if (point.targetPct != null || (point.sourceText && point.sourceText !== point.text)) {
-            metadata = document.createElement("small");
-            metadata.className = "ap-body-reshape-option-meta";
-            const details = [];
-            if (point.targetPct != null) details.push(`目前目標 ${bodyReshapeAmountLabel(point.targetPct)}`);
-            if (point.sourceText && point.sourceText !== point.text) details.push(`原始：${point.sourceText}`);
-            metadata.textContent = details.join(" · ");
-            row.appendChild(metadata);
-          }
           const sliderRow = document.createElement("div");
           sliderRow.className = "ap-body-reshape-slider-row";
           const sliderLabel = document.createElement("span");
           sliderLabel.className = "ap-body-reshape-slider-label";
           sliderLabel.textContent = "調整幅度";
+          const strengthIndex = bodyReshapeStrengthIndex(point.targetPct);
+          const selectedStrength = bodyReshapeStrengthAt(strengthIndex);
           const slider = document.createElement("input");
           slider.type = "range";
           slider.className = "ap-body-reshape-slider";
-          slider.min = String(sliderConfig.min);
-          slider.max = String(sliderConfig.max);
-          slider.step = String(sliderConfig.step);
-          slider.value = String(Math.min(sliderConfig.max, Math.max(sliderConfig.min, Number(point.targetPct))));
+          slider.min = "0";
+          slider.max = String(BODY_RESHAPE_STRENGTHS.length - 1);
+          slider.step = "1";
+          slider.value = String(strengthIndex);
           slider.setAttribute("aria-label", `${bodyReshapeDisplayText(point.text)} 調整幅度`);
-          const sliderValue = document.createElement("output");
-          sliderValue.className = "ap-body-reshape-slider-value";
-          sliderValue.textContent = bodyReshapeAmountLabel(point.targetPct);
+          slider.setAttribute("aria-valuetext", `${selectedStrength.label}強度`);
+          const sliderControl = document.createElement("div");
+          sliderControl.className = "ap-body-reshape-slider-control";
+          sliderControl.appendChild(slider);
+          const strengthScale = document.createElement("div");
+          strengthScale.className = "ap-body-reshape-slider-scale";
+          BODY_RESHAPE_STRENGTHS.forEach((strength) => {
+            const mark = document.createElement("span");
+            mark.textContent = strength.label;
+            strengthScale.appendChild(mark);
+          });
+          sliderControl.appendChild(strengthScale);
           slider.addEventListener("input", () => {
-            point.targetPct = Number(slider.value);
+            const strength = bodyReshapeStrengthAt(slider.value);
+            const nextIndex = BODY_RESHAPE_STRENGTHS.indexOf(strength);
+            slider.value = String(nextIndex);
+            point.targetPct = strength.targetPct;
             point.amountTouched = true;
-            sliderValue.textContent = bodyReshapeAmountLabel(point.targetPct);
-            if (metadata) {
-              const details = [`目前目標 ${bodyReshapeAmountLabel(point.targetPct)}`];
-              if (point.sourceText && point.sourceText !== point.text) details.push(`原始：${point.sourceText}`);
-              metadata.textContent = details.join(" · ");
-            }
+            slider.setAttribute("aria-valuetext", `${strength.label}強度`);
           });
           sliderRow.appendChild(sliderLabel);
-          sliderRow.appendChild(slider);
-          sliderRow.appendChild(sliderValue);
+          sliderRow.appendChild(sliderControl);
           row.appendChild(sliderRow);
-          pointControls.push({ point, input, slider, sliderValue, row });
+          pointControls.push({ point, input, slider, row });
           if (point.selectable === false && point.reason) {
             row.title = `此項不會送入 edit：${point.reason}`;
             row.classList.add("is-unavailable");

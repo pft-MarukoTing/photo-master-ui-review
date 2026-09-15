@@ -1777,12 +1777,15 @@ body[data-theme="peach"] .proc-wrap {
 }
 .ap-body-reshape-slider-row {
   display: grid;
-  grid-template-columns: 64px minmax(90px, 1fr) minmax(42px, 92px);
+  grid-template-columns: 64px minmax(120px, 1fr);
   align-items: center;
   gap: 8px;
   margin-left: 25px;
   color: var(--text-3);
   font-size: 12px;
+}
+.ap-body-reshape-slider-control {
+  min-width: 0;
 }
 .ap-body-reshape-slider {
   width: 100%;
@@ -1792,12 +1795,19 @@ body[data-theme="peach"] .proc-wrap {
   opacity: .45;
   cursor: not-allowed;
 }
-.ap-body-reshape-slider-value {
-  min-width: 42px;
-  white-space: nowrap;
-  text-align: right;
-  color: var(--text-2);
-  font-variant-numeric: tabular-nums;
+.ap-body-reshape-slider-scale {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 7px;
+  margin-top: 1px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.1;
+  user-select: none;
+}
+.ap-body-reshape-slider-scale span {
+  min-width: 1em;
+  text-align: center;
 }
 .ap-body-reshape-option-meta {
   color: var(--text-3);

@@ -21,6 +21,7 @@ from prompts import (
     build_reviewed_light_color_target,
     build_user_preserved_choices,
     has_approved_alignment_correction,
+    build_body_reshape_edit_block,
     resolve_user_blink_request,
     resolve_user_gaze_request,
     resolve_user_hair_request,
@@ -1652,11 +1653,7 @@ def build_compact_editor_prompt(
                         source_indices.append(index)
             provenance = f" (source key-point indices: {source_indices})" if source_indices else ""
             state_lines.append(
-                "- Body reshape source" + provenance + ":\nBody reshape:"
-            )
-            state_lines.extend(f"- {point}" for point in body_adjustments)
-            state_lines.append(
-                "- Treat every listed point as a mandatory geometric endpoint that must be clearly recognizable at normal viewing size. Natural means anatomically believable and texture-faithful, not subtle, restrained, barely visible, or minimum-change. Body reshape itself never authorizes a posture, action, gesture, joint-angle, or body-direction change; a separately selected pose style remains authoritative for its own pose transformation."
+                "- Body reshape source" + provenance + ": see the authoritative Body reshape execution instructions below."
             )
         hair_level = state.get("hair_level")
         hair_correction_plan = str(state.get("hair_correction_plan") or "").strip()
@@ -1796,17 +1793,19 @@ def build_compact_editor_prompt(
         "- Treat hair work as an arrangement/local-sheen edit, not a head or face regeneration. Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color. Where hair crosses a facial feature, retain that feature's visible source shape and position and repair only the strand-width footprint; any authorized eye or expression changes follow only their own resolved final states above."
         if "hair" in resolved_features else ""
     )
-    body_boundary_block = (
-        "\nBody reshape targets:\n"
-        "- Treat body work as local geometry, not a new identity, weight-loss claim, fitness transformation, or unselected pose change. Every approved endpoint is mandatory and must visibly change the named local measurement in the stated direction. A no-op, near-no-op, lighting-only change, smoothing, sharpening, or fold-only change fails the endpoint. A separately selected pose style remains authoritative for its own pose transformation.\n"
-        "- Interpret a percentage against the named region's visible 2D local measurement in the input. It is the total dimensional change, not the amount per side and not a percentage of the person, bounding box, canvas, weight, circumference, or hidden depth. Do not stack duplicate percentages on one measurement; join adjacent waist/abdomen endpoints as one continuous contour.\n"
-        "- If the user's explicit direction gives a different amount or prohibits this same body-region change, that explicit instruction overrides the planner's default 12% endpoint; preserve the stated amount exactly and do not silently clamp it.\n"
-        "- GARMENT IDENTITY AND COVERAGE CONTRACT: preserve the same garment, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method. Inside an approved region, allow its existing garment silhouette, fabric, texture, pattern, seams, folds, and local clothing/skin boundary to move continuously with the body geometry. Do not freeze those authorized local pixels or edges in their source position or shape.\n"
-        "- This authorized local garment follow-through overrides generic clothing or internal-proportion preservation elsewhere for the approved region only. Those rules still protect garment identity/coverage and every unlisted region.\n"
-        "- Any generic instruction elsewhere to preserve clothing means preserve garment identity and coverage outside the approved local geometry. It does not freeze garment silhouette, seams, folds, texture, or the local clothing/skin boundary inside the approved region. Leaving the garment silhouette unchanged is not valid preservation when it prevents the mandatory endpoint.\n"
-        "- Never lengthen/lower a top to cover abdomen, raise a waistband to cover waist, add/remove fabric, alter neckline or sleeve design, change which body area is clothed/exposed, or rearrange coverage to fake shaping. Do not use shadows, blur, sharpening, or redrawn folds instead of geometry.\n"
-        "- When an approved outer contour moves, continue only the necessary narrow strip of the same background between old and new contours. Preserve unlisted body regions, face identity and facial anatomy (except separately approved smile, gaze, blink, or hair endpoints), skin texture, hair identity, hands, feet, accessories, nearby people/objects, background structure, camera viewpoint, and perspective; never broaden the narrow continuation into scene reconstruction."
+    # Keep the complete, analysis-approved body contract in the prompt sent to
+    # the editor.  The legacy prompt and compact resolver must share this
+    # source so the exact-target, garment follow-through, and local-background
+    # rules cannot drift apart.  Per-subject states above retain only a
+    # provenance pointer; repeating the endpoint text there would make the
+    # editor see the same body operation twice.
+    body_execution_block = (
+        build_body_reshape_edit_block(analysis)
         if body_reshape_active else ""
+    )
+    body_boundary_block = (
+        "\nBody reshape targets:\n" + body_execution_block
+        if body_execution_block else ""
     )
     user_text = user_direction.strip() or "No additional direction."
     revision_text = f"\n\nRevision feedback:\n{revision_feedback}" if revision_feedback else ""

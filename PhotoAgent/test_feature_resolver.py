@@ -8,7 +8,7 @@ from photo_agent.feature_resolver import (
     build_feature_contracts,
     resolve_feature_contracts,
 )
-from prompts import build_eye_repair_planning_instruction
+from prompts import build_body_reshape_edit_block, build_eye_repair_planning_instruction
 
 
 def interaction_analysis():
@@ -45,6 +45,23 @@ def blink_analysis():
             "blink_issue": {"should_fix": True, "reason": "eyes half closed"},
         }],
         "correction_plan": ["Reopen the left man's eyes."],
+    }
+
+
+def body_reshape_analysis():
+    return {
+        "_advanced_options": {},
+        "subjects": [{
+            "label": "central woman",
+            "box": {"x": .2, "y": .1, "w": .5, "h": .8},
+            "is_person": True,
+            "body_reshape": {
+                "subject_index": 0,
+                "key_points": ["腰部：可見總寬向內收窄12%"],
+            },
+        }],
+        "correction_plan": [],
+        "correction_axes": [],
     }
 
 
@@ -103,6 +120,24 @@ class NestedIssueReading(unittest.TestCase):
         analysis = blink_analysis()
         analysis["_disabled_face_issues"] = [{"subject_index": 0, "category": "blink_issue"}]
         self.assertEqual(build_feature_contracts(analysis), [])
+
+
+class BodyReshapePromptRouting(unittest.TestCase):
+    def test_compact_editor_prompt_keeps_the_shared_execution_block(self):
+        analysis = body_reshape_analysis()
+        shared_block = build_body_reshape_edit_block(analysis)
+        prompt, metadata = build_compact_editor_prompt(analysis, "", "", {})
+
+        self.assertTrue(shared_block)
+        self.assertIn(shared_block, prompt)
+        self.assertEqual(
+            prompt.count("Body reshape execution instructions (analysis-approved):"),
+            1,
+        )
+        self.assertEqual(
+            metadata["body_reshape_targets"][0]["key_points"],
+            ["腰部：可見總寬向內收窄12%"],
+        )
 
 
 def blink_strategy():
