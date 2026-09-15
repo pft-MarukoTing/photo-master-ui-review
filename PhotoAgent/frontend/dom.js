@@ -293,6 +293,10 @@ window.PhotoAgentDom = (() => {
     // screen, and the processing screen has no completed result yet to
     // discard either.
     if (els.resetButton) els.resetButton.hidden = name !== "results";
+    // #changelog-btn lives in the global header too, but 版本紀錄 is only
+    // relevant while picking settings to run a new job on the upload
+    // screen -- not mid-processing or while reviewing a finished result.
+    if (els.changelogBtn) els.changelogBtn.hidden = name !== "upload";
     // #logo-home-btn resets the whole app (see resetApp, app.js) -- fine as
     // a stray click target on the upload/results screens, but analysis is
     // actively running/in-flight on the processing screen, so clicking it

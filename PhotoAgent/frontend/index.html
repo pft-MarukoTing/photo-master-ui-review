@@ -2549,8 +2549,11 @@
     }
     /* #header-settings-btn sits in the same row (right after #account-badge,
        the row's last child) -- same compact-pill override as #reset-btn
-       above, same reasons. */
-    #header-settings-btn.btn {
+       above, same reasons. #changelog-btn (right before it in the row)
+       shares the same override so both read as the same size/shape pill
+       instead of #changelog-btn falling back to a taller, square .btn-sm. */
+    #header-settings-btn.btn,
+    #changelog-btn.btn {
       height: 32px;
       padding: 0 14px;
       gap: 6px;
@@ -2613,6 +2616,7 @@
       #account-badge-label { display: none; }
       .account-badge,
       #reset-btn.btn,
+      #changelog-btn.btn,
       #header-settings-btn.btn,
       #admin-reports-btn.btn {
         padding: 0 7px;

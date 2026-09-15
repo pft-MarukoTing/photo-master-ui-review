@@ -365,22 +365,6 @@ a { text-decoration: none; color: inherit; }
   font-size: clamp(12px, .85vw, 15px);
   line-height: 1.45;
 }
-/* #changelog-btn (index.html) -- pinned to this section's own top-right
-   corner rather than flowing inline with .upload-headline/.upload-sub, so
-   it stays put regardless of how many lines either wraps to. A secondary,
-   easy-to-ignore utility action (same as #report-btn/#header-settings-btn
-   in the header), so it gets their same compact-pill size instead of
-   .btn-sm's larger default. */
-#changelog-btn {
-  position: static;
-  flex: 0 0 auto;
-  height: 26px;
-  padding: 0 11px;
-  gap: 5px;
-  font-size: 12px;
-  border-radius: 999px;
-}
-
 .eyebrow-label {
   font-size: 14px;
   font-weight: 700;
