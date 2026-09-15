@@ -7313,6 +7313,7 @@
     paper: "淺色・紙張",
     peach: "淺色・暖橘",
     lilac: "淺色・紫丁香",
+    caramel: "淺色・焦糖",
   };
   function applyTheme(theme, persist = true) {
     const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "default";
