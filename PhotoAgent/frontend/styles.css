@@ -4575,16 +4575,24 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     overflow-y: hidden;
     gap: 0;
     padding-left: 24px;
-    /* 10px top and bottom (the default strip runs 0 / 8px) is the room the
-       cards' rotation and vertical jitter need to sit in. It isn't extra
-       height: the card rule below gives back exactly the 12px this adds,
-       so the strip still measures the same as it does with the toggle
-       off. overflow-y has to be hidden here -- overflow-x is auto, and CSS
-       forces the other axis to a non-visible value -- so anything outside
-       this padding is cut, and a card nudged down would otherwise lose its
-       whole bottom edge to a straight cut, not just a rounded corner. */
-    padding-top: 10px;
-    padding-bottom: 10px;
+    /* Asymmetric on purpose: 6px on top, 0 on the bottom. overflow-y has
+       to be hidden here (overflow-x is auto, and CSS forces the other
+       axis to a non-visible value), so whatever doesn't fit this padding
+       gets a real cut -- but which edge that cut lands on isn't neutral.
+       The top edge is where the badge sits (card rule below repositions
+       it there in card mode) and where a photo's actual subject usually
+       is; the bottom is just more of the same blurred backdrop. Only
+       ~3.9px of the 6px on top is actually needed to clear the tilt's own
+       corner overhang at this card's (smaller, see that rule's comment)
+       size -- the rest is just what's left of the row-height budget once
+       the card gives up 2px of width to reduce the badge/remove-button
+       overlap below, and it isn't wasted: it's headroom the jitter rule
+       below leans on for its upward moves. The bottom gets none: jitter
+       leans down into that sacrificial edge on purpose, and a sliver of
+       backdrop disappearing under the row's edge is a fair trade for not
+       shrinking the card further. */
+    padding-top: 6px;
+    padding-bottom: 0;
   }
   body.gallery-card-style #upload-section .upload-gallery-col .history-grid {
     grid-template-columns: none;
@@ -4593,21 +4601,33 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube {
     position: relative;
     flex: 0 0 auto;
-    /* Deliberately the SAME expression the default peek strip sizes its
-       grid tracks with (grid-auto-columns, ~line 1281) rather than an
+    /* Built from the SAME expression the default peek strip sizes its grid
+       tracks with (grid-auto-columns, ~line 1281) rather than an
        independent guess: transform doesn't affect layout, so the strip's
-       height is exactly this card's height, and matching the default's
-       track width is what keeps turning the toggle on from changing how
-       much vertical space the gallery occupies. An earlier 34vw + 150px
-       cap drifted well above it (128px vs the default's 89px at a 377px
-       viewport) and made the row ~39px taller than with the toggle off.
-       The -12px is what pays for the grid's 10px/10px vertical padding
-       above (12px of card traded for 12px of padding, so the strip's total
-       height is unchanged): a row exactly one card tall has nowhere to put
-       a tilt or a vertical offset, which capped the jitter at about 5px
-       downward and still clipped the top corner. Spending a little card
-       size on breathing room buys the full ±6px back. */
-    width: calc(((100cqw - 22px) / 3.2) - 12px);
+       height is exactly this card's height, and staying close to the
+       default's track width is what keeps turning the toggle on from
+       changing how much vertical space the gallery occupies. An earlier
+       34vw + 150px cap drifted way above it (128px vs the default's 89px
+       at a 377px viewport) and made the row ~39px taller than with the
+       toggle off.
+       A card sized to exactly the default track, with the badge
+       repositioned to top-left for card mode (below, ::before/::after
+       rules), leaves the top-left badge only ~7px from the top-right
+       remove button (.history-cube-remove, index.html) -- at a real
+       photo's badge text ("修圖完成"/"待修圖") that reads as a visible
+       overlap (~21px), not just tight spacing. Widening the card all the
+       way to clear it needs +10px, which doesn't fit the row-height
+       budget below -- +2px is the deliberately smaller step actually
+       used, chosen over +4px specifically to keep the top padding above
+       generous (6px, comfortably past the ~3.9px this size's tilt needs)
+       rather than tight, at the cost of a slightly larger residual
+       overlap (~8-9px instead of ~7px). Either way the row's total
+       height stays EXACTLY equal to the toggle-off default (89.0625 +
+       8px on one side = the same 97.0625px this card's width plus the
+       grid's padding above adds up to) -- more width here means less
+       padding there, and vice versa; nothing here changes the row
+       height, only how the same fixed budget is split. */
+    width: calc(((100cqw - 22px) / 3.2) + 2px);
     height: auto;
     aspect-ratio: 1 / 1;
     margin: 0;
@@ -4659,22 +4679,33 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   }
   /* Same alternating tilt as desktop, but jittered vertically
      (translateY) instead of sideways -- sideways jitter would fight the
-     row's own horizontal overlap and scroll direction. The ±6px range is
-     what the grid's 10px vertical padding affords once the tilt's own
-     corner overhang (~3.4px at this card size) is accounted for -- pushed
-     past that, overflow-y: hidden starts cutting card edges. */
+     row's own horizontal overlap and scroll direction. The three cards
+     nudged UP (-2/-1/-2 below) are each already within a hair of their
+     own top-clip ceiling -- measured per-card, that ceiling ranges from
+     ~0.2px to ~1.7px of remaining headroom at these values, so none of
+     them can move up any further, and a literal uniform upward shift of
+     the whole row isn't available; the tightest card has none to give.
+     What DOES still have slack is the three cards nudged DOWN: at +4/+5
+     they were sitting 7-8px clear of the top edge, which reads as an
+     empty band above the whole strip even though no single card is
+     actually free to rise into it. Pulling those three in to +2/+3
+     (down from +4/+5) doesn't touch the up-biased cards' ceilings at
+     all, but it moves the row's visual center of mass upward, closing
+     most of that apparent gap. The bottom stays biased downward overall
+     -- a clip there is still a fair trade, see the padding rule's
+     comment -- just less aggressively than before. */
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+1),
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+1) { transform: rotate(-5deg) translateY(-6px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+1) { transform: rotate(-5deg) translateY(-2px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+2),
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+2) { transform: rotate(4deg) translateY(5px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+2) { transform: rotate(4deg) translateY(3px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+3),
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+3) { transform: rotate(-3deg) translateY(4px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+3) { transform: rotate(-3deg) translateY(2px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+4),
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+4) { transform: rotate(5deg) translateY(-5px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+4) { transform: rotate(5deg) translateY(-1px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+5),
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+5) { transform: rotate(-4deg) translateY(4px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+5) { transform: rotate(-4deg) translateY(2px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+6),
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+6) { transform: rotate(3deg) translateY(-4px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+6) { transform: rotate(3deg) translateY(-2px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:hover,
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube:hover {
     transform: rotate(0deg) translateY(0) scale(1.12);
