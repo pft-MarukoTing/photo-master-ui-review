@@ -5627,24 +5627,38 @@
     if (!jobs.length) return;
 
     // One heading + grid per calendar day, cube tiles instead of full-width
-    // rows -- jobs is already grouped by construction (see this function's
-    // own doc above), so a fresh group starts only when the label changes.
+    // rows. Keep existing date groups available during append so a page
+    // boundary in the middle of "今天"/"昨天" does not create a duplicate
+    // heading for the same calendar day.
     let currentLabel = null;
     let currentGrid = null;
+    const existingGrids = new Map();
+    if (append) {
+      Array.from(container.children).forEach((group) => {
+        if (!group.classList.contains("history-day-group")) return;
+        const heading = group.querySelector(".history-day-heading");
+        const grid = group.querySelector(".history-grid");
+        if (heading && grid) existingGrids.set(heading.textContent, grid);
+      });
+    }
     const rows = jobs.map((job) => {
       const label = formatHistoryDayLabel(job.ts);
       if (label !== currentLabel) {
         currentLabel = label;
-        const group = document.createElement("div");
-        group.className = "history-day-group";
-        const heading = document.createElement("h3");
-        heading.className = "history-day-heading";
-        heading.textContent = label;
-        group.appendChild(heading);
-        currentGrid = document.createElement("ul");
-        currentGrid.className = "history-grid";
-        group.appendChild(currentGrid);
-        container.appendChild(group);
+        currentGrid = existingGrids.get(label) || null;
+        if (!currentGrid) {
+          const group = document.createElement("div");
+          group.className = "history-day-group";
+          const heading = document.createElement("h3");
+          heading.className = "history-day-heading";
+          heading.textContent = label;
+          group.appendChild(heading);
+          currentGrid = document.createElement("ul");
+          currentGrid.className = "history-grid";
+          group.appendChild(currentGrid);
+          container.appendChild(group);
+          existingGrids.set(label, currentGrid);
+        }
       }
 
       const li = document.createElement("li");

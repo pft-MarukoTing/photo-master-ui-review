@@ -3891,6 +3891,201 @@ body[data-theme="peach"] .proc-wrap {
   box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
 }
 
+@media (min-width: 1201px) {
+  /* On desktop the recent-photo gallery is a true edge rail rather than a
+     third flex card. Reserve its width in the content row so the main
+     workspace remains fully visible beside it. */
+  #upload-section .upload-content-row {
+    padding-right: 360px;
+  }
+  #upload-section .upload-content-row > .upload-main-col {
+    position: relative;
+    left: 32px;
+  }
+  #upload-section .upload-content-row > .upload-gallery-col {
+    position: fixed;
+    top: var(--header-h);
+    right: 0;
+    bottom: auto;
+    z-index: 20;
+    width: 360px;
+    height: calc(100vh - var(--header-h));
+    max-height: none;
+    flex: none;
+    margin-right: 0;
+    padding: 16px;
+    gap: 12px;
+    border: 0;
+    border-left: 1px solid rgba(var(--on-surface-rgb), .06);
+    border-radius: 0;
+    background: rgba(var(--on-surface-rgb), .022);
+    box-shadow: none;
+    overflow: hidden;
+  }
+  #upload-section .upload-gallery-col .upload-gallery-heading {
+    flex: 0 0 auto;
+  }
+  #upload-section .upload-gallery-col .upload-gallery-scroll-frame {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #upload-section .upload-gallery-col .demo-images-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  #upload-section .upload-gallery-col.is-history .demo-images-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  #upload-section .upload-gallery-col .history-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  /* Mosaic gallery: history keeps one outer column for each day group,
+     while the photos inside that group share the same square three-column
+     grid as anonymous example photos. */
+  #upload-section .upload-gallery-col .demo-images-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 104px;
+    grid-auto-flow: dense;
+    gap: 0;
+    column-count: auto;
+    column-gap: normal;
+  }
+  #upload-section .upload-gallery-col.is-history .demo-images-grid {
+    display: block;
+    column-count: auto;
+  }
+  #upload-section .upload-gallery-col .history-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: 104px;
+    grid-auto-flow: dense;
+    gap: 0;
+    column-count: auto;
+    column-gap: normal;
+  }
+  #upload-section .upload-gallery-col.is-history .history-day-heading {
+    display: block;
+    padding-top: 20px;
+    padding-bottom: 0;
+    margin-bottom: 0;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  #upload-section .upload-gallery-col.is-history .history-day-group {
+    display: flex;
+    flex-direction: column;
+  }
+  #upload-section .upload-gallery-col.is-history .history-day-heading {
+    order: 0;
+  }
+  #upload-section .upload-gallery-col.is-history .history-day-group::before {
+    order: 1;
+  }
+  #upload-section .upload-gallery-col.is-history .history-day-group:first-child::before {
+    display: block;
+  }
+  #upload-section .upload-gallery-col.is-history .history-grid {
+    order: 2;
+  }
+  #upload-section .upload-gallery-col .demo-image-tile,
+  #upload-section .upload-gallery-col .history-cube {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 1 / 1;
+    margin: 0;
+    border: 1px solid #513363;
+    border-radius: 6px;
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+  }
+  #upload-section .upload-gallery-col .demo-image-tile:hover,
+  #upload-section .upload-gallery-col .demo-image-tile.selected {
+    border-color: rgba(var(--accent-rgb), .72);
+  }
+  #upload-section .upload-gallery-col .history-cube:hover {
+    border-color: rgba(var(--accent-soft-rgb), .58);
+  }
+  #upload-section .upload-gallery-col .demo-image-tile {
+    padding-top: 0;
+  }
+  #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg) {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: cover;
+  }
+  #upload-section .upload-gallery-col .history-cube .rc-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  #upload-section .upload-gallery-col .history-cube .rc-media .history-cube-main {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: block;
+    object-fit: cover;
+  }
+
+  /* Dense mosaic rhythm shared by examples and recent photos. Enlarged
+     tiles span two rows and two columns together, so every tile remains
+     square while the overall grid still gets a collage-like cadence. */
+  #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:nth-child(16n + 1),
+  #upload-section .upload-gallery-col .history-grid > .history-cube:nth-child(16n + 1) {
+    grid-column: 1 / span 2;
+    grid-row: span 2;
+  }
+  #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:nth-child(16n + 9),
+  #upload-section .upload-gallery-col .history-grid > .history-cube:nth-child(16n + 9) {
+    grid-column: 2 / span 2;
+    grid-row: span 2;
+  }
+
+}
+
+@media (min-width: 1201px) {
+  #upload-section .upload-gallery-col .history-load-more-hint svg {
+    transform: rotate(90deg);
+  }
+}
+
+@media (max-width: 1200px) {
+  #upload-section .upload-gallery-col .history-load-more-hint {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  #upload-section .upload-gallery-col .history-load-more-hint svg {
+    order: 2;
+    flex: 0 0 auto;
+  }
+  #upload-section .upload-gallery-col .history-load-more-hint .history-load-more-label {
+    order: 1;
+    writing-mode: vertical-rl;
+    text-orientation: upright;
+    line-height: 1.15;
+  }
+}
+
 .recent-photos-history-btn { display: none; }
 
 @media (max-width: 1200px) {
@@ -3911,3 +4106,8 @@ body[data-theme="peach"] .proc-wrap {
     cursor: pointer;
   }
   #upload-section .upload-gallery-col .recent-photos-history-btn:hover {
+    color: var(--text);
+    border-color: rgba(var(--accent-rgb), .5);
+    background: rgba(var(--accent-rgb), .14);
+  }
+}

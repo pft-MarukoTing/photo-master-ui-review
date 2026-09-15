@@ -2855,6 +2855,57 @@
         opacity: 1; pointer-events: auto;
       }
     }
+    /* Recent Photos is a modal, not a side drawer. Keep it centered on every
+       viewport while leaving the admin reports drawer unchanged. */
+    #history-drawer {
+      top: 50%;
+      right: auto;
+      bottom: auto;
+      left: 50%;
+      width: min(560px, calc(100vw - 28px));
+      height: min(560px, 70vh);
+      max-height: calc(100vh - 80px);
+      box-sizing: border-box;
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      transform: translate(-50%, -46%) scale(.97);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform .25s ease, opacity .2s ease;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #history-drawer.drawer-open {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #history-drawer .history-header {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      flex: 0 0 auto;
+      background: var(--card);
+    }
+    #history-drawer .history-drawer-close-btn {
+      top: 11px;
+      right: 11px;
+      width: 36px;
+      height: 36px;
+      z-index: 5;
+    }
+    #history-drawer .history-drawer-close-btn svg {
+      width: 19px;
+      height: 19px;
+    }
+    #history-drawer .history-list {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-width: thin;
+    }
     /* rows reuse .batch-sidebar-item/.rc-media/.rc-badge (defined above,
        batch sidebar) for the same thumbnail+badge look, just laid out
        full-width instead of in a 280px column. */
@@ -2954,6 +3005,34 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+    /* Keep the title on its own row, then align the account context and
+       history actions on the row directly below it. The existing DOM stays
+       compatible with the history action handlers while display:contents
+       lets both controls participate in the same grid row. */
+    #history-drawer .history-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      column-gap: 12px;
+      row-gap: 4px;
+    }
+    #history-drawer .history-header-top {
+      display: contents;
+    }
+    #history-drawer .history-header-top h2 {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+    #history-drawer .history-current-user {
+      grid-column: 1;
+      grid-row: 2;
+      min-width: 0;
+    }
+    #history-drawer .history-header-actions {
+      grid-column: 2;
+      grid-row: 2;
+      justify-self: end;
     }
     /* One heading + grid per calendar day (see formatHistoryDayLabel/
        renderHistoryList, app.js) -- .history-list itself just stacks the
@@ -4675,7 +4754,8 @@
 <aside class="history-drawer" id="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-drawer-title">
   <button class="history-drawer-close-btn" id="history-drawer-close-btn" type="button" aria-label="關閉">
     <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
-      <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M18 6l-4 4m0 0h4m-4 0V6M6 18l4-4m0 0H6m4 0v4"
+        stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
     </svg>
   </button>
   <div class="history-header">
