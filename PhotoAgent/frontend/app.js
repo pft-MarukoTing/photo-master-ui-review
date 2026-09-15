@@ -40,7 +40,7 @@
     deleteReport,
     reportScreenshotUrl
   } = window.PhotoAgentApi;
-  const { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
+  const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
   const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, getBodyReshapeOverrides, applyBodyReshapeOverrides, getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
@@ -6969,8 +6969,14 @@
 
   function refreshUploadGallery(user) {
     if (!els.demoImagesGrid) return;
-    if (els.uploadGalleryCol) els.uploadGalleryCol.classList.toggle("is-history", !!user);
-    if (user) {
+    // A guest identity (isGuestUser, account.js -- a broken/undecryptable
+    // ?user_id=) is signed in enough for account-badge/history, but its
+    // disposable per-session bucket never has real history worth a 最近照片
+    // tab -- treat it like the no-account case here, same as an anonymous
+    // visitor.
+    const signedIn = !!user && !isGuestUser();
+    if (els.uploadGalleryCol) els.uploadGalleryCol.classList.toggle("is-history", signedIn);
+    if (signedIn) {
       // Always land back on 最近照片 on a real account change (login/logout/
       // switching accounts) -- setUploadGalleryTab below handles a signed-in
       // user then manually switching to 範例照片 from here.
@@ -7129,7 +7135,7 @@
     // guard only matters for that startup race -- setUploadGalleryTab calls
     // fetchAndRenderDemoImages directly for a signed-in user deliberately
     // switching to 範例照片, once login state is already settled.
-    if (getCurrentUser() || new URLSearchParams(window.location.search).has("user_id")) return;
+    if (!isGuestUser() && (getCurrentUser() || new URLSearchParams(window.location.search).has("user_id"))) return;
     fetchAndRenderDemoImages();
   }
 
@@ -7139,8 +7145,10 @@
     getDemoImages().then((names) => {
       // Account bootstrap can finish, or the tab can be switched away, while
       // this was still in flight. Do not let a stale response replace
-      // whichever gallery is actually showing by then.
-      if (getCurrentUser() && uploadGalleryActiveTab !== "sample") return;
+      // whichever gallery is actually showing by then. A guest never leaves
+      // this gallery (refreshUploadGallery keeps it in the no-account state),
+      // so it's exempt same as the initDemoImagesGallery guard above.
+      if (getCurrentUser() && !isGuestUser() && uploadGalleryActiveTab !== "sample") return;
       demoImagesCache = names;
       renderDemoImagesGrid(names);
     });

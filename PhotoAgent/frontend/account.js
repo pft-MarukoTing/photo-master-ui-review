@@ -13,6 +13,13 @@
 // state; it does not survive a refresh/bookmark.
 window.PhotoAgentAccount = (() => {
   let currentUser = null;
+  // True only for the synthetic fallback identity below (a broken/
+  // undecryptable ?user_id=), never for a real resolved or self-created
+  // account -- app.js's upload gallery reads this to keep a guest on the
+  // plain 範例照片 view (no 最近照片 tab: a disposable per-session bucket has
+  // no real history worth switching to), while account-badge/history still
+  // treat a guest as signed in like anyone else.
+  let isGuest = false;
 
   function normalizeUsername(raw) {
     return (raw || "").trim();
@@ -20,6 +27,7 @@ window.PhotoAgentAccount = (() => {
 
   async function initFromUrl() {
     const userId = new URLSearchParams(window.location.search).get("user_id");
+    isGuest = false;
     if (!userId) {
       currentUser = null;
       return currentUser;
@@ -27,7 +35,14 @@ window.PhotoAgentAccount = (() => {
     try {
       currentUser = normalizeUsername(await window.PhotoAgentApi.resolveUserId(userId)) || null;
     } catch {
-      currentUser = null;
+      // Broken/undecryptable ?user_id= (stale or malformed value from the
+      // linking site) -- fall back to a private, session-only guest identity
+      // instead of leaving the app in the no-account state, so the rest of
+      // the UI (account-badge, etc.) behaves the same as any other signed-in
+      // visit rather than silently degrading. Random suffix keeps two
+      // different broken links from sharing one guest's history bucket.
+      currentUser = `guest_${Math.random().toString(36).slice(2, 10)}`;
+      isGuest = true;
     }
     return currentUser;
   }
@@ -36,13 +51,19 @@ window.PhotoAgentAccount = (() => {
     return currentUser;
   }
 
+  function isGuestUser() {
+    return isGuest;
+  }
+
   function setCurrentUser(user) {
     currentUser = user;
+    isGuest = false;
   }
 
   function clearCurrentUser() {
     currentUser = null;
+    isGuest = false;
   }
 
-  return { initFromUrl, getCurrentUser, setCurrentUser, clearCurrentUser, normalizeUsername };
+  return { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername };
 })();
