@@ -4542,6 +4542,143 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     opacity: .5;
   }
 }
+/* Narrow-screen (<=1200px) version of the same card skin -- the toggle used
+   to only affect the desktop right-rail column above; below 1200px the
+   gallery is a different structure entirely (the "peek strip" set up at
+   line ~1269: a single horizontal row, grid-auto-flow: column, sized so
+   ~3.2 tiles show with the last one deliberately clipped as a scroll
+   hint), so none of the vertical-stack rules above ever matched anything
+   here. This block gives that horizontal strip the equivalent scattered
+   look: overlapping square cards down a row instead of a column, using
+   margin-left instead of margin-top to overlap (so a later card's LEFT
+   edge sits on the previous card's RIGHT edge -- the badge stays anchored
+   top-left same as desktop, which is still the one corner nothing ever
+   overlaps). The border/shadow/sheen/badge/letterbox declarations are
+   intentionally identical to the desktop block above (same values, kept
+   in sync by hand) since none of that cosmetic layer depends on viewport
+   width -- only the flex direction and overlap axis do. */
+@media (max-width: 1200px) {
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid,
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid:has(.history-day-group) {
+    display: flex;
+    flex-direction: row;
+    grid-template-columns: none;
+    grid-auto-flow: unset;
+    grid-auto-columns: unset;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 0;
+    padding-left: 24px;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-grid {
+    grid-template-columns: none;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube {
+    position: relative;
+    flex: 0 0 auto;
+    width: 34vw;
+    max-width: 150px;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    margin: 0;
+    margin-left: -26px;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, .26);
+    border-radius: 12px;
+    background: var(--card-2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .48),
+      inset 0 0 0 1px rgba(255, 255, 255, .1),
+      inset 0 -1px 0 rgba(0, 0, 0, .18),
+      0 0 0 1px rgba(255, 255, 255, .05),
+      0 10px 24px rgba(0, 0, 0, .3);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .demo-image-tile,
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .history-cube {
+    border-color: rgba(255, 255, 255, .12);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .24),
+      inset 0 0 0 1px rgba(255, 255, 255, .05),
+      inset 0 -1px 0 rgba(0, 0, 0, .22),
+      0 0 0 1px rgba(255, 255, 255, .02),
+      0 10px 24px rgba(0, 0, 0, .35);
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile::before,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background:
+      linear-gradient(122deg, rgba(255, 255, 255, .52) 0%, rgba(255, 255, 255, .22) 6%, rgba(255, 255, 255, .04) 14%, transparent 26%),
+      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .16), transparent 50%);
+    mix-blend-mode: overlay;
+  }
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .demo-image-tile::before,
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .history-cube::before {
+    background:
+      linear-gradient(122deg, rgba(255, 255, 255, .26) 0%, rgba(255, 255, 255, .11) 6%, rgba(255, 255, 255, .02) 14%, transparent 26%),
+      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .16), transparent 50%);
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:first-child,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-grid > .history-cube:first-child {
+    margin-left: 0;
+  }
+  /* Same alternating tilt as desktop, but jittered vertically
+     (translateY) instead of sideways -- sideways jitter would fight the
+     row's own horizontal overlap and scroll direction. */
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+1),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+1) { transform: rotate(-5deg) translateY(-6px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+2),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+2) { transform: rotate(4deg) translateY(5px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+3),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+3) { transform: rotate(-3deg) translateY(4px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+4),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+4) { transform: rotate(5deg) translateY(-5px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+5),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+5) { transform: rotate(-4deg) translateY(4px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+6),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+6) { transform: rotate(3deg) translateY(-4px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:hover,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:hover {
+    transform: rotate(0deg) translateY(0) scale(1.12);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, .4);
+    z-index: 5;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media .history-cube-main {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-badge {
+    top: 6px;
+    bottom: auto;
+    left: 6px;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media::after {
+    background: linear-gradient(180deg, rgba(8,8,12,.55) 0%, rgba(8,8,12,.02) 55%, transparent 100%);
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile-bg,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube-bg {
+    filter: blur(22px) brightness(1.25) saturate(.75);
+    opacity: .5;
+  }
+}
 
 @media (max-width: 1200px) {
   #upload-section .upload-gallery-col .history-load-more-hint {
