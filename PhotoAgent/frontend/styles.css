@@ -4575,6 +4575,16 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     overflow-y: hidden;
     gap: 0;
     padding-left: 24px;
+    /* 10px top and bottom (the default strip runs 0 / 8px) is the room the
+       cards' rotation and vertical jitter need to sit in. It isn't extra
+       height: the card rule below gives back exactly the 12px this adds,
+       so the strip still measures the same as it does with the toggle
+       off. overflow-y has to be hidden here -- overflow-x is auto, and CSS
+       forces the other axis to a non-visible value -- so anything outside
+       this padding is cut, and a card nudged down would otherwise lose its
+       whole bottom edge to a straight cut, not just a rounded corner. */
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
   body.gallery-card-style #upload-section .upload-gallery-col .history-grid {
     grid-template-columns: none;
@@ -4583,8 +4593,21 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube {
     position: relative;
     flex: 0 0 auto;
-    width: 34vw;
-    max-width: 150px;
+    /* Deliberately the SAME expression the default peek strip sizes its
+       grid tracks with (grid-auto-columns, ~line 1281) rather than an
+       independent guess: transform doesn't affect layout, so the strip's
+       height is exactly this card's height, and matching the default's
+       track width is what keeps turning the toggle on from changing how
+       much vertical space the gallery occupies. An earlier 34vw + 150px
+       cap drifted well above it (128px vs the default's 89px at a 377px
+       viewport) and made the row ~39px taller than with the toggle off.
+       The -12px is what pays for the grid's 10px/10px vertical padding
+       above (12px of card traded for 12px of padding, so the strip's total
+       height is unchanged): a row exactly one card tall has nowhere to put
+       a tilt or a vertical offset, which capped the jitter at about 5px
+       downward and still clipped the top corner. Spending a little card
+       size on breathing room buys the full ±6px back. */
+    width: calc(((100cqw - 22px) / 3.2) - 12px);
     height: auto;
     aspect-ratio: 1 / 1;
     margin: 0;
@@ -4636,7 +4659,10 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   }
   /* Same alternating tilt as desktop, but jittered vertically
      (translateY) instead of sideways -- sideways jitter would fight the
-     row's own horizontal overlap and scroll direction. */
+     row's own horizontal overlap and scroll direction. The ±6px range is
+     what the grid's 10px vertical padding affords once the tilt's own
+     corner overhang (~3.4px at this card size) is accounted for -- pushed
+     past that, overflow-y: hidden starts cutting card edges. */
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+1),
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+1) { transform: rotate(-5deg) translateY(-6px); }
   body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+2),
