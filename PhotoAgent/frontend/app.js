@@ -6893,17 +6893,9 @@
   let uploadHistoryRequestToken = 0;
   let uploadHistoryLoading = false;
   let uploadHistoryHasMore = false;
-
-  function setUploadHistoryMoreState({ hidden = true, loading = false } = {}) {
-    const button = els.historyLoadMoreBtn;
-    if (!button) return;
-    uploadHistoryLoading = loading;
-    button.hidden = hidden;
-    button.classList.toggle("is-loading", loading);
-    button.setAttribute("aria-busy", String(loading));
-    const label = button.querySelector(".history-load-more-label");
-    if (label) label.textContent = loading ? "載入中…" : "載入更多";
-  }
+  // "recent" | "sample" while logged in (tabs visible), null while logged
+  // out (the plain #upload-gallery-title label is showing instead).
+  let uploadGalleryActiveTab = null;
 
   async function loadUploadHistoryPage({ reset = false } = {}) {
     const user = getCurrentUser();
@@ -6915,7 +6907,7 @@
       els.demoImagesGrid.innerHTML = "";
       if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = true;
     }
-    setUploadHistoryMoreState({ hidden: reset, loading: true });
+    uploadHistoryLoading = true;
     try {
       const page = await getHistory(user, {
         limit: UPLOAD_HISTORY_PAGE_SIZE,
@@ -6936,14 +6928,13 @@
       uploadHistoryOffset += jobs.length;
       const legacyHasMore = returnedJobs.length > UPLOAD_HISTORY_PAGE_SIZE
         && uploadHistoryOffset < returnedJobs.length;
-      const hasMore = page.has_more === true || legacyHasMore;
-      uploadHistoryHasMore = hasMore;
-      setUploadHistoryMoreState({ hidden: !hasMore });
+      uploadHistoryHasMore = page.has_more === true || legacyHasMore;
+      uploadHistoryLoading = false;
       if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = uploadHistoryOffset > 0;
     } catch {
       if (token !== uploadHistoryRequestToken) return;
       uploadHistoryHasMore = false;
-      setUploadHistoryMoreState({ hidden: true });
+      uploadHistoryLoading = false;
       if (!uploadHistoryOffset && els.demoImagesEmpty) {
         els.demoImagesEmpty.hidden = false;
         els.demoImagesEmpty.textContent = "目前無法取得處理紀錄。";
@@ -6955,17 +6946,57 @@
     if (!els.demoImagesGrid) return;
     if (els.uploadGalleryCol) els.uploadGalleryCol.classList.toggle("is-history", !!user);
     if (user) {
-      if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = "最近照片";
-      if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = true;
-      loadUploadHistoryPage({ reset: true });
+      // Always land back on 最近照片 on a real account change (login/logout/
+      // switching accounts) -- setUploadGalleryTab below handles a signed-in
+      // user then manually switching to 範例照片 from here.
+      setUploadGalleryTab("recent");
       return;
     }
+    uploadGalleryActiveTab = null;
+    if (els.uploadGalleryCol) els.uploadGalleryCol.classList.remove("showing-recent");
+    if (els.recentPhotosHistoryBtn) els.recentPhotosHistoryBtn.hidden = true;
     ++uploadHistoryRequestToken;
     uploadHistoryHasMore = false;
+    uploadHistoryLoading = false;
     if (els.uploadGalleryTitle) els.uploadGalleryTitle.textContent = "範例照片";
     if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = false;
-    setUploadHistoryMoreState({ hidden: true });
     initDemoImagesGallery();
+  }
+
+  // Switches which gallery .upload-gallery-tabs (index.html) is showing,
+  // while an account stays linked throughout -- unlike refreshUploadGallery
+  // above, this never touches the .is-history class. Also driven directly
+  // by refreshUploadGallery's own "recent" default whenever an account is
+  // (re)linked, so the two stay in sync instead of duplicating this logic.
+  function setUploadGalleryTab(tab) {
+    uploadGalleryActiveTab = tab;
+    // .showing-recent (styles.css) is what actually drives #demo-images-grid's
+    // layout -- keeps a logged-in user's 範例照片 tab on the exact same
+    // grid/tile styling an anonymous visitor sees, instead of inheriting the
+    // one-per-row/day-grouped history layout just because .is-history (an
+    // account is linked) is also true.
+    if (els.uploadGalleryCol) els.uploadGalleryCol.classList.toggle("showing-recent", tab === "recent");
+    // Mobile/tablet only (styles.css) -- 開啟歷史紀錄 only makes sense for
+    // 最近照片, not 範例照片.
+    if (els.recentPhotosHistoryBtn) els.recentPhotosHistoryBtn.hidden = tab !== "recent";
+    if (els.uploadGalleryTabRecent) {
+      els.uploadGalleryTabRecent.classList.toggle("is-active", tab === "recent");
+      els.uploadGalleryTabRecent.setAttribute("aria-selected", String(tab === "recent"));
+    }
+    if (els.uploadGalleryTabSample) {
+      els.uploadGalleryTabSample.classList.toggle("is-active", tab === "sample");
+      els.uploadGalleryTabSample.setAttribute("aria-selected", String(tab === "sample"));
+    }
+    if (tab === "sample") {
+      ++uploadHistoryRequestToken;
+      uploadHistoryHasMore = false;
+      uploadHistoryLoading = false;
+      if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = false;
+      fetchAndRenderDemoImages();
+      return;
+    }
+    if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = true;
+    loadUploadHistoryPage({ reset: true });
   }
 
   // applyAccountUi()'s initial call above and resetApp()'s call below cover
@@ -6977,15 +7008,19 @@
   // on both signals so either one catches it: "pageshow" covers bfcache
   // restores (event.persisted), "visibilitychange" covers plain tab/window
   // switching. Guarded to logged-in users only and only while the upload
-  // section is actually the one on screen -- 範例照片 (the logged-out demo
-  // list) issues a real request per refresh and barely ever changes, so
-  // refreshing it on every tab switch would be pure waste, and refreshing
-  // any gallery while a different section is showing would be too.
+  // section is actually the one on screen -- also only while 最近照片 is the
+  // active tab (uploadGalleryActiveTab): 範例照片 issues a real request per
+  // refresh and barely ever changes, so refreshing it on every tab switch
+  // would be pure waste, and refreshing any gallery while a different
+  // section is showing would be too. Deliberately does not reset which tab
+  // is active -- unlike refreshUploadGallery, this fires on returning to an
+  // already-open session, not on an account change.
   function refreshUploadGalleryIfVisible() {
     const user = getCurrentUser();
     if (!user) return;
     if (!els.sections?.upload?.classList.contains("visible")) return;
-    refreshUploadGallery(user);
+    if (uploadGalleryActiveTab !== "recent") return;
+    loadUploadHistoryPage({ reset: true });
   }
   window.addEventListener("pageshow", (event) => {
     // A plain first load fires "pageshow" too, right alongside
@@ -7065,14 +7100,22 @@
     // A linked account is identifiable from the URL before the async
     // decrypt/resolve round trip completes. Treat that as history mode
     // immediately, otherwise a slow account bootstrap can briefly start the
-    // anonymous demo gallery and issue one request per demo thumbnail.
+    // anonymous demo gallery and issue one request per demo thumbnail. This
+    // guard only matters for that startup race -- setUploadGalleryTab calls
+    // fetchAndRenderDemoImages directly for a signed-in user deliberately
+    // switching to 範例照片, once login state is already settled.
     if (getCurrentUser() || new URLSearchParams(window.location.search).has("user_id")) return;
+    fetchAndRenderDemoImages();
+  }
+
+  function fetchAndRenderDemoImages() {
+    if (!els.demoImagesGrid) return;
     updateDemoImagesConfirmBtn();
     getDemoImages().then((names) => {
-      // Account bootstrap can finish while the anonymous demo list is still
-      // in flight. Do not let that stale response replace the user's history
-      // gallery after the page has switched modes.
-      if (getCurrentUser()) return;
+      // Account bootstrap can finish, or the tab can be switched away, while
+      // this was still in flight. Do not let a stale response replace
+      // whichever gallery is actually showing by then.
+      if (getCurrentUser() && uploadGalleryActiveTab !== "sample") return;
       demoImagesCache = names;
       renderDemoImagesGrid(names);
     });
@@ -9242,6 +9285,8 @@
   });
   if (els.dzClearAllBtn) els.dzClearAllBtn.addEventListener("click", resetApp);
   if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.addEventListener("click", confirmDemoImageSelection);
+  if (els.uploadGalleryTabRecent) els.uploadGalleryTabRecent.addEventListener("click", () => setUploadGalleryTab("recent"));
+  if (els.uploadGalleryTabSample) els.uploadGalleryTabSample.addEventListener("click", () => setUploadGalleryTab("sample"));
   if (els.demoImagesGrid) {
     els.demoImagesGrid.addEventListener("scroll", () => {
       if (uploadHistoryLoading || !uploadHistoryHasMore) return;

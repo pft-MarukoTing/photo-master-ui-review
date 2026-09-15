@@ -3739,27 +3739,54 @@
                 <path d="M8 15l2.5-3 2 2 1.5-2 2 3M8 9.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </span>
-            <span class="upload-gallery-heading-icon upload-gallery-heading-icon--history" aria-hidden="true">
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
-                <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </span>
             <span id="upload-gallery-title">範例照片</span>
-            <button id="recent-photos-history-btn" class="recent-photos-history-btn" type="button" aria-label="開啟歷史紀錄" title="開啟歷史紀錄">
+            <!-- Only shown once .upload-gallery-col has .is-history (an
+                 account is linked -- refreshUploadGallery/setUploadGalleryTab,
+                 app.js) -- swaps the plain heading text above for a real
+                 switch between 最近照片 and 範例照片, both still backed by the
+                 same #demo-images-grid. A logged-out visitor has no history
+                 to switch to, so they keep the static label instead of a tab
+                 strip with only one working tab. Each tab carries its own
+                 icon (the same demo/history glyphs the plain heading above
+                 used to swap between) instead of one icon shared for the
+                 whole heading, since with two tabs on screen at once a
+                 single shared icon can only ever describe one of them. -->
+            <div class="upload-gallery-tabs" id="upload-gallery-tabs" role="tablist">
+              <button type="button" class="upload-gallery-tab is-active" id="upload-gallery-tab-recent" data-tab="recent" role="tab" aria-selected="true">
+                <span class="upload-gallery-tab-icon" aria-hidden="true">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                    <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                最近照片
+              </button>
+              <button type="button" class="upload-gallery-tab" id="upload-gallery-tab-sample" data-tab="sample" role="tab" aria-selected="false">
+                <span class="upload-gallery-tab-icon" aria-hidden="true">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                    <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M8 15l2.5-3 2 2 1.5-2 2 3M8 9.5h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </span>
+                範例照片
+              </button>
+            </div>
+          </div>
+          <div class="upload-gallery-scroll-frame">
+            <!-- Moved here from .upload-gallery-heading above -- floats over
+                 this frame's top-right corner (mobile/tablet only, see its
+                 own styles.css rule) instead of sitting in the heading row,
+                 and only while 最近照片 is the active tab (setUploadGalleryTab,
+                 app.js toggles [hidden]): opening 歷史紀錄 only makes sense for
+                 that gallery, not 範例照片. -->
+            <button id="recent-photos-history-btn" class="recent-photos-history-btn" type="button" hidden aria-label="開啟歷史紀錄" title="開啟歷史紀錄">
               <svg width="15" height="15" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M14 10l4-4m0 0h-4m4 0v4M10 14l-4 4m0 0h4m-4 0v-4"
                   stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
             </button>
-          </div>
-          <div class="upload-gallery-scroll-frame">
             <div id="demo-images-grid" class="demo-images-grid"></div>
-            <div id="history-load-more-btn" class="ap-style-scroll-hint history-load-more-hint" hidden aria-live="polite">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <span class="history-load-more-label">載入更多</span>
-            </div>
           </div>
           <p id="demo-images-empty" class="history-empty" hidden>目前沒有可顯示的照片。</p>
           <button id="demo-images-confirm-btn" class="btn btn-secondary btn-sm" type="button" disabled>使用所選照片</button>
