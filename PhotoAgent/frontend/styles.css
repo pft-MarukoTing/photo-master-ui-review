@@ -961,20 +961,19 @@ a { text-decoration: none; color: inherit; }
   gap: 7px;
 }
 
-@media (min-width: 1101px) {
-  .upload-main-col {
-    width: 580px;
-    min-width: 580px;
-    height: auto;
-  }
-  .upload-main-col .upload-actions-row #upload-inline-settings {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
+/* Shared with tablet (not just >=1101px desktop): setupCompactUploadSelectors
+   (app.js) already collapses these three pickers into one 模型設定 button the
+   moment they'd otherwise wrap, so this column layout only ever renders while
+   they still fit uncollapsed -- there's no separate narrower case to protect
+   by holding it back to desktop-only. */
+@media (min-width: 721px) {
+  /* Column 2's displayLabel text (生成模型) is short now -- production only
+     lists approved model/quality combos, see imageModelQualityOptions in
+     config.js -- so it no longer needs the wide track a longer label like
+     "Image 2.5 Sunburst · Enhanced" used to require. */
   .upload-main-col .upload-inline-settings-row-1 {
     display: grid;
-    grid-template-columns: minmax(145px, 1fr) minmax(245px, 1.45fr) minmax(130px, .9fr);
+    grid-template-columns: minmax(145px, 1fr) minmax(160px, 1.1fr) minmax(130px, .9fr);
     align-items: end;
     width: 100%;
     gap: 7px;
@@ -993,12 +992,42 @@ a { text-decoration: none; color: inherit; }
   .upload-main-col .upload-inline-settings-row-1 > .option-pill-group > .ap-style-item > .ap-style-trigger {
     width: 100%;
   }
+  /* Mirrors row-1's own grid-template-columns (not just a fixed %) so
+     #advanced-settings-fold's width always matches 分析模型's pill directly
+     above it, even if row-1's own column tracks change later. */
   .upload-main-col #upload-inline-settings-row-2 {
-    display: flex;
-    justify-content: space-between;
+    display: grid;
+    grid-template-columns: minmax(145px, 1fr) minmax(160px, 1.1fr) minmax(130px, .9fr);
+    align-items: center;
+    gap: 7px;
   }
   .upload-main-col #upload-inline-settings-row-2 > #advanced-settings-fold {
-    width: 31%;
+    grid-column: 1;
+    width: 100%;
+  }
+  /* Stretched to fill column 3 (not just its own natural content width) so
+     it lines up with 長寬比 (image-aspect-ratio-picker) directly above it,
+     same as #advanced-settings-fold matching 分析模型's column. #start-btn
+     grows to fill the extra room since .split-menu's own 24px chevron stays
+     fixed-width. */
+  .upload-main-col #upload-inline-settings-row-2 > .split-run {
+    grid-column: 3;
+    width: 100%;
+  }
+  .upload-main-col #upload-inline-settings-row-2 > .split-run #start-btn.split-main {
+    flex: 1 1 auto;
+  }
+}
+@media (min-width: 1101px) {
+  .upload-main-col {
+    width: 580px;
+    min-width: 580px;
+    height: auto;
+  }
+  .upload-main-col .upload-actions-row #upload-inline-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
 }
 @media (max-width: 1200px) {
