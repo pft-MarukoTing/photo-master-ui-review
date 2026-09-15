@@ -7148,6 +7148,42 @@
     if (els.apSettingsModal) els.apSettingsModal.hidden = true;
   }
 
+  // Theme palette is global to both settings modals and persists per browser.
+  // Keeping the controls duplicated in the two modal bodies means the same
+  // setting is reachable from the upload and results contexts.
+  const THEME_KEY = "photomaster-theme";
+  const THEME_LABELS = {
+    default: "深色・紫",
+    ocean: "深色・海洋",
+    forest: "深色・森林",
+    paper: "淺色・紙張",
+    peach: "淺色・暖橘",
+  };
+  function applyTheme(theme, persist = true) {
+    const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "default";
+    document.body.dataset.theme = selected;
+    if (selected === "default") delete document.body.dataset.theme;
+    document.querySelectorAll(".theme-option").forEach((option) => {
+      const active = option.dataset.theme === selected;
+      option.classList.toggle("is-selected", active);
+      option.setAttribute("aria-pressed", String(active));
+    });
+    document.querySelectorAll(".theme-picker-current").forEach((label) => {
+      label.textContent = THEME_LABELS[selected];
+    });
+    if (persist) {
+      try { localStorage.setItem(THEME_KEY, selected); } catch (_) { /* storage may be blocked */ }
+    }
+  }
+  function setupThemePicker() {
+    let saved = "default";
+    try { saved = localStorage.getItem(THEME_KEY) || "default"; } catch (_) { /* storage may be blocked */ }
+    applyTheme(saved, false);
+    document.querySelectorAll(".theme-option").forEach((option) => {
+      option.addEventListener("click", () => applyTheme(option.dataset.theme));
+    });
+  }
+
   // #header-settings-btn (index.html) is the single, always-visible entry
   // point into 設定 now -- picks #settings-modal or #ap-settings-modal based
   // on which section is actually showing, since the two pages' pickers
@@ -9287,6 +9323,7 @@
       if (e.target.dataset.close) closeAccountModal();
     });
   }
+  setupThemePicker();
   if (els.headerSettingsBtn) els.headerSettingsBtn.addEventListener("click", openContextSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
   if (els.settingsModal) {

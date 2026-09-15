@@ -59,7 +59,7 @@
       width: 36px;
       height: 36px;
       padding: 0;
-      border: 1px solid rgba(255,255,255,.16);
+      border: 1px solid rgba(var(--on-surface-rgb),.16);
       border-radius: 50%;
       background: rgba(9,9,11,.55);
       backdrop-filter: blur(16px) saturate(1.4);
@@ -145,7 +145,7 @@
        border to read as a grouped sub-panel, nothing more. */
     .step-list-frame {
       margin-top: 14px;
-      background: rgba(255,255,255,.03);
+      background: rgba(var(--on-surface-rgb),.03);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       padding: 16px 18px;
@@ -294,7 +294,7 @@
       margin-left: auto;
     }
     .analysis-preview-action-right:hover {
-      box-shadow: 0 14px 36px rgba(168,85,247,.34);
+      box-shadow: 0 14px 36px rgba(var(--accent-rgb),.34);
       transform: translateY(-1px);
     }
     .analysis-preview-action:active { transform: scale(.96); }
@@ -814,7 +814,7 @@
     #ap-review-panel {
       --hue-face: #F472B6;
       --hue-recipe: #E879F9;
-      --hue-style: #A855F7;
+      --hue-style: var(--accent);
       --hue-prompt: #818CF8;
     }
     /* Floor, not the actual size -- JS (syncAnalysisPanelHeights, app.js)
@@ -959,7 +959,7 @@
       transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
     }
     .ap-style-trigger::-webkit-details-marker { display: none; }
-    .ap-style-trigger:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
+    .ap-style-trigger:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
     .ap-style-trigger::after {
       content: '▾';
       font-size: 22px;
@@ -968,8 +968,8 @@
     }
     .ap-style-item[open] > .ap-style-trigger {
       border-color: var(--accent);
-      background: rgba(168,85,247,.14);
-      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
     }
     .ap-style-item[open] > .ap-style-trigger::after { transform: rotate(180deg); }
     /* Tab row of every detected person's thumbnail (renderFaceTabs, results.js)
@@ -1002,7 +1002,7 @@
       display: inline-flex;
       border-radius: 50%;
     }
-    .ap-face-tab-wrap.is-active { box-shadow: 0 0 0 3px rgba(168,85,247,.18); }
+    .ap-face-tab-wrap.is-active { box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.18); }
     .ap-face-tab {
       width: 44px;
       height: 44px;
@@ -1276,8 +1276,8 @@
     }
     .ap-style-modal-box .ap-style-option-btn:has(.ap-style-option-input:checked) {
       border-color: var(--accent);
-      background: rgba(168,85,247,.14);
-      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
     }
     .ap-style-modal-box .ap-style-option-thumb { width: 100%; }
     .ap-style-modal-box .ap-style-scroll-hint { bottom: 10px; }
@@ -1419,8 +1419,8 @@
     }
     .ap-style-type-btn.is-active {
       border-color: var(--accent);
-      background: rgba(168,85,247,.14);
-      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
     }
     /* Set by updateStyleTriggerLabel (results.js) whenever this category's
        checked radio isn't "default" -- recolors the value text (e.g.
@@ -1513,11 +1513,11 @@
       user-select: none;
       transition: border-color .15s, background .15s, transform .15s;
     }
-    .ap-style-option-btn:hover { border-color: rgba(168,85,247,.4); transform: translateY(-1px); }
+    .ap-style-option-btn:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
     .ap-style-option-btn:has(.ap-style-option-input:checked) {
       border-color: var(--accent);
-      background: rgba(168,85,247,.14);
-      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
     }
     .ap-style-option-input { position: absolute; opacity: 0; width: 0; height: 0; }
     /* Size-only card-level clear "x" (see fillStyleOptionList, results.js) --
@@ -1585,7 +1585,7 @@
     .ap-analysis-body .ap-composition-text {
       margin-top: 10px;
       padding-left: 12px;
-      border-left: 2px solid rgba(168,85,247,.45);
+      border-left: 2px solid rgba(var(--accent-rgb),.45);
       font-size: 15px;
       color: var(--text-2);
       line-height: 1.5;
@@ -1680,9 +1680,9 @@
       align-items: center;
       justify-content: center;
       gap: 4px;
-      border: 1.5px dashed rgba(255,255,255,.18);
+      border: 1.5px dashed rgba(var(--on-surface-rgb),.18);
       border-radius: var(--radius-sm);
-      background: rgba(255,255,255,.02);
+      background: rgba(var(--on-surface-rgb),.02);
       color: var(--text-2);
       cursor: pointer;
       transition: border-color .15s, background .15s, color .15s;
@@ -1690,7 +1690,7 @@
     /* Hover on the tile itself, not .dz-multi:hover -- that fired from
        hovering anywhere in the strip, including thumbnails nowhere near it. */
     .dz-add-more:hover {
-      border-color: rgba(168,85,247,.4);
+      border-color: rgba(var(--accent-rgb),.4);
       color: var(--accent);
     }
     .dz-add-more-icon {
@@ -1891,7 +1891,7 @@
       font-size: 12px; font-weight: 700; white-space: nowrap;
       line-height: 1.2; letter-spacing: .01em;
       overflow: hidden; text-overflow: ellipsis;
-      background: rgba(255,255,255,.12); color: var(--text-2);
+      background: rgba(var(--on-surface-rgb),.12); color: var(--text-2);
     }
     .rc-badge::before {
       display: inline-flex;
@@ -1909,9 +1909,9 @@
     .batch-sidebar-item.done .rc-badge::before { content: "✓"; }
     .batch-sidebar-item.error .rc-badge::before { content: "!"; }
     .batch-sidebar-item.analyzed .rc-badge {
-      background: rgba(168,85,247,.25);
-      border: 1px solid rgba(192,132,252,.55);
-      color: #e9d5ff;
+      background: rgba(var(--accent-rgb),.25);
+      border: 1px solid rgba(var(--accent-soft-rgb),.55);
+      color: var(--accent-pale-color);
     }
     .batch-sidebar-item.done .rc-badge {
       background: rgba(1,179,123,.22);
@@ -1922,7 +1922,7 @@
     .rc-spinner {
       position: absolute; top: 50%; left: 50%;
       width: 28px; height: 28px; margin: -14px 0 0 -14px;
-      border: 3px solid rgba(255,255,255,.35);
+      border: 3px solid rgba(var(--on-surface-rgb),.35);
       border-top-color: #fff;
       border-radius: 50%;
       animation: rc-spin .8s linear infinite;
@@ -2107,7 +2107,7 @@
       transition: border-color .15s, background .15s, box-shadow .15s, transform .15s;
     }
     .upload-below-zone #advanced-settings-fold > summary:hover {
-      border-color: rgba(168,85,247,.4);
+      border-color: rgba(var(--accent-rgb),.4);
       transform: translateY(-1px);
       color: var(--text);
     }
@@ -2117,8 +2117,8 @@
     }
     .upload-below-zone #advanced-settings-fold[open] > summary {
       border-color: var(--accent);
-      background: rgba(168,85,247,.14);
-      box-shadow: 0 0 0 3px rgba(168,85,247,.14);
+      background: rgba(var(--accent-rgb),.14);
+      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
     }
     .upload-below-zone #advanced-settings-fold[open] > summary::after { transform: rotate(180deg); }
     /* Opens upward (bottom-anchored), not down from top:100% like the other
@@ -2362,7 +2362,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(168, 85, 247, .25);
+      background: rgba(var(--accent-rgb), .25);
       pointer-events: none;
     }
     /* Checkmark badge -- always in the DOM (so it can transition), only
@@ -2378,7 +2378,7 @@
       align-items: center;
       justify-content: center;
       background: rgba(9,9,11,.55);
-      border: 1.5px solid rgba(255,255,255,.6);
+      border: 1.5px solid rgba(var(--on-surface-rgb),.6);
       color: #fff;
       opacity: 0;
       transition: opacity .15s, background-color .15s, border-color .15s;
@@ -2400,13 +2400,13 @@
        read as competing with the page's actual primary action, the Run
        button below the modal). */
     #demo-images-confirm-btn {
-      background: rgba(168, 85, 247, .14);
-      border-color: rgba(168, 85, 247, .4);
-      color: #fff;
+      background: rgba(var(--accent-rgb), .14);
+      border-color: rgba(var(--accent-rgb), .4);
+      color: var(--on-accent-color);
     }
     #demo-images-confirm-btn:hover:not(:disabled) {
-      background: rgba(168, 85, 247, .22);
-      border-color: rgba(168, 85, 247, .6);
+      background: rgba(var(--accent-rgb), .22);
+      border-color: rgba(var(--accent-rgb), .6);
     }
     /* Inline in the narrow gallery sidebar now (no modal footer to right-align
        it for us) -- full width reads better in a single-column column than a
@@ -2501,11 +2501,11 @@
       border-radius: 999px;
       background: var(--card-2);
       color: var(--accent);
-      border: 1px solid rgba(168,85,247,.4);
+      border: 1px solid rgba(var(--accent-rgb),.4);
     }
     #report-btn:hover {
-      background: rgba(168,85,247,.12);
-      border-color: rgba(168,85,247,.6);
+      background: rgba(var(--accent-rgb),.12);
+      border-color: rgba(var(--accent-rgb),.6);
     }
     /* Invisible but still fully laid out (visibility:hidden, not
        display:none/hidden) -- #report-btn-spacer's only job is to occupy
@@ -2732,7 +2732,7 @@
       align-items: center;
       justify-content: center;
       padding: 0;
-      border: 1px solid rgba(255,255,255,.16);
+      border: 1px solid rgba(var(--on-surface-rgb),.16);
       border-radius: 50%;
       background: rgba(9,9,11,.55);
       backdrop-filter: blur(8px);
@@ -3048,7 +3048,7 @@
       align-items: center;
       justify-content: center;
       background: rgba(9,9,11,.55);
-      border: 1.5px solid rgba(255,255,255,.6);
+      border: 1.5px solid rgba(var(--on-surface-rgb),.6);
       color: #fff;
       opacity: 0;
       pointer-events: none;
@@ -3200,7 +3200,7 @@
     }
     .report-item-status:hover { opacity: .8; }
     .report-item-status.status-unread { background: rgba(96,165,250,.22); color: #93c5fd; }
-    .report-item-status.status-read { background: rgba(255,255,255,.12); color: var(--text-3); }
+    .report-item-status.status-read { background: rgba(var(--on-surface-rgb),.12); color: var(--text-3); }
     .report-item-status.status-solved { background: rgba(1,179,123,.22); color: #6ee7b7; }
     /* Same compact icon-square as #history-clear-all-btn -- sits in
        .history-header-top next to "回報案件", reloads the list on demand
@@ -4993,6 +4993,19 @@
       <button id="settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="settings-modal-body" class="settings-modal-body">
+    <div class="theme-picker" aria-label="主題配色">
+      <div class="theme-picker-heading">
+        <span class="option-pill-label">主題配色</span>
+        <span class="theme-picker-current" aria-live="polite">深色・紫</span>
+      </div>
+      <div class="theme-options">
+        <button type="button" class="theme-option is-selected" data-theme="default" aria-pressed="true"><span class="theme-swatch theme-swatch-purple"></span><span>深色・紫</span></button>
+        <button type="button" class="theme-option" data-theme="ocean" aria-pressed="false"><span class="theme-swatch theme-swatch-ocean"></span><span>深色・海洋</span></button>
+        <button type="button" class="theme-option" data-theme="forest" aria-pressed="false"><span class="theme-swatch theme-swatch-forest"></span><span>深色・森林</span></button>
+        <button type="button" class="theme-option" data-theme="paper" aria-pressed="false"><span class="theme-swatch theme-swatch-paper"></span><span>淺色・紙張</span></button>
+        <button type="button" class="theme-option" data-theme="peach" aria-pressed="false"><span class="theme-swatch theme-swatch-peach"></span><span>淺色・暖橘</span></button>
+      </div>
+    </div>
     <div class="option-pill-group">
       <span class="option-pill-label">生成張數</span>
       <details class="ap-style-item" name="upload-option-picker" id="image-run-count-picker">
@@ -5212,6 +5225,19 @@
       <button id="ap-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="ap-settings-modal-body" class="settings-modal-body">
+    <div class="theme-picker" aria-label="主題配色">
+      <div class="theme-picker-heading">
+        <span class="option-pill-label">主題配色</span>
+        <span class="theme-picker-current" aria-live="polite">深色・紫</span>
+      </div>
+      <div class="theme-options">
+        <button type="button" class="theme-option is-selected" data-theme="default" aria-pressed="true"><span class="theme-swatch theme-swatch-purple"></span><span>深色・紫</span></button>
+        <button type="button" class="theme-option" data-theme="ocean" aria-pressed="false"><span class="theme-swatch theme-swatch-ocean"></span><span>深色・海洋</span></button>
+        <button type="button" class="theme-option" data-theme="forest" aria-pressed="false"><span class="theme-swatch theme-swatch-forest"></span><span>深色・森林</span></button>
+        <button type="button" class="theme-option" data-theme="paper" aria-pressed="false"><span class="theme-swatch theme-swatch-paper"></span><span>淺色・紙張</span></button>
+        <button type="button" class="theme-option" data-theme="peach" aria-pressed="false"><span class="theme-swatch theme-swatch-peach"></span><span>淺色・暖橘</span></button>
+      </div>
+    </div>
     <div class="option-pill-group">
       <span class="option-pill-label">分析模型</span>
       <details class="ap-style-item is-locked" name="ap-result-option-picker" id="ap-analysis-model-picker">
