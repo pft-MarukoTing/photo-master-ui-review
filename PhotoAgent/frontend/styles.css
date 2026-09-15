@@ -1860,7 +1860,7 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 }
 .theme-picker-heading .option-pill-label { padding-left: 0; color: var(--text); }
 .theme-picker-current { color: var(--text-2); font-size: 12px; }
-.theme-options { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
+.theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
 .theme-option {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   min-width: 0; padding: 8px 4px 7px; border: 1px solid var(--border);
@@ -1876,9 +1876,6 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 .theme-swatch-paper { background: linear-gradient(135deg, #dbeafe, #60a5fa 52%, #0891b2); }
 .theme-swatch-peach { background: linear-gradient(135deg, #f3c262, #e36255 52%, #bc2a1a); }
 .theme-swatch-lilac { background: linear-gradient(135deg, #d876a9, #9c539c 52%, #6a398c); }
-@media (max-width: 430px) {
-  .theme-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
 body[data-theme="paper"] .site-header,
 /* rgba(var(--on-surface-rgb)) instead of a hardcoded navy -- paper's own
    on-surface-rgb (23,32,51) was already that same navy in disguise, but
