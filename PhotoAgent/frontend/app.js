@@ -1902,7 +1902,7 @@
     return isSidePanelLayoutEnabled() && els.resultsAnalysisSlot ? els.resultsAnalysisSlot : els.resultsCanvasTop;
   }
 
-  // ── 最近照片卡片散落排列 (gallery-card-style-toggle, #settings-modal) ──────
+  // ── 最近照片／範例照片卡片散落排列 (gallery-card-style-toggle, #settings-modal) ──
   // Alternative arrangement for the upload page's 最近照片／範例照片 gallery --
   // a scattered, overlapping card stack instead of the default dense mosaic
   // grid. Same persisted-client-side display-preference pattern as
@@ -1911,9 +1911,11 @@
   // section) that CSS-overrides the mosaic by selector specificity alone
   // (one extra class beats the mosaic's own selectors), not by removing
   // anything -- both skins stay intact in the stylesheet, switching is just
-  // this class toggling on <body>. Desktop-only effect (>=1201px, same
-  // breakpoint the mosaic itself only applies at); narrower widths keep
-  // today's horizontal strip regardless of this setting.
+  // this class toggling on <body>. Applies at every width -- the desktop
+  // mosaic (>=1201px) switches to a vertical card stack, and the narrow
+  // horizontal strip (<=1200px) switches to its own horizontal card
+  // version (separate @media (max-width: 1200px) gallery-card-style
+  // block in styles.css).
   const GALLERY_CARD_STYLE_KEY = "photoagent.galleryCardStyle";
 
   // Defaults off (today's mosaic grid) -- distinguishes "never set" (null)

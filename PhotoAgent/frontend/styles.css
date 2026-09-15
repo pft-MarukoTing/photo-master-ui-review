@@ -4322,7 +4322,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   }
 }
 
-/* 最近照片卡片散落排列 (body.gallery-card-style, #settings-modal's
+/* 最近照片／範例照片卡片散落排列 (body.gallery-card-style, #settings-modal's
    gallery-card-style-toggle, app.js) -- an alternative to the dense mosaic
    grid above, for the same desktop (>=1201px) right-rail gallery. Every
    selector here is the mosaic's own selector with one extra class
