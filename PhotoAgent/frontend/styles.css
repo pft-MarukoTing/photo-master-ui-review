@@ -1169,30 +1169,39 @@ a { text-decoration: none; color: inherit; }
     display: contents;
     max-width: 520px;
   }
-  .upload-content-row > .upload-main-copy > .upload-intro-eyebrow,
-  .upload-content-row > .upload-main-copy > .upload-headline,
-  .upload-content-row > .upload-main-copy > .upload-intro-description {
+  .upload-content-row > .upload-main-copy > .upload-headline {
     width: 100%;
     max-width: 520px;
+    margin-bottom: 0;
     order: 0;
   }
-  .upload-content-row > .upload-main-col {
-    order: 1;
-    width: min(100%, 580px);
-    min-width: 0;
-    height: auto;
-    max-width: 100%;
-  }
   .upload-content-row > .upload-gallery-col {
-    order: 2;
+    order: 1;
     flex: 0 0 auto;
     width: min(100%, 580px);
     max-width: 100%;
     height: auto;
     max-height: none;
   }
-  .upload-content-row > .upload-main-copy > .upload-flow {
+  .upload-content-row > .upload-main-col {
+    order: 2;
+    width: min(100%, 580px);
+    min-width: 0;
+    height: auto;
+    max-width: 100%;
+  }
+  .upload-content-row > .upload-main-copy > .upload-intro-eyebrow {
+    width: 100%;
+    max-width: 520px;
     order: 3;
+  }
+  .upload-content-row > .upload-main-copy > .upload-intro-description {
+    width: 100%;
+    max-width: 520px;
+    order: 4;
+  }
+  .upload-content-row > .upload-main-copy > .upload-flow {
+    order: 5;
     width: 100%;
     max-width: 520px;
     margin-top: 0;
