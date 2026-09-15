@@ -373,7 +373,7 @@
       display: flex;
       align-items: center;
       width: 100%;
-      margin-bottom: 20px;
+      margin-bottom: 4px;
     }
     .ap-step {
       display: flex;
@@ -441,6 +441,25 @@
     }
     .ap-step-line--active {
       background: linear-gradient(90deg, var(--accent), var(--border-2));
+    }
+    /* Narrow phones: .ap-step's row layout (num circle + name side by side)
+       has nowhere near enough width for 4 steps' worth of circle+label pairs
+       plus their connecting lines, so labels wrapped/collided with the next
+       step's circle. Stacking num-over-name per step keeps every step's own
+       footprint narrow (just the circle's width) instead of circle+text.
+       align-items:flex-start (overriding the row layout's own center) plus a
+       matching margin-top on .ap-step-line keeps the connecting line level
+       with the circles' own vertical center, rather than centering against
+       each step's full two-line height (which would sit the line low). */
+    @media (max-width: 560px) {
+      .ap-step-indicator { align-items: flex-start; }
+      .ap-step {
+        flex-direction: column;
+        gap: 4px;
+        text-align: center;
+      }
+      .ap-step-name { font-size: 15px; }
+      .ap-step-line { margin: 14px 14px 0; }
     }
 
     /* ── Shared collapsible-card shell for #ap-review-panel, the merged
