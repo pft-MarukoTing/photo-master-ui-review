@@ -1160,14 +1160,13 @@ input[type="checkbox"] {
      #advanced-settings-fold's width always matches 分析模型's pill directly
      above it, even if row-1's own column tracks change later. */
   .upload-main-col #upload-inline-settings-row-2 {
-    display: grid;
-    grid-template-columns: minmax(145px, 1fr) minmax(160px, 1.1fr) minmax(130px, .9fr);
+    display: flex;
     align-items: center;
+    justify-content: center;
     gap: 7px;
   }
   .upload-main-col #upload-inline-settings-row-2 > #advanced-settings-fold {
-    grid-column: 1;
-    width: 100%;
+    width: fit-content;
   }
   /* Stretched to fill column 3 (not just its own natural content width) so
      it lines up with 長寬比 (image-aspect-ratio-picker) directly above it,
@@ -1175,8 +1174,7 @@ input[type="checkbox"] {
      grows to fill the extra room since .split-menu's own 24px chevron stays
      fixed-width. */
   .upload-main-col #upload-inline-settings-row-2 > .split-run {
-    grid-column: 3;
-    width: 100%;
+    width: fit-content;
   }
   .upload-main-col #upload-inline-settings-row-2 > .split-run #start-btn.split-main {
     flex: 1 1 auto;
