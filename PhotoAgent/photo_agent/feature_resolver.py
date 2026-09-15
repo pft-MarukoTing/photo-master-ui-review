@@ -187,7 +187,10 @@ def _crop_plan_has_visible_trim(crop_plan, axis_threshold=0.08, area_threshold=0
     )
 
 
-def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False, crop_plan=None):
+def _compact_raw_crop_instruction(
+    raw_instruction, *, has_body_reshape=False, crop_plan=None,
+    approved_crop_correction=False,
+):
     """Keep the raw builder's crop decision while removing explanatory prose."""
     raw = str(raw_instruction or "").strip()
     if not raw:
@@ -233,7 +236,10 @@ def _compact_raw_crop_instruction(raw_instruction, *, has_body_reshape=False, cr
         tightness = tightness_match.group(1).strip() if tightness_match else "use the stated crop tightness"
         same_shape = "same shape as the photograph" in raw and "nothing has to be given up" in raw
         near_full_frame = "close to the full frame" in tightness.lower()
-        visible_trim = _crop_plan_has_visible_trim(crop_plan)
+        visible_trim = (
+            _crop_plan_has_visible_trim(crop_plan)
+            or (approved_crop_correction and bool(crop_plan))
+        )
         if same_shape and near_full_frame and "Closer framing was requested" not in raw and not visible_trim:
             if not has_body_reshape:
                 return (
@@ -1504,8 +1510,12 @@ def build_compact_editor_prompt(
             item["removed_preservations"] = sorted(set(item["removed_preservations"]) | removed)
     ratio = analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio") or "original"
     raw_crop_block = str(raw_crop_instruction or "").strip()
+    approved_crop_correction = "crop" in _axis_set(analysis.get("correction_axes"))
     compact_crop_block = _compact_raw_crop_instruction(
-        raw_crop_block, has_body_reshape=body_reshape_active, crop_plan=crop_plan,
+        raw_crop_block,
+        has_body_reshape=body_reshape_active,
+        crop_plan=crop_plan,
+        approved_crop_correction=approved_crop_correction,
     )
     crop_instruction_source = "raw_edit_prompt" if compact_crop_block else "compact_fallback"
     if not compact_crop_block:

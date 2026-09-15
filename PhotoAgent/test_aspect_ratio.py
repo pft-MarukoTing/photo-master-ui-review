@@ -58,6 +58,28 @@ class CropGeometryTests(unittest.TestCase):
         actual = crop["w"] * 1200 / (crop["h"] * 800)
         self.assertAlmostEqual(actual, 4 / 5, places=6)
 
+    def test_hard_protection_slides_toward_right_and_bottom_before_growing(self):
+        context = {
+            "recommended_aspect_ratio": "1:1",
+            "crop_box": {
+                "enabled": True, "x": 0.1, "y": 0.1,
+                "w": 0.8, "h": 0.8, "aspect_ratio": "1:1",
+            },
+            "roi_box": {"x": 0.3, "y": 0.3, "w": 0.3, "h": 0.3},
+            "subject_extent_box": None,
+            "protected_regions": [{"x": 0.85, "y": 0.85, "w": 0.1, "h": 0.1}],
+        }
+
+        crop = resolve_crop_box_with_report(
+            context["crop_box"], context, image_width=1600, image_height=1600
+        )["cropBox"]
+
+        self.assertIsNotNone(crop)
+        self.assertAlmostEqual(crop["w"], 0.8, places=6)
+        self.assertAlmostEqual(crop["h"], 0.8, places=6)
+        self.assertAlmostEqual(crop["x"] + crop["w"], 1.0, places=6)
+        self.assertAlmostEqual(crop["y"] + crop["h"], 1.0, places=6)
+
 
 class RatioFitPlacementTests(unittest.TestCase):
     """Forcing a box back onto its aspect ratio slides it before it sacrifices
@@ -216,6 +238,133 @@ class DerivedAspectRatioTests(unittest.TestCase):
         # forced middle band (y 0.167-0.833) did not manage.
         self.assertLessEqual(crop["y"], 0.6)
         self.assertGreaterEqual(crop["y"] + crop["h"], 0.95)
+
+    @staticmethod
+    def _review_analysis(crop_box, *, roi_box=None, subject_extent_box=None, protected_regions=None):
+        return {
+            "recommended_aspect_ratio": "3:2",
+            "crop_box": crop_box,
+            "roi_box": roi_box or {"x": 0.35, "y": 0.3, "w": 0.3, "h": 0.35},
+            "subject_extent_box": subject_extent_box or {"x": 0.25, "y": 0.2, "w": 0.5, "h": 0.6},
+            "protected_regions": protected_regions or [],
+            "crop_recommendation": "改變長寬比並收窄左右空間",
+            "correction_plan": ["調整為3:2並收窄左右空間", "提升整體曝光"],
+            "correction_axes": [["crop"], ["exposure"]],
+            "correction_inverse": ["維持原圖構圖", "維持原圖曝光"],
+            "retouch_recipe": ["重新構圖：裁成3:2，收窄左右空間", "稍微提亮照片"],
+        }
+
+    def test_geometry_inserts_the_resolved_ratio_into_review_text(self):
+        analysis = self._review_analysis(
+            {"enabled": True, "x": 0.15, "y": 0, "w": 0.85, "h": 1, "aspect_ratio": "3:2"}
+        )
+
+        applied = apply_derived_aspect_ratio(analysis, 1600, 1600)
+
+        self.assertEqual(applied["recommended_aspect_ratio"], "4:5")
+        self.assertTrue(applied["crop_box"]["enabled"])
+        self.assertAlmostEqual(applied["crop_box"]["w"] / applied["crop_box"]["h"], 4 / 5, places=3)
+        self.assertTrue(applied["correction_plan"][0].startswith("以4:5輸出比例重新構圖；"))
+        self.assertEqual(applied["retouch_recipe"][0], "重新構圖：裁成4:5，收窄左右空間")
+
+    def test_user_ratio_change_refits_source_geometry_and_rewrites_text(self):
+        analysis = self._review_analysis(
+            {"enabled": True, "x": 0.15, "y": 0, "w": 0.85, "h": 1, "aspect_ratio": "3:2"}
+        )
+        auto = apply_derived_aspect_ratio(analysis, 1600, 1600)
+
+        changed = apply_derived_aspect_ratio(auto, 1600, 1600, aspect_ratio_pref="3:2")
+
+        self.assertEqual(changed["recommended_aspect_ratio"], "3:2")
+        self.assertAlmostEqual(changed["crop_box"]["w"] / changed["crop_box"]["h"], 3 / 2, places=3)
+        self.assertIn("重新構圖：裁成3:2，", changed["retouch_recipe"][0])
+        self.assertNotIn("4:5", changed["retouch_recipe"][0])
+
+    def test_explicit_protection_expanding_crop_to_full_frame_removes_reframe_item(self):
+        analysis = self._review_analysis(
+            {"enabled": True, "x": 0.05, "y": 0, "w": 0.9, "h": 1, "aspect_ratio": "4:5"},
+            roi_box={"x": 0.245, "y": 0.27, "w": 0.48, "h": 0.55},
+            subject_extent_box={"x": 0.14, "y": 0.247, "w": 0.76, "h": 0.753},
+            protected_regions=[
+                {"x": 0.02, "y": 0.02, "w": 0.96, "h": 0.96},
+            ],
+        )
+
+        applied = apply_derived_aspect_ratio(analysis, 1600, 1600)
+
+        self.assertEqual(applied["recommended_aspect_ratio"], "original")
+        self.assertFalse(applied["crop_box"]["enabled"])
+        self.assertEqual(applied["correction_plan"], ["提升整體曝光"])
+        self.assertEqual(applied["correction_axes"], [["exposure"]])
+        self.assertEqual(applied["correction_inverse"], ["維持原圖曝光"])
+        self.assertEqual(applied["retouch_recipe"], ["稍微提亮照片"])
+
+    def test_original_ratio_still_keeps_a_meaningful_same_ratio_crop(self):
+        analysis = self._review_analysis(
+            {"enabled": True, "x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9, "aspect_ratio": "original"}
+        )
+
+        applied = apply_derived_aspect_ratio(
+            analysis, 1600, 1600, aspect_ratio_pref="original"
+        )
+
+        self.assertEqual(applied["recommended_aspect_ratio"], "original")
+        self.assertTrue(applied["crop_box"]["enabled"])
+        self.assertLess(applied["crop_box"]["w"], 0.965)
+        self.assertLess(applied["crop_box"]["h"], 0.965)
+        self.assertTrue(applied["correction_plan"][0].startswith("維持原圖輸出比例並重新構圖；"))
+        self.assertEqual(applied["retouch_recipe"][0], "重新構圖：維持原圖比例，收窄左右空間")
+
+    def test_edge_touching_subject_extent_does_not_cancel_a_valid_crop(self):
+        # Production regression: image 2 in the keep-original-ratio reframe
+        # batch. The analyzer selected a useful square crop, but its semantic
+        # subject extent reached the already-truncated right edge. Treating
+        # that extent as hard protection expanded the crop to 98.8% and then
+        # disabled it as effectively full-frame.
+        analysis = self._review_analysis(
+            {"enabled": True, "x": 0.08, "y": 0.08, "w": 0.84, "h": 0.84, "aspect_ratio": "original"},
+            roi_box={"x": 0.305, "y": 0.375, "w": 0.49, "h": 0.43},
+            subject_extent_box={"x": 0.305, "y": 0.375, "w": 0.695, "h": 0.554},
+            protected_regions=[
+                {"x": 0.311, "y": 0.382, "w": 0.344, "h": 0.426},
+                {"x": 0.758, "y": 0.431, "w": 0.129, "h": 0.197},
+                {"x": 0.31, "y": 0.775, "w": 0.48, "h": 0.18},
+                {"x": 0.164, "y": 0.42, "w": 0.567, "h": 0.036},
+            ],
+        )
+
+        applied = apply_derived_aspect_ratio(
+            analysis, 1600, 1600, aspect_ratio_pref="original"
+        )
+
+        self.assertTrue(applied["crop_box"]["enabled"])
+        self.assertLess(applied["crop_box"]["w"], 0.965)
+        self.assertLess(applied["crop_box"]["h"], 0.965)
+
+    def test_edge_touching_explicit_region_repositions_same_ratio_crop(self):
+        # Production regression: 20260915-104931 proposed a 90% square crop.
+        # A hard region touching the right and bottom edges should move that
+        # square to the corner, not expand it back toward the complete frame.
+        analysis = self._review_analysis(
+            {"enabled": True, "x": 0.05, "y": 0.05, "w": 0.9, "h": 0.9, "aspect_ratio": "original"},
+            roi_box={"x": 0.292, "y": 0.382, "w": 0.357, "h": 0.444},
+            subject_extent_box={"x": 0.292, "y": 0.382, "w": 0.708, "h": 0.618},
+            protected_regions=[
+                {"x": 0.689, "y": 0.389, "w": 0.311, "h": 0.611},
+                {"x": 0.315, "y": 0.425, "w": 0.334, "h": 0.401},
+                {"x": 0.321, "y": 0.708, "w": 0.679, "h": 0.292},
+            ],
+        )
+
+        applied = apply_derived_aspect_ratio(
+            analysis, 1248, 1248, aspect_ratio_pref="original"
+        )
+
+        self.assertTrue(applied["crop_box"]["enabled"])
+        self.assertAlmostEqual(applied["crop_box"]["x"], 0.1, places=6)
+        self.assertAlmostEqual(applied["crop_box"]["y"], 0.1, places=6)
+        self.assertAlmostEqual(applied["crop_box"]["w"], 0.9, places=6)
+        self.assertAlmostEqual(applied["crop_box"]["h"], 0.9, places=6)
 
 
 class OutputGeometryCheckTests(unittest.TestCase):

@@ -359,6 +359,29 @@ Frame the photograph on what it is actually of."""
         self.assertNotIn("Do not zoom out, outpaint, or recompose", framing)
         self.assertTrue(audit["framing_change_active"])
 
+    def test_approved_near_full_crop_is_not_demoted_to_keep_original_framing(self):
+        analysis = interaction_analysis()
+        crop_item = "裁切四周較鬆散的邊緣，集中人物互動並保留必要環境。"
+        analysis.update({
+            "correction_plan": [crop_item],
+            "correction_axes": [["crop"]],
+            "recommended_aspect_ratio": "original",
+        })
+        raw = """Reframing:
+- Target output aspect ratio: 1248:1248. The output canvas has to be this shape.
+- Roughly how tight: close to the full frame; little more than the outer edges come off.
+This frame is the same shape as the photograph you were given, so nothing has to be given up to reach it. If the photograph is already well framed, a small trim is a fine answer.
+Frame the photograph on what it is actually of."""
+        crop_plan = {"x": .05, "y": .048, "w": .95, "h": .952, "aspectRatio": "1248:1248"}
+        prompt, audit = build_compact_editor_prompt(
+            analysis, "", "", crop_plan, raw_crop_instruction=raw,
+        )
+        framing = prompt.split("Required framing:", 1)[1].split("Finished light and color target:", 1)[0]
+        self.assertIn("Reframe to 1248:1248; a visible tightening", framing)
+        self.assertIn(f"Framing goal: {crop_item}", framing)
+        self.assertNotIn("Keep the supplied framing and subject scale", framing)
+        self.assertTrue(audit["framing_change_active"])
+
     def test_analysis_crop_item_is_not_repeated_after_required_framing(self):
         analysis = interaction_analysis()
         crop_item = "裁切畫面左側多餘空白，強化主體聚焦與構圖平衡。"

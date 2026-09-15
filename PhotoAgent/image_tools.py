@@ -12,7 +12,17 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 import pillow_heif
 
-from aiserver_utils.logger import logger as aiutils_logger
+try:
+    from aiserver_utils.logger import logger as aiutils_logger
+except Exception:
+    # That logger writes to LOG_PATH and cannot even be constructed without it,
+    # which the service platform sets but a test run or a local script does not.
+    # The timings below are telemetry, so dropping them beats being unimportable.
+    class _DroppedTelemetry:
+        def log(self, *args, **kwargs):
+            pass
+
+    aiutils_logger = _DroppedTelemetry()
 from sdl_face_detector import SDLFaceDetector
 
 logger = logging.getLogger(__name__)
@@ -408,25 +418,174 @@ def derive_aspect_ratio_from_crop(crop_box: dict, image_width: int, image_height
     return _nearest_by_ratio(measured, choices), measured
 
 
-def apply_derived_aspect_ratio(analysis: dict, image_width: int, image_height: int) -> dict:
-    """Auto mode: replace the analysis's own aspect-ratio fields with ones
-    derived from its crop geometry (see derive_aspect_ratio_from_crop).
+_CROP_AXIS_NAMES = {"crop", "cropping", "framing", "reframing"}
+_RATIO_TOKEN_RE = re.compile(r"(?<!\d)\d+\s*[:：]\s*\d+(?!\d)")
 
-    Applied once, right after the analysis comes back, so every consumer --
-    edit prompt, crop fitting, output-canvas request, QA, debug UI -- reads the
-    same locally-decided value and no stale model-picked label survives
-    anywhere. Each crop candidate is measured on its own, since candidates are
-    alternative framings and need not share one ratio.
+
+def _crop_review_indices(context: dict):
+    """Return aligned crop-item indices, or [] when the LLM arrays drifted."""
+    plan = context.get("correction_plan") or []
+    axes = context.get("correction_axes") or []
+    inverse = context.get("correction_inverse") or []
+    recipe = context.get("retouch_recipe") or []
+    if not (len(plan) == len(axes) == len(inverse) == len(recipe)):
+        return []
+    indices = []
+    for index, entry in enumerate(axes):
+        values = [entry] if isinstance(entry, str) else (entry or [])
+        if any(str(value or "").strip().lower() in _CROP_AXIS_NAMES for value in values):
+            indices.append(index)
+    return indices
+
+
+def _reframing_detail(text):
+    """Remove an analyzer/local ratio prefix while retaining crop intent."""
+    value = str(text or "").strip()
+    value = re.sub(r"^\s*重新構圖\s*[:：]\s*", "", value)
+    value = re.sub(
+        r"^\s*(?:以\s*" + _RATIO_TOKEN_RE.pattern + r"\s*輸出比例|維持原圖輸出比例並)"
+        r"\s*重新構圖\s*[；;，,]*\s*",
+        "",
+        value,
+    )
+    value = re.sub(r"^\s*維持原圖(?:輸出)?比例\s*[，,；;]*\s*", "", value)
+    value = re.sub(
+        r"(?:裁(?:切)?成|調整(?:為|成)|改(?:為|成)|輸出(?:為|成)?|採用|選擇|使用)\s*"
+        r"(?:比例\s*)?" + _RATIO_TOKEN_RE.pattern + r"(?:\s*(?:比例|畫幅|構圖))?",
+        "",
+        value,
+        flags=re.IGNORECASE,
+    )
+    value = _RATIO_TOKEN_RE.sub("", value)
+    value = re.sub(
+        r"(?:改變|更改|調整|選擇|指定)(?:輸出)?(?:長寬比|畫幅比例)|(?:長寬比|畫幅比例)(?:改變|調整)",
+        "",
+        value,
+    )
+    value = re.sub(r"\s*([，,；;。])\s*\1+", r"\1", value)
+    value = re.sub(r"^[\s，,；;。:：]+|[\s，,；;]+$", "", value)
+    value = re.sub(r"\s{2,}", " ", value)
+    return value
+
+
+def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: dict):
+    """Make review text describe locally resolved geometry, never stale LLM text."""
+    ctx = dict(context)
+    indices = _crop_review_indices(ctx)
+    if not crop_box:
+        if indices:
+            remove = set(indices)
+            for key in ("correction_plan", "correction_axes", "correction_inverse", "retouch_recipe"):
+                ctx[key] = [item for index, item in enumerate(ctx.get(key) or []) if index not in remove]
+        return ctx
+
+    if not indices:
+        return ctx
+
+    plan = list(ctx.get("correction_plan") or [])
+    recipe = list(ctx.get("retouch_recipe") or [])
+    for index in indices:
+        plan_detail = _reframing_detail(plan[index])
+        recipe_detail = _reframing_detail(recipe[index])
+        fallback = _reframing_detail(
+            (ctx.get("crop_box") or {}).get("reason") or ctx.get("crop_recommendation")
+        )
+        plan_detail = plan_detail or recipe_detail or fallback or "依已解析的裁切框改善主體集中度與邊緣落點。"
+        recipe_detail = recipe_detail or plan_detail
+        if ratio_label == "original":
+            plan[index] = f"維持原圖輸出比例並重新構圖；{plan_detail}"
+            recipe[index] = f"重新構圖：維持原圖比例，{recipe_detail}"
+        else:
+            plan[index] = f"以{ratio_label}輸出比例重新構圖；{plan_detail}"
+            recipe[index] = f"重新構圖：裁成{ratio_label}，{recipe_detail}"
+    ctx["correction_plan"] = plan
+    ctx["retouch_recipe"] = recipe
+    ctx["crop_recommendation"] = plan[indices[0]]
+    return ctx
+
+
+def apply_derived_aspect_ratio(
+    analysis: dict, image_width: int, image_height: int, aspect_ratio_pref: str = "auto",
+) -> dict:
+    """Resolve crop geometry, then make its ratio and review text agree.
+
+    ``original`` is only an output shape: a smaller same-ratio crop remains an
+    active reframe. A crop is removed only when the final ROI/protection-aware
+    rectangle actually expands back to the complete source frame.
     """
-    label, measured = derive_aspect_ratio_from_crop(analysis.get("crop_box"), image_width, image_height)
+    # A user-declined crop is the one case where the private analyzer geometry
+    # must not be revived. Re-checking removes this marker before arriving
+    # here, at which point the saved proposal becomes eligible again.
+    source_crop = (
+        analysis.get("crop_box")
+        if analysis.get("_preserve_original_composition")
+        else analysis.get("_reframing_geometry_source") or analysis.get("crop_box")
+    )
+    derived_label, measured = derive_aspect_ratio_from_crop(
+        source_crop, image_width, image_height,
+    )
+    pref = str(aspect_ratio_pref or "auto").strip().lower()
+    label = derived_label if pref == "auto" else ("original" if pref == "original" else pref)
 
     ctx = dict(analysis)
+    if "_reframing_geometry_source" not in ctx and source_crop:
+        ctx["_reframing_geometry_source"] = dict(source_crop)
+    ctx["auto_aspect_ratio"] = derived_label
     ctx["recommended_aspect_ratio"] = label
-    if ctx.get("crop_box"):
-        ctx["crop_box"] = {**ctx["crop_box"], "aspect_ratio": label}
+    if source_crop:
+        ctx["crop_box"] = {**source_crop, "aspect_ratio": label}
+
+    resolved_crop = None
+    fixed_shape_without_crop = pref not in {"auto", "original"}
+    if image_width and image_height and (
+        (source_crop or {}).get("enabled") is True or fixed_shape_without_crop
+    ):
+        geometry_ratio = label if label != "original" else f"{image_width}:{image_height}"
+        geometry_ctx = dict(ctx)
+        geometry_ctx["recommended_aspect_ratio"] = geometry_ratio
+        geometry_ctx["crop_box"] = {
+            **(ctx.get("crop_box") or {}), "aspect_ratio": geometry_ratio,
+        }
+        resolved_crop = resolve_crop_box_with_report(
+            geometry_ctx["crop_box"], geometry_ctx, image_width, image_height,
+        )["cropBox"]
+        if resolved_crop and resolved_crop.get("w", 1) > 0.965 and resolved_crop.get("h", 1) > 0.965:
+            resolved_crop = None
+
+    if resolved_crop:
+        ctx["crop_box"] = {
+            **(ctx.get("crop_box") or {}),
+            "enabled": True,
+            "x": resolved_crop["x"], "y": resolved_crop["y"],
+            "w": resolved_crop["w"], "h": resolved_crop["h"],
+            "aspect_ratio": label,
+        }
+        ctx["resolved_crop_box_measured_ratio"] = (
+            resolved_crop["w"] * image_width / (resolved_crop["h"] * image_height)
+        )
+    else:
+        label = label if fixed_shape_without_crop else "original"
+        ctx["recommended_aspect_ratio"] = label
+        source_crop = ctx.get("crop_box") or {}
+        ctx["crop_box"] = {
+            **source_crop,
+            "enabled": False,
+            "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0,
+            "aspect_ratio": label,
+            "reason": "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。",
+        }
+        ctx["crop_candidates"] = []
+        ctx["crop_intent"] = {
+            "trim_left": False, "trim_right": False,
+            "trim_top": False, "trim_bottom": False,
+            "subject_anchor": "center", "looking_direction": "unknown",
+            "remove_edge_distractions": [],
+        }
+        ctx["crop_recommendation"] = "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。"
+        ctx["composition_strategy"] = "本機幾何解析後選擇完整原圖構圖，不執行裁切。"
 
     candidates = analysis.get("crop_candidates")
-    if candidates:
+    if candidates and resolved_crop:
         ctx["crop_candidates"] = [
             {**c, "crop_box": {**c["crop_box"],
                                "aspect_ratio": derive_aspect_ratio_from_crop(c["crop_box"], image_width, image_height)[0]}}
@@ -436,14 +595,23 @@ def apply_derived_aspect_ratio(analysis: dict, image_width: int, image_height: i
 
     ctx["aspect_ratio_reason"] = (
         f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）於支援清單中選出最接近的「{label}」；"
-        "分析模型不再自行挑選輸出比例。"
-        if measured is not None else
+        "並完成 ROI／保護區域約束後確認此裁切可執行。"
+        if pref == "auto" and measured is not None and resolved_crop is not None else
+        f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）選擇候選比例，但套用 ROI／保護區域約束後裁切擴回完整畫面，因此維持原圖比例。"
+        if pref == "auto" and measured is not None else
+        f"依使用者選擇的輸出比例「{label}」完成裁切框與 ROI／保護區域約束解析。"
+        if resolved_crop is not None else
+        f"使用者選擇的輸出比例為「{label}」；本機幾何解析後不需要額外構圖裁切。"
+        if pref not in {"auto", "original"} else
         "AI 未提出裁切建議，維持原圖比例。"
     )
     # Debug/report fields: what the local decision was based on.
-    ctx["aspect_ratio_source"] = "crop_box_geometry"
+    if pref == "auto":
+        ctx["aspect_ratio_source"] = "crop_box_geometry" if resolved_crop is not None else "crop_box_geometry_noop"
+    else:
+        ctx["aspect_ratio_source"] = "user_aspect_ratio"
     ctx["crop_box_measured_ratio"] = measured
-    return ctx
+    return _sync_reframing_review_contract(ctx, label, resolved_crop)
 
 
 def apply_aspect_ratio_preference(context: dict, aspect_ratio_pref: str) -> dict:
@@ -678,38 +846,52 @@ def protected_boxes(context: dict) -> list:
     return boxes
 
 
-def _include_protected_box(crop: dict, box: dict) -> dict:
-    safety = 0.05 if box["kind"] == "roi" else 0.065
-    pl = max(0, box["x"] - safety)
-    pt = max(0, box["y"] - safety)
-    pr = min(1, box["x"] + box["w"] + safety)
-    pb = min(1, box["y"] + box["h"] + safety)
+def _hard_crop_protection_boxes(context: dict) -> list:
+    """Boxes that may expand an analyzer-selected composition crop.
 
-    x, y, w, h = crop["x"], crop["y"], crop["w"], crop["h"]
+    ``subject_extent_box`` remains available through ``protected_boxes`` as a
+    soft placement reference, but it is not a hard crop boundary. It often
+    reaches an edge for a subject already cut by the captured frame; forcing a
+    proposed crop to contain it would routinely expand a valid reframe back to
+    the complete image. The focal ROI and explicitly chosen protected regions
+    remain hard constraints.
+    """
+    return [box for box in protected_boxes(context) if box["kind"] != "subject"]
 
-    if x > pl:
-        w = min(1 - pl, w + (x - pl))
-        x = pl
-    if x + w < pr:
-        delta = pr - (x + w)
-        x = x - delta if x >= delta else x
-        w = min(1 - x, w + delta)
-    if y > pt:
-        h = min(1 - pt, h + (y - pt))
-        y = pt
-    if y + h < pb:
-        delta = pb - (y + h)
-        y = y - delta if y >= delta else y
-        h = min(1 - y, h + delta)
 
-    x, y = max(0, min(0.98, x)), max(0, min(0.98, y))
-    return {**crop, "x": x, "y": y, "w": max(0.02, min(1 - x, w)), "h": max(0.02, min(1 - y, h))}
+def _place_or_grow_axis(start: float, size: float, protected_start: float, protected_end: float):
+    """Contain a protected span by sliding first, growing only when needed."""
+    protected_size = max(0.02, protected_end - protected_start)
+    new_size = min(1.0, max(size, protected_size))
+    min_start = max(0.0, protected_end - new_size)
+    max_start = min(protected_start, 1.0 - new_size)
+    if min_start > max_start:
+        min_start = max_start = max(0.0, min(1.0 - new_size, protected_start))
+    return min(max(start, min_start), max_start), new_size
 
 
 def _protect_roi(crop: dict, context: dict) -> dict:
-    for box in protected_boxes(context):
-        crop = _include_protected_box(crop, box)
-    return crop
+    padded = []
+    for box in _hard_crop_protection_boxes(context):
+        safety = 0.05 if box["kind"] == "roi" else 0.065
+        padded.append({
+            "left": max(0.0, box["x"] - safety),
+            "top": max(0.0, box["y"] - safety),
+            "right": min(1.0, box["x"] + box["w"] + safety),
+            "bottom": min(1.0, box["y"] + box["h"] + safety),
+        })
+    if not padded:
+        return crop
+
+    x, w = _place_or_grow_axis(
+        crop["x"], crop["w"],
+        min(box["left"] for box in padded), max(box["right"] for box in padded),
+    )
+    y, h = _place_or_grow_axis(
+        crop["y"], crop["h"],
+        min(box["top"] for box in padded), max(box["bottom"] for box in padded),
+    )
+    return {**crop, "x": x, "y": y, "w": w, "h": h}
 
 
 # ── Framing size (close / closer) geometry ─────────────────────────────────────

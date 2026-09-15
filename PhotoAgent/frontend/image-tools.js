@@ -119,6 +119,14 @@ window.PhotoAgentImageTools = (() => {
     return boxes;
   }
 
+  // subject_extent_box remains a soft framing/display reference. It often
+  // reaches an edge for a subject already cut by the captured frame, so using
+  // it as a hard boundary would expand a useful composition crop back to the
+  // complete image. ROI and explicitly selected protected regions stay hard.
+  function hardCropProtectionBoxes(context) {
+    return protectedBoxes(context).filter((box) => box.kind !== "subject");
+  }
+
   function marginsForProtectedBox(box, context, baseMargin) {
     const safetyMargin = box.kind === "roi" ? Math.max(baseMargin, 0.05) : Math.max(baseMargin, 0.065);
     return {
@@ -128,55 +136,41 @@ window.PhotoAgentImageTools = (() => {
     };
   }
 
-  function includeProtectedBox(crop, box, context, margin = 0.035) {
-    const { xMargin, topMargin, bottomMargin } = marginsForProtectedBox(box, context, margin);
-    const protectedLeft = Math.max(0, box.x - xMargin);
-    const protectedTop = Math.max(0, box.y - topMargin);
-    const protectedRight = Math.min(1, box.x + box.w + xMargin);
-    const protectedBottom = Math.min(1, box.y + box.h + bottomMargin);
-    let { x, y, w, h } = crop;
-
-    if (x > protectedLeft) {
-      w = Math.min(1 - protectedLeft, w + (x - protectedLeft));
-      x = protectedLeft;
+  function placeOrGrowAxis(start, size, protectedStart, protectedEnd) {
+    const protectedSize = Math.max(0.02, protectedEnd - protectedStart);
+    const newSize = Math.min(1, Math.max(size, protectedSize));
+    let minStart = Math.max(0, protectedEnd - newSize);
+    let maxStart = Math.min(protectedStart, 1 - newSize);
+    if (minStart > maxStart) {
+      minStart = Math.max(0, Math.min(1 - newSize, protectedStart));
+      maxStart = minStart;
     }
-    if (x + w < protectedRight) {
-      const delta = protectedRight - (x + w);
-      if (x >= delta) x -= delta;
-      else w = Math.min(1 - x, w + delta);
-    }
-    if (y > protectedTop) {
-      h = Math.min(1 - protectedTop, h + (y - protectedTop));
-      y = protectedTop;
-    }
-    if (y + h < protectedBottom) {
-      const delta = protectedBottom - (y + h);
-      if (y >= delta) y -= delta;
-      else h = Math.min(1 - y, h + delta);
-    }
-
-    x = Math.max(0, Math.min(0.98, x));
-    y = Math.max(0, Math.min(0.98, y));
-    return {
-      ...crop,
-      x,
-      y,
-      w: Math.max(0.02, Math.min(1 - x, w)),
-      h: Math.max(0.02, Math.min(1 - y, h))
-    };
+    return [Math.min(Math.max(start, minStart), maxStart), newSize];
   }
 
   function protectRoi(crop, context, margin = 0.035) {
-    const boxes = protectedBoxes(context);
+    const boxes = hardCropProtectionBoxes(context);
     if (!boxes.length) return crop;
-    let { x, y, w, h } = crop;
-    let protectedCrop = { ...crop, x, y, w, h };
-
-    boxes.forEach((box) => {
-      protectedCrop = includeProtectedBox(protectedCrop, box, context, margin);
+    const padded = boxes.map((box) => {
+      const { xMargin, topMargin, bottomMargin } = marginsForProtectedBox(box, context, margin);
+      return {
+        left: Math.max(0, box.x - xMargin),
+        top: Math.max(0, box.y - topMargin),
+        right: Math.min(1, box.x + box.w + xMargin),
+        bottom: Math.min(1, box.y + box.h + bottomMargin)
+      };
     });
-
-    return protectedCrop;
+    const [x, w] = placeOrGrowAxis(
+      crop.x, crop.w,
+      Math.min(...padded.map((box) => box.left)),
+      Math.max(...padded.map((box) => box.right))
+    );
+    const [y, h] = placeOrGrowAxis(
+      crop.y, crop.h,
+      Math.min(...padded.map((box) => box.top)),
+      Math.max(...padded.map((box) => box.bottom))
+    );
+    return { ...crop, x, y, w, h };
   }
 
   function normalizeCropBox(cropBox, context) {

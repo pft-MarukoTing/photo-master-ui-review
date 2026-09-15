@@ -345,20 +345,20 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
-    # Auto mode: the output ratio is decided here, from the crop rectangle the
-    # analysis proposed, rather than by the analysis model itself (which is
-    # asked not to pick one). A model-chosen label that disagreed with its own
-    # crop geometry used to make the crop and the output canvas mutually
-    # unsatisfiable -- see image_tools.derive_aspect_ratio_from_crop. Done
-    # before the analysis leaves this stage so every downstream consumer, and
-    # the JSON the user reviews, sees one already-consistent value.
-    if aspect_ratio == "auto":
-        img_w, img_h = get_image_dimensions(image_bytes)
-        analysis = apply_derived_aspect_ratio(analysis, img_w, img_h)
-        logger.info(
-            "Step 2 aspect ratio derived locally: %s (crop measured %s)",
-            analysis.get("recommended_aspect_ratio"), analysis.get("crop_box_measured_ratio"),
-        )
+    # Geometry, not model-authored prose, owns the executable output ratio.
+    # Resolve every preference here so the review screen already shows the
+    # fitted crop and locally inserted ratio text. The finish-stage repeats
+    # this after checkbox/picker changes because those do not re-run analysis.
+    img_w, img_h = get_image_dimensions(image_bytes)
+    analysis = apply_derived_aspect_ratio(
+        analysis, img_w, img_h, aspect_ratio_pref=aspect_ratio,
+    )
+    logger.info(
+        "Step 2 aspect ratio resolved locally: %s (crop measured %s, source=%s)",
+        analysis.get("recommended_aspect_ratio"),
+        analysis.get("crop_box_measured_ratio"),
+        analysis.get("aspect_ratio_source"),
+    )
 
     if analysis_model == "gpt-5.6-luna":
         # Two-pass split (see openai_client._analyze_photo_two_pass): analysis
@@ -505,6 +505,15 @@ def finish_stage(
     # choice before body planning, editing, local cropping, and QA so no later
     # consumer can revive the stale crop_box or ratio recommendation.
     analysis, aspect_ratio = apply_rejected_reframing(analysis, aspect_ratio)
+    # Results-page ratio changes and a re-checked reframing item reuse the
+    # stored analyzer geometry. Refit it for this run and rewrite the visible
+    # review text from that resolved result. ``original`` controls only the
+    # output shape; a meaningful same-ratio crop remains enabled.
+    img_w, img_h = get_image_dimensions(image_bytes)
+    analysis = apply_derived_aspect_ratio(
+        analysis, img_w, img_h, aspect_ratio_pref=aspect_ratio,
+    )
+    analysis["_aspect_ratio_pref_at_edit"] = aspect_ratio
     analysis.pop("_body_reshape_execution_plan", None)
     body_execution_plan = build_body_reshape_execution_plan(analysis)
     if not ai_photo_editing and body_execution_plan.get("review_point_count"):
