@@ -6939,6 +6939,37 @@
     initDemoImagesGallery();
   }
 
+  // applyAccountUi()'s initial call above and resetApp()'s call below cover
+  // every IN-APP way back to the upload screen (Home, 清除, finishing a
+  // result). But the user can also return to it WITHOUT any in-app action
+  // firing -- switching browser tabs and back, minimizing/restoring the
+  // window, or browser back/forward (bfcache) all leave the upload section
+  // as the visible one without ever calling resetApp/showSection. Re-check
+  // on both signals so either one catches it: "pageshow" covers bfcache
+  // restores (event.persisted), "visibilitychange" covers plain tab/window
+  // switching. Guarded to logged-in users only and only while the upload
+  // section is actually the one on screen -- 範例照片 (the logged-out demo
+  // list) issues a real request per refresh and barely ever changes, so
+  // refreshing it on every tab switch would be pure waste, and refreshing
+  // any gallery while a different section is showing would be too.
+  function refreshUploadGalleryIfVisible() {
+    const user = getCurrentUser();
+    if (!user) return;
+    if (!els.sections?.upload?.classList.contains("visible")) return;
+    refreshUploadGallery(user);
+  }
+  window.addEventListener("pageshow", (event) => {
+    // A plain first load fires "pageshow" too, right alongside
+    // applyAccountUi()'s own initial refreshUploadGallery() call -- without
+    // this guard every fresh page load would fetch the gallery twice.
+    // event.persisted is true only for an actual bfcache restore, which is
+    // the case this listener exists for.
+    if (event.persisted) refreshUploadGalleryIfVisible();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshUploadGalleryIfVisible();
+  });
+
   function renderDemoImagesGrid(names) {
     if (!els.demoImagesGrid) return;
     els.demoImagesGrid.innerHTML = "";
@@ -8826,6 +8857,13 @@
     if (timingList) timingList.innerHTML = "";
     resetSteps();
     showSection("upload");
+    // Reload 最近照片 from the server instead of leaving whatever the
+    // gallery last happened to show -- resetApp is how the user gets back
+    // to the upload page from anywhere else (Home, 清除, finishing a
+    // result), and by then a job started on a previous visit may have
+    // finished, or a whole separate visit may have added new history
+    // entries since this page was last on screen.
+    refreshUploadGallery(getCurrentUser());
   }
 
   // ── Event listeners ────────────────────────────────────────────
