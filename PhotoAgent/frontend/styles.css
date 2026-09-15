@@ -1117,6 +1117,44 @@ a { text-decoration: none; color: inherit; }
   min-width: 0;
 }
 @media (max-width: 720px) {
+  .upload-main-col > .upload-below-zone {
+    padding-inline: 0;
+  }
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    justify-self: stretch;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run {
+    flex: 0 1 auto;
+    max-width: 100%;
+  }
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) .ap-style-trigger {
+    min-width: 0;
+    padding-inline: 7px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) #advanced-settings-fold > summary {
+    min-width: 0;
+    padding-inline: 7px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run,
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run .btn {
+    white-space: nowrap;
+  }
+
   /* Gallery stacks below the drop zone instead of beside it, and switches
      to a horizontal scroll strip -- a fixed 180px sidebar column left too
      little width for both it and the drop zone side by side once the
