@@ -959,12 +959,21 @@ input[type="checkbox"] {
   object-fit: contain;
   background: var(--card-2);
 }
+/* Blurred backdrop copy filling a contain-fitted photo's letterbox bars --
+   the .history-cube twin of .demo-image-tile-bg (index.html), and the same
+   filter/opacity values on purpose: that rule's comment is where this
+   treatment is explained, and both are the single definition for every
+   layout (desktop mosaic, narrow peek strip, and both under 卡片散落排列)
+   rather than being re-declared per skin. Short version: brighten and
+   desaturate BEFORE blending, so the mix with the cube's own pale
+   var(--card-2) stays clean instead of going muddy grey. */
 .upload-gallery-col .history-cube .rc-media .history-cube-bg {
   position: absolute;
   inset: 0;
   z-index: 0;
   object-fit: cover;
-  filter: blur(18px) brightness(.65);
+  filter: blur(22px) brightness(1.25) saturate(.75);
+  opacity: .5;
   transform: scale(1.15);
   background: transparent;
 }
@@ -4521,26 +4530,11 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media::after {
     background: linear-gradient(180deg, rgba(8,8,12,.55) 0%, rgba(8,8,12,.02) 55%, transparent 100%);
   }
-  /* The blurred backdrop (.demo-image-tile-bg / .history-cube-bg, base rule
-     in index.html/styles.css) darkens the photo to brightness(.65) -- a
-     thin sliver in the mosaic's cover-cropped tiles, easy to miss, but
-     object-fit: contain above exposes it as real letterbox bars on any
-     non-square photo, often a third of the card on each side. Blending
-     that DARKENED image at partial opacity over the tile's own
-     var(--card-2) (an earlier attempt at this fix) didn't read as "the
-     theme's color showing through" -- it read as grey, muddy smudging,
-     because a dim, blurred, still fairly saturated photo mixed with a
-     pale grey-blue card color lands on a murky brown-grey with no clean
-     source. Fix: stop darkening it first (brightness past 1, saturation
-     down), THEN blend at opacity -- blending a pale source with the
-     tile's pale var(--card-2) stays clean at any ratio, so the opacity
-     here is free to tune for how much of the theme's own tone should
-     show through, purely a matter of taste. */
-  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile-bg,
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube-bg {
-    filter: blur(22px) brightness(1.25) saturate(.75);
-    opacity: .5;
-  }
+  /* No letterbox-backdrop rule here on purpose: object-fit: contain above
+     exposes the blurred .demo-image-tile-bg / .history-cube-bg as real
+     letterbox bars, but that treatment now lives in those elements' own
+     base rules (index.html / this file, ~line 962) so every layout shares
+     one definition instead of card mode carrying its own copy. */
 }
 /* Narrow-screen (<=1200px) version of the same card skin -- the toggle used
    to only affect the desktop right-rail column above; below 1200px the
@@ -4673,11 +4667,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media::after {
     background: linear-gradient(180deg, rgba(8,8,12,.55) 0%, rgba(8,8,12,.02) 55%, transparent 100%);
   }
-  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile-bg,
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube-bg {
-    filter: blur(22px) brightness(1.25) saturate(.75);
-    opacity: .5;
-  }
+  /* Letterbox backdrop: same note as the desktop block -- defined once in
+     .demo-image-tile-bg / .history-cube-bg's own base rules, not here. */
 }
 
 @media (max-width: 1200px) {

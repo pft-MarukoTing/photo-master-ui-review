@@ -2425,11 +2425,25 @@
        here anyway since the tile's own "content box" is deliberately
        height:0 above. .demo-image-tile-bg is the same photo again, blurred
        and scaled up behind it, so a non-square photo's letterbox bars fill
-       with a soft glow of the image itself instead of flat --card-2. */
+       with a soft glow of the image itself instead of flat --card-2.
+       The filter/opacity below is the single place this letterbox
+       treatment is defined -- .history-cube-bg (styles.css) carries the
+       same values, and every layout (desktop mosaic, narrow peek strip,
+       and both of those under 卡片散落排列) inherits it rather than
+       overriding it per skin. It deliberately BRIGHTENS past 1 and pulls
+       saturation down before blending: an earlier version darkened to
+       brightness(.65), which is a thin sliver in the mosaic's cover-cropped
+       tiles but becomes real letterbox bars wherever the main image is
+       object-fit: contain -- often a third of the tile on each side -- and
+       a dim, blurred, still fairly saturated photo mixed at partial opacity
+       with a pale grey-blue --card-2 lands on a murky brown-grey with no
+       clean source. Lightening it first means the blend is pale-on-pale, so
+       the opacity is free to tune purely for how much of the theme's own
+       tone shows through. */
     .demo-image-tile-bg {
       position: absolute; inset: 0; width: 100%; height: 100%;
-      object-fit: cover; filter: blur(18px) brightness(.65);
-      transform: scale(1.15); display: block;
+      object-fit: cover; filter: blur(22px) brightness(1.25) saturate(.75);
+      opacity: .5; transform: scale(1.15); display: block;
     }
     .demo-image-tile img:not(.demo-image-tile-bg) { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
     .demo-image-tile:hover { border-color: var(--accent); transform: translateY(-2px); }
