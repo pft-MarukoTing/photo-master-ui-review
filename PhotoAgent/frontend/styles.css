@@ -3738,3 +3738,145 @@ body[data-theme="peach"] .proc-wrap {
   .upload-actions-row .btn svg { width: 14px; height: 14px; }
   .upload-actions-row .split-menu > summary { height: 24px; }
 }
+
+/* Upload workspace visual refinement
+   Keep the existing three-column DOM and all controls intact, but use
+   contrast, spacing, and typography instead of three opaque panels to group
+   the workspace. */
+#upload-section {
+  position: relative;
+  isolation: isolate;
+}
+#upload-section::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 52% 58% at 56% 52%,
+    rgba(var(--accent-rgb), .07) 0%,
+    rgba(var(--accent-rgb), .035) 38%,
+    transparent 76%
+  );
+}
+.site-header {
+  border-bottom-color: rgba(var(--on-surface-rgb), .045);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .08);
+}
+
+/* Left introduction: compact, indented steps with no repeated mini-panels. */
+#upload-section .upload-flow-card:not(:last-child)::after {
+  display: none;
+}
+@media (min-width: 1201px) {
+  #upload-section .upload-intro-eyebrow {
+    font-size: 20px;
+  }
+  #upload-section .upload-main-copy .upload-headline {
+    padding-top: 20px;
+    padding-bottom: 20px;
+  }
+  #upload-section .upload-flow-card {
+    padding-top: 15px;
+  }
+}
+#upload-section .upload-flow-icon {
+  border: 0;
+  background: rgba(var(--accent-rgb), .10);
+  box-shadow: none;
+  color: rgba(var(--accent-soft-rgb), .82);
+}
+
+/* Central workspace: the drop zone remains the focal hit area while its
+   settings become a quiet continuation of the same surface. */
+#upload-section .upload-main-col {
+  background: radial-gradient(
+    ellipse 78% 86% at 56% 50%,
+    rgba(var(--accent-rgb), .052) 0%,
+    rgba(var(--accent-rgb), .026) 44%,
+    rgba(var(--on-surface-rgb), .012) 68%,
+    transparent 100%
+  );
+  border: 1.5px dashed rgba(var(--on-surface-rgb), .10);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+}
+#upload-section .upload-main-col > .upload-left .upload-zone {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+#upload-section .upload-main-col:has(.upload-zone:hover),
+#upload-section .upload-main-col:has(.upload-zone.dragging) {
+  border-color: rgba(var(--accent-rgb), .42);
+}
+#upload-section .upload-main-col > .upload-left .upload-zone:hover,
+#upload-section .upload-main-col > .upload-left .upload-zone.dragging {
+  border-color: transparent;
+  background: rgba(var(--accent-rgb), .018);
+  box-shadow: none;
+}
+#upload-section .upload-zone .upload-icon-wrap {
+  border: 1px solid rgba(var(--accent-rgb), .16);
+  background: rgba(var(--accent-rgb), .08);
+  box-shadow: none;
+}
+#upload-section .upload-zone .dz-title {
+  color: color-mix(in srgb, var(--text-4) 76%, transparent);
+}
+#upload-section .upload-main-col > .upload-below-zone {
+  border-top: 0;
+  border-radius: 0 0 calc(var(--radius-lg) - 1.5px) calc(var(--radius-lg) - 1.5px);
+  background: linear-gradient(
+    180deg,
+    rgba(var(--on-surface-rgb), .012),
+    rgba(var(--on-surface-rgb), .035)
+  );
+}
+#upload-section .upload-actions-row #upload-inline-settings {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+#upload-section .upload-main-col .ap-style-trigger,
+#upload-section .upload-main-col .upload-below-zone #advanced-settings-fold > summary {
+  background: rgba(var(--on-surface-rgb), .035);
+  border-color: rgba(var(--on-surface-rgb), .07);
+  box-shadow: none;
+}
+#upload-section .upload-main-col .ap-style-trigger:hover,
+#upload-section .upload-main-col .upload-below-zone #advanced-settings-fold > summary:hover {
+  background: rgba(var(--on-surface-rgb), .055);
+  border-color: rgba(var(--accent-rgb), .28);
+}
+/* Recent photos sit on the workspace background instead of inside a card. */
+#upload-section .upload-gallery-col {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+#upload-section .upload-gallery-heading-icon {
+  border: 0;
+  border-radius: 50%;
+  background: rgba(var(--accent-rgb), .08);
+  box-shadow: none;
+}
+#upload-section .upload-gallery-col .demo-images-grid {
+  scrollbar-color: rgba(var(--accent-soft-rgb), .18) transparent;
+}
+#upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar-thumb {
+  background-color: rgba(var(--accent-soft-rgb), .18);
+}
+#upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(var(--accent-soft-rgb), .28);
+}
+#upload-section .upload-gallery-col .history-cube,
+#upload-section .upload-gallery-col .demo-image-tile {
+  border: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .12);
+}
+#upload-section .upload-gallery-col .history-cube:hover {
+  border-color: transparent;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .18);
+}
