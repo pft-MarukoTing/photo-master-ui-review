@@ -2468,9 +2468,14 @@
       // the whole canvas, and a tainted canvas.toBlob() below resolves null
       // silently (no thrown error, so the catch below never fires) instead
       // of the single #generated-img swap this onclone already handles.
+      // Fallback fill for anything html2canvas can't capture (e.g. a
+      // layer it fails to render) -- read from the live theme instead of
+      // hardcoding the default dark theme's bg, which showed through as a
+      // mismatched dark patch on the light paper/peach themes.
+      const themeBg = getComputedStyle(document.body).getPropertyValue("--bg").trim() || "#09090b";
       const canvas = await Promise.race([
         html2canvas(document.body, {
-          backgroundColor: "#09090b",
+          backgroundColor: themeBg,
           useCORS: true,
           scale,
           windowWidth: viewportWidth,

@@ -30,6 +30,7 @@
   --accent-2: #EC4899;
   --green:   #01B37B;
   --red:     #FF2600;
+  --blue:    #2563EB;
   --mv-grad: linear-gradient(135deg, #FF6BCE 0%, #A855F7 50%, #4338CA 100%);
 
   --header-h: 68px;
@@ -86,7 +87,7 @@ body[data-theme="forest"] {
   --bg-glow-1: rgba(52,211,153,.11); --bg-glow-2: rgba(132,204,22,.07); --header-bg: rgba(11,21,17,.8);
   --shadow-accent: 0 10px 30px rgba(52,211,153,.2);
 }
-body[data-theme="paper"], body[data-theme="peach"] {
+body[data-theme="paper"] {
   --n04: #f5f7fb; --n09: #ffffff; --n14: #eef2f7; --n24: #e2e8f0;
   --n34: #cbd5e1; --n44: #94a3b8; --n54: #64748b; --n64: #526174;
   --n74: #3e4b5d; --n84: #273447; --n100: #172033;
@@ -97,18 +98,36 @@ body[data-theme="paper"], body[data-theme="peach"] {
   --glass-rgb: 255,255,255;
   --accent-pale-color: #DBEAFE; --accent-pale-grad: linear-gradient(110deg, #EFF6FF 0%, #DBEAFE 68%, #93C5FD 100%);
   --header-bg: rgba(245,247,251,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
-}
-body[data-theme="paper"] {
   --accent: #2563eb; --accent-2: #06b6d4; --accent-rgb: 37,99,235; --accent-2-rgb: 6,182,212;
   --mv-grad: linear-gradient(135deg, #60a5fa 0%, #2563eb 52%, #0891b2 100%);
   --bg-glow-1: rgba(37,99,235,.09); --bg-glow-2: rgba(6,182,212,.07); --shadow-accent: 0 10px 30px rgba(37,99,235,.18);
 }
+/* "淺色・暖橘" -- its own full warm-cream neutral scale (not shared with
+   "paper" anymore, see below), built around the brand's terracotta/gold
+   palette: #e36255 (terracotta, --accent), #ec9a86 (salmon, --accent-2),
+   #f3c262 (gold, --accent-soft), #a2c5c9 (dusty teal, a deliberate cool
+   counter-note used sparingly and standalone -- e.g. .think-ring's third
+   ring further down -- rather than mixed into the accent/gradient family)
+   and #f1e0ce (cream, anchoring --n14/--n24). Previously this theme only
+   patched --bg
+   and the accent colors onto "paper"'s own blue-gray neutral scale, which
+   is why every plain card (.compare-card, #ap-analysis-shell,
+   .ap-style-option-btn, #dz-preview, ...) rendered as a cool white-gray
+   slab instead of matching this theme's own tone. */
 body[data-theme="peach"] {
-  --bg: #fff8f3; --n04: #fff8f3; --accent: #ea580c; --accent-2: #db2777; --accent-rgb: 234,88,12; --accent-2-rgb: 219,39,119;
-  --accent-soft-rgb: 251,146,60;
-  --accent-pale-color: #FFEDD5; --accent-pale-grad: linear-gradient(110deg, #FFF7ED 0%, #FFEDD5 68%, #FDBA74 100%);
-  --mv-grad: linear-gradient(135deg, #fb923c 0%, #ea580c 52%, #db2777 100%);
-  --bg-glow-1: rgba(234,88,12,.09); --bg-glow-2: rgba(219,39,119,.07); --shadow-accent: 0 10px 30px rgba(234,88,12,.18);
+  --n04: #FAF7F4; --n09: var(--n04); --n14: #F6F0E9; --n24: #EFE3D7;
+  --n34: #E0CFBD; --n44: #B9A188; --n54: #8F755B; --n64: #78614A;
+  --n74: #5F4A35; --n84: #493622; --n100: #332414;
+  --bg: var(--n04); --card: var(--n09); --card-2: var(--n14); --card-3: var(--n24);
+  --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
+  --border: rgba(51,36,20,.10); --border-2: rgba(51,36,20,.18);
+  --accent: #E36255; --accent-2: #EC9A86; --accent-rgb: 227,98,85; --accent-2-rgb: 236,154,134;
+  --accent-soft-rgb: 243,194,98; --on-surface-rgb: 51,36,20; --on-surface-color: #332414;
+  --glass-rgb: 255,255,255;
+  --accent-pale-color: #F3DCD5; --accent-pale-grad: linear-gradient(110deg, #FBF3EA 0%, #F3DCD5 68%, #EC9A86 100%);
+  --header-bg: rgba(250,247,244,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
+  --mv-grad: linear-gradient(135deg, #F3C262 0%, #E36255 52%, #BC2A1A 100%);
+  --bg-glow-1: rgba(227,98,85,.09); --bg-glow-2: rgba(236,154,134,.08); --shadow-accent: 0 10px 30px rgba(227,98,85,.18);
 }
 
 /* The review tabs have their own small icon palette; keep that palette in
@@ -116,7 +135,26 @@ body[data-theme="peach"] {
 body[data-theme="ocean"] #ap-review-panel { --hue-face: #67e8f9; --hue-recipe: #38bdf8; --hue-style: #22d3ee; --hue-prompt: #818cf8; }
 body[data-theme="forest"] #ap-review-panel { --hue-face: #86efac; --hue-recipe: #a3e635; --hue-style: #34d399; --hue-prompt: #facc15; }
 body[data-theme="paper"] #ap-review-panel { --hue-face: #06b6d4; --hue-recipe: #2563eb; --hue-style: #2563eb; --hue-prompt: #7c3aed; }
-body[data-theme="peach"] #ap-review-panel { --hue-face: #fb7185; --hue-recipe: #db2777; --hue-style: #ea580c; --hue-prompt: #c026d3; }
+/* --hue-recipe was the raw palette gold (#F3C262) -- .ap-review-tab .ic
+   (index.html) uses this hue directly as icon color at .5 opacity at rest,
+   which needs it dark/saturated enough to read on its own, not just
+   pretty as a swatch. Gold is one of the lightest colors in the whole
+   palette (L67, see the palette-design notes above) and nearly disappeared
+   at that opacity on this theme's light cards -- #7E5207 is the same
+   amber hue pushed dark enough to clear the app's own bar for this exact
+   role (its other three hues sit around 1.7-2.3:1 contrast at .5 opacity
+   on this card color; #F3C262 was only ~1.3, #7E5207 is ~2.2). */
+body[data-theme="peach"] #ap-review-panel { --hue-face: #EC9A86; --hue-recipe: #7E5207; --hue-style: #E36255; --hue-prompt: #BC2A1A; }
+
+/* .field-input/.field-ta (further down) default to background: var(--card)
+   -- on every other theme --card is a step lighter/darker than --bg, but
+   peach's own --card was set equal to --n04/--bg (per this same theme's
+   n09==n04 change above), so text fields there rendered as the single
+   lightest tone in the whole theme instead of a normal input surface.
+   --card-2 (one step deeper, still warm) reads as an actual field instead
+   of a blank patch of page background. */
+body[data-theme="peach"] .field-input,
+body[data-theme="peach"] .field-ta { background: var(--card-2); }
 
 /* ════════════════════════════════════════
    BASE
@@ -724,7 +762,12 @@ a { text-decoration: none; color: inherit; }
   margin: 0 auto;
   font-size: clamp(24px, 2vw, 32px);
   font-weight: 700;
-  background: var(--accent-pale-grad);
+  /* --accent-pale-grad is a pale tint meant for light-on-dark surfaces, not
+     a text-clip gradient -- on the paper/peach light themes it renders as
+     near-white text on a near-white page. --mv-grad (already used by the
+     logo and the upload-intro headline above) stays saturated enough to
+     read in every theme. */
+  background: var(--mv-grad);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -929,7 +972,7 @@ a { text-decoration: none; color: inherit; }
 .upload-main-col .ap-style-trigger {
   box-sizing: border-box;
   height: 30px;
-  padding: 0 9px;
+  padding: 0 14px;
   gap: 4px;
   border-radius: 15px;
   font-size: 13px;
@@ -1363,7 +1406,12 @@ a { text-decoration: none; color: inherit; }
 .upload-zone .dz-title {
   font-size: 20px;
   font-weight: 650;
-  color: rgba(211, 211, 217, .78);
+  /* Was a hardcoded light-gray rgba, which read fine on the dark themes'
+     dark upload-zone background but went low-contrast on paper/peach's
+     light one (#upload-section's own override further down already
+     accounts for this with a themed color-mix -- this base rule should
+     match it instead of drifting). */
+  color: var(--text-2);
 }
 @media (max-width: 720px) {
   .upload-zone .upload-icon-wrap { width: 72px; height: 72px; }
@@ -1459,7 +1507,10 @@ a { text-decoration: none; color: inherit; }
   gap: 8px;
   background: rgba(var(--glass-rgb),.55);
   border-radius: 10px;
-  color: #fff;
+  /* --glass-rgb flips to white on the paper/peach light themes, so a
+     hardcoded white foreground here would disappear into it -- var(--text)
+     tracks the same flip (see .canvas-btn's identical pairing below). */
+  color: var(--text);
   font-size: 16.25px;
   font-weight: 700;
   letter-spacing: -.13px;
@@ -1758,16 +1809,19 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
 .theme-swatch-ocean { background: linear-gradient(135deg, #67e8f9, #22d3ee 52%, #2563eb); }
 .theme-swatch-forest { background: linear-gradient(135deg, #a3e635, #34d399 52%, #059669); }
 .theme-swatch-paper { background: linear-gradient(135deg, #dbeafe, #60a5fa 52%, #0891b2); }
-.theme-swatch-peach { background: linear-gradient(135deg, #fed7aa, #fb923c 52%, #db2777); }
+.theme-swatch-peach { background: linear-gradient(135deg, #f3c262, #e36255 52%, #bc2a1a); }
 @media (max-width: 430px) {
   .theme-options { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 body[data-theme="paper"] .site-header,
-body[data-theme="peach"] .site-header { box-shadow: 0 8px 24px rgba(35,45,65,.08); }
+/* rgba(var(--on-surface-rgb)) instead of a hardcoded navy -- paper's own
+   on-surface-rgb (23,32,51) was already that same navy in disguise, but
+   the literal value silently stayed navy for peach's warm brown too. */
+body[data-theme="peach"] .site-header { box-shadow: 0 8px 24px rgba(var(--on-surface-rgb),.08); }
 body[data-theme="paper"] .upload-gallery-col,
 body[data-theme="peach"] .upload-gallery-col {
   background: var(--card-sheen), var(--card);
-  box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.12), 0 16px 34px rgba(35,45,65,.08);
+  box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.12), 0 16px 34px rgba(var(--on-surface-rgb),.08);
 }
 body[data-theme="paper"] .proc-wrap,
 body[data-theme="peach"] .proc-wrap {
@@ -1956,9 +2010,19 @@ body[data-theme="peach"] .proc-wrap {
 }
 .think-ring:nth-child(3) {
   inset: 44px;
-  border-top-color: rgba(99,102,241,.6);
+  /* Was a hardcoded indigo -- a fixed third hue outside the accent/accent-2
+     pair reads as an odd cool outlier against a warm theme like peach.
+     A neutral on-surface ring keeps three visibly distinct rings in every
+     theme without introducing a color the palette doesn't own. */
+  border-top-color: rgba(var(--on-surface-rgb),.35);
   animation: spin 3.1s linear infinite;
 }
+/* peach's one deliberate cool note (#a2c5c9, dusty teal) -- everywhere else
+   in this theme stays in the terracotta/gold/salmon family on purpose, but
+   a third ring in that same family started blurring into the first two, so
+   this is the one spot that gets the palette's cool complementary color
+   instead of the generic neutral above. */
+body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,197,201,.65); }
 .think-center {
   position: absolute;
   inset: 62px;
@@ -2834,7 +2898,10 @@ body[data-theme="peach"] .proc-wrap {
   border: 1px solid rgba(var(--on-surface-rgb),.07);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
-  color: rgba(var(--on-surface-rgb),.7);
+  /* Fixed light text, not on-surface-rgb -- the backdrop above is a
+     constant dark wash over the photo canvas regardless of theme, but
+     on-surface-rgb flips dark on paper/peach, which read as dark-on-dark. */
+  color: rgba(255,255,255,.7);
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -3824,8 +3891,12 @@ body[data-theme="peach"] .proc-wrap {
 /* Central workspace: the drop zone remains the focal hit area while its
    settings become a quiet continuation of the same surface. */
 #upload-section .upload-main-col {
+  /* farthest-corner, not a fixed 78%/86% ellipse -- a percentage-sized
+     ellipse inscribed in a wide rectangle never quite reaches the four
+     corners, so they sat past its last color-stop and read as a faint but
+     distinctly flatter/"wrong" patch against the rest of the glow. */
   background: radial-gradient(
-    ellipse 78% 86% at 56% 50%,
+    ellipse farthest-corner at 56% 50%,
     rgba(var(--accent-rgb), .052) 0%,
     rgba(var(--accent-rgb), .026) 44%,
     rgba(var(--on-surface-rgb), .012) 68%,
@@ -3839,6 +3910,32 @@ body[data-theme="peach"] .proc-wrap {
   border-color: transparent;
   background: transparent;
   box-shadow: none;
+}
+/* #dz-preview/.dz-multi (the drop zone's other two states -- a selected
+   photo, or several) never got this same treatment, so each still drew its
+   own rounded, shadowed, opaque box nested a few px inside .upload-main-col's
+   own already-rounded, already-dashed-bordered card. Two close, slightly
+   mismatched rounded rects each casting their own corner shadow is exactly
+   what read as small "peeled paper" flaps at the four corners once peach's
+   warm palette made the mismatch more visible than it was against the old
+   washed-out white-on-white. Dropping the box-shadow (that's what actually
+   drew the mismatched corners) fixes that, but going all the way to a flat
+   transparent background left this area reading identical to
+   .upload-below-zone right underneath it -- a faint flat tint instead (no
+   shadow, so no more doubled corners), one notch fainter than
+   .upload-below-zone's own .012-.035 gradient below, keeps a hint of "this
+   is its own zone" without reintroducing a second boxed card. */
+#upload-section .upload-main-col > .upload-left #dz-preview,
+#upload-section .upload-main-col > .upload-left .dz-multi {
+  background: rgba(var(--on-surface-rgb), .02);
+  box-shadow: none;
+  /* Square, not var(--radius-lg) on all four corners -- .upload-below-zone
+     right underneath (its own border-radius is 0 0 var(--radius-lg)
+     var(--radius-lg), rounded only at the very bottom of the whole card)
+     has square TOP corners to meet this. Rounding this box's bottom
+     corners left a visible gap/mismatch right at their new hairline
+     border instead of the two reading as one continuous card outline. */
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 #upload-section .upload-main-col:has(.upload-zone:hover),
 #upload-section .upload-main-col:has(.upload-zone.dragging) {
@@ -3859,7 +3956,14 @@ body[data-theme="peach"] .proc-wrap {
   color: color-mix(in srgb, var(--text-4) 76%, transparent);
 }
 #upload-section .upload-main-col > .upload-below-zone {
-  border-top: 0;
+  /* Was 0 -- back when #dz-preview/.dz-multi still drew their own boxed
+     card above this, that card's own edge already read as the boundary.
+     Now that both are flattened into .upload-main-col's single surface
+     (right above), the two background tints alone were too close to tell
+     apart. A faint hairline (fainter than .upload-main-col's own dashed
+     border, rgba(...,.1)) is a clearer, cheaper boundary than trying to
+     separate them by tint contrast alone. */
+  border-top: 1px solid rgba(var(--on-surface-rgb), .07);
   border-radius: 0 0 calc(var(--radius-lg) - 1.5px) calc(var(--radius-lg) - 1.5px);
   background: linear-gradient(
     180deg,
@@ -4027,7 +4131,7 @@ body[data-theme="peach"] .proc-wrap {
     min-height: 0;
     aspect-ratio: 1 / 1;
     margin: 0;
-    border: 1px solid #513363;
+    border: 1px solid var(--border-2);
     border-radius: 6px;
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
@@ -4124,7 +4228,11 @@ body[data-theme="peach"] .proc-wrap {
     padding: 0;
     border: 1px solid rgba(var(--on-surface-rgb), .18);
     border-radius: 50%;
-    background: rgba(8, 9, 14, .72);
+    /* Matches the accent-tinted .upload-gallery-heading-icon circles right
+       beside it in the same header row, instead of a fixed near-black fill
+       that read as a dark hole (with a barely-visible icon) on the
+       paper/peach light themes. */
+    background: rgba(var(--accent-rgb), .08);
     color: var(--text-2);
     cursor: pointer;
   }

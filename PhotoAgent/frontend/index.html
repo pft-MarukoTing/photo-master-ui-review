@@ -89,7 +89,22 @@
          existing 900px width breakpoint, see styles.css), since this and
          the empty drop zone are mutually-exclusive views of the same slot. */
       min-height: 280px;
-      background: var(--card);
+      /* var(--card) alone is a flat, opaque fill -- it was blocking the
+         page's own ambient glow (body's fixed-position radial-gradient,
+         and #upload-section .upload-main-col's own one further down)
+         wherever a selected photo doesn't fully cover this box (a
+         narrower/shorter image leaves letterboxed margin on the sides or
+         bottom). Against peach's n09==n04 (this card's fill is literally
+         the same hex as the page), that flatness was the only thing left
+         making the margins read as a different, flat "white" patch instead
+         of continuing the same warm glow the empty drop zone shows through
+         to (it's transparent, see .upload-zone below). farthest-corner,
+         not a fixed pixel ellipse -- guarantees the glow actually reaches
+         every corner of this box instead of leaving them a visible harder
+         edge once it runs out. */
+      background:
+        radial-gradient(ellipse farthest-corner at 50% 38%, rgba(var(--accent-rgb),.11) 0%, rgba(var(--accent-2-rgb),.05) 45%, transparent 75%),
+        var(--card);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
       overflow: hidden;
@@ -1646,7 +1661,13 @@
       overflow: auto;
       flex: 1;
       min-height: 360px;
-      background: var(--card);
+      /* Same flat-var(--card) issue as #dz-preview above (see its own
+         comment) -- a few small thumbnails leave most of this grid as bare
+         card color, which read especially flat here since it's the
+         tallest/emptiest of the three .upload-left views. */
+      background:
+        radial-gradient(ellipse farthest-corner at 50% 30%, rgba(var(--accent-rgb),.11) 0%, rgba(var(--accent-2-rgb),.05) 45%, transparent 75%),
+        var(--card);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-sm);
       transition: box-shadow .25s, transform .25s;
@@ -1882,13 +1903,27 @@
        above, kept as its own class since the tile's real done/error status
        (and badge) must stay untouched underneath it. */
     .history-cube.opening .rc-media img { opacity: .35; }
+    /* Same spinner as .rc-spinner (analyzing/processing tiles, below) --
+       a plain ::after instead of a real .rc-spinner element since .opening
+       is only ever toggled on li.classList (app.js), never rendered into
+       the DOM, so there's no JS-side moment to insert/remove a node for it. */
+    .history-cube.opening .rc-media::after {
+      content: "";
+      position: absolute; top: 50%; left: 50%;
+      width: 28px; height: 28px; margin: -14px 0 0 -14px;
+      border: 3px solid rgba(var(--on-surface-rgb),.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: rc-spin .8s linear infinite;
+      z-index: 5;
+    }
     /* Static pill beside the filename (not overlaid on the thumbnail like the
        old grid card's badge -- the sidebar's thumbnail is too small for that
        text to fit without wrapping). */
     .rc-badge {
       display: inline-flex; align-self: flex-start; max-width: 100%;
       padding: 3px 10px; border-radius: 20px;
-      font-size: 12px; font-weight: 700; white-space: nowrap;
+      font-size: 12px; font-weight: 300; white-space: nowrap;
       line-height: 1.2; letter-spacing: .01em;
       overflow: hidden; text-overflow: ellipsis;
       background: rgba(var(--on-surface-rgb),.12); color: var(--text-2);
@@ -1908,17 +1943,43 @@
     .batch-sidebar-item.analyzed .rc-badge::before { content: "✦"; }
     .batch-sidebar-item.done .rc-badge::before { content: "✓"; }
     .batch-sidebar-item.error .rc-badge::before { content: "!"; }
+    /* A translucent color wash directly over a photo thumbnail (these
+       badges aren't only shown on a plain card -- .history-cube .rc-badge,
+       further down, overlays one) has no guaranteed contrast against
+       arbitrary photo content: a bright/white patch of photo right behind
+       the badge washes the tint out no matter how saturated the color
+       itself is. A dark glass layer under the tint fixed that but read as
+       a heavy dark chip instead of a light badge. Going back to a single
+       light, mostly-transparent tint + blur, but leaning on a dark
+       text-shadow (not the background) to keep the white text/icon
+       readable -- the same trick captions on photos/video use, since a
+       shadow hugging each glyph's own edge stays legible over any content
+       behind it without needing the background itself to carry the
+       contrast. */
     .batch-sidebar-item.analyzed .rc-badge {
-      background: rgba(var(--accent-rgb),.25);
+      background: rgba(var(--accent-rgb),.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       border: 1px solid rgba(var(--accent-soft-rgb),.55);
-      color: var(--accent-pale-color);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
     }
     .batch-sidebar-item.done .rc-badge {
-      background: rgba(1,179,123,.22);
+      background: rgba(1,179,123,.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       border: 1px solid rgba(52,211,153,.55);
-      color: #a7f3d0;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
     }
-    .batch-sidebar-item.error .rc-badge { background: rgba(220,60,60,.25); color: #fca5a5; }
+    .batch-sidebar-item.error .rc-badge {
+      background: rgba(220,60,60,.35);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(220,60,60,.55);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
     .rc-spinner {
       position: absolute; top: 50%; left: 50%;
       width: 28px; height: 28px; margin: -14px 0 0 -14px;
@@ -3063,6 +3124,12 @@
       max-width: calc(100% - 12px);
       z-index: 3;
       background: rgba(9,9,11,.65);
+      /* Fixed light text to match the fixed-dark background above -- this
+         badge overlays a photo thumbnail, so unlike the sidebar's plain
+         .rc-badge (background: rgba(var(--on-surface-rgb),.12); color:
+         var(--text-2);) it can't let color track --text-2, which flips dark
+         in the paper/peach themes and would go unreadable on this backdrop. */
+      color: #fff;
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
     }
@@ -3263,9 +3330,9 @@
       transition: opacity .15s;
     }
     .report-item-status:hover { opacity: .8; }
-    .report-item-status.status-unread { background: rgba(96,165,250,.22); color: #93c5fd; }
+    .report-item-status.status-unread { background: rgba(37,99,235,.18); color: var(--blue); }
     .report-item-status.status-read { background: rgba(var(--on-surface-rgb),.12); color: var(--text-3); }
-    .report-item-status.status-solved { background: rgba(1,179,123,.22); color: #6ee7b7; }
+    .report-item-status.status-solved { background: rgba(1,179,123,.22); color: var(--green); }
     /* Same compact icon-square as #history-clear-all-btn -- sits in
        .history-header-top next to "回報案件", reloads the list on demand
        (see refreshReportsList, app.js) so an admin doesn't have to close
