@@ -2840,6 +2840,21 @@
       cursor: pointer;
     }
     .history-drawer-close-btn:hover { color: var(--text); }
+    @media (max-width: 1200px) {
+      .history-drawer {
+        top: 50%; right: auto; bottom: auto; left: 50%;
+        width: min(560px, calc(100vw - 28px));
+        max-height: min(720px, calc(100vh - 40px));
+        border: 1px solid var(--border); border-radius: 22px;
+        transform: translate(-50%, -46%) scale(.97);
+        opacity: 0; pointer-events: none;
+        transition: transform .25s ease, opacity .2s ease;
+      }
+      .history-drawer.drawer-open {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1; pointer-events: auto;
+      }
+    }
     /* rows reuse .batch-sidebar-item/.rc-media/.rc-badge (defined above,
        batch sidebar) for the same thumbnail+badge look, just laid out
        full-width instead of in a 280px column. */
@@ -3438,7 +3453,7 @@
            applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
            button exists; the clock icon (same one that button used to use)
            signals "this opens your processing history" alongside the
-           username text, set separately into #account-badge-label so
+           「最近照片」文字，set separately into #account-badge-label so
            applyAccountUi's textContent write doesn't clobber this icon. -->
       <button id="account-badge" class="account-badge" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -3604,6 +3619,12 @@
               </svg>
             </span>
             <span id="upload-gallery-title">範例照片</span>
+            <button id="recent-photos-history-btn" class="recent-photos-history-btn" type="button" aria-label="開啟歷史紀錄" title="開啟歷史紀錄">
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 10l4-4m0 0h-4m4 0v4M10 14l-4 4m0 0h4m-4 0v-4"
+                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
           </div>
           <div class="upload-gallery-scroll-frame">
             <div id="demo-images-grid" class="demo-images-grid"></div>
@@ -4651,7 +4672,7 @@
      openHistoryDrawer/closeHistoryDrawer (app.js), same backdrop + close-
      button + Escape/outside-click-to-dismiss shape as every modal below. -->
 <div class="history-drawer-backdrop" id="history-drawer-backdrop" hidden></div>
-<aside class="history-drawer" id="history-drawer">
+<aside class="history-drawer" id="history-drawer" role="dialog" aria-modal="true" aria-labelledby="history-drawer-title">
   <button class="history-drawer-close-btn" id="history-drawer-close-btn" type="button" aria-label="關閉">
     <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
       <path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -4659,7 +4680,7 @@
   </button>
   <div class="history-header">
     <div class="history-header-top">
-      <h2>最近照片</h2>
+      <h2 id="history-drawer-title">最近照片</h2>
       <div class="history-header-actions">
         <!-- Enters multi-select mode (enterHistorySelectMode, app.js) --
              swaps out for #history-download-selected-btn/

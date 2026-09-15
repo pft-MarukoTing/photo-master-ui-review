@@ -5295,9 +5295,12 @@
     const user = getCurrentUser();
     if (els.accountBadge) {
       // .textContent (not on accountBadge itself) so the clock icon markup
-      // beside #account-badge-label survives every call to this.
-      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user || "";
-      els.accountBadge.hidden = !user;
+      // beside #account-badge-label survives every call to this. The label
+      // intentionally says 最近照片; the account name stays in aria-label
+      // and in the history modal subtitle.
+      if (els.accountBadgeLabel) els.accountBadgeLabel.textContent = user ? "最近照片" : "";
+      const uploadVisible = !!els.sections.upload?.classList.contains("visible");
+      els.accountBadge.hidden = !user || uploadVisible;
       els.accountBadge.title = user ? "查看處理紀錄" : "";
       els.accountBadge.setAttribute("aria-label", user ? `${user}｜查看處理紀錄` : "");
     }
@@ -9297,6 +9300,13 @@
     });
   }
   if (els.accountBadge) els.accountBadge.addEventListener("click", openHistoryPage);
+  if (els.recentPhotosHistoryBtn) els.recentPhotosHistoryBtn.addEventListener("click", openHistoryPage);
+  document.addEventListener("photoagent:sectionchange", (event) => {
+    if (els.accountBadge) {
+      const user = getCurrentUser();
+      els.accountBadge.hidden = !user || event.detail?.name === "upload";
+    }
+  });
   if (els.adminReportsBtn) els.adminReportsBtn.addEventListener("click", openReportsPage);
   if (els.reportsRefreshBtn) els.reportsRefreshBtn.addEventListener("click", refreshReportsList);
   if (els.reportsDrawerCloseBtn) els.reportsDrawerCloseBtn.addEventListener("click", closeReportsDrawer);

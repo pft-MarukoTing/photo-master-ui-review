@@ -53,6 +53,7 @@ window.PhotoAgentDom = (() => {
     demoImagesConfirmBtn: document.querySelector("#demo-images-confirm-btn"),
     uploadGalleryTitle: document.querySelector("#upload-gallery-title"),
     uploadGalleryCol: document.querySelector(".upload-gallery-col"),
+    recentPhotosHistoryBtn: document.querySelector("#recent-photos-history-btn"),
     historyLoadMoreBtn: document.querySelector("#history-load-more-btn"),
     changelogBtn: document.querySelector("#changelog-btn"),
     changelogModal: document.querySelector("#changelog-modal"),
@@ -286,6 +287,7 @@ window.PhotoAgentDom = (() => {
   function showSection(name) {
     Object.values(els.sections).forEach((section) => section.classList.remove("visible"));
     els.sections[name]?.classList.add("visible");
+    document.dispatchEvent(new CustomEvent("photoagent:sectionchange", { detail: { name } }));
     // #reset-btn lives in the global header, but only makes sense on the
     // results screen -- "上傳照片" doesn't apply while already on the upload
     // screen, and the processing screen has no completed result yet to
