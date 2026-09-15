@@ -489,7 +489,7 @@ input[type="checkbox"] {
   flex: 0 0 var(--flow-icon-size);
   border: 1px solid rgba(var(--accent-rgb),.3);
   border-radius: 50%;
-  color: rgba(var(--accent-soft-rgb),.82);
+  color: color-mix(in srgb, var(--accent) 55%, rgb(var(--accent-soft-rgb)) 45%);
   background: radial-gradient(circle at 35% 25%, rgba(var(--accent-rgb),.1), rgba(var(--accent-rgb),.025));
   box-shadow: 0 6px 16px rgba(var(--accent-rgb),.05);
 }
@@ -4007,7 +4007,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   border: 0;
   background: rgba(var(--accent-rgb), .10);
   box-shadow: none;
-  color: rgba(var(--accent-soft-rgb), .82);
+  color: color-mix(in srgb, var(--accent) 55%, rgb(var(--accent-soft-rgb)) 45%);
 }
 
 /* Central workspace: the drop zone remains the focal hit area while its
