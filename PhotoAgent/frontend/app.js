@@ -856,6 +856,30 @@
     refresh();
   }
 
+  // Below 560px, a shrunk .logo plus every .header-actions button (each
+  // previously squeezed down to an icon-only pill to fit) still crowded a
+  // narrow phone once #account-badge/#admin-reports-btn were also showing.
+  // Move everything except #report-btn-spacer (the real #report-btn stays
+  // fixed-position, tracking that spacer regardless of where its siblings
+  // go) down into #header-actions-secondary instead, so they can show their
+  // full label again -- and back into .header-actions once the viewport is
+  // wide enough to hold them there normally.
+  function setupCompactHeaderActions() {
+    const row = els.headerActions;
+    const secondRow = els.headerActionsSecondary;
+    const spacer = els.reportBtnSpacer;
+    if (!row || !secondRow || !spacer) return;
+    const items = Array.from(row.children).filter((el) => el !== spacer);
+    if (!items.length) return;
+    const mql = window.matchMedia("(max-width: 560px)");
+    const sync = () => {
+      if (mql.matches) items.forEach((el) => secondRow.appendChild(el));
+      else items.forEach((el) => row.insertBefore(el, spacer));
+    };
+    mql.addEventListener("change", sync);
+    sync();
+  }
+
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
   // combination (window.PhotoAgentConfig.imageModelQualityOptions is the
   // single source of truth), appearing on both the upload screen
@@ -9231,6 +9255,7 @@
   // right away, since the app always starts on the upload screen.
   ensureAdvancedSettingsFoldIn(els.uploadInlineSettingsRow2);
   setupCompactUploadSelectors();
+  setupCompactHeaderActions();
   // The portrait-settings panel is a popover on the upload page. Close it
   // when the user clicks anywhere outside the shared fold, while allowing
   // clicks inside the panel (including its toggles) to pass through.

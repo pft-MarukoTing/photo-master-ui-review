@@ -248,6 +248,26 @@ a { text-decoration: none; color: inherit; }
   gap: 12px;
 }
 
+/* Populated by setupCompactHeaderActions (app.js) on narrow phones only --
+   every .header-actions button except #report-btn-spacer moves here so it
+   can show its full label instead of collapsing to icon-only up in
+   .header-inner's single row. Right-aligned to match .header-actions'
+   own position in that row. A plain (non-sticky) sibling of .site-header,
+   not a child of it -- see its own placement comment in index.html -- so
+   its own border-top stands in for a gap/divider against the sticky header
+   above it, same weight as .site-header's own border-bottom. :empty keeps
+   it (and this padding/border) out of the layout entirely at every wider
+   width, where setupCompactHeaderActions never moves anything into it. */
+.header-actions-secondary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--border);
+}
+.header-actions-secondary:empty { display: none; }
+
 .mvp-badge {
   display: inline-flex;
   align-items: center;
@@ -3517,28 +3537,18 @@ body[data-theme="peach"] .proc-wrap {
   .container { padding: 0 18px; }
   .header-inner { padding: 0 18px; }
 
-  /* Icon-only on narrow phones -- even a shrunk .logo (see above) plus two
-     full-label buttons (重新分析/上傳照片, both can show at once in batch
-     mode) don't reliably fit side by side down at 320-390px widths.
-     #report-btn (index.html) is a body-level sibling of <header> now, not
-     a descendant of .header-actions -- this selector alone can't reach it,
-     so it's added explicitly, or its label would stay full-width forever
-     while #report-btn-spacer (still a real .header-actions child) shrinks
-     to match it, leaving #report-btn wider than the slot it's supposed to
-     sit in and spilling into whatever's next to it (#account-badge). */
+  /* #report-btn-spacer is the only .header-actions child left at this width
+     -- setupCompactHeaderActions (app.js) moves every other button down
+     into #header-actions-secondary instead, so they can show a full label
+     rather than needing an icon-only squeeze up here. #report-btn itself
+     (index.html) is a body-level sibling of <header> now, not a descendant
+     of .header-actions -- this selector alone can't reach it, so it's added
+     explicitly, or its label would stay full-width forever while the spacer
+     it tracks shrinks to icon-only, leaving #report-btn wider than the slot
+     it's supposed to sit in. */
   .header-actions .btn-label,
   #report-btn .btn-label { display: none; }
-  .header-actions .btn { padding: 0 12px; gap: 0; }
-  /* Up to four icon-only pills can share this row at once now (#reset-btn,
-     #header-settings-btn, #admin-reports-btn, #account-badge) -- the row's
-     own 12px gap (fine for the 1-2 buttons this was originally sized for)
-     adds up fast across four, pushing the row wide enough to crowd .logo or
-     spill past the viewport edge on a 320-360px phone. Tighter gap here, on
-     top of #reset-btn/#header-settings-btn/#admin-reports-btn/
-     .account-badge's own further-reduced padding (index.html, same
-     breakpoint), keeps all four fitting comfortably beside even .logo's
-     un-shrunk clamp() floor. */
-  .header-actions { gap: 6px; }
+  #report-btn-spacer.btn { padding: 0 12px; gap: 0; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
      height (see the base rule above), so that padding was eating straight

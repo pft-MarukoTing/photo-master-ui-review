@@ -65,6 +65,9 @@ window.PhotoAgentDom = (() => {
     runModeMenu: document.querySelector("#run-mode-menu"),
     uploadInlineSettingsRow2: document.querySelector("#upload-inline-settings-row-2"),
     resetButton: document.querySelector("#reset-btn"),
+    headerActions: document.querySelector(".header-actions"),
+    // Populated by setupCompactHeaderActions (app.js) on narrow phones only.
+    headerActionsSecondary: document.querySelector("#header-actions-secondary"),
     logoHomeBtn: document.querySelector("#logo-home-btn"),
     showPromptBtn: document.querySelector("#show-prompt-btn"),
     promptsModal: document.querySelector("#prompts-modal"),
