@@ -246,6 +246,8 @@ window.PhotoAgentDom = (() => {
     advancedSettingsFold: document.querySelector("#advanced-settings-fold"),
     sidePanelLayoutRow: document.querySelector("#side-panel-layout-row"),
     sidePanelLayoutToggle: document.querySelector("#side-panel-layout-toggle"),
+    galleryCardStyleRow: document.querySelector("#gallery-card-style-row"),
+    galleryCardStyleToggle: document.querySelector("#gallery-card-style-toggle"),
     eyeClosedDetectionToggle: document.querySelector("#eye-closed-detection-toggle"),
     eyeGazeFocusToggle: document.querySelector("#eye-gaze-focus-toggle"),
     hairMessDetectionToggle: document.querySelector("#hair-mess-detection-toggle"),

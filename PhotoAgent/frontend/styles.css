@@ -4275,6 +4275,223 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   }
 }
 
+/* 最近照片卡片散落排列 (body.gallery-card-style, #settings-modal's
+   gallery-card-style-toggle, app.js) -- an alternative to the dense mosaic
+   grid above, for the same desktop (>=1201px) right-rail gallery. Every
+   selector here is the mosaic's own selector with one extra class
+   (body.gallery-card-style) prefixed on, which is strictly higher
+   specificity than the mosaic's -- so this overrides purely by winning the
+   cascade, never by editing/removing the mosaic rules. Both skins stay
+   intact in the stylesheet at all times; switching is just that one body
+   class. Cards stack in a single column, overlapping with a small
+   alternating rotation + sideways jitter (the pre-mosaic "spilled stack of
+   photos" look), and straighten + lift on hover -- entirely on the tile
+   itself, unlike the earlier hover-preview experiment (removed) which
+   popped a separate element that covered the selection checkmark / history
+   delete button underneath. */
+@media (min-width: 1201px) {
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-grid {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding-top: 22px;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col.is-history .history-day-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-day-heading {
+    display: block;
+    order: 0;
+    width: 100%;
+    margin: 18px 0 14px;
+    padding: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .05em;
+    color: var(--text-2);
+    text-align: center;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-day-group:first-child .history-day-heading {
+    margin-top: 4px;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-grid {
+    order: 1;
+    width: 100%;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube {
+    position: relative;
+    display: block;
+    /* flex-shrink: 0 -- without it, a flex column with more cards than fit
+       the rail's visible height squishes every card short (flexbox's
+       default shrink-to-fit fights the scrollable overflow-y: auto on the
+       grid above it) instead of letting the list scroll and each card stay
+       a true square. */
+    flex: 0 0 auto;
+    width: 68%;
+    max-width: 172px;
+    height: auto;
+    min-height: 0;
+    aspect-ratio: 1 / 1;
+    margin: 0;
+    margin-top: -30px;
+    padding: 0;
+    overflow: hidden;
+    /* Glass edge: a bright, translucent rim (inset top-highlight brighter
+       than the bottom-inset shadow, like light catching a beveled glass
+       edge) instead of the flat single-tone border the mosaic tiles use.
+       A thin near-white inner ring plus a soft outer bloom stand in for
+       the extra specular edge a backdrop-filter bevel would give a truly
+       translucent panel -- backdrop-filter itself would do nothing here
+       since the photo fills the card edge-to-edge, leaving nothing behind
+       the border to blur. */
+    border: 1px solid rgba(255, 255, 255, .38);
+    border-radius: 12px;
+    background: var(--card-2);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .7),
+      inset 0 0 0 1px rgba(255, 255, 255, .16),
+      inset 0 -1px 0 rgba(0, 0, 0, .2),
+      0 0 0 1px rgba(255, 255, 255, .07),
+      0 10px 24px rgba(0, 0, 0, .3);
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  /* Same reasoning as the reflection streak below: a bright white rim
+     reads as a restrained glass edge against a light theme's own pale
+     surroundings, but glows as an obvious halo around every card on a
+     dark theme. Turn it down there. */
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .demo-image-tile,
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .history-cube {
+    border-color: rgba(255, 255, 255, .18);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, .35),
+      inset 0 0 0 1px rgba(255, 255, 255, .08),
+      inset 0 -1px 0 rgba(0, 0, 0, .25),
+      0 0 0 1px rgba(255, 255, 255, .03),
+      0 10px 24px rgba(0, 0, 0, .35);
+  }
+  /* Two-part glass reflection: a bright, narrow streak near the top-left
+     edge (where a light source would catch a curved glass surface) fading
+     fast, plus a faint dark pool in the opposite corner (light not
+     reaching there) -- reads as a directional reflection rather than a
+     flat highlight. mix-blend-mode: overlay lightens/darkens the photo
+     underneath instead of painting a flat tinted layer over it. Sits above
+     the photo layers (z-index: 2) but below the badge/delete button
+     (z-index: 3-4) so it never dims their own contrast. */
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile::before,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background:
+      linear-gradient(122deg, rgba(255, 255, 255, .75) 0%, rgba(255, 255, 255, .32) 6%, rgba(255, 255, 255, .06) 14%, transparent 26%),
+      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .22), transparent 50%);
+    mix-blend-mode: overlay;
+  }
+  /* On a light theme the white streak is landing on an already-light photo
+     tone, so it stays a subtle glint; on the dark themes the same white at
+     full strength "pops" much harder against dim surroundings and reads as
+     glare rather than a glass reflection. Soften it there specifically. */
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .demo-image-tile::before,
+  body.gallery-card-style:not([data-theme="paper"]):not([data-theme="peach"]) #upload-section .upload-gallery-col .history-cube::before {
+    background:
+      linear-gradient(122deg, rgba(255, 255, 255, .38) 0%, rgba(255, 255, 255, .16) 6%, rgba(255, 255, 255, .03) 14%, transparent 26%),
+      radial-gradient(circle at 84% 90%, rgba(0, 0, 0, .22), transparent 50%);
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-images-grid > .demo-image-tile:first-child,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-grid > .history-cube:first-child {
+    margin-top: 0;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+1),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+1) { transform: rotate(-5deg) translateX(-8px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+2),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+2) { transform: rotate(4deg) translateX(7px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+3),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+3) { transform: rotate(-3deg) translateX(6px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+4),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+4) { transform: rotate(5deg) translateX(-7px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+5),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+5) { transform: rotate(-4deg) translateX(5px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:nth-child(6n+6),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:nth-child(6n+6) { transform: rotate(3deg) translateX(-6px); }
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile:hover,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube:hover {
+    transform: rotate(0deg) translateX(0) scale(1.12);
+    box-shadow: 0 18px 34px rgba(0, 0, 0, .4);
+    z-index: 5;
+  }
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+  /* object-fit: contain, not cover -- the mosaic grid crops to fill the
+     square edge-to-edge on purpose, but a card is a single full photo, so
+     "不要切圖" (don't crop) means showing the whole image uncropped even
+     when that leaves empty space at two edges of the square. The blurred
+     -bg copy (base rule, always on: .demo-image-tile-bg / .history-cube-bg)
+     already sits behind it full-bleed for exactly this case -- a non-square
+     photo's letterbox bars fill with a soft glow of the photo itself
+     instead of flat card background. */
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg),
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media .history-cube-main {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+  }
+  /* Card mode overlaps each card's bottom edge with the next card down
+     (margin-top: -34px above, later card painted on top), so the base
+     rule's bottom-left "待修圖"/"修圖完成" badge (index.html's
+     .history-cube .rc-badge) gets hidden under the following card. Each
+     card's own TOP edge sits on top of the previous card instead, so
+     moving the badge there keeps it readable. */
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-badge {
+    top: 6px;
+    bottom: auto;
+    left: 6px;
+  }
+  /* The base rule's .rc-media::after darkens toward the BOTTOM (for the
+     bottom-left badge in mosaic mode) -- that dark band is what read as a
+     stray "黑黑的" patch on light themes once the badge above moved to the
+     top-left and nothing at the bottom needed contrast anymore. Flip the
+     gradient to darken the top instead, so it still does its job (badge
+     legibility over a bright photo) instead of just being deleted. */
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media::after {
+    background: linear-gradient(180deg, rgba(8,8,12,.55) 0%, rgba(8,8,12,.02) 55%, transparent 100%);
+  }
+  /* The blurred backdrop (.demo-image-tile-bg / .history-cube-bg, base rule
+     in index.html/styles.css) darkens the photo to brightness(.65) -- a
+     thin sliver in the mosaic's cover-cropped tiles, easy to miss, but
+     object-fit: contain above exposes it as real letterbox bars on any
+     non-square photo, often a third of the card on each side. Blending
+     that DARKENED image at partial opacity over the tile's own
+     var(--card-2) (an earlier attempt at this fix) didn't read as "the
+     theme's color showing through" -- it read as grey, muddy smudging,
+     because a dim, blurred, still fairly saturated photo mixed with a
+     pale grey-blue card color lands on a murky brown-grey with no clean
+     source. Fix: stop darkening it first (brightness past 1, saturation
+     down), THEN blend at opacity -- blending a pale source with the
+     tile's pale var(--card-2) stays clean at any ratio, so the opacity
+     here is free to tune for how much of the theme's own tone should
+     show through, purely a matter of taste. */
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile-bg,
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube-bg {
+    filter: blur(22px) brightness(1.25) saturate(.75);
+    opacity: .5;
+  }
+}
+
 @media (max-width: 1200px) {
   #upload-section .upload-gallery-col .history-load-more-hint {
     display: flex;

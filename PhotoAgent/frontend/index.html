@@ -5376,6 +5376,25 @@
         <span class="ios-track"><span class="ios-thumb"></span></span>
       </label>
     </label>
+    <!-- Alternative arrangement for 最近照片／範例照片 (upload page, right-hand
+         gallery rail) -- the格狀拼貼 mosaic grid (default) vs. a scattered,
+         overlapping card stack (see "gallery-card-style" section, styles.css).
+         Same persisted-client-side pattern as #side-panel-layout-row above:
+         a display preference, not a per-request option, applied immediately
+         on load and on change (see the gallery-card-style block in app.js),
+         no reload needed. Desktop-only effect (>=1201px, same width as the
+         mosaic grid itself) -- narrower widths keep today's single-row
+         horizontal strip regardless of this toggle. -->
+    <label id="gallery-card-style-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">最近照片卡片散落排列</span>
+        <span class="option-desc">開啟後，最近照片／範例照片改用卡片交錯散落的樣式呈現，取代目前的格狀拼貼；僅影響寬螢幕（畫廊顯示在右側時）。</span>
+      </div>
+      <label class="ios-switch">
+        <input id="gallery-card-style-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
   </div>
   </div>
 </div>

@@ -1902,6 +1902,40 @@
     return isSidePanelLayoutEnabled() && els.resultsAnalysisSlot ? els.resultsAnalysisSlot : els.resultsCanvasTop;
   }
 
+  // ── 最近照片卡片散落排列 (gallery-card-style-toggle, #settings-modal) ──────
+  // Alternative arrangement for the upload page's 最近照片／範例照片 gallery --
+  // a scattered, overlapping card stack instead of the default dense mosaic
+  // grid. Same persisted-client-side display-preference pattern as
+  // isSidePanelLayoutEnabled/setSidePanelLayoutEnabled just above: not sent
+  // to the backend, just a body class (styles.css's "gallery-card-style"
+  // section) that CSS-overrides the mosaic by selector specificity alone
+  // (one extra class beats the mosaic's own selectors), not by removing
+  // anything -- both skins stay intact in the stylesheet, switching is just
+  // this class toggling on <body>. Desktop-only effect (>=1201px, same
+  // breakpoint the mosaic itself only applies at); narrower widths keep
+  // today's horizontal strip regardless of this setting.
+  const GALLERY_CARD_STYLE_KEY = "photoagent.galleryCardStyle";
+
+  // Defaults off (today's mosaic grid) -- distinguishes "never set" (null)
+  // from an explicit "0" so an opt-out still sticks across reloads.
+  function isGalleryCardStyleEnabled() {
+    try {
+      return localStorage.getItem(GALLERY_CARD_STYLE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  function setGalleryCardStyleEnabled(enabled) {
+    try {
+      localStorage.setItem(GALLERY_CARD_STYLE_KEY, enabled ? "1" : "0");
+    } catch {
+      // Private-browsing/storage-disabled: falls back to session-only via
+      // the body class below, just doesn't survive a reload.
+    }
+    document.body.classList.toggle("gallery-card-style", enabled);
+  }
+
   // Shared with #ap-settings-modal the same way ensureAdvancedSettingsFoldIn
   // (below) shares #advanced-settings-fold -- one toggle reparented into
   // whichever 設定 modal is open, not a separate copy per page.
@@ -9491,6 +9525,16 @@
       if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
         moveOptionsCardTo(getOptionsCardTarget());
       }
+    });
+  }
+  // Same "apply immediately on load" reasoning as side-panel-layout above --
+  // the upload page's gallery can already be on screen by the time the user
+  // ever opens 設定.
+  document.body.classList.toggle("gallery-card-style", isGalleryCardStyleEnabled());
+  if (els.galleryCardStyleToggle) {
+    els.galleryCardStyleToggle.checked = isGalleryCardStyleEnabled();
+    els.galleryCardStyleToggle.addEventListener("change", () => {
+      setGalleryCardStyleEnabled(els.galleryCardStyleToggle.checked);
     });
   }
   // Resets to the pills-only view every time this tab is switched to --
