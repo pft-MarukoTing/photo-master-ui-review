@@ -577,6 +577,62 @@
        #ap-review-panel keeps its own border/background nested inside,
        reading as a highlighted sub-card rather than a second competing
        outer box (same fill color, just its own border). ── */
+    /* ── #ap-photo-summary: quick-read badges+sentence sitting directly
+       above #ap-analysis-shell (markup above). Its own small card (background
+       +border, same --card-2/--border pair #ap-analysis-shell itself uses)
+       instead of bare floating text -- a plain pill+sentence with no
+       enclosing shape read as loose/monotonous next to the card below it.
+       Accent-tinted badges (.ap-photo-summary-tags span, mirrors .mvp-badge's
+       rgba(--accent-rgb) recipe) instead of .tag-row's plain gray pills, so
+       subject/scene read as the headline facts they are rather than blending
+       into muted metadata. ── */
+    .ap-photo-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    /* Synced with .ap-analysis-shell-title (same icon+text pairing just
+       below this card) instead of a small uppercase kicker -- reads as the
+       same label style, not a competing typographic system. */
+    .ap-photo-summary-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 17.5px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.14px;
+    }
+    .ap-photo-summary-label svg { flex-shrink: 0; color: var(--accent); }
+    .ap-photo-summary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .ap-photo-summary-tags span {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      background: rgba(var(--accent-rgb),.12);
+      border: 1px solid rgba(var(--accent-rgb),.25);
+      border-radius: 20px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -.05px;
+    }
+    .ap-photo-summary-text {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text-2);
+    }
+    .ap-photo-summary-text:empty { display: none; }
     .ap-analysis-shell {
       background: var(--card-2);
       border: 1px solid var(--border);
@@ -4243,6 +4299,22 @@
                      own -- renderAnalysisPreview (results.js) sets both from
                      the same `expanded` flag: open together for the
                      first-time 分析 review and for the 結果 page/a revise. -->
+                <!-- Quick-read summary of the analysis result, above the
+                     collapsible 分析與調整 card below -- subject_category/
+                     scene_category as badges, photo_summary as a one-line
+                     sentence, so the gist is visible before expanding
+                     #ap-analysis-shell. Filled by renderAnalysisPreview
+                     (results.js), same call as that card's own content, so it
+                     shows on both the first-time 分析 review and the 結果
+                     page/a revise without any extra wiring. -->
+                <div class="ap-photo-summary" id="ap-photo-summary">
+                  <span class="ap-photo-summary-label">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
+                    照片內容
+                  </span>
+                  <div class="ap-photo-summary-tags" id="ap-photo-summary-tags"></div>
+                  <p class="ap-photo-summary-text" id="ap-photo-summary-text"></p>
+                </div>
                 <details class="ap-options-toggle ap-analysis-shell" id="ap-analysis-shell" open>
                   <summary class="ap-label ap-analysis-shell-summary">
                     <div class="ap-analysis-shell-summary-inner">

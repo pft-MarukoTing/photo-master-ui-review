@@ -2423,6 +2423,16 @@ window.PhotoAgentResults = (() => {
         analysis.scene_category || "未知場景"
       ]);
     }
+    if (els.apPhotoSummaryTags) {
+      renderTags(els.apPhotoSummaryTags, [
+        analysis.subject_category || "未知類型",
+        analysis.scene_category || "未知場景"
+      ]);
+    }
+    if (els.apPhotoSummaryText) {
+      const summary = stripFieldLabel(analysis.photo_summary, ["照片內容", "照片摘要", "內容"]);
+      els.apPhotoSummaryText.textContent = summary ? `${summary}。` : "";
+    }
 
     // main_subject/scene_type are already surfaced by buildPhotoContentSummary
     // just above (els.apSubject, "照片內容") -- repeating them here as well

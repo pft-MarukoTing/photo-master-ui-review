@@ -99,6 +99,8 @@ window.PhotoAgentDom = (() => {
     canvasLoadingStatus: document.querySelector("#canvas-loading-status"),
     apSubjectTags: document.querySelector("#ap-subject-tags"),
     apSubject: document.querySelector("#ap-subject"),
+    apPhotoSummaryTags: document.querySelector("#ap-photo-summary-tags"),
+    apPhotoSummaryText: document.querySelector("#ap-photo-summary-text"),
     apDiagnosis: document.querySelector("#ap-diagnosis"),
     apComposition: document.querySelector("#ap-composition"),
     apRecipeList: document.querySelector("#ap-recipe-list"),
