@@ -1277,22 +1277,57 @@ input[type="checkbox"] {
   .upload-gallery-col { flex-basis: 220px; }
   .upload-gallery-col .demo-images-grid,
   .upload-gallery-col .demo-images-grid:has(.history-day-group) {
-    display: grid;
-    grid-template-columns: none;
-    grid-auto-flow: column;
+    /* Flex, not grid -- a CSS Grid's implicit auto-placed columns
+       (grid-auto-columns below used to live here) all share ONE track
+       width, so the day-heading label was forced to the exact same
+       tile-sized column as every photo, just to hold 2-4 characters of
+       text. Flex items size independently instead: tiles keep this fixed
+       width via their own flex-basis (see .demo-image-tile/.history-cube
+       below), while the heading gets flex:0 0 auto and shrinks to fit its
+       own text -- narrower than a tile, but never narrower than the text
+       itself needs (unlike a fixed px guess, which is too wide for "今天"
+       and too cramped for "9月10日"). */
+    display: flex;
+    align-items: stretch;
     /* Always exactly 3.2 tiles' worth of this row's own width (the .2 is
        the deliberate "next tile" peek that hints there's more to scroll
        to) -- N tiles + (N-1) gaps spanning the container's width solves to
        (container - gap*(N-1)) / N. Driven by .upload-gallery-scroll-frame's
        cqw (container-type:inline-size, set on that frame) rather than a
        fixed px guess, so it scales continuously instead of needing a
-       separate magic-number override at every narrower breakpoint. */
-    grid-auto-columns: calc((100cqw - 22px) / 3.2);
+       separate magic-number override at every narrower breakpoint. --
+       still referenced by .demo-image-tile/.history-cube's own flex-basis
+       below now that this container itself is flex, not grid. */
+    --gallery-tile-size: calc((100cqw - 22px) / 3.2);
     overflow-x: auto;
     overflow-y: hidden;
     flex: 0 0 auto;
     width: 100%;
     gap: 10px;
+  }
+  .upload-gallery-col .demo-image-tile,
+  .upload-gallery-col .history-cube {
+    flex: 0 0 var(--gallery-tile-size);
+    width: auto;
+  }
+  /* .demo-image-tile's square shape (index.html) is the classic height:0 +
+     padding-top:100% trick, not aspect-ratio -- chosen there specifically
+     to dodge a Safari bug where CSS Grid's auto row-track sizing
+     undersizes an aspect-ratio item (see that rule's own long comment).
+     That trick's percentage padding resolves against the containing
+     block's width, but which "containing block" that means differs here:
+     CSS Grid resolves it against the item's own grid-cell width, while
+     Flexbox resolves it against the whole flex CONTAINER's width instead
+     -- so now that this row is flex, not grid (see the comment above), the
+     tile's height padding was inflating to the full scrollable row width
+     (hundreds of px) instead of this one tile's ~90px column. Switching
+     to aspect-ratio here sidesteps that Flex/Grid percentage difference
+     entirely, and the original Safari grid-row-sizing bug this dodged no
+     longer applies either, since this row isn't CSS Grid anymore. */
+  .upload-gallery-col .demo-image-tile {
+    height: auto;
+    padding-top: 0;
+    aspect-ratio: 1 / 1;
   }
   .upload-gallery-col .history-day-group {
     display: contents;
@@ -1302,6 +1337,32 @@ input[type="checkbox"] {
   }
   .upload-gallery-col .history-grid {
     display: contents;
+  }
+  /* Both wrappers above go display:contents, so each day's <h3> and its
+     tiles all end up as plain siblings in the same horizontal-scrolling
+     flex row -- in DOM order that's naturally heading, that day's tiles,
+     next heading, next day's tiles, so scrolling through the strip still
+     reads as grouped by day, same information as the desktop mosaic's
+     stacked headings above each group. The heading itself still needs
+     unhiding, though: the base rule (`.history-day-heading { display:
+     none }` further up) only ever gets switched back to `block` inside
+     the >=1201px desktop media query, never here. flex:0 0 auto (not the
+     tiles' own fixed --gallery-tile-size) lets it shrink-to-fit its own
+     text -- "今天"/"昨天" narrower, "9月10日" a little wider -- instead of
+     always claiming a whole tile-sized column for 2-4 characters. */
+  .upload-gallery-col .history-day-heading {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0 6px;
+    color: var(--text-2);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: center;
+    white-space: nowrap;
   }
 }
 @media (max-width: 900px) {
