@@ -1867,8 +1867,14 @@
       /* A self-contained card, same language as .options-card/.verdict-card
          elsewhere -- previously just a border-right hairline, which still
          read as sharing the page's own background/region with the results
-         column instead of looking like its own distinct block. */
-      background: var(--card);
+         column instead of looking like its own distinct block.
+         --card-2 (not --card, unlike those two) -- on the light themes
+         (paper/lilac/caramel) --card is a near-white/pure-white value, and
+         this panel is large enough and plain enough (long list, little
+         content) that reads as the single brightest surface on the page;
+         --card-2 is the same "visibly deeper" step already used for other
+         recessed panels (.field-input/.field-ta, see below). */
+      background: var(--card-2);
       border: 1px solid var(--border);
       border-radius: var(--radius);
       box-shadow: var(--shadow-sm);
@@ -2048,6 +2054,13 @@
        shadow hugging each glyph's own edge stays legible over any content
        behind it without needing the background itself to carry the
        contrast. */
+    /* Unlike .history-cube's .rc-badge (further down), this one never sits
+       over an arbitrary photo -- it's on the flat .batch-sidebar-item row
+       background -- so it doesn't need the white-text-on-glass trick that
+       exists purely for photo-overlay legibility. Kept for the dark themes
+       (default/ocean/forest) below, where white-on-translucent-tint still
+       reads fine against this panel's own dark surface; overridden further
+       down for the light themes, where the same white text washed out. */
     .batch-sidebar-item.analyzed .rc-badge {
       background: rgba(var(--accent-rgb),.35);
       backdrop-filter: blur(6px);
@@ -2071,6 +2084,46 @@
       border: 1px solid rgba(220,60,60,.55);
       color: #fff;
       text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
+    /* Light themes: same white text over a light tint reads as washed
+       out/low-contrast, so these use a lighter tint + a solid, darker
+       version of each status color as text instead, same as .field-input's
+       own light-theme treatment elsewhere in this file.
+       :not(.history-cube) -- .batch-sidebar-item is also reused on every
+       .history-cube grid tile (renderHistoryList, app.js), whose .rc-badge
+       overlays an actual photo and still needs the white-on-glass contrast
+       trick; only the real batch-sidebar list rows (never a .history-cube)
+       should get the darker, flat-background treatment below. */
+    body[data-theme="paper"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge,
+    body[data-theme="peach"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge,
+    body[data-theme="lilac"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge,
+    body[data-theme="caramel"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge {
+      background: rgba(var(--accent-rgb),.16);
+      border-color: rgba(var(--accent-rgb),.4);
+      /* color-mix, not var(--accent) directly -- some themes' accent (e.g.
+         ocean's cyan, forest's green) is itself too light/bright to read as
+         "dark text", so this forces a darker shade of whatever the theme's
+         accent is instead of assuming it's already dark enough. */
+      color: color-mix(in srgb, var(--accent) 55%, #000);
+      text-shadow: none;
+    }
+    body[data-theme="paper"] .batch-sidebar-item.done:not(.history-cube) .rc-badge,
+    body[data-theme="peach"] .batch-sidebar-item.done:not(.history-cube) .rc-badge,
+    body[data-theme="lilac"] .batch-sidebar-item.done:not(.history-cube) .rc-badge,
+    body[data-theme="caramel"] .batch-sidebar-item.done:not(.history-cube) .rc-badge {
+      background: rgba(1,179,123,.16);
+      border-color: rgba(1,179,123,.4);
+      color: #045c3f;
+      text-shadow: none;
+    }
+    body[data-theme="paper"] .batch-sidebar-item.error:not(.history-cube) .rc-badge,
+    body[data-theme="peach"] .batch-sidebar-item.error:not(.history-cube) .rc-badge,
+    body[data-theme="lilac"] .batch-sidebar-item.error:not(.history-cube) .rc-badge,
+    body[data-theme="caramel"] .batch-sidebar-item.error:not(.history-cube) .rc-badge {
+      background: rgba(220,60,60,.16);
+      border-color: rgba(220,60,60,.4);
+      color: #8a1a1a;
+      text-shadow: none;
     }
     .rc-spinner {
       position: absolute; top: 50%; left: 50%;
