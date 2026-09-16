@@ -53,21 +53,26 @@ window.PhotoAgentDom = (() => {
     demoImagesConfirmBtn: document.querySelector("#demo-images-confirm-btn"),
     uploadGalleryTitle: document.querySelector("#upload-gallery-title"),
     uploadGalleryCol: document.querySelector(".upload-gallery-col"),
+    // Never registered here despite app.js's setUploadGalleryTab/click-wiring
+    // (app.js) reading them since the 最近照片／範例照片 tab pair was added
+    // (index.html, #upload-gallery-tabs) -- both els.* lookups silently
+    // returned undefined, so #upload-gallery-tab-sample's click listener was
+    // never attached and the tab never actually switched, no matter what CSS
+    // or layout was active.
     uploadGalleryTabRecent: document.querySelector("#upload-gallery-tab-recent"),
     uploadGalleryTabSample: document.querySelector("#upload-gallery-tab-sample"),
     recentPhotosHistoryBtn: document.querySelector("#recent-photos-history-btn"),
+    historyLoadMoreBtn: document.querySelector("#history-load-more-btn"),
     changelogBtn: document.querySelector("#changelog-btn"),
     changelogModal: document.querySelector("#changelog-modal"),
     changelogModalClose: document.querySelector("#changelog-modal-close"),
     changelogModalBody: document.querySelector("#changelog-modal-body"),
     procThumb: document.querySelector("#proc-thumb"),
     startButton: document.querySelector("#start-btn"),
-    startFullButton: document.querySelector("#start-full-btn"),
+    runModeFullRadio: document.querySelector("#run-mode-full"),
+    runModeMenu: document.querySelector("#run-mode-menu"),
     uploadInlineSettingsRow2: document.querySelector("#upload-inline-settings-row-2"),
     resetButton: document.querySelector("#reset-btn"),
-    headerActions: document.querySelector(".header-actions"),
-    // Populated by setupCompactHeaderActions (app.js) on narrow phones only.
-    headerActionsSecondary: document.querySelector("#header-actions-secondary"),
     logoHomeBtn: document.querySelector("#logo-home-btn"),
     showPromptBtn: document.querySelector("#show-prompt-btn"),
     promptsModal: document.querySelector("#prompts-modal"),
@@ -98,8 +103,6 @@ window.PhotoAgentDom = (() => {
     canvasLoadingStatus: document.querySelector("#canvas-loading-status"),
     apSubjectTags: document.querySelector("#ap-subject-tags"),
     apSubject: document.querySelector("#ap-subject"),
-    apPhotoSummaryTags: document.querySelector("#ap-photo-summary-tags"),
-    apPhotoSummaryText: document.querySelector("#ap-photo-summary-text"),
     apDiagnosis: document.querySelector("#ap-diagnosis"),
     apComposition: document.querySelector("#ap-composition"),
     apRecipeList: document.querySelector("#ap-recipe-list"),
@@ -248,7 +251,6 @@ window.PhotoAgentDom = (() => {
     sidePanelLayoutRow: document.querySelector("#side-panel-layout-row"),
     sidePanelLayoutToggle: document.querySelector("#side-panel-layout-toggle"),
     galleryCardStyleRow: document.querySelector("#gallery-card-style-row"),
-    galleryCardStyleToggle: document.querySelector("#gallery-card-style-toggle"),
     eyeClosedDetectionToggle: document.querySelector("#eye-closed-detection-toggle"),
     eyeGazeFocusToggle: document.querySelector("#eye-gaze-focus-toggle"),
     hairMessDetectionToggle: document.querySelector("#hair-mess-detection-toggle"),
@@ -300,10 +302,6 @@ window.PhotoAgentDom = (() => {
     // screen, and the processing screen has no completed result yet to
     // discard either.
     if (els.resetButton) els.resetButton.hidden = name !== "results";
-    // #changelog-btn lives in the global header too, but 版本紀錄 is only
-    // relevant while picking settings to run a new job on the upload
-    // screen -- not mid-processing or while reviewing a finished result.
-    if (els.changelogBtn) els.changelogBtn.hidden = name !== "upload";
     // #logo-home-btn resets the whole app (see resetApp, app.js) -- fine as
     // a stray click target on the upload/results screens, but analysis is
     // actively running/in-flight on the processing screen, so clicking it
