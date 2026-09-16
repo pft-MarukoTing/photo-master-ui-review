@@ -1332,7 +1332,11 @@
     .ap-review-style { height: 100%; }
     .error-modal-box.ap-style-modal-box {
       width: min(560px, calc(100vw - 40px));
-      max-height: calc(100vh - 40px);
+      /* Same --header-h + 36px trim as .error-modal's own padding-top comment
+         further down (index.html) -- this override replaces the shared
+         .error-modal-box max-height, so it has to account for that reserved
+         space itself instead of inheriting it. */
+      max-height: calc(100vh - var(--header-h) - 76px);
       display: flex;
       flex-direction: column;
       padding: 14px 16px;
@@ -2064,7 +2068,15 @@
       animation: rc-spin .8s linear infinite;
     }
     @keyframes rc-spin { to { transform: rotate(360deg); } }
-    .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    /* padding-top reserves .site-header's own height (--header-h) -- #report-btn
+       is position:fixed inside that header row at z-index:2000, above every
+       .error-modal-based popup's own z-index (1000-1002), so a modal box tall
+       enough to reach the very top of the viewport would have its own close
+       button (top of .error-modal-box) sit right where #report-btn floats and
+       get visually covered by it. Keeping the box's flex area entirely below
+       --header-h means the box can never grow into that row in the first
+       place, regardless of which modal or how much content it holds. */
+    .error-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: calc(var(--header-h) + 16px) 20px 20px; }
     .error-modal[hidden] { display: none; }
     /* #confirm-modal can be triggered from inside the history drawer (its
        delete button) -- the drawer itself sits at z-index 1001 (see
@@ -2088,6 +2100,11 @@
       position: relative; width: min(440px, calc(100vw - 40px));
       background: var(--card); border: 1px solid var(--border-2);
       border-radius: var(--radius); padding: 20px 22px; box-shadow: var(--shadow-lg);
+      /* Belt-and-suspenders alongside .error-modal's own padding-top above --
+         even wider modals (.report-screenshot-modal-box etc.) that override
+         width still can't outgrow the reserved area and creep back up under
+         #report-btn. Scrolls internally instead. */
+      max-height: 100%; overflow-y: auto;
     }
     /* Divider between the header and everything below it -- originally
        scoped to just #ap-style-modal (its own inner frame border had been
@@ -2128,7 +2145,12 @@
        would read as two competing scrollbars for what's really one list. */
     .settings-modal-body {
       display: flex; flex-direction: column; gap: 16px;
-      max-height: calc(100vh - 160px);
+      /* -160px was tuned for a modal centered in the full viewport; .error-modal
+         now also reserves --header-h + 36px up top (see its own comment) so
+         this needs the same amount trimmed off, or this inner scroll region
+         alone could still ask for more height than .error-modal-box's own
+         max-height allows and pop a second, redundant scrollbar. */
+      max-height: calc(100vh - var(--header-h) - 196px);
       overflow-y: auto;
     }
     .settings-modal-body .ap-style-item { width: 100%; }
@@ -2291,7 +2313,9 @@
        for a stable height. */
     .changelog-modal-box { width: min(480px, calc(100vw - 40px)); }
     .changelog-modal-body {
-      max-height: calc(100vh - 160px);
+      /* Same --header-h + 36px trim as .settings-modal-body above, and for
+         the same reason -- keeps this the only scrollbar inside the modal. */
+      max-height: calc(100vh - var(--header-h) - 196px);
       overflow-y: auto;
     }
     .changelog-entry + .changelog-entry {
@@ -2341,7 +2365,10 @@
        leaves), since this is meant to be read at length, not glanced at. */
     .prompts-modal-box {
       width: min(1200px, calc(100vw - 40px));
-      height: calc(100vh - 40px);
+      /* Same --header-h + 36px trim as .settings-modal-body's comment above --
+         .error-modal-box's own max-height:100% would otherwise still clip
+         this to a shorter box than the height set here asks for. */
+      height: calc(100vh - var(--header-h) - 76px);
       display: flex;
       flex-direction: column;
     }
@@ -3583,6 +3610,12 @@
        it must stay clickable so the user can actually unlock it. */
     .ap-style-item.is-locked .step-inline-list { opacity: .45; pointer-events: none; }
     .ap-style-item.is-locked > .ap-style-trigger { opacity: .7; }
+    /* Applied by applyPickerSingleOptionState (app.js) once debug-only
+       candidates are filtered out and a single visible <option> is left --
+       nothing to pick, so drop the dropdown arrow and disable the trigger
+       entirely instead of opening a panel with one, already-selected row. */
+    .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
+    .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
   </style>
 </head>
 <body>
