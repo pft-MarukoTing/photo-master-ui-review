@@ -595,6 +595,19 @@
       background: var(--card-2);
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
+      /* Full width of #ap-options-card-inline, matching #ap-analysis-shell
+         directly below it -- without this it was the only child of that
+         flex-wrap row without a width of its own, so it sized to its own
+         content and came out narrower than the card below.
+         width, deliberately NOT #ap-analysis-shell's flex-basis:100%: that
+         row turns into flex-direction:column under body.side-panel-layout
+         (styles.css), where flex-basis stops meaning width and starts
+         meaning HEIGHT -- which is why the shell needs its own explicit
+         `flex: 1 1 494px` override there. width:100% is the cross-axis
+         size in that column and is what align-items:stretch already gives
+         this card anyway, so it aligns the width in the row layout without
+         touching the height in either. */
+      width: 100%;
     }
     /* Synced with .ap-analysis-shell-title (same icon+text pairing just
        below this card) instead of a small uppercase kicker -- reads as the
