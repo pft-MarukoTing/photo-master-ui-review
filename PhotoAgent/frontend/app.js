@@ -1928,7 +1928,7 @@
     return isSidePanelLayoutEnabled() && els.resultsDetail ? els.resultsDetail : els.resultsCanvasTop;
   }
 
-  // ── 分析面板顯示於預覽右側 (side-panel-layout-toggle, #settings-modal) ───────
+  // ── 分析面板顯示於預覽右側 (side-panel-layout-toggle, #ap-settings-modal) ───────
   // A display preference, not a per-request option -- persisted client-side
   // rather than sent to the backend. When on, moveOptionsCardTo's two call
   // sites (showPendingResults/openInlineAnalysisPanel below) target
@@ -2004,16 +2004,6 @@
       // the body class below, just doesn't survive a reload.
     }
     document.body.classList.toggle("gallery-card-style", enabled);
-  }
-
-  // Shared with #ap-settings-modal the same way ensureAdvancedSettingsFoldIn
-  // (below) shares #advanced-settings-fold -- one toggle reparented into
-  // whichever 設定 modal is open, not a separate copy per page.
-  function ensureSidePanelLayoutRowIn(body) {
-    if (!els.sidePanelLayoutRow) return;
-    if (body && els.sidePanelLayoutRow.parentElement !== body) {
-      body.appendChild(els.sidePanelLayoutRow);
-    }
   }
 
   // applyDebugUiVisibility (above in this file) otherwise hides
@@ -7370,7 +7360,6 @@
   // need to reparent anything itself anymore.
   function openSettingsModal() {
     ensureTwoStageEditRowIn(els.settingsModalBody);
-    ensureSidePanelLayoutRowIn(els.settingsModalBody);
     if (els.settingsModal) els.settingsModal.hidden = false;
   }
 
@@ -7390,7 +7379,6 @@
   function openApSettingsModal() {
     ensureAdvancedSettingsFoldIn(els.apSettingsModalBody);
     ensureTwoStageEditRowIn(els.apSettingsModalBody);
-    ensureSidePanelLayoutRowIn(els.apSettingsModalBody);
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
 

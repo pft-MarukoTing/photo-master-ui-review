@@ -5492,35 +5492,6 @@
         </select>
       </label>
     </div>
-    <!-- Last in this modal's own static markup, by default -- reparenting
-         (ensureSidePanelLayoutRowIn, app.js) only ever MOVES this row into a
-         DIFFERENT parent (#ap-settings-modal-body) when that's the modal
-         actually open; it's a no-op here in #settings-modal-body, this
-         row's own original home, since it's already parented there --
-         so wherever it sits in THIS markup is exactly where it ends up on
-         screen, unlike #advanced-settings-fold above (which really does get
-         moved to the end whenever #ap-settings-modal reparents it in, just
-         not here). Shared with #ap-settings-modal the same way
-         #advanced-settings-fold above is -- one toggle, reparented into
-         whichever 設定 modal is open, not a separate copy per page.
-         Persisted client-side (localStorage, SIDE_PANEL_LAYOUT_KEY in
-         app.js) since it's a display preference, not a per-request option
-         like the pickers above -- applies immediately to an already-open
-         review panel via getOptionsCardTarget/moveOptionsCardTo, no reload
-         needed. Only changes anything at >900px width (see styles.css's
-         "side-panel layout" section) -- narrower viewports keep today's
-         stacked-below layout regardless of this toggle, same breakpoint
-         .showing-analysis already collapses at. -->
-    <label id="side-panel-layout-row" class="option-row">
-      <div class="option-text">
-        <span class="option-label">分析面板顯示於預覽右側</span>
-        <span class="option-desc">寬螢幕時，將修圖建議面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。</span>
-      </div>
-      <label class="ios-switch">
-        <input id="side-panel-layout-toggle" type="checkbox">
-        <span class="ios-track"><span class="ios-thumb"></span></span>
-      </label>
-    </label>
     <!-- Alternative arrangement for 最近照片／範例照片 (upload page, right-hand
          gallery rail) -- the格狀拼貼 mosaic grid (default) vs. a scattered,
          overlapping card stack (see "gallery-card-style" section, styles.css).
@@ -5702,6 +5673,29 @@
         </select>
       </label>
     </div>
+    <!-- Only in this modal (analyze/results page) -- the layout it controls
+         (修圖建議面板 beside vs. below the preview) only exists once analysis
+         is showing, so it doesn't belong in the upload page's #settings-modal.
+         No longer reparented between modals (ensureSidePanelLayoutRowIn used
+         to move it in from #settings-modal-body); it lives only here now,
+         permanently. Persisted client-side (localStorage, SIDE_PANEL_LAYOUT_KEY
+         in app.js) since it's a display preference, not a per-request option
+         like the pickers above -- applies immediately to an already-open
+         review panel via getOptionsCardTarget/moveOptionsCardTo, no reload
+         needed. Only changes anything at >900px width (see styles.css's
+         "side-panel layout" section) -- narrower viewports keep today's
+         stacked-below layout regardless of this toggle, same breakpoint
+         .showing-analysis already collapses at. -->
+    <label id="side-panel-layout-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">分析面板顯示於預覽右側</span>
+        <span class="option-desc">寬螢幕時，將修圖建議面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。</span>
+      </div>
+      <label class="ios-switch">
+        <input id="side-panel-layout-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
   </div>
   </div>
 </div>
