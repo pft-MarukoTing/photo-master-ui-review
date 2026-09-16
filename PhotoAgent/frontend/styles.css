@@ -865,6 +865,20 @@ body[data-theme="caramel"] .upload-gallery-col {
   background: rgba(var(--accent-rgb), .14);
   color: var(--accent);
 }
+/* Wraps #upload-gallery-tab-recent with its history button (index.html) so
+   the pair shares one flex slot -- same width/growth behavior the tab had
+   on its own, so wrapping it doesn't change desktop's equal-width tabs
+   (the history button inside is display:none outside the mobile query
+   below, where it merges into this wrapper's own pill). */
+.upload-gallery-tab-recent-group {
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.upload-gallery-tab-recent-group .upload-gallery-tab {
+  flex: 1 1 auto;
+}
 .upload-gallery-scroll-frame {
   position: relative;
   display: flex;
@@ -4941,39 +4955,46 @@ body[data-theme="caramel"] .recipe-tags {
 @media (max-width: 1200px) {
   /* Keep the resident gallery on touch layouts. This compact history action
      opens the full history dialog without replacing the visible thumbnails.
-     Floats over .upload-gallery-scroll-frame's own top-right corner (moved
-     there from .upload-gallery-heading, index.html -- that frame is already
-     position:relative) instead of sitting in the heading row, since the
-     heading is now shared with 範例照片 (setUploadGalleryTab, app.js also
-     toggles this button's [hidden] to match, so it only ever shows up over
-     最近照片's own thumbnails). */
+     Merges into the 最近照片 tab's own pill instead of sitting beside it as a
+     separate circle -- the active/hover background moves to
+     .upload-gallery-tab-recent-group (below) so both buttons inside share
+     one chip, and each button itself goes transparent so only the group's
+     background shows. :has() picks up the tab's existing .is-active/hover
+     state without app.js having to toggle anything extra. */
+  .upload-gallery-tab-recent-group {
+    border-radius: 8px;
+    transition: background .15s, color .15s;
+  }
+  .upload-gallery-tab-recent-group:has(> .upload-gallery-tab.is-active) {
+    background: rgba(var(--accent-rgb), .14);
+    color: var(--accent);
+  }
+  .upload-gallery-tab-recent-group:hover {
+    color: var(--text);
+  }
+  .upload-gallery-tab-recent-group .upload-gallery-tab.is-active {
+    background: transparent;
+    color: inherit;
+  }
   #upload-section .upload-gallery-col .recent-photos-history-btn {
     display: inline-flex;
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 2;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    flex: 0 0 auto;
+    width: 22px;
     padding: 0;
-    border: 1px solid rgba(var(--on-surface-rgb), .18);
-    border-radius: 50%;
-    /* Matches the accent-tinted .upload-gallery-heading-icon circles this
-       used to sit beside in the header row, instead of a fixed near-black
-       fill that read as a dark hole (with a barely-visible icon) on the
-       paper/peach light themes. */
-    background: rgba(var(--accent-rgb), .08);
-    color: var(--text-2);
+    margin: 4px 4px 4px 0;
+    border: 0;
+    border-left: 1px solid rgba(var(--on-surface-rgb), .16);
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
     cursor: pointer;
   }
   #upload-section .upload-gallery-col .recent-photos-history-btn[hidden] {
     display: none;
   }
   #upload-section .upload-gallery-col .recent-photos-history-btn:hover {
-    color: var(--text);
-    border-color: rgba(var(--accent-rgb), .5);
-    background: rgba(var(--accent-rgb), .14);
+    opacity: .7;
   }
 }

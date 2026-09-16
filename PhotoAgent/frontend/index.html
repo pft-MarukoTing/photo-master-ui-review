@@ -3889,16 +3889,38 @@
                  whole heading, since with two tabs on screen at once a
                  single shared icon can only ever describe one of them. -->
             <div class="upload-gallery-tabs" id="upload-gallery-tabs" role="tablist">
-              <button type="button" class="upload-gallery-tab is-active" id="upload-gallery-tab-recent" data-tab="recent" role="tab" aria-selected="true">
-                <span class="upload-gallery-tab-icon" aria-hidden="true">
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-                    <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-                    <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- Wraps the 最近照片 tab and its history action together so
+                   the two read as one merged pill (mobile/tablet only, see
+                   its own styles.css rule -- the wrapper's flex:1 1 0 keeps
+                   desktop's equal-width tab layout unchanged, since the
+                   history button itself is display:none there). They stay
+                   as two separate <button>s (can't nest a button in a
+                   button), but styles.css paints the active/hover pill on
+                   this wrapper instead of on #upload-gallery-tab-recent
+                   directly so the history icon appears to live inside the
+                   same chip as the 最近照片 label rather than as a separate
+                   item beside it. -->
+              <div class="upload-gallery-tab-recent-group">
+                <button type="button" class="upload-gallery-tab is-active" id="upload-gallery-tab-recent" data-tab="recent" role="tab" aria-selected="true">
+                  <span class="upload-gallery-tab-icon" aria-hidden="true">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                      <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                  </span>
+                  最近照片
+                </button>
+                <!-- Only shown while 最近照片 is the active tab
+                     (setUploadGalleryTab, app.js toggles [hidden]): opening
+                     歷史紀錄 only makes sense for that gallery, not 範例照片. -->
+                <button id="recent-photos-history-btn" class="recent-photos-history-btn" type="button" hidden aria-label="開啟歷史紀錄" title="開啟歷史紀錄">
+                  <svg width="15" height="15" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M14 10l4-4m0 0h-4m4 0v4M10 14l-4 4m0 0h4m-4 0v-4"
+                      stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                   </svg>
-                </span>
-                最近照片
-              </button>
+                </button>
+              </div>
               <button type="button" class="upload-gallery-tab" id="upload-gallery-tab-sample" data-tab="sample" role="tab" aria-selected="false">
                 <span class="upload-gallery-tab-icon" aria-hidden="true">
                   <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
@@ -3911,18 +3933,6 @@
             </div>
           </div>
           <div class="upload-gallery-scroll-frame">
-            <!-- Moved here from .upload-gallery-heading above -- floats over
-                 this frame's top-right corner (mobile/tablet only, see its
-                 own styles.css rule) instead of sitting in the heading row,
-                 and only while 最近照片 is the active tab (setUploadGalleryTab,
-                 app.js toggles [hidden]): opening 歷史紀錄 only makes sense for
-                 that gallery, not 範例照片. -->
-            <button id="recent-photos-history-btn" class="recent-photos-history-btn" type="button" hidden aria-label="開啟歷史紀錄" title="開啟歷史紀錄">
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M14 10l4-4m0 0h-4m4 0v4M10 14l-4 4m0 0h4m-4 0v-4"
-                  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
             <div id="demo-images-grid" class="demo-images-grid"></div>
           </div>
           <p id="demo-images-empty" class="history-empty" hidden>目前沒有可顯示的照片。</p>
