@@ -22,6 +22,33 @@ Read by default from `./.env` (override with `--env-file`), git-ignored:
 - `OPENAI_API_KEY` -- OpenAI image generation/edit/judge.
 - `AIPOC_REFRESH_TOKEN` -- internal aipoc gateway, which fronts Gemini.
 
+## Available models
+
+Confirmed working as of 2026-09-16 (OpenAI via `client.models.list()` against
+the key in `.env`; Gemini via the aipoc gateway, which has no list-models
+endpoint of its own, empirically probed one generate call per candidate name).
+
+**OpenAI** (`api_caller/openai_client.py`'s `model=` argument), newest first:
+
+- `gpt-image-2.5-sunburst` -- latest preview tier
+- `gpt-image-2.5-flare` -- latest preview tier, alternate variant
+- `gpt-image-2` -- current flagship
+- `gpt-image-1.5` -- mid tier
+- `gpt-image-1` -- **current `api_caller` default**
+- `gpt-image-1-mini` -- lightest/cheapest tier
+
+**Gemini** (`api_caller/gemini_client.py`'s `model=` argument), via the aipoc
+gateway's `gmnImgEdit` effect, newest first:
+
+- `gemini-3.1-flash-image-preview` -- **current `api_caller` default**
+- `gemini-3.1-flash-image` -- "Nano Banana 2"
+- `gemini-3.1-flash-lite-image` -- "Nano Banana 2 Lite", lighter tier
+- `gemini-2.5-flash-image` -- previous generation ("Nano Banana")
+- `gemini-2.5-flash-image-preview` -- previous generation, preview variant
+
+Override per call with `tools/cli.py --gemini-model ...` / `--openai-model
+...`, or pass `model=` directly to `generate_image`/`edit_image`/`judge_images`.
+
 ## Layout
 
 - `api_caller/` -- the actual library. Every function here is a plain,
