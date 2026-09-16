@@ -236,6 +236,12 @@
   // single-image counterpart of a batch record's mirrorIndex).
   let singleRuns = null;
   let singleMirrorIndex = null;
+  // Re-sync hook for setupCompactUploadSelectors' own wrap/compact state --
+  // set once that function runs (see its own call site below). resetApp
+  // calls this after moving #advanced-settings-fold back so the compact
+  // selector logic re-measures instead of trusting a stale "compact" flag;
+  // see the comment on that call in resetApp for the bug this fixes.
+  let refreshCompactUploadSelectors = null;
 
   // The runs array/current index/select-callback last handed to
   // updateRunSwitcher -- lets the prev/next arrows (defined once, up top,
@@ -854,6 +860,11 @@
     });
     window.addEventListener("resize", refresh);
     refresh();
+    // Exposed so resetApp can re-run this after it reparents
+    // #advanced-settings-fold back out of #ap-settings-modal-body -- that
+    // move happens outside this closure, so `compact` can go stale relative
+    // to the fold's real parent unless something forces a re-measure.
+    refreshCompactUploadSelectors = refresh;
   }
 
   // Below 560px, a shrunk .logo plus every .header-actions button (each
@@ -8965,6 +8976,23 @@
     if (timingList) timingList.innerHTML = "";
     resetSteps();
     showSection("upload");
+    // setupCompactUploadSelectors (narrow viewports) tracks its own
+    // "compact" flag and moves #advanced-settings-fold a SECOND time, into
+    // row-1 alongside its collapsed 模型設定 menu, whenever the three
+    // selector pills wrap. ensureAdvancedSettingsFoldIn above bypasses that
+    // closure entirely, so if compact mode was active before this reset,
+    // the fold lands back in row-2 while the closure still believes it's in
+    // row-1 -- row-1 then shows only the menu button and row-2 shows the
+    // fold+Run, splitting one row into two and growing
+    // #upload-inline-settings from 40px to 70px tall. Re-running the same
+    // refresh the resize handler uses re-measures and restores whichever
+    // layout (compact or expanded) actually fits now -- this has to happen
+    // AFTER showSection("upload") just above, not right after the reparent:
+    // #upload-section is still hidden (display:none, "visible" class not
+    // yet applied) until that call, and getBoundingClientRect() on hidden
+    // elements measures everything as 0, which reads as "nothing wraps" and
+    // wrongly leaves/restores the expanded (non-compact) layout.
+    refreshCompactUploadSelectors?.();
     // Reload 最近照片 from the server instead of leaving whatever the
     // gallery last happened to show -- resetApp is how the user gets back
     // to the upload page from anywhere else (Home, 清除, finishing a
