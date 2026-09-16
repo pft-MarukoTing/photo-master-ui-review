@@ -7327,7 +7327,7 @@
     caramel: "淺色・焦糖",
   };
   function applyTheme(theme, persist = true) {
-    const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "default";
+    const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "caramel";
     document.body.dataset.theme = selected;
     if (selected === "default") delete document.body.dataset.theme;
     document.querySelectorAll(".theme-option").forEach((option) => {
@@ -7343,8 +7343,8 @@
     }
   }
   function setupThemePicker() {
-    let saved = "default";
-    try { saved = localStorage.getItem(THEME_KEY) || "default"; } catch (_) { /* storage may be blocked */ }
+    let saved = "caramel";
+    try { saved = localStorage.getItem(THEME_KEY) || "caramel"; } catch (_) { /* storage may be blocked */ }
     applyTheme(saved, false);
     document.querySelectorAll(".theme-option").forEach((option) => {
       option.addEventListener("click", () => applyTheme(option.dataset.theme));
