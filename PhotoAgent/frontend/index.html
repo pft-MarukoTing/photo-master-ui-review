@@ -3586,6 +3586,21 @@
   </style>
 </head>
 <body>
+<script>
+  // Runs before the rest of <body> is parsed/painted so the saved theme
+  // applies on the very first frame -- without this, the body renders
+  // attribute-less (default/purple) until app.js runs at the bottom of the
+  // page, causing a purple-to-theme flash on every load. Fallback here must
+  // match applyTheme()/setupThemePicker() in app.js.
+  (function () {
+    try {
+      var THEME_KEYS = ["default", "ocean", "forest", "paper", "peach", "lilac", "caramel"];
+      var saved = localStorage.getItem("photomaster-theme");
+      var theme = THEME_KEYS.indexOf(saved) !== -1 ? saved : "caramel";
+      if (theme !== "default") document.body.dataset.theme = theme;
+    } catch (_) { /* storage may be blocked */ }
+  })();
+</script>
 
 <!-- ── Global Header ── -->
 <header class="site-header">
