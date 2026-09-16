@@ -1,17 +1,21 @@
 #!/usr/bin/env python3
 """pipeline.py -- generate two hand photos, transfer nail style via ComfyUI,
-judge the transfer with both Gemini and OpenAI, and append one JSONL record.
+judge the transfer, and append one JSONL record.
 
 Steps:
     1. Generate two hand photos from the same prompt via one provider
        (--provider), giving a random source hand and a random reference hand.
     2. Send them through ComfyUI's nail-transfer workflow (source gets the
        reference's nail style) via comfyui_run.run_pair.
-    3. Ask both Gemini (aipoc gateway) and OpenAI to judge whether the
-       transfer preserved the hand and matched the nail style, each
-       returning a structured {"verdict": "good"|"bad", "reason": "..."}.
-    4. Append one record (source/reference/result paths + both judges'
-       verdicts) to --log as a JSON line.
+    3. Ask OpenAI's gpt-5.5 to judge whether the transfer preserved the hand
+       and matched the nail style, returning a structured
+       {"verdict": "good"|"bad", "reason": "..."}. Single judge, not
+       Gemini+OpenAI: a 16-case comparison against human QA labels found
+       gpt-5.5 the most reliable of the models tried (see git log for this
+       file), and cheaper/faster beat the small residual accuracy gap from
+       also running a second judge.
+    4. Append one record (source/reference/result paths + the verdict) to
+       --log as a JSON line.
 
 Usage:
     conda activate apicaller
@@ -23,7 +27,6 @@ Usage:
 import argparse
 import asyncio
 import json
-import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -54,26 +57,7 @@ JUDGE_JSON_SCHEMA = {
     },
 }
 
-# Gemini (via the aipoc gateway) has no structured-output mode -- it only
-# ever returns free text (see gemini_client.judge_images). Asking it to
-# answer with nothing but a JSON object and parsing that text is the closest
-# equivalent; a genuinely malformed answer is surfaced as verdict "unparsed"
-# rather than silently dropped. This suffix is mechanical (a gateway
-# limitation), not part of the judging criteria, so it's appended in code
-# rather than living in judge_prompt.txt.
-GEMINI_JSON_ONLY_SUFFIX = (
-    "\n\n請只回傳一個 JSON 物件，不要有任何其他文字、不要用 markdown code block，"
-    '格式為 {"verdict": "good" 或 "bad", "reason": "..."}。'
-)
-
-
-def _parse_json_loose(text: str) -> dict:
-    text = text.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[1] if "\n" in text else text
-        if text.endswith("```"):
-            text = text.rsplit("```", 1)[0]
-    return json.loads(text.strip())
+JUDGE_MODEL = "gpt-5.5"
 
 
 async def generate_pair(provider: str, prompt: str, out_dir: Path, run_id: str) -> tuple[Path, Path]:
@@ -88,25 +72,14 @@ async def generate_pair(provider: str, prompt: str, out_dir: Path, run_id: str) 
     return source_path, reference_path
 
 
-async def judge_pair(source: Path, reference: Path, result: Path, judge_prompt: str) -> dict:
+def judge_pair(source: Path, reference: Path, result: Path, judge_prompt: str) -> dict:
     image_paths = [str(source), str(reference), str(result)]
-    verdicts = {}
-
     try:
-        raw = await gemini_client.judge_images(image_paths, judge_prompt + GEMINI_JSON_ONLY_SUFFIX)
-        try:
-            verdicts["gemini"] = _parse_json_loose(raw)
-        except Exception:
-            verdicts["gemini"] = {"verdict": "unparsed", "reason": raw}
+        return openai_client.judge_images_structured(
+            image_paths, judge_prompt, JUDGE_JSON_SCHEMA, model=JUDGE_MODEL
+        )
     except Exception as e:
-        verdicts["gemini"] = {"verdict": "error", "reason": str(e)}
-
-    try:
-        verdicts["openai"] = openai_client.judge_images_structured(image_paths, judge_prompt, JUDGE_JSON_SCHEMA)
-    except Exception as e:
-        verdicts["openai"] = {"verdict": "error", "reason": str(e)}
-
-    return verdicts
+        return {"verdict": "error", "reason": str(e)}
 
 
 def append_log(log_path: Path, record: dict) -> None:
@@ -138,9 +111,9 @@ async def run(args: argparse.Namespace) -> None:
     )
     print(f"  result={result_path}")
 
-    print("[3/4] judging (gemini + openai) ...")
-    verdicts = await judge_pair(source_path, reference_path, result_path, judge_prompt)
-    print(json.dumps(verdicts, ensure_ascii=False, indent=2))
+    print(f"[3/4] judging ({JUDGE_MODEL}) ...")
+    verdict = judge_pair(source_path, reference_path, result_path, judge_prompt)
+    print(json.dumps(verdict, ensure_ascii=False, indent=2))
 
     record = {
         "run_id": run_id,
@@ -150,7 +123,8 @@ async def run(args: argparse.Namespace) -> None:
         "source": str(source_path),
         "reference": str(reference_path),
         "result": str(result_path),
-        "judges": verdicts,
+        "judge_model": JUDGE_MODEL,
+        "judge": verdict,
     }
     print(f"[4/4] appending to {args.log} ...")
     append_log(args.log, record)

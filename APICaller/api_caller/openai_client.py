@@ -8,7 +8,7 @@ import os
 
 DEFAULT_MODEL = "gpt-image-1"
 DEFAULT_SIZE = "1024x1024"
-DEFAULT_JUDGE_MODEL = "gpt-4.1"
+DEFAULT_JUDGE_MODEL = "gpt-5.5"
 
 
 def generate_image(
