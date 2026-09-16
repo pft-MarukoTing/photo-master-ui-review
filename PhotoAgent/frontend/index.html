@@ -1234,6 +1234,19 @@
       box-shadow: 0 16px 40px rgba(0,0,0,.55);
       animation: fadeUp .2s ease both;
     }
+    /* The model picker's longest label ("GPT Image 2.5 Sunburst · Standard" /
+       "GPT Image 2.5 Flare · Enhanced", config.js imageModelQualityOptions)
+       outgrew the general 320px cap above once the ".5"/tier suffixes were
+       added, wrapping "· Enhanced"/"· Standard" onto their own line -- widen
+       just these two pickers' panel and keep their labels on one line. */
+    #image-model-quality-picker .ap-style-panel,
+    #ap-image-model-quality-picker .ap-style-panel {
+      max-width: 380px;
+    }
+    #image-model-quality-picker .step-cb-label,
+    #ap-image-model-quality-picker .step-cb-label {
+      white-space: nowrap;
+    }
     /* Applied by wireOptionPicker (app.js) when there isn't enough room
        below the trigger -- flips the panel to open upward instead of
        spilling past the viewport bottom. */
@@ -3581,6 +3594,11 @@
       /* Room for .batch-sidebar-close-btn (30px, inset 14px from the aside's
          edge) so a long "全部下載" label never runs underneath it. */
       .batch-sidebar-header { padding-right: 36px; }
+      /* Shrink the thumbnail so .batch-sidebar-text/.rc-badge get a bit more
+         of the drawer's already-tight width (min(220px, 68vw)) -- otherwise
+         a longer status string (e.g. "完成 (3/3)" for a multi-RUN image)
+         has too little room before its ellipsis kicks in. */
+      .batch-sidebar-item .rc-media { width: 40px; height: 40px; flex: 0 0 40px; }
     }
 
     .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 18px; }

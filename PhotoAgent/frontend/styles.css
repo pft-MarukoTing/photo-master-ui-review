@@ -719,12 +719,22 @@ body[data-theme="caramel"] .site-header {
     height: min(520px, 100%);
     max-height: 520px;
     justify-content: flex-start;
+    /* Lets .upload-headline size itself off this element's own (fixed)
+       width instead of the viewport's -- vw alone grew independently of
+       this column's capped max-width, so a wide-enough viewport could
+       size the nowrap headline past 400px and spill onto .upload-main-col
+       (the drop zone) beside it. */
+    container-type: inline-size;
   }
   .upload-content-row > .upload-main-copy .upload-headline {
     width: max-content;
     max-width: none;
     white-space: nowrap;
-    font-size: clamp(24px, 1.65vw, 30px);
+    /* cqw (this column's own width), not vw -- keeps the single-line
+       headline from ever outgrowing the column it actually has to fit in,
+       regardless of how .upload-main-copy's own width clamp changes across
+       breakpoints (see the >=1600px rule below). */
+    font-size: clamp(20px, 7cqw, 30px);
   }
   .upload-content-row > .upload-main-col,
   .upload-content-row > .upload-gallery-col {
@@ -2002,6 +2012,11 @@ body[data-theme="caramel"] .ios-thumb {
    label reads as this row's primary heading, the verdict as its detail. */
 .ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
 .ap-face-issue-row .step-cb-label { white-space: nowrap; }
+/* Run-mode selector (#run-mode-menu, "只分析..."/"一鍵到底：..."): its
+   .ap-style-panel is width:max-content up to a 320px cap, comfortably wide
+   enough for either label's natural length, so nowrap here just guarantees
+   the label never wraps rather than growing the panel. */
+#run-mode-menu .step-cb-label { white-space: nowrap; }
 /* On its own row below .ap-face-issue-row (hair/smile only), indented to
    line up under .step-cb-label (the verdict text) rather than under the
    toggle/label/icon columns before it -- 34px toggle + 10px gap + 76px
