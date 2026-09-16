@@ -74,6 +74,13 @@ Override per call with `tools/cli.py --gemini-model ...` / `--openai-model
   - `judge.py` -- free-text judging of an arbitrary set of images.
 - `nail_prompt.txt` -- the default hand/nail-art generation prompt `pipeline.py`
   and `tools/cli.py` read when no `--prompt`/`--prompt-file` is given.
+- `judge_prompt.txt` -- the default judging criteria `pipeline.py` reads
+  when no `--judge-prompt-file` is given (what counts as "good"/"bad" and
+  why). Kept external, same as `nail_prompt.txt`, so the criteria can be
+  edited or made more detailed without touching `pipeline.py`; the
+  Gemini-only "reply with nothing but JSON" instruction and the OpenAI JSON
+  schema are gateway/API mechanics, not judging criteria, so those stay in
+  `pipeline.py` and get combined with this file's text at call time.
 
 ## Usage
 
@@ -82,6 +89,10 @@ Override per call with `tools/cli.py --gemini-model ...` / `--openai-model
 python pipeline.py --provider gemini \
     --checkpoint nail_salon_lora/nail_salon_lora_20260826.safetensors \
     --comfyui-port 8450
+
+# same, with custom generation/judging criteria
+python pipeline.py --provider gemini --checkpoint ... --comfyui-port 8450 \
+    --prompt-file my_prompt.txt --judge-prompt-file my_judge_prompt.txt
 
 # ad-hoc single-step tools
 python tools/cli.py --provider both --prompt "a red bicycle on a beach" --out-dir ./out

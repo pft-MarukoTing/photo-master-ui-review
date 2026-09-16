@@ -36,18 +36,8 @@ TZ_UTC8 = timezone(timedelta(hours=8))
 HERE = Path(__file__).resolve().parent
 DEFAULT_ENV_PATH = HERE / ".env"
 DEFAULT_NAIL_PROMPT_PATH = HERE / "nail_prompt.txt"
+DEFAULT_JUDGE_PROMPT_PATH = HERE / "judge_prompt.txt"
 DEFAULT_LOG_PATH = HERE / "pipeline_log.jsonl"
-
-JUDGE_PROMPT = (
-    "IMAGE 1 = SOURCE (原始手部照片，尚未套用新指甲風格前)。\n"
-    "IMAGE 2 = REFERENCE (提供指甲風格的照片)。\n"
-    "IMAGE 3 = RESULT (經過指甲風格移植後的輸出圖)。\n\n"
-    "請評估 RESULT 是否同時符合：\n"
-    "1. 手的部分（手勢、姿勢、膚色、戒指/飾品、袖口服裝、背景）與 SOURCE 一致，沒有被改動。\n"
-    "2. 指甲的部分（形狀、顏色、圖案、亮粉/金屬箔等元素）成功換成了 REFERENCE 的風格。\n\n"
-    "只要有一項明顯不符合，verdict 就是 \"bad\"；兩項都做到才是 \"good\"。"
-    "reason 用繁體中文簡短說明理由（包含兩點各自的判斷）。"
-)
 
 JUDGE_JSON_SCHEMA = {
     "type": "json_schema",
@@ -68,8 +58,10 @@ JUDGE_JSON_SCHEMA = {
 # ever returns free text (see gemini_client.judge_images). Asking it to
 # answer with nothing but a JSON object and parsing that text is the closest
 # equivalent; a genuinely malformed answer is surfaced as verdict "unparsed"
-# rather than silently dropped.
-GEMINI_JUDGE_PROMPT = JUDGE_PROMPT + (
+# rather than silently dropped. This suffix is mechanical (a gateway
+# limitation), not part of the judging criteria, so it's appended in code
+# rather than living in judge_prompt.txt.
+GEMINI_JSON_ONLY_SUFFIX = (
     "\n\n請只回傳一個 JSON 物件，不要有任何其他文字、不要用 markdown code block，"
     '格式為 {"verdict": "good" 或 "bad", "reason": "..."}。'
 )
@@ -96,12 +88,12 @@ async def generate_pair(provider: str, prompt: str, out_dir: Path, run_id: str) 
     return source_path, reference_path
 
 
-async def judge_pair(source: Path, reference: Path, result: Path) -> dict:
+async def judge_pair(source: Path, reference: Path, result: Path, judge_prompt: str) -> dict:
     image_paths = [str(source), str(reference), str(result)]
     verdicts = {}
 
     try:
-        raw = await gemini_client.judge_images(image_paths, GEMINI_JUDGE_PROMPT)
+        raw = await gemini_client.judge_images(image_paths, judge_prompt + GEMINI_JSON_ONLY_SUFFIX)
         try:
             verdicts["gemini"] = _parse_json_loose(raw)
         except Exception:
@@ -110,7 +102,7 @@ async def judge_pair(source: Path, reference: Path, result: Path) -> dict:
         verdicts["gemini"] = {"verdict": "error", "reason": str(e)}
 
     try:
-        verdicts["openai"] = openai_client.judge_images_structured(image_paths, JUDGE_PROMPT, JUDGE_JSON_SCHEMA)
+        verdicts["openai"] = openai_client.judge_images_structured(image_paths, judge_prompt, JUDGE_JSON_SCHEMA)
     except Exception as e:
         verdicts["openai"] = {"verdict": "error", "reason": str(e)}
 
@@ -126,6 +118,8 @@ def append_log(log_path: Path, record: dict) -> None:
 async def run(args: argparse.Namespace) -> None:
     prompt_path = args.prompt_file or DEFAULT_NAIL_PROMPT_PATH
     prompt = Path(prompt_path).read_text(encoding="utf-8").strip()
+    judge_prompt_path = args.judge_prompt_file or DEFAULT_JUDGE_PROMPT_PATH
+    judge_prompt = Path(judge_prompt_path).read_text(encoding="utf-8").strip()
     run_id = datetime.now(TZ_UTC8).strftime("%Y%m%d_%H%M%S")
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -145,7 +139,7 @@ async def run(args: argparse.Namespace) -> None:
     print(f"  result={result_path}")
 
     print("[3/4] judging (gemini + openai) ...")
-    verdicts = await judge_pair(source_path, reference_path, result_path)
+    verdicts = await judge_pair(source_path, reference_path, result_path, judge_prompt)
     print(json.dumps(verdicts, ensure_ascii=False, indent=2))
 
     record = {
@@ -169,6 +163,8 @@ def main() -> None:
                          help="which provider generates the source/reference hand photos")
     parser.add_argument("--prompt-file", type=Path, default=None,
                          help="defaults to nail_prompt.txt next to this script")
+    parser.add_argument("--judge-prompt-file", type=Path, default=None,
+                         help="defaults to judge_prompt.txt next to this script")
     parser.add_argument("--checkpoint", required=True,
                          help="lora_name as ComfyUI resolves it (relative to its own models/loras/ dir)")
     parser.add_argument("--workflow", type=Path, default=DEFAULT_WORKFLOW)
