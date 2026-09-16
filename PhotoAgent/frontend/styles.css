@@ -1970,6 +1970,42 @@ body[data-theme="caramel"] .ios-thumb {
 }
 .ios-switch input:checked + .ios-track .ios-thumb { left: 21px; }
 
+/* 最近照片／範例照片排列方式 (#gallery-card-style-row, index.html): three
+   buttons need their own full-width line below the label/description, not
+   .option-row's default row layout (label left, control right) sized for a
+   single small .ios-switch. */
+#gallery-card-style-row {
+  flex-direction: column;
+  align-items: stretch;
+}
+.gallery-layout-mode-group {
+  display: flex;
+  gap: 6px;
+}
+/* Same visual language as .theme-option (a few rules up) -- a bordered pill
+   that takes on the accent color once selected -- so this reads as the same
+   kind of choice, just flex:1 across three instead of a 4-column grid. */
+.gallery-layout-mode-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: .15s ease;
+}
+.gallery-layout-mode-btn:hover { color: var(--text); border-color: var(--border-2); background: var(--card-3); }
+.gallery-layout-mode-btn.is-selected {
+  color: var(--text);
+  border-color: var(--accent);
+  background: rgba(var(--accent-rgb),.12);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.16);
+}
+
 /* #ap-face-issue-list rows: toggle slot -> issue label -> should_fix icon ->
    should_fix result label (results.js's fillFaceIssueList). Toggle switch is
    smaller than the Advanced Settings .ios-switch so it fits inline with the
@@ -4559,8 +4595,8 @@ body[data-theme="caramel"] .recipe-tags span {
   }
 }
 
-/* 最近照片／範例照片卡片散落排列 (body.gallery-card-style, #settings-modal's
-   gallery-card-style-toggle, app.js) -- an alternative to the dense mosaic
+/* 最近照片／範例照片排列方式 (body.gallery-card-style -- set by #settings-modal's
+   交錯/預設 gallery-layout-mode-btn, app.js) -- an alternative to the dense mosaic
    grid above, for the same desktop (>=1201px) right-rail gallery. Every
    selector here is the mosaic's own selector with one extra class
    (body.gallery-card-style) prefixed on, which is strictly higher

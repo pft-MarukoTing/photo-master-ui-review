@@ -1991,40 +1991,81 @@
     return isSidePanelLayoutEnabled() && els.resultsAnalysisSlot ? els.resultsAnalysisSlot : els.resultsCanvasTop;
   }
 
-  // ── 最近照片／範例照片卡片散落排列 (gallery-card-style-toggle, #settings-modal) ──
-  // Alternative arrangement for the upload page's 最近照片／範例照片 gallery --
-  // a scattered, overlapping card stack instead of the default dense mosaic
-  // grid. Same persisted-client-side display-preference pattern as
+  // ── 最近照片／範例照片排列方式 (gallery-layout-mode-btn, #settings-modal) ──
+  // Three-way layout choice for the upload page's 最近照片／範例照片 gallery:
+  // 格狀 (the dense mosaic grid), 交錯 (a scattered, overlapping card stack),
+  // or 預設, which picks between those two automatically off the same
+  // <=1200px breakpoint the two CSS skins are already scoped to. Same
+  // persisted-client-side display-preference pattern as
   // isSidePanelLayoutEnabled/setSidePanelLayoutEnabled just above: not sent
   // to the backend, just a body class (styles.css's "gallery-card-style"
   // section) that CSS-overrides the mosaic by selector specificity alone
   // (one extra class beats the mosaic's own selectors), not by removing
-  // anything -- both skins stay intact in the stylesheet, switching is just
-  // this class toggling on <body>. Applies at every width -- the desktop
-  // mosaic (>=1201px) switches to a vertical card stack, and the narrow
-  // horizontal strip (<=1200px) switches to its own horizontal card
-  // version (separate @media (max-width: 1200px) gallery-card-style
-  // block in styles.css).
+  // anything -- both skins stay intact in the stylesheet, and switching (or,
+  // in 預設, the viewport crossing 1200px) is just this class toggling on
+  // <body>. The desktop mosaic (>=1201px) switches to a vertical card stack,
+  // and the narrow horizontal strip (<=1200px) to its own horizontal card
+  // version (separate @media (max-width: 1200px) gallery-card-style block in
+  // styles.css) -- which is exactly why 預設 can defer to width: each width
+  // already has both skins defined.
   const GALLERY_CARD_STYLE_KEY = "photoagent.galleryCardStyle";
-
-  // Defaults off (today's mosaic grid) -- distinguishes "never set" (null)
-  // from an explicit "0" so an opt-out still sticks across reloads.
-  function isGalleryCardStyleEnabled() {
-    try {
-      return localStorage.getItem(GALLERY_CARD_STYLE_KEY) === "1";
-    } catch {
-      return false;
-    }
+  const GALLERY_LAYOUT_MODES = ["auto", "grid", "collage"];
+  // One shared MediaQueryList (same pattern as setupCompactHeaderActions's
+  // own `mql` above) rather than calling matchMedia() per read. Wrapped in
+  // try/catch and null-guarded everywhere below because this one runs at
+  // module scope, unlike setupCompactHeaderActions's, which sits inside a
+  // function: an exception there would cost that one feature, an exception
+  // here would abort the rest of this file's top-level evaluation and take
+  // the whole app down with it. Null just means 預設 resolves as 格狀 and
+  // stops following width -- both explicit modes, and everything else on
+  // the page, still work.
+  let galleryLayoutNarrowMql = null;
+  try {
+    galleryLayoutNarrowMql = window.matchMedia("(max-width: 1200px)");
+  } catch {
+    /* no matchMedia: 預設 falls back to 格狀, see applyGalleryLayoutMode */
   }
 
-  function setGalleryCardStyleEnabled(enabled) {
+  // Reads the persisted mode, migrating this setting's older on/off form:
+  // "1" (卡片散落排列 was on) becomes a fixed 交錯 choice, "0" (explicitly
+  // off) a fixed 格狀 one, and never-set (null) the new "auto" default -- so
+  // someone who never touched this keeps today's look at >=1201px (格狀,
+  // unchanged) and now gets 交錯 at <=1200px, which is the point of 預設.
+  function getGalleryLayoutMode() {
+    let raw = null;
+    try { raw = localStorage.getItem(GALLERY_CARD_STYLE_KEY); } catch { /* storage may be blocked */ }
+    if (raw === "1") return "collage";
+    if (raw === "0") return "grid";
+    return GALLERY_LAYOUT_MODES.includes(raw) ? raw : "auto";
+  }
+
+  // Flips the body class the CSS actually keys off. "auto" reads the current
+  // viewport against the same <=1200px breakpoint the narrow-width skin is
+  // itself scoped to, so mode switches and resizes both land on whichever
+  // skin the CSS would pick anyway.
+  function applyGalleryLayoutMode(mode) {
+    const collage = mode === "collage" || (mode === "auto" && !!galleryLayoutNarrowMql?.matches);
+    document.body.classList.toggle("gallery-card-style", collage);
+  }
+
+  function syncGalleryLayoutModeButtons(mode) {
+    document.querySelectorAll(".gallery-layout-mode-btn").forEach((btn) => {
+      const active = btn.dataset.galleryLayoutMode === mode;
+      btn.classList.toggle("is-selected", active);
+      btn.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function setGalleryLayoutMode(mode) {
+    const resolved = GALLERY_LAYOUT_MODES.includes(mode) ? mode : "auto";
     try {
-      localStorage.setItem(GALLERY_CARD_STYLE_KEY, enabled ? "1" : "0");
+      localStorage.setItem(GALLERY_CARD_STYLE_KEY, resolved);
     } catch {
       // Private-browsing/storage-disabled: falls back to session-only via
       // the body class below, just doesn't survive a reload.
     }
-    document.body.classList.toggle("gallery-card-style", enabled);
+    applyGalleryLayoutMode(resolved);
+    syncGalleryLayoutModeButtons(resolved);
   }
 
   // applyDebugUiVisibility (above in this file) otherwise hides
@@ -9688,12 +9729,28 @@
   // Same "apply immediately on load" reasoning as side-panel-layout above --
   // the upload page's gallery can already be on screen by the time the user
   // ever opens 設定.
-  document.body.classList.toggle("gallery-card-style", isGalleryCardStyleEnabled());
-  if (els.galleryCardStyleToggle) {
-    els.galleryCardStyleToggle.checked = isGalleryCardStyleEnabled();
-    els.galleryCardStyleToggle.addEventListener("change", () => {
-      setGalleryCardStyleEnabled(els.galleryCardStyleToggle.checked);
+  {
+    const initialGalleryLayoutMode = getGalleryLayoutMode();
+    applyGalleryLayoutMode(initialGalleryLayoutMode);
+    syncGalleryLayoutModeButtons(initialGalleryLayoutMode);
+    document.querySelectorAll(".gallery-layout-mode-btn").forEach((btn) => {
+      btn.addEventListener("click", () => setGalleryLayoutMode(btn.dataset.galleryLayoutMode));
     });
+    // 預設 tracks the viewport live -- crossing the 1200px breakpoint while
+    // the page is open (resizing a desktop window, rotating a tablet)
+    // re-picks 格狀/交錯 right away instead of only on the next reload.
+    // Purely an enhancement on top of the resolve-on-load above, so every
+    // branch here degrades to "updates on next load" rather than failing:
+    // addListener is the pre-Safari-14 spelling, and neither being present
+    // just means no live updates.
+    const onNarrowChange = () => {
+      if (getGalleryLayoutMode() === "auto") applyGalleryLayoutMode("auto");
+    };
+    if (galleryLayoutNarrowMql?.addEventListener) {
+      galleryLayoutNarrowMql.addEventListener("change", onNarrowChange);
+    } else if (galleryLayoutNarrowMql?.addListener) {
+      galleryLayoutNarrowMql.addListener(onNarrowChange);
+    }
   }
   // Resets to the pills-only view every time this tab is switched to --
   // same as this tab's old openStyleModal always starting there, so

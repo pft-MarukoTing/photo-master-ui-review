@@ -5551,27 +5551,38 @@
         </select>
       </label>
     </div>
-    <!-- Alternative arrangement for 最近照片／範例照片 (upload page, right-hand
-         gallery rail) -- the格狀拼貼 mosaic grid (default) vs. a scattered,
-         overlapping card stack (see "gallery-card-style" section, styles.css).
+    <!-- Layout choice for 最近照片／範例照片 (upload page, right-hand gallery
+         rail): 格狀 (the 格狀拼貼 mosaic grid) vs. 交錯 (a scattered,
+         overlapping card stack -- see "gallery-card-style" section,
+         styles.css) vs. 預設, which picks between those two automatically off
+         the same <=1200px breakpoint the two CSS skins are already scoped to,
+         so a phone gets 交錯 and a desktop 格狀 without the user choosing per
+         device. Three buttons rather than the old on/off switch: a checkbox
+         can't express "let the width decide".
          Same persisted-client-side pattern as #side-panel-layout-row above:
          a display preference, not a per-request option, applied immediately
-         on load and on change (see the gallery-card-style block in app.js),
-         no reload needed. Applies at every width: the desktop mosaic grid
-         (>=1201px) switches to the vertical overlapping card stack, and the
-         narrow single-row horizontal strip (<=1200px) switches to its own
-         horizontal overlapping card version (see the @media (max-width:
-         1200px) gallery-card-style block in styles.css). -->
-    <label id="gallery-card-style-row" class="option-row">
+         on load and on change (see the gallery-layout-mode block in app.js),
+         no reload needed. Each width already defines both skins -- the
+         desktop mosaic grid (>=1201px) has its vertical overlapping card
+         stack, and the narrow single-row horizontal strip (<=1200px) its own
+         horizontal overlapping version (see the @media (max-width: 1200px)
+         gallery-card-style block in styles.css) -- which is what lets 預設
+         defer to width at all.
+         A <div>, not the old <label>: a label wrapping three buttons has no
+         single control to activate. The id stays so #gallery-card-style-row's
+         own styling (styles.css) and els.galleryCardStyleRow (dom.js) keep
+         resolving. -->
+    <div id="gallery-card-style-row" class="option-row">
       <div class="option-text">
-        <span class="option-label">最近照片／範例照片卡片散落排列</span>
-        <span class="option-desc">開啟後，最近照片／範例照片改用卡片交錯散落的樣式呈現，取代目前的格狀拼貼。</span>
+        <span class="option-label">最近照片／範例照片排列方式</span>
+        <span class="option-desc">預設時，寬版顯示格狀拼貼、窄版顯示交錯散落的卡片；也可以固定使用其中一種樣式。</span>
       </div>
-      <label class="ios-switch">
-        <input id="gallery-card-style-toggle" type="checkbox">
-        <span class="ios-track"><span class="ios-thumb"></span></span>
-      </label>
-    </label>
+      <div class="gallery-layout-mode-group" role="group" aria-label="最近照片／範例照片排列方式">
+        <button type="button" class="gallery-layout-mode-btn" data-gallery-layout-mode="auto" aria-pressed="false">預設</button>
+        <button type="button" class="gallery-layout-mode-btn" data-gallery-layout-mode="grid" aria-pressed="false">格狀</button>
+        <button type="button" class="gallery-layout-mode-btn" data-gallery-layout-mode="collage" aria-pressed="false">交錯</button>
+      </div>
+    </div>
   </div>
   </div>
 </div>
