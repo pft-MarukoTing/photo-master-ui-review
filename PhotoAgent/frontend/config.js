@@ -41,17 +41,26 @@ window.PhotoAgentConfig = {
     "MAI-Image-2.6": "MAI-Image-2.6"
   },
   // Single source of truth for the merged 修圖模型/影像品質 selector (upload
-  // page + analyze-preview). The production picker exposes only the approved
-  // model/quality combinations below; debug-only candidates stay out of this
-  // user-facing list. MAI-Image-2.6 has no PhotoAgent quality tier, so it uses
-  // one option with quality fixed internally.
+  // page + analyze-preview). Only Sunburst · Enhanced and Flare · Standard
+  // are approved for the release picker; every other combination here
+  // (gpt-image-2's two tiers, Sunburst · Standard, Flare · Enhanced, Nano
+  // Banana 2, MAI-Image-2.6) is a debug-only candidate -- app.js's
+  // DEBUG_ONLY_IMAGE_MODELS hides them outside debug mode, so they stay
+  // listed here purely for debug-mode testing. Nano Banana 2 and
+  // MAI-Image-2.6 have no PhotoAgent quality tier, so each uses one option
+  // with quality fixed internally.
   // "Standard"/"Enhanced" (not "Low"/"Medium") describe what the two tiers
   // actually trade off -- faster/lighter vs. more detail -- without reading
   // as "worse" vs. "better" the way the raw API quality names do; `quality`
   // itself stays "low"/"medium" since that's the literal API param value.
   imageModelQualityOptions: [
+    { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard", displayLabel: "Image 2 · Standard" },
+    { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced", displayLabel: "Image 2 · Enhanced" },
+    { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Image 2.5 Sunburst·Standard" },
     { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced", displayLabel: "Image 2.5 Sunburst" },
     { value: "gpt-image-2.5-flare:low", model: "gpt-image-2.5-flare", quality: "low", label: "GPT Image 2.5 Flare · Standard", displayLabel: "Image 2.5 Flare" },
+    { value: "gpt-image-2.5-flare:medium", model: "gpt-image-2.5-flare", quality: "medium", label: "GPT Image 2.5 Flare · Enhanced", displayLabel: "Image 2.5 Flare·Enhanced" },
+    { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2" },
     { value: "MAI-Image-2.6", model: "MAI-Image-2.6", quality: "medium", label: "MAI-Image-2.6", displayLabel: "MAI-Image-2.6" }
   ],
   defaultImageModelQuality: "gpt-image-2.5-sunburst:medium",

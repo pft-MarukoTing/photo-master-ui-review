@@ -501,8 +501,44 @@
     window.PhotoAgentConfig.defaultEditorPromptStrategy || "resolved_compact";
 
   // GPT 5.6 Sol is a testbed-only analysis-model variant, not yet vetted for
-  // general use -- keep it out of the 分析模型 picker outside debug mode.
-  const DEBUG_ONLY_ANALYSIS_MODELS = ["gpt-5.6-sol"];
+  // general use, and GPT 4.1 Mini was pulled from the release picker -- keep
+  // both out of the 分析模型 picker outside debug mode.
+  const DEBUG_ONLY_ANALYSIS_MODELS = ["gpt-5.6-sol", "gpt-4.1-mini"];
+
+  // Only Sunburst · Enhanced and Flare · Standard are approved for the
+  // release 修圖模型/影像品質 picker -- every other value in
+  // config.js's imageModelQualityOptions (gpt-image-2's two tiers, Sunburst
+  // · Standard, Flare · Enhanced, Nano Banana 2, MAI-Image-2.6) is a
+  // debug-only candidate, same treatment as DEBUG_ONLY_ANALYSIS_MODELS above.
+  const DEBUG_ONLY_IMAGE_MODELS = [
+    "gpt-image-2:low",
+    "gpt-image-2:medium",
+    "gpt-image-2.5-sunburst:low",
+    "gpt-image-2.5-flare:medium",
+    "nano-banana-2",
+    "MAI-Image-2.6",
+  ];
+
+  function applyImageModelOptionLimit(select, isDebug) {
+    if (!select) return;
+    Array.from(select.options).forEach((opt) => {
+      opt.hidden = !isDebug && DEBUG_ONLY_IMAGE_MODELS.includes(opt.value);
+    });
+    if (!isDebug && DEBUG_ONLY_IMAGE_MODELS.includes(select.value)) {
+      select.value = window.PhotoAgentConfig.defaultImageModelQuality || select.value;
+    }
+  }
+
+  // Outside debug mode, filtering debug-only candidates out of 分析模型/修圖
+  // 模型 can leave exactly one visible option -- nothing left to actually
+  // choose, so mark the picker `.is-single-option` (index.html CSS drops its
+  // arrow and disables the trigger) instead of leaving an openable panel
+  // with one, already-selected row in it.
+  function applyPickerSingleOptionState(picker, select) {
+    if (!picker || !select) return;
+    const visibleCount = Array.from(select.options).filter((opt) => !opt.hidden).length;
+    picker.classList.toggle("is-single-option", visibleCount <= 1);
+  }
 
   function applyAnalysisModelOptionLimit(select, isDebug) {
     if (!select) return;
@@ -519,9 +555,12 @@
   // local checks without a real backend). isDebug=false is the shape a
   // normal user sees -- the processing-path and QA-verification rows (true
   // internal/testing knobs) and every deep-dive section (analysis breakdown,
-  // workflow steps, timing, prompts) disappear. Image quality/model stay
-  // visible in both modes -- they're choices a regular user cares about, not
-  // debug-only. Elements this hides always keep their own independent
+  // workflow steps, timing, prompts) disappear. Image quality/model choices
+  // stay visible in both modes for the approved options -- they're choices a
+  // regular user cares about, not debug-only -- except for debug-only
+  // candidates like MAI-Image-2.6 (see DEBUG_ONLY_IMAGE_MODELS above), which
+  // applyImageModelOptionLimit strips from the release picker below.
+  // Elements this hides always keep their own independent
   // show/hide logic underneath; this only ever adds an extra "and also not
   // debug" gate on top; it never replaces that logic.
   function applyDebugUiVisibility(isDebug) {
@@ -593,6 +632,12 @@
     applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebug);
     applyAnalysisModelOptionLimit(els.analysisModelSelect, isDebug);
     applyAnalysisModelOptionLimit(els.apAnalysisModelSelect, isDebug);
+    applyImageModelOptionLimit(els.imageModelQualitySelect, isDebug);
+    applyImageModelOptionLimit(els.apImageModelQualitySelect, isDebug);
+    applyPickerSingleOptionState(els.analysisModelPicker, els.analysisModelSelect);
+    applyPickerSingleOptionState(els.apAnalysisModelPicker, els.apAnalysisModelSelect);
+    applyPickerSingleOptionState(els.imageModelQualityPicker, els.imageModelQualitySelect);
+    applyPickerSingleOptionState(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
   }
 
   // Fetch the feature flag even on a ?debug page.  Debug mode may expose
@@ -930,6 +975,12 @@
   }
   populateModelQualitySelect(els.imageModelQualitySelect);
   populateModelQualitySelect(els.apImageModelQualitySelect);
+  // The options only exist now, after applyDebugUiVisibility already ran, so
+  // apply the gate here too rather than waiting for the next debug-mode change.
+  applyImageModelOptionLimit(els.imageModelQualitySelect, isDebugUiActive);
+  applyImageModelOptionLimit(els.apImageModelQualitySelect, isDebugUiActive);
+  applyPickerSingleOptionState(els.imageModelQualityPicker, els.imageModelQualitySelect);
+  applyPickerSingleOptionState(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
   wireOptionPicker(els.imageModelQualityPicker, els.imageModelQualitySelect);
   wireOptionPicker(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
   wireOptionPicker(els.apRunCountPicker, els.apRunCountSelect);
@@ -1085,6 +1136,12 @@
   }
   populateAnalysisModelSelect(els.analysisModelSelect);
   populateAnalysisModelSelect(els.apAnalysisModelSelect);
+  // The options only exist now, after applyDebugUiVisibility already ran, so
+  // apply the gate here too rather than waiting for the next debug-mode change.
+  applyAnalysisModelOptionLimit(els.analysisModelSelect, isDebugUiActive);
+  applyAnalysisModelOptionLimit(els.apAnalysisModelSelect, isDebugUiActive);
+  applyPickerSingleOptionState(els.analysisModelPicker, els.analysisModelSelect);
+  applyPickerSingleOptionState(els.apAnalysisModelPicker, els.apAnalysisModelSelect);
   wireOptionPicker(els.analysisModelPicker, els.analysisModelSelect);
   wireOptionPicker(els.apAnalysisModelPicker, els.apAnalysisModelSelect);
 
