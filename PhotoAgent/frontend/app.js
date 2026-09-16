@@ -1671,6 +1671,26 @@
   // caller still has to proceed and show whatever it's got.
   async function setImgSrcPreloaded(imgEl, src) {
     if (imgEl.src === src && imgEl.complete) return;
+    // .photo-frame shrink-wraps to whatever imgEl is currently showing (see
+    // #run-switch-loading's own doc, index.html) -- reassigning imgEl.src
+    // below collapses it to a sliver the instant the fetch starts, well
+    // before the replacement is ready, which is exactly why imgEl itself is
+    // hidden for the whole wait. That leaves nothing but .compare-card's own
+    // background showing through for however long the fetch takes, though --
+    // a clone of whatever imgEl was just displaying, absolutely positioned
+    // over the stable .photo-frame-wrap (not .photo-frame, see .compare-img's
+    // own rule for it in styles.css), keeps that old photo on screen for the
+    // whole gap instead. It's the same already-decoded image already on
+    // screen, so this costs no extra fetch even though the real result/
+    // history endpoint isn't cacheable (see below).
+    let mask = null;
+    const wrap = imgEl.closest(".photo-frame-wrap");
+    if (wrap && imgEl.complete && imgEl.currentSrc) {
+      mask = imgEl.cloneNode(true);
+      mask.removeAttribute("id");
+      mask.setAttribute("aria-hidden", "true");
+      wrap.appendChild(mask);
+    }
     imgEl.style.visibility = "hidden";
     await new Promise((resolve) => {
       imgEl.onload = () => { imgEl.onload = null; imgEl.onerror = null; resolve(); };
@@ -1678,6 +1698,7 @@
       imgEl.src = src;
     });
     imgEl.style.visibility = "";
+    if (mask) mask.remove();
   }
 
   function appendTimingRow(container, label, duration, { sub = false } = {}) {
@@ -6848,6 +6869,33 @@
     if (resultsDetailExtra) resultsDetailExtra.hidden = !revealDetailExtra;
     updateResultStatusPill(report);
 
+    // .results-canvas-row/.results-canvas-col/.results-analysis-slot all
+    // transition their own gap/flex-grow/opacity (styles.css) so a live
+    // in-page toggle (opening/closing the revise panel) eases smoothly --
+    // but opening a whole DIFFERENT historical record isn't a toggle the
+    // user asked to watch animate. no-transition (below) guards against
+    // that, same as elsewhere in this file.
+    //
+    // The bigger issue is earlier and plainer than a transition, though:
+    // showSection("results")/showBatchDoneMain (further down) make this row
+    // visible BEFORE this record's own generated/original image has finished
+    // loading and BEFORE showSingleResult/showBatchDoneMain get around to
+    // adding showing-analysis -- there's a real await in between (the image
+    // fetch). Whatever this row's state happens to be at that exact instant
+    // (no showing-analysis at all on a first-ever visit -- full width, no
+    // panel -- or still the PREVIOUS record's own layout/content on a
+    // later one) is what actually gets painted for however long that fetch
+    // takes, before a second, later paint shows the finished thing. Hiding
+    // the row via visibility (not its own `hidden` -- that would zero out
+    // layout, and drawAnalysisBoxes/updateAnalysisPreviewMaxHeight below
+    // need real measurements while this runs) keeps it fully laid out but
+    // paints nothing until it's explicitly revealed again once the new
+    // record is completely ready, further down each branch below.
+    if (els.resultsCanvasRow) {
+      els.resultsCanvasRow.classList.add("no-transition");
+      els.resultsCanvasRow.style.visibility = "hidden";
+    }
+
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
     // batch-mode layout doesn't bleed into this single-photo view.
@@ -6944,7 +6992,19 @@
       // showSingleResult itself preloads the RUN's image before painting, so
       // this doesn't return until that's done either.
       await showSingleResult({ forceReopen: true, revealDetailExtra });
-      if (historyViewToken === myToken) closeHistoryDrawer();
+      if (historyViewToken === myToken) {
+        closeHistoryDrawer();
+        // Only for the call that's still current -- a superseded one (the
+        // user picked yet another record before this one finished) would
+        // otherwise reveal this now-stale render right on top of whatever
+        // the newer call is still busy preparing behind its own hidden row.
+        if (els.resultsCanvasRow) {
+          els.resultsCanvasRow.style.visibility = "";
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+          });
+        }
+      }
       return;
     }
 
@@ -6992,7 +7052,17 @@
     applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna"));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
     applyAdvancedOptionsOption(record.result.analysis?._advanced_options);
-    if (historyViewToken === myToken) closeHistoryDrawer();
+    if (historyViewToken === myToken) {
+      closeHistoryDrawer();
+      // Only for the call that's still current -- see the local-path
+      // branch's identical guard above for why.
+      if (els.resultsCanvasRow) {
+        els.resultsCanvasRow.style.visibility = "";
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+        });
+      }
+    }
   }
 
   // Example-photo gallery (.upload-gallery-col, always visible) -- fetched
@@ -8052,6 +8122,25 @@
     if (currentBatchRecord !== null && currentBatchRecord !== record) return;
     if (historyViewToken !== guardToken) return;
 
+    // Preloaded here -- before the canvas/panel below ever reveal anything
+    // -- rather than after, like the rest of this function used to run.
+    // Awaiting it in between left the canvas showing full-width, with no
+    // analysis panel and none of this record's own content, for however
+    // long this fetch took, before a second, visibly separate repaint
+    // patched the rest in. Resolving every await up front means everything
+    // from here down runs as one uninterrupted synchronous burst, so
+    // whichever paint the browser actually shows is already the finished
+    // layout, not a partial one.
+    const hasOriginal = !!record.previewUrl;
+    if (!hasOriginal) {
+      els.originalImg.removeAttribute("src");
+    } else {
+      await setImgSrcPreloaded(els.originalImg, record.previewUrl);
+    }
+    if (record.imageUrl !== targetImageUrl) return;
+    if (currentBatchRecord !== null && currentBatchRecord !== record) return;
+    if (historyViewToken !== guardToken) return;
+
     // Skip the teardown when the canvas is already showing -- this runs
     // again every time a RUN tab is clicked (same record, just a different
     // run), and hideAllBatchMainViews' restoreAnalysisPreviewHome() would
@@ -8070,77 +8159,63 @@
     // separate live-revise-vs-read-only-preview choice below, not this.
     if (els.showPromptBtn) els.showPromptBtn.hidden = !(isDebugUiActive || settings.revealDetailExtra);
     renderRunSwitcher(record, settings);
-
-    const hasOriginal = !!record.previewUrl;
-    const applyRender = () => {
-      els.origDim.textContent = hasOriginal
-        ? `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`
-        : "-";
-      // Report the models that actually ran, same label logic as single.
-      const extraInfo = record.result["extra-info"] || {};
-      const usedImageModelLabel = extraInfo.image_model
-        ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
-        : "本機處理";
-      const usedAnalysisModelLabel = extraInfo.analysis_model
-        ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
-        : window.PhotoAgentConfig.analysisModel;
-      const usedModelLabel = isDebugUiActive
-      ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-      : "AI 智能修圖";
-      const data = {
-        image: record.imageUrl,
-        model: usedModelLabel,
-        usage: record.result.token_usage,
-        qualityCheck: record.result.quality_check,
-        localOnly: !settings.aiPhotoEditing,
-        retryCount: 0
-      };
-      // Point the zip download at the currently-viewed image, same shape the
-      // single flow sets so handleDownloadClick works here too. The extra
-      // runs field switches the download to an all-runs bundle when this
-      // image was edited more than once. sourceUrl is buildImageFiles'
-      // fallback for when there's no local File object (record.file) to read
-      // straight from -- see fetchImageDownloadData.
-      lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
-      updateDownloadLinks(record.runs);
-      renderResult({
-        data,
-        analysis: record.result.analysis,
-        preset: settings.preset,
-        imageModel: data.model,
-        hasOriginal
-      });
-      populateTimingSection(record.timings);
-      // Analysis-preview shows by default alongside the canvas -- no-ops if
-      // it's already open (e.g. just switching RUN tabs on the same record),
-      // UNLESS forceReopen (a genuine switch to a different record,
-      // selectBatchRecord/maybeAutoAdvanceToBatchResult) says otherwise --
-      // "already showing-analysis" there means the PREVIOUS record's panel,
-      // not this one's, and needs a real reopen to load this record's own
-      // recipe/style/prompt state instead of silently no-op-ing and leaving
-      // the old record's picks on screen. Read-only historical playback
-      // shows the very same panel (recipe/style picks, diagnosis) but with
-      // every control disabled and no Run/Cancel actions -- re-running a
-      // past job through this flow doesn't apply, but the information
-      // itself is exactly what's asked for. Re-rendered on every RUN switch
-      // too, since each RUN of a multi-RUN job carries its own analysis.
-      if (reviewable) {
-        openInlineAnalysisForCurrentContext(forceReopen);
-      } else {
-        renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset, expanded: true });
-        openInlineAnalysisPanel(true);
-      }
+    els.origDim.textContent = hasOriginal
+      ? `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`
+      : "-";
+    // Report the models that actually ran, same label logic as single.
+    const extraInfo = record.result["extra-info"] || {};
+    const usedImageModelLabel = extraInfo.image_model
+      ? (window.PhotoAgentConfig.imageModels[extraInfo.image_model] || extraInfo.image_model)
+      : "本機處理";
+    const usedAnalysisModelLabel = extraInfo.analysis_model
+      ? (window.PhotoAgentConfig.analysisModels[extraInfo.analysis_model] || extraInfo.analysis_model)
+      : window.PhotoAgentConfig.analysisModel;
+    const usedModelLabel = isDebugUiActive
+    ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
+    : "AI 智能修圖";
+    const data = {
+      image: record.imageUrl,
+      model: usedModelLabel,
+      usage: record.result.token_usage,
+      qualityCheck: record.result.quality_check,
+      localOnly: !settings.aiPhotoEditing,
+      retryCount: 0
     };
-    if (!hasOriginal) {
-      els.originalImg.removeAttribute("src");
+    // Point the zip download at the currently-viewed image, same shape the
+    // single flow sets so handleDownloadClick works here too. The extra
+    // runs field switches the download to an all-runs bundle when this
+    // image was edited more than once. sourceUrl is buildImageFiles'
+    // fallback for when there's no local File object (record.file) to read
+    // straight from -- see fetchImageDownloadData.
+    lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
+    updateDownloadLinks(record.runs);
+    renderResult({
+      data,
+      analysis: record.result.analysis,
+      preset: settings.preset,
+      imageModel: data.model,
+      hasOriginal
+    });
+    populateTimingSection(record.timings);
+    // Analysis-preview shows by default alongside the canvas -- no-ops if
+    // it's already open (e.g. just switching RUN tabs on the same record),
+    // UNLESS forceReopen (a genuine switch to a different record,
+    // selectBatchRecord/maybeAutoAdvanceToBatchResult) says otherwise --
+    // "already showing-analysis" there means the PREVIOUS record's panel,
+    // not this one's, and needs a real reopen to load this record's own
+    // recipe/style/prompt state instead of silently no-op-ing and leaving
+    // the old record's picks on screen. Read-only historical playback
+    // shows the very same panel (recipe/style picks, diagnosis) but with
+    // every control disabled and no Run/Cancel actions -- re-running a
+    // past job through this flow doesn't apply, but the information
+    // itself is exactly what's asked for. Re-rendered on every RUN switch
+    // too, since each RUN of a multi-RUN job carries its own analysis.
+    if (reviewable) {
+      openInlineAnalysisForCurrentContext(forceReopen);
     } else {
-      // setImgSrcPreloaded (not a bare src assignment) keeps #original-img
-      // from ever showing the browser's broken-image icon/alt text while
-      // this record's own photo is a different one than whatever was on
-      // screen before.
-      await setImgSrcPreloaded(els.originalImg, record.previewUrl);
+      renderAnalysisPreview({ analysis: record.result.analysis, preset: settings.preset, expanded: true });
+      openInlineAnalysisPanel(true);
     }
-    applyRender();
   }
 
   // Is a batch record (either already-finished, or analyzed-but-not-yet-

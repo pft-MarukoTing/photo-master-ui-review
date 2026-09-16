@@ -3058,6 +3058,22 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   max-height: 480px;
 }
 
+/* setImgSrcPreloaded's own temporary clone (app.js) -- a direct child of the
+   stable .photo-frame-wrap (never .photo-frame itself, which shrinks to a
+   sliver mid-reload, see that function's doc), sized to match wherever
+   .photo-frame img would otherwise sit at each of its own breakpoints below,
+   so the old photo it's standing in for doesn't visibly shift once removed. */
+.photo-frame-wrap > .compare-img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 480px;
+  z-index: 2;
+}
+
 /* Analysis-preview flow: #ap-options-card-inline (the review tabs + controls)
    sits stacked directly below .compare-card in the same column here (not
    beside it), so the photo's own fixed height is the main lever for how much
@@ -3071,6 +3087,9 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame img {
   max-height: 400px;
 }
+.results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame-wrap > .compare-img {
+  max-height: 400px;
+}
 
 /* Only one of the two images is ever shown at a time, switched by
    #compare-toggle-btn. */
@@ -3078,20 +3097,27 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 .compare-card.showing-generated .compare-img-original { display: none; }
 .compare-card.showing-generated .compare-img-generated { display: block; }
 
-/* Hover layer over the still-visible previous RUN/record while the next
-   one's image downloads (selectAdjacentRun/selectBatchRecord/the history-
-   list click handler, app.js) -- dims the photo and blocks clicks on it
-   rather than swapping .compare-img's src mid-download, which would
-   otherwise paint progressively right in front of the user. Anchored to
-   .photo-frame-wrap (see this element's own HTML comment for why, not
-   .photo-frame -- its own rounding, since it's no longer clipped by
-   .photo-frame's overflow:hidden. */
+/* Shared by #run-switch-loading (results page) and #dz-preview-loading
+   (upload dropzone, see its own comment in index.html) -- the dim background
+   below is only actually needed for the latter, which has no photo of its
+   own underneath to preserve while its preview decodes. #run-switch-loading
+   overrides it back to none further down. */
 .run-switch-loading {
   position: absolute;
   inset: 0;
   z-index: 3;
   border-radius: var(--radius-lg);
   background: rgba(10, 10, 14, .45);
+}
+/* Sits over the still-visible previous RUN/record while the next one's
+   image downloads (selectAdjacentRun/selectBatchRecord/the history-list
+   click handler, app.js) -- blocks clicks on it rather than swapping
+   .compare-img's src mid-download, which would otherwise paint progressively
+   right in front of the user. No background of its own -- setImgSrcPreloaded
+   (app.js) already keeps the old photo itself on screen underneath for the
+   whole wait, so this is just the spinner, not a dimming wash over it. */
+#run-switch-loading {
+  background: none;
 }
 
 /* Glass icon buttons, right-aligned in .canvas-header-row (see above).
@@ -3393,6 +3419,9 @@ body[data-theme="caramel"] .recipe-tags span {
   max-height: 100%;
 }
 .compare-card.is-fullscreen .photo-frame img {
+  max-height: 100%;
+}
+.compare-card.is-fullscreen .photo-frame-wrap > .compare-img {
   max-height: 100%;
 }
 /* #canvas-loading replaces .photo-frame-wrap outright while re-processing
