@@ -3293,10 +3293,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   letter-spacing: -.1px;
   box-shadow: 0 6px 16px rgba(0,0,0,.3);
 }
-body[data-theme="paper"] .recipe-tags,
-body[data-theme="peach"] .recipe-tags,
-body[data-theme="lilac"] .recipe-tags,
-body[data-theme="caramel"] .recipe-tags {
+/* Same flat-black-shadow-on-light-card issue as --shadow-lg/--shadow-btn
+   (see their :root comment) -- retint per light theme instead of leaving
+   this one black too. Targets .recipe-tags span, not .recipe-tags itself --
+   the box-shadow being retinted lives on each pill, not the flex container
+   wrapping them. */
+body[data-theme="paper"] .recipe-tags span,
+body[data-theme="peach"] .recipe-tags span,
+body[data-theme="lilac"] .recipe-tags span,
+body[data-theme="caramel"] .recipe-tags span {
   box-shadow: 0 6px 16px rgba(var(--on-surface-rgb),.12);
 }
 
