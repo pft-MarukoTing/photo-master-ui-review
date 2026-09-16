@@ -49,6 +49,27 @@ gateway's `gmnImgEdit` effect, newest first:
 Override per call with `tools/cli.py --gemini-model ...` / `--openai-model
 ...`, or pass `model=` directly to `generate_image`/`edit_image`/`judge_images`.
 
+### Judge models
+
+`judge_images`/`judge_images_structured` take a text/vision model, not an
+image-generation one -- a different `model=` argument than the table above.
+
+**OpenAI** (`openai_client.judge_images_structured`'s `model=`), via the
+Responses API, vision-capable and confirmed present on this key:
+
+- `gpt-5.5` / `gpt-5.4` / `gpt-5.2` -- latest flagship tier
+- `gpt-5.4-mini` / `gpt-5-mini` -- cheaper mid tier
+- `o3-pro` / `o3` / `o1-pro` -- reasoning models (slower, more scrutiny)
+- `gpt-4.1` -- **current `api_caller` default**
+- `gpt-4o` -- alternate mid tier
+- `gpt-4.1-mini` / `gpt-4o-mini` / `gpt-5-nano` -- lightest/cheapest tier
+
+**Gemini** (`gemini_client.judge_images`'s `model=`): must be one of the same
+five image-capable models listed above, not a text-only Gemini model --
+`judge_images` works by asking an image-generation model to answer in text
+instead (see the module docstring), so it needs a model that effect actually
+accepts. `gemini-3.1-flash-image-preview` is the current default.
+
 ## Layout
 
 - `api_caller/` -- the actual library. Every function here is a plain,
