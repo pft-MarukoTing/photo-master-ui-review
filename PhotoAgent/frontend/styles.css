@@ -41,6 +41,7 @@
   --shadow-sm: 0 2px 10px rgba(0,0,0,.22);
   --shadow-md: 0 12px 32px rgba(0,0,0,.32);
   --shadow-lg: 0 24px 64px rgba(0,0,0,.4);
+  --shadow-btn: 0 8px 24px rgba(0,0,0,.35);
   --shadow-accent: 0 10px 30px rgba(168,85,247,.22);
 
   --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.05) 0%, rgba(var(--on-surface-rgb),0) 40%);
@@ -101,6 +102,14 @@ body[data-theme="paper"] {
   --accent: #2563eb; --accent-2: #06b6d4; --accent-rgb: 37,99,235; --accent-2-rgb: 6,182,212;
   --mv-grad: linear-gradient(135deg, #60a5fa 0%, #2563eb 52%, #0891b2 100%);
   --bg-glow-1: rgba(37,99,235,.09); --bg-glow-2: rgba(6,182,212,.07); --shadow-accent: 0 10px 30px rgba(37,99,235,.18);
+  /* --shadow-lg/--shadow-btn stay flat rgba(0,0,0,..) in :root, tuned for
+     dark-theme cards; at that same opacity against this theme's near-white
+     card they read as a muddy gray halo instead of a soft drop shadow.
+     Tint them to the theme's own ink color (on-surface-rgb) at much lower
+     opacity instead, same idea as --shadow-accent above. */
+  --shadow-sm: 0 2px 10px rgba(var(--on-surface-rgb),.09);
+  --shadow-lg: 0 16px 40px rgba(var(--on-surface-rgb),.10);
+  --shadow-btn: 0 6px 16px rgba(var(--on-surface-rgb),.14);
 }
 /* "淺色・暖橘" -- its own full warm-cream neutral scale (not shared with
    "paper" anymore, see below), built around the brand's terracotta/gold
@@ -128,6 +137,10 @@ body[data-theme="peach"] {
   --header-bg: rgba(250,247,244,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
   --mv-grad: linear-gradient(135deg, #F3C262 0%, #E36255 52%, #BC2A1A 100%);
   --bg-glow-1: rgba(227,98,85,.09); --bg-glow-2: rgba(236,154,134,.08); --shadow-accent: 0 10px 30px rgba(227,98,85,.18);
+  /* Same light-theme shadow retint as paper above, see its comment. */
+  --shadow-sm: 0 2px 10px rgba(var(--on-surface-rgb),.09);
+  --shadow-lg: 0 16px 40px rgba(var(--on-surface-rgb),.10);
+  --shadow-btn: 0 6px 16px rgba(var(--on-surface-rgb),.14);
 }
 /* "淺色・紫丁香" -- built from a single given purple-to-pink hue sweep
    (#6a398c darkest -> #804595 -> #9c539c -> #c967a2 -> #d876a9 lightest,
@@ -164,6 +177,10 @@ body[data-theme="lilac"] {
   --header-bg: rgba(250,244,250,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
   --mv-grad: linear-gradient(135deg, #D876A9 0%, #9C539C 52%, #6A398C 100%);
   --bg-glow-1: rgba(156,83,156,.09); --bg-glow-2: rgba(201,103,162,.08); --shadow-accent: 0 10px 30px rgba(156,83,156,.18);
+  /* Same light-theme shadow retint as paper above, see its comment. */
+  --shadow-sm: 0 2px 10px rgba(var(--on-surface-rgb),.09);
+  --shadow-lg: 0 16px 40px rgba(var(--on-surface-rgb),.10);
+  --shadow-btn: 0 6px 16px rgba(var(--on-surface-rgb),.14);
 }
 /* "淺色・焦糖" -- maps almost 1:1 onto peach's own 5-role structure, just
    with every role given literally instead of half of them being terracotta/
@@ -195,6 +212,10 @@ body[data-theme="caramel"] {
   --header-bg: rgba(250,244,246,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
   --mv-grad: linear-gradient(135deg, #F9D178 0%, #D56723 52%, #8D2212 100%);
   --bg-glow-1: rgba(213,103,35,.09); --bg-glow-2: rgba(241,170,66,.08); --shadow-accent: 0 10px 30px rgba(213,103,35,.18);
+  /* Same light-theme shadow retint as paper above, see its comment. */
+  --shadow-sm: 0 2px 10px rgba(var(--on-surface-rgb),.09);
+  --shadow-lg: 0 16px 40px rgba(var(--on-surface-rgb),.10);
+  --shadow-btn: 0 6px 16px rgba(var(--on-surface-rgb),.14);
 }
 
 /* The review tabs have their own small icon palette; keep that palette in
@@ -325,6 +346,16 @@ input[type="checkbox"] {
   -webkit-backdrop-filter: blur(24px) saturate(1.4);
   border-bottom: 1px solid var(--border);
   box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+/* Same flat-black-shadow-on-light-card issue as --shadow-lg/--shadow-btn
+   (see their :root comment) -- retint per light theme instead of leaving
+   this one black too. Applies directly to the selector rather than a
+   shared var since every affected rule below has its own offset/blur. */
+body[data-theme="paper"] .site-header,
+body[data-theme="peach"] .site-header,
+body[data-theme="lilac"] .site-header,
+body[data-theme="caramel"] .site-header {
+  box-shadow: 0 8px 24px rgba(var(--on-surface-rgb),.07);
 }
 
 .header-inner {
@@ -744,6 +775,12 @@ input[type="checkbox"] {
     var(--card);
   box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.04), 0 16px 34px rgba(0,0,0,.12);
 }
+body[data-theme="paper"] .upload-gallery-col,
+body[data-theme="peach"] .upload-gallery-col,
+body[data-theme="lilac"] .upload-gallery-col,
+body[data-theme="caramel"] .upload-gallery-col {
+  box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.04), 0 16px 34px rgba(var(--on-surface-rgb),.05);
+}
 .upload-gallery-heading {
   display: flex;
   align-items: center;
@@ -952,6 +989,12 @@ input[type="checkbox"] {
   box-shadow: 0 8px 20px rgba(0,0,0,.18);
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
 }
+body[data-theme="paper"] .upload-gallery-col .history-cube,
+body[data-theme="peach"] .upload-gallery-col .history-cube,
+body[data-theme="lilac"] .upload-gallery-col .history-cube,
+body[data-theme="caramel"] .upload-gallery-col .history-cube {
+  box-shadow: 0 8px 20px rgba(var(--on-surface-rgb),.07);
+}
 .upload-gallery-col .demo-image-tile {
   border: 0;
 }
@@ -988,6 +1031,12 @@ input[type="checkbox"] {
   border-color: rgba(var(--accent-soft-rgb),.75);
   box-shadow: 0 10px 24px rgba(0,0,0,.28), 0 0 0 1px rgba(var(--accent-rgb),.16);
   transform: translateY(-2px);
+}
+body[data-theme="paper"] .upload-gallery-col .history-cube:hover,
+body[data-theme="peach"] .upload-gallery-col .history-cube:hover,
+body[data-theme="lilac"] .upload-gallery-col .history-cube:hover,
+body[data-theme="caramel"] .upload-gallery-col .history-cube:hover {
+  box-shadow: 0 10px 24px rgba(var(--on-surface-rgb),.12), 0 0 0 1px rgba(var(--accent-rgb),.16);
 }
 .upload-gallery-col .history-cube .rc-media::after {
   content: "";
@@ -1039,6 +1088,12 @@ input[type="checkbox"] {
     linear-gradient(145deg, rgba(var(--on-surface-rgb),.04), rgba(var(--on-surface-rgb),.012) 48%, rgba(var(--accent-rgb),.025)),
     var(--card);
   box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.04), 0 16px 34px rgba(0,0,0,.14);
+}
+body[data-theme="paper"] .upload-main-col,
+body[data-theme="peach"] .upload-main-col,
+body[data-theme="lilac"] .upload-main-col,
+body[data-theme="caramel"] .upload-main-col {
+  box-shadow: inset 0 1px 0 rgba(var(--on-surface-rgb),.04), 0 16px 34px rgba(var(--on-surface-rgb),.06);
 }
 .upload-main-col > .upload-left {
   width: 100% !important;
@@ -1903,6 +1958,12 @@ label.option-row:hover { background: rgba(var(--on-surface-rgb),.025); }
   box-shadow: 0 1px 4px rgba(0,0,0,.3);
   transition: left .22s cubic-bezier(.4,0,.2,1);
   display: block;
+}
+body[data-theme="paper"] .ios-thumb,
+body[data-theme="peach"] .ios-thumb,
+body[data-theme="lilac"] .ios-thumb,
+body[data-theme="caramel"] .ios-thumb {
+  box-shadow: 0 1px 4px rgba(var(--on-surface-rgb),.18);
 }
 .ios-switch input:checked + .ios-track .ios-thumb { left: 21px; }
 
@@ -3004,7 +3065,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: var(--text);
   cursor: pointer;
   transition: background .2s, border-color .2s, transform .2s, box-shadow .2s;
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  box-shadow: var(--shadow-btn);
 }
 .canvas-btn:hover {
   background: rgba(var(--accent-rgb),.4);
@@ -3042,7 +3103,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   background: rgba(var(--glass-rgb),.92);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  box-shadow: var(--shadow-btn);
 }
 .download-menu-item {
   padding: 8px 10px;
@@ -3153,6 +3214,12 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   letter-spacing: -.1px;
   box-shadow: 0 6px 16px rgba(0,0,0,.3);
 }
+body[data-theme="paper"] .recipe-tags,
+body[data-theme="peach"] .recipe-tags,
+body[data-theme="lilac"] .recipe-tags,
+body[data-theme="caramel"] .recipe-tags {
+  box-shadow: 0 6px 16px rgba(var(--on-surface-rgb),.12);
+}
 
 /* Prev/next arrows for switching between this photo's N edit RUNs -- float
    over the left/right edges of the photo itself instead of a separate strip
@@ -3177,7 +3244,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
   color: var(--text);
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  box-shadow: var(--shadow-btn);
   transition: background .2s, border-color .2s, transform .2s;
 }
 .photo-switch-arrow:hover { background: rgba(var(--accent-rgb),.4); border-color: rgba(var(--accent-rgb),.55); }
