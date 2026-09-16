@@ -2324,6 +2324,13 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: var(--text-2);
   line-height: 1.6;
   max-width: 440px;
+  /* startProcSubRotation (app.js) rewrites this text every 5s, cycling
+     through phrasings of very different lengths -- without a reserved
+     height, each swap reflows .proc-top's height and the whole card
+     visibly grows/shrinks as .proc-wrap re-centers it. 3 lines covers the
+     longest rotating message (model name + RUN-count progress) at mobile
+     widths. */
+  min-height: 4.8em;
 }
 
 /* ════════════════════════════════════════
@@ -2460,6 +2467,18 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 }
 @media (max-width: 900px) {
   .results-canvas-row { flex-direction: column; }
+  /* .results-canvas-col's own align-self:center (base rule, above) exists to
+     vertically center it in the normal side-by-side ROW layout -- once this
+     media query flips .results-canvas-row to a COLUMN, that same align-self
+     governs the CROSS axis instead, which is now horizontal. Without an
+     explicit width, the column shrink-wraps to its content instead of
+     stretching, then centers -- invisible for a real photo (whose frame
+     already hugs the image's own width) but very visible for #canvas-loading,
+     whose only content is rotating status text: every ~5s
+     (startProcSubRotation, app.js) that text's length changes, so the whole
+     .compare-card visibly grew/shrank and re-centered with it. Only needed
+     outside .showing-analysis -- that case already forces width:100% below. */
+  .results-canvas-col { width: 100%; }
   .results-canvas-row.showing-analysis .results-canvas-col,
   .results-canvas-row.showing-analysis .results-analysis-slot { flex-basis: auto; width: 100%; }
   /* #batch-sidebar no longer gets a width:100% override here -- that was
