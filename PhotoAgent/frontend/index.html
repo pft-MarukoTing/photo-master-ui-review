@@ -3650,8 +3650,13 @@
       /* Shrink the thumbnail so .batch-sidebar-text/.rc-badge get a bit more
          of the drawer's already-tight width (min(220px, 68vw)) -- otherwise
          a longer status string (e.g. "完成 (3/3)" for a multi-RUN image)
-         has too little room before its ellipsis kicks in. */
-      .batch-sidebar-item .rc-media { width: 40px; height: 40px; flex: 0 0 40px; }
+         has too little room before its ellipsis kicks in.
+         :not(.history-cube) -- .batch-sidebar-item is also reused on every
+         .history-cube grid tile (renderHistoryList, app.js), whose own
+         .rc-media is absolutely positioned to fill the whole square tile
+         (inset:0, width/height:100%); this fixed 40x40 box would collapse
+         that photo into a tiny corner instead of the intended full square. */
+      .batch-sidebar-item:not(.history-cube) .rc-media { width: 40px; height: 40px; flex: 0 0 40px; }
     }
 
     .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 18px; }
