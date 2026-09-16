@@ -4220,35 +4220,18 @@
                  portrait-settings fold is inserted into this row by app.js. -->
             <div class="upload-inline-settings-row-2" id="upload-inline-settings-row-2">
             <div class="split-run">
-              <button id="start-btn" class="btn btn-grad split-main" type="button">
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" class="lbl-analyze">
+              <button id="start-btn" class="btn btn-grad split-main" type="button" title="分析完成後會先暫停，讓你確認、調整，再手動繼續修圖">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.06-1.06-4.75-4.75A6 6 0 0010 4zm0 1.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z"/>
                 </svg>
-                <span class="lbl-analyze">分析</span>
-                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24" class="lbl-full">
+                <span>分析</span>
+              </button>
+              <button id="start-full-btn" class="btn btn-grad split-secondary" type="button" title="分析完成後，直接修圖並顯示結果">
+                <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z"/>
                 </svg>
-                <span class="lbl-full">修圖</span>
+                <span>一鍵修圖</span>
               </button>
-              <details id="run-mode-menu" class="split-menu ap-style-item">
-                <summary title="切換 Run 要執行的流程">▾</summary>
-                <div class="step-list-frame ap-style-panel">
-                  <ul class="step-inline-list">
-                    <li>
-                      <label>
-                        <span class="step-cb"><input type="radio" name="run-mode" id="run-mode-analyze" value="analyze" checked><span class="step-cb-box"></span></span>
-                        <span class="step-cb-label">只分析，稍後手動確認再修圖</span>
-                      </label>
-                    </li>
-                    <li>
-                      <label>
-                        <span class="step-cb"><input type="radio" name="run-mode" id="run-mode-full" value="full"><span class="step-cb-box"></span></span>
-                        <span class="step-cb-label">一鍵到底：分析＋修圖</span>
-                      </label>
-                    </li>
-                  </ul>
-                </div>
-              </details>
             </div>
             </div>
           </div>

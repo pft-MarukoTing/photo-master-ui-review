@@ -1197,8 +1197,7 @@ body[data-theme="caramel"] .upload-main-col {
   height: 30px;
   border-radius: 15px 0 0 15px;
 }
-.upload-main-col .upload-actions-row .split-menu > summary {
-  width: 24px;
+.upload-main-col #start-full-btn.split-secondary {
   height: 30px;
   border-radius: 0 15px 15px 0;
 }
@@ -1256,16 +1255,8 @@ body[data-theme="caramel"] .upload-main-col {
   .upload-main-col #upload-inline-settings-row-2 > #advanced-settings-fold {
     width: fit-content;
   }
-  /* Stretched to fill column 3 (not just its own natural content width) so
-     it lines up with 長寬比 (image-aspect-ratio-picker) directly above it,
-     same as #advanced-settings-fold matching 分析模型's column. #start-btn
-     grows to fill the extra room since .split-menu's own 24px chevron stays
-     fixed-width. */
   .upload-main-col #upload-inline-settings-row-2 > .split-run {
     width: fit-content;
-  }
-  .upload-main-col #upload-inline-settings-row-2 > .split-run #start-btn.split-main {
-    flex: 1 1 auto;
   }
 }
 @media (min-width: 1101px) {
@@ -1470,18 +1461,27 @@ body[data-theme="caramel"] .upload-main-col {
     max-width: 100%;
     box-sizing: border-box;
     justify-self: stretch;
-    flex-wrap: nowrap;
-    gap: 4px;
+    /* Grid, not flex -- flex-basis:100% could force .split-run onto its own
+       row but always stretched it to fill that row's full width, since
+       flex's own shrink/grow math has nothing narrower to settle on once
+       basis is 100%. Grid placement (grid-column below) separates "which
+       row" from "how wide": .split-run spans both columns (its own row,
+       guaranteed) while justify-self:center keeps it sized to its own
+       content instead of stretching across the span. */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    column-gap: 4px;
+    row-gap: 8px;
+    align-items: center;
   }
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold {
-    flex: 1 1 0;
     min-width: 0;
     max-width: 100%;
   }
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run {
-    flex: 0 1 auto;
-    max-width: 100%;
+    grid-column: 1 / -1;
+    justify-self: center;
   }
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) .ap-style-trigger {
     min-width: 0;
@@ -1530,24 +1530,21 @@ body[data-theme="caramel"] .upload-main-col {
   gap: 14px;
 }
 
-/* Run split-button (#start-btn + its mode menu, index.html) -- replaces the
-   old single Run button with #one-shot-toggle stacked above it (a small
-   label + switch that was easy to miss, so it wasn't obvious the button's
-   own behavior depended on it). #start-btn (.btn.btn-grad.split-main) is
-   always the button you actually click to run; the chevron beside it just
-   opens a menu that sets WHICH of the two flows that is, and #start-btn's
-   own icon/label swap immediately to name it, via :has() below -- no JS
-   needed to keep the button in sync with the menu's pick. #start-btn keeps
-   its normal .btn/.btn-grad classes (not a bespoke size/color of its own)
-   so it still shrinks at every .upload-actions-row .btn breakpoint below --
-   .split-menu's own chevron half is kept in sync with those same
-   breakpoints right after each one, since it isn't a .btn itself but still
-   has to match #start-btn's height to read as one connected control. */
+/* Run split-button (#start-btn + #start-full-btn, index.html) -- two
+   distinct actions living in one connected pill: #start-btn (分析) runs the
+   analyze-then-pause-for-review flow, #start-full-btn (一鍵修圖) runs
+   analyze+edit in one click with no pause. Both keep their normal
+   .btn/.btn-grad classes (not a bespoke size/color of their own) so they
+   still shrink together at every .upload-actions-row .btn breakpoint below. */
 /* Paint the gradient once on the shared outer box and keep both halves
    transparent, so the connected control has one continuous surface. */
 .split-run {
   position: relative;
-  display: inline-flex;
+  /* Grid, not flex -- an equal 1fr/1fr split forces both buttons to the same
+     width (driven by whichever label is wider, 一鍵修圖 in practice) at every
+     breakpoint, instead of each button just sizing to its own text. */
+  display: inline-grid;
+  grid-template-columns: 1fr 1fr;
   height: 41px;
   border-radius: 20px;
   background: var(--mv-grad);
@@ -1564,12 +1561,13 @@ body[data-theme="caramel"] .upload-main-col {
   box-shadow: 0 14px 36px rgba(var(--accent-rgb),.34);
   transform: translateY(-1px);
 }
-/* #start-btn.split-main (not just .split-main) -- .btn/.btn-grad's own
-   rules (further down) share .split-main's specificity (one class each) and
-   come later in the file, so they were winning the cascade back. The id
-   bump makes this win regardless of source order: the shared split-run
-   gradient shows through and only the outer left corners are rounded, while
-   hover lift is handled by the whole control above. */
+/* #start-btn.split-main / #start-full-btn.split-secondary (not just the bare
+   classes) -- .btn/.btn-grad's own rules (further down) share their
+   specificity (one class each) and come later in the file, so they were
+   winning the cascade back. The id bump makes this win regardless of source
+   order: the shared split-run gradient shows through and only each button's
+   own outer corner is rounded, while hover lift is handled by the whole
+   control above. */
 #start-btn.split-main {
   height: 41px;
   background: transparent;
@@ -1580,38 +1578,19 @@ body[data-theme="caramel"] .upload-main-col {
   box-shadow: none;
   transform: none;
 }
-/* Defaults to showing "分析" (#run-mode-analyze, checked by default in
-   index.html) -- flips to the one-shot label/icon only once
-   #run-mode-full is the checked radio inside this same .split-run. */
-.split-main .lbl-full { display: none; }
-.split-run:has(#run-mode-full:checked) .split-main .lbl-full { display: inline; }
-.split-run:has(#run-mode-full:checked) .split-main .lbl-analyze { display: none; }
-.split-menu { position: relative; }
-.split-menu > summary {
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
+#start-full-btn.split-secondary {
   height: 41px;
+  background: transparent;
+  box-shadow: none;
   border-radius: 0 20px 20px 0;
-  color: #fff;
-  cursor: pointer;
   /* A subtle divider keeps the two click targets readable while the shared
      outer background makes them one connected button. */
   border-left: 1px solid rgba(var(--on-surface-rgb),.25);
 }
-.split-menu > summary::-webkit-details-marker,
-.split-menu > summary::marker { display: none; content: ''; }
-/* Reuses .ap-style-item/.ap-style-panel's floating-panel chrome (index.html)
-   for the mode list itself -- only the anchor side needs overriding: the
-   shared rule anchors a panel's LEFT edge to its own (usually much wider)
-   trigger, but here the trigger is this narrow 32px chevron sitting at the
-   split-button's right end, so left:0 would run the panel off past the
-   button toward the row's own right edge (.upload-actions-row right-aligns
-   this whole control). Anchoring the panel's right edge instead keeps it
-   fully on-screen, hanging down-left of the chevron. */
-.split-menu.ap-style-item .ap-style-panel { left: auto; right: 0; }
+#start-full-btn.split-secondary:hover {
+  box-shadow: none;
+  transform: none;
+}
 
 /* Drop zone -- flex:1 makes it the piece that grows/shrinks to fill
    .upload-grid's remaining space; min-height is just the floor for very
@@ -2012,11 +1991,6 @@ body[data-theme="caramel"] .ios-thumb {
    label reads as this row's primary heading, the verdict as its detail. */
 .ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
 .ap-face-issue-row .step-cb-label { white-space: nowrap; }
-/* Run-mode selector (#run-mode-menu, "只分析..."/"一鍵到底：..."): its
-   .ap-style-panel is width:max-content up to a 320px cap, comfortably wide
-   enough for either label's natural length, so nowrap here just guarantees
-   the label never wraps rather than growing the panel. */
-#run-mode-menu .step-cb-label { white-space: nowrap; }
 /* On its own row below .ap-face-issue-row (hair/smile only), indented to
    line up under .step-cb-label (the verdict text) rather than under the
    toggle/label/icon columns before it -- 34px toggle + 10px gap + 76px
@@ -3986,10 +3960,11 @@ body[data-theme="caramel"] .recipe-tags span {
   .upload-actions-row { gap: 8px; }
   .upload-actions-row .btn { height: 40px; padding: 0 14px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 18px; height: 18px; }
-  /* .split-menu's chevron isn't a .btn, but has to match #start-btn's own
-     height at every tier above (it sits flush against it) to still read as
-     one connected control instead of a taller sliver bolted on. */
-  .upload-actions-row .split-menu > summary { height: 40px; }
+  /* Below this width, Run (.split-run, two labeled buttons now instead of
+     one button + a narrow chevron) is wide enough that keeping it beside
+     the 人像修正設定 pill left too little room for either -- stack them
+     instead, pill on its own first row, Run pushed down to a second row. */
+  #upload-inline-settings-row-2 { flex-direction: column; }
 
   .wf-step { grid-template-columns: 36px minmax(0,1fr); gap: 12px; }
   .wf-num { width: 36px; height: 36px; font-size: 17.5px; }
@@ -4012,7 +3987,6 @@ body[data-theme="caramel"] .recipe-tags span {
 @media (max-width: 380px) {
   .upload-actions-row .btn { height: 36px; padding: 0 10px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 16px; height: 16px; }
-  .upload-actions-row .split-menu > summary { height: 36px; }
 }
 
 /* Short viewports (small/un-maximized browser windows, not just narrow
@@ -4041,7 +4015,6 @@ body[data-theme="caramel"] .recipe-tags span {
      doesn't also shrink unrelated buttons elsewhere in the app. */
   .upload-actions-row .btn { height: 36px; padding: 0 16px; font-size: 15px; gap: 5px; }
   .upload-actions-row .btn svg { width: 18px; height: 18px; }
-  .upload-actions-row .split-menu > summary { height: 36px; }
 
   /* Results page, inline revise flow: .compare-card's photo-frame is a
      fixed 480px (see styles.css above) so once #ap-options-card-inline is
@@ -4159,7 +4132,6 @@ body[data-theme="caramel"] .recipe-tags span {
   #dz-preview { min-height: 130px; }
   .upload-actions-row .btn { height: 30px; padding: 0 12px; font-size: 13px; gap: 4px; }
   .upload-actions-row .btn svg { width: 15px; height: 15px; }
-  .upload-actions-row .split-menu > summary { height: 30px; }
 }
 
 /* Landscape phones/small tablets (narrow width *and* short height at once):
@@ -4190,7 +4162,6 @@ body[data-theme="caramel"] .recipe-tags span {
   #dz-preview { min-height: 50px; }
   .upload-actions-row .btn { height: 24px; padding: 0 10px; font-size: 12px; gap: 3px; }
   .upload-actions-row .btn svg { width: 14px; height: 14px; }
-  .upload-actions-row .split-menu > summary { height: 24px; }
 }
 
 /* Upload workspace visual refinement

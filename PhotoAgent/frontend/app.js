@@ -3966,6 +3966,7 @@
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
+    if (els.startFullButton) els.startFullButton.disabled = true;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
@@ -4055,6 +4056,7 @@
       if (els.analysisPreview) els.analysisPreview.hidden = true;
     } finally {
       els.startButton.disabled = false;
+      if (els.startFullButton) els.startFullButton.disabled = false;
       // Only a safety net for an abandoned pending-review (e.g. an error
       // thrown while showPendingResults/waitForPendingResultsAction was still
       // in play) -- the normal "continue" path already calls this itself
@@ -4675,6 +4677,7 @@
     };
 
     els.startButton.disabled = true;
+    if (els.startFullButton) els.startFullButton.disabled = true;
     resetSteps(); // clears completedTimings so each run's total starts fresh
     const uploadedAt = Date.now() / 1000;
     batchRecords.forEach((r) => {
@@ -4802,6 +4805,7 @@
       }
     } finally {
       els.startButton.disabled = false;
+      if (els.startFullButton) els.startFullButton.disabled = false;
     }
   }
 
@@ -5865,8 +5869,8 @@
           jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch(() => ({ status: "error" })))
         );
         // job.stage === "analyze" (see api.py's /analyze, account.py's
-        // record_history) -- a paused-for-review upload (Run's own
-        // #run-mode-analyze picked, see .split-run in index.html) that
+        // record_history) -- a paused-for-review upload (#start-btn's own
+        // analyze-only flow, see .split-run in index.html) that
         // hasn't been continued past yet. Its one job_id's own "success"
         // means "analysis ready", not "edit done", so it needs its own
         // badge/handler instead of falling into the done/processing checks
@@ -6517,7 +6521,7 @@
     return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
   }
 
-  // Resumes a paused-for-review upload (Run's own #run-mode-analyze picked)
+  // Resumes a paused-for-review upload (#start-btn's own analyze-only flow)
   // that had only reached /analyze last time the history list was fetched --
   // job.stage ===
   // "analyze" flags this (see api.py's /analyze, account.py's
@@ -9046,6 +9050,7 @@
     // clicking continue (waitForPendingResultsAction's promise is left
     // pending), so re-enable Start explicitly here too.
     els.startButton.disabled = false;
+    if (els.startFullButton) els.startFullButton.disabled = false;
     if (timingDetails) timingDetails.hidden = true;
     if (timingList) timingList.innerHTML = "";
     resetSteps();
@@ -9451,33 +9456,8 @@
     const fold = els.advancedSettingsFold;
     if (fold && fold.open && !fold.contains(e.target)) fold.open = false;
   });
-  els.startButton.addEventListener("click", () => startSubmit({ skipReview: els.runModeFullRadio ? els.runModeFullRadio.checked : false }));
-  // #run-mode-analyze/#run-mode-full (the split-menu's own two radios) pick
-  // Run's flow. Two things need to happen on every pick, neither of which
-  // wireOptionPicker provides here since this is a fixed 2-item list, not a
-  // <select>-backed picker built through it: close the panel (native
-  // details/summary only does that for a re-click on the summary itself,
-  // same reason a click anywhere else on the page needs its own listener
-  // below), and refresh Run's tooltip (its icon/label already stay in sync
-  // via the :has() rules in styles.css, but a title attribute can't be
-  // driven by CSS).
-  if (els.runModeMenu && els.runModeFullRadio) {
-    const updateRunButtonTitle = () => {
-      els.startButton.title = els.runModeFullRadio.checked
-        ? "分析完成後，直接修圖並顯示結果"
-        : "分析完成後會先暫停，讓你確認、調整，再手動繼續修圖";
-    };
-    document.querySelectorAll('input[name="run-mode"]').forEach((radio) => {
-      radio.addEventListener("change", () => {
-        els.runModeMenu.open = false;
-        updateRunButtonTitle();
-      });
-    });
-    document.addEventListener("click", (e) => {
-      if (els.runModeMenu.open && !els.runModeMenu.contains(e.target)) els.runModeMenu.open = false;
-    });
-    updateRunButtonTitle();
-  }
+  els.startButton.addEventListener("click", () => startSubmit({ skipReview: false }));
+  if (els.startFullButton) els.startFullButton.addEventListener("click", () => startSubmit({ skipReview: true }));
   els.showPromptBtn.addEventListener("click", openPromptsModal);
   if (els.promptsModalClose) els.promptsModalClose.addEventListener("click", closePromptsModal);
   if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.addEventListener("click", togglePromptsModalImageCompare);
