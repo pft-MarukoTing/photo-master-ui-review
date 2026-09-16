@@ -2185,6 +2185,13 @@
   async function runPendingReviewFlow(analysis, preset) {
     await showPendingResults(analysis, preset);
     await waitForPendingResultsAction();
+    // Always proceeds straight into #canvas-loading below (no "cancel" branch
+    // here, unlike closeInlineAnalysisPanel's callers) -- skip
+    // .results-canvas-row's panel-close animation (styles.css) since there's
+    // no photo on screen for it to slide/grow against; removed again once
+    // canvas-loading is actually showing so a later, normal panel toggle
+    // still animates.
+    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("no-transition");
     closePendingResults();
     setStepIndicatorStep(3, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
     // Same "editing" loading overlay backToProcessFromResults' revise flow
@@ -2194,6 +2201,11 @@
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
+    if (els.resultsCanvasRow) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+      });
+    }
     try {
       await finishSingleFlow();
     } finally {
@@ -4579,6 +4591,13 @@
     updateInlineAnalysisContinueBtnState();
 
     const action = await waitForInlineAnalysisAction();
+    // Closing straight into #canvas-loading (below) rather than back onto
+    // the photo -- skip .results-canvas-row's panel-close animation (styles.
+    // css) here, since there's no photo on screen for it to slide/grow
+    // against. The cancel branch below stays on the photo, so it keeps the
+    // animation; removed again (finally block below) once canvas-loading is
+    // actually showing, so a later, normal panel toggle still animates.
+    if (action !== "cancel" && els.resultsCanvasRow) els.resultsCanvasRow.classList.add("no-transition");
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Preserve unsent local review edits for the next time the panel is
@@ -4610,6 +4629,16 @@
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = false;
+    if (els.resultsCanvasRow) {
+      // Two rAFs: the first lets the browser commit the instant
+      // (transition-suppressed) layout the panel close + the hidden flips
+      // above just produced; only then is it safe to remove "no-transition"
+      // without a later, real panel toggle picking up this same instant
+      // jump instead of its own animation.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+      });
+    }
     try {
       await finishSingleFlow();
     } catch (error) {

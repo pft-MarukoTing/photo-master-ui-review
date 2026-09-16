@@ -2362,6 +2362,18 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   gap: 0;
   transition: gap .4s cubic-bezier(.4,0,.2,1);
 }
+/* Applied for one frame (app.js) right when the inline analysis panel closes
+   straight into #canvas-loading (starting an edit run) instead of back onto
+   the photo -- there's nothing on screen for the panel-close animation
+   (this row's own gap, plus .results-canvas-col/.results-analysis-slot's
+   flex-grow, below) to slide/grow into, so it just reads as the whole
+   compare-card sliding in from the left. The normal cancel-back-to-photo
+   close keeps the animation. */
+.results-canvas-row.no-transition,
+.results-canvas-row.no-transition .results-canvas-col,
+.results-canvas-row.no-transition .results-analysis-slot {
+  transition: none;
+}
 /* Pinned to .results-canvas-row's own top-right corner (not the photo frame
    underneath) -- see the button's own comment in index.html. */
 .result-report-status {
@@ -2377,6 +2389,17 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   flex: 1 1 0%;
   min-width: 0;
   align-self: center;
+  /* .results-analysis-slot (below) transitions its own flex-grow when
+     .showing-analysis toggles, but this column never had a matching
+     transition -- its flex-grow rule (55/40/1, see the .showing-analysis
+     selectors below) just switches value instantly. Closing the panel (55
+     -> 1) while the slot's 45 -> 0 is still mid-transition meant this
+     column's share of the row was briefly ~1/(1+45), a sliver pinned at the
+     row's flex-start corner, before ballooning out to full width over the
+     remaining 0.4s -- read as the whole compare-card zooming in from a tiny
+     top-left patch. Transitioning both sides in lockstep keeps the ratio
+     smooth the entire time. */
+  transition: flex-grow .4s cubic-bezier(.4,0,.2,1);
 }
 /* Wraps just .compare-card (+ #ap-options-card-inline, moved in here during
    the inline revise flow -- see moveOptionsCardTo in app.js). display:contents
@@ -2879,9 +2902,6 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   justify-content: center;
   gap: 12px;
   height: 480px;
-  border-radius: var(--radius-lg);
-  background: var(--card-2);
-  box-shadow: var(--shadow-lg);
 }
 /* Same eyebrow/title treatment as .proc-eyebrow/.proc-title (styles.css
    above), just smaller -- those are sized for the upload page's full-width
@@ -2949,6 +2969,17 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
    it. */
 .compare-card:hover {
   box-shadow: var(--shadow-lg), var(--shadow-accent);
+}
+/* While re-processing (#canvas-loading showing instead of the photo),
+   .compare-card's own dashed-border/background/shadow just doubled up
+   around #canvas-loading's own rounded/shadowed card (styles.css, below) --
+   two nested "frames" instead of one. Stripping the outer one down to a
+   plain box lets #canvas-loading's own framing read as the single card. */
+.compare-card:has(#canvas-loading:not([hidden])) {
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
 }
 
 /* Header row floating over the top of the photo (a child of
