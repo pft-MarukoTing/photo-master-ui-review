@@ -970,7 +970,16 @@
        Keyed to #ap-analysis-shell (the outer title+collapse frame), not
        #ap-review-panel any more -- #ap-review-panel is now nested one level
        inside it, so #ap-analysis-shell is the actual flex child of
-       .options-card-inline that needs the order/flex-basis. */
+       .options-card-inline that needs the order/flex-basis.
+       #ap-photo-summary (markup above #ap-analysis-shell) is this same
+       flex row's other direct child and needs the identical treatment --
+       without its own flex-basis:100% it fell back to flex's default
+       content-width sizing instead of matching #ap-analysis-shell/
+       .ap-actions-row's full-width rows, which is why it rendered
+       narrower than the card below it. order left unset (defaults to 0,
+       same as #ap-analysis-shell) so DOM order -- summary card first,
+       then the analysis shell -- keeps deciding which comes first. */
+    #ap-photo-summary { flex-basis: 100%; }
     #ap-analysis-shell { order: 0; flex-basis: 100%; }
     /* Holds .ap-settings-run-row (人像修正設定/Run) on its own full-width block,
        last -- 修圖風格/補充指令 used to sit here too (a trigger button and a
