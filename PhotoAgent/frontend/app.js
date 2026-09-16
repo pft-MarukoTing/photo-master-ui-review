@@ -1991,70 +1991,40 @@
     return isSidePanelLayoutEnabled() && els.resultsAnalysisSlot ? els.resultsAnalysisSlot : els.resultsCanvasTop;
   }
 
-  // ── 最近照片／範例照片排列方式 (gallery-layout-mode-btn, #settings-modal) ──
-  // Three-way layout choice for the upload page's 最近照片／範例照片 gallery:
-  // 格狀 (today's dense mosaic grid), 交錯 (a scattered, overlapping
-  // rotated-tile stack), or 預設, which picks between those two
-  // automatically off the same <=1200px breakpoint the two CSS skins are
-  // already scoped to (styles.css's "gallery-card-style" section: a
-  // desktop mosaic vs. vertical stack at >=1201px, a narrow horizontal
-  // strip vs. horizontal stack at <=1200px). Same persisted-client-side
-  // display-preference pattern as isSidePanelLayoutEnabled/
-  // setSidePanelLayoutEnabled just above: not sent to the backend, just a
-  // body class that CSS-overrides the mosaic by selector specificity alone
+  // ── 最近照片／範例照片卡片散落排列 (gallery-card-style-toggle, #settings-modal) ──
+  // Alternative arrangement for the upload page's 最近照片／範例照片 gallery --
+  // a scattered, overlapping card stack instead of the default dense mosaic
+  // grid. Same persisted-client-side display-preference pattern as
+  // isSidePanelLayoutEnabled/setSidePanelLayoutEnabled just above: not sent
+  // to the backend, just a body class (styles.css's "gallery-card-style"
+  // section) that CSS-overrides the mosaic by selector specificity alone
   // (one extra class beats the mosaic's own selectors), not by removing
-  // anything -- both skins stay intact in the stylesheet, switching (or,
-  // in "auto", the viewport crossing 1200px) is just this class toggling
-  // on <body>.
+  // anything -- both skins stay intact in the stylesheet, switching is just
+  // this class toggling on <body>. Applies at every width -- the desktop
+  // mosaic (>=1201px) switches to a vertical card stack, and the narrow
+  // horizontal strip (<=1200px) switches to its own horizontal card
+  // version (separate @media (max-width: 1200px) gallery-card-style
+  // block in styles.css).
   const GALLERY_CARD_STYLE_KEY = "photoagent.galleryCardStyle";
-  const GALLERY_LAYOUT_MODES = ["auto", "grid", "collage"];
-  // One shared MediaQueryList (matching setupCompactHeaderActions's own
-  // `mql` above) instead of calling matchMedia() fresh in both
-  // applyGalleryLayoutMode and the resize listener below.
-  const galleryLayoutNarrowMql = window.matchMedia("(max-width: 1200px)");
 
-  // Reads the persisted mode, migrating the setting's old on/off form
-  // (before this was three-way): "1" (卡片散落排列 was on) becomes a fixed
-  // 交錯 choice, "0" (explicitly off) becomes a fixed 格狀 choice, and
-  // never-set (null) becomes the new "auto" default -- so an existing user
-  // who never touched this keeps today's look at >=1201px (格狀, unchanged)
-  // but now also gets 交錯 at <=1200px instead of 格狀, since giving narrow
-  // widths that default automatically is the whole point of adding "auto".
-  function getGalleryLayoutMode() {
-    let raw = null;
-    try { raw = localStorage.getItem(GALLERY_CARD_STYLE_KEY); } catch { /* storage may be blocked */ }
-    if (raw === "1") return "collage";
-    if (raw === "0") return "grid";
-    return GALLERY_LAYOUT_MODES.includes(raw) ? raw : "auto";
+  // Defaults off (today's mosaic grid) -- distinguishes "never set" (null)
+  // from an explicit "0" so an opt-out still sticks across reloads.
+  function isGalleryCardStyleEnabled() {
+    try {
+      return localStorage.getItem(GALLERY_CARD_STYLE_KEY) === "1";
+    } catch {
+      return false;
+    }
   }
 
-  function setGalleryLayoutMode(mode) {
-    const resolved = GALLERY_LAYOUT_MODES.includes(mode) ? mode : "auto";
+  function setGalleryCardStyleEnabled(enabled) {
     try {
-      localStorage.setItem(GALLERY_CARD_STYLE_KEY, resolved);
+      localStorage.setItem(GALLERY_CARD_STYLE_KEY, enabled ? "1" : "0");
     } catch {
       // Private-browsing/storage-disabled: falls back to session-only via
       // the body class below, just doesn't survive a reload.
     }
-    applyGalleryLayoutMode(resolved);
-    syncGalleryLayoutModeButtons(resolved);
-  }
-
-  // Flips the body class the CSS actually keys off. "auto" reads the
-  // current viewport against the same <=1200px breakpoint the narrow-width
-  // skin itself is scoped to, so switching modes and resizing across that
-  // breakpoint both land on whichever skin the CSS would pick anyway.
-  function applyGalleryLayoutMode(mode) {
-    const collage = mode === "collage" || (mode === "auto" && galleryLayoutNarrowMql.matches);
-    document.body.classList.toggle("gallery-card-style", collage);
-  }
-
-  function syncGalleryLayoutModeButtons(mode) {
-    document.querySelectorAll(".gallery-layout-mode-btn").forEach((btn) => {
-      const active = btn.dataset.galleryLayoutMode === mode;
-      btn.classList.toggle("is-selected", active);
-      btn.setAttribute("aria-pressed", String(active));
-    });
+    document.body.classList.toggle("gallery-card-style", enabled);
   }
 
   // applyDebugUiVisibility (above in this file) otherwise hides
@@ -9718,18 +9688,11 @@
   // Same "apply immediately on load" reasoning as side-panel-layout above --
   // the upload page's gallery can already be on screen by the time the user
   // ever opens 設定.
-  {
-    const initialGalleryLayoutMode = getGalleryLayoutMode();
-    applyGalleryLayoutMode(initialGalleryLayoutMode);
-    syncGalleryLayoutModeButtons(initialGalleryLayoutMode);
-    document.querySelectorAll(".gallery-layout-mode-btn").forEach((btn) => {
-      btn.addEventListener("click", () => setGalleryLayoutMode(btn.dataset.galleryLayoutMode));
-    });
-    // "auto" tracks the viewport live -- crossing the 1200px breakpoint
-    // while the page is open (e.g. resizing a desktop window) re-picks
-    // 格狀/交錯 right away instead of only on the next reload.
-    galleryLayoutNarrowMql.addEventListener("change", () => {
-      if (getGalleryLayoutMode() === "auto") applyGalleryLayoutMode("auto");
+  document.body.classList.toggle("gallery-card-style", isGalleryCardStyleEnabled());
+  if (els.galleryCardStyleToggle) {
+    els.galleryCardStyleToggle.checked = isGalleryCardStyleEnabled();
+    els.galleryCardStyleToggle.addEventListener("change", () => {
+      setGalleryCardStyleEnabled(els.galleryCardStyleToggle.checked);
     });
   }
   // Resets to the pills-only view every time this tab is switched to --
