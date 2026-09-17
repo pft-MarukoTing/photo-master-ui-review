@@ -38,23 +38,27 @@ window.PhotoAgentConfig = {
     "MAI-Image-2.6": "MAI-Image-2.6"
   },
   // Single source of truth for the merged 修圖模型/影像品質 selector (upload
-  // page + analyze-preview). Only Sunburst · Enhanced and Flare · Standard
-  // are approved for the release picker; every other combination here
-  // (gpt-image-2's two tiers, Sunburst · Standard, Flare · Enhanced, Nano
-  // Banana 2, MAI-Image-2.6) is a debug-only candidate -- app.js's
-  // DEBUG_ONLY_IMAGE_MODELS hides them outside debug mode, so they stay
-  // listed here purely for debug-mode testing. Nano Banana 2 and
-  // MAI-Image-2.6 have no PhotoAgent quality tier, so each uses one option
-  // with quality fixed internally.
-  // "Standard"/"Enhanced" (not "Low"/"Medium") describe what the two tiers
-  // actually trade off -- faster/lighter vs. more detail -- without reading
-  // as "worse" vs. "better" the way the raw API quality names do; `quality`
-  // itself stays "low"/"medium" since that's the literal API param value.
+  // page + analyze-preview). All three Sunburst tiers are approved for the
+  // release picker; every other combination here (gpt-image-2's two tiers,
+  // both Flare tiers, Nano Banana 2, MAI-Image-2.6) is a debug-only
+  // candidate -- app.js's DEBUG_ONLY_IMAGE_MODELS hides them outside debug
+  // mode, so they stay listed here purely for debug-mode testing. Nano
+  // Banana 2 and MAI-Image-2.6 have no PhotoAgent quality tier, so each
+  // uses one option with quality fixed internally.
+  // "Standard"/"Enhanced"/"Premium" (not "Low"/"Medium"/"High") describe
+  // what the tiers actually trade off -- faster/lighter vs. more detail --
+  // without reading as "worse" vs. "better" the way the raw API quality
+  // names do; `quality` itself stays "low"/"medium"/"high" since that's the
+  // literal API param value. Sunburst's own displayLabel (the selected-value
+  // badge, not the dropdown row) uses "Efficient"/"Enhanced"/"Premium"
+  // instead, since it's the release-facing set and reads better standalone
+  // without a "Standard" that sounds like a fallback/default.
   imageModelQualityOptions: [
     { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard", displayLabel: "Image 2 · Standard" },
     { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced", displayLabel: "Image 2 · Enhanced" },
-    { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Image 2.5 Sunburst·Standard" },
-    { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced", displayLabel: "Image 2.5 Sunburst" },
+    { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Sunburst · Efficient" },
+    { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced", displayLabel: "Sunburst · Enhanced" },
+    { value: "gpt-image-2.5-sunburst:high", model: "gpt-image-2.5-sunburst", quality: "high", label: "GPT Image 2.5 Sunburst · Premium", displayLabel: "Sunburst Premium" },
     { value: "gpt-image-2.5-flare:low", model: "gpt-image-2.5-flare", quality: "low", label: "GPT Image 2.5 Flare · Standard", displayLabel: "Image 2.5 Flare" },
     { value: "gpt-image-2.5-flare:medium", model: "gpt-image-2.5-flare", quality: "medium", label: "GPT Image 2.5 Flare · Enhanced", displayLabel: "Image 2.5 Flare·Enhanced" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2" },

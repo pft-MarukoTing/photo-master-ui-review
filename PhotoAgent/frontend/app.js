@@ -582,15 +582,15 @@
   // both out of the 分析模型 picker outside debug mode.
   const DEBUG_ONLY_ANALYSIS_MODELS = ["gpt-5.6-sol", "gpt-4.1-mini"];
 
-  // Only Sunburst · Enhanced and Flare · Standard are approved for the
-  // release 修圖模型/影像品質 picker -- every other value in
-  // config.js's imageModelQualityOptions (gpt-image-2's two tiers, Sunburst
-  // · Standard, Flare · Enhanced, Nano Banana 2, MAI-Image-2.6) is a
-  // debug-only candidate, same treatment as DEBUG_ONLY_ANALYSIS_MODELS above.
+  // All three Sunburst tiers are approved for the release 修圖模型/影像品質
+  // picker -- every other value in config.js's imageModelQualityOptions
+  // (gpt-image-2's two tiers, both Flare tiers, Nano Banana 2,
+  // MAI-Image-2.6) is a debug-only candidate, same treatment as
+  // DEBUG_ONLY_ANALYSIS_MODELS above.
   const DEBUG_ONLY_IMAGE_MODELS = [
     "gpt-image-2:low",
     "gpt-image-2:medium",
-    "gpt-image-2.5-sunburst:low",
+    "gpt-image-2.5-flare:low",
     "gpt-image-2.5-flare:medium",
     "nano-banana-2",
     "MAI-Image-2.6",
