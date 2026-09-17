@@ -136,6 +136,10 @@ window.PhotoAgentResults = (() => {
   function previewAspectRatio(pref) {
     if (!lastRender || !pref) return;
     const resultAnalysis = lastRender.analysis;
+    const recipeInputs = Array.from(
+      els.apRecipeList?.querySelectorAll('input[type="checkbox"]') || []
+    );
+    const recipeChecked = recipeInputs.map((input) => input.checked);
     const reframeChecked = Array.from(
       els.apRecipeList?.querySelectorAll("li") || []
     ).some((item) =>
@@ -163,6 +167,10 @@ window.PhotoAgentResults = (() => {
       resolveCropBoxWithReport(shown.crop_box, shown, width, height).cropBox || null;
 
     renderResult({ ...lastRender, analysis: shown }, { keepView: true });
+    Array.from(els.apRecipeList?.querySelectorAll('input[type="checkbox"]') || [])
+      .forEach((input, index) => {
+        if (index < recipeChecked.length) input.checked = recipeChecked[index];
+      });
   }
 
   function aspectRatioDisplayValue(value) {
