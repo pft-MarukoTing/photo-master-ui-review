@@ -5575,13 +5575,10 @@
   function renderChangelog(entries) {
     if (!els.changelogModalBody) return;
     els.changelogModalBody.innerHTML = "";
-    // <details> gives free fold/unfold with no click-handler JS; only the
-    // newest entry (index 0 -- entries.json is kept newest-first) starts open.
-    entries.forEach((entry, index) => {
-      const block = document.createElement("details");
+    entries.forEach((entry) => {
+      const block = document.createElement("div");
       block.className = "changelog-entry";
-      block.open = index === 0;
-      const date = document.createElement("summary");
+      const date = document.createElement("div");
       date.className = "changelog-entry-date";
       date.textContent = entry.date || "";
       block.appendChild(date);
