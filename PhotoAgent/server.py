@@ -6,6 +6,7 @@ import threading
 import time
 import traceback
 
+import psutil
 import requests
 from PIL import Image as PILImage
 
@@ -20,12 +21,72 @@ from aiserver_utils.health_checker import HeartBeatV2
 
 from photo_agent import EFFECT_NAME
 from artifact_store import S3ArtifactStore
+from compatibility_version import CURRENT_COMPATIBILITY_VERSION, MIN_COMPATIBLE_VERSION
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR, RESULT_AI_SERVICE_TIMEOUT, RESULT_EXCEED_MAX_RESOLUTION
 from job_processor import PhotoAgentJobProcessor
 
 
-ENGINE_VERSION = 'photoAgent-backbone-001'
+ENGINE_VERSION = 'photoAgent-backbone-peggy-001'
 ENGINE_WORKER_NUM = max(int(os.getenv('ENGINE_WORKER_NUM', '1')), 1)
+# Continuous CPU/GPU/mem sampling, independent of job boundaries -- the
+# per-job usage log in check_queue() only captures usage while a job is
+# in flight, so it misses idle-time baseline between jobs.
+USAGE_SAMPLE_INTERVAL_SEC = max(int(os.getenv('USAGE_SAMPLE_INTERVAL_SEC', '3')), 1)
+# How often a running task's own CPU/mem is sampled to build its avg/peak
+# (see _TaskResourceSampler below).
+TASK_USAGE_SAMPLE_INTERVAL_SEC = max(float(os.getenv('TASK_USAGE_SAMPLE_INTERVAL_SEC', '0.5')), 0.1)
+
+
+class _TaskResourceSampler:
+    """Samples this worker process's own CPU%/RSS on an interval for the
+    duration of one task, so callers get the task's avg/peak resource use
+    instead of a single system-wide snapshot taken at whatever moment the
+    job happened to finish.
+
+    Measures the whole process (psutil.Process(os.getpid())), not just the
+    calling thread -- with ENGINE_WORKER_NUM > 1, concurrent jobs on other
+    worker threads show up in each other's numbers, since they share one
+    process. With the default ENGINE_WORKER_NUM=1 there's only ever one job
+    in flight, so this is effectively per-task.
+    """
+
+    def __init__(self, interval_sec):
+        self._interval = interval_sec
+        self._proc = psutil.Process(os.getpid())
+        self._samples = []
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._start_ts = None
+
+    def _run(self):
+        self._proc.cpu_percent()  # first call is always 0.0; primes the baseline
+        while not self._stop.wait(self._interval):
+            cpu = self._proc.cpu_percent()
+            mem_mb = self._proc.memory_info().rss / (1024 * 1024)
+            self._samples.append((cpu, mem_mb))
+
+    def start(self):
+        self._start_ts = time.time()
+        self._thread.start()
+        return self
+
+    def stop(self):
+        self._stop.set()
+        self._thread.join(timeout=self._interval + 1)
+        duration_sec = round(time.time() - self._start_ts, 2)
+        if not self._samples:
+            return {"duration_sec": duration_sec, "CPU avg": "N/A", "CPU peak": "N/A",
+                    "Mem avg": "N/A", "Mem peak": "N/A", "samples": 0}
+        cpus = [c for c, _ in self._samples]
+        mems = [m for _, m in self._samples]
+        return {
+            "duration_sec": duration_sec,
+            "CPU avg": f"{sum(cpus) / len(cpus):.1f} %",
+            "CPU peak": f"{max(cpus):.1f} %",
+            "Mem avg": f"{sum(mems) / len(mems):.0f} MB",
+            "Mem peak": f"{max(mems):.0f} MB",
+            "samples": len(self._samples),
+        }
 
 MSG_ID_QUEUE = os.environ['REDIS_MSG_QUEUE'].split(",")[0]
 
@@ -36,6 +97,14 @@ MSG_ID_QUEUE = os.environ['REDIS_MSG_QUEUE'].split(",")[0]
 # code change) still surfaces as "updated" without requiring a manual bump.
 WORKER_VERSION_KEY = os.getenv('REDIS_WORKER_VERSION_KEY', 'photoagent:version:worker')
 WORKER_VERSION = os.getenv('WORKER_VERSION') or '%s-%d' % (ENGINE_VERSION, int(time.time()))
+
+# Read by backend/services/compatibility.py so continue_job's own gate and
+# /api/config's debug-mode display reflect a worker-only deploy without the
+# separate Flask process needing its own restart -- same Redis channel/reason
+# as WORKER_VERSION_KEY above, just two more keys on it. Must match the key
+# names backend/services/compatibility.py reads.
+COMPATIBILITY_VERSION_KEY = os.getenv('REDIS_COMPATIBILITY_VERSION_KEY', 'photoagent:compatibility:current_version')
+COMPATIBILITY_MIN_VERSION_KEY = os.getenv('REDIS_COMPATIBILITY_MIN_VERSION_KEY', 'photoagent:compatibility:min_version')
 
 MONITOR_DST_DIR = './tmp'
 os.makedirs(MONITOR_DST_DIR, exist_ok=True)
@@ -91,6 +160,13 @@ def init():
     except Exception as e:
         logger.error('', "Failed to publish worker version: %s" % str(e))
 
+    try:
+        redis_conn.set(COMPATIBILITY_VERSION_KEY, CURRENT_COMPATIBILITY_VERSION)
+        redis_conn.set(COMPATIBILITY_MIN_VERSION_KEY, MIN_COMPATIBLE_VERSION)
+        logger.info('', "Published compatibility version: %s (min compatible %s)" % (CURRENT_COMPATIBILITY_VERSION, MIN_COMPATIBLE_VERSION))
+    except Exception as e:
+        logger.error('', "Failed to publish compatibility version: %s" % str(e))
+
     heart_beat_timeout = 60000
     heart_beat = HeartBeatV2(timeout_after_ms=heart_beat_timeout)
 
@@ -139,6 +215,7 @@ def check_queue():
         tsk_id = task_info.get('tskId', 'N/A')
         effect = task_info.get('effect', EFFECT_NAME)
 
+        resource_sampler = _TaskResourceSampler(TASK_USAGE_SAMPLE_INTERVAL_SEC).start()
         try:
             with active_workers_lock:
                 active_workers += 1
@@ -176,6 +253,7 @@ def check_queue():
             if should_set_idle:
                 with heart_beat_lock:
                     heart_beat.change_status("idle", task_id=tsk_id, job_id=task_id, queue_name=MSG_ID_QUEUE)
+            aiutils_logger.log('[Worker] task finished', task_id=tsk_id, **resource_sampler.stop())
             gc.collect()
 
 
@@ -190,11 +268,26 @@ def launch_checking_queue_thread():
     return threads
 
 
+def sample_usage_periodically():
+    while True:
+        time.sleep(USAGE_SAMPLE_INTERVAL_SEC)
+        aiutils_logger.log_usage('[UsageSampler] periodic sample')
+
+
+def launch_usage_sampler_thread():
+    thread = threading.Thread(target=sample_usage_periodically, name='usage-sampler')
+    thread.daemon = True
+    thread.start()
+    logger.info('', f'Launched usage sampler thread (every {USAGE_SAMPLE_INTERVAL_SEC}s)')
+    return thread
+
+
 if __name__ == "__main__":
     try:
         init()
 
         threads = launch_checking_queue_thread()
+        launch_usage_sampler_thread()
         health_checker.set_engine_ready()
         for t in threads:
             t.join()

@@ -137,7 +137,7 @@
   // Lifecycle metadata for the case currently shown in the shared result
   // canvas. Backend history uses snake_case; live records use camelCase.
   // Values are Unix seconds so both paths can share the same renderer.
-  let currentCaseTimes = { uploadedAt: null, modifiedAt: null, version: null, compatible: null, revealExtra: false };
+  let currentCaseTimes = { uploadedAt: null, modifiedAt: null, compatibilityVersion: null, compatible: null, revealExtra: false };
 
   function timestampValue(value) {
     const number = Number(value);
@@ -794,6 +794,14 @@
         input.name = name;
         input.value = opt.value;
         input.checked = opt.value === select.value;
+        // Rebuilt from scratch on every open (see this function's own doc
+        // below) -- a plain setAnalysisPreviewDisabled(true) sweep run once,
+        // earlier, would already be gone by the time the user next opens
+        // this picker. isAnalysisPreviewLocked() re-checks the live lock
+        // state at creation time instead, so the panel stays fully openable
+        // (the content itself is never hidden) while picking a new option
+        // here just doesn't do anything.
+        input.disabled = isAnalysisPreviewLocked();
         const box = document.createElement("span");
         box.className = "step-cb-box";
         cb.appendChild(input);
@@ -1852,6 +1860,27 @@
   // .is-blocked class rather than the native disabled attribute -- see that
   // function's own comment for why -- so this blanket disabled=true/false
   // toggle applies to it normally, same as every other control here.
+  // #ap-options-card-inline (the actual model/quality/style pickers + Run)
+  // does NOT stay inside #analysis-preview -- openInlineAnalysisPanel moves
+  // it out to sit beside the photo (#results-canvas-top) whenever the
+  // already-edited flow's panel is open, and only moves it back on close.
+  // A lock scoped to #analysis-preview alone would stop covering it the
+  // moment that move happens, so every lock/unlock/click-guard below treats
+  // these two as one combined surface regardless of where the second one
+  // currently lives in the DOM.
+  function analysisPreviewLockTargets() {
+    return [els.analysisPreview, els.apOptionsCardInline].filter(Boolean);
+  }
+
+  // Whether the panel is currently locked read-only -- checked by
+  // wireOptionPicker's rebuild() below, not just set once here. The user
+  // must still be able to open/read everything (recipe, diagnosis, a
+  // picker's own option list) -- this only gates whether picking a NEW
+  // option actually takes, never visibility.
+  function isAnalysisPreviewLocked() {
+    return analysisPreviewLockTargets().some((target) => target.classList.contains("ap-readonly-locked"));
+  }
+
   function setAnalysisPreviewDisabled(disabled) {
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
@@ -1859,6 +1888,17 @@
         el.disabled = disabled;
       });
     }
+    // ap-readonly-locked (CSS opacity cue, styles.css) also gates
+    // wireOptionPicker's rebuild(): a .ap-style-item picker's option list
+    // (pose/angle/lighting/size, model quality, aspect ratio, analysis
+    // model) is torn down and rebuilt from scratch every time it's opened,
+    // which would otherwise silently undo the .disabled sweep above the
+    // next time the user opens one -- see isAnalysisPreviewLocked. Content
+    // stays fully visible/openable either way; only picking a new option is
+    // what this actually blocks.
+    analysisPreviewLockTargets().forEach((target) => {
+      target.classList.toggle("ap-readonly-locked", disabled);
+    });
   }
 
   // ── Inline analysis-review panel (results page) ─────────────────────────
@@ -2252,6 +2292,16 @@
   // #ap-options-card-inline (recipe/style/prompt + Run button) below
   // .compare-card.
   async function showPendingResults(analysis, preset) {
+    // This flow never relocates #ap-options-card-inline itself (unlike
+    // openInlineAnalysisPanel's already-edited case, which moves it out to
+    // sit beside the photo) -- it's assumed to already be nested inside
+    // #analysis-preview throughout. That assumption breaks if the user
+    // previously viewed an already-edited case in this same session and its
+    // read-only branch is what's active now (setAnalysisPreviewDisabled
+    // below silently finds nothing to disable once the card has been moved
+    // out elsewhere) -- restore it home first so the assumption holds
+    // regardless of what the screen showed right before this.
+    restoreOptionsCardHome();
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
     // Step 2 already ran by the time this review screen shows -- populate
@@ -2347,7 +2397,31 @@
   // review" history record (viewAnalyzeHistoryRecord) -- the two reach this
   // exact same paused state by different routes.
   async function runPendingReviewFlow(analysis, preset) {
+    // A "待修圖" history record (viewAnalyzeHistoryRecord) whose analysis no
+    // longer meets compatibility_version.py's floor opens read-only here too
+    // -- same reasoning/mechanism as backToProcessFromResults' already-edited
+    // case: finishSingleFlow would reject it anyway, so there's nothing here
+    // for Continue/any picker to legitimately do. A fresh analyze (the other
+    // caller, startSubmit's manual path) is always compatible, so this is a
+    // no-op for it. Computed and applied BEFORE showPendingResults below --
+    // that call rebuilds this case's own recipe/face-review checkboxes
+    // (results.js's fillCheckList/buildPersonIssueItems), which read the
+    // lock class at creation time, not just once afterward. Setting it only
+    // after would leak whatever the PREVIOUS case left the class as into
+    // this case's initial build (and leave this case unlocked until the
+    // NEXT case's build finally catches up).
+    const readOnly = !isCompatible(analysis);
+    setAnalysisPreviewDisabled(readOnly);
     await showPendingResults(analysis, preset);
+    if (readOnly) {
+      if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
+      // Shown once the (already read-only-locked) screen has actually
+      // finished loading in, not before -- the lock itself doesn't announce
+      // itself otherwise, and a dimmed panel alone is easy to miss as "why
+      // can't I click anything" rather than "this case is outdated."
+      showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+      return; // no Continue button exists to wait for in this mode
+    }
     await waitForPendingResultsAction();
     // Always proceeds straight into #canvas-loading below (no "cancel" branch
     // here, unlike closeInlineAnalysisPanel's callers) -- skip
@@ -2392,6 +2466,16 @@
   // setAnalysisPreviewDisabled's els.analysisPreview.querySelectorAll(...)
   // can no longer find its controls to toggle.
   function openInlineAnalysisPanel(readOnly = false) {
+    // Restores the invariant setAnalysisPreviewDisabled below depends on
+    // (#ap-options-card-inline nested inside #analysis-preview) regardless of
+    // how the PREVIOUS cycle ended. Every other exit from this panel already
+    // goes through closeInlineAnalysisPanel -> restoreOptionsCardHome, but the
+    // read-only path (backToProcessFromResults returns right after opening,
+    // with no Run/Cancel to eventually trigger that close) never did --
+    // leaving the card stranded at its moved-out target and silently
+    // breaking every later open's disable/enable call. A no-op when the card
+    // is already home.
+    restoreOptionsCardHome();
     moveAnalysisPreviewTo(els.resultsAnalysisSlot);
     // Before moveOptionsCardTo below -- setAnalysisPreviewDisabled re-enables
     // via els.analysisPreview.querySelectorAll(...), which only finds
@@ -4732,6 +4816,20 @@
     if (timingDetails) timingDetails.hidden = true;
     resetSteps(); // clears completedTimings so this run's timings don't append to the previous run's
 
+    // A case resumed from history whose analysis no longer meets
+    // compatibility_version.py's floor (backend/services/compatibility.py)
+    // opens read-only -- same reasoning/mechanism as viewHistoryRecord's
+    // AIPoC branch (showBatchDoneMain's reviewable:false): finishSingleFlow
+    // would reject it anyway (isCompatible, same rule as continue_job's own
+    // check), so there is nothing here for Run/any picker to legitimately do.
+    // Computed and applied BEFORE renderAnalysisPreview/renderFaceReviewCards
+    // below -- those rebuild this case's own recipe/face-review checkboxes
+    // (results.js), which read the lock class at creation time, not just
+    // once afterward via openInlineAnalysisPanel further down. Setting it
+    // only there would leak the PREVIOUS case's lock state into this case's
+    // initial build (and leave this case's own lock one case late).
+    const readOnly = !isCompatible(singleFlowState.analysis);
+    setAnalysisPreviewDisabled(readOnly);
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
@@ -4753,7 +4851,16 @@
       applyStyleSelections(lastSingleSelections);
     }
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
-    openInlineAnalysisPanel();
+    openInlineAnalysisPanel(readOnly);
+    if (readOnly) {
+      // Shown once the (already read-only-locked) screen has actually
+      // finished loading in, not before -- the lock itself doesn't announce
+      // itself otherwise, and a dimmed panel alone is easy to miss as "why
+      // can't I click anything" rather than "this case is outdated."
+      showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+      return; // no Run/Cancel controls exist to wait for in this mode
+    }
+
     captureInlineReviseSnapshot();
     updateInlineAnalysisContinueBtnState();
 
@@ -5699,10 +5806,18 @@
     const confirmed = await showConfirmModal("確定要刪除這筆處理紀錄嗎？");
     if (!confirmed) return;
     try {
+      // Captured before removal -- li.closest/contains would already read
+      // false once removeHistoryCubeFromDom takes it out of the tree below.
+      const inDrawer = els.historyList?.contains(li);
       await deleteHistoryEntry(user, job.image_key);
       removeHistoryCubeFromDom(li);
       historyJobsByKey.delete(job.image_key);
       historyTileElsByKey.delete(job.image_key);
+      // Keeps historyDrawerOffset in sync with the server-side list this
+      // deleted entry came out of -- otherwise a later scroll-triggered
+      // loadHistoryDrawerPage would request an offset one too high and
+      // silently skip whatever entry is now in that spot.
+      if (inDrawer) historyDrawerOffset = Math.max(0, historyDrawerOffset - 1);
       // Nothing left to browse -- back out to a fresh upload screen instead
       // of leaving the drawer open over whatever page happened to be
       // showing behind it once its last entry is gone.
@@ -5729,6 +5844,8 @@
       if (els.historyList) els.historyList.innerHTML = "";
       if (els.historyEmpty) els.historyEmpty.hidden = false;
       if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = true;
+      historyDrawerOffset = 0;
+      historyDrawerHasMore = false;
       closeHistoryDrawer();
       resetApp();
     } catch (err) {
@@ -5919,16 +6036,24 @@
     if (els.historyDeleteSelectedBtn) els.historyDeleteSelectedBtn.disabled = true;
     const results = await Promise.allSettled(keys.map((key) => deleteHistoryEntry(user, key)));
     let anyFailed = false;
+    let removedFromDrawer = 0;
     keys.forEach((key, i) => {
       if (results[i].status !== "fulfilled") {
         anyFailed = true;
         return;
       }
       const li = historyTileElsByKey.get(key);
-      if (li) removeHistoryCubeFromDom(li);
+      if (li) {
+        if (els.historyList?.contains(li)) removedFromDrawer++;
+        removeHistoryCubeFromDom(li);
+      }
       historyJobsByKey.delete(key);
       historyTileElsByKey.delete(key);
     });
+    // Same offset bookkeeping as handleDeleteHistoryEntry, once per entry
+    // actually removed from the drawer (a demo-gallery selection, if any,
+    // has no such offset to keep in sync).
+    if (removedFromDrawer) historyDrawerOffset = Math.max(0, historyDrawerOffset - removedFromDrawer);
     exitHistorySelectMode();
     if (anyFailed) showNoticeModal("部分紀錄刪除失敗，請稍後再試。");
     // Same "nothing left to browse" reset as handleDeleteHistoryEntry/
@@ -5947,13 +6072,24 @@
   async function renderHistoryList(jobs, { container = els.historyList, append = false } = {}) {
     if (!container) return;
     const isDrawer = container === els.historyList;
-    if (isDrawer) exitHistorySelectMode();
-    historyJobsByKey.clear();
-    historyTileElsByKey.clear();
-    if (!append) container.innerHTML = "";
-    if (isDrawer && els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
-    if (isDrawer && els.historyClearAllBtn) els.historyClearAllBtn.hidden = jobs.length === 0;
-    if (isDrawer && els.historySelectBtn) els.historySelectBtn.hidden = jobs.length === 0;
+    if (isDrawer && !append) exitHistorySelectMode();
+    if (!append) {
+      // Appending a later page must keep the earlier pages' tiles indexed
+      // (multi-select/delete look them up by image_key) -- only a fresh
+      // render (reset, or the demo-gallery's own non-drawer usage) starts
+      // these over.
+      historyJobsByKey.clear();
+      historyTileElsByKey.clear();
+      container.innerHTML = "";
+    }
+    if (isDrawer && !append) {
+      // jobs.length here is only this page's count -- on an append call an
+      // empty (no-more) page doesn't mean the drawer itself is empty, so
+      // these only make sense to (re)evaluate on the first page.
+      if (els.historyEmpty) els.historyEmpty.hidden = jobs.length > 0;
+      if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = jobs.length === 0;
+      if (els.historySelectBtn) els.historySelectBtn.hidden = jobs.length === 0;
+    }
     if (!jobs.length) return;
 
     // One heading + grid per calendar day, cube tiles instead of full-width
@@ -6212,6 +6348,45 @@
     }
   }
 
+  // Same paginate-on-scroll shape as loadUploadHistoryPage (the upload
+  // screen's "recent photos" gallery) -- getHistory(user) alone only ever
+  // returns its default limit=50 (photo-agent-api.js), so without this the
+  // drawer silently stopped at 50 entries with no way to reach anything
+  // older, unlike that gallery's own unbounded scroll.
+  const HISTORY_DRAWER_PAGE_SIZE = 50;
+  let historyDrawerOffset = 0;
+  let historyDrawerRequestToken = 0;
+  let historyDrawerLoading = false;
+  let historyDrawerHasMore = false;
+
+  async function loadHistoryDrawerPage({ reset = false } = {}) {
+    const user = getCurrentUser();
+    if (!user || !els.historyList || historyDrawerLoading) return;
+    const token = ++historyDrawerRequestToken;
+    if (reset) {
+      historyDrawerOffset = 0;
+      historyDrawerHasMore = false;
+    }
+    historyDrawerLoading = true;
+    try {
+      const page = await getHistory(user, {
+        limit: HISTORY_DRAWER_PAGE_SIZE,
+        offset: historyDrawerOffset
+      });
+      if (token !== historyDrawerRequestToken || getCurrentUser() !== user) return;
+      const jobs = Array.isArray(page.jobs) ? page.jobs : [];
+      await renderHistoryList(jobs, { append: !reset && historyDrawerOffset > 0 });
+      historyDrawerOffset += jobs.length;
+      historyDrawerHasMore = page.has_more === true;
+    } catch {
+      if (token !== historyDrawerRequestToken) return;
+      historyDrawerHasMore = false;
+      if (!historyDrawerOffset) renderHistoryList([]);
+    } finally {
+      if (token === historyDrawerRequestToken) historyDrawerLoading = false;
+    }
+  }
+
   async function openHistoryPage() {
     // Does NOT bump historyViewToken -- that's reserved for actually
     // navigating to a different record (viewHistoryRecord/
@@ -6227,12 +6402,7 @@
       renderHistoryList([]);
       return;
     }
-    try {
-      const { jobs } = await getHistory(user);
-      renderHistoryList(jobs || []);
-    } catch {
-      renderHistoryList([]);
-    }
+    await loadHistoryDrawerPage({ reset: true });
   }
 
   // Secret admin path: ?admin in the URL (no value needed) requests access
@@ -6758,13 +6928,12 @@
     try {
       const analyzeResult = await getAnalyzeResult(analyzeJobId);
       analysis = analyzeResult.result.analysis;
-      setCurrentCaseAnalysisVersion(analysis, { compatible: analyzeResult.result.compatible });
       // compatible missing (older backend) is treated as compatible -- the
-      // real gate is continue_job's own check, this is just an early hint.
-      if (analyzeResult.result.compatible === false) {
-        showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
-        return;
-      }
+      // real gate is finishSingleFlow's own isCompatible check (shown once
+      // the user actually presses Run, not here on page entry -- this screen
+      // has no finished photo yet for a read-only view to show instead, so
+      // there's nothing to gain by bouncing them before they've even looked).
+      setCurrentCaseAnalysisVersion(analysis, { compatible: analyzeResult.result.compatible });
     } catch (error) {
       if (historyViewToken !== myToken) return; // navigated away meanwhile
       showBatchMainError({ previewUrl, error: friendlyError(error) });
@@ -9771,6 +9940,14 @@
       const nearBottom = els.demoImagesGrid.scrollTop + els.demoImagesGrid.clientHeight
         >= els.demoImagesGrid.scrollHeight - 24;
       if (nearBottom) loadUploadHistoryPage();
+    });
+  }
+  if (els.historyList) {
+    els.historyList.addEventListener("scroll", () => {
+      if (historyDrawerLoading || !historyDrawerHasMore) return;
+      const nearBottom = els.historyList.scrollTop + els.historyList.clientHeight
+        >= els.historyList.scrollHeight - 24;
+      if (nearBottom) loadHistoryDrawerPage();
     });
   }
   // Account bootstrap above is asynchronous. Do not initialize the demo

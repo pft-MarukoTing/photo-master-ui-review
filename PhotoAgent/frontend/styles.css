@@ -2468,7 +2468,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: rgba(var(--on-surface-rgb),.52);
   font-weight: 600;
 }
-.result-case-time-item time {
+.result-case-time-item time,
+.result-case-time-item .result-case-time-value {
   color: rgba(var(--on-surface-rgb),.82);
 }
 /* flex-grow ratio (both basis pinned at 0%) instead of a fixed px width --
@@ -2550,6 +2551,19 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
    shown there; strip that once it's on loan to this narrower side slot. */
 .results-analysis-slot .analysis-preview {
   margin-top: 0;
+}
+
+/* Read-only lock (setAnalysisPreviewDisabled, app.js): visual cue for a case
+   whose analysis no longer meets compatibility_version.py's floor. Actual
+   blocking is per-control -- native form controls get .disabled, and
+   wireOptionPicker's rebuild() (app.js) reads isAnalysisPreviewLocked() to
+   create each option already-disabled -- so content stays fully visible and
+   openable here, this is cosmetic only. Applies to both #analysis-preview
+   and #ap-options-card-inline -- the latter moves outside the former while
+   the already-edited flow's panel is open, so it needs the class
+   independently. */
+.ap-readonly-locked {
+  opacity: 0.7;
 }
 
 /* ── Side-panel layout (分析面板顯示於預覽右側, #settings-modal) ──

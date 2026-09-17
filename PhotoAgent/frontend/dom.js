@@ -90,6 +90,8 @@ window.PhotoAgentDom = (() => {
     resultUploadedTime: document.querySelector("#result-uploaded-time"),
     resultModifiedTimeItem: document.querySelector("#result-modified-time-item"),
     resultModifiedTime: document.querySelector("#result-modified-time"),
+    resultCompatibilityVersionItem: document.querySelector("#result-compatibility-version-item"),
+    resultCompatibilityVersion: document.querySelector("#result-compatibility-version"),
     resultsAnalysisSlot: document.querySelector("#results-analysis-slot"),
     photoFrameWrap: document.querySelector("#photo-frame-wrap"),
     canvasLoading: document.querySelector("#canvas-loading"),

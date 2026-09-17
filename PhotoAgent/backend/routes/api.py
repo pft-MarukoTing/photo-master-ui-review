@@ -10,10 +10,12 @@ from PIL import Image as PILImage
 from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
+from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, HISTORY_MAX_LEN, normalize_username, record_history
+from backend.services.compatibility import get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
 from backend.services.report import delete_report, get_report_by_id, get_reports, is_admin, record_report, update_report_status
@@ -797,7 +799,19 @@ def analyze_result(job_id):
         return jsonify({"status": "error", "error": f"failed to download analysis: {download_error}"})
 
     analysis = json.loads(analysis_bytes)
-    return jsonify({"status": "success", "result": {"analysis": analysis}})
+    # compatible tells the frontend (viewAnalyzeHistoryRecord) whether this
+    # history item's analysis still meets the floor continue_job below will
+    # itself enforce -- surfaced here so it can hint "reprocess this photo"
+    # before the user invests time in the review screen, not only once they
+    # hit Run and continue_job rejects it. get_min_compatible_version() reads
+    # the worker's own floor from Redis (backend/services/compatibility.py)
+    # so this stays right even when only the worker, not this Flask process,
+    # has been redeployed since the floor last moved.
+    return jsonify({"status": "success", "result": {
+        "analysis": analysis,
+        "compatible": is_compatible(analysis, min_version=get_min_compatible_version()),
+        "compatibilityVersion": get_compatibility_version(analysis),
+    }})
 
 
 @api_bp.post("/continue/<job_id>")
@@ -807,6 +821,11 @@ def continue_job(job_id):
     analysis = body.get("analysis")
     if not isinstance(analysis, dict) or "subject_category" not in analysis:
         return jsonify({"error": "analysis (from /analyze/result) is required"}), 400
+    if not is_compatible(analysis, min_version=get_min_compatible_version()):
+        # Authoritative gate: the frontend already checks compatible from
+        # /analyze/result before offering Run, but this is what actually
+        # prevents an old analysis from reaching finish_stage.
+        return jsonify({"error": "analysis_compatibility_version_outdated"}), 409
 
     params, error = _parse_and_validate_params(body)
     if error:

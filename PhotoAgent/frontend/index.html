@@ -2162,6 +2162,10 @@
        .history-drawer below), above every other .error-modal-based popup, so
        this needs its own higher stacking order to actually show on top of it. */
     #confirm-modal { z-index: 1002; }
+    /* Same reasoning as #confirm-modal above -- a failed history tile's
+       click handler opens this to show its failure reason, from inside the
+       history drawer (z-index 1001), so it needs to win against that too. */
+    #notice-modal { z-index: 1002; }
     /* #report-btn itself is position:fixed at z-index:2000 (see its own
        rule further down) so it stays clickable above any other modal/
        drawer, dynamically-launched or not -- #report-modal is what it
@@ -3716,6 +3720,17 @@
        entirely instead of opening a panel with one, already-selected row. */
     .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
+    /* The Pose/Angle/Lighting/Size category buttons (.ap-style-type-btn) are
+       real <button>s sharing this same .ap-style-trigger class -- unlike the
+       <summary>-based pickers above (which stay clickable-to-view even while
+       read-only-locked, see isAnalysisPreviewLocked/setAnalysisPreviewDisabled,
+       app.js), these get a real disabled attribute when locked, same as
+       .btn:disabled elsewhere (styles.css) -- no pointer-events:none needed
+       (that's only for the .is-single-option/.is-locked rules above, which
+       aren't natively disabled, just class-locked -- pairing it with a real
+       disabled attribute here would only make the not-allowed cursor below
+       stop rendering, since the element would no longer be the hit target). */
+    .ap-style-trigger:disabled { cursor: not-allowed; opacity: .7; }
   </style>
 </head>
 <body>
@@ -4895,6 +4910,12 @@
             <span id="result-modified-time-item" class="result-case-time-item" hidden>
               <span class="result-case-time-label">最後修改時間</span>
               <time id="result-modified-time"></time>
+            </span>
+            <!-- compatibility_version this case's analysis was produced with
+                 (see compatibility_version.py) -- debug-only, same gate as the
+                 times above. -->
+            <span id="result-compatibility-version-item" class="result-case-time-item" hidden>
+              <span id="result-compatibility-version" class="result-case-time-value"></span>
             </span>
           </div>
         </div>

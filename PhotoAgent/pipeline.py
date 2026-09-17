@@ -5,6 +5,7 @@ import time
 from functools import partial
 from typing import Optional
 
+from compatibility_version import CURRENT_COMPATIBILITY_VERSION
 from config import MODELS
 from image_tools import (
     apply_derived_aspect_ratio,
@@ -317,6 +318,10 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # genuine finding and a later revise can turn a toggle back on without
     # re-analyzing the photo.
     analysis["_advanced_options"] = dict(advanced_options or {})
+    # Stamped so a history item resumed under a later app version (see
+    # backend/routes/api.py's continue_job) can tell which analyze_stage
+    # shape produced it -- see compatibility_version.py for how that's read back.
+    analysis["compatibility_version"] = CURRENT_COMPATIBILITY_VERSION
     return analysis
 
 

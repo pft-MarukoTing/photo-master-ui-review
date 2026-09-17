@@ -2,6 +2,17 @@ window.PhotoAgentResults = (() => {
   const { els } = window.PhotoAgentDom;
   const { resolveCropBoxForDisplay, resolveCropBoxWithReport } = window.PhotoAgentImageTools;
 
+  // Mirrors app.js's isAnalysisPreviewLocked (same ap-readonly-locked class,
+  // set by setAnalysisPreviewDisabled) -- checked here too because
+  // fillCheckList/buildPersonIssueItems below tear down and rebuild their
+  // checkboxes from scratch on every re-render (a recipe/advanced-options
+  // change, switching 人像檢查 tabs, ...), which would otherwise silently
+  // undo a one-time disable sweep the next time either rebuilds.
+  function isReadOnlyLocked() {
+    return !!(els.analysisPreview?.classList.contains("ap-readonly-locked")
+      || els.apOptionsCardInline?.classList.contains("ap-readonly-locked"));
+  }
+
   const DEFAULT_OPTION = { value: "default", label: "不指定" };
   const POSE_OPTIONS = [
     DEFAULT_OPTION,
@@ -426,6 +437,7 @@ window.PhotoAgentResults = (() => {
       input.id = `${element.id}-${index}`;
       input.dataset.recipeIndex = String(index);
       input.checked = true;
+      input.disabled = isReadOnlyLocked();
       const box = document.createElement("span");
       box.className = "step-cb-box";
       cb.appendChild(input);
@@ -1625,6 +1637,13 @@ window.PhotoAgentResults = (() => {
       // instead of an unflagged row (previously no toggle at all) sitting
       // ~44px left of a flagged one right above/below it.
       const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(issue.category);
+      // isReadOnlyLocked() is a separate reason from !globallyEnabled/
+      // !issue.controllable below (compatibility_version.py, not the
+      // 人像修正設定 fold) -- combined here since every guard below treats
+      // all three identically, but left out of toggle.title/is-locked just
+      // below so that tooltip keeps naming its own specific (unrelated)
+      // reason instead of misattributing a version-outdated lock to it.
+      const rowLocked = !globallyEnabled || !issue.controllable || isReadOnlyLocked();
       // A manual-override category (blink/gaze/hair/smile/body reshape) is only ever
       // locked when its #advanced-settings-fold toggle is off -- build_edit_
       // prompt's global veto would ignore a per-person re-enable regardless,
@@ -1652,18 +1671,18 @@ window.PhotoAgentResults = (() => {
       // behavior -- this row must be completely unclickable while locked, not
       // just visually dimmed. Same combined condition as input.disabled below.
       toggle.addEventListener("click", (event) => {
-        if (!globallyEnabled || !issue.controllable) { event.preventDefault(); event.stopPropagation(); }
+        if (rowLocked) { event.preventDefault(); event.stopPropagation(); }
       }, true);
       const input = document.createElement("input");
       input.type = "checkbox";
-      input.disabled = !globallyEnabled || !issue.controllable;
+      input.disabled = rowLocked;
       input.checked = globallyEnabled && issue.controllable && issue.allowed;
       input.addEventListener("change", () => {
         // input.disabled (and the capture-phase click guard above) already
         // block a real user click while locked -- this is the last backstop
         // so a locked row can never end up allowed=true no matter how the
         // change event got dispatched.
-        if (!globallyEnabled || !issue.controllable) { input.checked = false; return; }
+        if (rowLocked) { input.checked = false; return; }
         issue.allowed = input.checked;
         issue.allowedTouchVersion = (issue.allowedTouchVersion || 0) + 1;
         refreshVerdict();
@@ -1729,7 +1748,7 @@ window.PhotoAgentResults = (() => {
           select.appendChild(option);
         });
         select.value = issue.level || choices[0][0];
-        select.disabled = !globallyEnabled || !issue.allowed;
+        select.disabled = !globallyEnabled || !issue.allowed || isReadOnlyLocked();
         select.addEventListener("change", () => {
           issue.level = select.value;
           issue.levelUserTouched = true;
@@ -1743,7 +1762,7 @@ window.PhotoAgentResults = (() => {
           }
         });
         input.addEventListener("change", () => {
-          select.disabled = !input.checked;
+          select.disabled = !input.checked || isReadOnlyLocked();
           levelRow.hidden = !input.checked;
           row.classList.toggle("ap-face-issue-row--with-level", input.checked);
         });
@@ -1783,6 +1802,138 @@ window.PhotoAgentResults = (() => {
       items.push(li);
     });
 
+    if (bodyReshapeEnabled && entry?.bodyAnalysisAvailable) {
+      const section = document.createElement("li");
+      section.className = "ap-body-reshape-section";
+      const masterRow = document.createElement("div");
+      masterRow.className = "ap-face-issue-row";
+
+      const toggle = document.createElement("label");
+      toggle.className = "ios-switch ap-face-issue-toggle";
+      const actionableBodyPoints = bodyKeyPoints.filter((point) => point.selectable !== false);
+      toggle.title = actionableBodyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
+      const masterInput = document.createElement("input");
+      masterInput.type = "checkbox";
+      masterInput.disabled = !actionableBodyPoints.length || isReadOnlyLocked();
+      masterInput.checked = actionableBodyPoints.length && entry.bodyReshapeEnabled !== false;
+      const track = document.createElement("span");
+      track.className = "ios-track";
+      const thumb = document.createElement("span");
+      thumb.className = "ios-thumb";
+      track.appendChild(thumb);
+      toggle.appendChild(masterInput);
+      toggle.appendChild(track);
+      masterRow.appendChild(toggle);
+
+      const name = document.createElement("span");
+      name.className = "ap-face-issue-name";
+      name.textContent = "身形調整";
+      masterRow.appendChild(name);
+
+      const icon = document.createElement("span");
+      const verdict = document.createElement("span");
+      verdict.className = "step-cb-label";
+      masterRow.appendChild(icon);
+      masterRow.appendChild(verdict);
+      section.appendChild(masterRow);
+
+      const list = document.createElement("div");
+      list.className = "ap-body-reshape-list";
+      const pointControls = [];
+      if (bodyKeyPoints.length) {
+        bodyKeyPoints.forEach((point) => {
+          const row = document.createElement("div");
+          row.className = "ap-body-reshape-option";
+          const input = document.createElement("input");
+          input.type = "checkbox";
+          input.disabled = point.selectable === false || isReadOnlyLocked();
+          input.checked = point.selectable !== false && point.allowed !== false;
+          input.addEventListener("change", () => {
+            point.allowed = input.checked;
+            if (typeof refreshBodyReshape === "function") refreshBodyReshape();
+          });
+          const textLabel = document.createElement("label");
+          textLabel.className = "ap-body-reshape-option-label";
+          textLabel.appendChild(input);
+          const text = document.createElement("span");
+          text.textContent = bodyReshapeDisplayText(point.text);
+          textLabel.appendChild(text);
+          row.appendChild(textLabel);
+          const sliderRow = document.createElement("div");
+          sliderRow.className = "ap-body-reshape-slider-row";
+          const sliderLabel = document.createElement("span");
+          sliderLabel.className = "ap-body-reshape-slider-label";
+          sliderLabel.textContent = "調整幅度";
+          const strengthIndex = bodyReshapeStrengthIndex(point.targetPct);
+          const selectedStrength = bodyReshapeStrengthAt(strengthIndex);
+          const slider = document.createElement("input");
+          slider.type = "range";
+          slider.className = "ap-body-reshape-slider";
+          slider.min = "0";
+          slider.max = String(BODY_RESHAPE_STRENGTHS.length - 1);
+          slider.step = "1";
+          slider.value = String(strengthIndex);
+          slider.setAttribute("aria-label", `${bodyReshapeDisplayText(point.text)} 調整幅度`);
+          slider.setAttribute("aria-valuetext", `${selectedStrength.label}強度`);
+          const sliderControl = document.createElement("div");
+          sliderControl.className = "ap-body-reshape-slider-control";
+          sliderControl.appendChild(slider);
+          const strengthScale = document.createElement("div");
+          strengthScale.className = "ap-body-reshape-slider-scale";
+          BODY_RESHAPE_STRENGTHS.forEach((strength) => {
+            const mark = document.createElement("span");
+            mark.textContent = strength.label;
+            strengthScale.appendChild(mark);
+          });
+          sliderControl.appendChild(strengthScale);
+          slider.addEventListener("input", () => {
+            const strength = bodyReshapeStrengthAt(slider.value);
+            const nextIndex = BODY_RESHAPE_STRENGTHS.indexOf(strength);
+            slider.value = String(nextIndex);
+            point.targetPct = strength.targetPct;
+            point.amountTouched = true;
+            slider.setAttribute("aria-valuetext", `${strength.label}強度`);
+          });
+          sliderRow.appendChild(sliderLabel);
+          sliderRow.appendChild(sliderControl);
+          row.appendChild(sliderRow);
+          pointControls.push({ point, input, slider, row });
+          if (point.selectable === false && point.reason) {
+            row.title = `此項不會送入 edit：${point.reason}`;
+            row.classList.add("is-unavailable");
+            const reason = document.createElement("small");
+            reason.className = "ap-body-reshape-option-meta";
+            reason.textContent = `不執行：${point.reason}`;
+            row.appendChild(reason);
+          }
+          list.appendChild(row);
+        });
+      }
+      section.appendChild(list);
+
+      const refreshBodyReshape = () => {
+        const active = actionableBodyPoints.length > 0 && entry.bodyReshapeEnabled !== false;
+        masterInput.checked = active;
+        icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
+        icon.textContent = active ? "!" : "✓";
+        verdict.textContent = !actionableBodyPoints.length
+          ? "無需調整"
+          : (active ? "可以調整" : "不執行");
+        list.hidden = actionableBodyPoints.length > 0 ? !active : false;
+        pointControls.forEach(({ point, input, slider }) => {
+          const enabled = active && point.selectable !== false && !isReadOnlyLocked();
+          input.disabled = !enabled;
+          input.checked = enabled && point.allowed !== false;
+          slider.disabled = !enabled || point.allowed === false;
+        });
+      };
+      masterInput.addEventListener("change", () => {
+        entry.bodyReshapeEnabled = masterInput.checked;
+        refreshBodyReshape();
+      });
+      refreshBodyReshape();
+      items.push(section);
+    }
     return items;
   }
 

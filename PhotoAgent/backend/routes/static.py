@@ -4,6 +4,7 @@ import os
 from flask import Blueprint, current_app, jsonify, send_from_directory
 
 from aiserver_utils.pf_redis import pf_redis_client
+from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 import config as photoagent_config
 
 static_bp = Blueprint("static_bp", __name__)
@@ -62,6 +63,18 @@ def config():
         # Internal server-side feature switch mirrored to the UI.  The
         # backend remains authoritative; this only gates the read-only preview.
         "enableBodyReshape": bool(getattr(photoagent_config, "ENABLE_BODY_RESHAPE", True)),
+        # Lets the debug-mode version display (app.js) show a case's own
+        # compatibility_version next to what this deployment is running now,
+        # and lets finishSingleFlow gate a resumed case client-side (in
+        # addition to continue_job's own authoritative check) regardless of
+        # which history-view path it was resumed from. "compatibility" (not
+        # just "version") keeps this distinct from /api/version's unrelated
+        # frontend/worker build version, and from a client's own appVer.
+        # Read from Redis (backend/services/compatibility.py, published by
+        # the worker) rather than imported directly, so a worker-only deploy
+        # shows up here without this separate Flask process restarting too.
+        "compatibilityVersion": get_current_compatibility_version(),
+        "minCompatibleVersion": get_min_compatible_version(),
     })
 
 
