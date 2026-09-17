@@ -3642,7 +3642,12 @@
            widths; narrowed again so the backdrop clearly reads as the
            dominant surface with the drawer as a slim overlay panel. */
         width: min(220px, 68vw); flex-basis: auto;
-        max-height: none !important; margin-top: 0;
+        /* Cancels updateBatchSidebarMaxHeight's own inline max-height AND
+           height (app.js) -- this drawer variant is already sized top:0
+           bottom:0 (fixed), so an inline height would otherwise override
+           that computed top-to-bottom span with whatever fixed pixel value
+           JS last measured against the desktop layout. */
+        max-height: none !important; height: auto !important; margin-top: 0;
         border-radius: 0; border-width: 0 1px 0 0;
         z-index: 1001;
         transform: translateX(-100%);

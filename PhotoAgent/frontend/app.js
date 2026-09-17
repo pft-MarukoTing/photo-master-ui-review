@@ -7819,22 +7819,30 @@
     ] : []);
   }
 
-  // Caps .batch-sidebar so align-items:stretch never grows it past the
-  // viewport (per this app's "avoid making the user scroll the window"
-  // policy), even when the main content column is naturally very tall.
-  // Measured from the sidebar's own actual (pre-scroll) rendered top --
-  // a static CSS calc() can't know the fixed header's real height plus
-  // whatever else (results-body-actions, margins) pushes that starting
-  // position down. Deliberately NOT re-measured on scroll: this uses the sidebar's
-  // worst-case (unstuck, further down the page) position, which is the
-  // binding constraint -- once scrolled enough to actually stick higher up,
-  // capping to the same height just leaves a little unused room at the
+  // Sets .batch-sidebar's actual height (not just a cap) so align-items:stretch
+  // never grows it past the viewport (per this app's "avoid making the user
+  // scroll the window" policy), even when the main content column is
+  // naturally very tall. Measured from the sidebar's own actual (pre-scroll)
+  // rendered top -- a static CSS calc() can't know the fixed header's real
+  // height plus whatever else (results-body-actions, margins) pushes that
+  // starting position down. Deliberately NOT re-measured on scroll: this uses
+  // the sidebar's worst-case (unstuck, further down the page) position, which
+  // is the binding constraint -- once scrolled enough to actually stick higher
+  // up, capping to the same height just leaves a little unused room at the
   // bottom rather than growing (which would require re-measuring mid-scroll).
+  // A plain height (not max-height) deliberately overrides align-items:stretch's
+  // own natural-content sizing -- this already runs on the very first
+  // "analyzing" placeholder render (renderBatchMain), so leaving it as a mere
+  // cap let the sidebar sit at whatever height that item count's row list
+  // happened to add up to until a later, taller main-content view (the
+  // compare-card + analysis panel) stretched it up to this same number --
+  // a visible resize on selection instead of one stable height throughout.
   function updateBatchSidebarMaxHeight() {
     if (!els.batchSidebar || els.batchSidebar.hidden) return;
     const top = els.batchSidebar.getBoundingClientRect().top;
     const maxHeight = Math.max(200, window.innerHeight - top - 24);
     els.batchSidebar.style.maxHeight = `${maxHeight}px`;
+    els.batchSidebar.style.height = `${maxHeight}px`;
   }
   window.addEventListener("resize", updateBatchSidebarMaxHeight);
 
