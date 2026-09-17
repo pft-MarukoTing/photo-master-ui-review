@@ -2688,14 +2688,17 @@
   function waitForInlineAnalysisAction() {
     return new Promise((resolve) => {
       clearInlineAnalysisWait();
-      inlineAnalysisContinueHandler = () => {
-        // Nothing to actually change vs. the existing result -- rather than
-        // silently spend another edit call reproducing it, ask the user to
-        // either uncheck/pick something or leave via Cancel instead. Doesn't
-        // clear the listener/resolve, so the panel just stays open.
+      inlineAnalysisContinueHandler = async () => {
+        // Nothing to actually change vs. the existing result -- confirm the
+        // user really wants to spend another edit call reproducing it rather
+        // than silently blocking them, since re-running as-is (e.g. to redo
+        // a failed generation) is a legitimate reason to proceed. A Cancel
+        // here doesn't clear the listener/resolve, so the panel just stays
+        // open, same as before this confirmation was added.
         if (inlineReviseHasNoChanges()) {
-          showNoticeModal("請至少修改一項修圖建議、身形調整、風格選項、補充指令或設定後再執行。");
-          return;
+          const confirmed = await showConfirmModal(
+            "你沒有做任何修改，確定要再執行一次修圖嗎？", { confirmLabel: "修圖", danger: false });
+          if (!confirmed) return;
         }
         clearInlineAnalysisWait();
         resolve("continue");
