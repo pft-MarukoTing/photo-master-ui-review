@@ -23,7 +23,6 @@ window.PhotoAgentConfig = {
   defaultAnalysisModel: "gpt-4.1-mini",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
-    "gpt-image-2.5-sunburst": "GPT Image 2.5 Sunburst",
     "nano-banana-2": "Nano Banana 2"
   },
   // Single source of truth for the merged 修圖模型/影像品質 selector (upload
@@ -40,10 +39,9 @@ window.PhotoAgentConfig = {
   imageModelQualityOptions: [
     { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard" },
     { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced" },
-    { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2" }
   ],
-  defaultImageModelQuality: "gpt-image-2.5-sunburst:medium",
+  defaultImageModelQuality: "gpt-image-2:low",
   // User-facing aspect-ratio choices (upload page + analyze-preview, above
   // 生成張數) -- "auto" takes the output ratio from the framing the analysis
   // proposed (measured off its crop rectangle on the backend, not picked by

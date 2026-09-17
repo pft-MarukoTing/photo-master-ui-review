@@ -27,7 +27,6 @@ from prompts import build_analysis_instruction, backfill_missing_correction_item
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
     "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
-    "gpt-image-2.5-sunburst": partial(edit_photo, model="gpt-image-2.5-sunburst"),
     "nano-banana-2": edit_photo_gemini,
     "nano-banana-lite": partial(edit_photo_gemini, model=NANO_BANANA_LITE_MODEL),
 }
@@ -40,7 +39,6 @@ EDIT_PHOTO_BY_MODEL = {
 GAZE_REPAIR_BY_MODEL = {
     "gpt-image-2": edit_gaze_only_openai,
     "gpt-image-1.5": partial(edit_gaze_only_openai, model="gpt-image-1.5"),
-    "gpt-image-2.5-sunburst": partial(edit_gaze_only_openai, model="gpt-image-2.5-sunburst"),
     "nano-banana-2": edit_gaze_only_gemini,
     "nano-banana-lite": partial(edit_gaze_only_gemini, model=NANO_BANANA_LITE_MODEL),
 }
