@@ -38,7 +38,6 @@ from prompts import (
     build_body_reshape_planning_instruction,
     build_body_reshape_planning_response_schema,
     merge_body_reshape_edit_prompt,
-    build_user_instruction_review_prompt,
     build_edit_prompt,
     build_gaze_only_edit_prompt,
     build_quality_check_prompt,
