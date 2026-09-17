@@ -5017,13 +5017,28 @@ body[data-theme="caramel"] .recipe-tags span {
     display: block;
     object-fit: contain;
   }
+  /* Badge moved from top-left to bottom-left -- still the safe corner
+     under this row's stacking (later/rightward card covers the previous
+     card's RIGHT edge, see the nth-child rules above, so both left corners
+     stay clear regardless of top vs bottom). No top-darkening override on
+     .rc-media::after either: the un-prefixed base rule already darkens
+     toward the bottom (~line 1065), which is exactly where the badge sits
+     now. */
   body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-badge {
-    top: 6px;
-    bottom: auto;
+    top: auto;
+    bottom: 6px;
     left: 6px;
   }
-  body.gallery-card-style #upload-section .upload-gallery-col .history-cube .rc-media::after {
-    background: linear-gradient(180deg, rgba(8,8,12,.55) 0%, rgba(8,8,12,.02) 55%, transparent 100%);
+  /* Remove button moved from its base top-RIGHT (index.html, the covered
+     corner under this row's stacking) to top-left -- the other safe
+     corner, kept clear of the badge below it at bottom-left above. This
+     also fixes the narrow-mode bug where the remove button sat in the
+     covered corner and was unreachable by touch on every tile but the
+     last. */
+  body.gallery-card-style #upload-section .upload-gallery-col .history-cube-remove {
+    top: 5px;
+    right: auto;
+    left: 5px;
   }
   /* Letterbox backdrop: same note as the desktop block -- defined once in
      .demo-image-tile-bg / .history-cube-bg's own base rules, not here. */
