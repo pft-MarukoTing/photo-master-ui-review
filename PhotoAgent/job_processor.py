@@ -9,7 +9,7 @@ import time
 from aiserver_utils.queue import set_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
-from pipeline import analyze_stage, finish_stage
+from pipeline import analyze_stage, review_stage, finish_stage
 
 
 def build_job_metadata(task_info):
@@ -217,6 +217,16 @@ class PhotoAgentJobProcessor:
             )
             set_job_info(job_id=task_id, results={"stage": "edit", "run_count": run_count, "runs_done": 0})
 
+            # Step 3 once for the whole job: every RUN then edits from the
+            # same reviewed priorities, so the RUNs differ only by the image
+            # model's own variation (see pipeline.review_stage).
+            review = review_stage(
+                analysis,
+                params["user_prompt"],
+                overwrite_prompt=params.get("overwrite_prompt", False),
+                analysis_model=params["analysis_model"],
+            )
+
             run_results = []
             for run_index in range(run_count):
                 result = finish_stage(
@@ -232,6 +242,7 @@ class PhotoAgentJobProcessor:
                     aspect_ratio=params.get("aspect_ratio", "auto"),
                     overwrite_prompt=params.get("overwrite_prompt", False),
                     single_pass_edit=params.get("single_pass_edit", True),
+                    review=review,
                 )
 
                 run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index, include_pre_edit=bool(result.get("pre_edit_image")))

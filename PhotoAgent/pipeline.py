@@ -414,6 +414,53 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     return analysis
 
 
+def review_stage(
+    analysis: dict,
+    user_prompt: str,
+    *,
+    overwrite_prompt: bool = False,
+    analysis_model: str = MODELS["analysis"],
+) -> dict:
+    """Step 3: turn the typed instruction into structured editing priorities.
+
+    Kept out of finish_stage so a multi-RUN job reviews the instruction once
+    and every RUN edits from the same priorities. Reviewing per RUN made this
+    LLM call's own variance -- not the image model's -- the biggest difference
+    between RUNs: it re-decides per call whether a request that conflicts with
+    a preserve rule survives, so RUN 1 could be told to add poster text while
+    RUNs 2-3 were told the fidelity rules forbid it.
+
+    Cannot move into analyze_stage: the instruction is typed on the
+    analyze-preview screen, which only exists once analysis has returned.
+
+    Returns {"user_instruction", "prompt", "usage", "duration"}.
+    """
+    t0 = time.time()
+    logger.info("Step 3: reviewing user instruction (has_prompt=%s, overwrite_prompt=%s)", bool(user_prompt), overwrite_prompt)
+    if overwrite_prompt and (user_prompt or "").strip():
+        # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令):
+        # the raw text becomes the WHOLE edit-model prompt verbatim (see
+        # prompts.py's build_edit_prompt), so there is nothing here to
+        # structure into priorities/prohibitions -- skip the LLM review call.
+        user_instruction = {
+            "has_user_direction": True,
+            "normalized_user_direction": user_prompt.strip(),
+            "overwrite_prompt": True,
+        }
+        review_prompt = None
+        step3_usage = None
+    else:
+        user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis, analysis_model=analysis_model)
+    duration = time.time() - t0
+    logger.info("Step 3 done in %.2fs: has_direction=%s", duration, user_instruction.get("has_user_direction"))
+    return {
+        "user_instruction": user_instruction,
+        "prompt": review_prompt,
+        "usage": step3_usage,
+        "duration": duration,
+    }
+
+
 def finish_stage(
     image_bytes: bytes,
     analysis: dict,
@@ -427,8 +474,12 @@ def finish_stage(
     aspect_ratio: str = "auto",
     overwrite_prompt: bool = False,
     single_pass_edit: bool = True,
+    review: dict = None,
 ) -> dict:
     """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
+
+    review: a review_stage result to reuse instead of calling Step 3 here, so
+    every RUN of one job edits from the same reviewed priorities.
 
     There is no separate crop-validation step: the crop guidance from
     analyze_stage (crop_box, roi_box, protected_regions, ...) is passed
@@ -469,35 +520,15 @@ def finish_stage(
     usage = dict(analysis.get("usage") or {})
 
     # Step 3 — review user instruction (collected on the analyze-preview
-    # screen, so it's only available now that this stage has started)
-    t0 = time.time()
-    logger.info("Step 3: reviewing user instruction (has_prompt=%s, overwrite_prompt=%s)", bool(user_prompt), overwrite_prompt)
-    if overwrite_prompt and (user_prompt or "").strip():
-        # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令):
-        # the raw text becomes the WHOLE edit-model prompt verbatim (see
-        # prompts.py's build_edit_prompt), so there is nothing here to
-        # structure into priorities/prohibitions -- skip the LLM review call.
-        user_instruction = {
-            "has_user_direction": True,
-            "normalized_user_direction": user_prompt.strip(),
-            "overwrite_prompt": True,
-        }
-        review_prompt = None
-        step3_usage = None
-    else:
-        user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis, analysis_model=analysis_model)
-    has_body_review_points = any(
-        isinstance(subject, dict)
-        and isinstance(subject.get("body_reshape"), dict)
-        and bool(
-            subject.get("body_reshape", {}).get("key_points")
-            or subject.get("body_reshape", {}).get("raw_key_points")
-        )
-        for subject in (analysis.get("subjects") or [])
+    # screen, so it's only available now that this stage has started).
+    # A multi-RUN job reviews once in job_processor and passes it in here.
+    review = review or review_stage(
+        analysis, user_prompt,
+        overwrite_prompt=overwrite_prompt, analysis_model=analysis_model,
     )
-    if has_body_review_points:
+    user_instruction = review["user_instruction"]
+    if (user_prompt or "").strip():
         user_instruction = dict(user_instruction or {})
-    if has_body_review_points and (user_prompt or "").strip():
         user_instruction["original_user_direction"] = user_prompt.strip()
     analysis = {**analysis, "user_instruction": user_instruction}
     # A declined framing recipe owns both decisions the analyzer bundled into
@@ -523,10 +554,9 @@ def finish_stage(
     body_review_active = bool(body_execution_plan.get("review_point_count"))
     if body_review_active:
         analysis["_body_reshape_execution_plan"] = body_execution_plan
-    prompts["user_instruction_review"] = review_prompt
-    usage["Step 3 - user_instruction_review"] = step3_usage
-    timings["Step 3 - user_instruction_review"] = time.time() - t0
-    logger.info("Step 3 done in %.2fs: has_direction=%s", timings["Step 3 - user_instruction_review"], user_instruction.get("has_user_direction"))
+    prompts["user_instruction_review"] = review["prompt"]
+    usage["Step 3 - user_instruction_review"] = review["usage"]
+    timings["Step 3 - user_instruction_review"] = review["duration"]
 
     prompts["crop_validation"] = None
     timings["Step 4 - crop_validation"] = None

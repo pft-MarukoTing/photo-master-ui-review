@@ -1316,5 +1316,26 @@ Framing-size override requirement: This is a true wider-framing transformation. 
         self.assertEqual(audit["color_contract"]["skin_corrections"], analysis["correction_plan"])
 
 
+class UserDirectionPriority(unittest.TestCase):
+    """The reviewed user direction outranks the rest of the prompt."""
+
+    REVIEWED = "使用者希望加入文字與圖示，但此要求需受不得新增文字、標誌或物件的保真規則限制。"
+
+    def _block(self, user_direction):
+        prompt, _ = build_compact_editor_prompt(
+            {"subjects": [{"index": 0, "location": "center"}]}, "", user_direction, {},
+        )
+        return prompt.split("User direction:", 1)[1].split("Global preservation:", 1)[0].strip()
+
+    def test_a_reviewed_direction_gets_the_priority_line(self):
+        block = self._block(self.REVIEWED)
+        self.assertIn(self.REVIEWED, block)
+        self.assertIn("highest priority", block)
+
+    def test_no_direction_claims_no_priority(self):
+        block = self._block("")
+        self.assertEqual(block, "No additional direction.")
+
+
 if __name__ == "__main__":
     unittest.main()

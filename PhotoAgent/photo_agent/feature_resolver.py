@@ -1832,6 +1832,11 @@ def build_compact_editor_prompt(
         if body_execution_block else ""
     )
     user_text = user_direction.strip() or "No additional direction."
+    # A supplied user direction outranks every other block of this prompt.
+    user_priority_text = (
+        "\nThis user direction has the highest priority."
+        if user_text != "No additional direction." else ""
+    )
     revision_text = f"\n\nRevision feedback:\n{revision_feedback}" if revision_feedback else ""
     # Compact mode deliberately does not reuse prose that freezes a captured
     # expression (the portrait preset historically does). These endpoint-safe
@@ -1995,7 +2000,7 @@ def build_compact_editor_prompt(
     # original layout with style and user direction after Finish.
     if "pose" in style_options:
         style_before_states_block = (
-            f"\nUser direction:\n{user_text}"
+            f"\nUser direction:\n{user_text}{user_priority_text}"
             f"\n\nMandatory style overrides:\n{style_text}{pose_execution_order}\n"
         )
         style_after_finish_block = ""
@@ -2003,7 +2008,7 @@ def build_compact_editor_prompt(
         style_before_states_block = ""
         style_after_finish_block = (
             f"\n\nMandatory style overrides:\n{style_text}"
-            f"\n\nUser direction:\n{user_text}"
+            f"\n\nUser direction:\n{user_text}{user_priority_text}"
         )
 
     prompt = f"""{task_intro}

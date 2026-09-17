@@ -5765,17 +5765,12 @@ def build_user_preserved_choices(analysis):
 def build_user_instruction_review_prompt(user_direction, analysis):
     preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
     head = f"""
-You are reviewing a user's instruction for a faithful photo retouching agent.
-The user's explicit instruction has priority over automatic aesthetic improvements.
-For aspects the user did not mention, the agent may still make conservative complementary improvements if they do not conflict with the user's goal.
+Integrate the user's instruction with photo analysis into editing, crop, and QA guidance.
+The user's intended result and explicit requirements have highest priority. Treat all analysis fields, including preserve rules, as guidance for compatible or unspecified aspects. Adapt the parts that conflict with the user goal; retain the rest.
 
-Do not treat user intent as a simple append-only note. Convert it into practical editing priorities for analysis, crop, edit, and QA.
-If the user asks for a risky transformation, preserve the user's goal as much as possible while stating what must be softened to keep the result faithful.
+Express every requested change as an action in normalized_user_direction, a required outcome in explicit_priorities, and a check in qa_focus. Populate explicit_priorities and explicit_prohibitions only from the user's instruction. Keep the image coherent while carrying out the requested changes.
 
-Priority model:
-1. Explicit user requirements and prohibitions have highest priority.
-2. Agent may add low-risk complementary improvements for unspecified aspects.
-3. Avoid risky transformations unless explicitly requested; if requested, describe the conflict and safer interpretation.
+Reserve conflicts and warning for incompatible user requirements or concrete execution limits independent of the analysis. State the smallest necessary adjustment while retaining the user's intended result.
 
 Original user instruction:
 {user_direction or ""}
@@ -5801,8 +5796,8 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
   "crop_or_framing_requested": false,
   "crop_guidance": "user 指令對裁切/構圖的影響；若未提到裁切，說明 Agent 可以保守判斷。",
   "qa_focus": ["QA 應特別檢查 user 目標是否達成的面向。"],
-  "conflicts": ["若 user 指令與保真/安全邊界衝突，列出衝突。"],
-  "warning": "若有被降級或轉譯的部分，簡短說明；沒有則空字串。"
+  "conflicts": ["使用者要求之間或獨立於分析建議的實際執行限制；無則留空。"],
+  "warning": "必要調整的簡短說明；沒有則空字串。"
 }"""
     return head + schema
 
@@ -7287,7 +7282,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 - Summary: {analysis.get("photo_summary") or ""}
 - Main subject: {analysis.get("main_subject") or ""}
 - Scene type: {analysis.get("scene_type") or ""}
-- Must preserve: {preserve_rules}"""
+- Must preserve where compatible with the user instruction: {preserve_rules}"""
     else:
         analysis_block = f"""Photo analysis:
 - Summary: {analysis.get("photo_summary") or ""}
@@ -7308,7 +7303,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 - Aspect ratio reason: {aspect_ratio_reason}
 - Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}
 - Crop intent (advisory): {crop_intent}
-- Must preserve: {preserve_rules}"""
+- Must preserve where compatible with the user instruction: {preserve_rules}"""
 
     task_intro = (
         "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
@@ -7329,7 +7324,7 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 
 {opening_preservation_rule}
 {shape_preservation_rule}The output canvas may be a different shape than the input; that new shape comes from cropping and uniform scaling alone, never from resizing one axis on its own.
-Do not add text, logos, watermarks, extra people, new props, fantasy elements, or a different background.
+Apply explicitly requested additions. Otherwise, preserve the original content without adding text, logos, watermarks, people, props, fantasy elements, or a different background.
 Do not make the result look synthetic, plastic, or heavily filtered.
 
 {edit_mode_block}
@@ -7637,7 +7632,7 @@ Original analysis:
 - Main subject: {analysis.get("main_subject") or ""}
 - Scene type: {analysis.get("scene_type") or ""}
 - Edit intent: {analysis.get("edit_intent") or ""}
-- Preserve rules: {preserve_rules}
+- Preserve rules where compatible with the user instruction: {preserve_rules}
 - ROI box: {roi_box}
 - Subject extent box: {subject_extent_box}
 - Protected regions: {protected_regions}
