@@ -37,6 +37,8 @@ from prompts import (
     build_eye_repair_planning_response_schema,
     build_body_reshape_planning_instruction,
     build_body_reshape_planning_response_schema,
+    merge_body_reshape_edit_prompt,
+    build_user_instruction_review_prompt,
     build_edit_prompt,
     build_gaze_only_edit_prompt,
     build_quality_check_prompt,
@@ -47,11 +49,8 @@ from prompts import (
     derive_luna_gaze_decisions,
     eye_repair_targets,
     merge_eye_repair_strategies,
-    merge_body_reshape_plans,
-    apply_default_body_reshape_plans,
     strip_body_reshape,
     body_reshape_enabled,
-    body_reshape_execution_plan,
     portrait_qc_persons,
     style_option_entries,
     _apply_default_person_issues,
@@ -258,7 +257,7 @@ def _stamp_local_face_debug_fields(result, face_crops):
     return result
 
 
-def _analyze_photo_single_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL) -> dict:
+def _analyze_photo_single_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
 
@@ -286,11 +285,51 @@ def _analyze_photo_single_pass(image_bytes: bytes, aspect_ratio: str = "auto", a
     result = _parse_json_from_text(_extract_output_text(data))
     result = _stamp_local_face_debug_fields(result, face_crops)
     result = derive_hair_decisions(result)
+    usage_body = None
+    if body_reshape_enabled():
+        persons = portrait_qc_persons(result)
+        if persons:
+            try:
+                body_response, usage_body = _analyze_body_reshape_pass(
+                    data_url, persons, analysis_model
+                )
+                result = merge_body_reshape_edit_prompt(result, body_response)
+            except Exception as exc:
+                # Body Reshape is optional.  A failed optional pass must not
+                # make ordinary photo analysis or the other portrait features
+                # fail, and it must not invent a body edit without evidence.
+                logger.warning("Body reshape analysis pass failed: %s", exc)
+    else:
+        # Keep direct analyze_photo callers safe as well as the pipeline stage:
+        # a disabled feature must never leak a stale body field from a custom
+        # analyzer or a saved/retried response.
+        result = strip_body_reshape(result)
     return result, {
         "model": analysis_model,
-        "usage": data.get("usage"),
+        "usage": _sum_usage(data.get("usage"), usage_body),
         "reasoning_effort": ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
     }
+
+
+def _analyze_body_reshape_pass(data_url: str, persons: list, analysis_model: str):
+    """Run the dedicated per-person Body Reshape analyzer."""
+    payload = _responses_payload(
+        analysis_model,
+        [
+            {"type": "input_text", "text": build_body_reshape_planning_instruction(persons)},
+            {"type": "input_image", "image_url": data_url},
+        ],
+        # Strictly require one returned plan for every supplied person.  The
+        # subject/local-detection indices inside each plan are then validated
+        # by merge_body_reshape_plans rather than trusting response order.
+        text_format=build_body_reshape_planning_response_schema(len(persons)),
+        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    )
+    data = _post_json(
+        OPENAI_RESPONSES_URL, payload, "Photo analysis failed (body reshape pass)"
+    )
+    response = _parse_json_from_text(_extract_output_text(data))
+    return response, data.get("usage")
 
 
 def _sum_usage(*usage_items: dict) -> dict:
@@ -316,7 +355,7 @@ def _sum_usage(*usage_items: dict) -> dict:
     return combined
 
 
-def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL) -> dict:
+def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
     """gpt-5.6-luna only (see analyze_photo below). Call A does overall photo
     direction and subject identification, same as the single-pass flow minus
     blink/hair/gaze/smile; Call B is a dedicated portrait-QC pass that observes
@@ -325,12 +364,13 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     back by prompts.merge_portrait_qc_issues's stable subject_index (never by
     response-array position).  Python then applies the exact-lens gate and an
     optional Call C creates repair strategies only for people that passed it.
-    When ENABLE_BODY_RESHAPE is enabled, a separate body-planning pass reviews
-    every person and merges a concise body-only report plus at most five
-    actionable key_points by the same stable subject_index. The report is
-    review prose; downstream editing uses only the short key_points so
-    uncertain observations cannot become edits. When the internal flag is
-    disabled, that call is skipped and any stale body plan is removed.
+    When ENABLE_BODY_RESHAPE is enabled, one optional body-analysis pass reviews
+    the visible people independently and stores one detailed ``edit_prompt``
+    under each matching ``subjects[]`` entry.  Those per-person commands are
+    handed to the single image-editor prompt with their labels and boxes; no
+    person is allowed to inherit another person's body instruction.
+    When the internal flag is disabled, that call is skipped and stale body
+    data is removed.
 
     Call B (including a validation failure raised by merge_portrait_qc_issues
     itself -- a missing/duplicate/mismatched subject_index) is best-effort:
@@ -397,27 +437,14 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
 
     if persons and body_reshape_enabled():
         try:
-            content_body = [
-                {"type": "input_text", "text": build_body_reshape_planning_instruction(persons)},
-                {"type": "input_image", "image_url": data_url},
-            ]
-            payload_body = _responses_payload(
-                analysis_model,
-                content_body,
-                text_format=build_body_reshape_planning_response_schema(len(persons)),
-                reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+            body_response, usage_body = _analyze_body_reshape_pass(
+                data_url, persons, analysis_model
             )
-            data_body = _post_json(
-                OPENAI_RESPONSES_URL, payload_body, "Photo analysis failed (body reshape-planning pass)"
-            )
-            body_response = _parse_json_from_text(_extract_output_text(data_body))
-            analysis = merge_body_reshape_plans(analysis, body_response)
-            usage_body = data_body.get("usage")
+            analysis = merge_body_reshape_edit_prompt(analysis, body_response)
         except Exception as exc:
             logger.warning(
-                "Body reshape-planning pass failed; preserving every person's original body: %s", exc,
+                "Body reshape pass failed; leaving the optional body instruction absent: %s", exc,
             )
-            analysis = apply_default_body_reshape_plans(analysis)
     elif not body_reshape_enabled():
         # A finish/retry can be fed an analysis produced before the feature was
         # disabled.  Remove any stale body plan before it leaves the analysis
@@ -459,7 +486,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     }
 
 
-def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL) -> dict:
+def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
     if analysis_model == "gpt-5.6-luna":
         return _analyze_photo_two_pass(image_bytes, aspect_ratio, advanced_options, analysis_model)
     return _analyze_photo_single_pass(image_bytes, aspect_ratio, advanced_options, analysis_model)
@@ -718,36 +745,13 @@ QUALITY_CHECK_SCHEMA = {
 
 
 def _quality_check_schema(analysis):
-    """Add body adherence only when this request actually has body review data."""
-    plan = body_reshape_execution_plan(analysis)
-    if not plan.get("executable_point_count"):
-        return QUALITY_CHECK_SCHEMA
-    schema = copy.deepcopy(QUALITY_CHECK_SCHEMA)
-    schema["schema"]["properties"]["body_adherence"] = {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "subject_index": {"type": "integer"},
-                "source_key_point_index": {"type": "integer"},
-                "endpoint": {"type": "string"},
-                "status": {"type": "string", "enum": [
-                    "not_applicable", "not_evaluated", "passed", "failed", "unjudgeable",
-                ]},
-                "measured_change_pct": {"type": ["number", "null"]},
-                "minimum_threshold_verified": {"type": ["boolean", "null"]},
-                "assessment": {"type": "string"},
-                "note": {"type": "string"},
-            },
-            "required": [
-                "subject_index", "source_key_point_index", "endpoint", "status",
-                "measured_change_pct", "minimum_threshold_verified", "assessment", "note",
-            ],
-            "additionalProperties": False,
-        },
-    }
-    schema["schema"]["required"].insert(6, "body_adherence")
-    return schema
+    """Return the holistic QA schema for every request.
+
+    Body Reshape is a single natural-language instruction, so QA deliberately
+    uses the same general checks as other edits.  There is no endpoint list or
+    numeric body measurement to add to the response schema.
+    """
+    return QUALITY_CHECK_SCHEMA
 
 
 def _relabel_style_items(result: dict, analysis: dict) -> None:

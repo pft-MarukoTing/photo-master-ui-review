@@ -41,7 +41,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, getBodyReshapeOverrides, applyBodyReshapeOverrides, getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -226,11 +226,10 @@
   // result card shows the raw model string (e.g. "gpt-4.1-mini + gpt-image-2")
   // or a plain-language stand-in a regular user actually cares about.
   let isDebugUiActive = false;
-  // Internal Body Reshape switch.  This initial value mirrors config.js and
-  // is replaced by the backend's /api/config response below.  The server
-  // still enforces the flag for every analysis/edit request; this value only
-  // controls whether the corresponding review controls are rendered and
-  // whether the client forwards body selections on submit.
+  // Internal Body Reshape switch. This initial value mirrors config.js and is
+  // replaced by the backend's /api/config response below. The server still
+  // enforces the flag for every analysis/edit request; this value only controls
+  // feature visibility and whether the read-only prompt is retained on submit.
   let isBodyReshapeEnabled = window.PhotoAgentConfig?.enableBodyReshape !== false;
   // This deployment's own compatibility_version (compatibility_version.py), fetched
   // via /api/config below as compatibilityVersion -- "compatibility" (not
@@ -262,23 +261,12 @@
     setBodyReshapeEnabled(isBodyReshapeEnabled);
   }
 
-  function applyBodyReshapeSliderConfig(slider) {
-    if (!slider || typeof slider !== "object") return;
-    const values = ["default", "min", "max", "step"].map((key) => Number(slider[key]));
-    if (values.some((value) => !Number.isFinite(value))) return;
-    const [defaultValue, min, max, step] = values;
-    if (!(step > 0) || min < 0 || max < min || max >= 100 || defaultValue < min || defaultValue > max) return;
-    if (![defaultValue, min, max].every((value) => Math.abs((value - min) / step - Math.round((value - min) / step)) < 1e-9)) return;
-    window.PhotoAgentConfig = window.PhotoAgentConfig || {};
-    window.PhotoAgentConfig.bodyReshapeSlider = { default: defaultValue, min, max, step };
-  }
-
   // Single-image flow: kept after analyze so "回到流程" (from the results page)
   // can re-show the analysis preview and resubmit steps 3-6 without re-running
   // step 2. lastSingleSelections holds the last submitted prompt/options/recipe
   // checkboxes so re-opening the preview restores them instead of resetting.
   let singleFlowState = null; // { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, aiPhotoEditing, processingPath }
-  let lastSingleSelections = null; // { userPrompt, options, recipeChecked }
+  let lastSingleSelections = null; // { userPrompt, options, recipeChecked, bodyReshapeEnabled }
 
   // True between showPendingResults and closePendingResults -- #download-link
   // is shared with the finished-result state (gated there on lastResult), so
@@ -703,7 +691,6 @@
   if (window.location.href.includes("debug")) {
     applyDebugUiVisibility(true);
     getUiConfig().then((cfg) => {
-      applyBodyReshapeSliderConfig(cfg.bodyReshapeSlider);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
       }
@@ -717,7 +704,6 @@
     });
   } else {
     getUiConfig().then((cfg) => {
-      applyBodyReshapeSliderConfig(cfg.bodyReshapeSlider);
       applyDebugUiVisibility(!!cfg.debugUi);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
@@ -2491,19 +2477,20 @@
       // toggle (nothing else) leaves inlineReviseHasNoChanges thinking
       // nothing changed and blocks the Run click.
       faceIssueOverrides: getFaceIssueOverrides(),
-      bodyReshapeOverrides: getBodyReshapeOverrides(),
-      bodyReshapeAmountOverrides: getBodyReshapeAmountOverrides()
+      // The holistic Body Reshape approval switch is a real edit choice too:
+      // changing only this switch must unblock Run just like a face toggle.
+      bodyReshapeEnabled: getBodyReshapeReviewEnabled()
     };
   }
 
   // Each value here is either the primitive `false`, or a flat one-level
   // object like {allowed:true} / {allowed:true, level:"dynamic"} -- see
-  // getFaceIssueOverrides/getBodyReshapeOverrides (results.js). A plain
+  // getFaceIssueOverrides (results.js). A plain
   // `===` on those object values compared a fresh instance built just now
   // against the one captured in the snapshot, which are never the same
   // reference even when their contents match -- silently reporting "changed"
-  // on every revise that involved any face-issue/body-reshape override at
-  // all, not just an actual change to one. sameValue below compares that one
+  // on every revise that involved any face-issue override at all, not just an
+  // actual change to one. sameValue below compares that one
   // level of object contents instead of identity.
   function sameFaceIssueOverrides(a, b) {
     const sameValue = (va, vb) => {
@@ -2516,24 +2503,6 @@
     const keysA = Object.keys(a || {});
     const keysB = Object.keys(b || {});
     return keysA.length === keysB.length && keysA.every((key) => sameValue(a[key], (b || {})[key]));
-  }
-
-  function sameBodyReshapeAmountOverrides(a, b) {
-    const normalize = (values) => (Array.isArray(values) ? values : [])
-      .map((item) => ({
-        subject_index: Number(item?.subject_index),
-        key_point_index: Number(item?.key_point_index),
-        target_pct: Number(item?.target_pct)
-      }))
-      .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index) && Number.isFinite(item.target_pct))
-      .sort((left, right) => left.subject_index - right.subject_index || left.key_point_index - right.key_point_index);
-    const left = normalize(a);
-    const right = normalize(b);
-    return left.length === right.length && left.every((item, index) =>
-      item.subject_index === right[index].subject_index
-      && item.key_point_index === right[index].key_point_index
-      && item.target_pct === right[index].target_pct
-    );
   }
 
   // True if the inline revise panel's Run button would submit an unchanged
@@ -2562,12 +2531,9 @@
     const sameAdvancedOptions = Object.keys(advancedOptions).every(
       (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
-    const sameBodyReshape = sameFaceIssueOverrides(
-      getBodyReshapeOverrides(), inlineReviseSnapshot.bodyReshapeOverrides);
-    const sameBodyReshapeAmounts = sameBodyReshapeAmountOverrides(
-      getBodyReshapeAmountOverrides(), inlineReviseSnapshot.bodyReshapeAmountOverrides);
+    const sameBodyReshape = getBodyReshapeReviewEnabled() === inlineReviseSnapshot.bodyReshapeEnabled;
     return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount
-      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape && sameBodyReshapeAmounts;
+      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape;
   }
 
   // Keeps the Run button visually flagged whenever inlineReviseHasNoChanges()
@@ -2598,7 +2564,7 @@
         // either uncheck/pick something or leave via Cancel instead. Doesn't
         // clear the listener/resolve, so the panel just stays open.
         if (inlineReviseHasNoChanges()) {
-          showNoticeModal("請至少修改一項修圖建議、風格選項、補充指令或設定後再執行。");
+          showNoticeModal("請至少修改一項修圖建議、身形調整、風格選項、補充指令或設定後再執行。");
           return;
         }
         clearInlineAnalysisWait();
@@ -2938,7 +2904,7 @@
     [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach((list) => {
       if (list) list.innerHTML = "";
     });
-    // Same class of bug as above, but for face-issue/body-reshape overrides:
+    // Same class of bug as above, but for face-issue overrides:
     // that state lives in results.js's faceThumbEntries (an in-memory array,
     // not the DOM), which finishSingleFlow's getFaceIssueOverrides() reads
     // directly. Without this, the previous photo's allowed/flagged state
@@ -3729,8 +3695,7 @@
       analyzeJobId: null,   // local path only: the analyze job, reused by continue
       options: null,        // per-image style options {pose,angle,lighting,size} (UI-only)
       recipeChecked: null,  // per-image recipe checklist state (UI-only)
-      bodyReshapeOverrides: null, // unchecked per-person body key points (UI-only)
-      bodyReshapeAmountOverrides: null, // touched per-key-point amounts (UI-only)
+      bodyReshapeEnabled: null, // per-image holistic Body review switch (UI-only)
       userPrompt: "",       // per-image 補充指令 (entered in the step-2 review)
       overwritePrompt: false, // "取代最終送給編輯模型的完整指令" checkbox, alongside userPrompt
       analyzeTimings: [],   // step-1 timing rows, merged into the detail view
@@ -4306,15 +4271,14 @@
     singleFlowState.singlePassEdit = singlePassEdit;
     const selections = readStyleSelectionsFromDom();
     const faceIssueOverrides = getFaceIssueOverrides();
-    const bodyReshapeOverrides = getBodyReshapeOverrides();
-    const bodyReshapeAmountOverrides = getBodyReshapeAmountOverrides();
+    const bodyReshapeReviewEnabled = getBodyReshapeReviewEnabled();
     const userPrompt = els.promptInput.value.trim();
     const overwritePrompt = els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false;
-    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides, bodyReshapeOverrides, bodyReshapeAmountOverrides };
+    lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
     const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(
-      analysis, { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeOverrides, bodyReshapeAmountOverrides });
+      analysis, { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled });
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -4776,8 +4740,9 @@
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
       applyFaceIssueOverrides(lastSingleSelections.faceIssueOverrides);
-      applyBodyReshapeOverrides(lastSingleSelections.bodyReshapeOverrides);
-      applyBodyReshapeAmountOverrides(lastSingleSelections.bodyReshapeAmountOverrides);
+      if (typeof lastSingleSelections.bodyReshapeEnabled === "boolean") {
+        setBodyReshapeReviewEnabled(lastSingleSelections.bodyReshapeEnabled);
+      }
       // The face review cards were already built (renderAnalysisPreview just
       // above) before these overrides existed on faceThumbEntries -- rebuild
       // them so the toggles on screen reflect the restored picks instead of
@@ -4803,7 +4768,7 @@
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Preserve unsent local review edits for the next time the panel is
-      // opened; this includes slider amounts and does not submit a request.
+      // opened; this does not submit a request.
       const currentSelections = readStyleSelectionsFromDom();
       lastSingleSelections = {
         userPrompt: els.promptInput ? els.promptInput.value.trim() : "",
@@ -4811,8 +4776,7 @@
         ...currentSelections,
         advancedOptions: readAdvancedOptionsFromDom(),
         faceIssueOverrides: getFaceIssueOverrides(),
-        bodyReshapeOverrides: getBodyReshapeOverrides(),
-        bodyReshapeAmountOverrides: getBodyReshapeAmountOverrides()
+        bodyReshapeEnabled: getBodyReshapeReviewEnabled()
       };
       return;
     }
@@ -5244,6 +5208,7 @@
     // submitting it below -- close it out first so every not-yet-edited case
     // (including whichever one is currently open) goes through this one path.
     if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
+      if (currentBatchRecord) captureBatchReviewSelections(currentBatchRecord);
       clearInlineAnalysisWait();
       closeInlineAnalysisPanel();
     }
@@ -5274,8 +5239,7 @@
         recipeChecked: record.recipeChecked,
         advancedOptions: effectiveAdvancedOptions(record),
         faceIssueOverrides: record.faceIssueOverrides,
-        bodyReshapeOverrides: record.bodyReshapeOverrides,
-        bodyReshapeAmountOverrides: record.bodyReshapeAmountOverrides
+        bodyReshapeEnabled: record.bodyReshapeEnabled
       });
       const modelQuality = effectiveModelQuality(record);
       const analysisModel = effectiveAnalysisModel(record);
@@ -6698,17 +6662,6 @@
       lighting: styleOptions.lighting || "default",
       size: styleOptions.size || "default"
     };
-    const bodyReshapeOverrides = {};
-    (analysis._disabled_body_reshape_subjects || []).forEach((subjectIndex) => {
-      if (Number.isInteger(subjectIndex)) bodyReshapeOverrides[`subject:${subjectIndex}`] = false;
-    });
-    (analysis._disabled_body_reshape_key_points || []).forEach((item) => {
-      if (Number.isInteger(item?.subject_index) && Number.isInteger(item?.key_point_index)) {
-        bodyReshapeOverrides[`${item.subject_index}:${item.key_point_index}`] = false;
-      }
-    });
-    const bodyReshapeAmountOverrides = Array.isArray(analysis._body_reshape_amount_overrides)
-      ? analysis._body_reshape_amount_overrides.map((item) => ({ ...item })) : [];
     return {
       analysis: restoredAnalysis,
       selections: {
@@ -6716,8 +6669,7 @@
         overwritePrompt: !!overwritePrompt,
         options,
         recipeChecked,
-        bodyReshapeOverrides,
-        bodyReshapeAmountOverrides
+        bodyReshapeEnabled: analysis?._body_reshape_enabled !== false
       }
     };
   }
@@ -7934,7 +7886,7 @@
     // plain, panel-closed width) then narrow again as the new record's
     // panel reopened, purely from this now-removed round trip.
     if (els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) {
-      // Preserve in-progress review controls (including touched body amounts)
+      // Preserve in-progress face review controls
       // before replacing the panel with another batch photo. This is a local
       // snapshot only; no analyze/edit request is triggered.
       if (currentBatchRecord) captureBatchReviewSelections(currentBatchRecord);
@@ -8530,6 +8482,8 @@
     // rather than analyze-time history.
     syncFaceReviewAdvancedOptions(effectiveAdvancedOptions(record));
     applyBatchReviewSelections(record);
+    // applyBatchReviewSelections restores the per-image Body decision after
+    // renderAnalysisPreview rebuilt the shared review panel.
     if (els.promptInput) els.promptInput.value = record.userPrompt || "";
     if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!record.overwritePrompt;
     // Pre-fill with this image's own current RUN count (matching whatever was
@@ -8556,7 +8510,7 @@
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Keep local review edits when the user closes the panel without
-      // submitting; reopening this batch photo should not reset a slider.
+      // submitting; reopening this batch photo should not reset review state.
       captureBatchReviewSelections(record);
       return;
     }
@@ -9097,8 +9051,7 @@
   // the same change anyway. Any non-default pose/angle/lighting/size pick is
   // attached as style_options for the edit prompt.
   function buildEffectiveAnalysis(analysis, {
-    options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeOverrides,
-    bodyReshapeAmountOverrides
+    options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeEnabled
   } = {}) {
     // Applied BEFORE the recipeChecked split below, and on the same
     // `advancedOptions` #ap-recipe-list was just rendered/refreshed with
@@ -9109,26 +9062,73 @@
     const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
     const effective = { ...base };
 
-    // Do not let an analysis produced while Body Reshape was enabled leak
-    // stale plans into a later run after the server-side feature is disabled.
-    // This is also important for history/revise records, which can carry an
-    // older subjects[].body_reshape object in the browser.
-    if (!isBodyReshapeEnabled) {
-      if (Array.isArray(effective.subjects)) {
-        effective.subjects = effective.subjects.map((subject) => {
-          if (!subject || typeof subject !== "object") return subject;
-          const copy = { ...subject };
-          delete copy.body_reshape;
-          return copy;
-        });
-      }
-      delete effective._disabled_body_reshape_subjects;
-      delete effective._disabled_body_reshape_key_points;
-      delete effective._body_reshape_amount_overrides;
+    // Keep each person's original body_reshape object on the request.  The
+    // per-person switch only changes `should_edit`; `edit_prompt` remains the
+    // analyzer's exact editor command and is never replaced by a shared or
+    // regenerated sentence.
+    // ``null`` is the initial per-record value for a batch item, not an
+    // explicit approval.  Only a real boolean should override the persisted
+    // request-scoped decision on the analysis object; otherwise a saved
+    // ``_body_reshape_enabled: false`` must stay disabled when the record is
+    // reopened for editing.
+    const bodyReviewEnabled = typeof bodyReshapeEnabled === "boolean"
+      ? bodyReshapeEnabled
+      : effective._body_reshape_enabled !== false;
+    const disabledBodySubjects = new Set(
+      (Array.isArray(effective._disabled_body_reshape_subjects)
+        ? effective._disabled_body_reshape_subjects : [])
+        .filter((index) => Number.isInteger(index) && index >= 0)
+    );
+    let hasNestedBodyPlans = false;
+    if (Array.isArray(effective.subjects)) {
+      effective.subjects = effective.subjects.map((subject, subjectIndex) => {
+        if (!subject || typeof subject !== "object") return subject;
+        const copy = { ...subject };
+        const body = copy.body_reshape;
+        if (body && typeof body === "object") {
+          if (!isBodyReshapeEnabled) {
+            delete copy.body_reshape;
+          } else {
+            hasNestedBodyPlans = true;
+            const bodyCopy = { ...body };
+            if (!bodyReviewEnabled || disabledBodySubjects.has(subjectIndex)) {
+              bodyCopy.should_edit = false;
+            }
+            copy.body_reshape = bodyCopy;
+          }
+        }
+        return copy;
+      });
     }
-    // Execution conclusions are request-scoped. The backend rebuilds them
-    // after applying the latest checkbox, instruction, and overwrite state.
+    delete effective._disabled_body_reshape_subjects;
+    delete effective._disabled_body_reshape_key_points;
+    delete effective._body_reshape_amount_overrides;
     delete effective._body_reshape_execution_plan;
+    [
+      "key_points", "raw_key_points", "target_pct", "effective_target_pct",
+      "planner_target_pct", "planner_default_target_pct",
+      "body_reshape_execution", "body_reshape_execution_plan",
+    ].forEach((key) => delete effective[key]);
+    if (hasNestedBodyPlans) {
+      // Nested plans are now the source of truth.  Do not leave a legacy
+      // top-level prompt or global flag that could duplicate/suppress only
+      // part of the per-person hand-off.
+      delete effective.body_reshape;
+      delete effective._body_reshape_enabled;
+    } else if (isBodyReshapeEnabled) {
+      const prompt = effective.body_reshape?.edit_prompt;
+      if (typeof prompt === "string" && prompt.trim()) {
+        effective.body_reshape = { edit_prompt: prompt.trim() };
+        if (bodyReviewEnabled) delete effective._body_reshape_enabled;
+        else effective._body_reshape_enabled = false;
+      } else {
+        delete effective.body_reshape;
+        delete effective._body_reshape_enabled;
+      }
+    } else {
+      delete effective.body_reshape;
+      delete effective._body_reshape_enabled;
+    }
 
     // The per-person "allow AI to fix this" toggle (#ap-face-detail,
     // getFaceIssueOverrides in results.js): { "subjectIndex:category": false }
@@ -9149,7 +9149,11 @@
     //      override that ignores adjust_safe entirely, so only this hard
     //      exclusion can still stop it for a person who was opted out.
     if (faceIssueOverrides && Object.keys(faceIssueOverrides).length && Array.isArray(base.subjects)) {
-      const subjects = base.subjects.map((subject) => (subject && typeof subject === "object") ? { ...subject } : subject);
+      const subjects = (effective.subjects || base.subjects).map((subject) => {
+        if (!subject || typeof subject !== "object") return subject;
+        return { ...subject, ...(subject.body_reshape && typeof subject.body_reshape === "object"
+          ? { body_reshape: { ...subject.body_reshape } } : {}) };
+      });
       const disabledFaceIssues = [];
       Object.entries(faceIssueOverrides).forEach(([key, override]) => {
         const [subjectIndexStr, category] = key.split(":");
@@ -9159,9 +9163,16 @@
         const issue = { ...subject[category] };
         const allowed = override !== false && (!override || override.allowed !== false);
         if (!allowed) {
-          if (category === "smile_issue") issue.adjust_safe = true;
+          if (category === "body_reshape") issue.should_edit = false;
+          else if (category === "smile_issue") issue.adjust_safe = true;
           else issue.should_fix = false;
-          disabledFaceIssues.push({ subject_index: subjectIndex, category });
+          if (category !== "body_reshape") {
+            disabledFaceIssues.push({ subject_index: subjectIndex, category });
+          }
+        } else if (category === "body_reshape") {
+          // An explicit per-person ON choice must re-enable a plan that was
+          // previously saved with should_edit=false.
+          issue.should_edit = true;
         } else if (override && typeof override === "object") {
           // "Forced" means that the user overrode a negative analyzer verdict,
           // not merely that an enabled row carries a per-person level. Keep an
@@ -9177,35 +9188,6 @@
       });
       effective.subjects = subjects;
       effective._disabled_face_issues = disabledFaceIssues;
-    }
-
-    // Keep every analyzed body key point in subjects[] for review/history,
-    // and send a separate deny-list for the points the user unchecked. The
-    // backend's body_reshape_items() enforces this list for both legacy and
-    // compact editor prompts, so an unchecked item cannot become an edit.
-    if (isBodyReshapeEnabled) {
-      const bodyOverrideEntries = Object.entries(bodyReshapeOverrides || {});
-      effective._disabled_body_reshape_subjects = bodyOverrideEntries
-        .filter(([key, allowed]) => key.startsWith("subject:") && allowed === false)
-        .map(([key]) => Number(key.slice("subject:".length)))
-        .filter((subjectIndex) => Number.isInteger(subjectIndex));
-      effective._disabled_body_reshape_key_points = bodyOverrideEntries
-        .filter(([key, allowed]) => !key.startsWith("subject:") && allowed === false)
-        .map(([key]) => {
-          const [subjectIndex, keyPointIndex] = key.split(":").map(Number);
-          return { subject_index: subjectIndex, key_point_index: keyPointIndex };
-        })
-        .filter((item) => Number.isInteger(item.subject_index) && Number.isInteger(item.key_point_index));
-      effective._body_reshape_amount_overrides = (Array.isArray(bodyReshapeAmountOverrides)
-        ? bodyReshapeAmountOverrides : [])
-        .map((item) => ({
-          subject_index: Number(item?.subject_index),
-          key_point_index: Number(item?.key_point_index),
-          target_pct: Number(item?.target_pct)
-        }))
-        .filter((item) => Number.isInteger(item.subject_index)
-          && Number.isInteger(item.key_point_index)
-          && Number.isFinite(item.target_pct));
     }
 
     // `analysis` already carries its own _advanced_options, baked in at
@@ -9291,8 +9273,7 @@
     record.options = options;
     if (recipeChecked) record.recipeChecked = recipeChecked;
     record.faceIssueOverrides = getFaceIssueOverrides();
-    record.bodyReshapeOverrides = getBodyReshapeOverrides();
-    record.bodyReshapeAmountOverrides = getBodyReshapeAmountOverrides();
+    record.bodyReshapeEnabled = getBodyReshapeReviewEnabled();
   }
 
   // Restores previously-captured pose/angle/lighting/size radios + recipe
@@ -9329,8 +9310,9 @@
   // show what will actually be submitted, same merge rule as effectiveOptions.
   function applyBatchReviewSelections(record) {
     applyFaceIssueOverrides(record.faceIssueOverrides);
-    applyBodyReshapeOverrides(record.bodyReshapeOverrides);
-    applyBodyReshapeAmountOverrides(record.bodyReshapeAmountOverrides);
+    if (typeof record.bodyReshapeEnabled === "boolean") {
+      setBodyReshapeReviewEnabled(record.bodyReshapeEnabled);
+    }
     // The face review cards were already built (renderAnalysisPreview, called
     // just before this function at its one call site) before these overrides
     // existed on faceThumbEntries -- rebuild them so the toggles on screen
@@ -9706,7 +9688,8 @@
     lastSingleSelections = {
       userPrompt: analysis.user_instruction?.normalized_user_direction || "",
       options: analysis.style_options || undefined,
-      recipeChecked: null
+      recipeChecked: null,
+      bodyReshapeEnabled: analysis?._body_reshape_enabled !== false
     };
 
     singleRuns = image.runs;
@@ -9744,6 +9727,7 @@
       record.analysis = analysis;
       record.analyzeJobId = null;    // -> rerunJob
       record.options = analysis.style_options || null;
+      record.bodyReshapeEnabled = analysis?._body_reshape_enabled !== false;
       record.userPrompt = analysis.user_instruction?.normalized_user_direction || "";
       record.runs = image.runs;
       record.mirrorIndex = 0;
@@ -10091,8 +10075,8 @@
   // listener of their own: the recipe checklist (individual checkboxes are
   // rebuilt on every render, but this delegated listener on the stable
   // container survives that) and #ap-face-detail (delegated -- covers every
-  // per-person face-issue toggle/level-select and body-reshape toggle/
-  // checkbox it contains, all of which mutate faceThumbEntries in place
+  // per-person face-issue toggle/level-select it contains, all of which mutate
+  // faceThumbEntries in place
   // rather than exposing their own individual change hooks). 補充指令 and its
   // "取代" checkbox have no other listener at all yet.
   if (els.apRecipeList) {
@@ -10103,6 +10087,11 @@
   }
   if (els.apFaceDetail) {
     els.apFaceDetail.addEventListener("change", updateInlineAnalysisContinueBtnState);
+  }
+  if (els.apBodyReshapeControl) {
+    // The switch is rebuilt with each analysis/result render, so listen on
+    // its stable host rather than on the transient checkbox itself.
+    els.apBodyReshapeControl.addEventListener("change", updateInlineAnalysisContinueBtnState);
   }
   if (els.promptInput) {
     els.promptInput.addEventListener("input", updateInlineAnalysisContinueBtnState);

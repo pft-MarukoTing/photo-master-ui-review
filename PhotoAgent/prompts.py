@@ -1,7 +1,6 @@
 import copy
 import json
 import logging
-import math
 import re
 
 import config as _photoagent_config
@@ -19,6 +18,149 @@ def body_reshape_enabled():
     module.
     """
     return bool(getattr(_photoagent_config, "ENABLE_BODY_RESHAPE", True))
+
+
+# Body Reshape is a per-person contract.  The old review UI showed each
+# person's own body instruction; keep that relationship all the way through
+# Analyze -> review -> Editor instead of collapsing several people into one
+# holistic sentence.  Twenty characters is an intentional lower bound: a
+# command must name enough visible geometry to be useful to the editor.
+BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH = 20
+BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH = 240
+BODY_RESHAPE_FALLBACK_PROMPT = "自然調整可見身形輪廓與比例，保持解剖連續、原姿勢、衣物邊界及背景透視"
+
+# These keys appeared at the analysis root in intermediate/debug artifacts.
+# They are accepted only as history input and removed before an edit request;
+# ``_disabled_body_reshape_subjects`` is the one request-scoped review field
+# retained because the UI can disable one person's plan without changing the
+# analyzer output.
+_BODY_RESHAPE_LEGACY_KEYS = (
+    "key_points", "raw_key_points", "target_pct", "effective_target_pct",
+    "planner_target_pct", "planner_default_target_pct", "body_reshape_execution",
+    "body_reshape_execution_plan", "_disabled_body_reshape_key_points",
+    "_body_reshape_amount_overrides", "_body_reshape_execution_plan",
+)
+
+
+def _body_reshape_fallback_prompt(label=None, should_edit=True):
+    """Build a detailed, valid fallback while retaining person context."""
+    label = " ".join(str(label or "此人物").split()).strip() or "此人物"
+    if should_edit:
+        return (
+            f"針對{label}調整可見身形輪廓與比例，保持自然解剖、原姿勢、衣物邊界及背景透視連續"
+        )
+    return f"{label}不進行身形修改，保留原始輪廓比例、姿勢、衣物邊界與背景透視連續"
+
+
+def normalize_body_reshape_edit_prompt(value, fallback=BODY_RESHAPE_FALLBACK_PROMPT):
+    """Return one detailed editor-ready body instruction.
+
+    Unlike the short holistic contract used briefly in the previous revision,
+    this normalizer intentionally preserves useful numeric/detail wording and
+    only falls back when the instruction is empty, too short, too long, or
+    clearly formatted as a list.  In particular, percentages are allowed:
+    they are often the only unambiguous magnitude an editor can follow.
+    """
+    fallback_text = " ".join(str(fallback or BODY_RESHAPE_FALLBACK_PROMPT).split()).strip()
+    if len(fallback_text) < BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH:
+        fallback_text = BODY_RESHAPE_FALLBACK_PROMPT
+    if len(fallback_text) > BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH:
+        fallback_text = BODY_RESHAPE_FALLBACK_PROMPT
+    if not isinstance(value, str):
+        return fallback_text
+    text = " ".join(value.split()).strip().strip('"“”')
+    if not text or len(text) < BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH:
+        return fallback_text
+    if len(text) > BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH:
+        return fallback_text
+    if re.search(r"^(?:[#*•●▪-]|\d+\s*[.)、．：:])\s*", text):
+        return fallback_text
+    return text
+
+
+def _body_reshape_disabled_subjects(analysis):
+    values = analysis.get("_disabled_body_reshape_subjects") if isinstance(analysis, dict) else None
+    return {
+        value for value in (values or [])
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    }
+
+
+def body_reshape_plan_entries(analysis, *, include_disabled=True):
+    """Return normalized per-person body plans for review or execution.
+
+    ``include_disabled`` is used by the review UI so an opt-out still shows
+    the Analyze text.  Editor consumers use ``body_reshape_items`` below,
+    which returns only actionable plans.
+    """
+    if not body_reshape_enabled() or not isinstance(analysis, dict):
+        return []
+    if analysis.get("_body_reshape_enabled") is False:
+        return []
+    disabled = _body_reshape_disabled_subjects(analysis)
+    subjects = analysis.get("subjects") if isinstance(analysis.get("subjects"), list) else []
+    entries = []
+    for subject_index, subject in enumerate(subjects):
+        if not isinstance(subject, dict) or subject.get("is_person") is not True:
+            continue
+        body = subject.get("body_reshape")
+        if not isinstance(body, dict):
+            continue
+        prompt = body.get("edit_prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            legacy_points = body.get("key_points")
+            if isinstance(legacy_points, list):
+                prompt = "；".join(str(point).strip() for point in legacy_points if str(point).strip())
+        if not isinstance(prompt, str) or not prompt.strip():
+            continue
+        should_edit = body.get("should_edit") is not False
+        prompt = normalize_body_reshape_edit_prompt(
+            prompt,
+            fallback=_body_reshape_fallback_prompt(subject.get("label"), should_edit),
+        )
+        entry = {
+            "subject_index": subject_index,
+            "local_detection_index": subject.get("local_detection_index", -1),
+            "subject_label": subject.get("label") or f"人物 {subject_index + 1}",
+            "box": subject.get("box") or {},
+            "edit_prompt": prompt,
+            "report": str(body.get("report") or "").strip(),
+            "should_edit": should_edit,
+            "disabled": subject_index in disabled,
+        }
+        entry["active"] = should_edit and not entry["disabled"]
+        if include_disabled or entry["active"]:
+            entries.append(entry)
+
+    # Keep old saved analyses readable.  A top-level prompt has no person
+    # identity, so it is only a compatibility fallback when no nested plans
+    # exist; newly generated analyses always use the per-person branch above.
+    if not entries and not any(isinstance(s, dict) and isinstance(s.get("body_reshape"), dict) for s in subjects):
+        body = analysis.get("body_reshape")
+        if isinstance(body, dict) and isinstance(body.get("edit_prompt"), str) and body.get("edit_prompt").strip():
+            entries.append({
+                "subject_index": None,
+                "local_detection_index": -1,
+                "subject_label": "主要人物",
+                "box": {},
+                "edit_prompt": normalize_body_reshape_edit_prompt(body.get("edit_prompt")),
+                "report": "",
+                "should_edit": True,
+                "disabled": False,
+                "active": True,
+            })
+    return entries
+
+
+def get_body_reshape_edit_prompts(analysis):
+    """Return the visible per-person Analyze instructions, including opt-outs."""
+    return body_reshape_plan_entries(analysis, include_disabled=True)
+
+
+def get_body_reshape_edit_prompt(analysis):
+    """Compatibility reader returning active instructions as one string."""
+    entries = body_reshape_plan_entries(analysis, include_disabled=False)
+    return "；".join(entry["edit_prompt"] for entry in entries if entry.get("active"))
 
 
 def _without_body_reshape_prompt_lines(instruction):
@@ -222,7 +364,7 @@ Subject inclusion rule (for people specifically):
 - Signals that someone is likely an incidental bystander rather than an intended subject (none of these is decisive alone; weigh them together): they show only their back or the side/rear of their head with no facial detail at all; they are small, distant, blurred, or heavily occluded relative to this photo's real subject(s); they are not looking toward, posed with, or interacting with the photo's main subject(s); the photo's framing/composition clearly centers on someone or something else and this person sits at the edge or deep in the background.
 - Do not use sharpness, size, lighting, or facing-the-camera as evidence that someone belongs in subjects[] -- a candid photo routinely shows its real subject(s) mid-action, turned away, or partly out of frame, while an unrelated stranger nearby (another table, another bench, another group) simply happens to be well-lit and facing the camera. That stranger being the clearest, largest, or most camera-facing face in the photo is never by itself a reason to include them. Decide from spatial/social grouping instead: are they seated at the same table, part of the same conversation or physical cluster as the photo's own subject(s), or just someone else in the room who happens to be visible? A sharply-visible face belongs in subjects[] only if it also passes this grouping test -- clarity is not a substitute for it.
 - These signals do not automatically disqualify someone from getting a subjects[] entry. A main subject deliberately photographed from behind, or a close companion standing slightly behind/beside the main subject, still belongs in subjects[] -- box, label, prominence, reason -- even when their face is not visible at all. Whether that entry also gets is_person=true is a separate question, decided by the is_person definition below, not by this bystander test.
-- is_person definition: set is_person=true only when this subjects[] entry both (a) passed the inclusion test above and (b) has enough of their actual face visible to judge and, if needed, correct it -- eye state, gaze direction, smile, front hair. Set is_person=false whenever either is untrue: an incidental bystander (see above), or a genuine included subject whose face cannot be read at all -- shown only from the back or the side/rear of the head, a silhouette, or otherwise fully obscured. is_person=false is a full switch, not just for the face: it also turns off body_reshape for that person and skips them from the dedicated portrait-QC pass and the local face-box containment rule below, since there is nothing about them -- face or body -- for a close-up portrait review to act on. Never set is_person=true just because someone is a real, included person; only set it when their face is actually there to analyze.
+- is_person definition: set is_person=true only when this subjects[] entry both (a) passed the inclusion test above and (b) has enough of their actual face visible to judge and, if needed, correct it -- eye state, gaze direction, smile, front hair. Set is_person=false whenever either is untrue: an incidental bystander (see above), or a genuine included subject whose face cannot be read at all -- shown only from the back or the side/rear of the head, a silhouette, or otherwise fully obscured. is_person=false is a full switch, not just for the face: it also skips them from the dedicated portrait-QC pass and the local face-box containment rule below, since there is nothing about their face for a close-up portrait review to act on. Never set is_person=true just because someone is a real, included person; only set it when their face is actually there to analyze.
 - Judge from the whole picture: would someone looking at this photo say "the people in this photo" includes this individual, or would they say "there's also a stranger in the background"? Only the former belongs in subjects[] at all, whether as is_person=true or is_person=false.
 - A real face that fails this inclusion test (a genuine incidental bystander) still gets a local_face_review entry -- with matched_subject_index=-1 and a reason naming the exclusion -- it just does not get a subjects[] entry of its own.
 - This rule is about which people belong in subjects[]; it has no bearing on non-person subjects (products, food, animals, objects), which are still selected and ordered by the existing prominence rules in Coordinate rules below.
@@ -1007,7 +1149,7 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - Reframing consistency check: if crop_box.enabled=true, verify that exactly one correction_plan item owns all composition reframing and any aspect-ratio change, its correction_axes includes "crop", its retouch_recipe starts with "重新構圖：", and its correction_inverse restores the original ratio and complete composition without preserving tilt/perspective. The crop item text must describe the semantic crop without naming a numeric ratio; crop_box geometry owns that decision and local deterministic code inserts the resolved ratio afterward. If any composition-framing part is split across items, merge those parts and their aligned arrays before returning JSON. Keep any horizon/vertical/perspective correction in its own "alignment" item.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and its blink_issue/hair_issue/gaze_issue/smile_issue, and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
-- is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
+- is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue to their is_person=false placeholders instead of leaving stale judged values in place.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 - Before returning JSON, read edit_intent, lighting_strategy, memory_color_strategy, correction_plan, and preserve_rules together. Make them one consistent target and execution plan; remove or rewrite any statement that weakens or preserves away an approved light or color adjustment.
 
@@ -1950,7 +2092,7 @@ Subject inclusion rule (for people specifically):
 - Signals that someone is likely an incidental bystander rather than an intended subject (none of these is decisive alone; weigh them together): they show only their back or the side/rear of their head with no facial detail at all; they are small, distant, blurred, or heavily occluded relative to this photo's real subject(s); they are not looking toward, posed with, or interacting with the photo's main subject(s); the photo's framing/composition clearly centers on someone or something else and this person sits at the edge or deep in the background.
 - Do not use sharpness, size, lighting, or facing-the-camera as evidence that someone belongs in subjects[] -- a candid photo routinely shows its real subject(s) mid-action, turned away, or partly out of frame, while an unrelated stranger nearby (another table, another bench, another group) simply happens to be well-lit and facing the camera. That stranger being the clearest, largest, or most camera-facing face in the photo is never by itself a reason to include them. Decide from spatial/social grouping instead: are they seated at the same table, part of the same conversation or physical cluster as the photo's own subject(s), or just someone else in the room who happens to be visible? A sharply-visible face belongs in subjects[] only if it also passes this grouping test -- clarity is not a substitute for it.
 - These signals do not automatically disqualify someone from getting a subjects[] entry. A main subject deliberately photographed from behind, or a close companion standing slightly behind/beside the main subject, still belongs in subjects[] -- box, label, prominence, reason -- even when their face is not visible at all. Whether that entry also gets is_person=true is a separate question, decided by the is_person definition below, not by this bystander test.
-- is_person definition: set is_person=true only when this subjects[] entry both (a) passed the inclusion test above and (b) has enough of their actual face visible to judge and, if needed, correct it -- eye state, gaze direction, smile, front hair. Set is_person=false whenever either is untrue: an incidental bystander (see above), or a genuine included subject whose face cannot be read at all -- shown only from the back or the side/rear of the head, a silhouette, or otherwise fully obscured. is_person=false is a full switch, not just for the face: it also turns off body_reshape for that person and skips them from the dedicated portrait-QC pass and the local face-box containment rule below, since there is nothing about them -- face or body -- for a close-up portrait review to act on. Never set is_person=true just because someone is a real, included person; only set it when their face is actually there to analyze.
+- is_person definition: set is_person=true only when this subjects[] entry both (a) passed the inclusion test above and (b) has enough of their actual face visible to judge and, if needed, correct it -- eye state, gaze direction, smile, front hair. Set is_person=false whenever either is untrue: an incidental bystander (see above), or a genuine included subject whose face cannot be read at all -- shown only from the back or the side/rear of the head, a silhouette, or otherwise fully obscured. is_person=false is a full switch, not just for the face: it also skips them from the dedicated portrait-QC pass and the local face-box containment rule below, since there is nothing about their face for a close-up portrait review to act on. Never set is_person=true just because someone is a real, included person; only set it when their face is actually there to analyze.
 - Judge from the whole picture: would someone looking at this photo say "the people in this photo" includes this individual, or would they say "there's also a stranger in the background"? Only the former belongs in subjects[] at all, whether as is_person=true or is_person=false.
 - A real face that fails this inclusion test (a genuine incidental bystander) still gets a local_face_review entry -- with matched_subject_index=-1 and a reason naming the exclusion -- it just does not get a subjects[] entry of its own.
 - This rule is about which people belong in subjects[]; it has no bearing on non-person subjects (products, food, animals, objects), which are still selected and ordered by the existing prominence rules in Coordinate rules below.
@@ -2156,7 +2298,7 @@ Intent: Translate photographic problems and opportunities for aesthetic improvem
 - When crop_box.enabled=true, verify that every protected_regions box fits inside crop_box with breathing room. Resolve any conflict by repositioning the crop or limiting protection to the indispensable detail; background structure and intentionally trimmed subject/body edges remain outside protected_regions.
 - Local_face_review completeness check: before finalizing analysis, verify local_face_review has exactly one entry per "Face crop N" / "Local face detector reference N" you were given, and that every entry's matched_subject_index (when >= 0) points at a subjects[] entry whose own local_detection_index equals that same detection_index. If a detection was skipped, or the cross-reference does not agree in both directions, fix it before finalizing.
 - Subject inclusion recall check: before finalizing analysis, re-apply the Subject inclusion rule to every person subjects[] entry, not only the ones that came from a local detection. If a subject you added yourself from the full photo actually reads as an incidental bystander, remove that subjects[] entry (and any correction_plan/correction_axes/correction_inverse/retouch_recipe entries that named them) rather than leaving it in.
-- is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue/body_reshape to their is_person=false placeholders instead of leaving stale judged values in place.
+- is_person recall check: for every remaining person subjects[] entry, re-apply the is_person definition above. If it is currently true but this person's face is not actually legible enough to judge (back of head, silhouette, fully obscured), flip it to false and reset skin/blink_issue/hair_issue/gaze_issue/smile_issue to their is_person=false placeholders instead of leaving stale judged values in place.
 - Do not score output quality here. Do not write QA penalties here. Leave candidate ranking to the crop judge and final scoring to QA.
 - Make the composition-framing decision decisive and consistent. When composition_strategy, distraction_strategy, or detected_issues identifies a composition crop/reframe to execute, express it through crop_box and a crop-tagged correction_plan item. When crop_box.enabled is false, describe the original frame as the selected final composition with a definitive preserve decision. An alignment_strategy correction alone must not enable crop_box.
 - Consolidate the entire composition-framing decision into that one crop-tagged item: its crop/trim/frame-relative repositioning or scale actions and any change to recommended_aspect_ratio must never become separate review items. The paired retouch_recipe starts with "重新構圖：" and contains no numeric ratio; local deterministic geometry adds the resolved ratio later. Its correction_inverse explicitly restores the original ratio and composition but says nothing about tilt or perspective.
@@ -2334,813 +2476,6 @@ Set the endpoint from a natural, clearly open resting eye state, not by averagin
 Targets:
 """ + json.dumps(compact_targets, ensure_ascii=False, indent=2)
 
-
-# Luna does not always repeat the long display label verbatim.  In particular,
-# it commonly shortens "全身／整體身形" to "全身" or "整體身形".  Keep a
-# deliberately small alias table so harmless wording differences are
-# canonicalised while non-body requests such as background or skin edits are
-# still kept out of the editor prompt.
-_BODY_RESHAPE_REGION_ALIASES = {
-    # Legacy Traditional-Chinese labels are retained for saved analyses.
-    "全身/整體身形": "整體身形",
-    "全身": "整體身形",
-    "整體": "整體身形",
-    "整體身形": "整體身形",
-    "整體比例": "整體身形",
-    "全身比例": "整體身形",
-    "身形": "整體身形",
-    "站姿": "整體身形",
-    "軀幹": "整體身形",
-    "腿": "腿部",
-    "雙腿": "腿部",
-    "腿部": "腿部",
-    "腰": "腰部",
-    "腰線": "腰部",
-    "腰部": "腰部",
-    "腹": "腹部",
-    "腹部": "腹部",
-    "胸": "胸部",
-    "胸部": "胸部",
-    "肩": "肩部",
-    "肩膀": "肩部",
-    "雙肩": "肩部",
-    "肩部": "肩部",
-    "頸": "頸部",
-    "脖子": "頸部",
-    "頸部": "頸部",
-    "臀": "臀部",
-    "臀型": "臀部",
-    "臀線": "臀部",
-    "臀部": "臀部",
-    "雙臂": "手臂",
-    "上臂": "手臂",
-    "前臂": "手臂",
-    "手臂": "手臂",
-    "背": "背部",
-    "後背": "背部",
-    "背部": "背部",
-    # New body-planning prompts use English labels and preserve them through
-    # normalisation so new API output is consistently English.
-    "overallbodyshape": "overall body shape",
-    "overall": "overall body shape",
-    "bodyshape": "overall body shape",
-    "overallproportions": "overall body shape",
-    "fullbody": "overall body shape",
-    "leg": "legs",
-    "legs": "legs",
-    "waist": "waist",
-    "waistline": "waist",
-    "abdomen": "abdomen",
-    "belly": "abdomen",
-    "chest": "chest",
-    "breast": "chest",
-    "shoulder": "shoulders",
-    "shoulders": "shoulders",
-    "neck": "neck",
-    "buttocks": "buttocks",
-    "glutes": "buttocks",
-    "arm": "arms",
-    "arms": "arms",
-    "back": "back",
-}
-
-# Stable language-independent identity for endpoint deduplication and user
-# overrides.  ``region`` remains the display/canonical-language value so
-# legacy English key points are not rewritten into Chinese, while consumers
-# compare this key when deciding whether two points target the same region.
-_BODY_RESHAPE_REGION_IDS = {
-    "整體身形": "overall_body_shape", "overall body shape": "overall_body_shape",
-    "腿部": "legs", "legs": "legs",
-    "腰部": "waist", "waist": "waist",
-    "腹部": "abdomen", "abdomen": "abdomen",
-    "胸部": "chest", "chest": "chest",
-    "肩部": "shoulders", "shoulders": "shoulders",
-    "頸部": "neck", "neck": "neck",
-    "臀部": "buttocks", "buttocks": "buttocks",
-    "手臂": "arms", "arms": "arms",
-    "背部": "back", "back": "back",
-}
-
-# Clothing is a preservation boundary, never an executable body target.  If
-# Luna leaks any of these terms into a short key point, discard that point
-# instead of handing an ambiguous garment operation to the image editor.
-_BODY_RESHAPE_CLOTHING_TERMS = (
-    "衣物", "衣服", "服裝", "上衣", "T恤", "下擺", "領口", "袖口",
-    "腰頭", "褲頭", "裙頭", "皮帶", "縫線", "褶皺", "開口", "覆蓋", "遮蓋", "露膚",
-    "clothing", "garment", "shirt", "top", "t-shirt", "hem", "neckline", "sleeve",
-    "waistband", "trouser", "skirt", "belt", "seam", "fold", "opening", "coverage",
-    "exposed skin", "bare skin", "cover abdomen", "cover the abdomen", "pull down the top",
-)
-
-# Body reshape is deliberately a static contour/proportion edit. Posture,
-# gesture, weight-bearing, and joint-angle wording is excluded here as a
-# second line of defence after the planning prompt: a model-generated point
-# with one of these terms must never become an edit instruction.
-_BODY_RESHAPE_POSTURE_TERMS = (
-    "姿勢", "站姿", "坐姿", "躺姿", "動作", "手勢", "重心", "肩線", "肩高",
-    "高低差", "挺直", "駝背", "彎腰", "轉身", "轉頭", "抬頭", "低頭", "俯身",
-    "肢體角度", "關節角度", "腿部角度", "手臂角度", "手肘角度", "膝蓋角度",
-    "角度", "交叉腿", "抬臂", "抬手", "身體方向", "軀幹方向",
-    "pose", "posture", "gesture", "stance", "body direction", "shoulder line",
-    "joint angle", "weight shift", "turn", "turning", "bend", "bending", "straighten",
-    "straightening", "hunch", "hunching", "raised arm", "raise the arm", "pose change",
-    "body orientation", "head direction", "shoulder height",
-)
-
-_BODY_RESHAPE_MEASUREMENT_TERMS = (
-    "可見總寬", "總寬", "可見寬度", "局部寬度", "肩寬", "腰寬", "腹寬",
-    "胸寬", "臀寬", "上臂寬度", "前臂寬度", "大腿寬度", "小腿寬度",
-    "頸部寬度", "背部寬度", "可見長度", "局部長度", "前凸距離",
-    "輪廓寬度", "輪廓幅度", "可見尺寸", "local width", "visible width",
-    "total width", "width", "shoulder width", "waist width", "abdomen width", "chest width",
-    "hip width", "arm width", "leg width", "neck width", "back width",
-    "visible length", "local length", "projection distance", "contour width", "visible size",
-)
-_BODY_RESHAPE_DECREASE_TERMS = (
-    "向內", "內收", "收窄", "減少", "縮小", "縮減", "縮短", "inward", "narrow", "reduce",
-    "decrease", "shrink", "shorten",
-)
-_BODY_RESHAPE_INCREASE_TERMS = (
-    "向外", "外擴", "加寬", "增加", "擴大", "延長", "拉長", "outward", "widen",
-    "increase", "enlarge", "lengthen",
-)
-_BODY_RESHAPE_NON_EXECUTABLE_TERMS = (
-    "不調整", "不要", "不可", "無需", "不需", "不變", "不", "維持", "保留", "保持",
-    "避免", "原樣", "原狀", "do not", "don't", "no change", "unchanged", "preserve",
-    "maintain", "keep", "avoid", "not",
-)
-
-# Body-shape magnitude is a policy, not part of the text parser.  The parser
-# preserves whatever the planner or user supplied (including the legacy 10%)
-# and the execution plan records whether that value is inside this policy.
-# Kept as a compatibility export for integrations that import the planner
-# constant; runtime prompt/plan construction reads the validated config helper
-# below so changing the public default does not require editing this module.
-BODY_RESHAPE_TARGET_PCT = _photoagent_config.get_body_reshape_slider_config()["default"]
-BODY_RESHAPE_MIN_PCT = 10.0
-BODY_RESHAPE_MAX_PCT = 15.0
-BODY_RESHAPE_KEY_POINT_MAX_LENGTH = 30
-
-
-def _body_reshape_slider_config():
-    """Return the validated policy for manual, per-endpoint amounts.
-
-    The automatic planner deliberately keeps its own 10--15% policy above;
-    this configuration is only for a user changing an already-approved
-    endpoint in the review UI.  Read the module dynamically so a deployment
-    or test can change the public maximum without re-importing prompts.py.
-    """
-    getter = getattr(_photoagent_config, "get_body_reshape_slider_config", None)
-    if callable(getter):
-        values = getter()
-    else:  # compatibility with a minimal config module used by integrations
-        values = getattr(_photoagent_config, "BODY_RESHAPE_SLIDER_CONFIG", {
-            "default": 12, "min": 0, "max": 30, "step": 1,
-        })
-        if not isinstance(values, dict):
-            raise ValueError("BODY_RESHAPE_SLIDER_CONFIG must be an object")
-        values = {key: values.get(key) for key in ("default", "min", "max", "step")}
-    return {
-        key: int(value) if isinstance(value, float) and value.is_integer() else value
-        for key, value in values.items()
-    }
-
-
-def _body_reshape_validate_manual_target(value, *, field="target_pct"):
-    """Validate one numeric slider amount and return its canonical number."""
-    config = _body_reshape_slider_config()
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"body reshape {field} must be a number")
-    if not math.isfinite(value):
-        raise ValueError(f"body reshape {field} must be finite")
-    minimum, maximum, step = config["min"], config["max"], config["step"]
-    if value < minimum or value > maximum:
-        raise ValueError(
-            f"body reshape {field} must be between {minimum:g} and {maximum:g}"
-        )
-    units = (value - minimum) / step
-    if abs(units - round(units)) > 1e-9:
-        raise ValueError(f"body reshape {field} must align to step {step:g}")
-    return int(value) if float(value).is_integer() else float(value)
-
-
-def _body_reshape_amount_overrides(analysis):
-    """Validate and index request-scoped manual amount metadata.
-
-    Missing metadata is the legacy/untouched state.  An empty array is an
-    explicit, valid state.  ``None`` and malformed entries are rejected so a
-    client cannot silently turn an invalid amount into the planner default.
-    """
-    if not isinstance(analysis, dict) or "_body_reshape_amount_overrides" not in analysis:
-        return {}
-    raw_overrides = analysis.get("_body_reshape_amount_overrides")
-    if raw_overrides is None or not isinstance(raw_overrides, list):
-        raise ValueError("_body_reshape_amount_overrides must be an array")
-    subjects = analysis.get("subjects") if isinstance(analysis.get("subjects"), list) else []
-    result = {}
-    for raw in raw_overrides:
-        if not isinstance(raw, dict):
-            raise ValueError("body reshape amount override entries must be objects")
-        subject_index = raw.get("subject_index")
-        key_point_index = raw.get("key_point_index")
-        if (isinstance(subject_index, bool) or not isinstance(subject_index, int)
-                or subject_index < 0):
-            raise ValueError("body reshape amount override subject_index must be a non-negative integer")
-        if (isinstance(key_point_index, bool) or not isinstance(key_point_index, int)
-                or key_point_index < 0):
-            raise ValueError("body reshape amount override key_point_index must be a non-negative integer")
-        key = (subject_index, key_point_index)
-        if key in result:
-            raise ValueError(
-                "duplicate body reshape amount override for subject_index={} key_point_index={}"
-                .format(subject_index, key_point_index)
-            )
-        if subject_index >= len(subjects) or not isinstance(subjects[subject_index], dict):
-            raise ValueError("body reshape amount override references an unknown subject_index")
-        subject = subjects[subject_index]
-        if not subject.get("is_person"):
-            raise ValueError("body reshape amount override subject_index is not a person")
-        body_plan = subject.get("body_reshape")
-        points = body_plan.get("key_points") if isinstance(body_plan, dict) else None
-        if not isinstance(points, list) or key_point_index >= len(points):
-            raise ValueError("body reshape amount override references an unknown key_point_index")
-        if "target_pct" not in raw:
-            raise ValueError("body reshape amount override target_pct is required")
-        result[key] = _body_reshape_validate_manual_target(raw.get("target_pct"))
-    return result
-
-
-def _body_reshape_retarget_text(text, target_pct):
-    """Replace the single displayed percentage without changing endpoint text."""
-    if not isinstance(text, str):
-        return text
-    rendered = f"{target_pct:g}%"
-    replaced, count = re.subn(
-        r"[+＋]?\s*(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*[%％]",
-        rendered,
-        text,
-        count=1,
-    )
-    return replaced if count else text
-
-
-def _body_reshape_apply_manual_target(parsed, target_pct):
-    """Copy parsed endpoint metadata while changing only its amount."""
-    adjusted = dict(parsed or {})
-    adjusted["target_pct"] = target_pct
-    adjusted["canonical_text"] = _body_reshape_retarget_text(
-        adjusted.get("canonical_text") or adjusted.get("raw_text"), target_pct
-    )
-    # The source endpoint was already validated using the planner parser; the
-    # manual policy is intentionally wider than BODY_RESHAPE_MAX_PCT.
-    adjusted["policy_valid"] = True
-    adjusted["reason_code"] = None
-    adjusted["reason"] = None
-    return adjusted
-
-_BODY_RESHAPE_MEASUREMENT_ALIASES = (
-    ("visible total width", ("可見總寬", "總寬", "visible total width", "total width")),
-    ("segment width", ("可見寬度", "局部寬度", "寬度", "寬", "visible width", "local width", "width")),
-    ("visible length", ("可見長度", "局部長度", "長度", "長", "visible length", "local length", "length")),
-    ("projection distance", ("可見投影距離", "投影距離", "前凸距離", "前凸", "visible projection distance", "projection distance", "projection")),
-)
-
-
-def _body_reshape_measurement_identity(measurement):
-    """Collapse wording aliases that describe the same local measurement.
-
-    ``可見總寬``/``可見寬度`` (and their English equivalents) can be phrased
-    differently by the planner while still referring to one cross-section.  A
-    stable identity prevents those aliases from being stacked as two edits.
-    Region, segment and screen side remain separate parts of the endpoint key.
-    """
-    value = str(measurement or "").strip().lower()
-    if value in {
-        "visible total width", "total width", "segment width", "visible width",
-        "local width", "width",
-    }:
-        return "width"
-    if value in {"visible length", "local length", "length"}:
-        return "length"
-    if value in {"projection distance", "projection"}:
-        return "projection"
-    return value or None
-_BODY_RESHAPE_SEGMENT_ALIASES = (
-    ("screen-left", ("畫面左側", "畫面左", "左側", "左邊", "screen-left", "screen left", "left")),
-    ("screen-right", ("畫面右側", "畫面右", "右側", "右邊", "screen-right", "screen right", "right")),
-    ("upper arm", ("上臂", "upper arm")),
-    ("forearm", ("前臂", "forearm")),
-    ("thigh", ("大腿", "thigh")),
-    ("calf", ("小腿", "calf")),
-    ("mid abdomen", ("腹段", "腹部中段", "腹段中部", "mid abdomen", "abdomen segment")),
-    ("mid waist", ("腰段", "腰部中段", "腰段中部", "mid waist", "waist segment")),
-    ("mid chest", ("胸段", "胸部中段", "mid chest", "chest segment")),
-)
-
-
-def _body_reshape_find_alias(text, aliases):
-    lowered = str(text or "").strip().lower()
-    # Longest first prevents "left" from winning over "screen-left" and
-    # keeps a compound phrase such as "screen-right upper arm" intact.
-    candidates = sorted(
-        ((alias.lower(), canonical) for canonical, values in aliases for alias in values),
-        key=lambda item: len(item[0]), reverse=True,
-    )
-    for alias, canonical in candidates:
-        if alias and alias in lowered:
-            return canonical
-    return None
-
-
-def _body_reshape_parse_key_point(point):
-    """Parse one review point into a small, shared internal representation.
-
-    This deliberately separates syntax/semantics from the execution policy.
-    Consumers use this result instead of maintaining independent substring
-    whitelists, so a valid compound phrase (for example ``腹段寬度``) keeps its
-    segment, side, measurement, direction and original percentage intact.
-    """
-    raw_text = str(point or "").strip()
-    text = re.sub(r"(\d)\s*[％%]", r"\1%", raw_text)
-    text = re.sub(
-        r"^(?:[-*•●▪–—]+\s*|[(（]?\d+[)）.、．]\s*|"
-        r"[一二三四五六七八九十]+[、.．]\s*)",
-        "",
-        text,
-    ).strip()
-    parts = re.split(r"[：:﹕]", text, maxsplit=1)
-    result = {
-        "raw_text": raw_text,
-        "canonical_text": None,
-        "region": None,
-        "region_id": None,
-        "segment": None,
-        "screen_side": None,
-        "measurement": None,
-        "measurement_id": None,
-        "operation": None,
-        "target_pct": None,
-        "syntax_valid": False,
-        "policy_valid": False,
-        "reason_code": None,
-        "reason": None,
-    }
-    if len(parts) != 2:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="missing body-region colon")
-        return result
-    region_text, direction = (part.strip() for part in parts)
-    region_key = re.sub(r"\s+", "", region_text).replace("／", "/").lower()
-    canonical_region = _BODY_RESHAPE_REGION_ALIASES.get(region_key)
-    if not canonical_region or not direction:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="unsupported body region or empty direction")
-        return result
-
-    direction_normalized = re.sub(r"\s+", " ", direction).strip()
-    lowered = direction_normalized.lower()
-    measurement = _body_reshape_find_alias(direction_normalized, _BODY_RESHAPE_MEASUREMENT_ALIASES)
-    if not measurement:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="does not name a visible local measurement")
-        return result
-    # A sign immediately attached to the number is not silently discarded.
-    if re.search(r"(?:[-−–]\s*\d|負\s*\d)", direction_normalized):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="negative percentage is not allowed")
-        return result
-    # Parse the complete number immediately before the one percent marker.
-    # The former substring regex could silently turn malformed values such as
-    # ``10e2%`` into ``2%``, ``10,5%`` into ``5%``, or accept ``10%%``.  A
-    # body endpoint must never be executable after discarding part of the
-    # user's/planner-authored number, so require one marker and one complete
-    # decimal token, then reject exponent/locale-decimal/dotted leftovers at
-    # the token boundary.
-    percent_markers = list(re.finditer(r"[%％]", direction_normalized))
-    if len(percent_markers) != 1:
-        result.update(
-            reason_code="invalid_syntax_or_semantics",
-            reason="must contain exactly one explicit percentage in a valid numeric format",
-        )
-        return result
-    marker = percent_markers[0]
-    before_marker = direction_normalized[:marker.start()]
-    number_match = re.search(
-        r"(?P<number>[+＋]?\s*(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+))\s*$",
-        before_marker,
-    )
-    if not number_match:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="invalid percentage format")
-        return result
-    number_text = number_match.group("number")
-    leading_ws = len(number_text) - len(number_text.lstrip())
-    digits_start = number_match.start("number") + leading_ws
-    numeric_prefix = before_marker[:digits_start]
-    # ``10e2%``, ``10,5%`` and ``1.2.3%`` all otherwise leave a valid-looking
-    # suffix for the regex above.  A letter/exponent, comma, or period directly
-    # before that suffix proves the full number was malformed.  A normal
-    # English space (``decrease 10%``) and compact Chinese prose (``收窄10%``)
-    # remain valid.
-    if numeric_prefix and re.search(r"(?:[A-Za-zＡ-Ｚａ-ｚＥｅ][+＋\-−]?$|[,，.]$)", numeric_prefix):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="invalid percentage format")
-        return result
-    # A second number joined to the percentage without a separator (for
-    # example ``10 2%``) is not a meaningful target.  Natural-language prose
-    # may contain digits elsewhere, so only reject an immediately adjacent
-    # numeric token after allowing ordinary whitespace.
-    if numeric_prefix and re.search(r"[0-9]\s+$", numeric_prefix) and not re.search(r"(?:約|approximately|about)\s*$", numeric_prefix, re.IGNORECASE):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="invalid percentage format")
-        return result
-    # The percentage must terminate the numeric endpoint.  A short
-    # preservation clause is allowed after it, but arbitrary trailing text
-    # (for example ``10%abc`` or a second operation) must not be silently
-    # ignored while the parser extracts the valid-looking number before `%`.
-    suffix = direction_normalized[marker.end():].strip()
-    suffix = suffix.strip(" .。!！?？,，;；、")
-    if suffix and not re.match(
-        r"^(?:(?:並且|並|同時|且|但|但是)\s*(?:保留|保持|維持|避免)|"
-        r"(?:and|while|but|however)\s*(?:preserv\w*|maintain\w*|retain\w*|keep\w*|avoid\w*)\b)",
-        suffix,
-        re.IGNORECASE,
-    ):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="unexpected text after percentage")
-        return result
-    # Preservation prose is useful in a report, but key_points are executable
-    # body-only commands.  Keep garment wording out of them even when it is
-    # phrased as something to preserve; garment identity/coverage belongs to
-    # the shared body contract and edit prompt instead.
-    if any(term.lower() in direction_normalized.lower() for term in _BODY_RESHAPE_CLOTHING_TERMS):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="requests or mentions an unauthorized clothing operation")
-        return result
-    try:
-        target_pct = float(number_match.group("number").replace(" ", ""))
-    except (TypeError, ValueError):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="invalid percentage format")
-        return result
-    if target_pct <= 0 or target_pct >= 100:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="percentage must be greater than 0 and less than 100")
-        return result
-
-    # Strip only trailing preservation clauses before checking the operation;
-    # ``收窄12%並保留自然紋理`` is an endpoint, while ``維持自然比例`` is not.
-    operation_text = re.sub(
-        r"(?:並且|並|同時|且|但|但是|；|;|，|,|\band\b|\bwhile\b|\bbut\b|\bhowever\b)\s*"
-        r"(?:保留|保持|維持|避免|preserv\w*|maintain\w*|retain\w*|keep\w*|avoid\w*).*$",
-        "",
-        direction_normalized,
-        flags=re.IGNORECASE,
-    ).strip()
-    # Remove the numeric clause only for direction classification, preserving
-    # the original target_pct in the returned structure.
-    operation_text = re.sub(r"[+＋]?\s*\d+(?:\.\d+)?\s*[%％]", " ", operation_text).strip().lower()
-    decreases = any(term.lower() in operation_text for term in _BODY_RESHAPE_DECREASE_TERMS)
-    increases = any(term.lower() in operation_text for term in _BODY_RESHAPE_INCREASE_TERMS)
-    if decreases and increases:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="increase and decrease directions conflict")
-        return result
-    if not decreases and not increases:
-        result.update(reason_code="invalid_syntax_or_semantics", reason="missing explicit increase or decrease direction")
-        return result
-    # Clothing words are allowed in the report's preservation explanation, but
-    # a key point is an executable body command.  Check the operation scope
-    # after a trailing preservation clause has been removed; otherwise a legal
-    # point such as ``腰部：可見總寬向內收窄12%並保留衣物邊界`` would be rejected
-    # merely because it says what must remain intact.  A clothing term before
-    # the operation (or without a preservation conjunction) is still an
-    # unauthorized clothing edit.
-    if any(term.lower() in lowered for term in _BODY_RESHAPE_POSTURE_TERMS):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="requests a posture, action, or body-direction change")
-        return result
-    # Negation is invalid only when it scopes the operation, not when it is a
-    # trailing protection clause already removed above.
-    if re.search(
-        r"(?:不變|不要|不可|無需|不需|不(?!同)|do\s+not|don't|no\s+change|unchanged|not)"
-        r"[^。.!！？?]{0,40}?"
-        r"(?:收窄|減少|縮小|增加|加寬|向內|向外|narrow|reduce|decrease|increase|widen)",
-        operation_text,
-        re.IGNORECASE,
-    ):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="negation turns the endpoint into a no-op")
-        return result
-    # Also reject a no-op qualifier that follows the operation (for example
-    # ``向內收窄12%但不變``).  The preceding scoped-strip handles a genuine
-    # trailing preservation clause, so these remaining terms are contradictory
-    # endpoint semantics rather than harmless protection text.
-    if re.search(
-        r"(?:不變|不要|不可|無需|不需|不得|不改|原樣|原狀|no\s+change|unchanged|do\s+not|don't|not)",
-        operation_text,
-        re.IGNORECASE,
-    ):
-        result.update(reason_code="invalid_syntax_or_semantics", reason="negation turns the endpoint into a no-op")
-        return result
-    screen_side = _body_reshape_find_alias(direction_normalized, (
-        ("screen-left", ("畫面左側", "畫面左", "左側", "左邊", "screen-left", "screen left", "left")),
-        ("screen-right", ("畫面右側", "畫面右", "右側", "右邊", "screen-right", "screen right", "right")),
-    ))
-    segment = _body_reshape_find_alias(direction_normalized, tuple(
-        item for item in _BODY_RESHAPE_SEGMENT_ALIASES
-        if item[0] not in {"screen-left", "screen-right"}
-    ))
-    # If both sides are explicitly named, preserve the fact in the segment
-    # field rather than reducing it to an entire limb.
-    result.update(
-        canonical_text=_normalize_body_reshape_key_point(text),
-        region=canonical_region,
-        region_id=_BODY_RESHAPE_REGION_IDS.get(canonical_region, canonical_region),
-        segment=segment,
-        screen_side=screen_side,
-        measurement=measurement,
-        measurement_id=_body_reshape_measurement_identity(measurement),
-        operation="decrease" if decreases else "increase",
-        target_pct=target_pct,
-        syntax_valid=True,
-        # The lower bound is the new planner default, not a clamp on an
-        # explicit user amount.  A saved/user-authored 8% endpoint remains
-        # executable at 8%; only an amount above the hard safety ceiling is
-        # rejected here.  ``below_default_minimum`` is retained for metadata.
-        policy_valid=target_pct <= BODY_RESHAPE_MAX_PCT,
-        reason_code=("target_below_default_minimum" if target_pct < BODY_RESHAPE_MIN_PCT else None)
-        if target_pct <= BODY_RESHAPE_MAX_PCT else "target_out_of_policy",
-        reason=(f"target is below the {BODY_RESHAPE_MIN_PCT:g}% planner default but is preserved as an explicit amount"
-                if target_pct < BODY_RESHAPE_MIN_PCT else
-                None if target_pct <= BODY_RESHAPE_MAX_PCT else
-                f"target percentage exceeds the {BODY_RESHAPE_MAX_PCT:g}% execution policy"),
-    )
-    return result
-
-
-def _body_reshape_key_point_preserves_clothing(normalized):
-    parsed = _body_reshape_parse_key_point(normalized)
-    return bool(parsed.get("syntax_valid")) and parsed.get("reason_code") not in {
-        "invalid_syntax_or_semantics", "target_out_of_policy",
-    }
-
-
-def _body_reshape_key_point_validation_error(point):
-    """Return a stable reason when a body key point is not executable."""
-    parsed = _body_reshape_parse_key_point(point)
-    normalized = parsed.get("canonical_text")
-    if normalized is None:
-        return parsed.get("reason") or "unsupported body region or missing colon/direction"
-    if len(normalized) > 30:
-        return "exceeds the 30-character limit"
-    if not parsed.get("syntax_valid"):
-        return parsed.get("reason") or "invalid body reshape syntax or semantics"
-    if not parsed.get("policy_valid"):
-        return parsed.get("reason") or "target percentage is outside the execution policy"
-    return None
-
-
-def _body_reshape_overlap_identity(parsed):
-    """Return the conservative overlap group for adjacent waist/abdomen widths.
-
-    A broad waist and a broad abdomen point on the same person can describe the
-    same visible cross-section even though their region labels differ.  The
-    planner is allowed to mention both areas, but the editor must not apply the
-    requested percentage twice to their shared contour.  Explicitly located
-    mid-waist/mid-abdomen or side-specific points remain independent because
-    their measurement basis is narrower and is carried in the identity.
-    """
-    if not isinstance(parsed, dict):
-        return None
-    if parsed.get("measurement_id") != "width":
-        return None
-    if parsed.get("segment") is not None or parsed.get("screen_side") is not None:
-        return None
-    region_id = parsed.get("region_id")
-    if region_id not in {"waist", "abdomen"}:
-        return None
-    return "waist-abdomen-overlap"
-
-
-# Short compatibility alias for tests/integrations that expect the parser to
-# be named after the public concept rather than the internal prefix.
-_parse_body_reshape_key_point = _body_reshape_parse_key_point
-
-
-def _body_reshape_endpoint_identity(parsed):
-    """Return the stable local-measurement identity used for user overrides.
-
-    A body point's region is not enough to identify an endpoint: ``upper arm``
-    and ``forearm`` (or screen-left and screen-right) must stay independent.
-    The percentage and direction are intentionally *not* part of this key so a
-    clear user amount/direction can replace a planner default for that same
-    measurement without creating a second endpoint.
-    """
-    if not isinstance(parsed, dict) or not parsed.get("syntax_valid"):
-        return None
-    return (
-        parsed.get("region_id") or parsed.get("region"), parsed.get("segment"), parsed.get("screen_side"),
-        parsed.get("measurement_id") or _body_reshape_measurement_identity(parsed.get("measurement")),
-    )
-
-
-def _body_reshape_user_override_candidates(analysis):
-    """Parse explicit, measurable body endpoints from the reviewed user text.
-
-    The normal planner remains the authority for which regions are safe and
-    visible.  This helper only lets an explicit user endpoint change the
-    amount/direction of an already-planned matching measurement; it never
-    creates a new body target from free-form prose.  Returning parsed objects
-    here lets the request-scoped execution plan preserve the original source
-    point while recording the user override as its effective target.
-    """
-    instruction = analysis.get("user_instruction") if isinstance(analysis, dict) else None
-    if not isinstance(instruction, dict) or instruction.get("overwrite_prompt"):
-        return [], []
-
-    texts = []
-    for field in ("original_user_direction", "normalized_user_direction", "user_intent_summary"):
-        value = instruction.get(field)
-        if isinstance(value, str) and value.strip():
-            texts.append(value)
-    for field in ("explicit_priorities", "explicit_prohibitions"):
-        values = instruction.get(field) or []
-        if isinstance(values, str):
-            values = [values]
-        texts.extend(value for value in values if isinstance(value, str) and value.strip())
-
-    # Longest aliases first avoids matching ``左側`` inside ``畫面左側``.
-    region_aliases = sorted(
-        {
-            alias for _canonical, aliases in _BODY_RESHAPE_REGION_ALIASES.items()
-            for alias in [ _canonical ]
-        } | set(_BODY_RESHAPE_REGION_ALIASES),
-        key=len, reverse=True,
-    )
-    # The dictionary keys contain normalized no-space forms, while user text
-    # can use the displayed Traditional-Chinese labels.  Include the aliases
-    # from the canonical map's values as well for English user directions.
-    region_aliases.extend(
-        sorted({value for value in _BODY_RESHAPE_REGION_ALIASES.values()}, key=len, reverse=True)
-    )
-    region_pattern = "|".join(re.escape(alias) for alias in sorted(set(region_aliases), key=len, reverse=True) if alias)
-    endpoint_pattern = re.compile(
-        rf"(?P<region>{region_pattern})\s*[：:]\s*(?P<direction>[^\r\n;；。!?！？]+)",
-        flags=re.IGNORECASE,
-    )
-    candidates = []
-    prohibitions = []
-    seen = set()
-    for text in texts:
-        chunks = re.split(r"[\r\n;；。!?！？]+", text)
-        for chunk in chunks:
-            chunk = chunk.strip(" \t-•*0123456789.、．")
-            if not chunk:
-                continue
-            matches = list(endpoint_pattern.finditer(chunk)) if region_pattern else []
-            if not matches:
-                matches = [None]
-            for match in matches:
-                raw = (
-                    f"{match.group('region')}：{match.group('direction').strip()}"
-                    if match is not None else chunk
-                )
-                parsed = _body_reshape_parse_key_point(raw)
-                if parsed.get("syntax_valid"):
-                    identity = _body_reshape_endpoint_identity(parsed)
-                    signature = (identity, parsed.get("operation"), parsed.get("target_pct"))
-                    if identity and signature not in seen:
-                        seen.add(signature)
-                        candidates.append(parsed)
-                    continue
-
-                # A prohibition has no executable direction/percentage, but it
-                # can still explicitly cancel a matching planner endpoint.
-                region_match = re.split(r"[：:]", raw, maxsplit=1)
-                if len(region_match) != 2:
-                    continue
-                region_key = re.sub(r"\s+", "", region_match[0]).replace("／", "/").lower()
-                region = _BODY_RESHAPE_REGION_ALIASES.get(region_key)
-                direction = region_match[1].strip()
-                measurement = _body_reshape_find_alias(direction, _BODY_RESHAPE_MEASUREMENT_ALIASES)
-                if not region or not measurement:
-                    continue
-                if not re.search(
-                    r"(?:不變|不要|不可|無需|不需|no\s+change|unchanged|do\s+not|don't)",
-                    direction, re.IGNORECASE,
-                ):
-                    continue
-                screen_side = _body_reshape_find_alias(direction, (
-                    ("screen-left", ("畫面左側", "畫面左", "左側", "左邊", "screen-left", "screen left", "left")),
-                    ("screen-right", ("畫面右側", "畫面右", "右側", "右邊", "screen-right", "screen right", "right")),
-                ))
-                segment = _body_reshape_find_alias(direction, tuple(
-                    item for item in _BODY_RESHAPE_SEGMENT_ALIASES
-                    if item[0] not in {"screen-left", "screen-right"}
-                ))
-                prohibitions.append({
-                    "region": region,
-                    "region_id": _BODY_RESHAPE_REGION_IDS.get(region, region),
-                    "segment": segment,
-                    "screen_side": screen_side, "measurement": measurement,
-                    "measurement_id": _body_reshape_measurement_identity(measurement),
-                    "raw_text": raw,
-                })
-    return candidates, prohibitions
-
-
-def build_body_reshape_planning_instruction(persons):
-    """Generate one independent body-reshape review for each person.
-
-    ``persons`` must come from :func:`portrait_qc_persons`, which supplies the
-    stable subject_index used to merge this pass back into subjects[].
-    """
-    if not body_reshape_enabled():
-        return ""
-    return ("""You are a professional portrait body-shape retouching consultant.
-
-Using only the attached original photograph, analyze body-shape adjustments independently for every person listed below. Never transfer one person's body traits or recommendations to another person.
-
-[Analysis scope]
-Analyze only visible static body contours and proportions. Do not analyze posture, action, gesture, or body direction. The allowed areas are:
-- Overall body shape and upper-to-lower-body proportions
-- Legs, waist, abdomen, and chest
-- Shoulder width and shape, neck, and buttocks
-- Static arm and back contours
-
-[Posture and action are completely out of scope]
-- Do not analyze, describe, or recommend changing standing, sitting, or lying posture; actions; gestures; weight bearing; body or head direction; shoulder height; raised limbs; turning; bending; straightening; hunching; or any limb or joint angle.
-- The report must describe only visible body contours, proportions, and occlusion evidence. Do not describe or evaluate the person's posture, action, or body direction.
-- key_points must never contain posture or action semantics. If a visible natural optimization opportunity can be addressed only by changing posture, omit that body area from key_points.
-
-Clothing may be used only as evidence for locating body contours. Do not analyze or recommend changing clothing color, material, style, pattern, or construction.
-
-[Clothing identity and wearing relationship]
-- Preserve the identity, type, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method of every garment.
-- Inside an approved body region, the existing garment silhouette, fabric, texture, pattern, seams, folds, and local clothing/skin boundary may move continuously with the named body geometry. This is required follow-through of body reshaping, not a separate clothing edit.
-- Preserve which body areas are clothed or exposed as a semantic relationship. Local visible geometry may follow the approved reshape; do not freeze it to its original pixel coordinates, area, or shape.
-- Never lengthen or lower a top to cover the abdomen, raise a waistband to cover the waist, add or remove fabric, alter a neckline or sleeve design, change garment coverage, or rearrange clothing to fake a body change.
-- A safe adjustment must preserve garment identity and coverage topology while allowing only the local follow-through needed by the approved body endpoint. Omit a candidate if that relationship cannot be preserved.
-
-Do not analyze or recommend changing:
-- Facial features or face shape
-- Face or body skin tone
-- Skin texture, blemishes, or smoothing
-- Makeup, hairstyle, lighting, or background
-- Clothing color, material, style, pattern, or construction
-
-[Judgment rules]
-- Describe safe and clearly visible natural body-shape optimization opportunities that are supported by direct evidence in the photograph. A body area does not need to have an obvious defect or problem to qualify.
-- Propose a total-width endpoint only when both lateral contours at the same visible cross-section are clear and localizable. A clothed contour may be used when it reliably follows the body; do not use a table edge, chair, another person, frame edge, occluder, or hanging fabric that does not represent the body boundary.
-- A one-sided contour is not a total width. Use a side-specific endpoint only when a reliable visible reference length is present and can be expressed in the key point; otherwise omit it. For limb width, measure perpendicular to the local limb axis, not as a fixed horizontal image distance.
-- Do not infer areas hidden by clothing, people, objects, or the frame boundary.
-- Do not invent an adjustment when there is no safe and visible natural optimization opportunity.
-- Recommend only endpoints that remain anatomically natural and consistent with real human proportions; natural does not mean barely visible. Never change posture or action.
-- Avoid edits that warp clothing edges, background lines, body boundaries, or perspective.
-- The report must identify visible evidence, measurement basis, geometric direction, target amount, occlusion limits, and the clothing identity/coverage relationship to preserve. State when a section is not visible or not reliably measurable and why it was omitted. Passing the text parser does not prove that an image boundary is measurable; do not invent boundary-visible evidence. key_points must contain body geometry only, never clothing operations.
-
-[Output requirements]
-Return valid JSON and output one plan for every person in the same order as the supplied people list.
-
-Every person must include:
-- subject_index: return the supplied value unchanged.
-- local_detection_index: return the supplied value unchanged.
-- report: write a concise Traditional-Chinese analysis of visible body shape, any safe and visible natural optimization opportunity, the natural adjustment direction, and the proportions that must be preserved.
-- key_points: condense the report into at most five actionable body-shape points, using Traditional Chinese descriptions.
-
-Use subject_index and local_detection_index only for system merging. Never include either identifier in report or key_points text.
-
-[key_points rules]
-- Output no more than five points, ordered by importance.
-- Every point must use exactly this format: "身體部位：修圖方向", with a full-width Chinese colon.
-- The body region before the colon may be only: 整體身形、腿部、腰部、腹部、胸部、肩部、頸部、臀部、手臂、背部.
-- Every point must contain: (1) the exact body region and any needed screen-left/screen-right or limb-segment location, (2) a visible local 2D measurement such as total width, segment width, visible length, or directly visible projection distance, (3) one explicit geometric increase/decrease direction, and (4) one explicit target percentage.
-- Never use screen-left or screen-right merely to identify which person is being discussed; side labels belong only to the named local body contour or limb segment.
-- For a newly generated quantifiable point, use a total target of 12% of that region's visible 2D local measurement in the input image (normally keep the target between 10% and 15%). This is the total dimensional change, not 10% per side, not 12% per side, not 10% or 12% of the person, bounding box, or canvas, and not an estimate of weight, circumference, depth, or hidden anatomy. For example, a waist narrowed from width W targets 0.88W; if symmetric, each side moves inward by about 0.06W.
-- Do not force an explicitly supplied smaller amount up to the planner default or silently clamp an amount. A legacy or user-specified 10% remains 10%; the new 12% value applies only to newly generated planner endpoints. An existing explicit endpoint may say approximately 10%; preserve that explicit amount, but do not use approximately 10% as a new default.
-- Legacy explicit endpoint examples such as "腰部：可見總寬向內收窄約10%" and "手臂：畫面左側上臂可見寬度減少約10%" must be preserved exactly when they are already supplied; do not rewrite their wording or magnitude.
-- Do not stack the percentage twice when multiple points refer to the same measurement on the same body region. Make adjacent waist/abdomen changes one continuous contour without double-shrinking their overlap.
-- Each point must be no longer than 30 characters, including punctuation and spaces. Do not output any point longer than 30 characters.
-- Include a point only when the report identifies a safe and visible natural optimization opportunity supported by direct visual evidence for that area; an obvious defect or problem is not required.
-- Include a point only when its measurement and direction are visually supported and garment identity, construction, wearing method, and coverage relationship can remain intact while local garment geometry follows the approved body change.
-- key_points must not contain clothing-operation terms such as 衣物、服裝、下擺、腰頭、褲頭、袖口、領口、褶皺、縫線、覆蓋、露膚, or their English equivalents.
-- key_points must not contain posture/action terms such as 姿勢、站姿、坐姿、動作、手勢、重心、肩線、挺直、駝背、轉身、抬臂、抬手, or their English equivalents.
-- Do not output vague intent or preservation-only wording such as 微調輪廓、修順線條、平衡比例、維持自然比例, or their English equivalents. If the increase/decrease direction or visible measurement is unclear, omit the point and explain why in report.
-- Do not fill all five slots when fewer are supported.
-- Count every point's characters before returning the JSON.
-
-Example key_points:
-- "腰部：可見總寬向內收窄12%"
-- "腹部：腹段可見總寬向內收窄12%"
-- "肩部：可見肩寬向外增加12%"
-- "手臂：畫面左側上臂可見寬度減少12%"
-- "腿部：畫面右側大腿可見寬度減少12%"
-
-JSON format:
-{
-  "body_reshape_plans": [
-    {
-      "subject_index": 0,
-      "local_detection_index": 0,
-      "report": "繁體中文身形分析內容",
-      "key_points": [
-        "腰部：可見總寬向內收窄12%"
-      ]
-    }
-  ]
-}
-
-People to review:
-""" + _person_list_text(persons)).replace(
-        "12%", f"{_body_reshape_slider_config()['default']:g}%"
-    )
 
 
 
@@ -3641,35 +2976,6 @@ def build_eye_repair_planning_response_schema(person_count):
         }),
     }
 
-
-_BODY_RESHAPE_PLAN_SCHEMA = _schema_object({
-    "subject_index": _schema_integer(),
-    "local_detection_index": _schema_integer(),
-    "report": _schema_string(),
-    "key_points": {
-        "type": "array",
-        "items": {"type": "string", "maxLength": BODY_RESHAPE_KEY_POINT_MAX_LENGTH},
-        "minItems": 0,
-        "maxItems": 5,
-    },
-})
-
-
-def build_body_reshape_planning_response_schema(person_count):
-    """Strict output shape for build_body_reshape_planning_instruction."""
-    return {
-        "type": "json_schema",
-        "name": "body_reshape_planning",
-        "strict": True,
-        "schema": _schema_object({
-            "body_reshape_plans": {
-                "type": "array",
-                "items": _BODY_RESHAPE_PLAN_SCHEMA,
-                "minItems": person_count,
-                "maxItems": person_count,
-            },
-        }),
-    }
 
 
 def _default_person_issues():
@@ -4776,44 +4082,226 @@ def merge_eye_repair_strategies(analysis, repair_response):
     return cleaned
 
 
-def _default_body_reshape_plan(subject_index, local_detection_index=-1):
-    """Conservative fallback used when the optional body-planning call fails."""
-    return {
-        "subject_index": subject_index,
-        "local_detection_index": local_detection_index,
-        "report": "照片資訊不足，無法可靠判斷安全且可見的身形優化方向；不提出身形修改，保留原始比例、衣物身分與穿著關係及場景透視。",
-        "key_points": [],
-        "raw_key_points": [],
+# ---------------------------------------------------------------------------
+# Per-person Body Reshape hand-off
+# ---------------------------------------------------------------------------
+
+
+def build_body_reshape_planning_instruction(persons=None):
+    """Ask the analysis model for one detailed plan for every person."""
+    if not body_reshape_enabled():
+        return ""
+    people_text = _person_list_text(persons or []) if persons else "No separately identified person."
+    return f"""You are a professional portrait retoucher planning Body Reshape edits.
+
+Inspect the attached original photograph and analyze every listed person independently. Never transfer a body observation, region, amount, or instruction from one person to another. Return one plan for every supplied person, in the same order, using the supplied subject_index and local_detection_index unchanged. A person can legitimately have no safe edit; in that case set should_edit=false and write a clear preservation instruction instead of inventing a change.
+
+Each edit_prompt is a single Traditional-Chinese editor command of at least {BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH} and at most {BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH} Unicode characters. It must be detailed enough to name that person's visible body region or contour, geometric increase/decrease direction, and the visible local measurement or target amount when the image supports one. State that the existing garment follows the approved local contour without changing garment identity or coverage. Mention only static body geometry: never request a pose, action, gesture, head/body direction, joint angle, facial edit, skin edit, lighting edit, clothing redesign, or background reconstruction. Do not use vague text such as「微調輪廓」alone. Numeric percentages are allowed and must be interpreted as a total change of the named visible 2D measurement, not per side or hidden anatomy.
+
+The report is a Traditional-Chinese explanation of the visual evidence, the selected region and measurement, the direction and magnitude, and the limits that must be preserved. It is review context; edit_prompt is the exact text handed to Editor. Keep each person's instruction distinct by referring to the corresponding person and never merge multiple people into one sentence.
+
+The editor must preserve identity, face, hair, hands, feet, anatomy, pose, expression, camera viewpoint, lighting, scene, background geometry, and every unlisted body region. Existing fabric, texture, seams, folds, and local clothing/skin boundaries may move only as necessary with an approved body contour. Do not move a person to their box coordinates or treat a box as a target silhouette.
+
+Return exactly this JSON object:
+{{
+  "body_reshape_plans": [
+    {{"subject_index": 0, "local_detection_index": 0, "should_edit": true, "report": "...", "edit_prompt": "..."}}
+  ]
+}}
+
+People visible in the source:
+{people_text}
+""".strip()
+
+
+_BODY_RESHAPE_PLAN_SCHEMA = _schema_object({
+    "subject_index": _schema_integer(),
+    "local_detection_index": _schema_integer(),
+    "should_edit": _schema_boolean(),
+    "report": {"type": "string", "minLength": BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH, "maxLength": 600},
+    "edit_prompt": {
+        "type": "string",
+        "minLength": BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH,
+        "maxLength": BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH,
+    },
+})
+
+
+def build_body_reshape_planning_response_schema(person_count=None):
+    """Strict transport schema for the per-person Body plans."""
+    properties = {"body_reshape_plans": {
+        "type": "array", "items": _BODY_RESHAPE_PLAN_SCHEMA,
+    }}
+    if person_count is not None:
+        count = max(0, int(person_count))
+        properties["body_reshape_plans"].update(minItems=count, maxItems=count)
+    return {"type": "json_schema", "name": "body_reshape_planning", "strict": True,
+            "schema": _schema_object(properties)}
+
+
+def _normalize_body_subject_plan(subject, subject_index, body):
+    if not isinstance(body, dict):
+        return None
+    label = subject.get("label") if isinstance(subject, dict) else None
+    prompt = body.get("edit_prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        points = body.get("key_points")
+        if isinstance(points, list):
+            prompt = "；".join(str(point).strip() for point in points if str(point).strip())
+    if not isinstance(prompt, str) or not prompt.strip():
+        return None
+    should_edit = body.get("should_edit") is not False
+    normalized = {
+        "edit_prompt": normalize_body_reshape_edit_prompt(
+            prompt, fallback=_body_reshape_fallback_prompt(label, should_edit)
+        ),
+        "should_edit": should_edit,
     }
+    report = body.get("report")
+    if isinstance(report, str) and report.strip():
+        normalized["report"] = report.strip()[:600]
+    normalized["subject_index"] = subject_index
+    normalized["local_detection_index"] = body.get(
+        "local_detection_index", subject.get("local_detection_index", -1)
+    )
+    return normalized
+
+
+def sanitize_body_reshape_analysis(analysis):
+    """Keep per-person plans and review opt-outs across the edit boundary."""
+    if not isinstance(analysis, dict):
+        return analysis
+    if not body_reshape_enabled():
+        return strip_body_reshape(analysis)
+    cleaned = dict(analysis)
+    # A legacy top-level prompt remains readable for history; fresh Analyze
+    # responses put their prompts on each subject instead.
+    body = cleaned.get("body_reshape")
+    if isinstance(body, dict) and isinstance(body.get("edit_prompt"), str):
+        cleaned["body_reshape"] = {"edit_prompt": normalize_body_reshape_edit_prompt(body["edit_prompt"])}
+    elif not isinstance(body, dict):
+        cleaned.pop("body_reshape", None)
+
+    subjects = cleaned.get("subjects")
+    if isinstance(subjects, list):
+        sanitized_subjects = []
+        for index, subject in enumerate(subjects):
+            if not isinstance(subject, dict):
+                sanitized_subjects.append(subject)
+                continue
+            copy_subject = dict(subject)
+            normalized = _normalize_body_subject_plan(subject, index, subject.get("body_reshape"))
+            if normalized and subject.get("is_person") is True:
+                copy_subject["body_reshape"] = normalized
+            else:
+                copy_subject.pop("body_reshape", None)
+            sanitized_subjects.append(copy_subject)
+        cleaned["subjects"] = sanitized_subjects
+
+    if isinstance(cleaned.get("_body_reshape_enabled"), bool):
+        cleaned["_body_reshape_enabled"] = bool(cleaned["_body_reshape_enabled"])
+    else:
+        cleaned.pop("_body_reshape_enabled", None)
+    disabled = cleaned.get("_disabled_body_reshape_subjects")
+    if isinstance(disabled, list):
+        cleaned["_disabled_body_reshape_subjects"] = sorted({
+            value for value in disabled
+            if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+        })
+    else:
+        cleaned.pop("_disabled_body_reshape_subjects", None)
+    for key in _BODY_RESHAPE_LEGACY_KEYS:
+        cleaned.pop(key, None)
+    return cleaned
+
+
+def merge_body_reshape_plans(analysis, response):
+    """Validate and merge one independent plan into every person subject."""
+    if not body_reshape_enabled():
+        return strip_body_reshape(analysis)
+    cleaned = sanitize_body_reshape_analysis(analysis or {})
+    subjects = [dict(subject) if isinstance(subject, dict) else subject
+                for subject in (cleaned.get("subjects") or [])]
+    cleaned["subjects"] = subjects
+    expected = {
+        index for index, subject in enumerate(subjects)
+        if isinstance(subject, dict) and subject.get("is_person") is True
+    }
+    plans = response.get("body_reshape_plans") if isinstance(response, dict) else None
+    if not isinstance(plans, list):
+        raise ValueError("body reshape planning response must contain body_reshape_plans")
+    seen = set()
+    for plan in plans:
+        if not isinstance(plan, dict):
+            raise ValueError("body reshape plan entries must be objects")
+        subject_index = plan.get("subject_index")
+        if isinstance(subject_index, bool) or not isinstance(subject_index, int) or subject_index not in expected or subject_index in seen:
+            raise ValueError("invalid or duplicate body reshape subject_index {}".format(subject_index))
+        subject = subjects[subject_index]
+        expected_detection = subject.get("local_detection_index", -1)
+        returned_detection = plan.get("local_detection_index", -1)
+        if returned_detection != expected_detection:
+            raise ValueError("body reshape local_detection_index mismatch for subject_index {}".format(subject_index))
+        prompt = plan.get("edit_prompt")
+        # Accept one old-version key_points array while migrating saved test
+        # fixtures; new API responses always use edit_prompt.
+        if not isinstance(prompt, str) or not prompt.strip():
+            points = plan.get("key_points")
+            prompt = "；".join(str(point).strip() for point in points or [] if str(point).strip()) if isinstance(points, list) else ""
+        should_edit = plan.get("should_edit") is not False
+        body = {
+            "subject_index": subject_index,
+            "local_detection_index": returned_detection,
+            "should_edit": should_edit,
+            "edit_prompt": normalize_body_reshape_edit_prompt(
+                prompt, fallback=_body_reshape_fallback_prompt(subject.get("label"), should_edit)
+            ),
+        }
+        report = plan.get("report")
+        if isinstance(report, str) and report.strip():
+            body["report"] = report.strip()[:600]
+        subject["body_reshape"] = body
+        seen.add(subject_index)
+    missing = sorted(expected - seen)
+    if missing:
+        raise ValueError("body reshape plans missing subject_index values: {}".format(missing))
+    cleaned.pop("body_reshape", None)
+    cleaned.pop("_body_reshape_enabled", None)
+    cleaned.pop("_disabled_body_reshape_subjects", None)
+    return cleaned
+
+
+def merge_body_reshape_edit_prompt(analysis, response):
+    """Merge the new per-person plans, with a history-compatible fallback."""
+    if isinstance(response, dict) and "body_reshape_plans" in response:
+        return merge_body_reshape_plans(analysis, response)
+    # Older offline callers supplied one top-level sentence. Preserve it as a
+    # compatibility shape; new Analyze calls never take this branch.
+    if not body_reshape_enabled():
+        return strip_body_reshape(analysis)
+    cleaned = sanitize_body_reshape_analysis(analysis or {})
+    value = response.get("edit_prompt") if isinstance(response, dict) else None
+    cleaned["body_reshape"] = {"edit_prompt": normalize_body_reshape_edit_prompt(value)}
+    return cleaned
 
 
 def strip_body_reshape(analysis):
-    """Return an analysis copy with all Body Reshape data removed.
-
-    This is a defensive boundary for old history records or client-supplied
-    analyses that were created while the feature was enabled.  It prevents
-    stale ``subjects[].body_reshape`` values and deny-list metadata from being
-    carried into a disabled run, while leaving every unrelated analysis field
-    untouched.
-    """
+    """Remove both new per-person and legacy Body data."""
     if not isinstance(analysis, dict):
         return analysis
     cleaned = dict(analysis)
+    cleaned.pop("body_reshape", None)
+    cleaned.pop("_body_reshape_enabled", None)
+    cleaned.pop("_disabled_body_reshape_subjects", None)
     raw_subjects = analysis.get("subjects")
     if isinstance(raw_subjects, list):
-        subjects = []
-        for subject in raw_subjects:
-            if isinstance(subject, dict):
-                item = dict(subject)
-                item.pop("body_reshape", None)
-                subjects.append(item)
-            else:
-                subjects.append(subject)
-        cleaned["subjects"] = subjects
-    cleaned.pop("_disabled_body_reshape_subjects", None)
-    cleaned.pop("_disabled_body_reshape_key_points", None)
-    cleaned.pop("_body_reshape_amount_overrides", None)
-    cleaned.pop("_body_reshape_execution_plan", None)
+        cleaned["subjects"] = [
+            ({key: value for key, value in subject.items() if key != "body_reshape"}
+             if isinstance(subject, dict) else subject)
+            for subject in raw_subjects
+        ]
+    for key in _BODY_RESHAPE_LEGACY_KEYS:
+        cleaned.pop(key, None)
     prompts = cleaned.get("prompts")
     if isinstance(prompts, dict):
         prompts = dict(prompts)
@@ -4822,620 +4310,36 @@ def strip_body_reshape(analysis):
     return cleaned
 
 
-def apply_default_body_reshape_plans(analysis):
-    """Ensure every is_person subject has a predictable body_reshape field."""
-    if not body_reshape_enabled():
-        cleaned = strip_body_reshape(analysis)
-        if isinstance(analysis, dict) and isinstance(cleaned, dict) and cleaned is not analysis:
-            analysis.clear()
-            analysis.update(cleaned)
-        return analysis
-    for subject_index, subject in enumerate(analysis.get("subjects") or []):
-        if not isinstance(subject, dict) or not subject.get("is_person"):
-            continue
-        subject.setdefault(
-            "body_reshape",
-            _default_body_reshape_plan(subject_index, subject.get("local_detection_index", -1)),
-        )
-    return analysis
-
-
-def merge_body_reshape_plans(analysis, planning_response):
-    """Validate and merge one report/key-points result into each person."""
-    if not body_reshape_enabled():
-        return strip_body_reshape(analysis)
-    if planning_response is not None and not isinstance(planning_response, dict):
-        raise ValueError("body reshape planning response must be an object")
-    cleaned = dict(analysis)
-    subjects = [dict(subject) for subject in (analysis.get("subjects") or [])]
-    cleaned["subjects"] = subjects
-    expected = {
-        index for index, subject in enumerate(subjects)
-        if isinstance(subject, dict) and subject.get("is_person")
-    }
-    seen = set()
-
-    for plan in (planning_response or {}).get("body_reshape_plans") or []:
-        if not isinstance(plan, dict):
-            raise ValueError("body reshape plan entries must be objects")
-        subject_index = plan.get("subject_index")
-        if isinstance(subject_index, bool) or not isinstance(subject_index, int):
-            raise ValueError("body reshape subject_index must be an integer")
-        if subject_index not in expected or subject_index in seen:
-            raise ValueError("invalid or duplicate body reshape subject_index {}".format(subject_index))
-
-        subject = subjects[subject_index]
-        expected_detection = subject.get("local_detection_index", -1)
-        returned_detection = plan.get("local_detection_index", -1)
-        if (
-            isinstance(expected_detection, bool)
-            or not isinstance(expected_detection, int)
-            or isinstance(returned_detection, bool)
-            or not isinstance(returned_detection, int)
-            or returned_detection != expected_detection
-        ):
-            raise ValueError(
-                "body reshape local_detection_index mismatch for subject_index {}".format(subject_index)
-            )
-        report = plan.get("report")
-        if not isinstance(report, str) or not report.strip():
-            raise ValueError("body reshape report must be a non-empty string")
-        key_points = plan.get("key_points")
-        if not isinstance(key_points, list) or len(key_points) > 5:
-            raise ValueError("body reshape key_points must contain at most five items")
-        if any(not isinstance(point, str) for point in key_points):
-            raise ValueError("body reshape key_points items must be strings")
-        review_points = []
-        ignored_points = []
-        for point in key_points:
-            normalized = _normalize_body_reshape_key_point(point)
-            review_point = normalized or point.strip()
-            if len(review_point) > 30:
-                raise ValueError("body reshape key_points items must be at most 30 characters")
-            reason = _body_reshape_key_point_validation_error(review_point)
-            if reason:
-                ignored_points.append({"point": point, "reason": reason})
-            # Preserve one review entry per source entry.  The UI's disabled
-            # key-point indices refer to these original positions; executable
-            # consumers validate again instead of shifting those indices here.
-            review_points.append(review_point)
-        if ignored_points:
-            logger.warning(
-                "Keeping non-executable body reshape key_points for review only for subject_index %s: %s",
-                subject_index,
-                ignored_points,
-            )
-
-        normalized_plan = dict(plan)
-        normalized_plan["report"] = report.strip()
-        normalized_plan["key_points"] = review_points
-        # Keep the exact model-authored strings beside the normalised review
-        # list.  The public contract remains the historical four fields, but
-        # the request-scoped execution plan needs an audit trail that can show
-        # what was reviewed before aliases/list markers were canonicalised.
-        normalized_plan["raw_key_points"] = list(key_points)
-        subject["body_reshape"] = normalized_plan
-        seen.add(subject_index)
-
-    missing = sorted(expected - seen)
-    if missing:
-        raise ValueError("body reshape plans missing subject_index values: {}".format(missing))
-    return cleaned
-
-
-def _normalize_body_reshape_key_point(point):
-    """Return a canonical body key point, or ``None`` when out of scope.
-
-    Structured output constrains the JSON shape and string length, but cannot
-    express that the text before the colon is an enum.  Luna may therefore use
-    a reasonable short label or add a Markdown/list marker.  Normalising those
-    harmless variants here prevents an optional planning pass from failing the
-    entire photo, while the explicit alias table still rejects background,
-    skin, face, clothing, and other out-of-scope edit requests.
-    """
-    text = str(point or "").strip()
-    text = re.sub(r"(\d)\s*[％%]", r"\1%", text)
-    text = re.sub(
-        r"^(?:[-*•●▪–—]+\s*|[(（]?\d+[)）.、．]\s*|"
-        r"[一二三四五六七八九十]+[、.．]\s*)",
-        "",
-        text,
-    )
-    parts = re.split(r"[：:﹕]", text, maxsplit=1)
-    if len(parts) != 2:
-        return None
-    region, direction = (part.strip() for part in parts)
-    region_key = re.sub(r"\s+", "", region).replace("／", "/").lower()
-    canonical_region = _BODY_RESHAPE_REGION_ALIASES.get(region_key)
-    if not canonical_region or not direction:
-        return None
-    separator = ": " if canonical_region.isascii() else "："
-    return f"{canonical_region}{separator}{direction}"
-
-
-def _is_valid_body_reshape_key_point(point):
-    """Return whether a key point is syntactically and policy executable."""
-    return _body_reshape_key_point_validation_error(point) is None
-
-
-def _body_reshape_plan_signature(analysis):
-    """Return a deterministic signature for the current request inputs.
-
-    The execution plan is intentionally request-scoped.  A caller may reuse an
-    analysis object while changing a per-person checkbox, an individual point,
-    an explicit user amount, or the overwrite switch; accepting an old cached
-    plan in any of those cases would make the prompt, quality policy, QA, and
-    UI disagree about what was actually sent.  Only body-relevant inputs are
-    included so unrelated timing/prompt fields do not invalidate the plan.
-    """
-    if not isinstance(analysis, dict):
-        analysis = {}
-    subjects = []
-    for index, subject in enumerate(analysis.get("subjects") or []):
-        if not isinstance(subject, dict):
-            subjects.append({"index": index, "value": None})
-            continue
-        subjects.append({
-            "index": index,
-            "is_person": bool(subject.get("is_person")),
-            "body_reshape": subject.get("body_reshape"),
-        })
-    payload = {
-        "subjects": subjects,
-        "disabled_subjects": analysis.get("_disabled_body_reshape_subjects") or [],
-        "disabled_points": analysis.get("_disabled_body_reshape_key_points") or [],
-        # Amount metadata is request-scoped state just like the checkbox deny
-        # lists.  Include the live policy too, so changing a deployment from
-        # max=30 to max=40 cannot reuse a plan built under the old ceiling.
-        "amount_overrides": analysis.get("_body_reshape_amount_overrides"),
-        "slider_config": _body_reshape_slider_config(),
-        "user_instruction": analysis.get("user_instruction") or {},
-    }
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
-
-
-def build_body_reshape_execution_plan(analysis):
-    """Build the request-scoped body plan shared by edit, QA and the UI.
-
-    Review points remain in their original order and retain their original
-    indices.  Every point ends in exactly one state, so a duplicate, conflict,
-    disabled point, or malformed endpoint can never accidentally be counted as
-    rendered.  The function is intentionally pure with respect to ``analysis``
-    and is called again after user settings are applied for every request.
-    """
-    analysis = analysis if isinstance(analysis, dict) else {}
-    slider_config = _body_reshape_slider_config()
-    if not body_reshape_enabled():
-        return {
-            "version": 1,
-            "request_signature": _body_reshape_plan_signature(strip_body_reshape(analysis)),
-            "planner_default_target_pct": slider_config["default"],
-            "planner_min_target_pct": BODY_RESHAPE_MIN_PCT,
-            "planner_max_target_pct": BODY_RESHAPE_MAX_PCT,
-            "slider_config": slider_config,
-            "body_active": False,
-            "points": [],
-            "items": [],
-            "review_point_count": 0,
-            "selected_point_count": 0,
-            "executable_point_count": 0,
-            "disabled_point_count": 0,
-            "amount_zero_point_count": 0,
-            "excluded_point_count": 0,
-            "duplicate_point_count": 0,
-            "conflict_point_count": 0,
-            "user_override_point_count": 0,
-            "resolved_subject_count": 0,
-            "rendered_endpoint_count": 0,
-            "no_executable_reason": "body reshape feature is disabled",
-        }
-    overwrite = bool((analysis.get("user_instruction") or {}).get("overwrite_prompt"))
-    amount_overrides = _body_reshape_amount_overrides(analysis)
-    disabled_subjects = {
-        value for value in (analysis.get("_disabled_body_reshape_subjects") or [])
-        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
-    }
-    disabled_points = {
-        (entry.get("subject_index"), entry.get("key_point_index"))
-        for entry in (analysis.get("_disabled_body_reshape_key_points") or [])
-        if isinstance(entry, dict)
-        and isinstance(entry.get("subject_index"), int)
-        and not isinstance(entry.get("subject_index"), bool)
-        and entry.get("subject_index") >= 0
-        and isinstance(entry.get("key_point_index"), int)
-        and not isinstance(entry.get("key_point_index"), bool)
-        and entry.get("key_point_index") >= 0
-    }
-    user_overrides, user_prohibitions = _body_reshape_user_override_candidates(analysis)
-    overrides_by_identity = {}
-    for override in user_overrides:
-        identity = _body_reshape_endpoint_identity(override)
-        if identity:
-            overrides_by_identity.setdefault(identity, []).append(override)
-    points = []
-    subjects_for_items = {}
-    for subject_index, subject in enumerate(analysis.get("subjects") or []):
-        if not isinstance(subject, dict) or not subject.get("is_person"):
-            continue
-        body_plan = subject.get("body_reshape") or {}
-        if not isinstance(body_plan, dict):
-            continue
-        subjects_for_items[subject_index] = subject
-        review_points = body_plan.get("key_points") or []
-        if not isinstance(review_points, list):
-            continue
-        source_points = body_plan.get("raw_key_points")
-        # ``raw_key_points`` was added after the public planning contract.  A
-        # saved analysis from before that field existed remains valid; in that
-        # case the displayed review text is the only available source text.
-        if not isinstance(source_points, list) or len(source_points) != len(review_points):
-            source_points = review_points
-        for key_point_index, raw_point in enumerate(review_points):
-            source_point = source_points[key_point_index]
-            raw_text = source_point if isinstance(source_point, str) else str(source_point or "")
-            review_text = raw_point if isinstance(raw_point, str) else str(raw_point or "")
-            parsed = _body_reshape_parse_key_point(review_text)
-            planner_parsed = parsed
-            identity = _body_reshape_endpoint_identity(parsed)
-            matching_overrides = list(overrides_by_identity.get(identity, ())) if identity else []
-            override_conflict = False
-            override = None
-            if matching_overrides:
-                signatures = {
-                    (item.get("operation"), item.get("target_pct"))
-                    for item in matching_overrides
-                }
-                if len(signatures) > 1:
-                    override_conflict = True
-                else:
-                    override = matching_overrides[0]
-                    # The user override is authoritative for this already
-                    # approved measurement.  Keep the review source text and
-                    # source index, but use the explicit amount/direction for
-                    # execution, QA and metadata.
-                    parsed = dict(override)
-            parsed_before_amount = parsed
-            amount_override_present = (subject_index, key_point_index) in amount_overrides
-            amount_override = amount_overrides.get((subject_index, key_point_index))
-            if amount_override_present and parsed.get("syntax_valid"):
-                # The slider changes only the approved endpoint's amount.  It
-                # never changes the parsed region, side, segment, operation,
-                # or source/provenance identity.
-                parsed = _body_reshape_apply_manual_target(parsed, amount_override)
-            prohibition = next(
-                (
-                item for item in user_prohibitions
-                    if identity and (
-                        item.get("region_id") or item.get("region"), item.get("segment"), item.get("screen_side"),
-                        item.get("measurement_id") or _body_reshape_measurement_identity(item.get("measurement"))
-                    ) == identity
-                ),
-                None,
-            )
-            canonical = parsed.get("canonical_text") or raw_text.strip()
-            entry = {
-                "subject_index": subject_index,
-                "key_point_index": key_point_index,
-                "source_key_point_index": key_point_index,
-                # One rendered endpoint can stand in for several review
-                # entries after exact/overlap deduplication.  Keep every
-                # source index on the winner so provenance is not lost when
-                # the compact contract is built.
-                "source_key_point_indices": [key_point_index],
-                "endpoint_id": f"body:{subject_index}:{key_point_index}",
-                "raw_text": raw_text,
-                "planner_raw_text": raw_text,
-                "canonical_text": canonical,
-                "endpoint": canonical,
-                "region": parsed.get("region"),
-                "region_id": parsed.get("region_id"),
-                "segment": parsed.get("segment"),
-                "screen_side": parsed.get("screen_side"),
-                "measurement": parsed.get("measurement"),
-                "measurement_id": parsed.get("measurement_id") or _body_reshape_measurement_identity(parsed.get("measurement")),
-                "operation": parsed.get("operation"),
-                "target_pct": parsed.get("target_pct"),
-                "planner_target_pct": planner_parsed.get("target_pct"),
-                "planner_default_target_pct": slider_config["default"],
-                "effective_target_pct": parsed.get("target_pct"),
-                "policy_valid": parsed.get("policy_valid"),
-                "policy_reason_code": planner_parsed.get("reason_code") if planner_parsed.get("reason_code") == "target_below_default_minimum" else None,
-                "policy_reason": planner_parsed.get("reason") if planner_parsed.get("reason_code") == "target_below_default_minimum" else None,
-                "planner_canonical_text": planner_parsed.get("canonical_text") or raw_text.strip(),
-                "source": "user_instruction" if override else "analysis_body_reshape",
-                "target_source": "user_slider" if amount_override_present and parsed.get("syntax_valid") else ("user_instruction" if override else "analysis_body_reshape"),
-                "override_raw_text": override.get("raw_text") if override else None,
-                "amount_override_touched": amount_override_present,
-                "amount_override_pct": amount_override if amount_override_present else None,
-                "amount_control_available": bool(parsed_before_amount.get("syntax_valid")),
-                "selected": not overwrite and subject_index not in disabled_subjects and (subject_index, key_point_index) not in disabled_points,
-                "executable": False,
-                "reason_code": None,
-                "reason": None,
-                # Text validation cannot establish that image boundaries are
-                # visible.  Keep that uncertainty explicit for QA/UI rather
-                # than fabricating a positive visibility flag.
-                "visibility_status": "not_verified_by_parser",
-            }
-            if overwrite:
-                entry.update(reason_code="overwrite_prompt", reason="full user prompt override bypasses analysis targets")
-            elif subject_index in disabled_subjects or (subject_index, key_point_index) in disabled_points:
-                entry.update(reason_code="disabled_by_user", reason="disabled in the current user settings")
-            elif prohibition:
-                entry.update(
-                    selected=False,
-                    executable=False,
-                    reason_code="disabled_by_user",
-                    reason="explicit user instruction prohibits this body measurement: {}".format(
-                        prohibition.get("raw_text") or "no change"
-                    ),
-                )
-            elif override_conflict:
-                entry.update(
-                    executable=False,
-                    reason_code="conflicting_endpoint",
-                    reason="conflicting explicit user targets for this body measurement",
-                )
-            elif not isinstance(raw_point, str):
-                entry.update(reason_code="invalid_syntax_or_semantics", reason="key point must be a string")
-            else:
-                # Validate the planner/user-authored endpoint before applying
-                # a manual amount.  A 20% or 30% slider value is valid under
-                # the manual policy, but must not be re-parsed through the
-                # planner's legacy <=15% ceiling (and 0% is intentionally not
-                # sent to the positive-target parser at all).
-                validation_error = _body_reshape_key_point_validation_error(
-                    parsed_before_amount.get("canonical_text") or raw_text
-                )
-                if validation_error:
-                    entry.update(
-                        reason_code=(parsed_before_amount.get("reason_code") or "invalid_syntax_or_semantics"),
-                        reason=validation_error,
-                    )
-                elif amount_override_present and amount_override == 0:
-                    entry.update(
-                        reason_code="amount_zero",
-                        reason="manual amount is 0%; keep this review point but do not execute it",
-                    )
-                else:
-                    entry.update(reason_code="executable", reason=None, executable=True)
-            points.append(entry)
-
-    # Exact endpoint duplicates are removed.  Same-measurement endpoints with
-    # different direction/amount are a conflict; neither silently wins.
-    executable_by_exact = {}
-    executable_by_measurement = {}
-    for entry in points:
-        if not entry.get("executable"):
-            continue
-        exact_key = (
-            entry["subject_index"], entry.get("region_id") or entry.get("region"), entry.get("segment"),
-            entry.get("screen_side"), entry.get("measurement_id") or _body_reshape_measurement_identity(entry.get("measurement")),
-            entry.get("operation"), entry.get("target_pct"),
-        )
-        measurement_key = (
-            entry["subject_index"], entry.get("region_id") or entry.get("region"), entry.get("segment"),
-            entry.get("screen_side"), entry.get("measurement_id") or _body_reshape_measurement_identity(entry.get("measurement")),
-        )
-        duplicate = executable_by_exact.get(exact_key)
-        if duplicate is not None:
-            entry.update(executable=False, reason_code="duplicate_of",
-                         reason=f"duplicate of key_point_index {duplicate['key_point_index']}")
-            duplicate.setdefault("source_key_point_indices", [duplicate["key_point_index"]]).append(
-                entry["key_point_index"]
-            )
-            duplicate.setdefault("duplicate_source_key_point_indices", []).append(
-                entry["key_point_index"]
-            )
-            continue
-        executable_by_exact[exact_key] = entry
-        executable_by_measurement.setdefault(measurement_key, []).append(entry)
-    for entries in executable_by_measurement.values():
-        if len(entries) < 2:
-            continue
-        signatures = {(item.get("operation"), item.get("target_pct")) for item in entries}
-        if len(signatures) <= 1:
-            continue
-        indices = ", ".join(str(item["key_point_index"]) for item in entries)
-        for entry in entries:
-            entry.update(executable=False, reason_code="conflicting_endpoint",
-                         reason=f"conflicts with key_point_index values {indices}")
-
-    # Broad waist and abdomen width descriptions can refer to one shared
-    # visible contour even though their region labels differ.  Execute one
-    # endpoint in that case and retain the later review index on the winner;
-    # explicitly located segments/sides are excluded by the overlap helper and
-    # remain independent.  Distinct targets for that same broad contour are a
-    # conflict, never a last-write-wins merge.
-    overlap_groups = {}
-    for entry in points:
-        if not entry.get("executable"):
-            continue
-        parsed_entry = {
-            "measurement_id": entry.get("measurement_id"),
-            "segment": entry.get("segment"),
-            "screen_side": entry.get("screen_side"),
-            "region_id": entry.get("region_id"),
-        }
-        overlap_id = _body_reshape_overlap_identity(parsed_entry)
-        if overlap_id is not None:
-            overlap_groups.setdefault((entry["subject_index"], overlap_id), []).append(entry)
-    for entries in overlap_groups.values():
-        if len(entries) < 2:
-            continue
-        signatures = {(entry.get("operation"), entry.get("target_pct")) for entry in entries}
-        winner = entries[0]
-        if len(signatures) == 1:
-            for duplicate in entries[1:]:
-                duplicate.update(
-                    executable=False,
-                    reason_code="duplicate_of",
-                    reason=(
-                        "overlaps broad waist/abdomen measurement; duplicate of "
-                        f"key_point_index {winner['key_point_index']}"
-                    ),
-                )
-                winner.setdefault("source_key_point_indices", [winner["key_point_index"]]).append(
-                    duplicate["key_point_index"]
-                )
-                winner.setdefault("duplicate_source_key_point_indices", []).append(
-                    duplicate["key_point_index"]
-                )
-        else:
-            indices = ", ".join(str(entry["key_point_index"]) for entry in entries)
-            for entry in entries:
-                entry.update(
-                    executable=False,
-                    reason_code="conflicting_endpoint",
-                    reason=f"overlapping waist/abdomen measurements conflict at key_point_index values {indices}",
-                )
-
-    items = []
-    for subject_index, subject in subjects_for_items.items():
-        subject_entries = [
-            entry for entry in points
-            if entry["subject_index"] == subject_index and entry.get("executable")
-        ]
-        if not subject_entries:
-            continue
-        items.append({
-            "subject_index": subject_index,
-            "subject_label": subject.get("label") or "Person in the frame",
-            "box": subject.get("box") or {},
-            "key_points": [entry["canonical_text"] for entry in subject_entries],
-            "key_point_entries": subject_entries,
-        })
-
-    counts = {
-        "review_point_count": len(points),
-        # A point that is checked before parsing but later rejected/duplicated
-        # is not an executable selection in the UI.  Count only selected
-        # endpoints that survive validation and conflict resolution so this
-        # value agrees with the controls and does not overlap the exclusion
-        # terminal states.
-        "selected_point_count": sum(1 for item in points if item.get("selected") and item.get("executable")),
-        "executable_point_count": sum(1 for item in points if item.get("executable")),
-        "disabled_point_count": sum(1 for item in points if item.get("reason_code") == "disabled_by_user"),
-        "amount_zero_point_count": sum(1 for item in points if item.get("reason_code") == "amount_zero"),
-        "excluded_point_count": sum(1 for item in points if item.get("reason_code") in {
-            "invalid_syntax_or_semantics", "target_out_of_policy",
-            "conflicting_endpoint", "subject_unresolved", "not_applicable", "overwrite_prompt",
-        }),
-        "duplicate_point_count": sum(1 for item in points if item.get("reason_code") == "duplicate_of"),
-        "conflict_point_count": sum(1 for item in points if item.get("reason_code") == "conflicting_endpoint"),
-        "user_override_point_count": sum(1 for item in points if item.get("target_source") == "user_instruction"),
-        "resolved_subject_count": len(items),
-        "rendered_endpoint_count": sum(len(item.get("key_points") or []) for item in items),
-    }
-    plan = {
-        "version": 1,
-        "request_signature": _body_reshape_plan_signature(analysis),
-        "planner_default_target_pct": slider_config["default"],
-        "planner_min_target_pct": BODY_RESHAPE_MIN_PCT,
-        "planner_max_target_pct": BODY_RESHAPE_MAX_PCT,
-        "slider_config": slider_config,
-        "body_active": bool(items) and not overwrite,
-        "points": points,
-        "items": items,
-        **counts,
-    }
-    if not items:
-        plan["no_executable_reason"] = (
-            "full user prompt override bypasses analysis targets" if overwrite else
-            "no executable body reshape points after validation and user selections"
-        )
-    return plan
-
-
-def body_reshape_execution_plan(analysis):
-    """Return the request plan, using only an explicitly request-scoped cache."""
-    if not body_reshape_enabled():
-        return build_body_reshape_execution_plan(analysis)
-    cached = analysis.get("_body_reshape_execution_plan") if isinstance(analysis, dict) else None
-    signature = _body_reshape_plan_signature(analysis)
-    if (
-        isinstance(cached, dict)
-        and isinstance(cached.get("points"), list)
-        and cached.get("request_signature") == signature
-    ):
-        return cached
-    return build_body_reshape_execution_plan(analysis)
-
-
 def body_reshape_items(analysis):
-    """Flatten actionable per-person body plans for editor/QA consumers.
-
-    ``report`` remains review-only prose.  Only the short, validated
-    ``key_points`` are execution instructions, which prevents descriptive or
-    uncertain report text from accidentally becoming a body transformation.
-    """
-    plan = body_reshape_execution_plan(analysis)
-    for entry in plan.get("points") or []:
-        if entry.get("reason_code") not in {None, "executable", "duplicate_of", "amount_zero", "disabled_by_user", "overwrite_prompt"} and entry.get("reason"):
-            logger.warning(
-                "Ignoring non-executable body reshape key_point at subject_index=%s key_point_index=%s: %r (%s)",
-                entry.get("subject_index"), entry.get("key_point_index"), entry.get("raw_text"), entry.get("reason"),
-            )
-    return list(plan.get("items") or [])
-
-
-def body_reshape_prompt_targets(analysis):
-    """Return the exact executable targets shared by raw and compact prompts."""
-    return body_reshape_items(analysis)
+    """Return actionable per-person plans for the Editor hand-off."""
+    return [entry for entry in body_reshape_plan_entries(analysis, include_disabled=False)
+            if entry.get("active")]
 
 
 def build_body_reshape_edit_block(analysis):
-    """Render body key points as bounded, per-person edit instructions."""
-    targets = []
-    for item in body_reshape_items(analysis):
-        adjustments = "\n".join(f"  - {point}" for point in item["key_points"])
-        source_indices = []
-        for entry in item.get("key_point_entries") or ():
-            candidates = entry.get("source_key_point_indices") if isinstance(entry, dict) else None
-            if not isinstance(candidates, (list, tuple)):
-                candidates = [entry.get("key_point_index")] if isinstance(entry, dict) else []
-            for index in candidates:
-                if isinstance(index, int) and not isinstance(index, bool) and index not in source_indices:
-                    source_indices.append(index)
-        targets.append(
-            f'- Subject: {item["subject_label"]}\n'
-            f'  Approximate location in frame: {json.dumps(item["box"], ensure_ascii=False)}\n'
-        f'  Approved natural body adjustments (source keypoint indices: {source_indices}):\n{adjustments}'
-        )
+    """Render detailed, independently identified body commands."""
+    targets = body_reshape_items(analysis)
     if not targets:
         return ""
-
-    planner_default = _body_reshape_slider_config()["default"]
-    manual_max = _body_reshape_slider_config()["max"]
-    instructions = """Body reshape execution instructions (analysis-approved):
-- Every listed key point is a mandatory geometric endpoint for the named person. Apply no unlisted body-shape change; body-reshape authority itself never authorizes a posture, action, gesture, joint-angle, or body-direction change. A separately selected pose style remains authoritative for its own pose transformation.
-- Locations identify people only; do not move a person to the box coordinates or treat the box as a target silhouette.
-- Complete each named increase/decrease at the exact numeric target printed for that endpoint. Do not enlarge a 1% or 5% request to make it more conspicuous, and do not treat a low requested amount as a request for the planner default. A true no-op, opposite-direction change, tonal-only edit, blur, sharpening, or fold-only change does not complete a body endpoint; all positive amounts still require the corresponding geometric direction.
-- Interpret each percentage against the named region's visible 2D local measurement in the input. It is the total dimensional change, not that percentage per side and not a percentage of the person, bounding box, canvas, weight, circumference, hidden depth, or hidden anatomy. For the planner's default symmetric 12% width decrease, target 0.88 of the source width by moving each side inward about 6% of the source width; preserve any other explicit target exactly.
-- The numeric percentage printed on each listed endpoint is its final effective target. Follow that number exactly, including a manually selected amount such as 1%, 5%, 20%, or the configured upper limit; never substitute the planner default or apply the percentage twice.
-- When a reviewed endpoint also has a user slider amount, that printed effective amount is authoritative for the endpoint's magnitude; retain any higher-priority prohibition or full prompt overwrite semantics, but do not apply a second user-text percentage.
-- If the user's explicit direction gives a different amount or prohibits this same body-region change, that explicit user instruction overrides the planner's default 12% endpoint; never replace an explicit user amount with the default or silently clamp it.
-- Do not accumulate the same percentage twice for duplicate references to one measurement. Blend adjacent waist/abdomen changes into one continuous contour without double-shrinking their overlap.
-- Preserve garment identity, type, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method. Within an approved body region, allow the existing garment silhouette, fabric, texture, pattern, seams, folds, and local clothing/skin boundary to move continuously with the approved body geometry; this follow-through is required and is not a separate clothing edit.
-- Within an approved body region, this garment follow-through overrides generic instructions elsewhere to preserve clothing or all internal proportions. Those generic rules still protect garment identity/coverage and every unlisted region; they do not freeze the authorized local geometry.
-- Never lengthen or lower a top to cover the abdomen, raise a waistband to cover the waist, add/remove fabric, alter a neckline or sleeve design, change which body area is clothed or exposed, or rearrange clothing coverage to fake body shaping. Never substitute shadows, blur, sharpening, or redrawn folds for the required geometric contour change.
-- Where an approved outer contour moves, continue only the necessary narrow strip of the same background between the old and new contour with matching scene texture and geometry. Do not expand this into background reconstruction or move/warp nearby people, objects, lines, architecture, or perspective.
-- Preserve face identity and facial anatomy, skin color and texture, hair, hands, feet, accessories, camera viewpoint, crop, lighting, and every unlisted body region, except for separately approved smile, gaze, blink, hair, or style endpoints that remain active in their own contracts.
-- Protect anatomy continuity, nearby people and objects, background lines, architecture, furniture, and perspective from warping, bending, smearing, duplication, or displacement outside the necessary local follow-through above.
-- This block authorizes body changes only. A person or body region not listed below is out of scope for body reshape, but separately approved feature or style endpoints for that person remain active and must not be cancelled by this body-only scope.
+    target_lines = []
+    for item in targets:
+        target_lines.append(
+            f'- Subject: {item["subject_label"]}\n'
+            f'  Approximate location in frame: {json.dumps(item["box"], ensure_ascii=False)}\n'
+            f'  Approved natural body adjustment:\n    {item["edit_prompt"]}'
+        )
+    return """Body reshape execution instructions (analysis-approved):
+- Every listed instruction is mandatory for the named person and applies only to the visible static body geometry it names. Do not invent an unlisted body change; Body Reshape never authorizes posture, action, gesture, joint-angle, head direction, or body-direction changes. A separately selected pose style remains authoritative only for its own pose transformation.
+- Subject labels and boxes identify people only. Never move a person to box coordinates or treat a box as a target silhouette. Match each command to the named person's visible anatomy and clothing in the supplied image.
+- Complete each named increase/decrease at the exact amount printed in that person's instruction. A true no-op, tonal-only edit, blur, sharpening, or redrawn fold does not complete a geometric body command. A percentage is the total dimensional change of the named visible 2D local measurement, not per side, the whole person, bounding box, canvas, circumference, hidden depth, or hidden anatomy.
+- If adjacent waist and abdomen commands overlap, blend them into one continuous contour without applying the same percentage twice. Preserve every unlisted body region and every other person's geometry.
+- Preserve garment identity, type, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method. Within an approved body region, let the existing garment silhouette, fabric, texture, seams, folds, and local clothing/skin boundary follow the approved body contour continuously; this is required follow-through, not permission to redesign clothing.
+- Never lengthen or lower a top to cover the abdomen, raise a waistband to cover the waist, add or remove fabric, alter a neckline or sleeve, change clothing coverage, or use shadows/blur/folds to fake a body change.
+- Where an outer contour moves, continue only the narrow adjacent strip of the same background with matching texture and perspective. Do not reconstruct or warp the background, nearby people, objects, architecture, lines, or camera viewpoint.
+- Preserve face identity and facial anatomy, skin, hair, hands, feet, accessories, expression, pose, lighting, crop, perspective, and every unlisted region. Protect anatomy continuity and nearby content from smearing, bending, duplication, or displacement outside the necessary local follow-through above.
 
 Targets:
-"""
-    instructions = instructions.replace(
-        "12%", f"{planner_default:g}%"
-    ).replace(
-        "0.88", f"{1 - planner_default / 100:g}"
-    ).replace(
-        "6%", f"{planner_default / 2:g}%"
-    ).replace(
-        "the configured upper limit", f"{manual_max:g}%"
-    )
-    return instructions + "\n".join(targets)
+""" + "\n".join(target_lines)
 
 
 # The photo-specific target and approved plan already name the operations. This
@@ -5775,8 +4679,8 @@ CONTENT_SHAPE_RULE = (
 
 BODY_RESHAPE_CONTENT_SHAPE_RULE = (
     "Everything inside the frame keeps its tilt, relative placement, and unlisted proportions from the input photograph. "
-    "This whole-image preservation does not freeze an approved local body measurement: only the named body region may "
-    "change by its mandatory geometric endpoint, with the necessary local garment and adjacent-background follow-through."
+    "The one holistic body instruction may adjust the visible figure as a continuous, anatomically natural contour, "
+    "with only the necessary local garment and adjacent-background follow-through."
 )
 
 
@@ -5945,12 +4849,12 @@ def _build_crop_instruction_block(
         if has_body_reshape:
             consequence = consequence.replace(
                 "rather than narrowing the people and objects in it.",
-                "rather than narrowing unlisted people, objects, or body regions; approved body endpoints remain "
-                "the only deliberate local geometry exception.",
+                "rather than narrowing other people, objects, or unrelated geometry; the holistic body instruction remains "
+                "the only deliberate figure-geometry exception.",
             ).replace(
                 "rather than flattening the people and objects in it.",
-                "rather than flattening unlisted people, objects, or body regions; approved body endpoints remain "
-                "the only deliberate local geometry exception.",
+                "rather than flattening other people, objects, or unrelated geometry; the holistic body instruction remains "
+                "the only deliberate figure-geometry exception.",
             )
         lines.append(consequence)
 
@@ -7216,7 +6120,7 @@ Priority order:
         opening_preservation_rule = (
             "Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, "
             + (
-                "facial structure, every unlisted body region, and important details. Apply body-shape changes only where the named body reshape instructions explicitly authorize them."
+                "facial structure, every unrelated body area, and important details. Apply only the single holistic body-reshape instruction above."
                 if has_body_reshape else
                 "facial structure, body shape, and important details."
             )
@@ -7274,8 +6178,8 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
     )
 
     shape_preservation_rule = (
-        "The photographed content keeps its true shape except for the exact local body regions named in the body reshape instructions below. "
-        "Those approved regions may change only as described; every face, object, background structure, unlisted body region, tilt, and relative spatial relationship remains faithful to the input photograph. "
+        "The photographed content keeps its true shape except for the one holistic body-reshape instruction below. "
+        "Apply that instruction as a continuous, anatomically natural whole-person adjustment; preserve face, object, background structure, camera/tilt, relative spatial relationships, and unrelated people/regions. "
         if has_body_reshape else
         "The photographed content keeps its true shape throughout: every person, face, object, and background structure comes through with the proportions, the tilt, and the relative sizes and distances it has in the input photograph. "
     )
@@ -7486,42 +6390,19 @@ Judge each rejected item independently and put the result in recipe_adherence.re
             "to the original. A changed expression on anyone not named fails this check.\n"
         )
 
-    body_plan = body_reshape_execution_plan(analysis)
-    body_qa_items = list(body_plan.get("items") or [])
-    body_qa_block = ""
-    if body_qa_items:
-        body_targets = []
-        for item in body_qa_items:
-            points = "; ".join(item["key_points"])
-            source_indices = []
-            for entry in item.get("key_point_entries") or ():
-                candidates = entry.get("source_key_point_indices") if isinstance(entry, dict) else None
-                if not isinstance(candidates, (list, tuple)):
-                    candidates = [entry.get("key_point_index")] if isinstance(entry, dict) else []
-                for index in candidates:
-                    if isinstance(index, int) and not isinstance(index, bool) and index not in source_indices:
-                        source_indices.append(index)
-            body_targets.append(
-                f'- subject_index={item["subject_index"]}, source_key_point_indices={source_indices}, '
-                f'{item["subject_label"]} at {json.dumps(item["box"], ensure_ascii=False)}: {points}'
-            )
-        body_qa_block = """- Approved body reshape endpoints: judge every listed target for the correct person, named region, visible measurement, increase/decrease direction, and a geometric change consistent with the exact numeric target. Compare at normal viewing size without demanding a larger change merely because the target is 1% or 5%. A true no-op, opposite-direction change, or a result achieved only through exposure, shadow, smoothing, sharpening, blur, or fold redrawing means that endpoint was not completed; set checks.user_intent_followed=false, pass=false, and explain the failed endpoint in summary/warnings/recommendation instead of letting better global color hide the failure. The legacy phrase \"clear no-op, near-no-op, or moves in the opposite direction\" is not a fixed minimum threshold: a small requested amount must be judged at its own target.
-- Percentage comparison: compare the named local 2D measurement before and after while excluding crop and uniform whole-image scaling. The percentage is total dimensional change, not per-side movement and not subject-box/canvas/weight/circumference/hidden-depth change. If pose or viewpoint changed enough to prevent a reliable comparison, say it is not reliably judgeable; never claim an exact percentage without sufficient visual evidence. ``target_pct`` is the requested endpoint, not a measured result.
-- Judge each endpoint against the final numeric percentage printed in the target list. If the user's explicit direction supplied a different amount or prohibited the same body-region change, judge against that user instruction where applicable, while still honoring the effective slider target and never silently replacing it with a planner default.
-- Legal garment follow-through: an approved body change may locally move the existing garment silhouette, fabric, texture, pattern, seams, folds, and clothing/skin boundary with that body geometry. Do not fail merely because those authorized local pixels or edge shapes moved. Verify that texture and pattern remain continuous and that only the narrow necessary background strip beside a moved outer contour was continued.
-- Garment identity and coverage failure: fail unauthorized redesign or semantic coverage changes, including changing garment type/design/color/material/pattern/construction/openings/layering/front-back order/wearing method, lengthening or lowering a top to cover abdomen, raising a waistband to cover waist, adding/removing fabric, changing neckline/sleeve design, changing which body area is clothed or exposed, or using clothing rearrangement to fake shaping. Also fail warped nearby people, objects, background structures, or perspective.
-- Preserve every unlisted body region, identity, face, skin texture, hair, hands, feet, pose, action, gesture, joint angle, camera viewpoint, and unlisted person. Do not accumulate duplicate percentages on one measurement; adjacent waist/abdomen targets must form one continuous contour without double-shrinking their overlap. Return one structured ``body_adherence`` entry per actual endpoint, with its subject_index and source_key_point_index, and use only ``not_applicable``, ``not_evaluated``, ``passed``, ``failed``, or ``unjudgeable``. For visual-only judgement set measured_change_pct and minimum_threshold_verified to null; never turn the requested percentage into a fabricated measurement. Targets:
-{}\n""".format("\n".join(body_targets))
-    elif body_plan.get("review_point_count"):
-        body_qa_block = "- Body reshape review points were all excluded or disabled by the request-scoped execution plan. There are no executable body endpoints to judge; do not invent a body failure or a body success, and do not use review-only points as QA targets.\n"
-    else:
-        body_qa_block = ""
-    body_qa_score_cap = (
-        "- For body reshape, authorized local garment/skin boundary motion that continuously follows an approved geometric endpoint is not itself a failure. If the output instead redesigns a garment, changes its semantic coverage or wearing relationship, lengthens/lowers a top to cover abdomen, raises a waistband to cover waist, invents/removes fabric, damages pattern/texture continuity, or warps surrounding content, this is a major preservation failure: pass must be false and score must be 3 or lower.\n"
-        "- If an approved, visually judgeable body endpoint is a true no-op or moves in the opposite direction, pass must be false and score must be 4 or lower, and checks.user_intent_followed must be false. Do not apply this cap when the comparison is genuinely unjudgeable; report that uncertainty explicitly instead.\n"
-        if body_plan.get("executable_point_count") else ""
+    body_prompt = get_body_reshape_edit_prompt(analysis)
+    body_qa_block = "" if not body_prompt else (
+        "- Holistic Body Reshape instruction (copied from Analyze; judge this sentence's visible intent as written): "
+        f"{body_prompt}\n"
+        "  Compare the visible figure with the original and judge whether the requested overall contour/proportion "
+        "improvement was carried out naturally. Check anatomy continuity, identity, face, clothing identity and "
+        "semantic coverage, and nearby scene geometry. Do not require key points, regions, or numeric measurements; "
+        "uncertainty should be reported rather than converted into a fabricated percentage.\n"
     )
-
+    body_qa_score_cap = "" if not body_prompt else (
+        "- For Body Reshape, redesigning clothing, changing semantic coverage, damaging anatomy continuity, or "
+        "warping nearby content is a major preservation failure: pass must be false and score must be 3 or lower.\n"
+    )
     framing_focus = analysis.get("_framing_focus") or {}
     closer_block = ""
     if framing_focus.get("size") == "closer":
@@ -7609,10 +6490,6 @@ Original analysis:
 
 Return only valid JSON. User-visible values must be Traditional Chinese.
 """
-    body_adherence_property = (
-        f'  "body_adherence": [\n    {{"subject_index": 0, "source_key_point_index": 0, "endpoint": "腰部：可見總寬向內收窄{_body_reshape_slider_config()["default"]:g}%", "status": "passed", "measured_change_pct": null, "minimum_threshold_verified": null, "assessment": "visual assessment", "note": "局部輪廓有可見變化。"}}\n  ],\n'
-        if body_plan.get("executable_point_count") else ""
-    )
     schema = """{
   "pass": true,
   "overall_status": "可展示",
@@ -7620,7 +6497,7 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
   "failure_level": "none / minor / borderline / major / severe",
   "score_reason": "說明為什麼給這個分數，尤其要對照是否有主體裁切、保護區域破壞、形狀失真或透視不自然。",
   "summary": "一句話說明輸出是否符合原始照片與修圖目標。",
-__BODY_ADHERENCE_PROPERTY__  "checks": {
+  "checks": {
     "subject_preserved": true,
     "user_intent_followed": true,
     "crop_safe": true,
@@ -7651,5 +6528,5 @@ __BODY_ADHERENCE_PROPERTY__  "checks": {
       {"item": "移除背景雜物", "violated": false, "note": "背景雜物仍保留，未被誤刪。"}
     ]
   }
-}""".replace("__BODY_ADHERENCE_PROPERTY__", body_adherence_property)
+}"""
     return head + schema

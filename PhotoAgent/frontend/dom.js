@@ -100,6 +100,7 @@ window.PhotoAgentDom = (() => {
     apSubject: document.querySelector("#ap-subject"),
     apPhotoSummaryTags: document.querySelector("#ap-photo-summary-tags"),
     apPhotoSummaryText: document.querySelector("#ap-photo-summary-text"),
+    apBodyReshapeControl: document.querySelector("#ap-body-reshape-control"),
     apDiagnosis: document.querySelector("#ap-diagnosis"),
     apComposition: document.querySelector("#ap-composition"),
     apRecipeList: document.querySelector("#ap-recipe-list"),

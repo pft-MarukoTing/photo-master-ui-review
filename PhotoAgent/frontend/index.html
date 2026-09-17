@@ -4502,7 +4502,12 @@
                   </summary>
                   <div class="ap-toggle-card-body">
                     <ul id="ap-recipe-list" class="step-inline-list" hidden></ul>
-                    <div class="ap-face-detail" id="ap-face-detail"></div>
+                    <div class="ap-face-detail" id="ap-face-detail">
+                      <!-- results.js moves this stable Body Reshape control after
+                           the selected person's face-issue rows, so it stays
+                           directly below 「笑容調整」 inside 人像檢查. -->
+                      <div class="ap-body-reshape-control" id="ap-body-reshape-control" hidden aria-live="polite"></div>
+                    </div>
                     <div class="ap-review-style" id="ap-review-style" hidden>
                       <!-- Keep the four category buttons in the 修圖風格 tab;
                            clicking one opens the standalone modal with only

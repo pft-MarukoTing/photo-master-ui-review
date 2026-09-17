@@ -284,8 +284,8 @@ body {
 button, input, select, textarea { font: inherit; }
 a { text-decoration: none; color: inherit; }
 
-/* Native checkboxes (box-type-row, step-cb, prompt-overwrite,
-   ap-body-reshape, ...) have no explicit accent-color, so they fall back
+/* Native checkboxes (box-type-row, step-cb, prompt-overwrite, ...) have no
+   explicit accent-color, so they fall back
    to the browser's own default tint -- a green that stays fixed across
    every theme instead of following each theme's --accent. */
 input[type="checkbox"] {
@@ -2087,6 +2087,50 @@ body[data-theme="caramel"] .ios-thumb {
 }
 .ap-face-issue-level-select:disabled { opacity: .45; cursor: not-allowed; }
 
+/* Holistic Body Reshape review control (#ap-body-reshape-control, results.js):
+   keep the compact iOS switch language used by 「笑容調整」 while making the
+   Analyze -> Editor sentence visible below it.  This is intentionally a
+   single approval switch; no region, amount, range, or strength control is
+   rendered here. */
+.ap-body-reshape-control {
+  margin-top: 8px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+}
+.ap-body-reshape-control[hidden] { display: none; }
+.ap-body-reshape-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+.ap-body-reshape-toggle.ios-switch {
+  width: 34px;
+  height: 20px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.ap-body-reshape-toggle .ios-thumb {
+  width: 14px;
+  height: 14px;
+  top: 3px;
+  left: 3px;
+}
+.ap-body-reshape-toggle input:checked + .ios-track .ios-thumb { left: 17px; }
+.ap-body-reshape-name { color: var(--text); font-weight: 700; }
+.ap-body-reshape-verdict { white-space: nowrap; }
+.ap-body-reshape-prompt {
+  margin: 8px 0 0 44px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.ap-body-reshape-prompt-label {
+  color: var(--text-3);
+  margin-right: 4px;
+}
+
 @media (max-width: 560px) {
   .ap-face-issue-row { gap: 6px; }
   .ap-face-issue-name { flex-basis: 64px; }
@@ -2158,81 +2202,6 @@ body[data-theme="caramel"] .proc-wrap {
 }
 * { scrollbar-color: rgba(var(--accent-rgb),.4) transparent; }
 
-.ap-body-reshape-section {
-  margin-top: 10px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-2);
-}
-.ap-body-reshape-list {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-.ap-body-reshape-option {
-  display: grid;
-  gap: 4px 9px;
-  color: var(--text-2);
-  line-height: 1.45;
-}
-.ap-body-reshape-option-label {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  cursor: pointer;
-}
-.ap-body-reshape-option-label input {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
-  margin: 3px 0 0;
-  accent-color: var(--accent);
-}
-.ap-body-reshape-option.is-unavailable {
-  opacity: .58;
-  cursor: not-allowed;
-}
-.ap-body-reshape-slider-row {
-  display: grid;
-  grid-template-columns: 64px minmax(120px, 1fr);
-  align-items: center;
-  gap: 8px;
-  margin-left: 25px;
-  color: var(--text-3);
-  font-size: 12px;
-}
-.ap-body-reshape-slider-control {
-  min-width: 0;
-}
-.ap-body-reshape-slider {
-  width: 100%;
-  accent-color: var(--accent);
-}
-.ap-body-reshape-slider:disabled {
-  opacity: .45;
-  cursor: not-allowed;
-}
-.ap-body-reshape-slider-scale {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 7px;
-  margin-top: 1px;
-  color: var(--text-3);
-  font-size: 11px;
-  line-height: 1.1;
-  user-select: none;
-}
-.ap-body-reshape-slider-scale span {
-  min-width: 1em;
-  text-align: center;
-}
-.ap-body-reshape-option-meta {
-  color: var(--text-3);
-  display: block;
-  font-size: 12px;
-  margin-left: auto;
-  max-width: 45%;
-  text-align: right;
-}
 /* Quality select */
 .quality-select {
   background: var(--card-2)

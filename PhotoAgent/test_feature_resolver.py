@@ -59,11 +59,10 @@ def body_reshape_analysis():
             "label": "central woman",
             "box": {"x": .2, "y": .1, "w": .5, "h": .8},
             "is_person": True,
-            "body_reshape": {
-                "subject_index": 0,
-                "key_points": ["腰部：可見總寬向內收窄12%"],
-            },
         }],
+        "body_reshape": {
+            "edit_prompt": "自然修飾整體身形比例並保持真實協調",
+        },
         "correction_plan": [],
         "correction_axes": [],
     }
@@ -127,7 +126,7 @@ class NestedIssueReading(unittest.TestCase):
 
 
 class BodyReshapePromptRouting(unittest.TestCase):
-    def test_compact_editor_prompt_keeps_the_shared_execution_block(self):
+    def test_compact_editor_prompt_routes_one_holistic_prompt_verbatim(self):
         analysis = body_reshape_analysis()
         shared_block = build_body_reshape_edit_block(analysis)
         prompt, metadata = build_compact_editor_prompt(analysis, "", "", {})
@@ -135,13 +134,12 @@ class BodyReshapePromptRouting(unittest.TestCase):
         self.assertTrue(shared_block)
         self.assertIn(shared_block, prompt)
         self.assertEqual(
-            prompt.count("Body reshape execution instructions (analysis-approved):"),
+            prompt.count("自然修飾整體身形比例並保持真實協調"),
             1,
         )
-        self.assertEqual(
-            metadata["body_reshape_targets"][0]["key_points"],
-            ["腰部：可見總寬向內收窄12%"],
-        )
+        self.assertNotIn("key_points", prompt)
+        self.assertNotIn("target_pct", prompt)
+        self.assertEqual(metadata["body_reshape_edit_prompt"], "自然修飾整體身形比例並保持真實協調")
 
 
 def blink_strategy():

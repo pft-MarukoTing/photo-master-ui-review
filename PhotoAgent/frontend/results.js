@@ -100,14 +100,120 @@ window.PhotoAgentResults = (() => {
   // Body Reshape is an internal feature switch owned by the backend.  The
   // value in config.js is only an initial default; app.js replaces it with
   // /api/config once the page bootstraps.  Keep the gate here as well as in
-  // app.js so stale analysis objects cannot render body controls or preserve
-  // body selections when the feature is disabled.
+  // app.js so stale analysis objects cannot render a body prompt when the
+  // feature is disabled.
   let bodyReshapeEnabled = window.PhotoAgentConfig?.enableBodyReshape !== false;
+  // This is the review decision for the current analysis, not a second body
+  // plan.  The Analyze sentence remains visible when the user switches it
+  // off, so they can turn it back on without re-running analysis; app.js
+  // serializes the boolean at the edit boundary.
+  let bodyReshapeReviewEnabled = true;
+  let bodyReshapeReviewAnalysis = null;
+
   function setBodyReshapeEnabled(enabled) {
     const next = enabled !== false;
     const changed = bodyReshapeEnabled !== next;
     bodyReshapeEnabled = next;
-    if (changed) renderFaceReviewCards();
+    if (changed) {
+      renderFaceReviewCards();
+      renderBodyReshapeControl(bodyReshapeReviewAnalysis, { resetState: false });
+    }
+  }
+
+  // Body Reshape's Analyze sentence is the exact text that will be copied to
+  // Editor when the review switch is on.  It is intentionally independent of
+  // the switch state here: an off switch suppresses execution, not
+  // transparency about what Analyze proposed.
+  function bodyReshapePromptForDisplay(analysis) {
+    if (!bodyReshapeEnabled) return "";
+    const prompt = analysis?.body_reshape?.edit_prompt;
+    return typeof prompt === "string" && prompt.trim() ? prompt.trim() : "";
+  }
+
+  function setBodyReshapeReviewAnalysis(analysis, { resetState = false } = {}) {
+    bodyReshapeReviewAnalysis = analysis || null;
+    if (resetState || bodyReshapeReviewAnalysis) {
+      bodyReshapeReviewEnabled = bodyReshapeReviewAnalysis?._body_reshape_enabled !== false;
+    }
+    renderBodyReshapeControl(bodyReshapeReviewAnalysis, { resetState: false });
+  }
+
+  function setBodyReshapeReviewEnabled(enabled) {
+    bodyReshapeReviewEnabled = enabled !== false;
+    if (bodyReshapeReviewAnalysis && typeof bodyReshapeReviewAnalysis === "object") {
+      if (bodyReshapeReviewEnabled) delete bodyReshapeReviewAnalysis._body_reshape_enabled;
+      else bodyReshapeReviewAnalysis._body_reshape_enabled = false;
+    }
+    renderBodyReshapeControl(bodyReshapeReviewAnalysis, { resetState: false });
+  }
+
+  function getBodyReshapeReviewEnabled() {
+    return bodyReshapeEnabled && bodyReshapeReviewEnabled !== false;
+  }
+
+  // Reuses the same compact iOS switch language as the per-person 「笑容調整」
+  // rows.  There are no region controls or percentage/strength sliders here:
+  // this one switch is the complete user decision for the holistic Analyze
+  // sentence, and the sentence itself is shown directly underneath it.
+  function renderBodyReshapeControl(analysis, { resetState = false } = {}) {
+    const host = els.apBodyReshapeControl;
+    if (!host) return;
+    if (resetState) {
+      bodyReshapeReviewEnabled = analysis?._body_reshape_enabled !== false;
+    }
+    const prompt = bodyReshapePromptForDisplay(analysis);
+    host.replaceChildren();
+    host.hidden = !prompt;
+    if (!prompt) return;
+
+    const row = document.createElement("div");
+    row.className = "ap-body-reshape-row";
+    const toggle = document.createElement("label");
+    toggle.className = "ios-switch ap-body-reshape-toggle";
+    toggle.title = "決定是否將身形調整指令送給 Editor";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    const track = document.createElement("span");
+    track.className = "ios-track";
+    const thumb = document.createElement("span");
+    thumb.className = "ios-thumb";
+    track.appendChild(thumb);
+    toggle.appendChild(input);
+    toggle.appendChild(track);
+    row.appendChild(toggle);
+
+    const name = document.createElement("span");
+    name.className = "ap-body-reshape-name";
+    name.textContent = "身形調整";
+    row.appendChild(name);
+    const icon = document.createElement("span");
+    row.appendChild(icon);
+    const verdict = document.createElement("span");
+    verdict.className = "step-cb-label ap-body-reshape-verdict";
+    row.appendChild(verdict);
+
+    const refresh = () => {
+      const active = bodyReshapeReviewEnabled !== false;
+      input.checked = active;
+      icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
+      icon.textContent = active ? "!" : "✓";
+      verdict.textContent = active ? "可以調整" : "不執行";
+      toggle.setAttribute("aria-label", active ? "關閉身形調整" : "開啟身形調整");
+    };
+    input.addEventListener("change", () => {
+      setBodyReshapeReviewEnabled(input.checked);
+    });
+    refresh();
+    host.appendChild(row);
+
+    const promptLine = document.createElement("p");
+    promptLine.className = "ap-body-reshape-prompt";
+    const promptLabel = document.createElement("span");
+    promptLabel.className = "ap-body-reshape-prompt-label";
+    promptLabel.textContent = "送給 Editor：";
+    promptLine.appendChild(promptLabel);
+    promptLine.appendChild(document.createTextNode(prompt));
+    host.appendChild(promptLine);
   }
 
   // recommended_aspect_ratio on a RESULT is the ratio that result was actually
@@ -749,18 +855,19 @@ window.PhotoAgentResults = (() => {
     { field: "blink_issue", label: "閉眼偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "gaze_issue", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "hair_issue", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
-    { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: true, flagText: "可以調整", okText: "不建議調整" }
+    { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: true, flagText: "可以調整", okText: "不建議調整" },
+    { field: "body_reshape", label: "身形調整", flagField: "should_edit", flagWhen: true, flagText: "可以調整", okText: "不執行" }
   ];
 
   // Every category the user can manually switch on even when the analyzer
   // itself found nothing to fix -- app.js's buildEffectiveAnalysis sets
-  // issue._user_forced for exactly these four when the toggle is flipped on
+  // issue._user_forced for the face categories when a toggle is flipped on
   // an unflagged row, and prompts.py's resolve_user_hair_request/
   // resolve_user_blink_request/resolve_user_gaze_request (plus smile's own
   // explicit-level path) turn that into a real edit instruction. Unlike hair,
   // blink/gaze have no per-person style level -- see LEVEL_SELECT_CATEGORIES
   // below -- so they don't appear in that second list.
-  const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue"];
+  const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue", "body_reshape"];
   const LEVEL_SELECT_CATEGORIES = ["hair_issue", "smile_issue"];
 
   // Intersection over the SMALLER of the two boxes' own area (the
@@ -820,32 +927,23 @@ window.PhotoAgentResults = (() => {
     return { ...bestSubjectMatch(analysis?.subjects, faceBox), matched: false };
   }
 
-  function bodySubjectForDetection(analysis, detectionIndex) {
-    const review = (analysis?.local_face_review || []).find((r) => r?.detection_index === detectionIndex);
-    if (review) {
-      const idx = review.matched_subject_index;
-      const subjects = Array.isArray(analysis?.subjects) ? analysis.subjects : [];
-      const subject = Number.isInteger(idx) && idx >= 0 && idx < subjects.length ? subjects[idx] : null;
-      return { subject, index: subject ? idx : -1, matched: true, unresolved: !subject };
-    }
-    const subjects = Array.isArray(analysis?.subjects) ? analysis.subjects : [];
-    const candidates = subjects
-      .map((subject, index) => ({ subject, index }))
-      .filter(({ subject }) => Number.isInteger(subject?.local_detection_index)
-        && subject.local_detection_index === detectionIndex);
-    if (candidates.length === 1) return { ...candidates[0], matched: false, unresolved: false };
-    return { subject: null, index: -1, matched: false, unresolved: true };
-  }
-
   // subjectIndex/category identify the underlying analysis.subjects[i][category]
   // field this entry came from -- the toggle in buildPersonIssueItems writes
   // back through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
   // uses the same pair to flip should_fix/adjust_safe before submission.
-  function faceIssueEntries(subject, index) {
+  function faceIssueEntries(subject, index, bodyDisabled = false) {
     if (!subject) return [];
     return FACE_ISSUE_CATEGORIES.map((category) => {
       const match = subject[category.field];
       if (!match || typeof match !== "object") return null;
+      const isBodyReshape = category.field === "body_reshape";
+      const bodyPrompt = isBodyReshape && typeof match.edit_prompt === "string"
+        ? match.edit_prompt.trim()
+        : "";
+      // A body row is available whenever this person's original analysis JSON
+      // contains an editor command.  `should_edit` is optional in older
+      // records, so an omitted value keeps the historical default enabled.
+      if (isBodyReshape && (subject.is_person !== true || !bodyPrompt)) return null;
       const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(category.field);
       // buildEffectiveAnalysis (app.js) writes _user_forced/_user_level onto
       // this same subject[category.field] object at submit time, and the
@@ -860,18 +958,25 @@ window.PhotoAgentResults = (() => {
       // category) is applied at render time in buildPersonIssueItems below,
       // via faceIssueGloballyEnabled/reviewAdvancedOptions -- not baked in
       // here. So this stays the plain per-analysis verdict.
+      const flagged = isBodyReshape
+        ? match.should_edit !== false
+        : match[category.flagField] === category.flagWhen;
+      const allowed = isBodyReshape
+        ? match.should_edit !== false && !bodyDisabled
+        : match[category.flagField] === category.flagWhen || wasUserForced;
       return {
         label: category.label,
-        flagged: match[category.flagField] === category.flagWhen,
+        flagged,
         flagText: category.flagText,
         okText: category.okText,
-        reason: match.reason || "",
+        reason: isBodyReshape ? (match.report || match.reason || "") : (match.reason || ""),
+        editPrompt: isBodyReshape ? bodyPrompt : "",
         category: category.field,
         subjectIndex: index,
-        // Hair, smile, blink, and gaze are all user-selectable transformations
+        // Hair, smile, blink, gaze, and body reshape are all user-selectable transformations
         // even when the analyzer recommends preserving them.
-        controllable: match[category.flagField] === category.flagWhen || isManualOverride,
-        allowed: match[category.flagField] === category.flagWhen || wasUserForced,
+        controllable: isBodyReshape || match[category.flagField] === category.flagWhen || isManualOverride,
+        allowed,
         level: category.field === "hair_issue"
           ? (match._user_level || "dynamic")
           : category.field === "smile_issue"
@@ -883,135 +988,6 @@ window.PhotoAgentResults = (() => {
         poseSuggestedFields: {}
       };
     }).filter(Boolean);
-  }
-
-  function bodyReshapeSliderConfig() {
-    const fallback = { default: 12, min: 0, max: 30, step: 1 };
-    const raw = window.PhotoAgentConfig?.bodyReshapeSlider;
-    if (!raw || typeof raw !== "object") return fallback;
-    const values = ["default", "min", "max", "step"].map((key) => Number(raw[key]));
-    if (values.some((value) => !Number.isFinite(value))) return fallback;
-    const [defaultValue, min, max, step] = values;
-    if (!(step > 0) || min < 0 || max < min || max >= 100 || defaultValue < min || defaultValue > max) return fallback;
-    if (![defaultValue, min, max].every((value) => Math.abs((value - min) / step - Math.round((value - min) / step)) < 1e-9)) return fallback;
-    return { default: defaultValue, min, max, step };
-  }
-
-  function bodyReshapeTargetFromText(text, fallback) {
-    const match = String(text || "").match(/(?:^|[^0-9.])([0-9]+(?:\.[0-9]+)?)\s*[%％]/);
-    const value = match ? Number(match[1]) : Number(fallback);
-    return Number.isFinite(value) ? value : bodyReshapeSliderConfig().default;
-  }
-
-  // The review UI deliberately exposes three semantic strengths instead of
-  // the backend's continuous percentage policy.  Keep the percentage on the
-  // strength object so selecting a tick still writes the exact numeric target
-  // consumed by the execution plan and Editor prompt.
-  const BODY_RESHAPE_STRENGTHS = [
-    { key: "weak", label: "弱", targetPct: 5 },
-    { key: "medium", label: "中", targetPct: 15 },
-    { key: "strong", label: "強", targetPct: 30 },
-  ];
-
-  function bodyReshapeStrengthIndex(value) {
-    const amount = Number(value);
-    if (!Number.isFinite(amount)) return 1;
-    // This conversion only chooses the visible tick.  Until the user moves
-    // the control, the original numeric amount (including the legacy 12%
-    // planner target) remains untouched and is not sent as a new override.
-    let selected = 0;
-    let distance = Infinity;
-    BODY_RESHAPE_STRENGTHS.forEach((strength, index) => {
-      const nextDistance = Math.abs(amount - strength.targetPct);
-      // Resolve an exact midpoint toward the stronger tick so the planner's
-      // legacy 12% default is represented by the middle UI strength.
-      if (nextDistance <= distance) {
-        selected = index;
-        distance = nextDistance;
-      }
-    });
-    return selected;
-  }
-
-  function bodyReshapeStrengthAt(index) {
-    const numericIndex = Number(index);
-    return BODY_RESHAPE_STRENGTHS[numericIndex] || BODY_RESHAPE_STRENGTHS[1];
-  }
-
-  function bodyReshapeDisplayText(text) {
-    return String(text || "").replace(/\s*[+＋]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)\s*[%％]/, "").trim();
-  }
-
-  function bodyReshapeAmountMap(analysis) {
-    const map = new Map();
-    const overrides = Array.isArray(analysis?._body_reshape_amount_overrides)
-      ? analysis._body_reshape_amount_overrides : [];
-    overrides.forEach((item) => {
-      if (!Number.isInteger(item?.subject_index) || !Number.isInteger(item?.key_point_index)) return;
-      const value = Number(item.target_pct);
-      if (Number.isFinite(value)) map.set(`${item.subject_index}:${item.key_point_index}`, value);
-    });
-    return map;
-  }
-
-  function bodyReshapePointEntries(subject, subjectIndex, analysis) {
-    if (!bodyReshapeEnabled) return [];
-    const points = subject?.body_reshape?.key_points;
-    if (!Array.isArray(points)) return [];
-    const sliderConfig = bodyReshapeSliderConfig();
-    const amountMap = bodyReshapeAmountMap(analysis);
-    const disabled = new Set(
-      (Array.isArray(analysis?._disabled_body_reshape_key_points)
-        ? analysis._disabled_body_reshape_key_points : [])
-        .filter((item) => Number.isInteger(item?.subject_index) && Number.isInteger(item?.key_point_index))
-        .map((item) => `${item.subject_index}:${item.key_point_index}`)
-    );
-    const executionPoints = Array.isArray(analysis?._body_reshape_execution_plan?.points)
-      ? analysis._body_reshape_execution_plan.points : [];
-    return points.map((point, keyPointIndex) => {
-      const execution = executionPoints.find((item) =>
-        Number(item?.subject_index) === subjectIndex
-        && Number(item?.key_point_index) === keyPointIndex
-      );
-      const reasonCode = execution?.reason_code || null;
-      const structurallySelectable = execution
-        ? execution.amount_control_available !== false
-          && !["invalid_syntax_or_semantics", "target_out_of_policy", "conflicting_endpoint", "duplicate_of", "subject_unresolved", "not_applicable", "overwrite_prompt"].includes(reasonCode)
-        : true;
-      const executable = execution ? reasonCode === "executable" && execution.executable !== false : structurallySelectable;
-      const sourceText = typeof point === "string" ? point.trim() : "";
-      const executionTarget = execution?.effective_target_pct ?? execution?.target_pct;
-      const sourceTarget = bodyReshapeTargetFromText(execution?.canonical_text || sourceText, sliderConfig.default);
-      const amountTouched = amountMap.has(`${subjectIndex}:${keyPointIndex}`)
-        || execution?.amount_override_touched === true;
-      const targetPct = amountMap.has(`${subjectIndex}:${keyPointIndex}`)
-        ? amountMap.get(`${subjectIndex}:${keyPointIndex}`)
-        : (executionTarget != null ? Number(executionTarget) : sourceTarget);
-      return {
-        text: executable || structurallySelectable ? (execution?.canonical_text || sourceText) : sourceText,
-        sourceText,
-        subjectIndex,
-        keyPointIndex,
-        allowed: structurallySelectable && !disabled.has(`${subjectIndex}:${keyPointIndex}`),
-        executable,
-        selectable: structurallySelectable,
-        reasonCode,
-        reason: execution?.reason || "",
-        targetPct: Number.isFinite(targetPct) ? targetPct : sliderConfig.default,
-        plannerTargetPct: execution?.planner_target_pct ?? sourceTarget,
-        amountTouched,
-        canonicalText: execution?.canonical_text || sourceText
-      };
-    }).filter((point) => point.text);
-  }
-
-  function bodyReshapeSubjectEnabled(subjectIndex, points, analysis) {
-    if (!points.length) return false;
-    const disabledSubjects = Array.isArray(analysis?._disabled_body_reshape_subjects)
-      ? analysis._disabled_body_reshape_subjects : [];
-    return !disabledSubjects.some(
-      (index) => Number.isInteger(index) && index === subjectIndex
-    ) && points.some((point) => point.selectable !== false && point.allowed !== false);
   }
 
   // Flattened { "subjectIndex:category": false } for every flagged issue the
@@ -1031,50 +1007,6 @@ window.PhotoAgentResults = (() => {
         // with nothing else to record still has to reach app.js, or a
         // manually-enabled unflagged row would silently vanish at submit time.
         else if (issue.allowed) overrides[`${issue.subjectIndex}:${issue.category}`] = { allowed: true };
-      });
-    });
-    return overrides;
-  }
-
-  // Flattened { "subjectIndex:keyPointIndex": false } for body key points
-  // unchecked in the per-person modal. The full analysis remains intact so
-  // an unchecked point can be shown and re-enabled on a later revise.
-  function getBodyReshapeOverrides() {
-    if (!bodyReshapeEnabled) return {};
-    const overrides = {};
-    faceThumbEntries.forEach((entry) => {
-      if (entry.bodyAnalysisAvailable && entry.bodyReshapeEnabled === false) {
-        overrides[`subject:${entry.bodySubjectIndex ?? entry.subjectIndex}`] = false;
-      }
-      (entry.bodyKeyPoints || []).forEach((point) => {
-        if (point.selectable !== false && point.allowed === false) {
-          overrides[`${point.subjectIndex}:${point.keyPointIndex}`] = false;
-        }
-      });
-    });
-    return overrides;
-  }
-
-  // Only explicitly touched amounts are sent.  An untouched slider inherits
-  // the analyzed endpoint (including a legacy explicit amount), while 0 is a
-  // real, serialized stop rather than an omitted/default value.
-  function getBodyReshapeAmountOverrides() {
-    if (!bodyReshapeEnabled) return [];
-    const overrides = [];
-    const seen = new Set();
-    faceThumbEntries.forEach((entry) => {
-      (entry.bodyKeyPoints || []).forEach((point) => {
-        if (point.selectable === false || !point.amountTouched) return;
-        const value = Number(point.targetPct);
-        if (!Number.isFinite(value)) return;
-        const key = `${point.subjectIndex}:${point.keyPointIndex}`;
-        if (seen.has(key)) return;
-        seen.add(key);
-        overrides.push({
-          subject_index: point.subjectIndex,
-          key_point_index: point.keyPointIndex,
-          target_pct: value
-        });
       });
     });
     return overrides;
@@ -1135,40 +1067,6 @@ window.PhotoAgentResults = (() => {
     });
   }
 
-  function applyBodyReshapeOverrides(overrides) {
-    if (!bodyReshapeEnabled || !overrides) return;
-    faceThumbEntries.forEach((entry) => {
-      if (entry.bodyAnalysisAvailable) {
-        const subjectIndex = entry.bodySubjectIndex ?? entry.subjectIndex;
-        entry.bodyReshapeEnabled = overrides[`subject:${subjectIndex}`] !== false;
-      }
-      (entry.bodyKeyPoints || []).forEach((point) => {
-        if (point.selectable !== false) {
-          point.allowed = overrides[`${point.subjectIndex}:${point.keyPointIndex}`] !== false;
-        }
-      });
-    });
-  }
-
-  function applyBodyReshapeAmountOverrides(overrides) {
-    if (!bodyReshapeEnabled || !Array.isArray(overrides)) return;
-    const values = new Map();
-    overrides.forEach((item) => {
-      if (!Number.isInteger(item?.subject_index) || !Number.isInteger(item?.key_point_index)) return;
-      const value = Number(item.target_pct);
-      if (Number.isFinite(value)) values.set(`${item.subject_index}:${item.key_point_index}`, value);
-    });
-    faceThumbEntries.forEach((entry) => {
-      (entry.bodyKeyPoints || []).forEach((point) => {
-        const key = `${point.subjectIndex}:${point.keyPointIndex}`;
-        if (point.selectable !== false && values.has(key)) {
-          point.targetPct = values.get(key);
-          point.amountTouched = true;
-        }
-      });
-    });
-  }
-
   function cropFaceThumbnail(img, box) {
     const nw = img?.naturalWidth;
     const nh = img?.naturalHeight;
@@ -1193,9 +1091,8 @@ window.PhotoAgentResults = (() => {
 
   // { box, issues }[] for the face tabs currently on screen -- kept
   // module-level (not just local to renderFaceThumbnails) because
-  // getFaceIssueOverrides/getBodyReshapeOverrides (app.js, at submit time)
-  // read the in-memory issue.allowed/point.allowed/entry.bodyReshapeEnabled
-  // state each toggle mutates directly, not the DOM.
+  // getFaceIssueOverrides (app.js, at submit time) reads the in-memory
+  // issue.allowed state each face toggle mutates directly, not the DOM.
   let faceThumbEntries = [];
 
   // Drops any face-review state left over from a previously selected photo.
@@ -1380,8 +1277,16 @@ window.PhotoAgentResults = (() => {
     const bodySubjects = bodyReshapeEnabled
       ? (Array.isArray(analysis?.subjects) ? analysis.subjects : [])
         .map((subject, subjectIndex) => ({ subject, subjectIndex }))
-        .filter(({ subject }) => subject?.is_person && subject?.body_reshape && typeof subject.body_reshape === "object")
+        .filter(({ subject }) => subject?.is_person === true
+          && subject.body_reshape && typeof subject.body_reshape === "object"
+          && typeof subject.body_reshape.edit_prompt === "string"
+          && subject.body_reshape.edit_prompt.trim())
       : [];
+    const bodyDisabledSubjects = new Set(
+      (Array.isArray(analysis?._disabled_body_reshape_subjects)
+        ? analysis._disabled_body_reshape_subjects : [])
+        .filter((index) => Number.isInteger(index) && index >= 0)
+    );
     if (!faces.length && !bodySubjects.length) {
       // No 人像檢查 tab to show -- renderFaceReviewCards (below) hides that
       // tab button and falls back to the 修圖建議 tab, it just needs
@@ -1427,54 +1332,37 @@ window.PhotoAgentResults = (() => {
         // for it, since the model may have described this exact person from
         // its coordinate-only text hint alone.
         if (!subject && (matched || !sentToModel)) return null;
-        const bodyMatch = bodySubjectForDetection(analysis, detectionIndex);
-        const bodySubject = bodyMatch.subject;
-        const bodyIndex = bodyMatch.index;
-        const bodyKeyPoints = bodyReshapePointEntries(bodySubject, bodyIndex, analysis);
         return {
           box: f.box,
-          issues: faceIssueEntries(subject, index),
-          bodyKeyPoints,
-          bodyAnalysisAvailable: bodyReshapeEnabled && !!(bodySubject?.body_reshape && typeof bodySubject.body_reshape === "object"),
-          bodyReshapeEnabled: bodyReshapeSubjectEnabled(bodyIndex, bodyKeyPoints, analysis),
+          issues: faceIssueEntries(subject, index, bodyDisabledSubjects.has(index)),
           subjectIndex: index,
-          bodySubjectIndex: bodyIndex,
           sentToModel,
           label: (subject && subject.label) || "",
         };
       })
       .filter(Boolean);
 
-    // Body planning is per subjects[] person, while this row historically
-    // came only from the local face detector. A distant, turned-away, or
-    // partially occluded person can therefore have a valid body_reshape plan
-    // without a local face box. Give every such unmatched person a fallback
-    // entry based on the model's person box, otherwise their key points could
-    // reach edit without ever being exposed as user-selectable checkboxes.
+    // Body plans are attached to subjects[], while the face tab list is based
+    // on local face detections. Add a lightweight person-box fallback so a
+    // valid body command is still switchable when that person has no local
+    // face crop.
     const representedSubjectIndexes = new Set(
-      faceThumbEntries
-        .map((entry) => entry.bodySubjectIndex)
+      faceThumbEntries.map((entry) => entry.subjectIndex)
         .filter((index) => Number.isInteger(index) && index >= 0)
     );
     bodySubjects.forEach(({ subject, subjectIndex }) => {
       if (representedSubjectIndexes.has(subjectIndex)) return;
       const box = subject.box;
       if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;
-      const bodyKeyPoints = bodyReshapePointEntries(subject, subjectIndex, analysis);
       faceThumbEntries.push({
         box,
-        issues: faceIssueEntries(subject, subjectIndex),
-        bodyKeyPoints,
-        bodyAnalysisAvailable: bodyReshapeEnabled,
-        bodyReshapeEnabled: bodyReshapeSubjectEnabled(subjectIndex, bodyKeyPoints, analysis),
+        issues: faceIssueEntries(subject, subjectIndex, bodyDisabledSubjects.has(subjectIndex)),
         subjectIndex,
-        bodySubjectIndex: subjectIndex,
-        // null means this is a subjects[] fallback, not a local face that
-        // missed the zoomed-crop cap (false retains that existing meaning).
         sentToModel: null,
         label: subject.label || "",
       });
     });
+
     renderFaceReviewCards();
   }
 
@@ -1483,7 +1371,7 @@ window.PhotoAgentResults = (() => {
   // from renderFaceThumbnails (which rebuilds faceThumbEntries itself from a
   // fresh analysis) so a caller that mutates entries in place *after*
   // renderAnalysisPreview already ran -- restoring a previous round's picks
-  // via applyFaceIssueOverrides/applyBodyReshapeOverrides (app.js) -- can
+  // via applyFaceIssueOverrides (app.js) -- can
   // re-render to reflect that restored state without rebuilding
   // faceThumbEntries itself (which would discard those very overrides right
   // back out). Exported under this name for that reason -- kept even though
@@ -1527,7 +1415,7 @@ window.PhotoAgentResults = (() => {
       // (only a coordinate hint reached the model, see detect_face_crops/
       // analyze_photo) and null for a subjects[] entry the model found on
       // its own with no backing local detection at all (see the
-      // bodySubjects fallback in renderFaceThumbnails above). Either way, no
+      // subjects fallback in renderFaceThumbnails above). Either way, no
       // zoomed crop of this exact face ever reached the model, so any
       // findings it shows came from reading the full photo alone -- dimmed
       // here so that lower-confidence reading is visible at a glance (see
@@ -1570,7 +1458,7 @@ window.PhotoAgentResults = (() => {
       // the allow/deny toggle in #ap-face-detail, so it stays put even after
       // the user turns a flagged fix off (it's still something the analysis
       // found, just no longer approved).
-      if ((entry.issues || []).some((issue) => issue.flagged) || (entry.bodyKeyPoints || []).length) {
+      if ((entry.issues || []).some((issue) => issue.flagged)) {
         const badge = document.createElement("span");
         badge.className = "ap-face-tab-badge";
         badge.textContent = "!";
@@ -1651,9 +1539,17 @@ window.PhotoAgentResults = (() => {
   function renderFaceDetailPanel() {
     const detail = els.apFaceDetail;
     if (!detail) return;
+    // Keep the Body Reshape host stable while replacing the selected person's
+    // face rows.  The host starts as a placeholder inside #ap-face-detail and
+    // is reattached after the list so it always appears immediately below
+    // the smile row instead of returning to the photo-summary card.
+    const bodyControl = els.apBodyReshapeControl;
     detail.innerHTML = "";
     const entry = faceThumbEntries[selectedFaceIndex];
-    if (!entry) return;
+    if (!entry) {
+      if (bodyControl) detail.appendChild(bodyControl);
+      return;
+    }
     const name = document.createElement("p");
     name.className = "ap-face-detail-name";
     name.textContent = entry.label || `人物 ${selectedFaceIndex + 1}`;
@@ -1662,20 +1558,24 @@ window.PhotoAgentResults = (() => {
     list.className = "step-inline-list step-inline-list--readonly";
     buildPersonIssueItems(entry).forEach((li) => list.appendChild(li));
     detail.appendChild(list);
+    // New analyses render Body Reshape as this person's own issue row below
+    // 笑容調整. Keep the old holistic host only for legacy top-level records,
+    // so it cannot duplicate a per-person switch or prompt.
+    const hasPersonBodyRow = (entry.issues || []).some((issue) => issue.category === "body_reshape");
+    if (bodyControl && !hasPersonBodyRow) detail.appendChild(bodyControl);
   }
 
   // Builds every <li> row for one person's issue review: the not-analyzed-
-  // in-closeup caveat (sentToModel !== true), one row per blink/gaze/hair/
-  // smile issue, and a 身形調整 (body-reshape) section -- was #ap-face-modal's
+  // in-closeup caveat (sentToModel !== true) and one row per blink/gaze/hair/
+  // smile issue -- was #ap-face-modal's
   // fillFaceIssueList, rebuilt into a single shared list for whichever one
   // person's thumbnail was clicked; now called once per person so every
   // detected person's own review renders inline at once (renderFaceThumbnails
   // above). Flagged items get an "allow AI to fix this" toggle; unsafe smile
   // gets the same toggle off by default so the user can override the
-  // warning. Changing it updates issue.allowed/point.allowed/
-  // entry.bodyReshapeEnabled in place on the faceThumbEntries entry itself,
-  // which getFaceIssueOverrides/getBodyReshapeOverrides read back at submit
-  // time.
+  // warning. Changing it updates issue.allowed in place on the
+  // faceThumbEntries entry itself, which
+  // getFaceIssueOverrides reads back at submit time.
   function buildPersonIssueItems(entry) {
     const items = [];
     if (entry && entry.sentToModel !== true && debugUiActive) {
@@ -1693,9 +1593,10 @@ window.PhotoAgentResults = (() => {
       note.textContent = "此人物的分析結果來自整張照片的判讀，未使用特寫照片進行細節分析，準確度可能略低。";
       items.push(note);
     }
-    const issues = entry?.issues || [];
-    const bodyKeyPoints = entry?.bodyKeyPoints || [];
-    if (!issues.length && !entry?.bodyAnalysisAvailable) {
+    const issues = (entry?.issues || []).filter((issue) =>
+      bodyReshapeEnabled || issue.category !== "body_reshape"
+    );
+    if (!issues.length) {
       const li = document.createElement("li");
       li.textContent = "此人像沒有可顯示的分析結果。";
       items.push(li);
@@ -1724,7 +1625,7 @@ window.PhotoAgentResults = (() => {
       // instead of an unflagged row (previously no toggle at all) sitting
       // ~44px left of a flagged one right above/below it.
       const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(issue.category);
-      // A manual-override category (blink/gaze/hair/smile) is only ever
+      // A manual-override category (blink/gaze/hair/smile/body reshape) is only ever
       // locked when its #advanced-settings-fold toggle is off -- build_edit_
       // prompt's global veto would ignore a per-person re-enable regardless,
       // so this says so instead of the normal "仍可手動開啟", which would be
@@ -1862,6 +1763,12 @@ window.PhotoAgentResults = (() => {
       } else {
         li.appendChild(row);
       }
+      if (issue.category === "body_reshape" && issue.editPrompt) {
+        const prompt = document.createElement("div");
+        prompt.className = "ap-body-reshape-prompt ap-face-issue-prompt";
+        prompt.textContent = `送給 Editor：${issue.editPrompt}`;
+        li.appendChild(prompt);
+      }
 
       // The model's own reasoning is debug-only detail (same gate as the
       // box overlay's legend) -- a regular user just needs the verdict, not
@@ -1876,138 +1783,6 @@ window.PhotoAgentResults = (() => {
       items.push(li);
     });
 
-    if (bodyReshapeEnabled && entry?.bodyAnalysisAvailable) {
-      const section = document.createElement("li");
-      section.className = "ap-body-reshape-section";
-      const masterRow = document.createElement("div");
-      masterRow.className = "ap-face-issue-row";
-
-      const toggle = document.createElement("label");
-      toggle.className = "ios-switch ap-face-issue-toggle";
-      const actionableBodyPoints = bodyKeyPoints.filter((point) => point.selectable !== false);
-      toggle.title = actionableBodyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
-      const masterInput = document.createElement("input");
-      masterInput.type = "checkbox";
-      masterInput.disabled = !actionableBodyPoints.length;
-      masterInput.checked = actionableBodyPoints.length && entry.bodyReshapeEnabled !== false;
-      const track = document.createElement("span");
-      track.className = "ios-track";
-      const thumb = document.createElement("span");
-      thumb.className = "ios-thumb";
-      track.appendChild(thumb);
-      toggle.appendChild(masterInput);
-      toggle.appendChild(track);
-      masterRow.appendChild(toggle);
-
-      const name = document.createElement("span");
-      name.className = "ap-face-issue-name";
-      name.textContent = "身形調整";
-      masterRow.appendChild(name);
-
-      const icon = document.createElement("span");
-      const verdict = document.createElement("span");
-      verdict.className = "step-cb-label";
-      masterRow.appendChild(icon);
-      masterRow.appendChild(verdict);
-      section.appendChild(masterRow);
-
-      const list = document.createElement("div");
-      list.className = "ap-body-reshape-list";
-      const pointControls = [];
-      if (bodyKeyPoints.length) {
-        bodyKeyPoints.forEach((point) => {
-          const row = document.createElement("div");
-          row.className = "ap-body-reshape-option";
-          const input = document.createElement("input");
-          input.type = "checkbox";
-          input.disabled = point.selectable === false;
-          input.checked = point.selectable !== false && point.allowed !== false;
-          input.addEventListener("change", () => {
-            point.allowed = input.checked;
-            if (typeof refreshBodyReshape === "function") refreshBodyReshape();
-          });
-          const textLabel = document.createElement("label");
-          textLabel.className = "ap-body-reshape-option-label";
-          textLabel.appendChild(input);
-          const text = document.createElement("span");
-          text.textContent = bodyReshapeDisplayText(point.text);
-          textLabel.appendChild(text);
-          row.appendChild(textLabel);
-          const sliderRow = document.createElement("div");
-          sliderRow.className = "ap-body-reshape-slider-row";
-          const sliderLabel = document.createElement("span");
-          sliderLabel.className = "ap-body-reshape-slider-label";
-          sliderLabel.textContent = "調整幅度";
-          const strengthIndex = bodyReshapeStrengthIndex(point.targetPct);
-          const selectedStrength = bodyReshapeStrengthAt(strengthIndex);
-          const slider = document.createElement("input");
-          slider.type = "range";
-          slider.className = "ap-body-reshape-slider";
-          slider.min = "0";
-          slider.max = String(BODY_RESHAPE_STRENGTHS.length - 1);
-          slider.step = "1";
-          slider.value = String(strengthIndex);
-          slider.setAttribute("aria-label", `${bodyReshapeDisplayText(point.text)} 調整幅度`);
-          slider.setAttribute("aria-valuetext", `${selectedStrength.label}強度`);
-          const sliderControl = document.createElement("div");
-          sliderControl.className = "ap-body-reshape-slider-control";
-          sliderControl.appendChild(slider);
-          const strengthScale = document.createElement("div");
-          strengthScale.className = "ap-body-reshape-slider-scale";
-          BODY_RESHAPE_STRENGTHS.forEach((strength) => {
-            const mark = document.createElement("span");
-            mark.textContent = strength.label;
-            strengthScale.appendChild(mark);
-          });
-          sliderControl.appendChild(strengthScale);
-          slider.addEventListener("input", () => {
-            const strength = bodyReshapeStrengthAt(slider.value);
-            const nextIndex = BODY_RESHAPE_STRENGTHS.indexOf(strength);
-            slider.value = String(nextIndex);
-            point.targetPct = strength.targetPct;
-            point.amountTouched = true;
-            slider.setAttribute("aria-valuetext", `${strength.label}強度`);
-          });
-          sliderRow.appendChild(sliderLabel);
-          sliderRow.appendChild(sliderControl);
-          row.appendChild(sliderRow);
-          pointControls.push({ point, input, slider, row });
-          if (point.selectable === false && point.reason) {
-            row.title = `此項不會送入 edit：${point.reason}`;
-            row.classList.add("is-unavailable");
-            const reason = document.createElement("small");
-            reason.className = "ap-body-reshape-option-meta";
-            reason.textContent = `不執行：${point.reason}`;
-            row.appendChild(reason);
-          }
-          list.appendChild(row);
-        });
-      }
-      section.appendChild(list);
-
-      const refreshBodyReshape = () => {
-        const active = actionableBodyPoints.length > 0 && entry.bodyReshapeEnabled !== false;
-        masterInput.checked = active;
-        icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
-        icon.textContent = active ? "!" : "✓";
-        verdict.textContent = !actionableBodyPoints.length
-          ? "無需調整"
-          : (active ? "可以調整" : "不執行");
-        list.hidden = actionableBodyPoints.length > 0 ? !active : false;
-        pointControls.forEach(({ point, input, slider }) => {
-          const enabled = active && point.selectable !== false;
-          input.disabled = !enabled;
-          input.checked = enabled && point.allowed !== false;
-          slider.disabled = !enabled || point.allowed === false;
-        });
-      };
-      masterInput.addEventListener("change", () => {
-        entry.bodyReshapeEnabled = masterInput.checked;
-        refreshBodyReshape();
-      });
-      refreshBodyReshape();
-      items.push(section);
-    }
     return items;
   }
 
@@ -2271,6 +2046,10 @@ window.PhotoAgentResults = (() => {
   // src, forcing the "After" view, model name).
   function renderResult({ data, analysis, preset, imageModel, hasOriginal = true }, { keepView = false, pending = false } = {}) {
     if (!keepView) lastRender = { data, analysis, preset, imageModel, hasOriginal };
+    // Keep the review switch and its Analyze -> Editor sentence in sync with
+    // whichever result/run is currently being displayed.  `keepView` is only
+    // a photo-view optimization; the analysis object may still be new.
+    setBodyReshapeReviewAnalysis(analysis, { resetState: false });
     const qa = data.qualityCheck || null;
     const validation = analysis.crop_validation || null;
     // previewAspectRatio re-rendered this result under an aspect-ratio choice
@@ -2360,6 +2139,7 @@ window.PhotoAgentResults = (() => {
       qa?.recommendation || ""
     ]);
 
+    const bodyPrompt = bodyReshapePromptForDisplay(analysis);
     els.compositionText.textContent = joinParts([
       analysis.composition_strategy ? sentence("原圖觀察", analysis.composition_strategy) : "",
       analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : "",
@@ -2367,7 +2147,8 @@ window.PhotoAgentResults = (() => {
       analysis.recommended_aspect_ratio
         ? `${ratioIsPreview ? "下次輸出比例（預覽）" : "輸出比例"}：${aspectRatioDisplayValue(analysis.recommended_aspect_ratio)}${!ratioIsPreview && analysis.aspect_ratio_reason ? `，${stripFieldLabel(analysis.aspect_ratio_reason, ["比例", "建議比例", "比例理由"])}` : ""}。`
         : "",
-      analysis.layout_method ? sentence("布局方法", analysis.layout_method) : ""
+      analysis.layout_method ? sentence("布局方法", analysis.layout_method) : "",
+      bodyPrompt ? `身形調整：${bodyPrompt}` : ""
     ]);
 
     els.roiText.textContent = joinParts([
@@ -2506,6 +2287,7 @@ window.PhotoAgentResults = (() => {
   // applyBatchReviewSelections), can read the same setting without it being
   // re-threaded through every call.
   function renderAnalysisPreview({ analysis, preset, expanded = true }) {
+    setBodyReshapeReviewAnalysis(analysis, { resetState: true });
     reviewExpanded = expanded;
     // A fresh analysis always lands back on the 人像檢查 tab first (falls
     // back to 修圖建議 in renderFaceReviewCards if this photo has no faces),
@@ -2544,11 +2326,13 @@ window.PhotoAgentResults = (() => {
 
     if (els.apComposition) {
       const userInstruction = analysis.user_instruction || {};
+      const bodyPrompt = bodyReshapePromptForDisplay(analysis);
       els.apComposition.textContent = joinParts([
         userInstruction.has_user_direction
           ? `使用者目標：${userInstruction.user_intent_summary || userInstruction.normalized_user_direction || ""}。`
           : (analysis.edit_intent || preset?.intent || ""),
-        analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : ""
+        analysis.composition_intent ? sentence("建議構圖", analysis.composition_intent) : "",
+        bodyPrompt ? `身形調整：${bodyPrompt}` : ""
       ]);
     }
 
@@ -2588,8 +2372,7 @@ window.PhotoAgentResults = (() => {
     updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
-    getBodyReshapeOverrides, applyBodyReshapeOverrides,
-    getBodyReshapeAmountOverrides, applyBodyReshapeAmountOverrides, setBodyReshapeEnabled,
+    setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,
     renderFaceReviewCards,
     syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion
   };

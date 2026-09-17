@@ -8,7 +8,6 @@ different, authorized feature on the same face.
 from __future__ import annotations
 
 import json
-import math
 import re
 
 # The legacy prompt's own readers, deliberately shared rather than reimplemented
@@ -22,16 +21,10 @@ from prompts import (
     build_user_preserved_choices,
     has_approved_alignment_correction,
     build_body_reshape_edit_block,
+    get_body_reshape_edit_prompt,
     resolve_user_blink_request,
     resolve_user_gaze_request,
     resolve_user_hair_request,
-    body_reshape_items,
-    body_reshape_execution_plan,
-    _body_reshape_parse_key_point,
-    _body_reshape_endpoint_identity,
-    _body_reshape_overlap_identity,
-    _body_reshape_measurement_identity,
-    _body_reshape_slider_config,
     resolve_smile_targets,
     smile_level,
     subject_issue_items,
@@ -197,8 +190,8 @@ def _compact_raw_crop_instruction(
         return ""
 
     local_shape_exception = (
-        " Preserve tilt, relative placement, and every unlisted proportion; this whole-image rule does not freeze "
-        "the mandatory local measurements named by approved body-reshape endpoints."
+        " Preserve tilt, relative placement, and every unlisted proportion; the holistic body instruction may "
+        "adjust the visible figure continuously while unrelated content remains source-matched."
         if has_body_reshape else
         " Preserve internal proportions, tilt, relative sizes, spacing, and overlap. Everything inside the frame keeps the proportions, the tilt, and the relative sizes and spacing it has in the input photograph."
     )
@@ -257,15 +250,15 @@ def _compact_raw_crop_instruction(
         consequence = ""
         if "left and right edges cannot both be inside" in raw:
             consequence = (
-                " Trim side content as needed rather than narrowing people or objects; approved body endpoints "
-                "remain the only deliberate local geometry exception."
+                " Trim side content as needed rather than narrowing people or objects; the holistic body instruction "
+                "remains the only deliberate figure-geometry exception."
                 if has_body_reshape else
                 " Trim side content as needed rather than narrowing people or objects."
             )
         elif "top and bottom edges cannot both be inside" in raw:
             consequence = (
-                " Trim top or bottom content as needed rather than flattening people or objects; approved body "
-                "endpoints remain the only deliberate local geometry exception."
+                " Trim top or bottom content as needed rather than flattening people or objects; the holistic body "
+                "instruction remains the only deliberate figure-geometry exception."
                 if has_body_reshape else
                 " Trim top or bottom content as needed rather than flattening people or objects."
             )
@@ -274,7 +267,7 @@ def _compact_raw_crop_instruction(
             f"Reframe to {aspect}; {tightness}.{consequence}{closer} Frame the visible main subject and meaningful "
             "context comfortably inside. Crop and scale uniformly. "
             + (
-                "Preserve tilt, relative placement, and unlisted proportions while completing approved local body endpoints."
+                "Preserve tilt, relative placement, and unlisted proportions while applying the holistic body instruction."
                 if has_body_reshape else
                 "Preserve internal proportions, tilt, relative sizes, spacing, and overlap."
             )
@@ -529,7 +522,7 @@ def _contract_subject_index(item):
 
 
 def _contract_priority(item):
-    """Resolve the small priority vocabulary used by explicit user endpoints."""
+    """Resolve the small priority vocabulary used by explicit user choices."""
     value = item.get("priority", item.get("source_priority", 0))
     if item.get("user_override") or str(item.get("source") or "").lower() in {
         "user", "user_instruction", "explicit_user",
@@ -540,240 +533,8 @@ def _contract_priority(item):
     return {"user": 100, "explicit_user": 100, "planner": 10, "analysis": 10}.get(str(value).lower(), 0)
 
 
-def _body_endpoint_record(value, source_item, source_index=0, entry_value=None):
-    """Normalize one body-adjustment value for resolver-level merging.
-
-    The normal request path already coalesces body points in
-    ``build_body_reshape_execution_plan``.  This extra normalization is for
-    legacy/imported analyses and for callers that construct more than one
-    body contract for a subject: distinct local regions must survive that
-    merge, while two instructions for the same local measurement must be
-    deduplicated or reported as a conflict.
-    """
-    metadata = entry_value if isinstance(entry_value, dict) else {}
-    text = (
-        metadata.get("canonical_text") or metadata.get("endpoint") or metadata.get("raw_text")
-        if metadata else value
-    )
-    text = str(text or "").strip()
-    parsed = _body_reshape_parse_key_point(text)
-    identity = _body_reshape_endpoint_identity(parsed)
-    metadata_identity = None
-    if metadata:
-        region = metadata.get("region_id") or metadata.get("region")
-        measurement = metadata.get("measurement")
-        if region and measurement:
-            metadata_identity = (
-                region,
-                metadata.get("segment"),
-                metadata.get("screen_side"),
-                metadata.get("measurement_id") or _body_reshape_measurement_identity(measurement),
-            )
-    # An invalid legacy point is not made executable by this resolver.  A
-    # request-plan entry may carry the parser's structured metadata even when
-    # its display text is an older/longer alias; trust that metadata only when
-    # it explicitly says the point is executable and has a complete, bounded
-    # operation/target.  Free-form text alone never becomes an endpoint here.
-    metadata_target = metadata.get("target_pct") if metadata else None
-    try:
-        metadata_target = float(metadata_target)
-    except (TypeError, ValueError):
-        metadata_target = None
-    metadata_valid = bool(
-        metadata_identity
-        and (identity is None or identity == metadata_identity)
-        and metadata.get("executable") is not False
-        and metadata.get("policy_valid") is True
-        and metadata.get("operation") in {"increase", "decrease"}
-        and metadata_target is not None
-        and math.isfinite(metadata_target)
-        and 0 < metadata_target < 100
-        and metadata_target <= _body_reshape_slider_config()["max"]
-    )
-    valid = bool(parsed.get("syntax_valid") and parsed.get("policy_valid")) or metadata_valid
-    if identity is None and metadata_valid:
-        identity = metadata_identity
-    canonical = parsed.get("canonical_text") or text
-    signature = (
-        identity,
-        parsed.get("operation") or metadata.get("operation"),
-        parsed.get("target_pct") if parsed.get("target_pct") is not None else metadata.get("target_pct"),
-    )
-    return {
-        "text": canonical,
-        "identity": identity or ("raw", canonical),
-        "signature": signature,
-        "entry": metadata or None,
-        "source": source_item,
-        "source_index": source_index,
-        # A request-plan entry carries the endpoint's provenance even though
-        # its parent body contract is shared by all points.  Let that
-        # provenance retain the explicit-user precedence when this resolver
-        # is called directly with multiple imported body contracts.
-        "priority": max(
-            _contract_priority(source_item),
-            _contract_priority(metadata) if metadata else 0,
-        ),
-        "valid": valid,
-        "reason_code": None if valid else (parsed.get("reason_code") or "invalid_syntax_or_semantics"),
-        "reason": None if valid else (parsed.get("reason") or "invalid body endpoint"),
-        "overlap_identity": _body_reshape_overlap_identity(parsed),
-    }
-
-
-def _merge_body_endpoint_values(items):
-    """Merge body points by local endpoint identity, not by whole-list tuple.
-
-    Returns ``(values, entries, sources, conflicts)``.  An explicit user
-    contract can replace a lower-priority planner amount/direction; ties with
-    incompatible values are surfaced as ``needs_review``.  A conflict for one
-    waist/arm/etc. endpoint does not discard unrelated body regions from the
-    same person.
-    """
-    records = []
-    for item in items:
-        endpoint = item.get("endpoint") or {}
-        values = endpoint.get("body_adjustments")
-        if values is None:
-            continue
-        if isinstance(values, (str, bytes, dict)):
-            values = [values]
-        elif not isinstance(values, (list, tuple)):
-            values = [values]
-        metadata_values = endpoint.get("body_adjustment_entries")
-        if isinstance(metadata_values, dict):
-            metadata_values = [metadata_values]
-        elif not isinstance(metadata_values, (list, tuple)):
-            metadata_values = []
-        for index, value in enumerate(values):
-            metadata = metadata_values[index] if index < len(metadata_values) else None
-            records.append(_body_endpoint_record(value, item, index, metadata))
-
-    grouped = {}
-    order = []
-    invalid_records = []
-    for record in records:
-        if not record.get("valid"):
-            invalid_records.append(record)
-            continue
-        identity = record["identity"]
-        if identity not in grouped:
-            grouped[identity] = []
-            order.append(identity)
-        grouped[identity].append(record)
-
-    # Broad waist/abdomen widths can be two labels for the same visible
-    # contour.  Put them into one merge group so equal requests are
-    # deduplicated and incompatible requests become an explicit conflict.
-    overlap_grouped = {}
-    for identity in order:
-        for record in grouped.get(identity, []):
-            overlap_id = record.get("overlap_identity")
-            if overlap_id is not None:
-                overlap_grouped.setdefault((overlap_id,), []).append(record)
-
-    merged_values = []
-    merged_entries = []
-    sources = []
-    conflicts = []
-    for record in invalid_records:
-        conflicts.append({
-            "endpoint": "body_adjustments",
-            "measurement": record.get("identity"),
-            "values": [record.get("text")],
-            "reason": record.get("reason_code") or "invalid_syntax_or_semantics",
-        })
-    for identity in order:
-        candidates = grouped[identity]
-        signatures = {}
-        for candidate in candidates:
-            signatures.setdefault(candidate["signature"], []).append(candidate)
-        if len(signatures) > 1:
-            top_priority = max(max(candidate["priority"] for candidate in group) for group in signatures.values())
-            winners = [
-                group[0] for group in signatures.values()
-                if max(candidate["priority"] for candidate in group) == top_priority
-            ]
-            if len(winners) == 1 and any(
-                max(candidate["priority"] for candidate in group) < top_priority
-                for group in signatures.values()
-            ):
-                selected = winners[0]
-            else:
-                conflicts.append({
-                    "endpoint": "body_adjustments",
-                    "measurement": identity,
-                    "values": [candidate["text"] for candidate in candidates],
-                })
-                continue
-        else:
-            selected = next(iter(signatures.values()))[0]
-        if selected["text"] not in merged_values:
-            merged_values.append(selected["text"])
-            if selected.get("entry") is not None:
-                merged_entries.append(selected["entry"])
-            sources.extend(candidate["source"] for candidate in candidates if candidate["source"] not in sources)
-
-    # Apply the cross-region overlap decision to the already selected values.
-    # The normal request path has made the same decision in
-    # build_body_reshape_execution_plan; this keeps direct/legacy resolver
-    # callers consistent as well.  If both broad measurements have the same
-    # operation/amount, keep the first and attach the later source index to its
-    # metadata.  Otherwise remove both and surface one conflict.
-    for records in overlap_grouped.values():
-        # Same-region exact duplicates have already been handled above; only
-        # a group containing both waist and abdomen identities is a
-        # cross-region overlap.
-        if len(records) < 2 or len({record["identity"] for record in records}) < 2:
-            continue
-        signatures = {
-            (record["signature"][1], record["signature"][2])
-            for record in records
-        }
-        selected_texts = {record["text"] for record in records}
-        if len(signatures) == 1:
-            winner = records[0]
-            duplicate_indices = [
-                record.get("entry", {}).get("key_point_index")
-                for record in records[1:]
-                if isinstance(record.get("entry"), dict)
-                and isinstance(record.get("entry", {}).get("key_point_index"), int)
-            ]
-            if duplicate_indices and isinstance(winner.get("entry"), dict):
-                entry = winner["entry"]
-                existing = entry.setdefault(
-                    "source_key_point_indices",
-                    [entry.get("key_point_index")] if isinstance(entry.get("key_point_index"), int) else [],
-                )
-                for index in duplicate_indices:
-                    if index not in existing:
-                        existing.append(index)
-                entry.setdefault("duplicate_source_key_point_indices", []).extend(
-                    index for index in duplicate_indices
-                    if index not in entry["duplicate_source_key_point_indices"]
-                )
-            for record in records[1:]:
-                if record["text"] != winner["text"] and record["text"] in merged_values:
-                    merged_values.remove(record["text"])
-                if record.get("entry") is not winner.get("entry") and record.get("entry") in merged_entries:
-                    merged_entries.remove(record.get("entry"))
-        else:
-            for record in records:
-                if record["text"] in merged_values:
-                    merged_values.remove(record["text"])
-                if record.get("entry") in merged_entries:
-                    merged_entries.remove(record.get("entry"))
-            conflicts.append({
-                "endpoint": "body_adjustments",
-                "measurement": "waist-abdomen-overlap",
-                "values": sorted(selected_texts),
-                "reason": "overlapping broad waist/abdomen measurements conflict",
-            })
-    return tuple(merged_values), tuple(merged_entries), sources, conflicts
-
-
 def _legacy_same_subject(left, right):
-    """Keep the pre-body resolver's matching for ordinary feature contracts."""
+    """Keep the historical matching for ordinary feature contracts."""
     if not isinstance(left, dict) or not isinstance(right, dict):
         return False
     if left.get("subject") == right.get("subject"):
@@ -787,14 +548,7 @@ def _legacy_same_subject(left, right):
 
 
 def _same_subject(left, right):
-    """Match body-aware contracts by stable id, legacy contracts by old rules.
-
-    Body reshape contracts carry the parent ``subjects[]`` index so their
-    per-person endpoints cannot be merged by a label or a large bounding box.
-    Contracts that do not participate in a body request retain the resolver's
-    historical label/box matching and therefore do not change eye, hair, or
-    smile behavior.
-    """
+    """Match stable-id contracts by parent subject, legacy contracts by old rules."""
     if not isinstance(left, dict) or not isinstance(right, dict):
         return False
     left_explicit = "subject_index" in left or "_subject_index" in left
@@ -811,15 +565,13 @@ def _same_subject(left, right):
             and _valid_contract_subject_index(right_id, right_count)
             and left_id == right_id
         )
-    # A body contract may coexist with a legacy face contract from an older
-    # saved analysis.  Only use the old geometric relation for that mixed pair;
-    # it never affects a request containing ordinary contracts alone.
+    # A stable-id contract may coexist with a legacy face contract from an older
+    # saved analysis.  Use the old geometric relation for that mixed pair.
     return _legacy_same_subject(left, right)
 
 
 def _smile_contracts(analysis):
     targets = resolve_smile_targets(analysis)
-    body_context = _analysis_has_body_plan(analysis)
 
     # The legacy/raw prompt has always retained an explicit user-selected
     # level when analysis produced no usable reading.  Keep the compact path
@@ -847,8 +599,6 @@ def _smile_contracts(analysis):
                 "current": None,
                 "target": level,
             }
-            if body_context:
-                target.update(subject_index=index, _subject_index=index)
             targets.append(target)
 
     contracts = []
@@ -869,18 +619,12 @@ def _smile_contracts(analysis):
             # the resolver removes it when gaze is also authorized.
             "preserve": sorted(_BASE_PRESERVE | _EYE_IDENTITY_PRESERVE | {"gaze_direction"}),
         }
-        if body_context:
-            contract.update(
-                subject_index=item.get("subject_index", item.get("_subject_index")),
-                _subject_count=len(analysis.get("subjects") or []),
-            )
         contracts.append(contract)
     return contracts
 
 
 def _gaze_contracts(analysis, include_gaze):
     options = analysis.get("_advanced_options") or {}
-    body_context = _analysis_has_body_plan(analysis)
     if not include_gaze or not options.get("gaze_contact_detection", True):
         return []
     disabled = _disabled_issue_subject_indices(analysis, "gaze_issue")
@@ -935,18 +679,12 @@ def _gaze_contracts(analysis, include_gaze):
                 "mouth_expression", "facial_expression", "eyelid_aperture",
             }),
         }
-        if body_context:
-            contract.update(
-                subject_index=item.get("subject_index", item.get("_subject_index")),
-                _subject_count=len(analysis.get("subjects") or []),
-            )
         contracts.append(contract)
     return contracts
 
 
 def _blink_contracts(analysis):
     options = analysis.get("_advanced_options") or {}
-    body_context = _analysis_has_body_plan(analysis)
     if not options.get("eye_closed_detection", True):
         return []
     disabled = _disabled_issue_subject_indices(analysis, "blink_issue")
@@ -993,18 +731,12 @@ def _blink_contracts(analysis):
             "dependent_changes": ["iris_visibility", "lash_line_position"],
             "preserve": sorted(_BASE_PRESERVE | _EYE_IDENTITY_PRESERVE),
         }
-        if body_context:
-            contract.update(
-                subject_index=item.get("subject_index", item.get("_subject_index")),
-                _subject_count=len(analysis.get("subjects") or []),
-            )
         contracts.append(contract)
     return contracts
 
 
 def _hair_contracts(analysis):
     options = analysis.get("_advanced_options") or {}
-    body_context = _analysis_has_body_plan(analysis)
     if not options.get("hair_mess_detection", True):
         return []
     # Compatibility for analyses produced before hair approval moved to the
@@ -1076,51 +808,7 @@ def _hair_contracts(analysis):
                 (_BASE_PRESERVE - {"hair"}) | _HAIR_IDENTITY_PRESERVE
             ),
         }
-        if body_context:
-            contract.update(subject_index=index, _subject_count=len(analysis.get("subjects") or []))
         contracts.append(contract)
-    return contracts
-
-
-def _body_reshape_contracts(analysis):
-    """Turn body-planning key points into bounded per-person contracts."""
-    contracts = []
-    for item in body_reshape_items(analysis):
-        key_points = tuple(item.get("key_points") or [])
-        direct = ["named_body_contours", "named_body_proportions"]
-        contracts.append({
-            "feature": "body_reshape",
-            "subject_index": item.get("subject_index"),
-            "_subject_count": len(analysis.get("subjects") or []),
-            "subject": item.get("subject_label") or "畫面中的人物",
-            "box": _box(item),
-            "endpoint": {
-                "body_adjustments": key_points,
-                "body_adjustment_entries": tuple(item.get("key_point_entries") or ()),
-            },
-            "direct_changes": direct,
-            "dependent_changes": [
-                "body_edge_continuity",
-                # These names deliberately match otherwise requested preserve
-                # tokens where applicable. resolve_feature_contracts subtracts
-                # the union footprint after smile/gaze/hair contracts merge, so
-                # their generic clothing preservation cannot re-freeze the
-                # approved person's local garment follow-through.
-                "clothing",
-                "garment_boundaries",
-                "exposed_skin_boundaries",
-                "local_garment_contour_and_surface_geometry",
-                "source_texture_and_pattern_continuity",
-                "necessary_adjacent_background_continuation",
-            ],
-            "preserve": sorted((_BASE_PRESERVE - {"clothing"}) | {
-                "face", "expression", "hands", "feet", "unlisted_body_regions",
-                "clothing_design", "garment_coverage_relationship",
-                "garment_length", "garment_construction", "garment_identity",
-                "garment_wearing_method", "body_clothing_topology",
-                "background_geometry", "camera_viewpoint",
-            }),
-        })
     return contracts
 
 
@@ -1150,22 +838,6 @@ def _safe_gaze_eye_adjustment(value):
             "preserving eye shape, canthi, lid folds, lashes, makeup, and iris identity"
         )
     return text
-
-
-def _analysis_has_body_plan(analysis):
-    # ``apply_default_body_reshape_plans`` gives every person an empty
-    # ``body_reshape`` object.  That placeholder must not switch ordinary
-    # eye/hair/smile requests onto the body-aware resolver; only a request
-    # with at least one executable endpoint needs the stable body identity
-    # metadata and merge rules.
-    if not isinstance(analysis, dict):
-        return False
-    try:
-        return bool(body_reshape_execution_plan(analysis).get("executable_point_count"))
-    except Exception:
-        # Keep the legacy feature path available if an imported/partially
-        # formed analysis cannot be inspected as a body plan.
-        return False
 
 
 def _safe_gaze_head_face_adjustment(value, *, allow_pose_change=False):
@@ -1219,24 +891,12 @@ def build_feature_contracts(analysis, *, include_gaze=True):
         + _gaze_contracts(analysis, include_gaze)
         + _blink_contracts(analysis)
         + _hair_contracts(analysis)
-        + _body_reshape_contracts(analysis)
     )
-    if _analysis_has_body_plan(analysis):
-        subjects = analysis.get("subjects") or []
-        for contract in contracts:
-            index = _contract_subject_index(contract)
-            if _valid_contract_subject_index(index, len(subjects)):
-                subject = subjects[index]
-                if isinstance(subject, dict):
-                    contract["canonical_subject"] = {
-                        "label": subject.get("label") or "畫面中的人物",
-                        "box": subject.get("box") or {},
-                    }
     return contracts
 
 
 def _resolve_legacy_feature_contracts(contracts):
-    """Resolve an ordinary (non-body) request exactly as before body support."""
+    """Resolve ordinary feature contracts with the historical semantics."""
     groups = []
     for contract in contracts:
         group = next((candidate for candidate in groups if _legacy_same_subject(candidate["contracts"][0], contract)), None)
@@ -1299,12 +959,10 @@ def resolve_feature_contracts(contracts, subject_count=None):
     iterated last.
     """
     contracts = list(contracts or [])
-    # No body contract and no explicit stable ids means this is an ordinary
-    # eye/hair/smile request. Keep its historical resolver output and
-    # conflict semantics byte-for-byte compatible with the baseline commit.
+    # Requests without stable subject ids retain the historical resolver output
+    # and conflict semantics used by ordinary eye/hair/smile edits.
     if not any(
-        item.get("feature") == "body_reshape"
-        or "subject_index" in item
+        "subject_index" in item
         or "_subject_index" in item
         for item in contracts if isinstance(item, dict)
     ):
@@ -1367,34 +1025,14 @@ def resolve_feature_contracts(contracts, subject_count=None):
         endpoint_values = {}
         endpoint_sources = {}
         endpoint_candidates = {}
-        body_items = []
         for item in items:
             for key, value in (item.get("source_state") or {}).items():
                 source_states.setdefault(key, value)
             for key, value in (item.get("endpoint") or {}).items():
-                if item.get("feature") == "body_reshape" and key == "body_adjustments":
-                    body_items.append(item)
-                    continue
-                # body_adjustment_entries carries provenance for the shared
-                # body list, not a second independent feature endpoint.  It is
-                # rebuilt alongside body_adjustments below so it cannot make
-                # two otherwise distinct body regions look like a tuple-wide
-                # conflict.
-                if item.get("feature") == "body_reshape" and key == "body_adjustment_entries":
-                    continue
                 endpoint_candidates.setdefault(key, []).append((value, item))
 
         conflicts = []
         overridden_endpoints = []
-        if body_items:
-            body_values, body_entries, body_sources, body_conflicts = _merge_body_endpoint_values(body_items)
-            if body_values:
-                endpoint_values["body_adjustments"] = body_values
-                endpoint_sources["body_adjustments"] = body_sources
-                if body_entries:
-                    endpoint_values["body_adjustment_entries"] = body_entries
-                    endpoint_sources["body_adjustment_entries"] = body_sources
-            conflicts.extend(body_conflicts)
         for key, candidates in endpoint_candidates.items():
             unique = []
             for value, item in candidates:
@@ -1429,8 +1067,7 @@ def resolve_feature_contracts(contracts, subject_count=None):
             endpoint_values = {}
 
         # Features whose only endpoint was rejected by a conflict are not
-        # active. This prevents body conflict metadata from opening a body
-        # preservation exception or triggering a quality promotion.
+        # active, so a conflicting choice cannot open a preservation exception.
         active_items = []
         if not unresolved_identity:
             for item in items:
@@ -1484,11 +1121,8 @@ def build_compact_editor_prompt(
     resolved = resolve_feature_contracts(
         contracts, subject_count=len(analysis.get("subjects") or [])
     )
-    body_plan = body_reshape_execution_plan(analysis)
-    body_reshape_active = bool(body_plan.get("executable_point_count")) and any(
-        "body_adjustments" in (item.get("final_state") or {})
-        for item in resolved
-    )
+    body_prompt = get_body_reshape_edit_prompt(analysis)
+    body_reshape_active = bool(body_prompt)
     for item in resolved:
         if "lighting" in item["preserve"]:
             item["preserve"].remove("lighting")
@@ -1503,16 +1137,6 @@ def build_compact_editor_prompt(
         for item in resolved:
             removed = set(item["preserve"]) & subject_style_footprint
             item["preserve"] = sorted(set(item["preserve"]) - subject_style_footprint)
-            item["removed_preservations"] = sorted(set(item["removed_preservations"]) | removed)
-    if body_reshape_active:
-        body_style_footprint = set()
-        if "angle" in style_options:
-            body_style_footprint.update({"camera_viewpoint", "scene_perspective", "projected_overlap"})
-        if "size" in style_options:
-            body_style_footprint.update({"framing", "subject_scale", "visible_extent", "image_boundaries"})
-        for item in resolved:
-            removed = set(item["preserve"]) & body_style_footprint
-            item["preserve"] = sorted(set(item["preserve"]) - body_style_footprint)
             item["removed_preservations"] = sorted(set(item["removed_preservations"]) | removed)
     ratio = analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio") or "original"
     raw_crop_block = str(raw_crop_instruction or "").strip()
@@ -1665,20 +1289,6 @@ def build_compact_editor_prompt(
             )
         if (smile or state.get("eye_state")) and not state.get("gaze"):
             state_lines.append("- Keep the captured iris/pupil direction, sclera balance, and catchlights.")
-        body_adjustments = state.get("body_adjustments") or []
-        if body_adjustments:
-            source_indices = []
-            for entry in state.get("body_adjustment_entries") or ():
-                candidates = entry.get("source_key_point_indices") if isinstance(entry, dict) else None
-                if not isinstance(candidates, (list, tuple)):
-                    candidates = [entry.get("key_point_index")] if isinstance(entry, dict) else []
-                for index in candidates:
-                    if isinstance(index, int) and not isinstance(index, bool) and index not in source_indices:
-                        source_indices.append(index)
-            provenance = f" (source key-point indices: {source_indices})" if source_indices else ""
-            state_lines.append(
-                "- Body reshape source" + provenance + ": see the authoritative Body reshape execution instructions below."
-            )
         hair_level = state.get("hair_level")
         hair_correction_plan = str(state.get("hair_correction_plan") or "").strip()
         hair_action = state.get("hair_action")
@@ -1817,18 +1427,15 @@ def build_compact_editor_prompt(
         "- Treat hair work as an arrangement/local-sheen edit, not a head or face regeneration. Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color. Where hair crosses a facial feature, retain that feature's visible source shape and position and repair only the strand-width footprint; any authorized eye or expression changes follow only their own resolved final states above."
         if "hair" in resolved_features else ""
     )
-    # Keep the complete, analysis-approved body contract in the prompt sent to
-    # the editor.  The legacy prompt and compact resolver must share this
-    # source so the exact-target, garment follow-through, and local-background
-    # rules cannot drift apart.  Per-subject states above retain only a
-    # provenance pointer; repeating the endpoint text there would make the
-    # editor see the same body operation twice.
+    # The analyzer sentence is the complete Body Reshape contract.  Add it
+    # once, verbatim, beside the other feature instructions; no per-subject
+    # resolver state is created for it.
     body_execution_block = (
         build_body_reshape_edit_block(analysis)
         if body_reshape_active else ""
     )
     body_boundary_block = (
-        "\nBody reshape targets:\n" + body_execution_block
+        "\n" + body_execution_block
         if body_execution_block else ""
     )
     user_text = user_direction.strip() or "No additional direction."
@@ -1863,7 +1470,7 @@ def build_compact_editor_prompt(
     pose_execution_order = (
         "\nPose-first execution order:\n"
         "- Establish the visibly different pose, gesture, head/body direction, limb placement, and silhouette first. "
-        "Then render the resolved local smile, eye, gaze, hair, and body-detail endpoints inside that new pose. "
+        "Then render the resolved local smile, eye, gaze, hair, and holistic body instruction inside that new pose. "
         "A changed expression or gaze alone does not complete the pose transformation."
         if "pose" in style_options else ""
     )
@@ -1904,7 +1511,7 @@ def build_compact_editor_prompt(
         style_scope_text = "- Preserve the source pose, viewpoint, subject scale, visible extent, and framing."
     if "pose" in style_options:
         gaze_endpoint_text = (
-            "plus any explicitly resolved gaze or body-reshape endpoint"
+            "plus the direct holistic body-reshape instruction"
             if body_reshape_active else
             "plus any explicitly resolved gaze endpoint"
         )
@@ -1915,8 +1522,8 @@ def build_compact_editor_prompt(
     elif has_head_aligned_gaze and body_reshape_active:
         facial_locality = (
             "- Apply facial edits locally. Only the resolved eyes-plus-head/face gaze endpoint may make its specified "
-            "bounded head/face alignment. Apply each approved body endpoint visibly inside its named body region, "
-            "including only its necessary garment and adjacent-background follow-through; keep unlisted regions fixed."
+            "bounded head/face alignment. Apply the direct holistic body instruction with continuous, natural "
+            "garment and adjacent-background follow-through; keep unlisted regions fixed."
         )
     elif has_head_aligned_gaze:
         facial_locality = (
@@ -1925,8 +1532,8 @@ def build_compact_editor_prompt(
         )
     elif body_reshape_active:
         facial_locality = (
-            "- Apply facial edits locally. Apply each approved body endpoint visibly inside its named body region, "
-            "including only its necessary garment and adjacent-background follow-through; do not move the head or unlisted regions."
+            "- Apply facial edits locally. Apply the direct holistic body instruction with only the necessary "
+            "garment and adjacent-background follow-through; do not move the head or unlisted regions."
         )
     else:
         facial_locality = (
@@ -1936,9 +1543,9 @@ def build_compact_editor_prompt(
         )
     if style_footprint and resolved:
         # Keep the enabled wording compatible with the existing compact
-        # prompt; only omit the body endpoint when the feature is inactive.
+        # prompt; only omit the body instruction when the feature is inactive.
         final_state_labels = (
-            "smile, eye state, gaze, hair, or body-reshape"
+            "smile, eye state, gaze, hair, or holistic body reshape"
             if body_reshape_active else
             "smile, eye state, gaze, or hair"
         )
@@ -1946,13 +1553,13 @@ def build_compact_editor_prompt(
             portrait_style_priority = (
                 "- Resolved subject final states remain mandatory local endpoints inside the style transformation, but they "
                 "must not preserve, restore, or substitute for the selected pose. Apply each specified "
-                f"{final_state_labels} endpoint within the visibly changed pose."
+                f"{final_state_labels} instruction within the visibly changed pose."
             )
         else:
             portrait_style_priority = (
                 "- Resolved subject final states remain mandatory inside the style transformation; "
                 "style may coordinate surrounding pose and light but must not replace a specified "
-                f"{final_state_labels} endpoint."
+                f"{final_state_labels} instruction."
             )
     else:
         portrait_style_priority = ""
@@ -1961,8 +1568,8 @@ def build_compact_editor_prompt(
         task_intro = (
             "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
             "Keep the same subject identity, scene, clothing, props, and photographic realism, but visibly change "
-            "the subject's pose according to the selected pose override. Complete every approved body endpoint "
-            "at its specified magnitude while preserving the same people, scene, and identity."
+            "the subject's pose according to the selected pose override. Apply the holistic body instruction "
+            "while preserving the same people, scene, and identity."
         )
     elif "pose" in style_options:
         task_intro = (
@@ -1973,7 +1580,7 @@ def build_compact_editor_prompt(
     elif body_reshape_active:
         task_intro = (
             "You are editing the supplied photograph with photographic realism, anatomically coherent local geometry, and faithful texture. "
-            "Complete every approved body endpoint at its specified magnitude while preserving the same people, scene, and identity."
+            "Apply the holistic body instruction while preserving the same people, scene, and identity."
         )
     else:
         task_intro = (
@@ -1981,11 +1588,11 @@ def build_compact_editor_prompt(
             "Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic."
         )
     finish_text = (
-        "Finish only with believable light, color, contrast, and texture quality. Do not reduce or omit an approved local body endpoint."
+        "Finish only with believable light, color, contrast, and texture quality. Do not omit the approved body instruction."
         if body_reshape_active else finish
     )
     global_preservation = (
-        "- Preserve the same identities, person count, scene identity, and photographic realism. Approved body endpoints may change only the named local geometry; the existing garment may follow that geometry locally under its garment contract. Keep every unlisted person and body region unchanged by body reshape. Keep face identity and facial anatomy unchanged except for separately approved smile, gaze, blink, or hair endpoints, which remain active in their own contracts."
+        "- Preserve the same identities, person count, scene identity, and photographic realism. Apply Body Reshape as one continuous overall-figure adjustment; the existing garment may follow the resulting geometry locally while retaining its identity and coverage. Keep every unlisted person and unrelated scene geometry unchanged. Keep face identity and facial anatomy unchanged except for separately approved smile, gaze, blink, or hair instructions, which remain active in their own contracts."
         if body_reshape_active else
         "- Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform, add, or erase people/objects; authorized framing may place existing content outside the output frame."
     )
@@ -2079,8 +1686,6 @@ Global preservation:
         "compact_style_instruction": compact_style_block,
         "style_change_footprint": sorted(style_footprint),
     }
-    if body_plan.get("review_point_count"):
-        metadata["body_reshape_execution_plan"] = body_plan
     if body_reshape_active:
-        metadata["body_reshape_targets"] = list(body_plan.get("items") or [])
+        metadata["body_reshape_edit_prompt"] = body_prompt
     return prompt.strip(), metadata
