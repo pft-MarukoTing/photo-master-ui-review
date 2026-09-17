@@ -20,7 +20,7 @@ window.PhotoAgentConfig = {
     { value: "gpt-4.1-mini", label: "GPT 4.1 Mini" },
     { value: "gpt-5.6-luna", label: "GPT 5.6 Luna" }
   ],
-  defaultAnalysisModel: "gpt-4.1-mini",
+  defaultAnalysisModel: "gpt-5.6-luna",
   imageModels: {
     "gpt-image-2": "GPT Image 2",
     "nano-banana-2": "Nano Banana 2"
