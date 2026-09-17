@@ -7915,6 +7915,24 @@
   function fetchAndRenderDemoImages() {
     if (!els.demoImagesGrid) return;
     updateDemoImagesConfirmBtn();
+    // Cached: render right now, no request and no gap. demoImagesCache was
+    // always written here but never actually read, so every switch to 範例照片
+    // paid for a fresh round trip -- for content this function's own cache
+    // comment already calls unchangeable mid-session.
+    if (demoImagesCache) {
+      renderDemoImagesGrid(demoImagesCache);
+      return;
+    }
+    // Uncached: empty the grid BEFORE the request, not after it in
+    // renderDemoImagesGrid. Both galleries render into this one element, so
+    // leaving the previous tab's tiles up for the length of a round trip
+    // showed 最近照片's thumbnails under the 範例照片 tab for a visible
+    // moment on every switch. Same reset loadUploadHistoryPage does for the
+    // other direction (which is why only this direction ever flashed),
+    // including keeping #demo-images-empty down meanwhile so an empty grid
+    // doesn't read as "no photos" mid-load.
+    els.demoImagesGrid.innerHTML = "";
+    if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = true;
     getDemoImages().then((names) => {
       // Account bootstrap can finish, or the tab can be switched away, while
       // this was still in flight. Do not let a stale response replace
@@ -7922,7 +7940,14 @@
       // this gallery (refreshUploadGallery keeps it in the no-account state),
       // so it's exempt same as the initDemoImagesGallery guard above.
       if (getCurrentUser() && !isGuestUser() && uploadGalleryActiveTab !== "sample") return;
-      demoImagesCache = names;
+      // Only a non-empty list is worth remembering. getDemoImages (photo-
+      // agent-api.js) swallows every failure -- bad response, bad JSON,
+      // network down -- and resolves with [], so an empty list can't be told
+      // apart from a genuinely empty gallery. Caching it would make one
+      // transient failure stick for the rest of the session now that this
+      // cache is actually read; leaving it unset just means the next switch
+      // to 範例照片 tries again, which is what used to happen every time.
+      if (names.length) demoImagesCache = names;
       renderDemoImagesGrid(names);
     });
   }
