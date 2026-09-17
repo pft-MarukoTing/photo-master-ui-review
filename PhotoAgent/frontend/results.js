@@ -1734,8 +1734,9 @@ window.PhotoAgentResults = (() => {
 
       // Hair and smile both remain available as explicit user transformations
       // even when the analyzer recommends preserving the captured state.
-      // CSS places the selector at the row's right edge on desktop and on a
-      // second verdict-aligned row on mobile. Hide it whenever this person's
+      // CSS keeps the selector inline after the verdict text while the
+      // panel is wide enough for it and wraps it onto its own
+      // verdict-aligned line when it isn't. Hide it whenever this person's
       // edit is off.
       let levelRow = null;
       if (LEVEL_SELECT_CATEGORIES.includes(issue.category)) {
@@ -1777,8 +1778,18 @@ window.PhotoAgentResults = (() => {
         levelRow.appendChild(select);
       }
 
-      li.appendChild(row);
-      if (levelRow) li.appendChild(levelRow);
+      if (levelRow) {
+        // Wrapper so the row and its selector wrap against each other alone --
+        // the debug reason line below must stay out of that flex flow (see
+        // .ap-face-issue-main in styles.css).
+        const main = document.createElement("div");
+        main.className = "ap-face-issue-main";
+        main.appendChild(row);
+        main.appendChild(levelRow);
+        li.appendChild(main);
+      } else {
+        li.appendChild(row);
+      }
 
       // The model's own reasoning is debug-only detail (same gate as the
       // box overlay's legend) -- a regular user just needs the verdict, not

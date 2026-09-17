@@ -2309,6 +2309,12 @@
        as .settings-fold's own separator from the pickers above it, so every
        section in this modal reads consistently. */
     #two-stage-edit-row { border-top: 1px solid var(--border); padding-top: 16px; }
+    /* .settings-fold-body is the one column that mixes .option-row
+       switches with a picker (笑容程度), and .option-row carries its own
+       16px side padding -- without matching it here the picker's label
+       and trigger sit flush against the modal edge while every switch
+       above them is inset. */
+    .settings-fold-body .option-pill-group { padding: 0 16px; }
 
     /* #advanced-settings-fold (人像修正設定) re-themed into a pill -- it's one
        shared node reparented between three homes now (see

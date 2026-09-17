@@ -2027,17 +2027,36 @@ body[data-theme="caramel"] .ios-thumb {
    label reads as this row's primary heading, the verdict as its detail. */
 .ap-face-issue-name { color: var(--text); font-weight: 700; flex: 0 0 76px; }
 .ap-face-issue-row .step-cb-label { white-space: nowrap; }
-/* On its own row below .ap-face-issue-row (hair/smile only), indented to
-   line up under .step-cb-label (the verdict text) rather than under the
-   toggle/label/icon columns before it -- 34px toggle + 10px gap + 76px
-   .ap-face-issue-name + 10px gap + 20px .adherence-icon + 10px gap = 160px.
-   Same idea the max-width:560px override below already used (with that
-   width's own smaller toggle-row gap and shorter name column), just now
-   the default instead of a narrow-viewport-only fallback. */
+/* Hair/smile only (results.js wraps just the row and its selector in this):
+   the level selector sits inline to the right of .step-cb-label (the verdict
+   text) whenever the panel is wide enough, and wraps onto its own line when
+   it isn't, indented to line up under that same verdict text rather than
+   under the toggle/label/icon columns before it -- 34px toggle + 10px gap +
+   76px .ap-face-issue-name + 10px gap + 20px .adherence-icon + 10px gap.
+   The wrap is the flex container's own doing, so it follows the panel's real
+   width rather than a viewport breakpoint: this padding-left is where a
+   wrapped line starts, and .ap-face-issue-row's matching negative margin
+   pulls the row itself back out to the list's left edge so it still lines up
+   with every other row.
+   Only those two elements live in here -- .ap-face-issue-reason stays a
+   plain block sibling below, so it can never be pulled onto the selector's
+   own flex line. */
+.ap-face-issue-main {
+  --face-issue-indent: 160px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 8px;
+  padding-left: var(--face-issue-indent);
+}
+.ap-face-issue-main > .ap-face-issue-row {
+  margin-left: calc(-1 * var(--face-issue-indent));
+}
 .ap-face-issue-level-row {
   position: static;
   transform: none;
-  margin: 8px 0 2px 160px;
+  margin: 0;
 }
 .ap-face-issue-toggle.ios-switch { width: 34px; height: 20px; cursor: pointer; flex-shrink: 0; }
 .ap-face-issue-toggle .ios-thumb { width: 14px; height: 14px; top: 3px; left: 3px; }
@@ -2072,9 +2091,16 @@ body[data-theme="caramel"] .ios-thumb {
   .ap-face-issue-row { gap: 6px; }
   .ap-face-issue-name { flex-basis: 64px; }
   /* Narrower toggle-row gap (6px) and .ap-face-issue-name (64px) at this
-     width shift the indent that lines .ap-face-issue-level-row up under
-     .step-cb-label: 34 + 3*6 + 64 + 20 = 136, vs. the 160px default above. */
-  .ap-face-issue-level-row { margin-left: 136px; }
+     width shift the indent that lines a wrapped .ap-face-issue-level-row up
+     under .step-cb-label: 34 + 3*6 + 64 + 20 = 136, vs. the 160px default. */
+  .ap-face-issue-main { --face-issue-indent: 136px; }
+}
+@media (max-width: 380px) {
+  /* Below this the panel is too narrow to hold the indent and the 96px
+     selector on one line, so a wrapped selector would push #ap-face-detail
+     into a horizontal scroll. Verdict alignment is worth less than fitting:
+     drop the indent and let the wrapped line start at the row's own edge. */
+  .ap-face-issue-main { --face-issue-indent: 0px; }
 }
 
 /* Theme selector in the global settings dialog. */
