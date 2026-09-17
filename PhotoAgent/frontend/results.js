@@ -133,6 +133,54 @@ window.PhotoAgentResults = (() => {
     return analysis?.auto_aspect_ratio || analysis?.recommended_aspect_ratio || "original";
   }
 
+  const REFRAME_AXIS_NAMES = new Set(["crop", "cropping", "framing", "reframing"]);
+  const RATIO_TOKEN_PATTERN = "\\d+\\s*[:：]\\s*\\d+";
+
+  function axesIncludeReframing(entry) {
+    const axes = Array.isArray(entry) ? entry : [entry];
+    return axes.some((axis) => REFRAME_AXIS_NAMES.has(String(axis || "").trim().toLowerCase()));
+  }
+
+  function reframingDetail(text) {
+    let value = String(text || "").trim().replace(/^\s*重新構圖\s*[:：]\s*/, "");
+    value = value.replace(
+      new RegExp(`^\\s*(?:以\\s*${RATIO_TOKEN_PATTERN}\\s*輸出比例|維持原圖輸出比例並)\\s*重新構圖\\s*[；;，,]*\\s*`),
+      ""
+    );
+    value = value.replace(/^\s*維持原圖(?:輸出)?比例\s*[，,；;]*\s*/, "");
+    value = value.replace(
+      new RegExp(`(?:裁(?:切)?成|調整(?:為|成)|改(?:為|成)|輸出(?:為|成)?|採用|選擇|使用)\\s*(?:比例\\s*)?${RATIO_TOKEN_PATTERN}(?:\\s*(?:比例|畫幅|構圖))?`, "gi"),
+      ""
+    );
+    value = value.replace(new RegExp(RATIO_TOKEN_PATTERN, "g"), "");
+    value = value.replace(/(?:改變|更改|調整|選擇|指定)(?:輸出)?(?:長寬比|畫幅比例)|(?:長寬比|畫幅比例)(?:改變|調整)/g, "");
+    return value
+      .replace(/\s*([，,；;。])\s*\1+/g, "$1")
+      .replace(/^[\s，,；;。:：]+|[\s，,；;]+$/g, "")
+      .replace(/\s{2,}/g, " ");
+  }
+
+  function syncPreviewReframingText(analysis, ratioLabel, cropPlan) {
+    const recipe = Array.isArray(analysis.retouch_recipe) ? [...analysis.retouch_recipe] : [];
+    const plan = Array.isArray(analysis.correction_plan) ? [...analysis.correction_plan] : [];
+    const axes = analysis.correction_axes || [];
+    axes.forEach((entry, index) => {
+      if (!axesIncludeReframing(entry) || index >= recipe.length) return;
+      const detail = reframingDetail(recipe[index])
+        || reframingDetail(plan[index])
+        || reframingDetail(analysis.crop_box?.reason)
+        || "依解析後的裁切框改善主體集中度與邊緣落點。";
+      if (!cropPlan) {
+        recipe[index] = "重新構圖：此比例下維持完整原圖（沒有有效裁切）";
+      } else if (ratioLabel === "original") {
+        recipe[index] = `重新構圖：維持原圖比例，${detail}`;
+      } else {
+        recipe[index] = `重新構圖：裁成${ratioLabel}，${detail}`;
+      }
+    });
+    return { ...analysis, retouch_recipe: recipe };
+  }
+
   function previewAspectRatio(pref) {
     if (!lastRender || !pref) return;
     const resultAnalysis = lastRender.analysis;
@@ -140,18 +188,16 @@ window.PhotoAgentResults = (() => {
       els.apRecipeList?.querySelectorAll('input[type="checkbox"]') || []
     );
     const recipeChecked = recipeInputs.map((input) => input.checked);
-    const reframeChecked = Array.from(
-      els.apRecipeList?.querySelectorAll("li") || []
-    ).some((item) =>
-      /^重新構圖\s*[:：]/.test(item.querySelector(".step-cb-label")?.textContent || "")
-      && item.querySelector('input[type="checkbox"]')?.checked
+    const reframeChecked = Array.from(els.apRecipeList?.querySelectorAll("li") || []).some(
+      (item) => /^重新構圖\s*[:：]/.test(item.querySelector(".step-cb-label")?.textContent || "")
+        && item.querySelector('input[type="checkbox"]')?.checked
     );
     // A rejected run keeps the pre-rejection crop proposal privately. When
     // the user checks that recipe again, preview the same restored geometry
     // the backend will execute instead of previewing the rejected run's
     // deliberately disabled crop_box.
     const savedReframing = resultAnalysis?._rejected_reframing_source;
-    const analysis = pref !== "original" && reframeChecked && savedReframing
+    const analysis = reframeChecked && savedReframing
       ? { ...resultAnalysis, ...savedReframing }
       : resultAnalysis;
     const label = aspectRatioForPref(analysis, pref);
@@ -159,12 +205,30 @@ window.PhotoAgentResults = (() => {
     const height = els.originalImg?.naturalHeight;
     if (!width || !height) return;
 
-    const shown = { ...analysis, recommended_aspect_ratio: label, _aspect_ratio_preview: pref };
-    if (shown.crop_box) shown.crop_box = { ...shown.crop_box, aspect_ratio: label };
+    let shown = { ...analysis, recommended_aspect_ratio: label, _aspect_ratio_preview: pref };
+    const cropSource = analysis?._reframing_geometry_source || analysis?.crop_box;
+    if (cropSource) shown.crop_box = { ...cropSource, aspect_ratio: label };
     // The crop the edit model would be handed, recomputed for this ratio --
     // null when nothing would be cropped, same as the backend's own contract.
-    shown.applied_crop_plan =
-      resolveCropBoxWithReport(shown.crop_box, shown, width, height).cropBox || null;
+    const geometryRatio = label === "original" ? `${width}:${height}` : label;
+    const geometryAnalysis = {
+      ...shown,
+      recommended_aspect_ratio: geometryRatio,
+      crop_box: shown.crop_box ? { ...shown.crop_box, aspect_ratio: geometryRatio } : shown.crop_box
+    };
+    let cropPlan = resolveCropBoxWithReport(
+      geometryAnalysis.crop_box, geometryAnalysis, width, height
+    ).cropBox || null;
+    if (!cropPlan && label !== "original") {
+      const fallbackCrop = {
+        enabled: true, x: 0, y: 0, w: 1, h: 1, aspect_ratio: geometryRatio
+      };
+      cropPlan = resolveCropBoxWithReport(
+        fallbackCrop, { ...geometryAnalysis, crop_box: fallbackCrop }, width, height
+      ).cropBox || null;
+    }
+    shown.applied_crop_plan = cropPlan;
+    if (reframeChecked) shown = syncPreviewReframingText(shown, label, cropPlan);
 
     renderResult({ ...lastRender, analysis: shown }, { keepView: true });
     Array.from(els.apRecipeList?.querySelectorAll('input[type="checkbox"]') || [])
