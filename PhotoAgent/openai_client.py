@@ -37,7 +37,6 @@ from prompts import (
     build_eye_repair_planning_response_schema,
     build_body_reshape_planning_instruction,
     build_body_reshape_planning_response_schema,
-    build_user_instruction_review_prompt,
     build_edit_prompt,
     build_gaze_only_edit_prompt,
     build_quality_check_prompt,
@@ -466,41 +465,24 @@ def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     return _analyze_photo_single_pass(image_bytes, aspect_ratio, advanced_options, analysis_model)
 
 
-# ── Step 3: user instruction review ───────────────────────────────────────────
+# ── Step 3: user instruction pass-through ─────────────────────────────────────
 
 def review_user_instruction(user_direction: str, analysis: dict, analysis_model: str = ANALYSIS_MODEL):
-    """Returns (result, prompt, usage) -- usage is {"model", "usage"}, both
-    usage and prompt are None when no GPT call was made (no user direction to
-    review)."""
+    """Pass the user's text through to the editor without an LLM review call."""
     trimmed = (user_direction or "").strip()
-    if not trimmed:
-        return {
-            "has_user_direction": False,
-            "user_intent_summary": "",
-            "normalized_user_direction": "",
-            "explicit_priorities": [],
-            "explicit_prohibitions": [],
-            "unspecified_agent_freedom": ["可依照片分析保守改善光線、色彩、清晰度、構圖與干擾。"],
-            "crop_or_framing_requested": False,
-            "crop_guidance": "使用者未指定裁切，Agent 可依分析保守判斷。",
-            "qa_focus": [],
-            "conflicts": [],
-            "warning": "",
-        }, None, None
-
-    prompt = build_user_instruction_review_prompt(trimmed, analysis)
-    payload = _responses_payload(
-        analysis_model, [{"type": "input_text", "text": prompt}],
-        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-    )
-    data = _post_json(OPENAI_RESPONSES_URL, payload, "User instruction review failed")
-    result = _parse_json_from_text(_extract_output_text(data))
-    result["has_user_direction"] = True
-    return result, prompt, {
-        "model": analysis_model,
-        "usage": data.get("usage"),
-        "reasoning_effort": ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-    }
+    return {
+        "has_user_direction": bool(trimmed),
+        "user_intent_summary": trimmed,
+        "normalized_user_direction": trimmed,
+        "explicit_priorities": [],
+        "explicit_prohibitions": [],
+        "unspecified_agent_freedom": ["可依照片分析保守改善光線、色彩、清晰度、構圖與干擾。"] if not trimmed else [],
+        "crop_or_framing_requested": False,
+        "crop_guidance": "使用者未指定裁切，Agent 可依分析保守判斷。" if not trimmed else "",
+        "qa_focus": [],
+        "conflicts": [],
+        "warning": "",
+    }, None, None
 
 
 # ── Step 5: image edit ─────────────────────────────────────────────────────────

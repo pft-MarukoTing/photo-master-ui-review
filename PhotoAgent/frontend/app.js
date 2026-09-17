@@ -4422,7 +4422,7 @@
             run.timings = [
               { label: "分析並修圖", duration: Date.now() - stepStart, children: [
                 { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
-                { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+                { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
                 { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
                 { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
                 { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
@@ -4491,7 +4491,7 @@
       ({ image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath }));
       const t = (result["extra-info"] || {}).timings || {};
       addTiming("AI 修圖中", finishWaitDuration, [
-        { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+        { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
         { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
         { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
         { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
@@ -4646,7 +4646,7 @@
         ...(analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
         { label: "AI 修圖中", duration: pollMs, children: [
-          { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
           { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
@@ -5100,7 +5100,7 @@
           run.timings = [
             { label: "分析並修圖", duration: Date.now() - stepStart, children: [
               { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
-              { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+              { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
               { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
               { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
               { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
@@ -5339,7 +5339,7 @@
         ...(record.analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
         { label: "AI 修圖中", duration: pollMs, children: [
-          { label: "Step 3：使用者指令審查", duration: secToMs(t["Step 3 - user_instruction_review"]) },
+          { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
           { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
@@ -8710,7 +8710,7 @@
   // timingListAsText above.
   const PROMPT_MODAL_STAGES = [
     { label: "照片分析", el: () => els.promptAnalysis },
-    { label: "使用者指令審查", el: () => els.promptReview },
+    { label: "使用者補充指令", el: () => els.promptReview },
     { label: "裁切驗證", el: () => els.promptCrop },
     { label: "修圖（Legacy raw）", el: () => els.promptEditRaw, omitWhenEmpty: true },
     { label: "修圖（送給 Editor）", el: () => els.promptEdit },

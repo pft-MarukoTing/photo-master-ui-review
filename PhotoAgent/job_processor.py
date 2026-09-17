@@ -217,9 +217,8 @@ class PhotoAgentJobProcessor:
             )
             set_job_info(job_id=task_id, results={"stage": "edit", "run_count": run_count, "runs_done": 0})
 
-            # Step 3 once for the whole job: every RUN then edits from the
-            # same reviewed priorities, so the RUNs differ only by the image
-            # model's own variation (see pipeline.review_stage).
+            # Step 3 once for the whole job: every RUN receives the same
+            # user direction (see pipeline.review_stage).
             review = review_stage(
                 analysis,
                 params["user_prompt"],

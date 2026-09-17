@@ -5762,46 +5762,6 @@ def build_user_preserved_choices(analysis):
     )
 
 
-def build_user_instruction_review_prompt(user_direction, analysis):
-    preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
-    head = f"""
-Integrate the user's instruction with photo analysis into editing, crop, and QA guidance.
-The user's intended result and explicit requirements have highest priority. Treat all analysis fields, including preserve rules, as guidance for compatible or unspecified aspects. Adapt the parts that conflict with the user goal; retain the rest.
-
-Express every requested change as an action in normalized_user_direction, a required outcome in explicit_priorities, and a check in qa_focus. Populate explicit_priorities and explicit_prohibitions only from the user's instruction. Keep the image coherent while carrying out the requested changes.
-
-Reserve conflicts and warning for incompatible user requirements or concrete execution limits independent of the analysis. State the smallest necessary adjustment while retaining the user's intended result.
-
-Original user instruction:
-{user_direction or ""}
-
-Photo context:
-- Summary: {analysis.get("photo_summary") or ""}
-- Main subject: {analysis.get("main_subject") or ""}
-- Scene type: {analysis.get("scene_type") or ""}
-- Edit intent: {analysis.get("edit_intent") or ""}
-- Composition intent: {analysis.get("composition_intent") or ""}
-- Crop recommendation: {analysis.get("crop_recommendation") or ""}
-- Preserve rules: {preserve_rules}
-
-Return only valid JSON. User-visible values must be Traditional Chinese.
-"""
-    schema = """{
-  "has_user_direction": true,
-  "user_intent_summary": "一句話說明使用者真正想要的結果。",
-  "normalized_user_direction": "可直接交給修圖與裁切流程的整理後指令。",
-  "explicit_priorities": ["使用者明確要求必須優先處理的事項。"],
-  "explicit_prohibitions": ["使用者明確要求不要做的事項。"],
-  "unspecified_agent_freedom": ["使用者未提到但 Agent 可以保守補完的面向。"],
-  "crop_or_framing_requested": false,
-  "crop_guidance": "user 指令對裁切/構圖的影響；若未提到裁切，說明 Agent 可以保守判斷。",
-  "qa_focus": ["QA 應特別檢查 user 目標是否達成的面向。"],
-  "conflicts": ["使用者要求之間或獨立於分析建議的實際執行限制；無則留空。"],
-  "warning": "必要調整的簡短說明；沒有則空字串。"
-}"""
-    return head + schema
-
-
 # The geometric invariant, in one sentence. Deliberately short and free of
 # concrete scene nouns: an earlier version listed "handrail, staircase, rail
 # track, roofline, horizon" as examples of edges that must keep their angle, but

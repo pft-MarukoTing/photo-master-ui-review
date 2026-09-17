@@ -57,8 +57,8 @@ MODELS = {
     "gaze_repair": "nano-banana-2",
 }
 
-# UI-selectable analysis models (Steps 2/3/6 -- analyze_photo,
-# review_user_instruction, quality_check_photo all share whichever model a
+# UI-selectable analysis models (Steps 2/6 -- analyze_photo and
+# quality_check_photo share whichever model a
 # request picks), overridable per request via analysis_model the same way
 # image_model overrides "image" above. Each maps to the reasoning.effort sent
 # with its Responses API calls: None omits the "reasoning" field entirely,

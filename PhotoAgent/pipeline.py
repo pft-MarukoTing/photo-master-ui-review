@@ -314,7 +314,7 @@ def _normalize_quality_check_result(result, analysis, execution_plan, *, status=
 def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"]) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
-    The user's instruction is reviewed in finish_stage instead of here --
+    The user's instruction is passed through in finish_stage instead of here --
     it's collected on the analyze-preview screen, shown to the user only
     after this stage's result comes back, so there's nothing to review yet
     at this point.
@@ -421,36 +421,18 @@ def review_stage(
     overwrite_prompt: bool = False,
     analysis_model: str = MODELS["analysis"],
 ) -> dict:
-    """Step 3: turn the typed instruction into structured editing priorities.
+    """Step 3: pass the typed instruction through for every editor prompt mode.
 
-    Kept out of finish_stage so a multi-RUN job reviews the instruction once
-    and every RUN edits from the same priorities. Reviewing per RUN made this
-    LLM call's own variance -- not the image model's -- the biggest difference
-    between RUNs: it re-decides per call whether a request that conflicts with
-    a preserve rule survives, so RUN 1 could be told to add poster text while
-    RUNs 2-3 were told the fidelity rules forbid it.
-
-    Cannot move into analyze_stage: the instruction is typed on the
-    analyze-preview screen, which only exists once analysis has returned.
-
-    Returns {"user_instruction", "prompt", "usage", "duration"}.
+    The instruction arrives after the analyze-preview screen. Return the same
+    shape used by finish_stage, without an LLM prompt or usage.
     """
     t0 = time.time()
-    logger.info("Step 3: reviewing user instruction (has_prompt=%s, overwrite_prompt=%s)", bool(user_prompt), overwrite_prompt)
-    if overwrite_prompt and (user_prompt or "").strip():
-        # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令):
-        # the raw text becomes the WHOLE edit-model prompt verbatim (see
-        # prompts.py's build_edit_prompt), so there is nothing here to
-        # structure into priorities/prohibitions -- skip the LLM review call.
-        user_instruction = {
-            "has_user_direction": True,
-            "normalized_user_direction": user_prompt.strip(),
-            "overwrite_prompt": True,
-        }
-        review_prompt = None
-        step3_usage = None
-    else:
-        user_instruction, review_prompt, step3_usage = review_user_instruction(user_prompt, analysis, analysis_model=analysis_model)
+    logger.info("Step 3: passing through user instruction (has_prompt=%s, overwrite_prompt=%s)", bool(user_prompt), overwrite_prompt)
+    user_instruction, review_prompt, step3_usage = review_user_instruction(
+        user_prompt, analysis, analysis_model=analysis_model,
+    )
+    if overwrite_prompt and user_instruction.get("has_user_direction"):
+        user_instruction["overwrite_prompt"] = True
     duration = time.time() - t0
     logger.info("Step 3 done in %.2fs: has_direction=%s", duration, user_instruction.get("has_user_direction"))
     return {
@@ -476,10 +458,10 @@ def finish_stage(
     single_pass_edit: bool = True,
     review: dict = None,
 ) -> dict:
-    """Steps 3, 5-6: review user instruction, then AI edit + QA (or local enhancement).
+    """Steps 3, 5-6: pass user instruction through, then AI edit + QA (or local enhancement).
 
     review: a review_stage result to reuse instead of calling Step 3 here, so
-    every RUN of one job edits from the same reviewed priorities.
+    every RUN of one job edits from the same user instruction.
 
     There is no separate crop-validation step: the crop guidance from
     analyze_stage (crop_box, roi_box, protected_regions, ...) is passed
@@ -519,9 +501,9 @@ def finish_stage(
     timings = dict(analysis.get("timings") or {})
     usage = dict(analysis.get("usage") or {})
 
-    # Step 3 — review user instruction (collected on the analyze-preview
+    # Step 3 — pass through user instruction (collected on the analyze-preview
     # screen, so it's only available now that this stage has started).
-    # A multi-RUN job reviews once in job_processor and passes it in here.
+    # A multi-RUN job prepares it once in job_processor and passes it in here.
     review = review or review_stage(
         analysis, user_prompt,
         overwrite_prompt=overwrite_prompt, analysis_model=analysis_model,
