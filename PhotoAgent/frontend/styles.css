@@ -1554,8 +1554,9 @@ body[data-theme="caramel"] .upload-main-col {
   flex-shrink: 0;
 }
 /* Hovering/focusing either half lifts the whole control together -- both
-   children opt out of .btn-grad's own per-element hover feedback (further
-   down) so only this one, shared transform+shadow ever fires. */
+   children keep this shared transform+shadow, but each one ALSO gets its
+   own background tint on hover (below) so it's clear which of the two
+   buttons the cursor is actually over. */
 .split-run:hover,
 .split-run:focus-within {
   box-shadow: 0 14px 36px rgba(var(--accent-rgb),.34);
@@ -1573,10 +1574,14 @@ body[data-theme="caramel"] .upload-main-col {
   background: transparent;
   box-shadow: none;
   border-radius: 20px 0 0 20px;
+  transition: background-color .15s;
 }
+/* Per-button hover tint -- a soft dark overlay on just the half under the
+   cursor, on top of the shared gradient, so the two halves read as separate
+   buttons instead of one uniform pill. Keeps the whole-control lift above
+   (transform/box-shadow) instead of re-declaring it here. */
 #start-btn.split-main:hover {
-  box-shadow: none;
-  transform: none;
+  background: rgba(0,0,0,.12);
 }
 #start-full-btn.split-secondary {
   height: 41px;
@@ -1586,10 +1591,10 @@ body[data-theme="caramel"] .upload-main-col {
   /* A subtle divider keeps the two click targets readable while the shared
      outer background makes them one connected button. */
   border-left: 1px solid rgba(var(--on-surface-rgb),.25);
+  transition: background-color .15s;
 }
 #start-full-btn.split-secondary:hover {
-  box-shadow: none;
-  transform: none;
+  background: rgba(0,0,0,.12);
 }
 
 /* Drop zone -- flex:1 makes it the piece that grows/shrinks to fill
