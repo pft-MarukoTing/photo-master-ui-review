@@ -1669,6 +1669,19 @@
   // entirely: there's only ever one fetch, and nothing is visible until it
   // resolves either way. Resolves (never rejects) even on error, since the
   // caller still has to proceed and show whatever it's got.
+  // Keyed by imgEl -- if a second setImgSrcPreloaded call for the same
+  // shared element (els.generatedImg/originalImg are singletons reused
+  // across every case, not per-record) starts before an earlier one's
+  // onload/onerror has fired, that earlier call's own resolve is about to
+  // be clobbered below and would then never run, permanently orphaning its
+  // mask (a switched-away-from case's photo, stuck floating over
+  // .photo-frame-wrap forever). Handing the still-pending mask off to
+  // whichever call is actually going to finish next, instead of letting
+  // each call only ever clean up its own, guarantees it gets removed at
+  // the very next load/error on this element regardless of how many
+  // switches raced in the meantime.
+  const pendingPreloadMasks = new WeakMap();
+
   async function setImgSrcPreloaded(imgEl, src) {
     if (imgEl.src === src && imgEl.complete) return;
     // .photo-frame shrink-wraps to whatever imgEl is currently showing (see
@@ -1683,14 +1696,15 @@
     // whole gap instead. It's the same already-decoded image already on
     // screen, so this costs no extra fetch even though the real result/
     // history endpoint isn't cacheable (see below).
-    let mask = null;
+    let mask = pendingPreloadMasks.get(imgEl) || null;
     const wrap = imgEl.closest(".photo-frame-wrap");
-    if (wrap && imgEl.complete && imgEl.currentSrc) {
+    if (!mask && wrap && imgEl.complete && imgEl.currentSrc) {
       mask = imgEl.cloneNode(true);
       mask.removeAttribute("id");
       mask.setAttribute("aria-hidden", "true");
       wrap.appendChild(mask);
     }
+    if (mask) pendingPreloadMasks.set(imgEl, mask);
     imgEl.style.visibility = "hidden";
     await new Promise((resolve) => {
       imgEl.onload = () => { imgEl.onload = null; imgEl.onerror = null; resolve(); };
@@ -1698,6 +1712,7 @@
       imgEl.src = src;
     });
     imgEl.style.visibility = "";
+    if (mask && pendingPreloadMasks.get(imgEl) === mask) pendingPreloadMasks.delete(imgEl);
     if (mask) mask.remove();
   }
 

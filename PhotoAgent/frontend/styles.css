@@ -2622,6 +2622,16 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.side-panel-layout .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame img {
     max-height: 100%;
   }
+  /* setImgSrcPreloaded's stand-in clone (app.js) needs the same height:100%
+     escape hatch as the real img just above -- without it, this rule's own
+     base 400px cap (.photo-frame-wrap > .compare-img further down) still
+     applied while the real photo was actually rendered taller via that
+     override, so every case switch visibly snapped the on-screen photo down
+     to 400px for the whole load (the clone standing in at its capped size)
+     before popping back up to full height once the new image took over. */
+  body.side-panel-layout .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame-wrap > .compare-img {
+    max-height: 100%;
+  }
   /* align-self:stretch (not center, not flex-start) -- gives
      #results-analysis-slot the row's own REAL height (the same one
      .compare-card/.photo-frame already stretch to fill, further up), so
