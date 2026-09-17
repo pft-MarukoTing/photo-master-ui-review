@@ -138,6 +138,10 @@
   // canvas. Backend history uses snake_case; live records use camelCase.
   // Values are Unix seconds so both paths can share the same renderer.
   let currentCaseTimes = { uploadedAt: null, modifiedAt: null, compatibilityVersion: null, compatible: null, revealExtra: false };
+  // History entries are keyed by image_key. Keep the currently viewed key so
+  // a finished history case can be marked as archived when its revise panel
+  // discovers that its analysis is no longer compatible.
+  let currentCaseHistoryImageKey = null;
 
   function timestampValue(value) {
     const number = Number(value);
@@ -189,6 +193,7 @@
   }
 
   function setCurrentCaseTimes(source = {}, revealExtra = false) {
+    currentCaseHistoryImageKey = source?.image_key || null;
     currentCaseTimes = {
       uploadedAt: timestampValue(source.uploaded_at ?? source.uploadedAt ?? source.ts),
       modifiedAt: timestampValue(source.modified_at ?? source.modifiedAt),
@@ -246,6 +251,22 @@
   // generic error after the fact. null until /api/config resolves; treated
   // as "unknown, assume compatible" until then -- see isCompatible.
   let minCompatibleVersion = null;
+  let compatibilityConfigRequest = null;
+
+  async function ensureCompatibilityConfigLoaded() {
+    if (minCompatibleVersion != null) return;
+    if (!compatibilityConfigRequest) {
+      compatibilityConfigRequest = getUiConfig().then((cfg) => {
+        if (typeof cfg.compatibilityVersion === "number") {
+          currentCompatibilityVersion = cfg.compatibilityVersion;
+        }
+        if (typeof cfg.minCompatibleVersion === "number") {
+          minCompatibleVersion = cfg.minCompatibleVersion;
+        }
+      });
+    }
+    await compatibilityConfigRequest;
+  }
 
   // Same rule as compatibility_version.py's is_compatible(), evaluated client-side.
   // Not authoritative (continue_job's own check is), just lets the UI bail
@@ -4341,6 +4362,10 @@
     // useCombinedJob has no analysis yet at this point (a fresh analyze,
     // always compatible) -- nothing to check.
     if (!singleFlowState.useCombinedJob && !isCompatible(singleFlowState.analysis)) {
+      // Keep the history tile in sync with the read-only state shown here.
+      // This is reached for completed history cases, whose compatibility is
+      // checked from the restored result rather than /analyze/result.
+      markHistoryCaseArchived();
       showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
       return;
     }
@@ -4829,6 +4854,7 @@
     // only there would leak the PREVIOUS case's lock state into this case's
     // initial build (and leave this case's own lock one case late).
     const readOnly = !isCompatible(singleFlowState.analysis);
+    if (readOnly) markHistoryCaseArchived();
     setAnalysisPreviewDisabled(readOnly);
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
     // Paint this record's global 人像修正設定 independently before restoring any
@@ -5605,9 +5631,10 @@
       analyzed: "待修圖",
       processing: "修圖中",
       done: "修圖完成",
-      error: "失敗"
+      error: "失敗",
+      archived: "舊版封存"
     }[record.status] || "";
-    if (runs.length > 1) {
+    if (record.status !== "archived" && runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
       if (runsRunning) badge.textContent = `修圖中 (${runsDone}/${runs.length})`;
       else if (runsDone) badge.textContent = `修圖完成 (${runsDone}/${runs.length})`;
@@ -5813,6 +5840,7 @@
       removeHistoryCubeFromDom(li);
       historyJobsByKey.delete(job.image_key);
       historyTileElsByKey.delete(job.image_key);
+      archivedHistoryKeys.delete(job.image_key);
       // Keeps historyDrawerOffset in sync with the server-side list this
       // deleted entry came out of -- otherwise a later scroll-triggered
       // loadHistoryDrawerPage would request an offset one too high and
@@ -5844,6 +5872,7 @@
       if (els.historyList) els.historyList.innerHTML = "";
       if (els.historyEmpty) els.historyEmpty.hidden = false;
       if (els.historyClearAllBtn) els.historyClearAllBtn.hidden = true;
+      archivedHistoryKeys.clear();
       historyDrawerOffset = 0;
       historyDrawerHasMore = false;
       closeHistoryDrawer();
@@ -5887,10 +5916,66 @@
   let historySelectMode = false;
   const selectedHistoryKeys = new Set();
   const historyJobsByKey = new Map();
-  // image_key -> that tile's <li>, so a bulk delete (handleDeleteSelectedHistoryClick)
-  // can remove exactly the right DOM nodes without having to re-query for
-  // them -- populated/cleared alongside historyJobsByKey.
+  // image_key -> that tile's <li>, so a compatibility decision can update the
+  // tile's .rc-badge immediately and a bulk delete (handleDeleteSelected-
+  // HistoryClick) can remove exactly the right DOM nodes without having to
+  // re-query for them. All rendered tiles are indexed; historyJobsByKey still
+  // contains only tiles eligible for selection/download.
   const historyTileElsByKey = new Map();
+  // Compatibility is derived from each case's analysis while its history
+  // tile renders (and may also be rediscovered when that case opens). Cache
+  // the decision for this page so later rerenders keep the same badge without
+  // introducing a synthetic status field in Redis.
+  const archivedHistoryKeys = new Set();
+
+  function applyHistoryArchivedState(job, li = historyTileElsByKey.get(job?.image_key)) {
+    const archived = job?.image_key && archivedHistoryKeys.has(job.image_key);
+    if (!job?.image_key || !archived || !li) return false;
+    archivedHistoryKeys.add(job.image_key);
+    li.classList.remove("analyzing", "processing", "analyzed", "done", "error");
+    li.classList.add("archived");
+    const badge = li.querySelector(".rc-badge");
+    if (badge) badge.textContent = "舊版封存";
+    return true;
+  }
+
+  function markHistoryCaseArchived(job = null) {
+    const imageKey = job?.image_key || currentCaseHistoryImageKey;
+    if (!imageKey) return;
+    archivedHistoryKeys.add(imageKey);
+    const historyJob = job || historyJobsByKey.get(imageKey) || { image_key: imageKey };
+    applyHistoryArchivedState(historyJob);
+  }
+
+  // The history row itself does not store a compatibility status. Resolve
+  // the same analysis object the analysis/result page would use, then apply
+  // the exact same isCompatible() rule that makes that page read-only.
+  async function historyJobNeedsArchiveBadge(job, jobIds, statuses) {
+    try {
+      await ensureCompatibilityConfigLoaded();
+      if (job.stage === "analyze") {
+        if (statuses[0]?.status !== "success") return false;
+        const analyzeResult = await getAnalyzeResult(jobIds[0]);
+        const analysis = analyzeResult.result?.analysis;
+        // Prefer the backend's authoritative result when available; the
+        // local check keeps this working with an older API response too.
+        return analyzeResult.result?.compatible === false
+          || (analysis ? !isCompatible(analysis) : false);
+      }
+
+      const doneIdx = statuses.findIndex((status) => status.status === "success");
+      if (doneIdx === -1) return false;
+      const result = await getJobRuns(jobIds[doneIdx], { path: job.path });
+      const analysis = result.result?.analysis
+        || result.runs?.find((run) => run.result?.analysis)?.result.analysis;
+      return analysis ? !isCompatible(analysis) : false;
+    } catch {
+      // Compatibility lookup is supplemental to the ordinary job-status
+      // render. A transient metadata failure must not turn a valid history
+      // tile into the unrelated "無法取得狀態" state.
+      return false;
+    }
+  }
 
   function updateHistorySelectionButtons() {
     const count = selectedHistoryKeys.size;
@@ -6049,6 +6134,7 @@
       }
       historyJobsByKey.delete(key);
       historyTileElsByKey.delete(key);
+      archivedHistoryKeys.delete(key);
     });
     // Same offset bookkeeping as handleDeleteHistoryEntry, once per entry
     // actually removed from the drawer (a demo-gallery selection, if any,
@@ -6132,7 +6218,8 @@
       // batch-sidebar-item's existing status-driven styling (done/error/
       // processing colors, dimming) -- reused as-is rather than duplicated.
       const isAnalyzingJob = job.stage === "analyze";
-      li.className = `history-cube batch-sidebar-item ${isAnalyzingJob ? "analyzing" : "processing"}`;
+      const isArchivedJob = archivedHistoryKeys.has(job.image_key);
+      li.className = `history-cube batch-sidebar-item ${isArchivedJob ? "archived" : (isAnalyzingJob ? "analyzing" : "processing")}`;
       // Local-path jobs keep their srcKeys forever (see account.py), so the
       // original photo is available immediately -- no need to wait for the
       // status check below just to show *something* here. AIPoC-path jobs
@@ -6145,7 +6232,7 @@
       const processingSpinner = '<div class="rc-spinner"></div>';
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}${processingSpinner}</div>
-        <span class="rc-badge">${isAnalyzingJob ? "分析中" : "修圖中"}</span>
+        <span class="rc-badge">${isArchivedJob ? "舊版封存" : (isAnalyzingJob ? "分析中" : "修圖中")}</span>
         <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
         <span class="history-cube-check">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
@@ -6154,6 +6241,7 @@
         </span>
       `;
       currentGrid.appendChild(li);
+      if (job.image_key) historyTileElsByKey.set(job.image_key, li);
       const removeBtn = li.querySelector(".history-cube-remove");
       if (removeBtn) {
         removeBtn.addEventListener("click", (e) => {
@@ -6178,12 +6266,16 @@
         const statuses = await Promise.all(
           jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
         );
+        if (await historyJobNeedsArchiveBadge(job, jobIds, statuses)) {
+          markHistoryCaseArchived(job);
+        }
         // getJobStatusOnce already asks the backend for `error`/`error_message`
         // (see /status/<job_id>'s keyToGet) -- the failed-tile click handlers
         // below run that through the same friendlyError() wrapping used for
         // every other run-status error, instead of showing the raw
         // error_message (often a bare Python exception string) as-is.
         const failureReason = (s) => friendlyError({ message: s?.error_message || s?.error, code: s?.error });
+        const archived = applyHistoryArchivedState(job, li);
         // job.stage === "analyze" (see api.py's /analyze, account.py's
         // record_history) -- a paused-for-review upload (#start-btn's own
         // analyze-only flow, see .split-run in index.html) that
@@ -6195,8 +6287,8 @@
           const analyzed = statuses[0]?.status === "success";
           const failed = statuses[0]?.status === "error";
           if (failed) {
-            li.className = "history-cube batch-sidebar-item error";
-            if (badge) badge.textContent = "失敗";
+            li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
+            if (badge) badge.textContent = archived ? "舊版封存" : "失敗";
             media?.querySelector(".rc-spinner")?.remove();
             markHistoryTileSelectable(li, job);
             li.addEventListener("click", () => {
@@ -6208,11 +6300,11 @@
             });
           } else {
             if (analyzed) {
-              li.className = "history-cube batch-sidebar-item analyzed";
-              if (badge) badge.textContent = "待修圖";
+              li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "analyzed"}`;
+              if (badge) badge.textContent = archived ? "舊版封存" : "待修圖";
               media?.querySelector(".rc-spinner")?.remove();
             } else if (badge) {
-              badge.textContent = "分析中";
+              badge.textContent = archived ? "舊版封存" : "分析中";
             }
             li.addEventListener("click", async () => {
               if (li.classList.contains("opening")) return;
@@ -6230,8 +6322,11 @@
         if (doneIdx !== -1) {
           li.className = "history-cube batch-sidebar-item done";
           markHistoryTileSelectable(li, job);
+          applyHistoryArchivedState(job, li);
           const doneCount = statuses.filter((s) => s.status === "success").length;
-          if (badge) badge.textContent = jobIds.length > 1 ? `修圖完成（${doneCount}/${jobIds.length}）` : "修圖完成";
+          if (badge) badge.textContent = archived
+            ? "舊版封存"
+            : (jobIds.length > 1 ? `修圖完成（${doneCount}/${jobIds.length}）` : "修圖完成");
           // Thumbnail route only exists for the local path (see
           // photo-agent-api.js's resultThumbnailUrl) -- AIPoC-path jobs fall
           // back to the full-res image, same as before this change.
@@ -6273,8 +6368,8 @@
             }
           });
         } else if (statuses.every((s) => s.status === "error")) {
-          li.className = "history-cube batch-sidebar-item error";
-          if (badge) badge.textContent = "失敗";
+          li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
+          if (badge) badge.textContent = archived ? "舊版封存" : "失敗";
           // Drop only the spinner -- keep the reference thumb (if any) so the
           // tile still shows a recognizable photo instead of going blank; the
           // badge/border already communicate the failure.
@@ -6296,7 +6391,7 @@
             showNoticeModal(failureReason(failed));
           });
         } else {
-          if (badge) badge.textContent = "修圖中";
+          if (badge) badge.textContent = archived ? "舊版封存" : "修圖中";
           // Still clickable -- otherwise there's no way to come back and
           // check on a record that was still processing last time this list
           // was fetched (see viewProcessingHistoryRecord). The opening guard
@@ -6314,8 +6409,9 @@
           });
         }
       } catch (err) {
-        li.className = "history-cube batch-sidebar-item error";
-        if (badge) badge.textContent = "無法取得狀態";
+        const archived = applyHistoryArchivedState(job, li);
+        li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
+        if (badge) badge.textContent = archived ? "舊版封存" : "無法取得狀態";
         markHistoryTileSelectable(li, job);
         li.addEventListener("click", () => {
           if (historySelectMode) {
@@ -6934,6 +7030,9 @@
       // has no finished photo yet for a read-only view to show instead, so
       // there's nothing to gain by bouncing them before they've even looked).
       setCurrentCaseAnalysisVersion(analysis, { compatible: analyzeResult.result.compatible });
+      if (analyzeResult.result.compatible === false || !isCompatible(analysis)) {
+        markHistoryCaseArchived(job);
+      }
     } catch (error) {
       if (historyViewToken !== myToken) return; // navigated away meanwhile
       showBatchMainError({ previewUrl, error: friendlyError(error) });

@@ -2098,6 +2098,14 @@
       color: #fff;
       text-shadow: 0 1px 3px rgba(0,0,0,.6);
     }
+    .batch-sidebar-item.archived .rc-badge {
+      background: rgba(75,75,85,.72);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(210,210,220,.5);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
+    }
     /* Light themes: same white text over a light tint reads as washed
        out/low-contrast, so these use a lighter tint + a solid, darker
        version of each status color as text instead, same as .field-input's
@@ -3337,6 +3345,15 @@
       color: #fff;
       backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
+    }
+    /* A history case whose analysis is below the current compatibility floor
+       remains viewable/downloadable, but cannot be revised safely. */
+    .batch-sidebar-item.archived .rc-badge::before { content: "▣"; }
+    .history-cube.batch-sidebar-item.archived .rc-badge {
+      background: rgba(75,75,85,.72);
+      border: 1px solid rgba(210,210,220,.5);
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,.6);
     }
     /* Top-right corner, opposite the badge (bottom-left) -- deletes just
        this history entry (see handleDeleteHistoryEntry, app.js); the job(s)
