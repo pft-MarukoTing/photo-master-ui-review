@@ -137,7 +137,7 @@
   // Lifecycle metadata for the case currently shown in the shared result
   // canvas. Backend history uses snake_case; live records use camelCase.
   // Values are Unix seconds so both paths can share the same renderer.
-  let currentCaseTimes = { uploadedAt: null, modifiedAt: null, revealExtra: false };
+  let currentCaseTimes = { uploadedAt: null, modifiedAt: null, version: null, compatible: null, revealExtra: false };
 
   function timestampValue(value) {
     const number = Number(value);
@@ -152,7 +152,7 @@
 
   function renderCurrentCaseTimes() {
     if (!els.resultCaseTimes) return;
-    const { uploadedAt, modifiedAt, revealExtra } = currentCaseTimes;
+    const { uploadedAt, modifiedAt, compatibilityVersion, compatible, revealExtra } = currentCaseTimes;
     // Upload/modified timestamps are testbed/admin detail, not something a
     // regular user's own result view needs -- same isDebugUiActive-or-
     // revealDetailExtra gate #show-prompt-btn/#results-detail-extra already
@@ -168,14 +168,47 @@
       els.resultModifiedTime.textContent = modifiedAt ? formatCaseTimestamp(modifiedAt) : "";
       els.resultModifiedTime.dateTime = modifiedAt ? new Date(modifiedAt * 1000).toISOString() : "";
     }
+    if (els.resultCompatibilityVersionItem) els.resultCompatibilityVersionItem.hidden = compatibilityVersion == null;
+    if (els.resultCompatibilityVersion) {
+      if (compatibilityVersion == null) {
+        els.resultCompatibilityVersion.textContent = "";
+      } else {
+        // "產生版本" is this case's own analysis.compatibility_version (stamped
+        // when it was analyzed); "系統版本" is what compatibility_version.py's
+        // CURRENT_COMPATIBILITY_VERSION this deployment is running now
+        // (currentCompatibilityVersion, from /api/config) -- shown side by
+        // side so a mismatch is obvious at a glance. compatible is only
+        // known where the backend actually told us (viewAnalyzeHistoryRecord's
+        // /analyze/result call) -- null elsewhere (fresh analyze, imported
+        // result folders, ...), where the two numbers alone still tell the story.
+        const parts = [`產生版本 v${compatibilityVersion}`];
+        if (currentCompatibilityVersion != null) parts.push(`系統版本 v${currentCompatibilityVersion}`);
+        els.resultCompatibilityVersion.textContent = parts.join(" / ") + (compatible === false ? "（已過舊，建議重新處理）" : "");
+      }
+    }
   }
 
   function setCurrentCaseTimes(source = {}, revealExtra = false) {
     currentCaseTimes = {
       uploadedAt: timestampValue(source.uploaded_at ?? source.uploadedAt ?? source.ts),
       modifiedAt: timestampValue(source.modified_at ?? source.modifiedAt),
+      compatibilityVersion: null,
+      compatible: null,
       revealExtra
     };
+    renderCurrentCaseTimes();
+  }
+
+  // Records which compatibility_version (compatibility_version.py) the case now
+  // shown in the result canvas was produced with -- called once that case's
+  // analysis object is actually in hand, separately from setCurrentCaseTimes
+  // above (which fires first, from the job/history row, before the analysis
+  // itself has been fetched). compatible is the compatible flag
+  // /analyze/result returns, when the caller has it; omitted callers (fresh
+  // analyze, imported result folders) just show the bare version number.
+  function setCurrentCaseAnalysisVersion(analysis, { compatible = null } = {}) {
+    currentCaseTimes.compatibilityVersion = analysis ? (analysis.compatibility_version ?? 0) : null;
+    currentCaseTimes.compatible = compatible;
     renderCurrentCaseTimes();
   }
 
@@ -199,6 +232,30 @@
   // controls whether the corresponding review controls are rendered and
   // whether the client forwards body selections on submit.
   let isBodyReshapeEnabled = window.PhotoAgentConfig?.enableBodyReshape !== false;
+  // This deployment's own compatibility_version (compatibility_version.py), fetched
+  // via /api/config below as compatibilityVersion -- "compatibility" (not
+  // just "version") to stay distinct from /api/version's unrelated frontend/
+  // worker build version and from a client's own appVer. Shown in debug mode
+  // next to a case's own compatibility version (setCurrentCaseAnalysisVersion)
+  // so the two can be compared directly. null until that fetch resolves.
+  let currentCompatibilityVersion = null;
+  // The floor below which continue_job's own check (backend/routes/api.py)
+  // rejects a resumed analysis -- mirrored here so finishSingleFlow (this
+  // app's single choke point for every "Run"/revise click, regardless of
+  // which history-view path set singleFlowState.analysis) can show a
+  // friendly hint before submitting, instead of only surfacing continue_job's
+  // generic error after the fact. null until /api/config resolves; treated
+  // as "unknown, assume compatible" until then -- see isCompatible.
+  let minCompatibleVersion = null;
+
+  // Same rule as compatibility_version.py's is_compatible(), evaluated client-side.
+  // Not authoritative (continue_job's own check is), just lets the UI bail
+  // out early with a specific hint instead of a generic submit error.
+  function isCompatible(analysis) {
+    if (minCompatibleVersion == null) return true; // config not loaded yet -- fail open, continue_job still gates it
+    const compatibilityVersion = (analysis && analysis.compatibility_version) || 0;
+    return compatibilityVersion >= minCompatibleVersion;
+  }
 
   function applyBodyReshapeVisibility(enabled) {
     isBodyReshapeEnabled = enabled !== false;
@@ -650,6 +707,13 @@
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
       }
+      if (typeof cfg.compatibilityVersion === "number") {
+        currentCompatibilityVersion = cfg.compatibilityVersion;
+        renderCurrentCaseTimes();
+      }
+      if (typeof cfg.minCompatibleVersion === "number") {
+        minCompatibleVersion = cfg.minCompatibleVersion;
+      }
     });
   } else {
     getUiConfig().then((cfg) => {
@@ -657,6 +721,13 @@
       applyDebugUiVisibility(!!cfg.debugUi);
       if (typeof cfg.enableBodyReshape === "boolean") {
         applyBodyReshapeVisibility(cfg.enableBodyReshape);
+      }
+      if (typeof cfg.compatibilityVersion === "number") {
+        currentCompatibilityVersion = cfg.compatibilityVersion;
+        renderCurrentCaseTimes();
+      }
+      if (typeof cfg.minCompatibleVersion === "number") {
+        minCompatibleVersion = cfg.minCompatibleVersion;
       }
       if (!cfg.debugUi && cfg.aipocDefault && els.processingPathSelect) {
         // Non-debug deployment started with `--aipoc`: the selector stays
@@ -4108,6 +4179,11 @@
       }
 
       singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
+      // A fresh analyze always runs the current analyze_stage, so there's
+      // nothing to flag as incompatible here -- just the version number, for
+      // debug mode. useCombinedJob has no `analysis` yet at this point
+      // (finishSingleFlow fills it in once the combined job completes).
+      if (analysis) setCurrentCaseAnalysisVersion(analysis);
       if (historyViewToken !== myHistoryToken) return; // navigated away meanwhile (see this function's own comment above)
 
       if (useCombinedJob) {
@@ -4167,6 +4243,18 @@
     // job started from."
     const myHistoryToken = historyViewToken;
     const isCurrent = () => historyViewToken === myHistoryToken;
+    // This is the single choke point every "Run"/revise click submits
+    // through, regardless of which history-view path set singleFlowState
+    // (viewAnalyzeHistoryRecord already hints earlier for its own path, but
+    // viewHistoryRecord/viewProcessingHistoryRecord/importAsSingle don't) --
+    // so it's also where a resumed old analysis gets caught for all of them
+    // alike, before wasting a submit continue_job would reject anyway.
+    // useCombinedJob has no analysis yet at this point (a fresh analyze,
+    // always compatible) -- nothing to check.
+    if (!singleFlowState.useCombinedJob && !isCompatible(singleFlowState.analysis)) {
+      showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+      return;
+    }
     // This is the common entry point for the first edit and every later
     // revise. Analysis-only views intentionally never set modifiedAt.
     markCurrentCaseModified();
@@ -5943,8 +6031,14 @@
       const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
       try {
         const statuses = await Promise.all(
-          jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch(() => ({ status: "error" })))
+          jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
         );
+        // getJobStatusOnce already asks the backend for `error`/`error_message`
+        // (see /status/<job_id>'s keyToGet) -- the failed-tile click handlers
+        // below run that through the same friendlyError() wrapping used for
+        // every other run-status error, instead of showing the raw
+        // error_message (often a bare Python exception string) as-is.
+        const failureReason = (s) => friendlyError({ message: s?.error_message || s?.error, code: s?.error });
         // job.stage === "analyze" (see api.py's /analyze, account.py's
         // record_history) -- a paused-for-review upload (#start-btn's own
         // analyze-only flow, see .split-run in index.html) that
@@ -5961,7 +6055,11 @@
             media?.querySelector(".rc-spinner")?.remove();
             markHistoryTileSelectable(li, job);
             li.addEventListener("click", () => {
-              if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
+              if (historySelectMode) {
+                if (job.image_key) toggleHistorySelection(job.image_key, li);
+                return;
+              }
+              showNoticeModal(failureReason(statuses[0]));
             });
           } else {
             if (analyzed) {
@@ -6045,7 +6143,12 @@
           // listener above, this one only ever does the select-mode toggle.
           markHistoryTileSelectable(li, job);
           li.addEventListener("click", () => {
-            if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
+            if (historySelectMode) {
+              if (job.image_key) toggleHistorySelection(job.image_key, li);
+              return;
+            }
+            const failed = statuses.find((s) => s.status === "error") || statuses[0];
+            showNoticeModal(failureReason(failed));
           });
         } else {
           if (badge) badge.textContent = "修圖中";
@@ -6065,12 +6168,16 @@
             }
           });
         }
-      } catch {
+      } catch (err) {
         li.className = "history-cube batch-sidebar-item error";
         if (badge) badge.textContent = "無法取得狀態";
         markHistoryTileSelectable(li, job);
         li.addEventListener("click", () => {
-          if (historySelectMode && job.image_key) toggleHistorySelection(job.image_key, li);
+          if (historySelectMode) {
+            if (job.image_key) toggleHistorySelection(job.image_key, li);
+            return;
+          }
+          showNoticeModal(err ? friendlyError(err) : "無法取得處理狀態，請稍後再試。");
         });
       }
     }));
@@ -6634,7 +6741,15 @@
 
     let analysis;
     try {
-      analysis = (await getAnalyzeResult(analyzeJobId)).result.analysis;
+      const analyzeResult = await getAnalyzeResult(analyzeJobId);
+      analysis = analyzeResult.result.analysis;
+      setCurrentCaseAnalysisVersion(analysis, { compatible: analyzeResult.result.compatible });
+      // compatible missing (older backend) is treated as compatible -- the
+      // real gate is continue_job's own check, this is just an early hint.
+      if (analyzeResult.result.compatible === false) {
+        showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+        return;
+      }
     } catch (error) {
       if (historyViewToken !== myToken) return; // navigated away meanwhile
       showBatchMainError({ previewUrl, error: friendlyError(error) });
@@ -6804,6 +6919,7 @@
           };
           applySinglePassEditOption(singleFlowState.singlePassEdit);
           lastSingleSelections = selections;
+          setCurrentCaseAnalysisVersion(restoredAnalysis);
         }
         const applyRender = () => {
           els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
@@ -7004,6 +7120,7 @@
       };
       applySinglePassEditOption(singleFlowState.singlePassEdit);
       lastSingleSelections = selections;
+      setCurrentCaseAnalysisVersion(restoredAnalysis);
 
       // #ap-options-card-inline's model/quality and aspect-ratio pickers are
       // otherwise left showing whatever a previous record (or the upload
