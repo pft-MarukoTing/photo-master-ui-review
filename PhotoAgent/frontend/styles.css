@@ -4949,6 +4949,19 @@ body[data-theme="caramel"] .recipe-tags span {
   body.gallery-card-style #upload-section .upload-gallery-col .history-grid > .history-cube:first-child {
     margin-left: 0;
   }
+  /* .demo-image-tile-check's own base position (index.html) is top-RIGHT --
+     the opposite corner from .rc-badge/.history-cube-remove's top-left
+     default. That's fine in the mosaic grid (nothing overlaps any tile's
+     corners there), but in this row every later card's margin-left:-26px
+     overlap covers the PREVIOUS card's right edge -- exactly where the
+     selection checkmark sits, so it's invisible/half-hidden on every tile
+     except the last. Move it to the one corner nothing here ever overlaps,
+     same as the history badge already does. */
+  body.gallery-card-style #upload-section .upload-gallery-col .demo-image-tile-check {
+    top: 6px;
+    right: auto;
+    left: 6px;
+  }
   /* Same alternating tilt as desktop, but jittered vertically
      (translateY) instead of sideways -- sideways jitter would fight the
      row's own horizontal overlap and scroll direction. The three cards
