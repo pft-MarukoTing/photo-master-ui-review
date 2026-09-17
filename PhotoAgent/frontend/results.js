@@ -217,11 +217,27 @@ window.PhotoAgentResults = (() => {
     });
   }
 
+  const REFRAME_RECIPE_RE = /^重新構圖\s*[:：]/;
+
   function fillCheckList(element, items, fallbackItems) {
     if (!element) return;
     element.innerHTML = "";
     const source = Array.isArray(items) && items.length ? items : fallbackItems;
-    source.forEach((item, index) => {
+    // Display order only: a reframing item always leads the list so its
+    // combined ratio/crop result is the first thing reviewed, but every
+    // checkbox still carries its *original* array position in
+    // data-recipe-index. app.js's recipeChecked read/restore and
+    // applyRejectedReframingRatio key off that attribute rather than DOM
+    // order, since correction_plan/correction_axes/correction_inverse stay
+    // aligned to retouch_recipe's original (unsorted) index.
+    const order = source.map((_, index) => index);
+    order.sort((a, b) => {
+      const aReframe = REFRAME_RECIPE_RE.test(String(source[a] || "")) ? 0 : 1;
+      const bReframe = REFRAME_RECIPE_RE.test(String(source[b] || "")) ? 0 : 1;
+      return aReframe !== bReframe ? aReframe - bReframe : a - b;
+    });
+    order.forEach((index) => {
+      const item = source[index];
       const li = document.createElement("li");
       const label = document.createElement("label");
 
@@ -230,6 +246,7 @@ window.PhotoAgentResults = (() => {
       const input = document.createElement("input");
       input.type = "checkbox";
       input.id = `${element.id}-${index}`;
+      input.dataset.recipeIndex = String(index);
       input.checked = true;
       const box = document.createElement("span");
       box.className = "step-cb-box";

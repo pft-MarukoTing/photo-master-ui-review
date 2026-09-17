@@ -1338,9 +1338,12 @@
   function applyRejectedReframingRatio(event) {
     const input = event.target;
     if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") return;
-    const boxes = Array.from(els.apRecipeList?.querySelectorAll("input[type=checkbox]") || []);
-    const index = boxes.indexOf(input);
-    if (index < 0) return;
+    // Keyed by data-recipe-index (the item's position in retouch_recipe/
+    // correction_axes), not DOM order -- fillCheckList visually pins a
+    // reframing item to the top of #ap-recipe-list, which no longer matches
+    // its original array index.
+    const index = Number(input.dataset.recipeIndex);
+    if (!Number.isInteger(index) || index < 0) return;
     const batchRecord = currentDetailBatchRecord();
     const rawAnalysis = batchRecord ? batchRecord.analysis : singleFlowState?.analysis;
     if (!rawAnalysis) return;
@@ -8991,9 +8994,22 @@
       lighting: checked("ap-lighting")?.value || "default",
       size: checked("ap-size")?.value || "default"
     };
-    const recipeChecked = els.apRecipeList
-      ? Array.from(els.apRecipeList.querySelectorAll("input[type=checkbox]")).map((c) => c.checked)
-      : null;
+    // Read back by each checkbox's own data-recipe-index rather than DOM
+    // order -- fillCheckList visually pins a reframing item to the top of
+    // #ap-recipe-list, but recipeChecked must still line up positionally
+    // with base.correction_plan/correction_axes/correction_inverse, which
+    // stay in retouch_recipe's original (unsorted) order.
+    const recipeBoxes = els.apRecipeList
+      ? Array.from(els.apRecipeList.querySelectorAll("input[type=checkbox]"))
+      : [];
+    let recipeChecked = null;
+    if (recipeBoxes.length) {
+      recipeChecked = [];
+      recipeBoxes.forEach((cb) => {
+        const index = Number(cb.dataset.recipeIndex);
+        if (Number.isInteger(index) && index >= 0) recipeChecked[index] = cb.checked;
+      });
+    }
     return { options, recipeChecked };
   }
 
@@ -9223,8 +9239,15 @@
       syncRestoredPoseSuggestions(options.pose);
     }
     if (Array.isArray(recipeChecked) && els.apRecipeList) {
+      // Match by data-recipe-index, not DOM position -- see the matching
+      // comment in readStyleSelectionsFromDom.
       const boxes = els.apRecipeList.querySelectorAll("input[type=checkbox]");
-      recipeChecked.forEach((isChecked, i) => { if (boxes[i]) boxes[i].checked = isChecked; });
+      boxes.forEach((box) => {
+        const index = Number(box.dataset.recipeIndex);
+        if (Number.isInteger(index) && index >= 0 && index < recipeChecked.length) {
+          box.checked = recipeChecked[index];
+        }
+      });
     }
   }
 
