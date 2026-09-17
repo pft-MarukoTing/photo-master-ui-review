@@ -2528,14 +2528,6 @@
     // the move, it silently found nothing there anymore and those controls
     // stayed disabled forever after the first disable/regenerate cycle.
     setAnalysisPreviewDisabled(readOnly);
-    // The step indicator describes a live "about to (re)run from here" flow
-    // -- read-only historical playback (viewHistoryRecord) reopens this same
-    // panel for an already-finished job, where that would be factually
-    // wrong, so hide it in that one case. The SLOT, not the indicator
-    // inside it: the slot carries the spacing (index.html), so hiding only
-    // the indicator would leave its padding behind as a gap. Every
-    // showSection back into a live flow re-shows it (dom.js).
-    if (els.stepIndicatorSlot) els.stepIndicatorSlot.hidden = readOnly;
     moveOptionsCardTo(getOptionsCardTarget());
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = readOnly;
     // Moved out of #inline-analysis-actions (now lives at the end of
