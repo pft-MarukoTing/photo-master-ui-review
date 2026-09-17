@@ -1850,70 +1850,6 @@
     return [{ run: 1, result: lastResult.resultText, jobId: lastResult.jobId, status: "done" }];
   }
 
-  // iOS Safari has no web API to write directly into the Photos app (no
-  // requestable "save to camera roll" permission for a plain page, unlike
-  // PHPhotoLibrary for a native app) -- its <a download> handling for an
-  // image just lands the file in the Files app's Downloads folder instead.
-  // The Web Share sheet's own "储存影像/Save Image" action is the only path
-  // a web page has into Photos, so on iOS this is tried first; the existing
-  // blob-anchor download is now the fallback (still used as-is on every
-  // other platform, and here whenever sharing isn't available/fails).
-  function isIOSDevice() {
-    const ua = navigator.userAgent || "";
-    // iPadOS 13+ reports as "Macintosh" but, unlike a real Mac, exposes touch
-    // points -- maxTouchPoints is what tells the two apart.
-    return /iPad|iPhone|iPod/.test(ua) || (ua.includes("Macintosh") && navigator.maxTouchPoints > 1);
-  }
-
-  function downloadBlobViaAnchor(blob, filename) {
-    const url = URL.createObjectURL(blob);
-    const tempLink = document.createElement("a");
-    tempLink.href = url;
-    tempLink.download = filename;
-    document.body.appendChild(tempLink);
-    tempLink.click();
-    tempLink.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  // Never rejects except on a genuine unexpected error -- a user-cancelled
-  // share sheet (AbortError) is treated the same as a normal completed
-  // download, since the page has no way to tell whether "Save Image" was
-  // actually tapped inside that sheet either way.
-  async function saveImageToDevice(blob, filename) {
-    if (isIOSDevice() && navigator.canShare) {
-      const file = new File([blob], filename, { type: blob.type || "image/png" });
-      if (navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file] });
-          return;
-        } catch (error) {
-          if (error && error.name === "AbortError") return;
-          // Any other failure falls through to the same anchor download
-          // every other platform uses.
-        }
-      }
-    }
-    downloadBlobViaAnchor(blob, filename);
-  }
-
-  async function downloadPendingSource() {
-    if (!selectedFile) return;
-    // --debug-ui mode still zips (source + analysis.json + prompts.json),
-    // same reasoning as downloadCurrentResultOnly's split below -- plain
-    // mode just wants the one photo, no zip overhead for a single file.
-    if (isDebugUiActive) {
-      await downloadZip(buildPendingSourceZip, buildDownloadZipFilename());
-      return;
-    }
-    try {
-      await saveImageToDevice(selectedFile, selectedFile.name || buildDownloadImageFilename());
-      showNoticeModal("已下載完成。");
-    } catch (error) {
-      showError("下載失敗，請稍後再試。");
-    }
-  }
-
   async function buildResultZip(onProgress) {
     const runs = lastResultRuns();
     // A combined multi-RUN job (job_processor.py's run_count loop) shares ONE
@@ -2272,7 +2208,14 @@
     try {
       const imageBuf = await fetch(resultImageUrl(current.jobId, { path: lastResult.path, run: current.run })).then((response) => response.arrayBuffer());
       const blob = new Blob([imageBuf], { type: "image/png" });
-      await saveImageToDevice(blob, buildDownloadImageFilename());
+      const url = URL.createObjectURL(blob);
+      const tempLink = document.createElement("a");
+      tempLink.href = url;
+      tempLink.download = buildDownloadImageFilename();
+      document.body.appendChild(tempLink);
+      tempLink.click();
+      tempLink.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
       // Same completion notice downloadZip shows -- this path bypasses that
       // shared function (a single PNG needs no zip), so it needs its own.
       showNoticeModal("已下載完成。");
