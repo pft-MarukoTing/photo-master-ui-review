@@ -2558,6 +2558,60 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
      whether the analysis/revise panel is open; the 2-ID-plus-2-class
      selector here would otherwise beat index.html's plain .batch-sidebar
      rule on specificity and force it back to full width. */
+
+  /* ── Run (修圖) floats above the page here, same as it effectively does on
+     a wide screen ──
+     Above 900px the side-panel rules turn #ap-options-card-inline into a
+     viewport-height column whose review panel scrolls internally, so
+     .ap-actions-row just sits at that column's bottom edge and reads as
+     pinned. None of that applies below 900px: the card is a plain stacked
+     block, and .ap-actions-row's own position:sticky (index.html) can't
+     stand in for it either -- sticky resolves against #results-analysis-slot
+     (overflow-y:hidden, so a scrollport that never scrolls) and the row is
+     the last child of its containing block, leaving it zero range to stick
+     within. The result was Run sitting at the very end of the page content,
+     several scrolls away. position:fixed is the one thing that does detach
+     it from all of that.
+     What floats is the Run pill itself, not a bar holding it: this row keeps
+     its full width only to place the button (margin-left:auto, index.html)
+     and is otherwise invisible and inert -- no background, no border, and
+     pointer-events:none so the strip of page it spans stays scrollable and
+     tappable. An earlier version gave it a real background and a top border
+     instead, which on a phone read as a permanent empty toolbar pinned to
+     the bottom rather than a floating button. Run already carries its own
+     pill shape and shadow (.analysis-preview-action-right, index.html),
+     which is all "floating" needs.
+     Gated on Run actually being visible, so the read-only historical
+     playback path (openInlineAnalysisPanel hides the button) leaves nothing
+     fixed over the page at all. */
+  #results-canvas-row .ap-actions-row:has(.analysis-preview-action-right:not([hidden])) {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    margin-top: 0;
+    /* 28px sides = the page's own .container gutter, so Run lines up with
+       the content it belongs to. env() keeps it clear of the gesture bar /
+       home indicator. */
+    padding: 0 28px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: none;
+    border-top: none;
+    /* Above page content, below every overlay (drawer/modals/fullscreen
+       compare all sit at 1000+). */
+    z-index: 30;
+    pointer-events: none;
+  }
+  #results-canvas-row .ap-actions-row:has(.analysis-preview-action-right:not([hidden])) .ap-settings-run-row {
+    pointer-events: auto;
+  }
+  /* Reserves the floating button's own footprint (35px pill + its 16px
+     bottom offset + the safe-area inset) plus a gap, so the last of the
+     review panel's content can still be scrolled clear of it instead of
+     ending up permanently underneath. Same :has() gate as the button
+     itself -- nothing floating, nothing to reserve for. */
+  #results-body:has(#results-canvas-row .ap-actions-row .analysis-preview-action-right:not([hidden])) {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
 }
 /* The panel keeps its processing-screen spacing (margin-top:32px) when it's
    shown there; strip that once it's on loan to this narrower side slot. */
