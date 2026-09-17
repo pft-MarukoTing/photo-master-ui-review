@@ -26,10 +26,19 @@ window.PhotoAgentAccount = (() => {
   }
 
   async function initFromUrl() {
-    const userId = new URLSearchParams(window.location.search).get("user_id");
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get("user_id");
     isGuest = false;
     if (!userId) {
-      currentUser = null;
+      // Secret admin path (?admin, no value needed -- app.js's
+      // resolveAdminUser already grants this same identity for the reports
+      // drawer): giving it here too, as the actual account identity, means
+      // photos processed while accessing via ?admin get a real `user` sent
+      // on every submit/continue/analyze call, so their processing history
+      // is recorded and recallable like any other account instead of
+      // getCurrentUser() staying null and every history write silently
+      // no-op'ing (backend's _record_history_safely).
+      currentUser = params.has("admin") ? "admin" : null;
       return currentUser;
     }
     try {
