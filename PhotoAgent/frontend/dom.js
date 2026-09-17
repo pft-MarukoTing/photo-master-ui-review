@@ -238,7 +238,7 @@ window.PhotoAgentDom = (() => {
     runProgressFill: document.querySelector("#run-progress-fill"),
     apOptionsCardInline: document.querySelector("#ap-options-card-inline"),
     apOptionsCardHome: document.querySelector("#ap-options-card-home"),
-    apStepIndicatorHome: document.querySelector("#ap-step-indicator-home"),
+    stepIndicatorSlot: document.querySelector("#step-indicator-slot"),
     reloadBatchBtn: document.querySelector("#reload-batch-btn"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),
     errorModal: document.querySelector("#error-modal"),
@@ -323,6 +323,14 @@ window.PhotoAgentDom = (() => {
     // actively running/in-flight on the processing screen, so clicking it
     // there would silently abandon that work.
     if (els.logoHomeBtn) els.logoHomeBtn.disabled = name === "processing";
+    // #step-indicator-slot sits above all three sections (index.html), so
+    // this is the one place that decides whether the step indicator is on
+    // screen at all: there's a flow to report progress on from the moment
+    // we leave the upload screen, and none while we're still on it. Which
+    // step is lit is a separate question, answered by the flow stage
+    // (setFlowStage, app.js). openInlineAnalysisPanel re-hides it for
+    // read-only historical playback, after its own showSection lands.
+    if (els.stepIndicatorSlot) els.stepIndicatorSlot.hidden = name === "upload";
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 

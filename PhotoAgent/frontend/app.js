@@ -101,19 +101,30 @@
   // from the backend), so this is what showSingleResult/finishSingleFlow
   // fall back to for the zip download's source entry instead.
   let selectedFileSourceUrl = null;
-  // Bumped by actually navigating to a different record (viewHistoryRecord/
-  // viewProcessingHistoryRecord) -- NOT by merely opening the history drawer
-  // (openHistoryPage), which just lists records without selecting one. This
-  // both lets a pending viewProcessingHistoryRecord poll (which can run for
-  // minutes) notice the user has since navigated elsewhere and skip its
-  // "done, render it" step, and lets finishSingleFlow's own completion
-  // (captured as its own snapshot of this token when it starts) recognize
-  // the user has since switched to a different record and skip re-applying
-  // ITS result to the now-unrelated screen -- unlike the batch flow's
+  // "Who owns the screen right now." Every long-running flow snapshots this
+  // when it starts and re-checks it before touching the DOM again, so a job
+  // whose result lands after the user has moved on quietly drops its render
+  // instead of yanking the screen back to itself. Unlike the batch flow's
   // editBatchItem, which guards its own re-render with
   // refreshIfSelected(record), the single-image flow has no per-record
-  // identity to check against, just "is the screen still showing what I
+  // identity to check against -- just "is the screen still showing what I
   // started with."
+  //
+  // Bumped by everything that hands the screen to something else:
+  //   - navigating to a different record (viewHistoryRecord /
+  //     viewProcessingHistoryRecord / viewAnalyzeHistoryRecord)
+  //   - resetApp -- 回到首頁/the logo abandon whatever is still running for
+  //     display purposes
+  //   - startSubmit / startSubmitBatch -- a new run owns the screen from the
+  //     moment it's submitted
+  // The last two matter for a case that otherwise looks like two unrelated
+  // actions: revise photo A from the results page, go 回到首頁 mid-job, then
+  // 一鍵修圖 photo B. Without a bump in between, A's still-running job would
+  // still see its own snapshot as current when it finished and would render
+  // A's result over B's screen.
+  //
+  // NOT bumped by merely opening the history drawer (openHistoryPage), which
+  // lists records without selecting one, and so hands the screen to nobody.
   let historyViewToken = 0;
   let previewUrl = "";
   // Small client-side JPEG counterpart of previewUrl, used only for the
@@ -1954,34 +1965,13 @@
   // the same plain horizontal pill row the upload page uses -- .ap-col-right
   // (its normal home, still used as-is on the processing screen, which has
   // no .compare-card to move below) squeezes it into a narrow column instead.
-  // #ap-step-indicator moves alongside it into the very same container, but
-  // prepended instead of appended so it lands ABOVE .compare-card (already
-  // the container's only other child at that point) rather than below the
-  // options card -- see its own markup comment in index.html. Unlike the
-  // options card, the step indicator's move is NOT undone by
-  // restoreOptionsCardHome (below) -- it stays above the photo through 修圖
-  // (editing) and 結果 (the finished result) too, not just while the 分析
-  // review panel itself is open; see setStepIndicatorStep/
-  // restoreStepIndicatorHome for the rest of its lifecycle.
+  // #ap-step-indicator used to be dragged along into the same container here
+  // (prepended, so it landed above .compare-card) -- it isn't any more. It
+  // lives in #step-indicator-slot above every screen and never moves; see
+  // that slot's markup comment in index.html. This function moves the
+  // options card and nothing else.
   function moveOptionsCardTo(container) {
     if (!container) return;
-    // #ap-step-indicator does NOT follow `container` -- unlike the options
-    // card, it's meant to stay visible above the photo through 修圖/結果
-    // too, not just while a review panel is open (see this function's own
-    // doc comment above), so #results-analysis-slot (whose opacity/width
-    // both collapse back to 0 as soon as .showing-analysis comes off,
-    // closePendingResults/closeInlineAnalysisPanel) is never a safe home for
-    // it regardless of what getOptionsCardTarget picked for the options
-    // card. getStepIndicatorTarget below picks its own target: normally
-    // #results-canvas-top (display:contents, inside the always-visible
-    // .results-canvas-col), or -- once 分析面板顯示於預覽右側 relocates the
-    // options card beside the photo -- #results-detail itself, so the
-    // indicator spans full width above BOTH columns instead of sitting
-    // inside just one of them.
-    const stepTarget = getStepIndicatorTarget();
-    if (els.apStepIndicator && stepTarget && els.apStepIndicator.parentElement !== stepTarget) {
-      stepTarget.prepend(els.apStepIndicator);
-    }
     if (els.apOptionsCardInline && els.apOptionsCardInline.parentElement !== container) {
       container.appendChild(els.apOptionsCardInline);
     }
@@ -2100,24 +2090,15 @@
     syncAnalysisPanelHeights();
   })();
 
-  // #results-detail (.results-container) is already display:flex;
-  // flex-direction:column -- prepending the indicator there (instead of
-  // into #results-canvas-top, nested one level inside the canvas column)
-  // makes it the row's own first flex child, full width, above both
-  // #results-canvas-row and everything in it.
-  function getStepIndicatorTarget() {
-    return isSidePanelLayoutEnabled() && els.resultsDetail ? els.resultsDetail : els.resultsCanvasTop;
-  }
-
   // ── 分析面板顯示於預覽右側 (side-panel-layout-toggle, #ap-settings-modal) ───────
   // A display preference, not a per-request option -- persisted client-side
   // rather than sent to the backend. When on, moveOptionsCardTo's two call
   // sites (showPendingResults/openInlineAnalysisPanel below) target
   // #results-analysis-slot instead of #results-canvas-top, so
   // #ap-options-card-inline (the #ap-analysis-shell/#ap-review-panel tabs)
-  // lands beside the photo instead of stacked below it -- #ap-step-indicator
-  // is NOT part of this move (moveOptionsCardTo above keeps it in
-  // #results-canvas-top unconditionally regardless of this setting). The
+  // lands beside the photo instead of stacked below it -- the step
+  // indicator isn't involved either way any more, it sits in
+  // #step-indicator-slot above this whole section (index.html). The
   // actual repositioning is CSS (styles.css's "side-panel layout" section,
   // gated to width > 900px), this just decides which container to move
   // into. Below 900px (and with the toggle off) nothing here changes
@@ -2270,34 +2251,68 @@
     }
   }
 
-  // Only called when actually leaving this image's flow (a brand new
-  // submission starting, resetApp) -- NOT when the 分析 review panel closes
-  // to move into 修圖, since the indicator is meant to keep showing progress
-  // through that transition instead of disappearing (moveOptionsCardTo's own
-  // comment above).
-  function restoreStepIndicatorHome() {
-    if (els.apStepIndicatorHome && els.apStepIndicator
-      && els.apStepIndicator.previousElementSibling !== els.apStepIndicatorHome) {
-      els.apStepIndicatorHome.after(els.apStepIndicator);
-    }
+  // ── Flow stage: the single source of truth for the step indicator ────────
+  // Every screen that shows progress derives what it shows from this one
+  // value, instead of each transition point remembering to push a step
+  // number of its own. That distinction is the whole point: the step number
+  // is a rendering detail, the stage is a fact about what the app is doing,
+  // and the second one is something every entry point already knows about
+  // itself. An entry point that declares its stage cannot "forget" to update
+  // the indicator, and can't advance it ahead of the work either -- both of
+  // which is exactly what used to go wrong (一鍵修圖 sat on 分析 for the whole
+  // edit because no call site on that path ever pushed 修圖; pushing it at
+  // the top of the branch instead skipped 分析 entirely, because that branch
+  // starts before the analysis does).
+  //
+  // Stages, in flow order:
+  //   idle             nothing running -- upload screen (the slot is hidden
+  //                    there anyway, dom.js; this just leaves a sane state
+  //                    behind for the next run)
+  //   analyzing        分析 is running now
+  //   awaiting-review  分析 finished, waiting for the user to hit Run
+  //   editing          修圖 is running now
+  //   done             結果 is on screen
+  //
+  // Resuming a record from 最近照片 needs no indicator bookkeeping of its own:
+  // each of those paths already routes through the same view function as the
+  // live flow (showBatchMainLoading / showBatchAnalyzedMain / showSingleResult
+  // / showBatchDoneMain), and the record's status is what picked the view.
+  const FLOW_STAGE_STEPS = {
+    idle: { step: 2, done: false },
+    analyzing: { step: 2, done: false },
+    "awaiting-review": { step: 2, done: true },
+    editing: { step: 3, done: false },
+    done: { step: 4, done: true }
+  };
+
+  let flowStage = "idle";
+
+  function setFlowStage(stage) {
+    if (!FLOW_STAGE_STEPS[stage]) return;
+    flowStage = stage;
+    renderStepIndicator();
   }
 
+  function renderStepIndicator() {
+    const { step, done } = FLOW_STAGE_STEPS[flowStage];
+    setStepIndicatorStep(step, { done });
+  }
+
+  // The DOM writer behind renderStepIndicator -- call setFlowStage, not this.
+  //
   // step: 1 (上傳), 2 (分析), 3 (修圖), or 4 (結果). Only the current step gets
   // .ap-step--active (highlighted); every step before it gets .ap-step--done
   // (muted, with a checkmark) so earlier steps read as "done" rather than
   // reverting to a plain ring once the flow moves past them. Connector
   // lines up to the current step stay .ap-step-line--active.
   //
-  // `done` covers the current step itself: true (the default) means the
-  // work behind this step has already finished by the time we're switching
-  // to it -- e.g. showing the pending-review panel only happens once
-  // analysis returned, and reaching 結果 only happens once editing is done
-  // -- so it gets a checkmark right away, same as an earlier step. Pass
-  // `done: false` when the step's own work is what's *about* to run (e.g.
-  // kicking off the edit job for 修圖): the current step then shows a
-  // spinner instead, until a later call marks the next step current (which
-  // implicitly finishes this one) or re-calls this same step with
-  // `done: true` once its work resolves.
+  // `done` covers the current step itself: true means the work behind this
+  // step has already finished by the time we're switching to it -- e.g.
+  // showing the pending-review panel only happens once analysis returned,
+  // and reaching 結果 only happens once editing is done -- so it gets a
+  // checkmark right away, same as an earlier step. false means the step's
+  // own work is what's running right now (分析/修圖 in flight): the current
+  // step shows a spinner instead, until the stage moves on.
   function setStepIndicatorStep(step, { done = true } = {}) {
     if (!els.apStepIndicator) return;
     els.apStepIndicator.querySelectorAll(".ap-step").forEach((el, i) => {
@@ -2366,9 +2381,10 @@
       { pending: true }
     );
     moveOptionsCardTo(getOptionsCardTarget());
-    // Reset to 分析, in case this is a fresh image after a previous one's
-    // flow advanced the indicator to 修圖/結果.
-    setStepIndicatorStep(2);
+    // Analysis is in and the user is being asked to Run -- this is also what
+    // resets the indicator for a fresh image after a previous one's flow had
+    // advanced it to 修圖/結果.
+    setFlowStage("awaiting-review");
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.add("showing-analysis");
     if (els.inlineAnalysisContinueBtn) {
@@ -2459,7 +2475,7 @@
     // still animates.
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("no-transition");
     closePendingResults();
-    setStepIndicatorStep(3, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
+    setFlowStage("editing"); // finishSingleFlow below moves to "done" once it finishes
     // Same "editing" loading overlay backToProcessFromResults' revise flow
     // uses -- swaps the photo for the thinking-rings animation instead of
     // navigating away from the results page.
@@ -2512,12 +2528,14 @@
     // the move, it silently found nothing there anymore and those controls
     // stayed disabled forever after the first disable/regenerate cycle.
     setAnalysisPreviewDisabled(readOnly);
-    // #ap-step-indicator always shows 分析 as the active step, which is only
-    // true for a live "about to (re)run from here" flow -- read-only
-    // historical playback (viewHistoryRecord) reopens this same panel for an
-    // already-finished job, where that would be factually wrong, so hide it
-    // entirely in that one case.
-    if (els.apStepIndicator) els.apStepIndicator.hidden = readOnly;
+    // The step indicator describes a live "about to (re)run from here" flow
+    // -- read-only historical playback (viewHistoryRecord) reopens this same
+    // panel for an already-finished job, where that would be factually
+    // wrong, so hide it in that one case. The SLOT, not the indicator
+    // inside it: the slot carries the spacing (index.html), so hiding only
+    // the indicator would leave its padding behind as a gap. Every
+    // showSection back into a live flow re-shows it (dom.js).
+    if (els.stepIndicatorSlot) els.stepIndicatorSlot.hidden = readOnly;
     moveOptionsCardTo(getOptionsCardTarget());
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = readOnly;
     // Moved out of #inline-analysis-actions (now lives at the end of
@@ -4191,6 +4209,11 @@
 
   async function startSubmit({ skipReview = false } = {}) {
     hideError();
+    // This new run owns the screen from here on -- bumped BEFORE the
+    // snapshot below so this run's own guard checks against its own token,
+    // while any job still finishing from an earlier one now fails its check
+    // and drops its render (historyViewToken's own comment has the case).
+    historyViewToken += 1;
     // Snapshot of historyViewToken as of when this upload started -- the
     // manual (two-stage, non-skip-review) path below awaits a real analyze
     // job that's now recorded into history the instant it's submitted (see
@@ -4236,8 +4259,7 @@
     if (timingList) timingList.innerHTML = "";
     resetSteps(); // clears completedTimings so each run's total starts fresh
     closePendingResults(); // drop any stale pending-review state from an abandoned prior run
-    restoreStepIndicatorHome();
-    setStepIndicatorStep(2, { done: false }); // analysis is only just starting -- not finished yet
+    setFlowStage("analyzing"); // analysis is only just starting -- not finished yet
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
     procVisual.classList.remove("done");
@@ -4405,6 +4427,13 @@
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
     setProcTitle(useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片"));
+    // Same split the title above already makes, so the two can't drift: a
+    // combined job (一鍵修圖 on the local path) does its OWN analysis inside
+    // this one job and is still analyzing at this point -- onCombinedStage
+    // below moves it on when the backend says the edit has actually started.
+    // Every other path arrives here with analysis already finished, so the
+    // edit is what's starting right now.
+    setFlowStage(useCombinedJob ? "analyzing" : "editing");
     if (useCombinedJob) {
       startProcSubRotation(analyzeSubMessages);
     } else {
@@ -4416,7 +4445,19 @@
     // two-job flow showed, even though it's now one job/one poll.
     const onCombinedStage = (stage) => {
       if (stage !== "edit") return;
+      // Same isCurrent guard revealResultsIfNeeded below uses, for the same
+      // reason: this fires from a poll that keeps running after the user may
+      // have moved on, and both writes below are to screen-wide state (the
+      // processing screen's title, and the shared step indicator) that would
+      // otherwise describe THIS job on whatever the user is now looking at.
+      if (!isCurrent()) return;
       setProcTitle(aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
+      // The backend reporting its analyze->edit switch is the only honest
+      // moment to move the indicator on for a combined job: there's no
+      // client-side transition to hang it off, and anything earlier (e.g.
+      // the top of this function's useCombinedJob branch) would claim 修圖
+      // while the job is demonstrably still analyzing.
+      setFlowStage("editing");
       startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
     };
 
@@ -4457,7 +4498,7 @@
       // it would otherwise hide this reveal if the user opened it while the
       // edit was still running in the background. No-op if already closed.
       closeHistoryDrawer();
-      setStepIndicatorStep(4); // 結果 -- no-op for the skipReview/direct path, where the indicator was never shown to begin with
+      setFlowStage("done");
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
     };
@@ -4791,7 +4832,7 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
-    setStepIndicatorStep(4); // 結果 -- covers both a live RUN-tab switch and viewHistoryRecord jumping straight here for a finished case
+    setFlowStage("done"); // covers both a live RUN-tab switch and viewHistoryRecord jumping straight here for a finished case
     // revealDetailExtra: true only for viewHistoryRecord's admin-reports-drawer
     // call -- shows the prompts button for that one record regardless of
     // debug mode, same override resultsDetailExtra itself already gets.
@@ -4920,7 +4961,7 @@
       };
       return;
     }
-    setStepIndicatorStep(3, { done: false }); // 修圖 -- finishSingleFlow below bumps it to 結果 once done
+    setFlowStage("editing"); // finishSingleFlow below moves to "done" once it finishes
 
     setAnalysisPreviewDisabled(true);
     if (els.showPromptBtn) els.showPromptBtn.disabled = true;
@@ -4973,6 +5014,10 @@
 
   // ── Batch step 1: analyze every image, then show the review grid ─────────
   async function startSubmitBatch(skipReview = false) {
+    // Same reason as startSubmit's own bump -- this covers reloadBatch, the
+    // one caller that doesn't come through startSubmit (which has already
+    // bumped by the time it delegates here).
+    historyViewToken += 1;
     const presetKey = "natural";
     const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
     batchSettings = {
@@ -8454,11 +8499,13 @@
     if (els.batchMainLoadingTitle) {
       els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在修圖";
     }
-    // This loading view replaces #results-canvas-row entirely (hideAllBatchMainViews
-    // above), so the step indicator itself isn't visible right now -- still
-    // keep its state in sync so it reads correctly the moment
-    // showBatchAnalyzedMain/showBatchDoneMain reveals it again.
-    setStepIndicatorStep(analyzing ? 2 : 3, { done: false }); // still running either way
+    // Same split the title above makes, off the record's own status -- this
+    // view only ever shows for a record that is running, and "running" here
+    // means exactly one of those two stages. Also the path a still-going
+    // record resumed from 最近照片 arrives through
+    // (viewProcessingHistoryRecord), which is why that path needs no
+    // indicator bookkeeping of its own.
+    setFlowStage(analyzing ? "analyzing" : "editing");
     // Same rotating phrasings as the single-image flow (startProcSubRotation
     // et al.), just targeting #batch-main-loading-text through setProcSub
     // instead of .proc-sub/#canvas-loading-status. There's only one shared
@@ -8547,9 +8594,10 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
-    // Reset to 分析, in case this is a freshly-analyzed record after a
-    // previous batch record's flow advanced the (shared) indicator further.
-    setStepIndicatorStep(2);
+    // Analysis is in, waiting for Run -- also what pulls the (shared)
+    // indicator back for a freshly-analyzed record after a previous batch
+    // record's flow had advanced it further.
+    setFlowStage("awaiting-review");
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
     // Same "下載原圖" treatment as the single-image flow's own pending-review
     // screen (showPendingResults) -- no edit has run yet, so this can only
@@ -8722,7 +8770,7 @@
     const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
     if (!alreadyShowing) hideAllBatchMainViews();
     els.resultsCanvasRow.hidden = false;
-    setStepIndicatorStep(4); // 結果 -- batch mode's own equivalent of the single-flow revealResultsIfNeeded update
+    setFlowStage("done"); // batch mode's own equivalent of the single-flow revealResultsIfNeeded update
     const reviewable = settings.reviewable !== false;
     // settings.revealDetailExtra: true only for viewHistoryRecord's admin-
     // reports-drawer call -- shows the prompts button for that one record
@@ -9689,6 +9737,12 @@
 
   function resetApp() {
     hideError();
+    // Going back to the upload screen hands the screen to nobody -- whatever
+    // job is still running in the background (a revise the user kicked off
+    // from the results page, say) must not render itself here later, on top
+    // of whatever the user has started doing since. See historyViewToken's
+    // own comment for the exact sequence this covers.
+    historyViewToken += 1;
     // Undoes viewHistoryRecord's own revealDetailExtra override (admin
     // reviewing a flagged case) -- a fresh upload afterward shouldn't
     // inherit that one record's forced visibility.
@@ -9739,8 +9793,7 @@
     // or it renders invisibly inside the now-hidden results section instead.
     restoreAnalysisPreviewHome();
     closePendingResults();
-    restoreStepIndicatorHome();
-    setStepIndicatorStep(2, { done: false }); // resetting to a fresh, not-yet-run state
+    setFlowStage("idle"); // back to the upload screen -- nothing running
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     // startSubmit()'s own `finally` never runs if the user resets instead of

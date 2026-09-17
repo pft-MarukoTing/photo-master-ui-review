@@ -362,18 +362,32 @@
     }
     .ap-sub-label:first-child { margin-top: 0; }
 
-    /* ── Step indicator (#ap-step-indicator): always shows 上傳 as the
-       completed first step and 分析 as the active step -- see the markup
-       comment there for the one exception
-       (read-only historical playback hides this element entirely). A
-       sibling of #ap-options-card-inline (not one of its flex children --
-       see the order scheme below), so it can sit above the photo, full
-       width, while the options card itself still lands below it. */
+    /* ── Step indicator (#ap-step-indicator) ──
+       Lives in #step-indicator-slot, directly inside <main> and above all
+       three screens (see its markup comment there) -- never inside the
+       screen it happens to be describing, so no screen can hide it along
+       with itself or give it its own spacing. setFlowStage (app.js) lights
+       the current step; showSection (dom.js) shows/hides the slot. */
     .ap-step-indicator {
       display: flex;
       align-items: center;
       width: 100%;
       margin-bottom: 4px;
+    }
+    /* padding-top mirrors .results-container's own (styles.css) so the
+       indicator sits exactly as far below the header as it did back when it
+       was #results-detail's first child -- and that spacing is now the only
+       one there is, for every screen. Declared after .container's
+       `padding: 0 28px` shorthand (styles.css loads before this block), so
+       this wins for the top edge while the 28px sides stay.
+       --step-indicator-h is this slot's full laid-out height (20px padding +
+       30px .ap-step-num + .ap-step-indicator's own 4px margin-bottom). The
+       screens that size themselves against the viewport subtract it
+       (styles.css: .proc-wrap, and the side-panel #results-detail rule),
+       since the slot now takes that height off the top of all of them. */
+    :root { --step-indicator-h: 54px; }
+    .step-indicator-slot {
+      padding-top: 20px;
     }
     .ap-step {
       display: flex;
@@ -452,6 +466,11 @@
        with the circles' own vertical center, rather than centering against
        each step's full two-line height (which would sit the line low). */
     @media (max-width: 560px) {
+      /* Two-line steps here (circle stacked over name), so the slot is
+         taller than the base 54px (measured: 73px box + the same 4px
+         margin) -- kept in sync so the viewport-height screens subtract the
+         right amount at this breakpoint too. */
+      :root { --step-indicator-h: 77px; }
       .ap-step-indicator { align-items: flex-start; }
       .ap-step {
         flex-direction: column;
@@ -1218,9 +1237,10 @@
        4-tab (人像檢查/修圖建議/修圖風格/補充指令) review panel (0), then the
        operational controls (order:3, below) -- read the review tabs first,
        adjust portrait settings and run last.
-       #ap-step-indicator (markup comment above) is a sibling of this whole
-       element, not one of these flex children, so it's positioned above the
-       photo instead. */
+       #ap-step-indicator is no part of this element at all any more (it used
+       to be a sibling that travelled alongside it) -- it lives in
+       #step-indicator-slot above every screen now, see its markup comment
+       inside <main>. */
     /* ID, not the shared .ap-toggle-card class -- when that class was
        introduced (unifying the two review cards' look, before they were
        themselves merged into this single panel) a same-named rule was once
@@ -4178,6 +4198,69 @@
 
 <main>
 
+  <!-- #ap-step-indicator's single, permanent home. Deliberately a sibling
+       of all three <section>s rather than living inside any one of them:
+       every screen that shows progress (the 正在分析照片/AI 正在修圖 spinner
+       in #processing-section, the review + result views in #results-section,
+       and every way of arriving at them -- a fresh 分析/一鍵修圖 run, resuming
+       a 待修圖 or still-processing record from 最近照片, a revise from the
+       results page) shares this ONE element in this ONE place. It used to be
+       parked inside #analysis-preview and then relocated per screen (three
+       different movers, one of them a side effect of moveOptionsCardTo),
+       which is what made it possible for it to be hidden along with its host,
+       or to land at a different distance from the header depending on which
+       screen had it -- neither is expressible any more. Only two things vary
+       now: whether the slot is shown at all (showSection, dom.js -- hidden on
+       the upload screen and for read-only historical playback) and which step
+       is lit, which follows the flow stage (setFlowStage, app.js).
+       Scrolls with the page rather than sticking under the header, matching
+       where it sat inside #results-detail before. .container + the slot's own
+       padding-top:20px mirror #results-body/.results-container's own values,
+       so its position is identical on every screen by construction. -->
+  <div class="container step-indicator-slot" id="step-indicator-slot" hidden>
+    <div class="ap-step-indicator" id="ap-step-indicator">
+      <div class="ap-step ap-step--done">
+        <span class="ap-step-num">
+          <span class="ap-step-num-spinner"></span>
+          <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="ap-step-name">上傳</span>
+      </div>
+      <div class="ap-step-line ap-step-line--active"></div>
+      <div class="ap-step ap-step--active">
+        <span class="ap-step-num">
+          <span class="ap-step-num-spinner"></span>
+          <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="ap-step-name">分析</span>
+      </div>
+      <div class="ap-step-line ap-step-line--active"></div>
+      <div class="ap-step">
+        <span class="ap-step-num">
+          <span class="ap-step-num-spinner"></span>
+          <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="ap-step-name">修圖</span>
+      </div>
+      <div class="ap-step-line"></div>
+      <div class="ap-step">
+        <span class="ap-step-num">
+          <span class="ap-step-num-spinner"></span>
+          <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
+            <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <span class="ap-step-name">結果</span>
+      </div>
+    </div>
+  </div>
+
   <!-- ══════════════════════════════════
        SCREEN 1 — UPLOAD
   ══════════════════════════════════ -->
@@ -4602,65 +4685,6 @@
                  one here. -->
             <p id="res-summary" class="r-summary" hidden>已完成影像分析與輸出。</p>
             <div id="ap-subject-tags" class="tag-row"></div>
-          </div>
-
-          <!-- Stable anchor -- moved above .compare-card (inside
-               #results-canvas-top, prepended so it lands before the photo)
-               while the inline results-page panel is open, same relocation
-               pattern as #ap-options-card-inline below -- see
-               moveOptionsCardTo/restoreOptionsCardHome in app.js. On the
-               processing screen (no .compare-card to move above) it just
-               stays here. A sibling of #ap-options-card-inline, not nested
-               inside it, so it can be relocated to the very top of the
-               canvas column while the options card itself still lands below
-               the photo. Always shows "上傳" as the completed first step and
-               "分析" as the active step: this panel
-               only ever renders while the user is still reviewing/adjusting
-               before a run, EXCEPT the read-only historical-playback path
-               (viewHistoryRecord -> openInlineAnalysisPanel(true), app.js),
-               where openInlineAnalysisPanel hides this element entirely (an
-               already-finished job has no "current step" to show). -->
-          <div id="ap-step-indicator-home"></div>
-          <div class="ap-step-indicator" id="ap-step-indicator">
-            <div class="ap-step ap-step--done">
-              <span class="ap-step-num">
-                <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </span>
-              <span class="ap-step-name">上傳</span>
-            </div>
-            <div class="ap-step-line ap-step-line--active"></div>
-            <div class="ap-step ap-step--active">
-              <span class="ap-step-num">
-                <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </span>
-              <span class="ap-step-name">分析</span>
-            </div>
-            <div class="ap-step-line ap-step-line--active"></div>
-            <div class="ap-step">
-              <span class="ap-step-num">
-                <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </span>
-              <span class="ap-step-name">修圖</span>
-            </div>
-            <div class="ap-step-line"></div>
-            <div class="ap-step">
-              <span class="ap-step-num">
-                <span class="ap-step-num-spinner"></span>
-                <svg class="ap-step-num-check" width="14" height="14" fill="none" viewBox="0 0 24 24">
-                  <path d="M20 6L9 17l-5-5" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </span>
-              <span class="ap-step-name">結果</span>
-            </div>
           </div>
 
           <div class="ap-row">

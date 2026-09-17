@@ -2264,7 +2264,14 @@ body[data-theme="caramel"] .proc-wrap {
    SCREEN 2 — PROCESSING
 ════════════════════════════════════════ */
 .proc-wrap {
-  min-height: calc(100vh - var(--header-h));
+  /* Minus --step-indicator-h (index.html) as well as the header: #step-
+     indicator-slot now sits above this whole section, so the space actually
+     left for the spinner to center itself in is that much shorter. Without
+     the subtraction this block would still claim a full viewport below the
+     header and push the page into a scroll by exactly the slot's height.
+     The fallback keeps this rule from being dropped outright (an unresolved
+     var() invalidates the whole declaration) if that block ever moves. */
+  min-height: calc(100vh - var(--header-h) - var(--step-indicator-h, 54px));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2573,8 +2580,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 
 /* ── Side-panel layout (分析面板顯示於預覽右側, #settings-modal) ──
    Opt-in, persisted client-side (getOptionsCardTarget/isSidePanelLayoutEnabled,
-   app.js): when on, #ap-step-indicator + #ap-options-card-inline (holding
-   #ap-analysis-shell/#ap-review-panel) move into #results-analysis-slot
+   app.js): when on, #ap-options-card-inline (holding
+   #ap-analysis-shell/#ap-review-panel) moves into #results-analysis-slot
    instead of stacking below .compare-card in #results-canvas-top. Everything
    below is purely how that already-relocated content is laid out -- gated to
    width > 900px, the exact complement of this file's own
@@ -2594,7 +2601,13 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
      (align-self:center on #results-analysis-slot, further down, overrides
      this row's own align-items:stretch for just that one side). */
   body.side-panel-layout #results-detail:has(.results-canvas-row.showing-analysis) {
-    height: calc(100vh - var(--header-h));
+    /* Minus --step-indicator-h (index.html) too -- #step-indicator-slot is
+       above #results-body entirely now, so the height budget this hands the
+       photo/panel row is the viewport minus the header AND that slot. (Back
+       when the indicator was this element's own first child it came out of
+       this same box automatically.) Fallback for the same reason as
+       .proc-wrap's above. */
+    height: calc(100vh - var(--header-h) - var(--step-indicator-h, 54px));
   }
   body.side-panel-layout .results-canvas-row.showing-analysis {
     flex: 1;
@@ -2660,15 +2673,6 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   body.side-panel-layout .results-canvas-row.showing-analysis .results-analysis-slot {
     align-self: stretch;
     overflow: hidden;
-  }
-  /* Only matches once getStepIndicatorTarget (app.js) has actually
-     relocated it to be #results-detail's own direct child (full width,
-     above both columns) -- #results-detail's own flex gap (24px) already
-     spaces it from the row below, so its own margin-bottom (20px, meant for
-     sitting inside #results-canvas-top instead) would otherwise just add
-     20px more on top of that. */
-  body.side-panel-layout #results-detail > .ap-step-indicator {
-    margin-bottom: 0;
   }
   /* Moves the chevron onto .ap-analysis-shell-desc's own line, right-
      aligned, instead of its own separate centered row below both title and
