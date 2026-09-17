@@ -331,7 +331,7 @@
 
     /* ── Analysis-preview label hierarchy ──
        .ap-label   = section header (修圖建議 / 修圖風格選項 / 分析結果)
-       .ap-sub-label = sub-header nested one level in (Pose / Angle / 照片內容 / 診斷與建議)
+       .ap-sub-label = sub-header nested one level in (Pose / Angle / 照片總覽 / 診斷與建議)
        Sub-labels must read as clearly subordinate to their section's .ap-label. */
     .ap-label {
       display: flex;
@@ -608,6 +608,7 @@
          this card anyway, so it aligns the width in the row layout without
          touching the height in either. */
       width: 100%;
+      position: relative;
     }
     /* Synced with .ap-analysis-shell-title (same icon+text pairing just
        below this card) instead of a small uppercase kicker -- reads as the
@@ -616,6 +617,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      flex-shrink: 0;
       font-size: 17.5px;
       font-weight: 700;
       color: var(--text);
@@ -625,6 +627,9 @@
     .ap-photo-summary-tags {
       display: flex;
       flex-wrap: wrap;
+      flex: 1 1 auto;
+      justify-content: flex-end;
+      min-width: 0;
       gap: 6px;
     }
     .ap-photo-summary-tags span {
@@ -646,6 +651,248 @@
       color: var(--text-2);
     }
     .ap-photo-summary-text:empty { display: none; }
+    .ap-photo-summary-toggle[hidden] { display: none; }
+    .ap-photo-summary-toggle {
+      position: absolute;
+      left: 50%;
+      bottom: 8px;
+      z-index: 2;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: max-content;
+      max-width: calc(100% - 20px);
+      padding: 3px 11px;
+      transform: translateX(-50%);
+      background: rgba(var(--accent-2-rgb),.16);
+      border: 1px solid rgba(var(--accent-2-rgb),.22);
+      border-radius: 999px;
+      box-shadow: 0 2px 8px rgba(var(--on-surface-rgb),.12);
+      color: var(--text-2);
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.3;
+      opacity: .78;
+      cursor: pointer;
+      text-align: center;
+      white-space: nowrap;
+      transition: opacity .15s, background .15s, color .15s;
+    }
+    .ap-photo-summary-toggle::before {
+      content: '⌄';
+      margin-right: 5px;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .ap-photo-summary-toggle[aria-expanded="true"]::before { content: '⌃'; }
+    .ap-photo-summary-toggle:hover {
+      background: rgba(var(--accent-2-rgb),.24);
+      color: var(--text);
+      opacity: 1;
+    }
+    @media (min-width: 901px) and (max-height: 760px) {
+      .ap-photo-summary.ap-photo-summary--compact {
+        /* Leave enough room for the analysis shell's 60vh floor and the
+           action row on short screens. The compact overview is intentionally
+           smaller than the normal 280px card; expanding it is what enables
+           the side-panel scroll. */
+        max-height: clamp(110px, calc(100% - 60% - 100px), 280px);
+        overflow: hidden;
+      }
+      .ap-photo-summary.ap-photo-summary--compact::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 48px;
+        background: linear-gradient(to bottom, rgba(var(--on-surface-rgb),0), var(--card-2));
+        pointer-events: none;
+      }
+    }
+    @media (max-width: 900px) {
+      .ap-photo-summary.ap-photo-summary--compact {
+        max-height: var(--ap-photo-summary-compact-height, 280px);
+        overflow: hidden;
+      }
+      .ap-photo-summary.ap-photo-summary--compact::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height: 48px;
+        background: linear-gradient(to bottom, rgba(var(--on-surface-rgb),0), var(--card-2));
+        pointer-events: none;
+      }
+    }
+
+    /* ── 照片總覽's header row: title left, category chips right.
+       The issue-count badge uses a fixed off-family orange (not var(--accent)) so it reads
+       the same "worth reviewing" signal in every theme, including the ones
+       whose own accent already lives in the green/purple/cyan family --
+       same fixed-color approach as .adherence-icon's --green/--red. ── */
+    .ap-photo-summary-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ap-photo-summary-badge {
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 10px;
+      background: rgba(249,115,22,.14);
+      border: 1px solid rgba(249,115,22,.28);
+      border-radius: 20px;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #F97316;
+      white-space: nowrap;
+    }
+    .ap-photo-summary-badge[hidden] { display: none; }
+    .ap-photo-summary-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 15px 0;
+    }
+    .ap-photo-secondary-sections {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    /* 照片亮點 / 優先改善 share this label style -- same title treatment as
+       .ap-photo-summary-label just smaller, so they read as sub-sections of
+       the same card rather than a competing heading level. */
+    .ap-photo-highlights-label,
+    .ap-photo-issues-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -.1px;
+    }
+    .ap-photo-issues-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .ap-photo-highlights-label svg { flex-shrink: 0; color: var(--green); }
+    .ap-photo-issues-label svg { flex-shrink: 0; color: #F97316; }
+    .ap-photo-highlights-box {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-top: 10px;
+      padding: 12px;
+      background: rgba(1,179,123,.08);
+      border-radius: 10px;
+    }
+    .ap-photo-highlight-row {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+    }
+    .ap-photo-highlight-key {
+      flex: 0 0 auto;
+      min-width: 60px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .ap-photo-highlight-value {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    .ap-photo-issues-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .ap-photo-issues-list-frame {
+      position: relative;
+      margin-top: 10px;
+      padding: 0;
+      background: rgba(249,115,22,.07);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .ap-photo-issue-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+    }
+    .ap-photo-issue-row + .ap-photo-issue-row {
+      border-top: 1px solid rgba(249,115,22,.14);
+    }
+    .ap-photo-issue-num {
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 20px;
+      margin-top: 1px;
+      border-radius: 6px;
+      background: rgba(249,115,22,.16);
+      color: #D5670F;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .ap-photo-issue-text {
+      flex: 1;
+      min-width: 0;
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+    /* Narrower right panel (batch mode's sidebar eating into the canvas
+       column, or a plain narrow viewport): stack 照片亮點's label/value
+       instead of keeping them side by side, same container-query hook
+       #ap-options-card-inline already uses for .ap-review-tab above. Issue
+       rows stay number+text side by side at any width per spec. */
+    @container options-card-inline (max-width: 520px) {
+      .ap-photo-highlight-row { flex-direction: column; gap: 2px; }
+      .ap-photo-highlight-key { min-width: 0; }
+      .ap-photo-summary-tags { justify-content: flex-end; }
+    }
+    /* On a desktop-width right panel, keep the two semantic groups in one
+       row. The divider switches from each section's horizontal rule to a
+       single vertical rule between the columns. If either group is hidden,
+       the :has() guard leaves the remaining group full-width and keeps its
+       normal horizontal divider. */
+    @container options-card-inline (min-width: 560px) {
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 15px;
+        margin-top: 15px;
+      }
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) > .ap-photo-summary-divider,
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) .ap-photo-summary-divider {
+        display: none;
+      }
+      .ap-photo-secondary-sections:has(> .ap-photo-highlights:not([hidden])):has(> .ap-photo-issues:not([hidden])) > .ap-photo-issues {
+        min-width: 0;
+        border-left: 1px solid var(--border);
+        padding-left: 15px;
+      }
+    }
     .ap-analysis-shell {
       background: var(--card-2);
       border: 1px solid var(--border);
@@ -4481,12 +4728,57 @@
                      shows on both the first-time 分析 review and the 結果
                      page/a revise without any extra wiring. -->
                 <div class="ap-photo-summary" id="ap-photo-summary">
-                  <span class="ap-photo-summary-label">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
-                    照片內容
-                  </span>
-                  <div class="ap-photo-summary-tags" id="ap-photo-summary-tags"></div>
+                  <div class="ap-photo-summary-header">
+                    <span class="ap-photo-summary-label">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L4 11l6.8-2.2L12 2z" fill="currentColor"/></svg>
+                      照片總覽
+                    </span>
+                    <div class="ap-photo-summary-tags" id="ap-photo-summary-tags"></div>
+                  </div>
                   <p class="ap-photo-summary-text" id="ap-photo-summary-text"></p>
+
+                  <div class="ap-photo-secondary-sections" id="ap-photo-secondary-sections">
+                    <!-- 照片亮點: composition_mood/main_subject only -- see
+                         renderAnalysisPreview (results.js). Whole block+divider
+                         hidden together when both fields are empty. On desktop,
+                         this and 優先改善 share a two-column row. -->
+                    <div class="ap-photo-highlights" id="ap-photo-highlights" hidden>
+                      <hr class="ap-photo-summary-divider">
+                      <span class="ap-photo-highlights-label">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 22V11l4-7a2 2 0 0 1 2 2v4h5.34a2 2 0 0 1 1.98 2.3l-1.2 8A2 2 0 0 1 17.16 22H7z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 11H4a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h3" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                        照片亮點
+                      </span>
+                      <div class="ap-photo-highlights-box" id="ap-photo-highlights-box">
+                        <div class="ap-photo-highlight-row" id="ap-highlight-mood" hidden>
+                          <span class="ap-photo-highlight-key">畫面氛圍</span>
+                          <span class="ap-photo-highlight-value" id="ap-highlight-mood-value"></span>
+                        </div>
+                        <div class="ap-photo-highlight-row" id="ap-highlight-subject" hidden>
+                          <span class="ap-photo-highlight-key">視覺焦點</span>
+                          <span class="ap-photo-highlight-value" id="ap-highlight-subject-value"></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 優先改善: detected_issues only, each row is one full
+                         string with no sub-parsing -- see renderPhotoIssues
+                         (results.js). Hidden together with its divider when
+                         there are no valid issues. -->
+                    <div class="ap-photo-issues" id="ap-photo-issues" hidden>
+                      <hr class="ap-photo-summary-divider">
+                      <div class="ap-photo-issues-header">
+                        <span class="ap-photo-issues-label">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>
+                          優先改善
+                        </span>
+                        <span class="ap-photo-summary-badge" id="ap-photo-summary-badge" hidden></span>
+                      </div>
+                      <div class="ap-photo-issues-list-frame">
+                        <ol class="ap-photo-issues-list" id="ap-photo-issues-list"></ol>
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="ap-photo-summary-toggle" id="ap-photo-summary-toggle" hidden aria-controls="ap-photo-secondary-sections" aria-expanded="false"></button>
                 </div>
                 <details class="ap-options-toggle ap-analysis-shell" id="ap-analysis-shell" open>
                   <summary class="ap-label ap-analysis-shell-summary">
@@ -4636,7 +4928,7 @@
             <summary class="ap-label">分析結果</summary>
             <div class="ap-analysis-body">
               <div class="ap-option-group">
-                <p class="ap-sub-label">照片內容</p>
+                <p class="ap-sub-label">照片總覽</p>
                 <p id="ap-subject" class="sb-value"></p>
               </div>
               <div class="ap-option-group">
@@ -4984,7 +5276,7 @@
 
         <div class="summary-band">
           <div class="sb-item">
-            <label class="sb-label">照片內容</label>
+            <label class="sb-label">照片總覽</label>
             <div id="r-subject-tags" class="tag-row"></div>
             <span id="r-subject" class="sb-value">照片主體</span>
           </div>

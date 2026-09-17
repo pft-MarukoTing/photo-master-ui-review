@@ -742,9 +742,9 @@ window.PhotoAgentResults = (() => {
 
   function renderTags(element, tags) {
     element.innerHTML = "";
-    tags.filter(Boolean).forEach((tag) => {
+    tags.filter((tag) => typeof tag === "string" && tag.trim()).forEach((tag) => {
       const chip = document.createElement("span");
-      chip.textContent = tag;
+      chip.textContent = tag.trim();
       element.appendChild(chip);
     });
   }
@@ -793,10 +793,132 @@ window.PhotoAgentResults = (() => {
       ]);
     }
     return joinParts([
-      subject ? `主體：${subject}。` : "已完成照片內容辨識。",
+      subject ? `主體：${subject}。` : "已完成照片總覽辨識。",
       scene ? `場景：${scene}。` : ""
     ]);
   }
+
+  // detected_issues is a plain string array with no category/severity/etc.
+  // -- see getValidIssues's callers for why this stays a flat trim+filter
+  // instead of any keyword-based grouping. Non-string entries (a stale/
+  // malformed analysis result) are dropped rather than displayed raw.
+  function getValidIssues(analysis) {
+    const raw = Array.isArray(analysis?.detected_issues) ? analysis.detected_issues : [];
+    return raw
+      .filter((item) => typeof item === "string")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  let currentValidIssues = [];
+  const ISSUES_DEFAULT_VISIBLE = 3;
+
+  // Renders #ap-photo-issues-list from the first three valid issues and
+  // keeps #ap-photo-summary-badge's "N 項值得調整" count in sync with the
+  // rows currently shown.
+  function renderPhotoIssues() {
+    if (!els.apPhotoIssuesList) return;
+    const total = currentValidIssues.length;
+    const visible = currentValidIssues.slice(0, ISSUES_DEFAULT_VISIBLE);
+    if (els.apPhotoSummaryBadge) {
+      els.apPhotoSummaryBadge.hidden = visible.length === 0;
+      els.apPhotoSummaryBadge.textContent = visible.length
+        ? `${visible.length} 項值得調整`
+        : "";
+    }
+    if (els.apPhotoIssues) els.apPhotoIssues.hidden = total === 0;
+    els.apPhotoIssuesList.innerHTML = "";
+    if (total === 0) {
+      return;
+    }
+    visible.forEach((text, index) => {
+      const li = document.createElement("li");
+      li.className = "ap-photo-issue-row";
+      const num = document.createElement("span");
+      num.className = "ap-photo-issue-num";
+      num.textContent = String(index + 1).padStart(2, "0");
+      const body = document.createElement("span");
+      body.className = "ap-photo-issue-text";
+      body.textContent = text;
+      li.appendChild(num);
+      li.appendChild(body);
+      els.apPhotoIssuesList.appendChild(li);
+    });
+  }
+
+  // 照片亮點: composition_mood/main_subject only, one row each, no fallback
+  // text and no other field ever feeds this -- see the spec this implements
+  // for why (no aesthetic_diagnosis excerpting, no rewriting).
+  function renderPhotoHighlights(analysis) {
+    const mood = typeof analysis?.composition_mood === "string" ? analysis.composition_mood.trim() : "";
+    const subject = typeof analysis?.main_subject === "string" ? analysis.main_subject.trim() : "";
+    if (els.apHighlightMood) els.apHighlightMood.hidden = !mood;
+    if (els.apHighlightMoodValue) els.apHighlightMoodValue.textContent = mood;
+    if (els.apHighlightSubject) els.apHighlightSubject.hidden = !subject;
+    if (els.apHighlightSubjectValue) els.apHighlightSubjectValue.textContent = subject;
+    if (els.apPhotoHighlights) els.apPhotoHighlights.hidden = !mood && !subject;
+  }
+
+  const PHOTO_SUMMARY_COMPACT_HEIGHT = 280;
+  const PHOTO_SUMMARY_MOBILE_RATIO = 1 / 3;
+  const PHOTO_SUMMARY_COMPACT_MEDIA = "(max-width: 900px), (min-width: 901px) and (max-height: 760px)";
+  let photoSummaryExpanded = false;
+
+  // Short desktop screens keep the summary readable without allowing it to
+  // consume the analysis shell's entire height. The button is only exposed
+  // when the natural summary actually overflows the compact height.
+  function syncPhotoSummaryCompactState() {
+    const summary = els.apPhotoSummary;
+    const toggle = els.apPhotoSummaryToggle;
+    if (!summary || !toggle) return;
+    const isMobile = typeof window.matchMedia === "function"
+      && window.matchMedia("(max-width: 900px)").matches;
+    const shouldCompactSummary = typeof window.matchMedia === "function"
+      && window.matchMedia(PHOTO_SUMMARY_COMPACT_MEDIA).matches;
+
+    summary.style.removeProperty("--ap-photo-summary-compact-height");
+    summary.classList.remove("ap-photo-summary--compact", "ap-photo-summary--expanded");
+    if (!shouldCompactSummary) {
+      photoSummaryExpanded = false;
+      toggle.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      return;
+    }
+
+    const needsCompactToggle = summary.scrollHeight > PHOTO_SUMMARY_COMPACT_HEIGHT;
+    if (!needsCompactToggle) {
+      photoSummaryExpanded = false;
+      toggle.hidden = true;
+      toggle.setAttribute("aria-expanded", "false");
+      return;
+    }
+
+    if (isMobile) {
+      summary.style.setProperty(
+        "--ap-photo-summary-compact-height",
+        `${Math.ceil(summary.scrollHeight * PHOTO_SUMMARY_MOBILE_RATIO)}px`
+      );
+    }
+    toggle.hidden = false;
+    toggle.textContent = photoSummaryExpanded ? "收合" : "查看更多";
+    toggle.setAttribute("aria-expanded", String(photoSummaryExpanded));
+    if (photoSummaryExpanded) {
+      summary.classList.add("ap-photo-summary--expanded");
+    } else {
+      summary.classList.add("ap-photo-summary--compact");
+    }
+  }
+
+  if (els.apPhotoSummaryToggle) {
+    els.apPhotoSummaryToggle.addEventListener("click", () => {
+      photoSummaryExpanded = !photoSummaryExpanded;
+      syncPhotoSummaryCompactState();
+    });
+  }
+  if (els.apPhotoSummary && typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(() => syncPhotoSummaryCompactState()).observe(els.apPhotoSummary);
+  }
+  window.addEventListener("resize", syncPhotoSummaryCompactState);
 
   function formatCandidate(candidate, validation) {
     const selected = validation?.selected_candidate_id === candidate.id;
@@ -2254,8 +2376,8 @@ window.PhotoAgentResults = (() => {
 
     els.subjectText.textContent = buildPhotoContentSummary(analysis);
     renderTags(els.subjectTags, [
-      analysis.subject_category || "未知類型",
-      analysis.scene_category || "未知場景"
+      analysis.subject_category,
+      analysis.scene_category
     ]);
 
     // #r-intent is now a <ul> — build list items from intent data
@@ -2272,7 +2394,7 @@ window.PhotoAgentResults = (() => {
     document.querySelector("#r-status").textContent = formatStatus(qa);
 
     // main_subject/scene_type are already surfaced by buildPhotoContentSummary
-    // just above (els.subjectText, "照片內容") -- repeating them here as well
+    // just above (els.subjectText, "照片總覽") -- repeating them here as well
     // read as the same "主體：.../場景：..." sentence printed twice in a row.
     els.diagnosisText.textContent = analysis.aesthetic_diagnosis
       || "照片已有基本資訊，接下來以提升光線、色彩、構圖與視覺焦點為主。";
@@ -2452,23 +2574,29 @@ window.PhotoAgentResults = (() => {
     if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
     if (els.apSubjectTags) {
       renderTags(els.apSubjectTags, [
-        analysis.subject_category || "未知類型",
-        analysis.scene_category || "未知場景"
+        analysis.subject_category,
+        analysis.scene_category
       ]);
     }
     if (els.apPhotoSummaryTags) {
-      renderTags(els.apPhotoSummaryTags, [
-        analysis.subject_category || "未知類型",
-        analysis.scene_category || "未知場景"
-      ]);
+      renderTags(els.apPhotoSummaryTags, [analysis.subject_category, analysis.scene_category]);
     }
     if (els.apPhotoSummaryText) {
-      const summary = stripFieldLabel(analysis.photo_summary, ["照片內容", "照片摘要", "內容"]);
-      els.apPhotoSummaryText.textContent = summary ? `${summary}。` : "";
+      // Keep the model-provided summary intact. This display-only selector
+      // only removes surrounding whitespace so it never rewrites the text
+      // or derives a sentence from another analysis field.
+      const summary = typeof analysis?.photo_summary === "string"
+        ? analysis.photo_summary.trim()
+        : "";
+      els.apPhotoSummaryText.textContent = summary;
     }
+    renderPhotoHighlights(analysis);
+    currentValidIssues = getValidIssues(analysis);
+    renderPhotoIssues();
+    syncPhotoSummaryCompactState();
 
     // main_subject/scene_type are already surfaced by buildPhotoContentSummary
-    // just above (els.apSubject, "照片內容") -- repeating them here as well
+    // just above (els.apSubject, "照片總覽") -- repeating them here as well
     // read as the same "主體：.../場景：..." sentence printed twice in a row.
     if (els.apDiagnosis) {
       els.apDiagnosis.textContent = analysis.aesthetic_diagnosis

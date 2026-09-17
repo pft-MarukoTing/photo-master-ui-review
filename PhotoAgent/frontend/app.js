@@ -1906,6 +1906,13 @@
     if (els.analysisPreview) {
       els.analysisPreview.querySelectorAll("input, select, textarea, button").forEach((el) => {
         if (el.classList.contains("ap-review-tab") || el.classList.contains("ap-face-tab")) return;
+        // This is a display-only overview expander. Archived cases remain
+        // read-only for editing controls, but the user must still be able to
+        // expand/collapse the photo summary.
+        if (el.id === "ap-photo-summary-toggle") {
+          el.disabled = false;
+          return;
+        }
         el.disabled = disabled;
       });
     }
@@ -8315,8 +8322,8 @@
     if (!els.apSubjectTags) return;
     const analysis = record && record.analysis;
     renderTags(els.apSubjectTags, analysis ? [
-      analysis.subject_category || "未知類型",
-      analysis.scene_category || "未知場景"
+      analysis.subject_category,
+      analysis.scene_category
     ] : []);
   }
 
