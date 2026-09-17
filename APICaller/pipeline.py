@@ -60,15 +60,19 @@ JUDGE_JSON_SCHEMA = {
 JUDGE_MODEL = "gpt-5.5"
 
 
-async def generate_pair(provider: str, prompt: str, out_dir: Path, run_id: str) -> tuple[Path, Path]:
+async def generate_pair(
+    provider: str, prompt: str, out_dir: Path, run_id: str, gen_model: str | None = None
+) -> tuple[Path, Path]:
     source_path = out_dir / f"{run_id}_source.png"
     reference_path = out_dir / f"{run_id}_reference.png"
     if provider == "gemini":
-        await gemini_client.generate_image(prompt, str(source_path))
-        await gemini_client.generate_image(prompt, str(reference_path))
+        model = gen_model or gemini_client.DEFAULT_MODEL
+        await gemini_client.generate_image(prompt, str(source_path), model=model)
+        await gemini_client.generate_image(prompt, str(reference_path), model=model)
     else:
-        openai_client.generate_image(prompt, str(source_path))
-        openai_client.generate_image(prompt, str(reference_path))
+        model = gen_model or openai_client.DEFAULT_MODEL
+        openai_client.generate_image(prompt, str(source_path), model=model)
+        openai_client.generate_image(prompt, str(reference_path), model=model)
     return source_path, reference_path
 
 
@@ -96,8 +100,8 @@ async def run(args: argparse.Namespace) -> None:
     run_id = datetime.now(TZ_UTC8).strftime("%Y%m%d_%H%M%S")
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[1/4] generating source + reference via {args.provider} ...")
-    source_path, reference_path = await generate_pair(args.provider, prompt, args.out_dir, run_id)
+    print(f"[1/4] generating source + reference via {args.provider} ({args.gen_model or 'default'}) ...")
+    source_path, reference_path = await generate_pair(args.provider, prompt, args.out_dir, run_id, args.gen_model)
     print(f"  source={source_path}\n  reference={reference_path}")
 
     print("[2/4] running ComfyUI nail-transfer workflow ...")
@@ -118,6 +122,7 @@ async def run(args: argparse.Namespace) -> None:
     record = {
         "run_id": run_id,
         "provider": args.provider,
+        "gen_model": args.gen_model or (gemini_client.DEFAULT_MODEL if args.provider == "gemini" else openai_client.DEFAULT_MODEL),
         "checkpoint": args.checkpoint,
         "workflow": str(args.workflow),
         "source": str(source_path),
@@ -135,6 +140,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--provider", choices=["gemini", "openai"], default="gemini",
                          help="which provider generates the source/reference hand photos")
+    parser.add_argument("--gen-model", default=None,
+                         help="override the generation model (default: each provider's own default in api_caller)")
     parser.add_argument("--prompt-file", type=Path, default=None,
                          help="defaults to nail_prompt.txt next to this script")
     parser.add_argument("--judge-prompt-file", type=Path, default=None,
