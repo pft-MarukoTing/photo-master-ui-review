@@ -2440,7 +2440,7 @@
       // finished loading in, not before -- the lock itself doesn't announce
       // itself otherwise, and a dimmed panel alone is easy to miss as "why
       // can't I click anything" rather than "this case is outdated."
-      showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+      showArchivedAnalysisNotice();
       return; // no Continue button exists to wait for in this mode
     }
     await waitForPendingResultsAction();
@@ -4366,7 +4366,7 @@
       // This is reached for completed history cases, whose compatibility is
       // checked from the restored result rather than /analyze/result.
       markHistoryCaseArchived();
-      showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+      showArchivedAnalysisNotice();
       return;
     }
     // This is the common entry point for the first edit and every later
@@ -4883,7 +4883,7 @@
       // finished loading in, not before -- the lock itself doesn't announce
       // itself otherwise, and a dimmed panel alone is easy to miss as "why
       // can't I click anything" rather than "this case is outdated."
-      showNoticeModal("這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。");
+      showArchivedAnalysisNotice();
       return; // no Run/Cancel controls exist to wait for in this mode
     }
 
@@ -5676,15 +5676,103 @@
   // Generic in-app notice popup -- same open/close shape as the error modal
   // above, styled with the PhotoMaster wordmark instead since it's not
   // reporting a failure (e.g. the inline revise panel's Run button when
-  // nothing was actually changed).
-  function showNoticeModal(message) {
+  // nothing was actually changed). Most callers use the dismiss-only form;
+  // recoverable notices can supply one primary action without needing a
+  // separate one-off modal.
+  let noticeModalAction = null;
+
+  function showNoticeModal(message, { dismissLabel = "OK", actionLabel = "", onAction = null } = {}) {
     if (!els.noticeModal) return;
     if (els.noticeModalMsg) els.noticeModalMsg.textContent = message;
+    noticeModalAction = typeof onAction === "function" ? onAction : null;
+    if (els.noticeModalOkBtn) {
+      els.noticeModalOkBtn.textContent = dismissLabel;
+      els.noticeModalOkBtn.classList.toggle("btn-grad", !noticeModalAction);
+      els.noticeModalOkBtn.classList.toggle("btn-secondary", !!noticeModalAction);
+    }
+    if (els.noticeModalActionBtn) {
+      els.noticeModalActionBtn.hidden = !noticeModalAction;
+      els.noticeModalActionBtn.disabled = false;
+      els.noticeModalActionBtn.textContent = actionLabel;
+    }
     els.noticeModal.hidden = false;
   }
 
   function closeNoticeModal() {
+    noticeModalAction = null;
     if (els.noticeModal) els.noticeModal.hidden = true;
+    if (els.noticeModalOkBtn) {
+      els.noticeModalOkBtn.textContent = "OK";
+      els.noticeModalOkBtn.classList.add("btn-grad");
+      els.noticeModalOkBtn.classList.remove("btn-secondary");
+    }
+    if (els.noticeModalActionBtn) {
+      els.noticeModalActionBtn.hidden = true;
+      els.noticeModalActionBtn.disabled = false;
+      els.noticeModalActionBtn.textContent = "";
+    }
+  }
+
+  async function handleNoticeModalAction() {
+    const action = noticeModalAction;
+    if (!action || !els.noticeModalActionBtn || els.noticeModalActionBtn.disabled) return;
+    const originalLabel = els.noticeModalActionBtn.textContent;
+    els.noticeModalActionBtn.disabled = true;
+    els.noticeModalActionBtn.textContent = "準備中…";
+    try {
+      await action();
+    } catch (error) {
+      // Keep the modal open so the user can retry instead of dropping them
+      // back onto the same read-only case with no explanation.
+      if (els.noticeModalMsg) {
+        els.noticeModalMsg.textContent = `無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`;
+      }
+      if (!els.noticeModal.hidden) {
+        els.noticeModalActionBtn.disabled = false;
+        els.noticeModalActionBtn.textContent = originalLabel;
+      }
+    }
+  }
+
+  const ARCHIVED_ANALYSIS_NOTICE = "這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。";
+
+  // Re-enters through the ordinary new-upload path instead of continuing or
+  // rerunning the archived job. Fetch the source before resetApp clears the
+  // current case pointers, then let setSelectedFile/startSubmit establish a
+  // fresh job, fresh analysis, and the normal downstream review pipeline.
+  async function restartArchivedCase(sourceFile, sourceUrl) {
+    let file = sourceFile;
+    if (!file) {
+      if (!sourceUrl) throw new Error("這筆紀錄沒有可重新上傳的原始照片。");
+      const response = await fetchWithRetry(sourceUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      file = new File([blob], "reuploaded-photo.jpg", { type: blob.type || "image/jpeg" });
+    }
+
+    // Invalidate any history-view work that may still be finishing in the
+    // background. The archived history entry itself is intentionally kept;
+    // only the active client-side case state is discarded.
+    historyViewToken += 1;
+    closeNoticeModal();
+    resetApp();
+    await setSelectedFile(file);
+    // Same route as clicking the upload page's 分析 button: analyze first,
+    // pause for review, then continue through the existing edit pipeline.
+    void startSubmit({ skipReview: false });
+  }
+
+  function showArchivedAnalysisNotice() {
+    // Capture these now so switching UI state while the modal is open cannot
+    // make the action accidentally reuse a different case's source photo.
+    const sourceFile = selectedFile;
+    const sourceUrl = selectedFileSourceUrl;
+    const canRestart = !!(sourceFile || sourceUrl);
+    showNoticeModal(ARCHIVED_ANALYSIS_NOTICE, canRestart ? {
+      dismissLabel: "查看舊版",
+      actionLabel: "重新處理",
+      onAction: () => restartArchivedCase(sourceFile, sourceUrl)
+    } : undefined);
   }
 
   // App-styled stand-in for window.confirm() -- same backdrop+box shape as
@@ -10146,6 +10234,7 @@
     });
   }
   if (els.noticeModalOkBtn) els.noticeModalOkBtn.addEventListener("click", closeNoticeModal);
+  if (els.noticeModalActionBtn) els.noticeModalActionBtn.addEventListener("click", handleNoticeModalAction);
   if (els.noticeModal) {
     els.noticeModal.addEventListener("click", (e) => {
       if (e.target.dataset.close) closeNoticeModal();

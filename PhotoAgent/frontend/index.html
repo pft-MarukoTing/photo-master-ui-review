@@ -2713,7 +2713,7 @@
       font-style: normal; background: var(--mv-grad);
       -webkit-background-clip: text; background-clip: text; color: transparent;
     }
-    .notice-modal-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+    .notice-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
     #notice-modal-msg { font-size: 18px; white-space: pre-line; }
 
     /* ── Account badge/modal/history (account.js + app.js) ── */
@@ -5241,9 +5241,9 @@
      above, branded with the PhotoMaster wordmark instead of a "處理失敗"
      title since it's not reporting a failure) -- shown by
      showNoticeModal(message) in app.js, e.g. the inline revise panel's Run
-     button when nothing was actually changed. No dedicated close (X) button --
-     just the single OK action below, plus the shared backdrop-click/Escape
-     dismiss every other modal here already gets. -->
+     button when nothing was actually changed. Most notices only show OK;
+     callers that can recover from the condition may reveal the optional
+     primary action too. Backdrop-click/Escape still dismisses either form. -->
 <div id="notice-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="notice-modal-title">
@@ -5253,6 +5253,7 @@
     <p id="notice-modal-msg" class="error-modal-msg"></p>
     <div class="notice-modal-actions">
       <button id="notice-modal-ok-btn" class="btn btn-grad btn-sm" type="button">OK</button>
+      <button id="notice-modal-action-btn" class="btn btn-grad btn-sm" type="button" hidden></button>
     </div>
   </div>
 </div>
