@@ -1790,6 +1790,23 @@
     if (mask) mask.remove();
   }
 
+  // Fetches a URL into the browser's image cache before it's ever assigned to
+  // a visible <img> -- unlike setImgSrcPreloaded above, this isn't tied to any
+  // particular DOM element; it's for delaying a page transition itself until
+  // the loading placeholder's own thumbnail is ready, so the two appear
+  // together instead of the placeholder popping in first and the thumbnail
+  // filling in a moment later. Resolves on error too (never rejects) so a
+  // broken/slow thumbnail URL can't hang the navigation it's blocking.
+  function preloadImage(src) {
+    if (!src) return Promise.resolve();
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve();
+      img.onerror = () => resolve();
+      img.src = src;
+    });
+  }
+
   function appendTimingRow(container, label, duration, { sub = false } = {}) {
     const row = document.createElement("div");
     row.className = sub ? "timing-row timing-sub" : "timing-row";
@@ -2260,6 +2277,26 @@
     // reads #original-img's laid-out size, which is all zeros while
     // #results-section is still display:none.
     showSection("results");
+    // The history drawer is a full-viewport overlay independent of which
+    // section is showing underneath -- if the user opened it (without
+    // clicking into any record, which would already have its own explicit
+    // close) while this analysis was still running in the background, this
+    // reveal would otherwise happen invisibly behind it. closeHistoryDrawer
+    // is a no-op when it's already closed.
+    closeHistoryDrawer();
+    // Same "already showing" guard showSingleResult/showBatchDoneMain/
+    // showBatchAnalyzedMain use, and the same reason: #batch-main-loading
+    // (shown by viewProcessingHistoryRecord/viewAnalyzeHistoryRecord while a
+    // DIFFERENT history record is still processing/analyzing) must never
+    // stay stuck covering the screen once this record's own review needs to
+    // render here instead -- clicking an already-analyzed ("待修圖") history
+    // tile skips straight to this function without ever calling
+    // showBatchMainLoading/hideAllBatchMainViews itself, so without this the
+    // old placeholder was left on top of the newly-built (but still hidden)
+    // #results-canvas-row.
+    const alreadyShowing = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
+    if (!alreadyShowing) hideAllBatchMainViews();
+    if (els.resultsCanvasRow) els.resultsCanvasRow.hidden = false;
     renderResult(
       { data: {}, analysis, preset, imageModel: singleFlowState.imageModel, hasOriginal: true },
       { pending: true }
@@ -4335,6 +4372,11 @@
       // alone decides it here.
       if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
       showSection("results");
+      // Same reasoning as showPendingResults' own closeHistoryDrawer call --
+      // the drawer is a full-viewport overlay independent of this section, so
+      // it would otherwise hide this reveal if the user opened it while the
+      // edit was still running in the background. No-op if already closed.
+      closeHistoryDrawer();
       setStepIndicatorStep(4); // 結果 -- no-op for the skipReview/direct path, where the indicator was never shown to begin with
       if (els.canvasLoading) els.canvasLoading.hidden = true;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
@@ -6076,7 +6118,7 @@
               if (li.classList.contains("opening")) return;
               li.classList.add("opening");
               try {
-                await viewAnalyzeHistoryRecord(job);
+                await viewAnalyzeHistoryRecord(job, { alreadyAnalyzed: analyzed });
               } finally {
                 li.classList.remove("opening");
               }
@@ -6718,7 +6760,7 @@
   // own manual path would have left it, via the same runPendingReviewFlow
   // both now share. historyViewToken guards this the same way
   // viewProcessingHistoryRecord does -- see its own comment.
-  async function viewAnalyzeHistoryRecord(job) {
+  async function viewAnalyzeHistoryRecord(job, { alreadyAnalyzed = false } = {}) {
     const myToken = ++historyViewToken;
     setCurrentCaseTimes(job);
     const analyzeJobId = Array.isArray(job.runs) && job.runs.length ? job.runs[0] : job.job_id;
@@ -6729,9 +6771,27 @@
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = true;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-    // This history entry is already analyzed (the tile is only wired to
-    // this handler after its analyze job succeeds). Keep the upload page
-    // visible while its analysis and source image are being reconstructed.
+    if (!alreadyAnalyzed) {
+      // This tile is clickable while the analyze job is still running (badge
+      // "分析中") -- unlike viewProcessingHistoryRecord's own upfront
+      // showBatchMainLoading, nothing here used to switch the visible section
+      // until AFTER pollJobStatus below resolved, so a click on a
+      // still-analyzing tile looked like a dead button for however long that
+      // poll took. Navigate immediately instead. An already-analyzed tile
+      // (badge "待修圖") skips this: pollJobStatus resolves for it almost
+      // instantly, so flashing this "still analyzing" placeholder first would
+      // just be a needless extra transition before the real review panel.
+      const thumbUrl = sourceThumbnailUrl(analyzeJobId);
+      // Waits for the small thumbnail itself (not previewUrl above, which is
+      // the full-size source image) to finish loading BEFORE navigating, so
+      // the placeholder and its photo appear together instead of the page
+      // jumping first and the thumbnail visibly popping in a moment later.
+      await preloadImage(thumbUrl);
+      if (historyViewToken !== myToken) return; // navigated away while the thumbnail loaded
+      showSection("results");
+      showBatchMainLoading({ previewUrl, thumbUrl, status: "analyzing" });
+      closeHistoryDrawer();
+    }
 
     try {
       await pollJobStatus(analyzeJobId, { path: "local" });
@@ -6813,6 +6873,20 @@
   async function viewProcessingHistoryRecord(job) {
     const myToken = ++historyViewToken;
     setCurrentCaseTimes(job);
+    // job.job_id doesn't exist on a history entry (see record_history/
+    // account.py) -- every job from the same action lives in job.runs
+    // instead, with job.job_id kept only as a fallback for an entry recorded
+    // before that field existed.
+    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+    const previewUrl = job.path === "local" ? sourceImageUrl(jobIds[0]) : "";
+    const thumbUrl = job.path === "local" ? sourceThumbnailUrl(jobIds[0]) : "";
+    // Waits for the small thumbnail itself (not previewUrl above, which is
+    // the full-size source image) to finish loading BEFORE navigating, so
+    // the loading placeholder and its photo appear together instead of the
+    // page jumping first and the thumbnail visibly popping in a moment later.
+    await preloadImage(thumbUrl);
+    if (historyViewToken !== myToken) return; // navigated away while the thumbnail loaded
+
     showSection("results");
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
@@ -6825,22 +6899,25 @@
     // bearing here the way it is in viewHistoryRecord.
     if (els.canvasLoading) els.canvasLoading.hidden = true;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-    // job.job_id doesn't exist on a history entry (see record_history/
-    // account.py) -- every job from the same action lives in job.runs
-    // instead, with job.job_id kept only as a fallback for an entry recorded
-    // before that field existed.
-    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
-    const previewUrl = job.path === "local" ? sourceImageUrl(jobIds[0]) : "";
     // aiPhotoEditing/imageModel: batchSettings (what showBatchMainLoading's
     // rotating status text would otherwise fall back to) is only populated
     // during an actual multi-photo batch run, never for a single history
     // record resumed here -- see showBatchMainLoading's own comment.
     showBatchMainLoading({
       previewUrl,
+      thumbUrl,
       status: "processing",
       aiPhotoEditing: job.ai_photo_editing,
       imageModel: job.image_model
     });
+    // Navigation to the loading view above is already visible now, so close
+    // the drawer immediately instead of waiting for an actual result to land
+    // further down (inside renderIfPossible/viewHistoryRecord): that deferred
+    // close doesn't run on every path out of this function (an early-return
+    // guard, viewHistoryRecord bailing on a still-catching-up /result fetch,
+    // etc.), which silently left the drawer open on top of an already-
+    // navigated page.
+    closeHistoryDrawer();
 
     // A combined multi-RUN job (runCombinedMultiRun) is ONE job_id covering
     // every RUN (job_processor.py runs finish_stage `run_count` times inside
@@ -6928,10 +7005,6 @@
           els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
           showSection("results");
           showSingleResult({ autoOpenPanel: false, forceReopen: !revealed });
-          // First RUN to actually land -- keep the drawer open until now so
-          // it doesn't disappear during the still-processing wait, then close
-          // it now that a result page is actually visible behind it.
-          if (!revealed) closeHistoryDrawer();
           revealed = true;
         };
         if (els.originalImg.src === selectedFileSourceUrl) {
