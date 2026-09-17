@@ -33,12 +33,17 @@ pip install --upgrade pip setuptools wheel
 #   committed.
 # requests: comfy_client.py's synchronous ComfyUI HTTP API client.
 # pillow: re-encoding ComfyUI's PNG output to JPEG in comfyui_run.py.
+# pyyaml: structured catalogs like nail_style.yaml (category -> list of
+#   items), read by tools that pick a style and inject it into a prompt
+#   template -- unlike the *_prompt.txt files, these need to be parsed as
+#   data, not handed to the model as prose.
 pip install \
     "aiohttp>=3.9" \
     "openai>=1.99" \
     "python-dotenv>=1.0" \
     "requests>=2.31" \
-    "pillow>=11.0"
+    "pillow>=11.0" \
+    "pyyaml>=6.0"
 
 echo ""
 echo "Setup complete. To use it:"
