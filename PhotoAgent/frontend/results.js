@@ -1554,8 +1554,10 @@ window.PhotoAgentResults = (() => {
       // findings it shows came from reading the full photo alone -- dimmed
       // here so that lower-confidence reading is visible at a glance (see
       // buildPersonIssueItems' own note li for the same caveat spelled out
-      // in words once this tab is selected).
-      if (entry.sentToModel !== true) tab.classList.add("ap-face-tab--local-only");
+      // in words once this tab is selected). Debug-only, same as the other
+      // sentToModel caveats below -- release users see every face tab
+      // rendered the same way regardless of how it was found.
+      if (entry.sentToModel !== true && debugUiActive) tab.classList.add("ap-face-tab--local-only");
       const label = entry.label || `人物 ${index + 1}`;
       tab.title = label;
       tab.setAttribute("aria-label", label);
