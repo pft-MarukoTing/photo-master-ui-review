@@ -251,6 +251,17 @@ STYLE_OPTION_INSTRUCTIONS = {
             "Make the lighting change noticeable through the whole image's softness, depth, and glow, not by drawing a bright rim around the subject. "
             "Preserve the same subject, location, props, and scene truth. Avoid plastic skin, flat studio lighting, artificial fog, excessive bloom, blown highlights, rebuilt background, or obvious halo/cutout effects."
         ),
+        "cool": (
+            "Transform the photo with a clearly visible cool blue-hour atmosphere, as daylight fades after sunset while the sky remains luminous. "
+            "Let soft blue ambient light from the scene shape subjects and background together, with cooler midtones and gently deeper shadows. "
+            "Keep faces in that ambient light, with exposure and shadow direction consistent with nearby surfaces; skin shares the cool illumination while retaining its complexion, and existing lamps keep their own color. "
+            "Preserve the same scene, material identity, and photographic realism."
+        ),
+        "night": (
+            "Transform the whole photo into a clearly recognizable night scene with dark blue ambient light and deeper, natural shadows. "
+            "Let existing light sources create gentle highlights on the subject and surroundings so both share the same nighttime atmosphere. "
+            "Keep the subject readable, skin complexion recognizable, and the original location and materials believable."
+        ),
     },
     "size": {
         "wide": (
@@ -335,7 +346,7 @@ STYLE_OPTION_VALUE_LABELS = {
         "vsign": "V-Sign", "cheer": "Cheer",
     },
     "angle": {"high": "High Shot", "low": "Low Shot", "eye": "Eye Level", "side": "Side Shot"},
-    "lighting": {"gold": "Gold Tone", "soft": "Soft Glow"},
+    "lighting": {"gold": "Gold Tone", "soft": "Soft Glow", "cool": "Blue Hour", "night": "Night"},
     "size": {"wide": "Wide", "wider": "Wider", "close": "Close", "closer": "Closer"},
 }
 

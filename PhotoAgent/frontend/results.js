@@ -34,7 +34,9 @@ window.PhotoAgentResults = (() => {
   const LIGHTING_OPTIONS = [
     DEFAULT_OPTION,
     { value: "gold", label: "金色光調" },
-    { value: "soft", label: "柔光" }
+    { value: "soft", label: "柔光" },
+    { value: "cool", label: "藍調光線" },
+    { value: "night", label: "夜色" }
   ];
   const SIZE_OPTIONS = [
     DEFAULT_OPTION,
@@ -56,7 +58,7 @@ window.PhotoAgentResults = (() => {
       vsign: "pose-vsing.png", cheer: "pose-cheer.png"
     },
     angle: { high: "angle-highshot.png", low: "angle-lowshot.png", eye: "angle-eyelevel.png" },
-    lighting: { gold: "lighting-goldtone.png", soft: "lighting-soft.png" },
+    lighting: { gold: "lighting-goldtone.png", soft: "lighting-soft.png", cool: "lighting-cool.png", night: "lighting-night.png" },
     size: { wide: "size-wide.png", wider: "size-wider.png", close: "size-close.png", closer: "size-closer.png" }
   };
 
