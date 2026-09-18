@@ -5025,6 +5025,27 @@
                           stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                       </svg>
                     </button>
+                    <!-- Shown instead of #inline-analysis-continue-btn for an
+                         archived (version-incompatible) case -- 維持現況
+                         (showArchivedAnalysisNotice, app.js) only dismisses
+                         that one-time notice, so this stays in place
+                         afterward as the case's lasting way back into
+                         重新分析/重新一鍵美化. Same split-run pill the upload
+                         page's #start-btn/#start-full-btn use. -->
+                    <div class="split-run ap-restart-actions" id="ap-restart-actions" hidden>
+                      <button id="ap-restart-analysis-btn" class="btn btn-grad split-main" type="button" title="用最新版本重新分析這張照片">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M10 4a6 6 0 104.47 10.03l4.75 4.75 1.06-1.06-4.75-4.75A6 6 0 0010 4zm0 1.5a4.5 4.5 0 110 9 4.5 4.5 0 010-9z"/>
+                        </svg>
+                        <span>重新分析</span>
+                      </button>
+                      <button id="ap-restart-full-btn" class="btn btn-grad split-secondary" type="button" title="用最新版本重新一鍵美化這張照片">
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M8 5v14l11-7z"/>
+                        </svg>
+                        <span>重新一鍵美化</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>

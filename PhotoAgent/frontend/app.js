@@ -1929,6 +1929,15 @@
           el.disabled = false;
           return;
         }
+        // #ap-restart-analysis-btn/#ap-restart-full-btn (index.html) live
+        // inside #ap-options-card-inline (one of analysisPreviewLockTargets
+        // below) but ARE this archived case's one legitimate action -- a
+        // blanket disabled=true here would make showArchivedAnalysisNotice's
+        // own canRestart toggle pointless.
+        if (el.closest("#ap-restart-actions")) {
+          el.disabled = false;
+          return;
+        }
         el.disabled = disabled;
       });
     }
@@ -2519,6 +2528,12 @@
     // NEXT case's build finally catches up).
     const readOnly = !isCompatible(analysis);
     setAnalysisPreviewDisabled(readOnly);
+    // Reset here, before the branch below -- a previous case left showing
+    // (readOnly=true, still on screen since 維持現況 doesn't clear it) could
+    // otherwise leak #ap-restart-actions into this one's normal edit flow.
+    // showArchivedAnalysisNotice (below) re-shows it for this case's own
+    // readOnly branch based on ITS OWN canRestart, not this case's.
+    if (els.apRestartActions) els.apRestartActions.hidden = true;
     await showPendingResults(analysis, preset);
     if (readOnly) {
       if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
@@ -2605,6 +2620,13 @@
     // #ap-options-card-inline) -- toggled alongside it here since it lost
     // that shared parent's hidden gating.
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = readOnly;
+    // Reset unconditionally, same reasoning as runPendingReviewFlow above --
+    // a readOnly caller that wants #ap-restart-actions shown (currently only
+    // backToProcessFromResults) calls showArchivedAnalysisNotice right after
+    // this, which re-shows it based on that case's own canRestart. A caller
+    // that doesn't (e.g. the plain "reviewable:false" historical-playback
+    // path) correctly leaves it hidden.
+    if (els.apRestartActions) els.apRestartActions.hidden = true;
     els.analysisPreview.hidden = false;
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     // Mirrored onto #results-body too -- #batch-sidebar's width split (see
@@ -2619,6 +2641,7 @@
     els.analysisPreview.hidden = true;
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
+    if (els.apRestartActions) els.apRestartActions.hidden = true;
     restoreOptionsCardHome();
   }
 
@@ -5946,6 +5969,12 @@
     const sourceFile = selectedFile;
     const sourceUrl = selectedFileSourceUrl;
     const canRestart = !!(sourceFile || sourceUrl);
+    // 維持現況 only dismisses this one-time notice -- it doesn't undo the
+    // read-only lock, so #ap-restart-actions (the same 重新分析/重新一鍵美化
+    // split-run pair as this notice's own two actions, index.html) is left
+    // showing in Run's old spot for as long as this archived case stays on
+    // screen, instead of the case going dead-ended after the first dismiss.
+    if (els.apRestartActions) els.apRestartActions.hidden = !canRestart;
     // Each restart choice gets its OWN #preflight-cost-modal at click time
     // (same row builders #start-btn/#start-full-btn use, since both re-enter
     // through the exact same startSubmit({skipReview}) path) instead of a
@@ -5969,6 +5998,42 @@
         await restartArchivedCase(sourceFile, sourceUrl, true);
       }
     } : undefined);
+  }
+
+  // #ap-restart-analysis-btn / #ap-restart-full-btn (index.html) -- the
+  // lasting counterparts of this same notice's 重新分析/重新一鍵美化 actions,
+  // for once the user has already dismissed the notice with 維持現況. Unlike
+  // those, there's no notice text already asking "are you sure" alongside
+  // them, so each click asks its own confirm question here, with the same
+  // toggle-gated cost breakdown showConfirmModal's costSteps already knows
+  // how to render (isPreflightCostEstimateEnabled, above).
+  async function handleArchivedRestartClick(btn, skipReview) {
+    if (!btn || btn.disabled) return;
+    const sourceFile = selectedFile;
+    const sourceUrl = selectedFileSourceUrl;
+    if (!sourceFile && !sourceUrl) return;
+    const steps = skipReview
+      ? [analysisPreflightStep(), editPreflightStep()]
+      : [analysisPreflightStep()];
+    const confirmed = await showConfirmModal(
+      skipReview ? "確定要用新版本重新一鍵美化一次嗎？" : "確定要用新版本重新分析一次嗎？",
+      { confirmLabel: skipReview ? "重新一鍵美化" : "重新分析", danger: false, costSteps: steps }
+    );
+    if (!confirmed) return;
+    btn.disabled = true;
+    hideError();
+    try {
+      await restartArchivedCase(sourceFile, sourceUrl, skipReview);
+    } catch (error) {
+      showError(`無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`);
+      btn.disabled = false;
+    }
+  }
+  if (els.apRestartAnalysisBtn) {
+    els.apRestartAnalysisBtn.addEventListener("click", () => handleArchivedRestartClick(els.apRestartAnalysisBtn, false));
+  }
+  if (els.apRestartFullBtn) {
+    els.apRestartFullBtn.addEventListener("click", () => handleArchivedRestartClick(els.apRestartFullBtn, true));
   }
 
   // App-styled stand-in for window.confirm() -- same backdrop+box shape as
@@ -10296,6 +10361,7 @@
     setFlowStage("idle"); // back to the upload screen -- nothing running
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
+    if (els.apRestartActions) els.apRestartActions.hidden = true;
     // Clears whatever showArchivedAnalysisNotice's readOnly lock left behind
     // (setAnalysisPreviewDisabled(true) on #analysis-preview /
     // #ap-options-card-inline -- see isCompatible). Those are the same
