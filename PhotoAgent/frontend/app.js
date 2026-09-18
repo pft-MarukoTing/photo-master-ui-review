@@ -2140,13 +2140,14 @@
   // option, so it's persisted client-side like SIDE_PANEL_LAYOUT_KEY above.
   const PREFLIGHT_COST_ESTIMATE_KEY = "photoagent.preflightCostEstimate";
 
-  // Same null-vs-"0" default-on distinction as isSidePanelLayoutEnabled.
+  // Same null-vs-"1" shape as isSidePanelLayoutEnabled, but default OFF --
+  // a user who's never touched this setting gets straight-through submits,
+  // same as before this feature existed; only an explicit "1" turns it on.
   function isPreflightCostEstimateEnabled() {
     try {
-      const stored = localStorage.getItem(PREFLIGHT_COST_ESTIMATE_KEY);
-      return stored === null ? true : stored === "1";
+      return localStorage.getItem(PREFLIGHT_COST_ESTIMATE_KEY) === "1";
     } catch {
-      return true;
+      return false;
     }
   }
 
