@@ -2428,6 +2428,11 @@
        click handler opens this to show its failure reason, from inside the
        history drawer (z-index 1001), so it needs to win against that too. */
     #notice-modal { z-index: 1002; }
+    /* The archived-case notice's own two restart actions (#notice-modal,
+       1002 above) each open this to confirm their own cost estimate before
+       actually restarting -- it must win against the notice it was opened
+       from, not sit behind it at the plain .error-modal base of 1000. */
+    #preflight-cost-modal { z-index: 1003; }
     /* #report-btn itself is position:fixed at z-index:2000 (see its own
        rule further down) so it stays clickable above any other modal/
        drawer, dynamically-launched or not -- #report-modal is what it
@@ -3005,6 +3010,11 @@
       .notice-modal-actions .btn { width: 100%; height: 38px; font-size: 15px; }
     }
     #notice-modal-msg { font-size: 18px; white-space: pre-line; }
+    /* showConfirmModal's message can now carry a folded-in cost-estimate
+       line (preflightCostNoteLine, app.js) separated by \n\n -- same
+       pre-line treatment #notice-modal-msg already gets, so that renders as
+       an actual blank line instead of running into the sentence before it. */
+    #confirm-modal-msg { white-space: pre-line; }
 
     /* ── Account badge/modal/history (account.js + app.js) ── */
     /* Hidden outright (not via the "hidden" attribute JS toggles based on
@@ -3638,15 +3648,15 @@
     }
     /* A history case whose analysis is below the current compatibility floor
        remains viewable/downloadable and can be reprocessed with the current
-       version. A simple upward arrow stays legible at this badge's small
-       size and communicates that a newer version is available. */
+       version. Keep the refresh paths inset from the SVG bounds so the full
+       circular icon remains visible at this badge's small size. */
     .batch-sidebar-item.archived .rc-badge::before {
       content: "";
-      width: 13px;
-      height: 13px;
+      width: 14px;
+      height: 14px;
       background: currentColor;
-      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m6.5 10.5 5.5-5.5 5.5 5.5'/%3E%3C/svg%3E") center / contain no-repeat;
-      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m6.5 10.5 5.5-5.5 5.5 5.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 1 0-2.34 5.66'/%3E%3Cpath d='M20 4v7h-7'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 11a8 8 0 1 0-2.34 5.66'/%3E%3Cpath d='M20 4v7h-7'/%3E%3C/svg%3E") center / contain no-repeat;
     }
     .history-cube.batch-sidebar-item.archived .rc-badge {
       background: rgba(75,75,85,.72);
@@ -5692,6 +5702,27 @@
   </div>
 </div>
 
+<!-- Pre-flight cost estimate -- shown by showPreflightCostModal (app.js)
+     when the user presses 分析/美化/分析+美化, before any request actually
+     goes out, so they can back out before spending anything. Rows are built
+     dynamically (#preflight-cost-modal-rows), reusing #cost-modal's own row
+     styling; unlike that modal this one gates the action, so it needs a
+     real 取消/確認 pair instead of a single × close. Same shared
+     backdrop-click/Escape dismiss (as Cancel) as every other modal here. -->
+<div id="preflight-cost-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="preflight-cost-modal-title">
+    <div class="error-modal-hdr">
+      <span id="preflight-cost-modal-title" class="notice-modal-title">預計花費</span>
+    </div>
+    <div id="preflight-cost-modal-rows" class="cost-modal-rows"></div>
+    <div class="account-modal-actions">
+      <button id="preflight-cost-modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">取消</button>
+      <button id="preflight-cost-modal-ok-btn" class="btn btn-grad btn-sm" type="button">確認送出</button>
+    </div>
+  </div>
+</div>
+
 <!-- Report sheet: opened by #report-btn (see openReportModal, app.js)
      before actually submitting -- lets the user confirm/edit which name the
      report is attributed to (prefilled from the current account, if any)
@@ -6065,6 +6096,21 @@
         <button type="button" class="gallery-layout-mode-btn" data-gallery-layout-mode="collage" aria-pressed="false">交錯</button>
       </div>
     </div>
+    <!-- Gates every #preflight-cost-modal open plus the folded-in cost line
+         in the "沒有做任何修改" confirm (isPreflightCostEstimateEnabled,
+         PREFLIGHT_COST_ESTIMATE_KEY in app.js). Duplicated (shared class,
+         not id) into #ap-settings-modal-body below, same as the theme
+         picker, since this needs to be changeable from both pages. -->
+    <label id="preflight-cost-toggle-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">分析／美化前顯示預計花費</span>
+        <span class="option-desc">開啟後，按下「分析」「一鍵美化」「美化」時會先跳出預計花費供確認；關閉則直接送出，不再顯示相關內容。</span>
+      </div>
+      <label class="ios-switch">
+        <input class="preflight-cost-toggle" type="checkbox" checked>
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
   </div>
   </div>
 </div>
@@ -6245,6 +6291,20 @@
       </div>
       <label class="ios-switch">
         <input id="side-panel-layout-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
+    <!-- Same toggle as #settings-modal-body's own preflight-cost-toggle-row
+         (shared class, see its comment there) -- reachable from here too
+         since the results page's own gear button opens THIS modal, not
+         #settings-modal (openContextSettingsModal, app.js). -->
+    <label id="ap-preflight-cost-toggle-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">分析／美化前顯示預計花費</span>
+        <span class="option-desc">開啟後，按下「分析」「一鍵美化」「美化」時會先跳出預計花費供確認；關閉則直接送出，不再顯示相關內容。</span>
+      </div>
+      <label class="ios-switch">
+        <input class="preflight-cost-toggle" type="checkbox" checked>
         <span class="ios-track"><span class="ios-thumb"></span></span>
       </label>
     </label>

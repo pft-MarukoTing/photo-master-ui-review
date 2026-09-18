@@ -21,6 +21,10 @@ window.PhotoAgentDom = (() => {
     costModalEdit: document.querySelector("#cost-modal-edit"),
     costModalEditModel: document.querySelector("#cost-modal-edit-model"),
     costModalTotal: document.querySelector("#cost-modal-total"),
+    preflightCostModal: document.querySelector("#preflight-cost-modal"),
+    preflightCostModalRows: document.querySelector("#preflight-cost-modal-rows"),
+    preflightCostModalCancelBtn: document.querySelector("#preflight-cost-modal-cancel-btn"),
+    preflightCostModalOkBtn: document.querySelector("#preflight-cost-modal-ok-btn"),
     // Drawer, not a section.toggle screen -- see openHistoryDrawer/
     // closeHistoryDrawer (app.js).
     historyDrawer: document.querySelector("#history-drawer"),

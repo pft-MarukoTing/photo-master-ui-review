@@ -2133,6 +2133,38 @@
     document.body.classList.toggle("side-panel-layout", enabled);
   }
 
+  // ── 分析／美化前顯示預計花費 (preflight-cost-toggle, both settings modals) ──
+  // Gates every #preflight-cost-modal open (showPreflightCostModal) and the
+  // folded-in cost line in the "沒有做任何修改" confirm (preflightCostNoteLine,
+  // further below) -- a display/friction preference, not a per-request
+  // option, so it's persisted client-side like SIDE_PANEL_LAYOUT_KEY above.
+  const PREFLIGHT_COST_ESTIMATE_KEY = "photoagent.preflightCostEstimate";
+
+  // Same null-vs-"0" default-on distinction as isSidePanelLayoutEnabled.
+  function isPreflightCostEstimateEnabled() {
+    try {
+      const stored = localStorage.getItem(PREFLIGHT_COST_ESTIMATE_KEY);
+      return stored === null ? true : stored === "1";
+    } catch {
+      return true;
+    }
+  }
+
+  // Updates every matching toggle (shared class, not id -- this setting is
+  // duplicated into both #settings-modal and #ap-settings-modal, see their
+  // own markup comments) so flipping it in one modal is immediately
+  // reflected if the user later opens the other one in the same session.
+  function setPreflightCostEstimateEnabled(enabled) {
+    try {
+      localStorage.setItem(PREFLIGHT_COST_ESTIMATE_KEY, enabled ? "1" : "0");
+    } catch {
+      // Private-browsing/storage-disabled: falls back to session-only.
+    }
+    document.querySelectorAll(".preflight-cost-toggle").forEach((toggle) => {
+      toggle.checked = enabled;
+    });
+  }
+
   function getOptionsCardTarget() {
     return isSidePanelLayoutEnabled() && els.resultsAnalysisSlot ? els.resultsAnalysisSlot : els.resultsCanvasTop;
   }
@@ -2448,7 +2480,19 @@
       function cleanup() {
         els.inlineAnalysisContinueBtn.removeEventListener("click", continueHandler);
       }
-      function continueHandler() { cleanup(); resolve(); }
+      // 美化's own pre-flight cost estimate -- singleFlowState.imageModel/
+      // .imageQuality are kept live-synced with the visible picker
+      // (applyModelQualityChange), so they already reflect whatever the user
+      // has selected by the time this click fires. A Cancel here just
+      // leaves the review panel open for another click, same as before this
+      // confirm existed.
+      async function continueHandler() {
+        const est = preflightEditEstimate(singleFlowState.imageModel, singleFlowState.imageQuality);
+        const confirmed = await showPreflightCostModal([{ label: "美化花費", modelLabel: est.label, cost: est.cost }]);
+        if (!confirmed) return;
+        cleanup();
+        resolve();
+      }
       els.inlineAnalysisContinueBtn.addEventListener("click", continueHandler);
     });
   }
@@ -2713,10 +2757,22 @@
         // a failed generation) is a legitimate reason to proceed. A Cancel
         // here doesn't clear the listener/resolve, so the panel just stays
         // open, same as before this confirmation was added.
+        // Same pre-flight cost estimate as the first-time continue
+        // (waitForPendingResultsAction) -- this button is the same 美化
+        // action, just for a later revise round, and still spends a real
+        // edit call each time it's pressed.
+        const est = preflightEditEstimate(singleFlowState.imageModel, singleFlowState.imageQuality);
         if (inlineReviseHasNoChanges()) {
+          // Folded into the same "nothing changed, are you sure" prompt
+          // (per the user's own request) instead of showing it and then a
+          // separate cost-estimate modal right after.
           const confirmed = await showConfirmModal(
-            "你沒有做任何修改，確定要再執行一次美化嗎？", { confirmLabel: "美化", danger: false });
+            "你沒有做任何修改，確定要再執行一次美化嗎？" + preflightCostNoteLine("美化花費", est),
+            { confirmLabel: "美化", danger: false });
           if (!confirmed) return;
+        } else {
+          const costConfirmed = await showPreflightCostModal([{ label: "美化花費", modelLabel: est.label, cost: est.cost }]);
+          if (!costConfirmed) return;
         }
         clearInlineAnalysisWait();
         resolve("continue");
@@ -5814,6 +5870,13 @@
     }
   }
 
+  // Thrown by a notice action that shows its own nested confirm/estimate step
+  // (e.g. the archived-case notice's preflight cost modal below) when the
+  // user backs out of THAT step -- runNoticeModalAction treats this as
+  // "quietly go back to the notice, try again", not a real failure worth
+  // reporting via its usual error text.
+  class NoticeActionCancelled extends Error {}
+
   // Shared by both action buttons -- `btn`/`action` pick which one is
   // running so the other stays untouched (and re-enabled on failure) while
   // its sibling shows "準備中…".
@@ -5827,7 +5890,7 @@
     } catch (error) {
       // Keep the modal open so the user can retry instead of dropping them
       // back onto the same read-only case with no explanation.
-      if (els.noticeModalMsg) {
+      if (!(error instanceof NoticeActionCancelled) && els.noticeModalMsg) {
         els.noticeModalMsg.textContent = `無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`;
       }
       if (!els.noticeModal.hidden) {
@@ -5880,12 +5943,28 @@
     const sourceFile = selectedFile;
     const sourceUrl = selectedFileSourceUrl;
     const canRestart = !!(sourceFile || sourceUrl);
+    // Each restart choice gets its OWN #preflight-cost-modal at click time
+    // (same row builders #start-btn/#start-full-btn use, since both re-enter
+    // through the exact same startSubmit({skipReview}) path) instead of a
+    // single cost line folded into this notice -- 重新分析 and 重新一鍵美化
+    // spend different amounts, so a single shared line can no longer speak
+    // for both. A decline here throws NoticeActionCancelled so
+    // runNoticeModalAction just quietly resets this button instead of
+    // reporting it as a failure.
     showNoticeModal(ARCHIVED_ANALYSIS_NOTICE, canRestart ? {
       dismissLabel: "維持現況",
       actionLabel: "重新分析",
-      onAction: () => restartArchivedCase(sourceFile, sourceUrl, false),
+      onAction: async () => {
+        const confirmed = await showPreflightCostModal([analysisPreflightStep()]);
+        if (!confirmed) throw new NoticeActionCancelled();
+        await restartArchivedCase(sourceFile, sourceUrl, false);
+      },
       action2Label: "重新一鍵美化",
-      onAction2: () => restartArchivedCase(sourceFile, sourceUrl, true)
+      onAction2: async () => {
+        const confirmed = await showPreflightCostModal([analysisPreflightStep(), editPreflightStep()]);
+        if (!confirmed) throw new NoticeActionCancelled();
+        await restartArchivedCase(sourceFile, sourceUrl, true);
+      }
     } : undefined);
   }
 
@@ -9532,6 +9611,118 @@
     return match ? match.label : friendlyModelLabel(modelId);
   }
 
+  // Fixed pre-flight ESTIMATES for #preflight-cost-modal (shown before
+  // 分析/美化/分析+美化 actually submit anything), keyed by the exact
+  // analysis model id or edit model+quality `value` a normal run can pick.
+  // imageModelQualityOptions' own comment notes only the three Sunburst
+  // tiers are release-facing today, so that's all this needs to cover --
+  // there's no real token usage yet at this point to price a combo from
+  // (unlike stageCost's post-run numbers above), so a combo missing here
+  // (a debug-only model/quality) just shows a dash, same as
+  // formatCostValue's zero-cost dash.
+  const PREFLIGHT_ANALYSIS_COST = { "gpt-5.6-luna": 0.0152 };
+  const PREFLIGHT_EDIT_COST = {
+    "gpt-image-2.5-sunburst:low": 0.0258,
+    "gpt-image-2.5-sunburst:medium": 0.0328,
+    "gpt-image-2.5-sunburst:high": 0.0679,
+  };
+
+  function preflightAnalysisEstimate(analysisModel) {
+    return { label: friendlyModelLabel(analysisModel), cost: PREFLIGHT_ANALYSIS_COST[analysisModel] ?? null };
+  }
+
+  function preflightEditEstimate(imageModel, imageQuality) {
+    const opt = findModelQualityOptionByPair(imageModel, imageQuality);
+    return { label: opt?.label || friendlyModelLabel(imageModel), cost: PREFLIGHT_EDIT_COST[opt?.value] ?? null };
+  }
+
+  // Shared #preflight-cost-modal row builders for a fresh 分析/一鍵美化 about
+  // to start (upload page's own picks, not an existing singleFlowState) --
+  // used by #start-btn/#start-full-btn and by the archived-case notice's two
+  // restart actions below, since both re-enter through the exact same
+  // startSubmit({skipReview}) path and so spend the exact same thing.
+  function analysisPreflightStep() {
+    const analysisModel = els.analysisModelSelect?.value || window.PhotoAgentConfig.defaultAnalysisModel || "gpt-5.6-luna";
+    const est = preflightAnalysisEstimate(analysisModel);
+    return { label: "分析花費", modelLabel: est.label, cost: est.cost };
+  }
+
+  function editPreflightStep() {
+    const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
+    const est = preflightEditEstimate(modelQualityOpt.model, modelQualityOpt.quality);
+    return { label: "美化花費", modelLabel: est.label, cost: est.cost };
+  }
+
+  function formatPreflightCostValue(cost) {
+    return cost != null ? `$${cost.toFixed(4)}` : "—";
+  }
+
+  // For merging a preflight estimate into an existing plain-text notice/
+  // confirm message (showArchivedAnalysisNotice, waitForInlineAnalysisAction's
+  // no-changes confirm) instead of stacking a second modal after it -- both
+  // of those modals' message elements render \n as a real line break
+  // (#notice-modal-msg/#confirm-modal-msg are both white-space: pre-line).
+  function preflightCostNoteLine(label, est) {
+    if (!isPreflightCostEstimateEnabled()) return "";
+    return `\n\n預計花費：${label} ${formatPreflightCostValue(est.cost)}${est.label ? `（${est.label}）` : ""}`;
+  }
+
+  let preflightCostModalHandlers = null;
+  function clearPreflightCostModalWait() {
+    if (!preflightCostModalHandlers) return;
+    els.preflightCostModalOkBtn?.removeEventListener("click", preflightCostModalHandlers.ok);
+    els.preflightCostModalCancelBtn?.removeEventListener("click", preflightCostModalHandlers.cancel);
+    preflightCostModalHandlers = null;
+  }
+
+  function buildPreflightCostRow({ label, modelLabel, cost }, extraClass = "") {
+    const item = document.createElement("div");
+    item.className = "cost-modal-item";
+    const row = document.createElement("div");
+    row.className = `cost-modal-row ${extraClass}`.trim();
+    const labelEl = document.createElement("span");
+    labelEl.className = "cost-modal-label";
+    labelEl.textContent = label;
+    const valueEl = document.createElement("span");
+    valueEl.className = "cost-modal-value";
+    valueEl.textContent = formatPreflightCostValue(cost);
+    row.append(labelEl, valueEl);
+    item.appendChild(row);
+    if (modelLabel) {
+      const modelEl = document.createElement("p");
+      modelEl.className = "cost-modal-model";
+      modelEl.textContent = modelLabel;
+      item.appendChild(modelEl);
+    }
+    return item;
+  }
+
+  // Shows the estimated cost of the step(s) a 分析/美化/分析+美化 press is
+  // about to submit and waits for the user to confirm or back out --
+  // resolves true/false the same way showConfirmModal does. `steps` is
+  // [{label, modelLabel, cost}], one entry per step about to run; a second
+  // entry gets a summed 總金額 row underneath, same as #cost-modal's own
+  // total row.
+  function showPreflightCostModal(steps) {
+    return new Promise((resolve) => {
+      if (!isPreflightCostEstimateEnabled() || !els.preflightCostModal || !els.preflightCostModalRows) { resolve(true); return; }
+      clearPreflightCostModalWait();
+      els.preflightCostModalRows.innerHTML = "";
+      steps.forEach((step) => els.preflightCostModalRows.appendChild(buildPreflightCostRow(step)));
+      if (steps.length > 1) {
+        const knownCosts = steps.filter((s) => s.cost != null);
+        const total = knownCosts.length ? knownCosts.reduce((sum, s) => sum + s.cost, 0) : null;
+        els.preflightCostModalRows.appendChild(
+          buildPreflightCostRow({ label: "總金額", cost: total }, "cost-modal-row-total"));
+      }
+      const finish = (result) => { clearPreflightCostModalWait(); els.preflightCostModal.hidden = true; resolve(result); };
+      preflightCostModalHandlers = { ok: () => finish(true), cancel: () => finish(false) };
+      els.preflightCostModalOkBtn?.addEventListener("click", preflightCostModalHandlers.ok);
+      els.preflightCostModalCancelBtn?.addEventListener("click", preflightCostModalHandlers.cancel);
+      els.preflightCostModal.hidden = false;
+    });
+  }
+
   // #cost-modal's three numbers, plus which model(s) actually ran each
   // bucket's stages, for whatever photo is currently on screen. null (button
   // stays hidden) until there's at least one priced stage; currentTokenUsage's
@@ -10530,8 +10721,16 @@
     const fold = els.advancedSettingsFold;
     if (fold && fold.open && !fold.contains(e.target)) fold.open = false;
   });
-  els.startButton.addEventListener("click", () => startSubmit({ skipReview: false }));
-  if (els.startFullButton) els.startFullButton.addEventListener("click", () => startSubmit({ skipReview: true }));
+  els.startButton.addEventListener("click", async () => {
+    const confirmed = await showPreflightCostModal([analysisPreflightStep()]);
+    if (!confirmed) return;
+    startSubmit({ skipReview: false });
+  });
+  if (els.startFullButton) els.startFullButton.addEventListener("click", async () => {
+    const confirmed = await showPreflightCostModal([analysisPreflightStep(), editPreflightStep()]);
+    if (!confirmed) return;
+    startSubmit({ skipReview: true });
+  });
   els.showPromptBtn.addEventListener("click", openPromptsModal);
   if (els.promptsModalClose) els.promptsModalClose.addEventListener("click", closePromptsModal);
   if (els.promptsModalImageCompareBtn) els.promptsModalImageCompareBtn.addEventListener("click", togglePromptsModalImageCompare);
@@ -10661,6 +10860,21 @@
       if (e.target.dataset.close) closeCostModal();
     });
   }
+  if (els.preflightCostModal) {
+    els.preflightCostModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) preflightCostModalHandlers?.cancel();
+    });
+  }
+  // Every gate that opens #preflight-cost-modal awaits it before doing
+  // anything that would change section (showSection dispatches this event) --
+  // so under normal use, by the time a section change happens, the modal has
+  // already resolved and cleared its own handlers. The one case this still
+  // catches is the user abandoning it mid-decision (e.g. opening a different
+  // history record, whose own archived-case notice sits at a higher z-index
+  // and would otherwise silently hide this modal behind it, only for
+  // dismissing that notice to reveal it again). Force-resolving it as a
+  // cancel here is a no-op whenever it's already closed.
+  document.addEventListener("photoagent:sectionchange", () => preflightCostModalHandlers?.cancel());
   setupThemePicker();
   if (els.headerSettingsBtn) els.headerSettingsBtn.addEventListener("click", openContextSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
@@ -10719,6 +10933,14 @@
       galleryLayoutNarrowMql.addListener(onNarrowChange);
     }
   }
+  // Same shared-class pattern as the theme picker above -- this toggle is
+  // duplicated into both #settings-modal and #ap-settings-modal (see their
+  // own markup comments), so every matching checkbox gets the initial state
+  // and its own change listener here.
+  document.querySelectorAll(".preflight-cost-toggle").forEach((toggle) => {
+    toggle.checked = isPreflightCostEstimateEnabled();
+    toggle.addEventListener("change", () => setPreflightCostEstimateEnabled(toggle.checked));
+  });
   // Resets to the pills-only view every time this tab is switched to --
   // same as this tab's old openStyleModal always starting there, so
   // whichever category grid was left open on a previous visit doesn't
@@ -10778,6 +11000,7 @@
     if (els.confirmModal && !els.confirmModal.hidden) confirmModalHandlers?.cancel();
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
     if (els.costModal && !els.costModal.hidden) closeCostModal();
+    if (els.preflightCostModal && !els.preflightCostModal.hidden) preflightCostModalHandlers?.cancel();
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
