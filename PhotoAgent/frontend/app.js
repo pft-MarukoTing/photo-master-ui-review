@@ -7698,6 +7698,14 @@
   async function loadUploadHistoryPage({ reset = false } = {}) {
     const user = getCurrentUser();
     if (!user || !els.demoImagesGrid || uploadHistoryLoading) return;
+    // Nothing may render history into the shared grid while 範例照片 owns it
+    // (see the scroll listener's own comment). The request token already
+    // stops a response that arrives after a switch; this stops a load from
+    // starting after one, which is the case that produced tiles appended
+    // below the sample gallery. Safe for every current caller:
+    // setUploadGalleryTab assigns uploadGalleryActiveTab before calling in,
+    // and refreshUploadGalleryIfVisible checks it first.
+    if (uploadGalleryActiveTab !== "recent") return;
     const token = ++uploadHistoryRequestToken;
     if (reset) {
       uploadHistoryOffset = 0;
@@ -10211,6 +10219,16 @@
   if (els.uploadGalleryTabSample) els.uploadGalleryTabSample.addEventListener("click", () => setUploadGalleryTab("sample"));
   if (els.demoImagesGrid) {
     els.demoImagesGrid.addEventListener("scroll", () => {
+      // 最近照片 only. This grid is shared with 範例照片, and a history page
+      // loaded while that tab owns it appends AFTER the sample tiles rather
+      // than replacing them -- renderHistoryList's append path finds no
+      // existing .history-day-group among them and creates a new one at the
+      // end, so recent photos end up tacked onto the bottom of the sample
+      // gallery. Every other caller of loadUploadHistoryPage already checks
+      // which tab is showing (setUploadGalleryTab sets it before calling,
+      // refreshUploadGalleryIfVisible tests it outright); this listener was
+      // the one entry point that didn't.
+      if (uploadGalleryActiveTab !== "recent") return;
       if (uploadHistoryLoading || !uploadHistoryHasMore) return;
       const nearBottom = els.demoImagesGrid.scrollTop + els.demoImagesGrid.clientHeight
         >= els.demoImagesGrid.scrollHeight - 24;
