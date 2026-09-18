@@ -6669,7 +6669,13 @@
         const statuses = await Promise.all(
           jobIds.map((id) => getJobStatusCached(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
         );
-        if (await historyJobNeedsArchiveBadge(job, jobIds, statuses)) {
+        // Same reasoning as terminalJobStatusCache above: a case already
+        // known archived can't become compatible again (compatibility_version
+        // never moves backward), so re-fetching its full result/analyze
+        // payload here on every gallery render just to re-derive "yes,
+        // still archived" is pure waste -- skip straight to the badge.
+        const alreadyArchived = job.image_key && archivedHistoryKeys.has(job.image_key);
+        if (!alreadyArchived && await historyJobNeedsArchiveBadge(job, jobIds, statuses)) {
           markHistoryCaseArchived(job);
         }
         // getJobStatusOnce already asks the backend for `error`/`error_message`
