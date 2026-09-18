@@ -1525,7 +1525,7 @@ window.PhotoAgentResults = (() => {
       applyActiveReviewTab();
       return;
     }
-    if (els.apAnalysisShell) els.apAnalysisShell.open = reviewExpanded;
+    if (els.apAnalysisShell) els.apAnalysisShell.open = true;
     if (els.apReviewPanel) els.apReviewPanel.open = reviewExpanded;
     if (selectedFaceIndex >= faceThumbEntries.length) selectedFaceIndex = 0;
 
@@ -1663,8 +1663,28 @@ window.PhotoAgentResults = (() => {
   // both ways so the two always behave as one control, never drifting apart.
   if (els.apAnalysisShell && els.apReviewPanel) {
     els.apAnalysisShell.addEventListener("toggle", () => {
-      els.apReviewPanel.open = els.apAnalysisShell.open;
+      if (!els.apAnalysisShell.open) {
+        els.apAnalysisShell.open = true;
+        return;
+      }
+      els.apReviewPanel.open = true;
     });
+  }
+  if (els.apAnalysisShell) {
+    const shellSummary = els.apAnalysisShell.querySelector(":scope > summary");
+    if (shellSummary) {
+      const preventAnalysisShellCollapse = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        els.apAnalysisShell.open = true;
+      };
+      shellSummary.addEventListener("click", preventAnalysisShellCollapse);
+      shellSummary.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          preventAnalysisShellCollapse(event);
+        }
+      });
+    }
   }
 
   // Fills #ap-face-detail with whichever one person renderFaceReviewCards
@@ -2569,7 +2589,7 @@ window.PhotoAgentResults = (() => {
     // #ap-analysis-shell (the outer title+collapse frame) mirrors
     // #ap-review-panel's own open state -- both are opened by default for
     // the first-time 分析 review and the 結果 page/a revise.
-    if (els.apAnalysisShell) els.apAnalysisShell.open = expanded;
+    if (els.apAnalysisShell) els.apAnalysisShell.open = true;
     if (els.apReviewPanel) els.apReviewPanel.open = expanded;
     if (els.apSubject) els.apSubject.textContent = buildPhotoContentSummary(analysis);
     if (els.apSubjectTags) {

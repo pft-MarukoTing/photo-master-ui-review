@@ -912,9 +912,9 @@
     }
     .ap-analysis-shell > summary {
       padding: 10px 14px;
-      transition: background .15s;
+      cursor: default;
+      transition: none;
     }
-    .ap-analysis-shell > summary:hover { background: var(--card-3); }
     .ap-analysis-shell[open] > summary { border-bottom: 1px solid var(--border-2); }
     /* Fixed, not auto -- without this, switching 人像檢查/修圖建議/修圖風格/
        補充指令 (whichever tab has more or less content) reflowed this whole
@@ -947,32 +947,9 @@
       align-items: stretch;
       gap: 6px;
     }
-    /* .ap-options-toggle's shared chevron (▸, further up) sits to the LEFT
-       of whatever it's attached to -- fine next to a single-line title, but
-       parked beside this summary's two-line title+description block it read
-       as a stray mark with no clear line to belong to. Dropped (same
-       content:none technique as .ap-review-summary above) in favor of the
-       centered row below (.ap-analysis-shell-chevron-row, markup below). A
-       real <svg> (same line-icon style as the #ap-review-tabs icons below),
-       not a text-character pseudo-element -- a glyph like ▸ or > only has
-       whatever weight/crispness that font happens to render at this size,
-       where an outlined SVG stays crisp and reads unambiguously as a
-       chevron at any size. */
+    /* The outer analysis shell is informational and stays open; its summary
+       has no collapse affordance. */
     .ap-options-toggle > summary.ap-analysis-shell-summary::before { content: none; }
-    .ap-analysis-shell-chevron-row {
-      display: flex;
-      justify-content: center;
-    }
-    /* Points down at rest (collapsed -- "more content below"), flips to
-       pointing up once open ("collapse it back") -- rotate(180deg), not the
-       trailing-chevron's old rotate(90deg), since the SVG's own resting
-       path (markup below) now points down instead of right. */
-    .ap-analysis-shell-chevron {
-      color: var(--text-2);
-      transition: transform .15s, color .15s;
-    }
-    .ap-analysis-shell-summary:hover .ap-analysis-shell-chevron { color: var(--accent); }
-    .ap-analysis-shell[open] > summary.ap-analysis-shell-summary .ap-analysis-shell-chevron { transform: rotate(180deg); }
     .ap-analysis-shell-summary-inner {
       display: flex;
       flex-direction: column;
@@ -1292,6 +1269,10 @@
     .ap-options-toggle[open] > summary::before { transform: rotate(90deg); }
     .ap-options-toggle > summary:hover { color: var(--accent); }
     .ap-options-toggle > summary:hover::before { color: var(--accent); }
+    .ap-analysis-shell > summary.ap-analysis-shell-summary:hover {
+      color: inherit;
+      background: transparent;
+    }
 
     /* ── Style-option pickers (Pose/Angle/Lighting/Size): a row of pill
        buttons, each a <details> whose panel pops over the content below
@@ -4804,9 +4785,6 @@
                         分析與調整
                       </span>
                       <span class="ap-analysis-shell-desc">這是 AI 分析出的建議，你可以在這裡調整設定</span>
-                    </div>
-                    <div class="ap-analysis-shell-chevron-row">
-                      <svg class="ap-analysis-shell-chevron" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </div>
                   </summary>
                   <div class="ap-analysis-shell-body">
