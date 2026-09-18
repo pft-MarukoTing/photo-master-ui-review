@@ -10380,6 +10380,19 @@
     setCurrentCaseTimes();
     singleRuns = null;
     singleMirrorIndex = null;
+    // A stale 生成張數 (RUN count) left over from earlier in this same
+    // session -- either the user's own explicit pick on the upload/review
+    // picker (applyRunCountChange), or one restored from a multi-run history
+    // record's revise panel (startInlineBatchReview setting
+    // els.apRunCountSelect.value = record.runs.length) -- must not silently
+    // carry into the NEXT, unrelated upload. finishSingleFlow reads this
+    // value directly to decide how many independent edit jobs to submit, so
+    // a leftover >1 here would make a normal upload -> analyze -> 美化 flow
+    // quietly produce multiple real results instead of the one the user
+    // expects. Reset both mirrored pickers (see applyRunCountChange) back to
+    // "1" on every real fresh start; a user who wants more than one result
+    // still chooses that explicitly again on the upload screen.
+    applyRunCountChange(1);
     // A real fresh start (unlike just toggling tiles in the gallery without
     // confirming, which leaves the picks in place -- see demoSelectedNames'
     // own doc above) -- the gallery should show nothing checked afterward,
