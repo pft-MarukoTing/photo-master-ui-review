@@ -1070,7 +1070,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      flex: 0 0 auto;
+      flex: 1 0 auto;
       min-width: max-content;
       gap: 6px;
       padding: 7px 10px;
@@ -1145,6 +1145,19 @@
        and inactive sizing is deliberately small now, not the earlier
        18px/19px. */
     .ap-review-tab.is-active .ic { width: 17px; height: 17px; }
+    /* Give the next tab a little more visibility on narrow panels without
+       changing the label size or wrapping it. This is count-independent:
+       whichever tab follows the last fully visible one gets the exposed
+       sliver naturally from the scroll row. */
+    @container options-card-inline (max-width: 520px) {
+      .ap-review-tab {
+        gap: 4px;
+        padding-left: 8px;
+        padding-right: 8px;
+      }
+      .ap-review-tab .ic { width: 15px; height: 15px; }
+      .ap-review-tab.is-active .ic { width: 16px; height: 16px; }
+    }
     /* Each tab carries its own hue (--hue, set per id below) instead of one
        shared gray/purple -- the icon shows that hue at low opacity even at
        rest (some color identity before you've touched anything), full
