@@ -10735,11 +10735,16 @@
     if (fold && fold.open && !fold.contains(e.target)) fold.open = false;
   });
   els.startButton.addEventListener("click", async () => {
+    // Nothing uploaded yet -- startSubmit's own "請先上傳一張照片" error is
+    // the right response, not a cost estimate for a request that's about to
+    // be rejected anyway (same condition startSubmit itself checks).
+    if (!selectedFile && batchRecords.length <= 1) { startSubmit({ skipReview: false }); return; }
     const confirmed = await showPreflightCostModal([analysisPreflightStep()]);
     if (!confirmed) return;
     startSubmit({ skipReview: false });
   });
   if (els.startFullButton) els.startFullButton.addEventListener("click", async () => {
+    if (!selectedFile && batchRecords.length <= 1) { startSubmit({ skipReview: true }); return; }
     const confirmed = await showPreflightCostModal([analysisPreflightStep(), editPreflightStep()]);
     if (!confirmed) return;
     startSubmit({ skipReview: true });
