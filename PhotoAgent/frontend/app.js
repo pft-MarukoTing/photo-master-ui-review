@@ -647,6 +647,17 @@
     if (els.runQaRow) els.runQaRow.style.display = isDebug ? "" : "none";
     if (els.twoStageEditRow) els.twoStageEditRow.style.display = isDebug ? "" : "none";
     if (els.promptOverwriteRow) els.promptOverwriteRow.style.display = isDebug ? "" : "none";
+    // 生成張數 (RUN count > 1) is being pulled from the release build for now
+    // -- hide both pickers (upload-page settings-modal + results-page
+    // ap-settings-modal) outside debug mode and pin the value to 1, rather
+    // than just capping the visible options like applyRunCountOptionLimit
+    // already does below.
+    if (els.imageRunCountWrap) els.imageRunCountWrap.style.display = isDebug ? "" : "none";
+    if (els.apRunCountWrap && !isDebug) els.apRunCountWrap.hidden = true;
+    if (!isDebug) {
+      if (els.imageRunCountSelect) els.imageRunCountSelect.value = "1";
+      if (els.apRunCountSelect) els.apRunCountSelect.value = "1";
+    }
     if (els.editorPromptSettings) els.editorPromptSettings.style.display = isDebug ? "" : "none";
     if (els.apEditorPromptSettings) els.apEditorPromptSettings.style.display = isDebug ? "" : "none";
     if (!isDebug) {
@@ -2395,7 +2406,7 @@
     // regardless of what the screen showed right before this.
     restoreOptionsCardHome();
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
-    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
     // Step 2 already ran by the time this review screen shows -- populate
     // #timing-details/#timing-list with just that much now (finishSingleFlow
     // repopulates it with the full Steps 2-6 timeline once the rest runs),
@@ -5051,7 +5062,7 @@
       // individual values, never an edit to the global 人像修正設定 above.
       applyStyleSelections(lastSingleSelections);
     }
-    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
     openInlineAnalysisPanel(readOnly);
     if (readOnly) {
       // Shown once the (already read-only-locked) screen has actually
@@ -5978,6 +5989,19 @@
     historyViewToken += 1;
     closeNoticeModal();
     resetApp();
+    // resetApp's own showSection("upload") is what a real Home/清除 click
+    // wants, but here it's just a stepping stone -- setSelectedFile below
+    // awaits createProcThumbUrl's createImageBitmap (a real async decode,
+    // not just a microtask), so the browser gets a genuine paint of that
+    // bare instant: results page -> upload screen's drop-zone loading
+    // spinner -> processing screen once startSubmit finishes setting up,
+    // reading as a stray flash of the wrong screen for a moment. Jumping
+    // straight to "processing" here instead means startSubmit's OWN
+    // showSection("processing") moments later is a same-section no-op, and
+    // whatever it hasn't set up yet (procThumb's src, procTitle, the sub-
+    // message rotation) still lands well within this same already-brief
+    // window, same as before.
+    showSection("processing");
     await setSelectedFile(file);
     void startSubmit({ skipReview });
   }
@@ -9274,7 +9298,7 @@
     // configured when it last ran) instead of hiding the control -- the
     // bulk #run-count in the sidebar only ever applies to a *first* continue,
     // so a revise needs its own visible/adjustable count, same as single-image.
-    if (els.apRunCountWrap) els.apRunCountWrap.hidden = false;
+    if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
     if (els.apRunCountSelect) els.apRunCountSelect.value = String((record.runs || []).length || 1);
     openInlineAnalysisPanel();
     // The "run with no changes just reproduces the same result" guard

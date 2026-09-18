@@ -171,6 +171,7 @@ window.PhotoAgentDom = (() => {
     imageModelQualityPicker: document.querySelector("#image-model-quality-picker"),
     imageAspectRatioPicker: document.querySelector("#image-aspect-ratio-picker"),
     imageRunCountPicker: document.querySelector("#image-run-count-picker"),
+    imageRunCountWrap: document.querySelector("#image-run-count-wrap"),
     analysisModelSelect: document.querySelector("#analysis-model"),
     analysisModelPicker: document.querySelector("#analysis-model-picker"),
     editorPromptSettings: document.querySelector("#editor-prompt-settings"),
