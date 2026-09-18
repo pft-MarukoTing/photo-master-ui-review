@@ -5758,26 +5758,44 @@
   // recoverable notices can supply one primary action without needing a
   // separate one-off modal.
   let noticeModalAction = null;
+  // Second, optional action button -- so far only used by the archived-case
+  // notice (重新分析 / 重新一鍵美化), but kept generic like the first one in
+  // case another caller needs a two-choice notice later.
+  let noticeModalAction2 = null;
 
-  function showNoticeModal(message, { dismissLabel = "OK", actionLabel = "", onAction = null } = {}) {
+  function showNoticeModal(message, {
+    dismissLabel = "OK",
+    actionLabel = "",
+    onAction = null,
+    action2Label = "",
+    onAction2 = null,
+  } = {}) {
     if (!els.noticeModal) return;
     if (els.noticeModalMsg) els.noticeModalMsg.textContent = message;
     noticeModalAction = typeof onAction === "function" ? onAction : null;
+    noticeModalAction2 = typeof onAction2 === "function" ? onAction2 : null;
+    const hasAnyAction = !!(noticeModalAction || noticeModalAction2);
     if (els.noticeModalOkBtn) {
       els.noticeModalOkBtn.textContent = dismissLabel;
-      els.noticeModalOkBtn.classList.toggle("btn-grad", !noticeModalAction);
-      els.noticeModalOkBtn.classList.toggle("btn-secondary", !!noticeModalAction);
+      els.noticeModalOkBtn.classList.toggle("btn-grad", !hasAnyAction);
+      els.noticeModalOkBtn.classList.toggle("btn-secondary", hasAnyAction);
     }
     if (els.noticeModalActionBtn) {
       els.noticeModalActionBtn.hidden = !noticeModalAction;
       els.noticeModalActionBtn.disabled = false;
       els.noticeModalActionBtn.textContent = actionLabel;
     }
+    if (els.noticeModalAction2Btn) {
+      els.noticeModalAction2Btn.hidden = !noticeModalAction2;
+      els.noticeModalAction2Btn.disabled = false;
+      els.noticeModalAction2Btn.textContent = action2Label;
+    }
     els.noticeModal.hidden = false;
   }
 
   function closeNoticeModal() {
     noticeModalAction = null;
+    noticeModalAction2 = null;
     if (els.noticeModal) els.noticeModal.hidden = true;
     if (els.noticeModalOkBtn) {
       els.noticeModalOkBtn.textContent = "OK";
@@ -5789,14 +5807,21 @@
       els.noticeModalActionBtn.disabled = false;
       els.noticeModalActionBtn.textContent = "";
     }
+    if (els.noticeModalAction2Btn) {
+      els.noticeModalAction2Btn.hidden = true;
+      els.noticeModalAction2Btn.disabled = false;
+      els.noticeModalAction2Btn.textContent = "";
+    }
   }
 
-  async function handleNoticeModalAction() {
-    const action = noticeModalAction;
-    if (!action || !els.noticeModalActionBtn || els.noticeModalActionBtn.disabled) return;
-    const originalLabel = els.noticeModalActionBtn.textContent;
-    els.noticeModalActionBtn.disabled = true;
-    els.noticeModalActionBtn.textContent = "準備中…";
+  // Shared by both action buttons -- `btn`/`action` pick which one is
+  // running so the other stays untouched (and re-enabled on failure) while
+  // its sibling shows "準備中…".
+  async function runNoticeModalAction(action, btn) {
+    if (!action || !btn || btn.disabled) return;
+    const originalLabel = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "準備中…";
     try {
       await action();
     } catch (error) {
@@ -5806,10 +5831,18 @@
         els.noticeModalMsg.textContent = `無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`;
       }
       if (!els.noticeModal.hidden) {
-        els.noticeModalActionBtn.disabled = false;
-        els.noticeModalActionBtn.textContent = originalLabel;
+        btn.disabled = false;
+        btn.textContent = originalLabel;
       }
     }
+  }
+
+  function handleNoticeModalAction() {
+    return runNoticeModalAction(noticeModalAction, els.noticeModalActionBtn);
+  }
+
+  function handleNoticeModalAction2() {
+    return runNoticeModalAction(noticeModalAction2, els.noticeModalAction2Btn);
   }
 
   const ARCHIVED_ANALYSIS_NOTICE = "這張照片還沒套用最新版本，重新處理一次就能得到更好的美化結果。";
@@ -5818,7 +5851,10 @@
   // rerunning the archived job. Fetch the source before resetApp clears the
   // current case pointers, then let setSelectedFile/startSubmit establish a
   // fresh job, fresh analysis, and the normal downstream review pipeline.
-  async function restartArchivedCase(sourceFile, sourceUrl) {
+  // skipReview mirrors startSubmit's own flag: false routes through 分析
+  // (analyze, pause for review) same as the upload page's 分析 button;
+  // true routes through the combined 一鍵美化 flow same as els.startFullButton.
+  async function restartArchivedCase(sourceFile, sourceUrl, skipReview = false) {
     let file = sourceFile;
     if (!file) {
       if (!sourceUrl) throw new Error("這筆紀錄沒有可重新上傳的原始照片。");
@@ -5835,9 +5871,7 @@
     closeNoticeModal();
     resetApp();
     await setSelectedFile(file);
-    // Same route as clicking the upload page's 分析 button: analyze first,
-    // pause for review, then continue through the existing edit pipeline.
-    void startSubmit({ skipReview: false });
+    void startSubmit({ skipReview });
   }
 
   function showArchivedAnalysisNotice() {
@@ -5848,8 +5882,10 @@
     const canRestart = !!(sourceFile || sourceUrl);
     showNoticeModal(ARCHIVED_ANALYSIS_NOTICE, canRestart ? {
       dismissLabel: "維持現況",
-      actionLabel: "重新美化",
-      onAction: () => restartArchivedCase(sourceFile, sourceUrl)
+      actionLabel: "重新分析",
+      onAction: () => restartArchivedCase(sourceFile, sourceUrl, false),
+      action2Label: "重新一鍵美化",
+      onAction2: () => restartArchivedCase(sourceFile, sourceUrl, true)
     } : undefined);
   }
 
@@ -10564,6 +10600,7 @@
   }
   if (els.noticeModalOkBtn) els.noticeModalOkBtn.addEventListener("click", closeNoticeModal);
   if (els.noticeModalActionBtn) els.noticeModalActionBtn.addEventListener("click", handleNoticeModalAction);
+  if (els.noticeModalAction2Btn) els.noticeModalAction2Btn.addEventListener("click", handleNoticeModalAction2);
   if (els.noticeModal) {
     els.noticeModal.addEventListener("click", (e) => {
       if (e.target.dataset.close) closeNoticeModal();
