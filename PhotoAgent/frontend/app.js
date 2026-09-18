@@ -2135,8 +2135,8 @@
 
   // ── 分析／美化前顯示預計花費 (preflight-cost-toggle, both settings modals) ──
   // Gates every #preflight-cost-modal open (showPreflightCostModal) and the
-  // folded-in cost line in the "沒有做任何修改" confirm (preflightCostNoteLine,
-  // further below) -- a display/friction preference, not a per-request
+  // folded-in cost rows in the "沒有做任何修改" confirm (showConfirmModal's
+  // costSteps option) -- a display/friction preference, not a per-request
   // option, so it's persisted client-side like SIDE_PANEL_LAYOUT_KEY above.
   const PREFLIGHT_COST_ESTIMATE_KEY = "photoagent.preflightCostEstimate";
 
@@ -2765,10 +2765,12 @@
         if (inlineReviseHasNoChanges()) {
           // Folded into the same "nothing changed, are you sure" prompt
           // (per the user's own request) instead of showing it and then a
-          // separate cost-estimate modal right after.
+          // separate cost-estimate modal right after -- costSteps renders it
+          // with #preflight-cost-modal's own row styling rather than a
+          // plain-text sentence.
           const confirmed = await showConfirmModal(
-            "你沒有做任何修改，確定要再執行一次美化嗎？" + preflightCostNoteLine("美化花費", est),
-            { confirmLabel: "美化", danger: false });
+            "你沒有做任何修改，確定要再執行一次美化嗎？",
+            { confirmLabel: "美化", danger: false, costSteps: [{ label: "美化花費", modelLabel: est.label, cost: est.cost }] });
           if (!confirmed) return;
         } else {
           const costConfirmed = await showPreflightCostModal([{ label: "美化花費", modelLabel: est.label, cost: est.cost }]);
@@ -5990,7 +5992,15 @@
   // button) -- it must never fall back to btn-secondary, or it reads as a
   // second, equally-weighted Cancel with nothing marking which button
   // actually confirms.
-  function showConfirmModal(message, { confirmLabel = "刪除", danger = true } = {}) {
+  //
+  // costSteps (optional) renders #preflight-cost-modal's own styled rows
+  // (buildPreflightCostRow, further below) under the plain-text message
+  // instead of a price folded into that text as another sentence -- used by
+  // the 美化 no-changes prompt so its cost estimate gets the same
+  // label/value/model hierarchy every other cost display in the app uses.
+  // Gated by isPreflightCostEstimateEnabled the same way showPreflightCostModal
+  // is, so a caller doesn't have to check the setting itself.
+  function showConfirmModal(message, { confirmLabel = "刪除", danger = true, costSteps = null } = {}) {
     return new Promise((resolve) => {
       if (!els.confirmModal) {
         resolve(window.confirm(message));
@@ -5998,6 +6008,14 @@
       }
       clearConfirmModalWait(); // drop any stale listener from an abandoned prior prompt
       if (els.confirmModalMsg) els.confirmModalMsg.textContent = message;
+      if (els.confirmModalCostRows) {
+        const steps = isPreflightCostEstimateEnabled() ? costSteps : null;
+        els.confirmModalCostRows.innerHTML = "";
+        if (steps?.length) {
+          steps.forEach((step) => els.confirmModalCostRows.appendChild(buildPreflightCostRow(step)));
+        }
+        els.confirmModalCostRows.hidden = !steps?.length;
+      }
       if (els.confirmModalOkBtn) {
         els.confirmModalOkBtn.textContent = confirmLabel;
         els.confirmModalOkBtn.classList.toggle("btn-danger", danger);
@@ -9660,16 +9678,6 @@
 
   function formatPreflightCostValue(cost) {
     return cost != null ? `$${cost.toFixed(4)}` : "—";
-  }
-
-  // For merging a preflight estimate into an existing plain-text notice/
-  // confirm message (showArchivedAnalysisNotice, waitForInlineAnalysisAction's
-  // no-changes confirm) instead of stacking a second modal after it -- both
-  // of those modals' message elements render \n as a real line break
-  // (#notice-modal-msg/#confirm-modal-msg are both white-space: pre-line).
-  function preflightCostNoteLine(label, est) {
-    if (!isPreflightCostEstimateEnabled()) return "";
-    return `\n\n預計花費：${label} ${formatPreflightCostValue(est.cost)}${est.label ? `（${est.label}）` : ""}`;
   }
 
   let preflightCostModalHandlers = null;

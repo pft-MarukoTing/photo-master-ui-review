@@ -665,7 +665,8 @@
     .ap-photo-summary-toggle[hidden] { display: none; }
     .ap-photo-summary-toggle {
       position: absolute;
-      left: 50%;
+      right: 0;
+      left: 0;
       bottom: 8px;
       z-index: 2;
       display: inline-flex;
@@ -674,7 +675,7 @@
       width: max-content;
       max-width: calc(100% - 20px);
       padding: 3px 11px;
-      transform: translateX(-50%);
+      margin-inline: auto;
       background: rgba(var(--accent-2-rgb),.16);
       border: 1px solid rgba(var(--accent-2-rgb),.22);
       border-radius: 999px;
@@ -2513,6 +2514,15 @@
     }
     .cost-modal-row-total .cost-modal-label { color: var(--text); font-weight: 700; }
     .cost-modal-row-total .cost-modal-value { color: var(--accent); font-size: 18px; }
+    /* #confirm-modal-msg sits right above this (showConfirmModal's costSteps
+       option) -- same divider treatment as .cost-modal-row-total above, so
+       the cost line reads as a separate, set-off block rather than running
+       straight into the message text. */
+    #confirm-modal-cost-rows {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
     /* Shared by #settings-modal (upload page) and #ap-settings-modal
        (results/analysis-preview page): same .option-pill-group rows as the
        inline pickers they replaced, just stacked instead of side by side.
@@ -3026,11 +3036,6 @@
       .notice-modal-actions .btn { width: 100%; height: 38px; font-size: 15px; }
     }
     #notice-modal-msg { font-size: 18px; white-space: pre-line; }
-    /* showConfirmModal's message can now carry a folded-in cost-estimate
-       line (preflightCostNoteLine, app.js) separated by \n\n -- same
-       pre-line treatment #notice-modal-msg already gets, so that renders as
-       an actual blank line instead of running into the sentence before it. */
-    #confirm-modal-msg { white-space: pre-line; }
 
     /* ── Account badge/modal/history (account.js + app.js) ── */
     /* Hidden outright (not via the "hidden" attribute JS toggles based on
@@ -5801,6 +5806,13 @@
       <span id="confirm-modal-title" class="notice-modal-title">Photo<em>Master</em></span>
     </div>
     <p id="confirm-modal-msg" class="error-modal-msg"></p>
+    <!-- Optional cost-estimate row(s) (showConfirmModal's costSteps option,
+         app.js) -- same #preflight-cost-modal row styling (buildPreflightCostRow
+         reused directly) instead of a plain-text price sentence tacked onto
+         the message above. Hidden entirely (not just left empty) when a
+         caller passes no cost steps, or the user has turned the preflight
+         cost estimate setting off. -->
+    <div id="confirm-modal-cost-rows" class="cost-modal-rows" hidden></div>
     <div class="account-modal-actions">
       <button id="confirm-modal-cancel-btn" class="btn btn-secondary btn-sm" type="button">取消</button>
       <button id="confirm-modal-ok-btn" class="btn btn-danger btn-sm" type="button">刪除</button>

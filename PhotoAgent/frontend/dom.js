@@ -263,6 +263,7 @@ window.PhotoAgentDom = (() => {
     noticeModalAction2Btn: document.querySelector("#notice-modal-action2-btn"),
     confirmModal: document.querySelector("#confirm-modal"),
     confirmModalMsg: document.querySelector("#confirm-modal-msg"),
+    confirmModalCostRows: document.querySelector("#confirm-modal-cost-rows"),
     confirmModalCancelBtn: document.querySelector("#confirm-modal-cancel-btn"),
     confirmModalOkBtn: document.querySelector("#confirm-modal-ok-btn"),
     headerSettingsBtn: document.querySelector("#header-settings-btn"),
