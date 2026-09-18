@@ -221,7 +221,7 @@ window.PhotoAgentResults = (() => {
     promptLine.className = "ap-body-reshape-prompt";
     const promptLabel = document.createElement("span");
     promptLabel.className = "ap-body-reshape-prompt-label";
-    promptLabel.textContent = "送給 Editor：";
+    promptLabel.textContent = "";
     promptLine.appendChild(promptLabel);
     promptLine.appendChild(document.createTextNode(prompt));
     host.appendChild(promptLine);
@@ -1957,14 +1957,17 @@ window.PhotoAgentResults = (() => {
       if (issue.category === "body_reshape" && issue.editPrompt) {
         const prompt = document.createElement("div");
         prompt.className = "ap-body-reshape-prompt ap-face-issue-prompt";
-        prompt.textContent = `送給 Editor：${issue.editPrompt}`;
+        prompt.textContent = `${issue.editPrompt}`;
         li.appendChild(prompt);
       }
 
       // The model's own reasoning is debug-only detail (same gate as the
       // box overlay's legend) -- a regular user just needs the verdict, not
-      // the analysis model's internal justification for it.
-      if (issue.flagged && issue.reason && debugUiActive) {
+      // the analysis model's internal justification for it. Body Reshape is
+      // the exception: its report is not part of the review UI at all; the
+      // analyzed edit_prompt above is the only Body Reshape text shown to the
+      // user and is the sentence that can be sent to Editor.
+      if (issue.category !== "body_reshape" && issue.flagged && issue.reason && debugUiActive) {
         const reason = document.createElement("div");
         reason.className = "ap-face-issue-reason";
         reason.textContent = issue.reason;
