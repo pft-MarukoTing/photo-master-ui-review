@@ -6020,13 +6020,25 @@
       { confirmLabel: skipReview ? "重新一鍵美化" : "重新分析", danger: false, costSteps: steps }
     );
     if (!confirmed) return;
+    // Restarting re-fetches the original photo from sourceUrl when there's no
+    // in-memory sourceFile (the common case for a history record reopened
+    // after a page reload) before resetApp/startSubmit can show the
+    // analyzing/processing animation -- same "準備中…" busy-state swap
+    // runNoticeModalAction uses for this notice's own two actions, so that
+    // wait reads as "working" instead of the button just sitting there
+    // unchanged. Scoped to the <span> (not btn.textContent) so the icon svg
+    // stays in place.
+    const label = btn.querySelector("span");
+    const originalLabel = label ? label.textContent : "";
     btn.disabled = true;
+    if (label) label.textContent = "準備中…";
     hideError();
     try {
       await restartArchivedCase(sourceFile, sourceUrl, skipReview);
     } catch (error) {
       showError(`無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`);
       btn.disabled = false;
+      if (label) label.textContent = originalLabel;
     }
   }
   if (els.apRestartAnalysisBtn) {
