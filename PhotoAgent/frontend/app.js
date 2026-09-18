@@ -6071,6 +6071,27 @@
   // introducing a synthetic status field in Redis.
   const archivedHistoryKeys = new Set();
 
+  // "success"/"error" are terminal for a job (see pollJobStatus, which stops
+  // on exactly those two) -- a finished case cannot become unfinished, so
+  // asking the backend about it again can only ever return the same answer.
+  // That matters because every history tile runs its own status check on
+  // every render, and the gallery re-renders on every return to the upload
+  // screen (resetApp -> refreshUploadGallery): 20 tiles meant 20+ requests
+  // each time, almost all of them re-confirming jobs that finished days ago.
+  // Only genuinely unfinished jobs go to the network now. Keyed by job id,
+  // which is unique per job, so nothing here can go stale within a session.
+  const terminalJobStatusCache = new Map();
+
+  async function getJobStatusCached(jobId, opts) {
+    const cached = terminalJobStatusCache.get(jobId);
+    if (cached) return cached;
+    const data = await getJobStatusOnce(jobId, opts);
+    if (data && (data.status === "success" || data.status === "error")) {
+      terminalJobStatusCache.set(jobId, data);
+    }
+    return data;
+  }
+
   function applyHistoryArchivedState(job, li = historyTileElsByKey.get(job?.image_key)) {
     const archived = job?.image_key && archivedHistoryKeys.has(job.image_key);
     if (!job?.image_key || !archived || !li) return false;
@@ -6407,7 +6428,7 @@
       const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
       try {
         const statuses = await Promise.all(
-          jobIds.map((id) => getJobStatusOnce(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
+          jobIds.map((id) => getJobStatusCached(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
         );
         if (await historyJobNeedsArchiveBadge(job, jobIds, statuses)) {
           markHistoryCaseArchived(job);
@@ -7695,7 +7716,7 @@
   // out (the plain #upload-gallery-title label is showing instead).
   let uploadGalleryActiveTab = null;
 
-  async function loadUploadHistoryPage({ reset = false } = {}) {
+  async function loadUploadHistoryPage({ reset = false, keepVisibleUntilReady = false } = {}) {
     const user = getCurrentUser();
     if (!user || !els.demoImagesGrid || uploadHistoryLoading) return;
     // Nothing may render history into the shared grid while 範例照片 owns it
@@ -7710,8 +7731,20 @@
     if (reset) {
       uploadHistoryOffset = 0;
       uploadHistoryHasMore = false;
-      els.demoImagesGrid.innerHTML = "";
-      if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = true;
+      // keepVisibleUntilReady: this is 最近照片 refreshing ITSELF (returning to
+      // the upload screen, a bfcache restore), so what's on screen is the
+      // previous render of the very same gallery -- emptying it here just
+      // blanks the panel for the length of a round trip before the same
+      // tiles come back. renderHistoryList's own !append clear swaps them
+      // out once the new page has actually arrived, which reads as no
+      // change at all when nothing changed. Without the flag (arriving from
+      // 範例照片) the tiles on screen belong to the OTHER gallery and have
+      // to go immediately -- same reasoning as fetchAndRenderDemoImages',
+      // just in the opposite direction.
+      if (!keepVisibleUntilReady) {
+        els.demoImagesGrid.innerHTML = "";
+        if (els.demoImagesEmpty) els.demoImagesEmpty.hidden = true;
+      }
     }
     uploadHistoryLoading = true;
     try {
@@ -7741,7 +7774,13 @@
       if (token !== uploadHistoryRequestToken) return;
       uploadHistoryHasMore = false;
       uploadHistoryLoading = false;
-      if (!uploadHistoryOffset && els.demoImagesEmpty) {
+      // Only when there is genuinely nothing on screen. keepVisibleUntilReady
+      // resets the offset while deliberately leaving the previous render up,
+      // so the offset alone no longer means "the gallery is empty" -- printing
+      // 目前無法取得處理紀錄。 over a full gallery of tiles contradicts what the
+      // user is looking at. A failed background refresh should leave what they
+      // already have alone and say nothing.
+      if (!uploadHistoryOffset && !els.demoImagesGrid.children.length && els.demoImagesEmpty) {
         els.demoImagesEmpty.hidden = false;
         els.demoImagesEmpty.textContent = "目前無法取得處理紀錄。";
       }
@@ -7781,6 +7820,11 @@
   // by refreshUploadGallery's own "recent" default whenever an account is
   // (re)linked, so the two stay in sync instead of duplicating this logic.
   function setUploadGalleryTab(tab) {
+    // Whether 最近照片 is already what's on screen decides if its reload may
+    // leave the current tiles up while it fetches (see loadUploadHistoryPage's
+    // keepVisibleUntilReady). Coming from 範例照片 -- or from no gallery at
+    // all -- it may not: those tiles belong to something else.
+    const wasShowingRecent = uploadGalleryActiveTab === "recent";
     uploadGalleryActiveTab = tab;
     // .showing-recent (styles.css) is what actually drives #demo-images-grid's
     // layout -- keeps a logged-in user's 範例照片 tab on the exact same
@@ -7808,7 +7852,7 @@
       return;
     }
     if (els.demoImagesConfirmBtn) els.demoImagesConfirmBtn.hidden = true;
-    loadUploadHistoryPage({ reset: true });
+    loadUploadHistoryPage({ reset: true, keepVisibleUntilReady: wasShowingRecent });
   }
 
   // applyAccountUi()'s initial call above and resetApp()'s call below cover
@@ -7832,7 +7876,9 @@
     if (!user) return;
     if (!els.sections?.upload?.classList.contains("visible")) return;
     if (uploadGalleryActiveTab !== "recent") return;
-    loadUploadHistoryPage({ reset: true });
+    // Already on 最近照片 by the guard above, so this is a silent background
+    // refresh of what the user is looking at -- never blank it first.
+    loadUploadHistoryPage({ reset: true, keepVisibleUntilReady: true });
   }
   window.addEventListener("pageshow", (event) => {
     // A plain first load fires "pageshow" too, right alongside
