@@ -1913,12 +1913,11 @@
     .ap-style-option-cancel:hover { background: rgba(255,38,0,.85); }
     .ap-style-option-thumb {
       width: 100%;
-      /* Source images are portrait (mostly 1024x1536, a couple 1122x1402) --
-         contain (not cover) so the example photo is never cropped, just
-         letterboxed against --card-3 on the rare image that isn't exactly
-         2:3. */
+      /* Source images are portrait but not all the same ratio (1024x1536 and
+         1120x1408) -- cover fills the card's 2:3 box to full height and
+         centre-crops the sides, so every thumbnail is the same size. */
       aspect-ratio: 2 / 3;
-      object-fit: contain;
+      object-fit: cover;
       border-radius: calc(var(--radius) - 4px);
       background: var(--card-3);
     }
