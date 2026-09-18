@@ -1587,6 +1587,7 @@ window.PhotoAgentResults = (() => {
         wrap.classList.add("is-active");
         selectedFaceIndex = index;
         renderFaceDetailPanel();
+        revealFaceTab(wrap);
       });
       wrap.appendChild(tab);
       // Lets the user spot which people have a flagged issue without
@@ -1624,33 +1625,40 @@ window.PhotoAgentResults = (() => {
     if (els.apReviewPrompt) els.apReviewPrompt.hidden = activeReviewTab !== "prompt";
   }
 
-  // If a tab is only partly visible at the edge of the horizontal tab strip,
-  // reveal the whole button after selection without moving the page itself.
-  function revealReviewTab(button) {
-    const tabs = els.apReviewTabs;
-    if (!tabs || !button) return;
+  // If a tab is only partly visible at the edge of a horizontal scrolling
+  // tab strip, reveal the whole item after selection without moving the
+  // page itself. Shared by both #ap-review-tabs and #ap-face-tabs -- same
+  // strip-of-scrollable-buttons shape, just a different item selector.
+  function revealScrollingTab(strip, item, itemSelector) {
+    if (!strip || !item) return;
     requestAnimationFrame(() => {
-      const tabsRect = tabs.getBoundingClientRect();
-      const buttonRect = button.getBoundingClientRect();
+      const stripRect = strip.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
       const edgePadding = 4;
-      const visibleTabs = [...tabs.querySelectorAll(".ap-review-tab:not([hidden])")];
-      const buttonIndex = visibleTabs.indexOf(button);
-      const hasPreviousTab = buttonIndex > 0;
-      const hasNextTab = buttonIndex >= 0 && buttonIndex < visibleTabs.length - 1;
-      const previousTabPeek = hasPreviousTab ? 18 : edgePadding;
-      const nextTabPeek = hasNextTab ? 18 : edgePadding;
-      const visibleLeft = tabsRect.left + previousTabPeek;
-      const visibleRight = tabsRect.right - nextTabPeek;
+      const visibleItems = [...strip.querySelectorAll(itemSelector)];
+      const itemIndex = visibleItems.indexOf(item);
+      const hasPreviousItem = itemIndex > 0;
+      const hasNextItem = itemIndex >= 0 && itemIndex < visibleItems.length - 1;
+      const previousItemPeek = hasPreviousItem ? 18 : edgePadding;
+      const nextItemPeek = hasNextItem ? 18 : edgePadding;
+      const visibleLeft = stripRect.left + previousItemPeek;
+      const visibleRight = stripRect.right - nextItemPeek;
       let scrollDelta = 0;
-      if (buttonRect.left < visibleLeft) {
-        scrollDelta = buttonRect.left - visibleLeft;
-      } else if (buttonRect.right > visibleRight) {
-        scrollDelta = buttonRect.right - visibleRight;
+      if (itemRect.left < visibleLeft) {
+        scrollDelta = itemRect.left - visibleLeft;
+      } else if (itemRect.right > visibleRight) {
+        scrollDelta = itemRect.right - visibleRight;
       }
       if (Math.abs(scrollDelta) < 0.5) return;
       const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-      tabs.scrollBy({ left: scrollDelta, behavior: reduceMotion ? "auto" : "smooth" });
+      strip.scrollBy({ left: scrollDelta, behavior: reduceMotion ? "auto" : "smooth" });
     });
+  }
+  function revealReviewTab(button) {
+    revealScrollingTab(els.apReviewTabs, button, ".ap-review-tab:not([hidden])");
+  }
+  function revealFaceTab(wrap) {
+    revealScrollingTab(els.apFaceTabs, wrap, ".ap-face-tab-wrap");
   }
 
   // Switches #ap-review-panel's active top-level tab -- wired once below to

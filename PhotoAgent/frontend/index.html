@@ -1326,12 +1326,41 @@
        -- the outer card's own colored sides (above) already run past this
        row on their way down to .ap-toggle-card-body, so a second colored
        border here was redundant, not connective. */
+    /* nowrap + horizontal scroll instead of flex-wrap, so a photo with many
+       faces never pushes this row to a second/third line -- same idea as
+       .ap-review-tabs above. padding-top/bottom (not just the original
+       left/right) is load-bearing here in a way it isn't for
+       .ap-review-tabs: setting overflow-x forces overflow-y to compute to
+       "auto" too (a paired-axis CSS rule, not a bug), so without it the
+       active tab's own ring and the issue badge -- both of which already
+       painted a few px past their own box on purpose (see is-active and
+       .ap-face-tab-badge below) -- would get clipped top/bottom by this
+       row's own new scroll box instead of just overlapping whatever used to
+       sit harmlessly above/below it. */
     .ap-face-tabs {
       display: flex;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-items: center;
       gap: 10px;
-      padding: 0 10px;
+      padding: 6px 10px;
+      /* This row's own parent (.ap-review-summary-inner, a column flex box)
+         stretches it to full width, but a flex item's default min-width is
+         its content's min-content size, not 0 -- without overriding that,
+         this row would rather grow past the stretch target to fit every
+         avatar unbroken than actually shrink and let overflow-x do
+         anything, and it'd get silently clipped by an ancestor's own
+         overflow:hidden (.ap-toggle-card-body) with no scrollbar ever
+         appearing. Same reason .ap-review-tabs above has this too. */
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
+    }
+    .ap-face-tabs::-webkit-scrollbar { height: 4px; }
+    .ap-face-tabs::-webkit-scrollbar-thumb {
+      background: var(--border-2);
+      border-radius: 999px;
     }
     /* Separate wrapper around the button + badge, NOT overflow:hidden itself
        -- .ap-face-tab below needs overflow:hidden to clip its square
@@ -1344,6 +1373,7 @@
     .ap-face-tab-wrap {
       position: relative;
       display: inline-flex;
+      flex-shrink: 0;
       border-radius: 50%;
     }
     /* A translucent ring alone blended into the thumbnail's own border at
