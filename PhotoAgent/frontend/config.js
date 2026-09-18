@@ -91,7 +91,7 @@ window.PhotoAgentConfig = {
   defaultAspectRatio: "auto",
   presets: {
     natural: {
-      label: "自然高級修圖",
+      label: "自然高級美化",
       intent: "保留原照內容，提升光線、色彩、構圖與整體質感。",
       tags: ["自然", "乾淨", "高質感", "保留真實"]
     },

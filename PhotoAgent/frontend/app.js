@@ -493,7 +493,7 @@
       "AI 正在分析照片，請稍候…",
       "正在辨識照片中的人物、光線與構圖…",
       "正在讀取照片的曝光與色彩資訊…",
-      "正在比對適合的修圖建議…",
+      "正在比對適合的美化建議…",
       "正在偵測照片中的細節與紋理…",
       "正在計算最佳的裁切與構圖建議…",
       "分析仍在進行中，可能需要多一點時間…",
@@ -504,16 +504,16 @@
   }
   function editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }) {
     const modelLabel = window.PhotoAgentConfig.imageModels[imageModel] || imageModel;
-    const progress = runCount > 1 ? `（已完成 ${doneCount}/${runCount} RUN）` : "";
+    const progress = runCount > 1 ? `（已完成 ${doneCount}/${runCount} 張）` : "";
     return aiPhotoEditing
       ? [
-          `AI 正在使用 ${modelLabel} 修圖${progress}，請稍候…`,
+          `AI 正在使用 ${modelLabel} 美化${progress}，請稍候…`,
           `AI 正在調整光影與細節${progress}，請稍候…`,
           `AI 正在細修色調${progress}，請稍候…`,
           `AI 正在校正白平衡與色彩${progress}，請稍候…`,
           `AI 正在優化背景與構圖${progress}，請稍候…`,
           `AI 正在強化畫面細節${progress}，請稍候…`,
-          `修圖仍在進行中${progress}，感謝您的耐心等候…`,
+          `美化仍在進行中${progress}，感謝您的耐心等候…`,
           `AI 正在進行最後的品質檢查${progress}…`,
           `快完成了，請再稍候一下${progress}…`,
           `即將完成，請再稍候一下${progress}…`
@@ -2697,7 +2697,7 @@
         // open, same as before this confirmation was added.
         if (inlineReviseHasNoChanges()) {
           const confirmed = await showConfirmModal(
-            "你沒有做任何修改，確定要再執行一次修圖嗎？", { confirmLabel: "修圖", danger: false });
+            "你沒有做任何修改，確定要再執行一次美化嗎？", { confirmLabel: "美化", danger: false });
           if (!confirmed) return;
         }
         clearInlineAnalysisWait();
@@ -3378,7 +3378,7 @@
     els.downloadLink.hidden = !lastResult;
     lastDoneRunsCount = (runs || []).filter((run) => run.status === "done").length;
     closeDownloadMenu();
-    const hint = lastDoneRunsCount > 1 ? `下載選項（${lastDoneRunsCount} 個 RUN）` : "下載結果";
+    const hint = lastDoneRunsCount > 1 ? `下載選項（共 ${lastDoneRunsCount} 張）` : "下載結果";
     els.downloadLink.title = hint;
     els.downloadLink.setAttribute("aria-label", hint);
   }
@@ -4091,7 +4091,7 @@
 
   function friendlyError(error) {
     if (error.message === "Failed to fetch") {
-      return "無法連線到 Photo Master 伺服器，請確認後端服務是否已啟動。";
+      return "目前無法連線到伺服器，請稍後再試，或確認網路連線是否正常。";
     }
     // error.code is the backend's short error code (see server.py's
     // process_for_api except block); ai_service_timeout means the AI
@@ -4099,7 +4099,7 @@
     // -- error.message for this case is a raw requests.Timeout string,
     // too technical to show as-is.
     if (error.code === "ai_service_timeout") {
-      return "AI 服務回應逾時，請稍後再試一次。";
+      return "系統回應逾時，請稍後再試一次。";
     }
     const msg = error.message || "";
     // OpenAI's images/edits API rejects requests its safety system flags --
@@ -4118,7 +4118,7 @@
       const reasonText = knownReasons.length
         ? knownReasons.join("、") + "，"
         : "這通常是因為照片中包含平台內容政策不允許編輯的元素（例如可辨識的受著作權保護角色/商標，或其他敏感內容），";
-      return `AI 修圖模型拒絕處理這張照片——${reasonText}基於平台政策無法編輯這類內容。請嘗試更換照片，或改用其他修圖模型再試一次。`;
+      return `這張照片目前無法完成美化——${reasonText}基於平台政策無法編輯這類內容。請嘗試更換照片，或調整美化風格後再試一次。`;
     }
     return msg || "發生未知錯誤。";
   }
@@ -4429,7 +4429,7 @@
 
     setAnalysisPreviewDisabled(true);
     procVisual.classList.remove("done");
-    setProcTitle(useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在修圖" : "正在處理照片"));
+    setProcTitle(useCombinedJob ? "正在分析照片" : (aiPhotoEditing ? "AI 正在美化" : "正在處理照片"));
     // Same split the title above already makes, so the two can't drift: a
     // combined job (一鍵修圖 on the local path) does its OWN analysis inside
     // this one job and is still analyzing at this point -- onCombinedStage
@@ -4454,7 +4454,7 @@
       // processing screen's title, and the shared step indicator) that would
       // otherwise describe THIS job on whatever the user is now looking at.
       if (!isCurrent()) return;
-      setProcTitle(aiPhotoEditing ? "AI 正在修圖" : "正在處理照片");
+      setProcTitle(aiPhotoEditing ? "AI 正在美化" : "正在處理照片");
       // The backend reporting its analyze->edit switch is the only honest
       // moment to move the indicator on for a combined job: there's no
       // client-side transition to hang it off, and anything earlier (e.g.
@@ -4544,11 +4544,11 @@
             run.result = runData.result;
             const t = (runData.result["extra-info"] || {}).timings || {};
             run.timings = [
-              { label: "分析並修圖", duration: Date.now() - stepStart, children: [
+              { label: "分析並美化", duration: Date.now() - stepStart, children: [
                 { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
                 { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
                 { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-                { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+                { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
                 { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
                 { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
               ] }
@@ -4574,7 +4574,7 @@
       }
 
       if (!myRuns.some((r) => r.status === "done")) {
-        throw new Error(myRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
+        throw new Error(myRuns.find((r) => r.error)?.error || "全部處理失敗，請稍後再試。");
       }
       // Remember the first successfully-done RUN's analysis + job id so a
       // later re-run (回到流程) goes through the normal two-stage continueJob
@@ -4614,10 +4614,10 @@
       stepStart = Date.now();
       ({ image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath }));
       const t = (result["extra-info"] || {}).timings || {};
-      addTiming("AI 修圖中", finishWaitDuration, [
+      addTiming("AI 美化中", finishWaitDuration, [
         { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
         { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-        { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+        { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
         { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
         { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
       ]);
@@ -4632,7 +4632,7 @@
         : window.PhotoAgentConfig.analysisModel;
       const usedModelLabel = isDebugUiActive
       ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-      : "AI 智能修圖";
+      : "AI 智能美化";
 
       const data = {
         image: imageUrl,
@@ -4706,7 +4706,7 @@
       }, POLL_CONCURRENCY);
 
       if (!myRuns.some((r) => r.status === "done")) {
-        throw new Error(myRuns.find((r) => r.error)?.error || "所有 RUN 皆失敗，請稍後再試。");
+        throw new Error(myRuns.find((r) => r.error)?.error || "全部處理失敗，請稍後再試。");
       }
       if (isCurrent()) await showSingleResult();
     }
@@ -4769,10 +4769,10 @@
       run.timings = [
         ...(analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
-        { label: "AI 修圖中", duration: pollMs, children: [
+        { label: "AI 美化中", duration: pollMs, children: [
           { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-          { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
           { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
@@ -4852,7 +4852,7 @@
       : window.PhotoAgentConfig.analysisModel;
     const usedModelLabel = isDebugUiActive
       ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-      : "AI 智能修圖";
+      : "AI 智能美化";
 
     const data = {
       image: pick.imageUrl,
@@ -5250,11 +5250,11 @@
           run.result = runData.result;
           const t = (runData.result["extra-info"] || {}).timings || {};
           run.timings = [
-            { label: "分析並修圖", duration: Date.now() - stepStart, children: [
+            { label: "分析並美化", duration: Date.now() - stepStart, children: [
               { label: "Step 2：照片分析", duration: secToMs(t["Step 2 - photo_analysis"]) },
               { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
               { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-              { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+              { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
               { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
               { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
             ] }
@@ -5490,10 +5490,10 @@
       run.timings = [
         ...(record.analyzeTimings || []),
         { label: "提交後續處理", duration: submitMs },
-        { label: "AI 修圖中", duration: pollMs, children: [
+        { label: "AI 美化中", duration: pollMs, children: [
           { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
-          { label: "Step 5：修圖執行", duration: secToMs(t["Step 5 - image_edit"]) },
+          { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
           { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
@@ -5683,16 +5683,16 @@
     badge.className = "rc-badge";
     badge.textContent = {
       analyzing: "分析中",
-      analyzed: "待修圖",
-      processing: "修圖中",
-      done: "修圖完成",
+      analyzed: "待美化",
+      processing: "美化中",
+      done: "美化完成",
       error: "失敗",
       archived: "舊版封存"
     }[record.status] || "";
     if (record.status !== "archived" && runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
-      if (runsRunning) badge.textContent = `修圖中 (${runsDone}/${runs.length})`;
-      else if (runsDone) badge.textContent = `修圖完成 (${runsDone}/${runs.length})`;
+      if (runsRunning) badge.textContent = `美化中 (${runsDone}/${runs.length})`;
+      else if (runsDone) badge.textContent = `美化完成 (${runsDone}/${runs.length})`;
     }
 
     // Unlike the old grid (badge overlaid on a large square thumbnail), the
@@ -6396,7 +6396,7 @@
       const processingSpinner = '<div class="rc-spinner"></div>';
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}${processingSpinner}</div>
-        <span class="rc-badge">${isArchivedJob ? "舊版封存" : (isAnalyzingJob ? "分析中" : "修圖中")}</span>
+        <span class="rc-badge">${isArchivedJob ? "舊版封存" : (isAnalyzingJob ? "分析中" : "美化中")}</span>
         <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
         <span class="history-cube-check">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
@@ -6465,7 +6465,7 @@
           } else {
             if (analyzed) {
               li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "analyzed"}`;
-              if (badge) badge.textContent = archived ? "舊版封存" : "待修圖";
+              if (badge) badge.textContent = archived ? "舊版封存" : "待美化";
               media?.querySelector(".rc-spinner")?.remove();
             } else if (badge) {
               badge.textContent = archived ? "舊版封存" : "分析中";
@@ -6490,7 +6490,7 @@
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = archived
             ? "舊版封存"
-            : (jobIds.length > 1 ? `修圖完成（${doneCount}/${jobIds.length}）` : "修圖完成");
+            : (jobIds.length > 1 ? `美化完成（${doneCount}/${jobIds.length}）` : "美化完成");
           // Thumbnail route only exists for the local path (see
           // photo-agent-api.js's resultThumbnailUrl) -- AIPoC-path jobs fall
           // back to the full-res image, same as before this change.
@@ -6555,7 +6555,7 @@
             showNoticeModal(failureReason(failed));
           });
         } else {
-          if (badge) badge.textContent = archived ? "舊版封存" : "修圖中";
+          if (badge) badge.textContent = archived ? "舊版封存" : "美化中";
           // Still clickable -- otherwise there's no way to come back and
           // check on a record that was still processing last time this list
           // was fetched (see viewProcessingHistoryRecord). The opening guard
@@ -6925,7 +6925,7 @@
       if (r.user_prompt) {
         const promptLine = document.createElement("span");
         promptLine.className = "report-item-note";
-        promptLine.textContent = `補充指令：${r.user_prompt}`;
+        promptLine.textContent = `個人化需求：${r.user_prompt}`;
         info.appendChild(promptLine);
       }
       if (r.note) {
@@ -7422,7 +7422,7 @@
       } catch (error) {
         if (historyViewToken !== myToken) return; // navigated away meanwhile
         if (!myRuns.some((r) => r.status === "done")) {
-          showBatchMainError({ previewUrl, error: "所有 RUN 皆處理失敗，請稍後再試。" });
+          showBatchMainError({ previewUrl, error: "全部處理失敗，請稍後再試。" });
         }
         // Otherwise at least one RUN already rendered -- leave it displayed
         // rather than clobbering it with an error for the whole record.
@@ -7450,7 +7450,7 @@
       await Promise.any(jobIds.map((id) => pollJobStatus(id, { path: job.path })));
     } catch {
       if (historyViewToken !== myToken) return; // navigated away meanwhile
-      showBatchMainError({ previewUrl, error: "所有 RUN 皆處理失敗，請稍後再試。" });
+      showBatchMainError({ previewUrl, error: "全部處理失敗，請稍後再試。" });
       return;
     }
     if (historyViewToken !== myToken) return; // navigated away meanwhile
@@ -8588,7 +8588,7 @@
     if (els.batchMainLoadingEyebrow) els.batchMainLoadingEyebrow.textContent = "Photo Master is working";
     const analyzing = record.status === "analyzing";
     if (els.batchMainLoadingTitle) {
-      els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在修圖";
+      els.batchMainLoadingTitle.textContent = analyzing ? "正在分析照片" : "AI 正在美化";
     }
     // Same split the title above makes, off the record's own status -- this
     // view only ever shows for a record that is running, and "running" here
@@ -8726,7 +8726,7 @@
     }
     const doneCount = runs.filter((r) => r.status === "done").length;
     els.runProgress.hidden = false;
-    if (els.runProgressLabel) els.runProgressLabel.textContent = `產生中… ${doneCount}/${runs.length} RUN`;
+    if (els.runProgressLabel) els.runProgressLabel.textContent = `產生中… ${doneCount}/${runs.length} 張`;
     if (els.runProgressFill) els.runProgressFill.style.width = `${Math.round((doneCount / runs.length) * 100)}%`;
   }
 
@@ -8883,7 +8883,7 @@
       : window.PhotoAgentConfig.analysisModel;
     const usedModelLabel = isDebugUiActive
     ? `${usedAnalysisModelLabel} + ${usedImageModelLabel}`
-    : "AI 智能修圖";
+    : "AI 智能美化";
     const data = {
       image: record.imageUrl,
       model: usedModelLabel,

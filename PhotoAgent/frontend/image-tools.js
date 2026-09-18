@@ -317,7 +317,7 @@ window.PhotoAgentImageTools = (() => {
       label: "保留原始構圖",
       cropBox: { enabled: false, x: 0, y: 0, w: 1, h: 1, aspect_ratio: "" },
       compositionIntent: "保留完整原圖與原始場景脈絡",
-      tradeoffs: "不做構圖裁切，只進行修圖與色彩整理"
+      tradeoffs: "不做構圖裁切，只進行美化與色彩整理"
     });
 
     const limit = options.highRisk === true ? 6 : 4;

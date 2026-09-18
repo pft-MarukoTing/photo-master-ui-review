@@ -491,7 +491,7 @@ window.PhotoAgentResults = (() => {
 
     if (!followedEntries.length && !styleEntries.length && !rejectedEntries.length) {
       const li = document.createElement("li");
-      li.textContent = "尚未取得修圖建議項目。";
+      li.textContent = "尚未取得美化建議項目。";
       element.appendChild(li);
       return;
     }
@@ -944,7 +944,7 @@ window.PhotoAgentResults = (() => {
       distractions_reassessed_after_crop: "裁切後重新評估干擾",
       scene_preserved: "場景真實保留",
       frame_breathing_room_ok: "邊緣呼吸感合理",
-      not_overedited: "未過度修圖",
+      not_overedited: "未過度美化",
       light_color_improved: "光色改善"
     };
     return Object.entries(qa.checks)
@@ -2500,7 +2500,7 @@ window.PhotoAgentResults = (() => {
       Array.isArray(analysis.protected_regions) && analysis.protected_regions.length
         ? `保護區域：${analysis.protected_regions.slice(0, 5).map((r) => r.label || r.reason || "重要區域").join("、")}。`
         : "",
-      pending ? "尚未執行修圖，確認後將開始 AI 影像修圖。" : (data.localOnly ? "目前使用本機處理，未執行 AI 影像生成。" : "目前已執行 AI 影像修圖。")
+      pending ? "尚未執行美化，確認後將開始 AI 影像美化。" : (data.localOnly ? "目前使用本機處理，未執行 AI 影像生成。" : "目前已執行 AI 影像美化。")
     ]);
 
     els.lightColorText.textContent = joinParts([
@@ -2566,8 +2566,8 @@ window.PhotoAgentResults = (() => {
     const recipeAdherence = qa?.recipe_adherence || null;
     if (els.recipeScoreText) {
       els.recipeScoreText.textContent = recipeAdherence && Number.isFinite(Number(recipeAdherence.score))
-        ? joinParts([`修圖建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
-        : "尚未取得修圖建議達成度。";
+        ? joinParts([`美化建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
+        : "尚未取得美化建議達成度。";
     }
     fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.style_items, recipeAdherence?.rejected_items, analysis.retouch_recipe, analysis.style_options);
 
@@ -2678,7 +2678,7 @@ window.PhotoAgentResults = (() => {
       ]);
     }
 
-    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得美化建議。"]);
     renderFaceThumbnails(analysis);
 
     // Rebuild the style-option groups each run (defaults to "Default
@@ -2706,7 +2706,7 @@ window.PhotoAgentResults = (() => {
   // renderAnalysisPreview and disturbing whatever Pose/Angle/Lighting/Size
   // pick the user already made.
   function refreshRecipeList(analysis) {
-    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得修圖建議。"]);
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得美化建議。"]);
   }
 
   return {
