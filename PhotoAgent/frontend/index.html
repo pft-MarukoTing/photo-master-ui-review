@@ -690,16 +690,32 @@
       transition: opacity .15s, background .15s, color .15s;
     }
     .ap-photo-summary-toggle::before {
-      content: '⌄';
+      /* A drawn border-corner chevron instead of a Unicode glyph (e.g. '⌄') --
+         that glyph has no real form in some fonts and falls back to a tofu
+         mark that sits low and off-center instead of centered in its box. */
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
       margin-right: 5px;
-      font-size: 14px;
-      line-height: 1;
+      border-right: 1.6px solid currentColor;
+      border-bottom: 1.6px solid currentColor;
+      transform: rotate(45deg);
+      transition: transform .15s;
     }
-    .ap-photo-summary-toggle[aria-expanded="true"]::before { content: '⌃'; }
+    .ap-photo-summary-toggle[aria-expanded="true"]::before { transform: rotate(-135deg); }
     .ap-photo-summary-toggle:hover {
       background: rgba(var(--accent-2-rgb),.24);
       color: var(--text);
       opacity: 1;
+    }
+    /* The toggle is position:absolute (bottom:8px, ~25px tall) so it doesn't
+       take up flow space -- fine when --compact's fade gradient sits behind
+       it, but once fully expanded the real text now reaches the card's own
+       bottom edge with nothing behind the pill, so it lands on top of the
+       last line. Reserve that room instead of overlapping it. */
+    .ap-photo-summary.ap-photo-summary--expanded {
+      padding-bottom: 40px;
     }
     @media (min-width: 901px) and (max-height: 760px) {
       .ap-photo-summary.ap-photo-summary--compact {
