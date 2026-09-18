@@ -10091,6 +10091,15 @@
     setFlowStage("idle"); // back to the upload screen -- nothing running
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
+    // Clears whatever showArchivedAnalysisNotice's readOnly lock left behind
+    // (setAnalysisPreviewDisabled(true) on #analysis-preview /
+    // #ap-options-card-inline -- see isCompatible). Those are the same
+    // singleton nodes the upload page's own 模型設定 picker reuses, not
+    // recreated per case, so without this the disabled attributes/
+    // ap-readonly-locked class from viewing an archived case would otherwise
+    // silently carry over and leave a brand-new upload's model settings
+    // stuck unselectable after Home/回到首頁.
+    setAnalysisPreviewDisabled(false);
     // startSubmit()'s own `finally` never runs if the user resets instead of
     // clicking continue (waitForPendingResultsAction's promise is left
     // pending), so re-enable Start explicitly here too.
