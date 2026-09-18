@@ -2418,6 +2418,19 @@
     // renderResult's renderPrompts call above, so there's no reason to make
     // debug users wait for the edit stage just to read those.
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
+    // currentTokenUsage()'s lastResult branch is checked BEFORE the
+    // singleFlowState.analysis fallback (see its own comment: it prefers the
+    // "finished" shape first) -- an assumption that only holds when
+    // lastResult and singleFlowState describe the SAME case. Nothing else
+    // clears lastResult when a fresh analyze starts (only resetApp/
+    // resetBatchState do, and neither runs on every path that can reach
+    // here), so without this, a photo that has only ever been analyzed --
+    // Step 5 has not run for it at all -- could still show a PREVIOUS,
+    // unrelated case's edit-stage cost. null is safe here: nothing else in
+    // this function (or the pending-review screen generally) reads
+    // lastResult, only the finished-result screens set it again.
+    lastResult = null;
+    updateCostBtn();
   }
 
   function closePendingResults() {
@@ -4062,6 +4075,7 @@
     singleFlowState = null;
     lastSingleSelections = null;
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
+    if (els.costBtn) els.costBtn.hidden = true;
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
     if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
     if (els.batchSidebar) els.batchSidebar.hidden = true;
@@ -4500,6 +4514,7 @@
       // Live session, not a historical revealDetailExtra view -- debug UI
       // alone decides it here.
       if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
+      updateCostBtn();
       showSection("results");
       // Same reasoning as showPendingResults' own closeHistoryDrawer call --
       // the drawer is a full-viewport overlay independent of this section, so
@@ -4869,6 +4884,9 @@
     };
 
     lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: pick.jobId, runNumber: pick.run, path: singleFlowState.processingPath, runs };
+    // currentTokenUsage() reads lastResult -- must run after it's (re)assigned
+    // above, or this shows whatever record was last displayed (or nothing).
+    updateCostBtn();
     updateDownloadLinks(runs);
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
@@ -5692,7 +5710,7 @@
       processing: "美化中",
       done: "美化完成",
       error: "失敗",
-      archived: "舊版封存"
+      archived: "可更新"
     }[record.status] || "";
     if (record.status !== "archived" && runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
@@ -6104,7 +6122,7 @@
     li.classList.remove("analyzing", "processing", "analyzed", "done", "error");
     li.classList.add("archived");
     const badge = li.querySelector(".rc-badge");
-    if (badge) badge.textContent = "舊版封存";
+    if (badge) badge.textContent = "可更新";
     return true;
   }
 
@@ -6461,7 +6479,7 @@
           const failed = statuses[0]?.status === "error";
           if (failed) {
             li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
-            if (badge) badge.textContent = archived ? "舊版封存" : "失敗";
+            if (badge) badge.textContent = archived ? "可更新" : "失敗";
             media?.querySelector(".rc-spinner")?.remove();
             markHistoryTileSelectable(li, job);
             li.addEventListener("click", () => {
@@ -6474,10 +6492,10 @@
           } else {
             if (analyzed) {
               li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "analyzed"}`;
-              if (badge) badge.textContent = archived ? "舊版封存" : "待美化";
+              if (badge) badge.textContent = archived ? "可更新" : "待美化";
               media?.querySelector(".rc-spinner")?.remove();
             } else if (badge) {
-              badge.textContent = archived ? "舊版封存" : "分析中";
+              badge.textContent = archived ? "可更新" : "分析中";
             }
             li.addEventListener("click", async () => {
               if (li.classList.contains("opening")) return;
@@ -6498,7 +6516,7 @@
           applyHistoryArchivedState(job, li);
           const doneCount = statuses.filter((s) => s.status === "success").length;
           if (badge) badge.textContent = archived
-            ? "舊版封存"
+            ? "可更新"
             : (jobIds.length > 1 ? `美化完成（${doneCount}/${jobIds.length}）` : "美化完成");
           // Thumbnail route only exists for the local path (see
           // photo-agent-api.js's resultThumbnailUrl) -- AIPoC-path jobs fall
@@ -6542,7 +6560,7 @@
           });
         } else if (statuses.every((s) => s.status === "error")) {
           li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
-          if (badge) badge.textContent = archived ? "舊版封存" : "失敗";
+          if (badge) badge.textContent = archived ? "可更新" : "失敗";
           // Drop only the spinner -- keep the reference thumb (if any) so the
           // tile still shows a recognizable photo instead of going blank; the
           // badge/border already communicate the failure.
@@ -6564,7 +6582,7 @@
             showNoticeModal(failureReason(failed));
           });
         } else {
-          if (badge) badge.textContent = archived ? "舊版封存" : "美化中";
+          if (badge) badge.textContent = archived ? "可更新" : "美化中";
           // Still clickable -- otherwise there's no way to come back and
           // check on a record that was still processing last time this list
           // was fetched (see viewProcessingHistoryRecord). The opening guard
@@ -6585,7 +6603,7 @@
         const archived = applyHistoryArchivedState(job, li);
         if (badge) badge.hidden = false;
         li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
-        if (badge) badge.textContent = archived ? "舊版封存" : "無法取得狀態";
+        if (badge) badge.textContent = archived ? "可更新" : "無法取得狀態";
         markHistoryTileSelectable(li, job);
         li.addEventListener("click", () => {
           if (historySelectMode) {
@@ -7161,6 +7179,7 @@
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
+    if (els.costBtn) els.costBtn.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = true;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
     if (!alreadyAnalyzed) {
@@ -7287,6 +7306,7 @@
     currentBatchRecord = null;
     // No result -- and so no prompts -- yet for #show-prompt-btn to show.
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
+    if (els.costBtn) els.costBtn.hidden = true;
     // In case some OTHER record's live revise (finishSingleFlow) left these
     // toggled -- showBatchMainLoading below hides #results-canvas-row
     // entirely (its parent), so this is mostly cheap insurance, not load-
@@ -8175,10 +8195,23 @@
     caramel: "淺色・焦糖",
     caramel: "淺色・焦糖",
   };
+  const THEME_SCROLLBAR_RGB = {
+    default: "147,51,234",
+    ocean: "14,165,194",
+    forest: "16,185,129",
+    paper: "29,78,216",
+    peach: "207,81,69",
+    lilac: "136,71,136",
+    caramel: "185,81,27",
+  };
   function applyTheme(theme, persist = true) {
     const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "caramel";
     document.body.dataset.theme = selected;
     if (selected === "default") delete document.body.dataset.theme;
+    document.documentElement.style.setProperty(
+      "--scrollbar-accent-rgb",
+      THEME_SCROLLBAR_RGB[selected]
+    );
     document.querySelectorAll(".theme-option").forEach((option) => {
       const active = option.dataset.theme === selected;
       option.classList.toggle("is-selected", active);
@@ -8692,6 +8725,7 @@
     // record's flow had advanced it further.
     setFlowStage("awaiting-review");
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebugUiActive;
+    updateCostBtn();
     // Same "下載原圖" treatment as the single-image flow's own pending-review
     // screen (showPendingResults) -- no edit has run yet, so this can only
     // ever offer the source photo, handled by handleDownloadClick's
@@ -8901,6 +8935,11 @@
     // fallback for when there's no local File object (record.file) to read
     // straight from -- see fetchImageDownloadData.
     lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
+    // currentTokenUsage() reads currentBatchRecord/lastResult -- must run
+    // after lastResult is (re)assigned above, since a historical AIPoC
+    // record reached via viewHistoryRecord never sets currentBatchRecord,
+    // leaving lastResult as the only correct source for this record's cost.
+    updateCostBtn();
     updateDownloadLinks(record.runs);
     renderResult({
       data,
@@ -9404,6 +9443,141 @@
   // wherever those live at any point in the pipeline. Cost is only as
   // accurate as MODEL_PRICING above -- update it if a provider changes its
   // list prices.
+  const ZERO_PRICING = { input: { text: 0, image: 0 }, output: { text: 0, image: 0 } };
+
+  // Shared by tokenUsageAsText (per-stage breakdown) and currentCostBreakdown
+  // (the 分析/修圖/總金額 split for #cost-modal) so the pricing formula only
+  // lives in one place. Returns null for a stage that didn't call a model or
+  // whose usage shape normalizeStageUsage couldn't make sense of.
+  function stageCost(entry) {
+    if (!entry || !entry.model) return null;
+    const tokens = normalizeStageUsage(entry.usage);
+    if (!tokens) return null;
+    const pricing = MODEL_PRICING[entry.model] || ZERO_PRICING;
+    const cost =
+      (tokens.input.text / 1_000_000) * pricing.input.text +
+      (tokens.input.image / 1_000_000) * pricing.input.image +
+      (tokens.output.text / 1_000_000) * pricing.output.text +
+      (tokens.output.image / 1_000_000) * pricing.output.image;
+    return { tokens, cost };
+  }
+
+  // pipeline.py's own stage names (verbatim, see its "Step N - ..." usage[]
+  // keys) bucketed into 分析 (understanding/planning the photo, before any
+  // pixel is touched) vs 修圖 (the actual edit call plus its repair/QA
+  // follow-ups) for #cost-modal. Step 4 (crop_validation) never appears here
+  // -- it's deterministic geometry with no model call, so it never has usage.
+  const ANALYSIS_COST_STAGES = ["Step 2 - photo_analysis", "Step 3 - user_instruction_review"];
+  const EDIT_COST_STAGES = ["Step 5 - image_edit", "Step 5b - gaze_repair_pass", "Step 6 - quality_check"];
+
+  // Raw model ids (MODEL_PRICING/entry.model's own id, e.g. "gpt-5.6-luna")
+  // -> the same user-facing label showSingleResult/showBatchDoneMain already
+  // show on the "輸出結果" card. analysisModels/imageModels (config.js) never
+  // share a key, so trying both is safe regardless of which bucket an id
+  // came from.
+  function friendlyModelLabel(modelId) {
+    const config = window.PhotoAgentConfig || {};
+    return config.analysisModels?.[modelId] || config.imageModels?.[modelId] || modelId;
+  }
+
+  // Same idea, but for an edit-stage model -- includes its Standard/
+  // Enhanced/Premium tier (imageModelQualityOptions, config.js), the same
+  // label the upload page's own 修圖模型/影像品質 picker shows, since a bare
+  // model name alone doesn't say which quality tier this photo actually
+  // paid for. `quality` is extra-info.image_quality (Step 5's actual tier,
+  // possibly upgraded by pipeline.py's gaze-fix bump -- see its own comment
+  // in tokenUsageAsText above); falls back to the model's only tier when it
+  // has just one (Nano Banana 2/MAI-Image-2.6), then to the plain model name
+  // if neither matches (e.g. a Step 6 QA model with no quality tier at all).
+  function friendlyEditModelLabel(modelId, quality) {
+    const options = window.PhotoAgentConfig?.imageModelQualityOptions || [];
+    const matches = options.filter((opt) => opt.model === modelId);
+    const match = (quality && matches.find((opt) => opt.quality === quality)) || (matches.length === 1 ? matches[0] : null);
+    return match ? match.label : friendlyModelLabel(modelId);
+  }
+
+  // #cost-modal's three numbers, plus which model(s) actually ran each
+  // bucket's stages, for whatever photo is currently on screen. null (button
+  // stays hidden) until there's at least one priced stage; currentTokenUsage's
+  // own in-progress fallback (see its comment above) means this already has
+  // a partial Step 2 amount to show before the edit stage has even run.
+  function currentCostBreakdown() {
+    const usage = currentTokenUsage();
+    if (!usage) return null;
+    const imageQuality = currentExtraInfo()?.image_quality;
+    let analysisCost = 0;
+    let editCost = 0;
+    let hasStage = false;
+    const analysisModels = new Set();
+    const editModels = new Set();
+    Object.entries(usage).forEach(([stage, entry]) => {
+      const priced = stageCost(entry);
+      if (!priced) return;
+      hasStage = true;
+      if (ANALYSIS_COST_STAGES.includes(stage)) {
+        analysisCost += priced.cost;
+        if (entry.model) analysisModels.add(friendlyModelLabel(entry.model));
+      } else if (EDIT_COST_STAGES.includes(stage)) {
+        editCost += priced.cost;
+        if (entry.model) editModels.add(friendlyEditModelLabel(entry.model, imageQuality));
+      }
+    });
+    return hasStage
+      ? { analysisCost, editCost, totalCost: analysisCost + editCost, analysisModels, editModels }
+      : null;
+  }
+
+  // Keeps #cost-btn's visibility in sync with whatever result is currently
+  // on screen -- called from the same spots that decide #show-prompt-btn's
+  // hidden state, since both depend on "is there a result to show numbers
+  // for" (see call sites below). The actual numbers are filled in lazily by
+  // renderCostModal, only when the modal is opened.
+  function updateCostBtn() {
+    if (!els.costBtn) return;
+    els.costBtn.hidden = !currentCostBreakdown();
+  }
+
+  // "$0.0000" reads like the stage genuinely cost nothing; a still-analyzed-
+  // only case (or a local/no-AI photo) hasn't priced that stage at all, so a
+  // dash is the more honest "n/a", not a real zero.
+  function formatCostValue(cost) {
+    return cost > 0 ? `$${cost.toFixed(4)}` : "—";
+  }
+
+  function renderModelCaption(el, models) {
+    if (!el) return;
+    // models is already a Set of final display labels (see
+    // currentCostBreakdown) -- no further mapping needed here.
+    const labels = Array.from(models || []).filter(Boolean);
+    if (!labels.length) {
+      el.hidden = true;
+      return;
+    }
+    el.textContent = labels.join("、");
+    el.hidden = false;
+  }
+
+  function renderCostModal() {
+    const breakdown = currentCostBreakdown();
+    const analysisCost = breakdown?.analysisCost || 0;
+    const editCost = breakdown?.editCost || 0;
+    const totalCost = breakdown?.totalCost || 0;
+    if (els.costModalAnalysis) els.costModalAnalysis.textContent = formatCostValue(analysisCost);
+    if (els.costModalEdit) els.costModalEdit.textContent = formatCostValue(editCost);
+    if (els.costModalTotal) els.costModalTotal.textContent = formatCostValue(totalCost);
+    renderModelCaption(els.costModalAnalysisModel, breakdown?.analysisModels);
+    renderModelCaption(els.costModalEditModel, breakdown?.editModels);
+  }
+
+  function openCostModal() {
+    renderCostModal();
+    if (els.costModal) els.costModal.hidden = false;
+  }
+
+  function closeCostModal() {
+    if (els.costModal) els.costModal.hidden = true;
+  }
+
   function tokenUsageAsText() {
     const usage = currentTokenUsage();
     if (!usage) return "";
@@ -9413,17 +9587,10 @@
     let totalCost = 0;
     let totalTokens = 0;
     let totalSeconds = 0;
-    const zeroPricing = { input: { text: 0, image: 0 }, output: { text: 0, image: 0 } };
     Object.entries(usage).forEach(([stage, entry]) => {
-      if (!entry || !entry.model) return;
-      const tokens = normalizeStageUsage(entry.usage);
-      if (!tokens) return;
-      const pricing = MODEL_PRICING[entry.model] || zeroPricing;
-      const cost =
-        (tokens.input.text / 1_000_000) * pricing.input.text +
-        (tokens.input.image / 1_000_000) * pricing.input.image +
-        (tokens.output.text / 1_000_000) * pricing.output.text +
-        (tokens.output.image / 1_000_000) * pricing.output.image;
+      const priced = stageCost(entry);
+      if (!priced) return;
+      const { tokens, cost } = priced;
       totalCost += cost;
       totalTokens += tokens.total;
       const seconds = timings[stage];
@@ -10441,6 +10608,13 @@
       if (e.target.dataset.close) closeAccountModal();
     });
   }
+  if (els.costBtn) els.costBtn.addEventListener("click", openCostModal);
+  if (els.costModalClose) els.costModalClose.addEventListener("click", closeCostModal);
+  if (els.costModal) {
+    els.costModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeCostModal();
+    });
+  }
   setupThemePicker();
   if (els.headerSettingsBtn) els.headerSettingsBtn.addEventListener("click", openContextSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
@@ -10557,6 +10731,7 @@
     if (els.noticeModal && !els.noticeModal.hidden) closeNoticeModal();
     if (els.confirmModal && !els.confirmModal.hidden) confirmModalHandlers?.cancel();
     if (els.accountModal && !els.accountModal.hidden) closeAccountModal();
+    if (els.costModal && !els.costModal.hidden) closeCostModal();
     if (els.reportModal && !els.reportModal.hidden) closeReportModal();
     if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();

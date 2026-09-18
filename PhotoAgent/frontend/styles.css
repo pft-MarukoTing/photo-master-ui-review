@@ -48,6 +48,9 @@
   --accent-rgb: 168,85,247;
   --accent-2-rgb: 236,72,153;
   --accent-soft-rgb: 216,180,254;
+  /* The viewport scrollbar belongs to <html>, while the selected palette
+     is applied to <body>. Keep a root-level copy for that one scrollbar. */
+  --scrollbar-accent-rgb: 147,51,234;
   --on-surface-rgb: 255,255,255;
   --on-surface-color: #FFFFFF;
   --on-accent-color: #FFFFFF;
@@ -68,6 +71,7 @@ body[data-theme="ocean"] {
   --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
   --border: rgba(180,230,240,.13); --border-2: rgba(180,230,240,.24);
   --accent: #22d3ee; --accent-2: #3b82f6; --accent-rgb: 34,211,238; --accent-2-rgb: 59,130,246;
+  --scrollbar-accent-rgb: 14,165,194;
   --accent-soft-rgb: 103,232,249; --on-surface-rgb: 255,255,255;
   --accent-pale-color: #CFFAFE; --accent-pale-grad: linear-gradient(110deg, #ECFEFF 0%, #CFFAFE 68%, #67E8F9 100%);
   --mv-grad: linear-gradient(135deg, #67e8f9 0%, #22d3ee 48%, #2563eb 100%);
@@ -82,6 +86,7 @@ body[data-theme="forest"] {
   --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
   --border: rgba(190,235,202,.13); --border-2: rgba(190,235,202,.24);
   --accent: #34d399; --accent-2: #84cc16; --accent-rgb: 52,211,153; --accent-2-rgb: 132,204,22;
+  --scrollbar-accent-rgb: 16,185,129;
   --accent-soft-rgb: 163,230,53; --on-surface-rgb: 255,255,255;
   --accent-pale-color: #DCFCE7; --accent-pale-grad: linear-gradient(110deg, #F0FDF4 0%, #DCFCE7 68%, #86EFAC 100%);
   --mv-grad: linear-gradient(135deg, #a3e635 0%, #34d399 52%, #059669 100%);
@@ -100,6 +105,7 @@ body[data-theme="paper"] {
   --accent-pale-color: #DBEAFE; --accent-pale-grad: linear-gradient(110deg, #EFF6FF 0%, #DBEAFE 68%, #93C5FD 100%);
   --header-bg: rgba(245,247,251,.82); --card-sheen: linear-gradient(160deg, rgba(var(--on-surface-rgb),.08), rgba(var(--on-surface-rgb),0) 55%);
   --accent: #2563eb; --accent-2: #06b6d4; --accent-rgb: 37,99,235; --accent-2-rgb: 6,182,212;
+  --scrollbar-accent-rgb: 29,78,216;
   --mv-grad: linear-gradient(135deg, #60a5fa 0%, #2563eb 52%, #0891b2 100%);
   --bg-glow-1: rgba(37,99,235,.09); --bg-glow-2: rgba(6,182,212,.07); --shadow-accent: 0 10px 30px rgba(37,99,235,.18);
   /* --shadow-lg/--shadow-btn stay flat rgba(0,0,0,..) in :root, tuned for
@@ -131,6 +137,7 @@ body[data-theme="peach"] {
   --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
   --border: rgba(51,36,20,.10); --border-2: rgba(51,36,20,.18);
   --accent: #E36255; --accent-2: #EC9A86; --accent-rgb: 227,98,85; --accent-2-rgb: 236,154,134;
+  --scrollbar-accent-rgb: 207,81,69;
   --accent-soft-rgb: 243,194,98; --on-surface-rgb: 51,36,20; --on-surface-color: #332414;
   --glass-rgb: 255,255,255;
   --accent-pale-color: #F3DCD5; --accent-pale-grad: linear-gradient(110deg, #FBF3EA 0%, #F3DCD5 68%, #EC9A86 100%);
@@ -171,6 +178,7 @@ body[data-theme="lilac"] {
   --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
   --border: rgba(51,20,49,.10); --border-2: rgba(51,20,49,.18);
   --accent: #9C539C; --accent-2: #C967A2; --accent-rgb: 156,83,156; --accent-2-rgb: 201,103,162;
+  --scrollbar-accent-rgb: 136,71,136;
   --accent-soft-rgb: 216,118,169; --on-surface-rgb: 51,20,49; --on-surface-color: #331431;
   --glass-rgb: 255,255,255;
   --accent-pale-color: #F5E6EF; --accent-pale-grad: linear-gradient(110deg, #FAF7F9 0%, #F5E6EF 68%, #C967A2 100%);
@@ -206,6 +214,7 @@ body[data-theme="caramel"] {
   --text: var(--n100); --text-2: var(--n64); --text-3: var(--n74); --text-4: var(--n84);
   --border: rgba(51,20,31,.10); --border-2: rgba(51,20,31,.18);
   --accent: #D56723; --accent-2: #F1AA42; --accent-rgb: 213,103,35; --accent-2-rgb: 241,170,66;
+  --scrollbar-accent-rgb: 185,81,27;
   --accent-soft-rgb: 249,209,120; --on-surface-rgb: 51,20,31; --on-surface-color: #33141F;
   --glass-rgb: 255,255,255;
   --accent-pale-color: #F8E9D3; --accent-pale-grad: linear-gradient(110deg, #FAF7F3 0%, #F8E9D3 68%, #F1AA42 100%);
@@ -277,6 +286,7 @@ body {
   background-attachment: fixed;
   font-family: 'Inter', -apple-system, system-ui, sans-serif;
   color: var(--text);
+  --scrollbar-accent-rgb: 147,51,234;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
@@ -301,7 +311,7 @@ input[type="checkbox"] {
    elements aren't inherited, so the * selector applies them everywhere. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(var(--accent-rgb),.4) transparent;
+  scrollbar-color: rgba(var(--scrollbar-accent-rgb),.4) transparent;
 }
 *::-webkit-scrollbar {
   width: 10px;
@@ -311,13 +321,13 @@ input[type="checkbox"] {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: rgba(var(--accent-rgb),.4);
+  background-color: rgba(var(--scrollbar-accent-rgb),.4);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(var(--accent-rgb),.65);
+  background-color: rgba(var(--scrollbar-accent-rgb),.65);
   background-clip: padding-box;
 }
 *::-webkit-scrollbar-corner {
@@ -2205,7 +2215,7 @@ body[data-theme="lilac"] .proc-wrap,
 body[data-theme="caramel"] .proc-wrap {
   background: radial-gradient(ellipse 600px 420px at 82% 18%, var(--bg-glow-2) 0%, transparent 60%), var(--bg);
 }
-* { scrollbar-color: rgba(var(--accent-rgb),.4) transparent; }
+* { scrollbar-color: rgba(var(--scrollbar-accent-rgb),.4) transparent; }
 
 /* Quality select */
 .quality-select {
@@ -4108,6 +4118,36 @@ body[data-theme="caramel"] .recipe-tags span {
   .header-actions .btn-label,
   #report-btn .btn-label { display: none; }
   #report-btn-spacer.btn { padding: 0 12px; gap: 0; }
+
+  /* Every button setupCompactHeaderActions (app.js) moves into
+     #header-actions-secondary -- tighter than their own compact-pill 14px
+     (index.html <style>: #reset-btn.btn/#header-settings-btn.btn/
+     #changelog-btn.btn/#admin-reports-btn.btn/#register-account-btn.btn/
+     .account-badge, all unconditional, not scoped to either row) so the
+     secondary row doesn't get needlessly wide on a phone screen. Each button
+     listed by id, not just ".btn" -- those index.html rules are an ID +
+     class selector each, same specificity as a plain "#header-actions-
+     secondary .btn" would be, and index.html's <style> loads AFTER this
+     file, so a same-specificity rule here would lose the tie and never take
+     effect. Chaining #header-actions-secondary's own id in front of each
+     button's id instead outranks them regardless of source order. */
+  #header-actions-secondary #reload-batch-btn.btn,
+  #header-actions-secondary #reset-btn.btn,
+  #header-actions-secondary #changelog-btn.btn,
+  #header-actions-secondary #header-settings-btn.btn,
+  #header-actions-secondary #admin-reports-btn.btn,
+  #header-actions-secondary #register-account-btn.btn,
+  #header-actions-secondary #cost-btn,
+  #header-actions-secondary #account-badge { padding: 0 8px; }
+
+  /* #reset-btn/#header-settings-btn additionally go icon-only there (the
+     rest keep their label) -- same treatment as #report-btn-spacer. Same
+     specificity note as above applies to gap:0 (index.html sets gap:6px
+     unconditionally on both). */
+  #reset-btn .btn-label,
+  #header-settings-btn .btn-label { display: none; }
+  #header-actions-secondary #reset-btn.btn,
+  #header-actions-secondary #header-settings-btn.btn { gap: 0; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
      height (see the base rule above), so that padding was eating straight

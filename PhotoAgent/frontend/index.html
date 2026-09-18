@@ -2473,6 +2473,25 @@
     .error-modal-close:hover { color: var(--text); }
     .error-modal-file { font-size: 13px; color: var(--text-2); margin-bottom: 8px; word-break: break-all; }
     .error-modal-msg { font-size: 15px; color: var(--text); line-height: 1.5; word-break: break-word; }
+    /* #cost-modal's 分析/修圖/總金額 breakdown -- plain label/value rows, the
+       last one (總金額) set off with a divider + bolder weight since it's
+       the sum of the two above it, not another line item. */
+    .cost-modal-rows { display: flex; flex-direction: column; gap: 10px; }
+    .cost-modal-item { display: flex; flex-direction: column; gap: 3px; }
+    .cost-modal-row { display: flex; align-items: center; justify-content: space-between; font-size: 15px; }
+    .cost-modal-label { color: var(--text-2); }
+    .cost-modal-value { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    /* Which model(s) actually ran this bucket's stages -- a quiet caption
+       under the number, not another figure competing for attention. */
+    .cost-modal-model { margin: 0; font-size: 12px; color: var(--text-3); }
+    .cost-modal-row-total {
+      margin-top: 4px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+      font-size: 16px;
+    }
+    .cost-modal-row-total .cost-modal-label { color: var(--text); font-weight: 700; }
+    .cost-modal-row-total .cost-modal-value { color: var(--accent); font-size: 18px; }
     /* Shared by #settings-modal (upload page) and #ap-settings-modal
        (results/analysis-preview page): same .option-pill-group rows as the
        inline pickers they replaced, just stacked instead of side by side.
@@ -3601,8 +3620,17 @@
       -webkit-backdrop-filter: blur(6px);
     }
     /* A history case whose analysis is below the current compatibility floor
-       remains viewable/downloadable, but cannot be revised safely. */
-    .batch-sidebar-item.archived .rc-badge::before { content: "▣"; }
+       remains viewable/downloadable and can be reprocessed with the current
+       version. A simple upward arrow stays legible at this badge's small
+       size and communicates that a newer version is available. */
+    .batch-sidebar-item.archived .rc-badge::before {
+      content: "";
+      width: 13px;
+      height: 13px;
+      background: currentColor;
+      -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m6.5 10.5 5.5-5.5 5.5 5.5'/%3E%3C/svg%3E") center / contain no-repeat;
+      mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19V5'/%3E%3Cpath d='m6.5 10.5 5.5-5.5 5.5 5.5'/%3E%3C/svg%3E") center / contain no-repeat;
+    }
     .history-cube.batch-sidebar-item.archived .rc-badge {
       background: rgba(75,75,85,.72);
       border: 1px solid rgba(210,210,220,.5);
@@ -4003,8 +4031,21 @@
   (function () {
     try {
       var THEME_KEYS = ["default", "ocean", "forest", "paper", "peach", "lilac", "caramel"];
+      var THEME_SCROLLBAR_RGB = {
+        "default": "147,51,234",
+        "ocean": "14,165,194",
+        "forest": "16,185,129",
+        "paper": "29,78,216",
+        "peach": "207,81,69",
+        "lilac": "136,71,136",
+        "caramel": "185,81,27"
+      };
       var saved = localStorage.getItem("photomaster-theme");
       var theme = THEME_KEYS.indexOf(saved) !== -1 ? saved : "caramel";
+      document.documentElement.style.setProperty(
+        "--scrollbar-accent-rgb",
+        THEME_SCROLLBAR_RGB[theme]
+      );
       if (theme !== "default") document.body.dataset.theme = theme;
     } catch (_) { /* storage may be blocked */ }
   })();
@@ -4076,6 +4117,19 @@
           <path d="M14 8l5 4-5 4M19 12H9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="btn-label">登入</span>
+      </button>
+      <!-- Opens #cost-modal, a running $ breakdown (分析/修圖/總金額) of the
+           currently-viewed photo's model-call cost, computed client-side
+           from token_usage/MODEL_PRICING -- see updateCostBtn/openCostModal
+           in app.js. Hidden until there's any usage to price; independent of
+           #account-badge's own visibility (no login required) -- sits just
+           to its left. -->
+      <button id="cost-btn" class="account-badge" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M12 1v22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>花費金額</span>
       </button>
       <!-- Doubles as the entry point into the history drawer (see
            applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
@@ -5580,6 +5634,42 @@
     <div class="account-modal-actions">
       <button id="account-modal-skip-btn" class="btn btn-secondary btn-sm" type="button">先略過</button>
       <button id="account-modal-create-btn" class="btn btn-grad btn-sm" type="button">建立帳號</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cost breakdown for the photo currently on screen -- opened by #cost-btn
+     (see openCostModal, app.js). Read-only, so just a title + × close,
+     same shared backdrop-click/Escape dismiss as every other modal here. -->
+<div id="cost-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="cost-modal-title">
+    <div class="error-modal-hdr">
+      <span id="cost-modal-title" class="notice-modal-title">花費金額</span>
+      <button id="cost-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div class="cost-modal-rows">
+      <div class="cost-modal-item">
+        <div class="cost-modal-row">
+          <span class="cost-modal-label">分析花費</span>
+          <span id="cost-modal-analysis" class="cost-modal-value">—</span>
+        </div>
+        <!-- Which model(s) actually ran Step 2/3 for this photo -- hidden
+             entirely (not left blank) when there's no usage yet to attribute
+             a model to. Filled in by renderCostModal (app.js). -->
+        <p id="cost-modal-analysis-model" class="cost-modal-model" hidden></p>
+      </div>
+      <div class="cost-modal-item">
+        <div class="cost-modal-row">
+          <span class="cost-modal-label">修圖花費</span>
+          <span id="cost-modal-edit" class="cost-modal-value">—</span>
+        </div>
+        <p id="cost-modal-edit-model" class="cost-modal-model" hidden></p>
+      </div>
+      <div class="cost-modal-row cost-modal-row-total">
+        <span class="cost-modal-label">總金額</span>
+        <span id="cost-modal-total" class="cost-modal-value">—</span>
+      </div>
     </div>
   </div>
 </div>

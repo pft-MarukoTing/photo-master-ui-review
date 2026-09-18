@@ -13,6 +13,14 @@ window.PhotoAgentDom = (() => {
     accountModalError: document.querySelector("#account-modal-error"),
     accountModalSkipBtn: document.querySelector("#account-modal-skip-btn"),
     accountModalCreateBtn: document.querySelector("#account-modal-create-btn"),
+    costBtn: document.querySelector("#cost-btn"),
+    costModal: document.querySelector("#cost-modal"),
+    costModalClose: document.querySelector("#cost-modal-close"),
+    costModalAnalysis: document.querySelector("#cost-modal-analysis"),
+    costModalAnalysisModel: document.querySelector("#cost-modal-analysis-model"),
+    costModalEdit: document.querySelector("#cost-modal-edit"),
+    costModalEditModel: document.querySelector("#cost-modal-edit-model"),
+    costModalTotal: document.querySelector("#cost-modal-total"),
     // Drawer, not a section.toggle screen -- see openHistoryDrawer/
     // closeHistoryDrawer (app.js).
     historyDrawer: document.querySelector("#history-drawer"),
