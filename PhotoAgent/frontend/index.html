@@ -1660,7 +1660,11 @@
       width: 96px;
       max-width: 100%;
       aspect-ratio: 2 / 3;
+      /* Gives the carousel step below a real vanishing point, so the top
+         photo swings away rather than just sliding flat. */
+      perspective: 700px;
     }
+    .ap-style-card-deep,
     .ap-style-card-back,
     .ap-style-card-front {
       position: absolute;
@@ -1672,18 +1676,64 @@
       border-radius: 8px;
       border: 1px solid var(--border-2);
       background: var(--card);
+      /* Only the carousel step animates these -- a pick or a re-render just
+         sets src, which no transition applies to. */
+      transition: transform .62s cubic-bezier(.22,.61,.36,1), opacity .62s ease;
+      backface-visibility: hidden;
     }
-    .ap-style-card-back[hidden] { display: none; }
+    /* All three need this: `display: block` above beats the browser's own
+       [hidden] { display: none }, so setting .hidden in JS does nothing
+       without it -- including on the front layer, which syncStylePicks
+       hides when a category has no example image to show at all. */
+    .ap-style-card-deep[hidden],
+    .ap-style-card-back[hidden],
+    .ap-style-card-front[hidden] { display: none; }
     .ap-style-card-back {
-      transform: rotate(5deg) translate(4px, -3px);
+      transform: rotate(5deg) translate(4px, -3px) scale(.97);
       opacity: .75;
     }
-    .ap-style-card-front.ap-style-carousel-changing {
-      animation: ap-style-card-carousel-fade .32s ease;
+    /* Invisible at rest -- the card still shows exactly two photos. This
+       layer exists only so a step has somewhere to bring the third photo in
+       FROM: it holds whatever comes after the back one, parked further out
+       and fully transparent until the step below moves it in. */
+    .ap-style-card-deep {
+      transform: rotate(8deg) translate(9px, -7px) scale(.9);
+      opacity: 0;
     }
-    @keyframes ap-style-card-carousel-fade {
-      from { opacity: .35; }
-      to { opacity: 1; }
+    /* One carousel step (advanceStyleCarousel, results.js): the front photo
+       swings off to the left in 3D while the tilted one behind it rises
+       into its place. The JS then moves both srcs one forward under
+       .no-anim, so the snap back to the resting state above is invisible.
+       The transition duration set above is the single source of truth for
+       how long a step takes -- results.js reads it back with
+       getComputedStyle rather than keeping its own copy, so retuning it
+       here is enough and the two cannot drift apart. */
+    .ap-style-card-stack.is-advancing .ap-style-card-front {
+      transform: rotateY(-20deg) rotateZ(-5deg) translateX(-16%) scale(.92);
+      opacity: 0;
+    }
+    .ap-style-card-stack.is-advancing .ap-style-card-back {
+      transform: rotate(0deg) translate(0, 0) scale(1);
+      opacity: 1;
+    }
+    /* ...and the deep layer takes over the back photo's resting spot in the
+       same breath, so the whole pile advances as one motion instead of the
+       incoming photo waiting for the other two to finish first. */
+    .ap-style-card-stack.is-advancing .ap-style-card-deep {
+      transform: rotate(5deg) translate(4px, -3px) scale(.97);
+      opacity: .75;
+    }
+    /* Every layer the commit snaps back to rest has to be listed here --
+       .ap-style-card-deep especially: left out, it animates that snap
+       instead of taking it instantly, which shows up as a third photo
+       drifting out and fading away behind the stack after the step. */
+    .ap-style-card-stack.no-anim .ap-style-card-front,
+    .ap-style-card-stack.no-anim .ap-style-card-back,
+    .ap-style-card-stack.no-anim .ap-style-card-deep { transition: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .ap-style-card-deep,
+      .ap-style-card-back,
+      .ap-style-card-front { transition: none; }
     }
     .ap-style-card.is-picked .ap-style-card-front { border-color: var(--accent); }
     .ap-style-card-clear {
@@ -4939,6 +4989,11 @@
                             <span class="ap-style-card-name">姿勢</span>
                             <span class="ap-style-card-thumbs">
                               <span class="ap-style-card-stack">
+                                <!-- Invisible at rest (see .ap-style-card-deep):
+                                     it only carries the photo entering the back
+                                     slot during a carousel step, so all three
+                                     photos a step needs can move at once. -->
+                                <img class="ap-style-card-deep" data-style-group="pose" alt="" hidden>
                                 <img class="ap-style-card-back" data-style-group="pose" alt="" hidden>
                                 <img class="ap-style-card-front" data-style-group="pose" alt="">
                               </span>
@@ -4952,6 +5007,7 @@
                             <span class="ap-style-card-name">拍攝角度</span>
                             <span class="ap-style-card-thumbs">
                               <span class="ap-style-card-stack">
+                                <img class="ap-style-card-deep" data-style-group="angle" alt="" hidden>
                                 <img class="ap-style-card-back" data-style-group="angle" alt="" hidden>
                                 <img class="ap-style-card-front" data-style-group="angle" alt="">
                               </span>
@@ -4965,6 +5021,7 @@
                             <span class="ap-style-card-name">光線</span>
                             <span class="ap-style-card-thumbs">
                               <span class="ap-style-card-stack">
+                                <img class="ap-style-card-deep" data-style-group="lighting" alt="" hidden>
                                 <img class="ap-style-card-back" data-style-group="lighting" alt="" hidden>
                                 <img class="ap-style-card-front" data-style-group="lighting" alt="">
                               </span>
@@ -4978,6 +5035,7 @@
                             <span class="ap-style-card-name">取景範圍</span>
                             <span class="ap-style-card-thumbs">
                               <span class="ap-style-card-stack">
+                                <img class="ap-style-card-deep" data-style-group="size" alt="" hidden>
                                 <img class="ap-style-card-back" data-style-group="size" alt="" hidden>
                                 <img class="ap-style-card-front" data-style-group="size" alt="">
                               </span>

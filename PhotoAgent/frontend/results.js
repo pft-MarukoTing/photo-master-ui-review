@@ -634,12 +634,243 @@ window.PhotoAgentResults = (() => {
     selectStylePick(name, "default");
   }
 
+  // While a 修圖風格 card has no pick yet, its front thumbnail cycles
+  // through every example image for that category (pose has 8, angle/
+  // lighting/size fewer) like a looping slideshow, instead of sitting on
+  // the same one or two examples forever -- the back photo always shows
+  // whichever example comes up *next*, so the "stack of photos" look still
+  // reads as one card away from flipping over rather than as a frozen
+  // pair. The step itself is a 3D swing rather than a src swap (see
+  // advanceStyleCarousel below and the .is-advancing rules in index.html's
+  // <style>) -- swapping a visible <img>'s src outright made the card blink
+  // on every tick, because the browser has nothing to show for the frames
+  // it spends decoding the new photo.
+  const STYLE_CAROUSEL_INTERVAL_MS = 2600;
+  // How long the swing runs before the step commits. This lives in the CSS
+  // (.ap-style-card-* transitions, index.html's <style>) and is read back
+  // from there rather than kept as a second copy here -- a duplicated
+  // number silently goes stale the moment anyone retunes the CSS, and the
+  // commit would then land mid-animation and jump. The constant is only the
+  // fallback for when the duration can't be read.
+  const STYLE_CAROUSEL_STEP_FALLBACK_MS = 620;
+  // At least three example images, because the step needs three layers to
+  // move at once (leaving, arriving at the front, entering the back slot).
+  // A category with fewer just shows a static card, as it did before the
+  // carousel existed.
+  const STYLE_CAROUSEL_MIN_IMAGES = 3;
+  const styleCarouselIndex = {};
+  const styleCarouselBusy = {};
+  // Every unpicked card advances off ONE shared ticker rather than a timer
+  // of its own. With a timer each, a card that got picked and then cleared
+  // again restarted counting from that moment and turned over permanently
+  // out of step with the cards that never stopped -- joining and leaving
+  // this map instead leaves the phase shared, so all four turn over
+  // together no matter what was picked or cleared along the way. (A
+  // left-to-right stagger was tried here and taken back out: the row reads
+  // better flipping as one.)
+  const styleCarouselRunning = new Map();
+  let styleCarouselTicker = null;
+  // Bumped by stopStyleCarousel so an advance that's mid-await (a pick made
+  // while the photo is still swinging away, a re-render, another record
+  // loading) bails at its next checkpoint instead of writing its own srcs
+  // over whatever replaced it.
+  const styleCarouselGen = {};
+
+  function styleCardParts(group) {
+    return {
+      front: document.querySelector(`.ap-style-card-front[data-style-group="${group}"]`),
+      back: document.querySelector(`.ap-style-card-back[data-style-group="${group}"]`),
+      deep: document.querySelector(`.ap-style-card-deep[data-style-group="${group}"]`),
+      stack: document.querySelector(`.ap-style-card[data-style-group="${group}"] .ap-style-card-stack`)
+    };
+  }
+
+  function resetStyleCarouselClasses(group) {
+    const { stack } = styleCardParts(group);
+    if (stack) stack.classList.remove("is-advancing", "no-anim");
+  }
+
+  function stopStyleCarousel(group) {
+    styleCarouselGen[group] = (styleCarouselGen[group] || 0) + 1;
+    styleCarouselRunning.delete(group);
+    // The ticker only exists while at least one card is riding it -- with
+    // every category picked there is nothing left to advance.
+    if (!styleCarouselRunning.size && styleCarouselTicker) {
+      clearInterval(styleCarouselTicker);
+      styleCarouselTicker = null;
+    }
+    resetStyleCarouselClasses(group);
+  }
+
+  function prefersReducedMotion() {
+    return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }
+
+  function setStyleThumb(img, src) {
+    if (!img) return;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = src;
+  }
+
+  // Fetch AND decode off-DOM, so the later `img.src = src` paints straight
+  // from cache in the same frame instead of leaving the <img> blank while
+  // the decode runs.
+  function preloadStyleThumb(src) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const done = () => resolve();
+      img.onload = () => { (img.decode ? img.decode() : Promise.resolve()).then(done, done); };
+      img.onerror = done;
+      img.src = src;
+    });
+  }
+
+  // A load/decode that never settles (a stalled fetch, the tab hidden
+  // mid-step) would otherwise leave styleCarouselBusy stuck true and freeze
+  // that card's carousel for good -- cap every wait in a step instead.
+  function withTimeout(promise, ms) {
+    return Promise.race([promise, new Promise((resolve) => setTimeout(resolve, ms))]);
+  }
+
+  function styleCarouselSrc(group, withImage, images, idx) {
+    return styleThumbSrc(group, images[withImage[idx % withImage.length].value]);
+  }
+
+  // Longest transition on the layer, in ms, straight from the stylesheet.
+  // getComputedStyle reports e.g. "0.62s, 0.62s" (or "620ms"), one entry per
+  // transitioned property; the swing is over once the slowest one is.
+  function styleCarouselStepMs(front) {
+    const raw = front ? getComputedStyle(front).transitionDuration : "";
+    const longest = String(raw).split(",").reduce((max, part) => {
+      const value = parseFloat(part);
+      if (!Number.isFinite(value)) return max;
+      return Math.max(max, part.trim().endsWith("ms") ? value : value * 1000);
+    }, 0);
+    return longest > 0 ? longest : STYLE_CAROUSEL_STEP_FALLBACK_MS;
+  }
+
+  // Paints a frame outright, no animation -- the carousel's starting state.
+  // (Every later frame arrives through advanceStyleCarousel's own commit;
+  // a card that is off-screen or under reduced motion simply holds this one
+  // rather than being repainted.)
+  function renderStyleCarouselFrame(group, withImage, images) {
+    const { front, back, deep } = styleCardParts(group);
+    const len = withImage.length;
+    const idx = (styleCarouselIndex[group] || 0) % len;
+    if (front) {
+      front.hidden = false;
+      setStyleThumb(front, styleCarouselSrc(group, withImage, images, idx));
+    }
+    if (back) {
+      back.hidden = len < 2;
+      if (len >= 2) setStyleThumb(back, styleCarouselSrc(group, withImage, images, idx + 1));
+    }
+    // Transparent at rest, so this only preloads what the next step will
+    // bring in -- it never adds a third visible photo to the card.
+    if (deep) {
+      deep.hidden = len < 3;
+      if (len >= 3) setStyleThumb(deep, styleCarouselSrc(group, withImage, images, idx + 2));
+    }
+  }
+
+  // One carousel step, all three layers moving at once: the top photo swings
+  // away in 3D, the tilted one behind it rises into its place, and the deep
+  // layer -- transparent at rest, holding the photo after that -- takes over
+  // the tilt. All three srcs then move one forward under .no-anim while the
+  // front photo is still faded out and every image involved is decoded, so
+  // the snap back to rest paints exactly like the last animated frame.
+  // Nothing appears afterwards: what the deep layer brought in IS the new
+  // back photo, already in place, and the deep layer goes transparent again
+  // holding the next one.
+  async function advanceStyleCarousel(group, withImage, images) {
+    // stopStyleCarousel drops a picked category from the map synchronously,
+    // so this covers any caller reaching a card that is no longer meant to
+    // be moving; the generation checks further down only catch a stop that
+    // lands once this step is already under way.
+    if (!styleCarouselRunning.has(group)) return;
+    if (styleCarouselBusy[group]) return;
+    const { front, back, deep, stack } = styleCardParts(group);
+    const len = withImage.length;
+    if (!front || !back || !deep || !stack || len < STYLE_CAROUSEL_MIN_IMAGES) return;
+
+    const idx = (styleCarouselIndex[group] || 0) % len;
+    const nextIdx = (idx + 1) % len;
+    // What the deep layer will hold once this step is done -- one past the
+    // photo it is carrying into the back slot right now.
+    const afterSrc = styleCarouselSrc(group, withImage, images, idx + 3);
+
+    // Hold the card exactly where it is, leaving the index alone so it stays
+    // in step with what is on screen and simply carries on from the same
+    // photo later. Two reasons to do that: nobody can see the card
+    // (background tab, review panel closed, another section showing), so
+    // cycling photos -- and decoding their replacements -- would be work
+    // done into a void; or the viewer asked for reduced motion, and a photo
+    // swapping itself every few seconds unprompted is exactly the kind of
+    // movement that setting exists to stop, with or without a transition on
+    // it. Either way the card stays a perfectly good static example.
+    if (document.hidden || !stack.offsetParent || prefersReducedMotion()) return;
+
+    const gen = styleCarouselGen[group] || 0;
+    const stale = () => (styleCarouselGen[group] || 0) !== gen;
+    styleCarouselBusy[group] = true;
+    try {
+      await withTimeout(preloadStyleThumb(afterSrc), 1500);
+      if (stale()) return;
+
+      // Both of these are on screen for the whole step, so they are decoded
+      // by the time the commit below hands them to the layer in front.
+      const risenSrc = back.src;
+      const arrivedSrc = deep ? deep.src : null;
+      stack.classList.add("is-advancing");
+      await new Promise((resolve) => setTimeout(resolve, styleCarouselStepMs(front)));
+      if (stale()) { resetStyleCarouselClasses(group); return; }
+
+      // Last chance to wait for anything: the commit below must not contain
+      // a single await. While .is-advancing is still on, the back layer is
+      // sitting at the FRONT position at full opacity -- so a paint landing
+      // between "back.src = the next back photo" and the class swap shows
+      // that photo full size up front for a frame or two, which is the
+      // occasional flash this ordering exists to prevent. (risenSrc is
+      // already on screen, so this resolves off cache.)
+      await withTimeout(preloadStyleThumb(risenSrc), 400);
+      if (stale()) { resetStyleCarouselClasses(group); return; }
+
+      // One synchronous block: every src and class moves together, so the
+      // browser can only ever paint the before or the after, never a mix.
+      stack.classList.add("no-anim");
+      front.src = risenSrc;
+      if (arrivedSrc) back.src = arrivedSrc;
+      // Back to transparent, now holding the photo the NEXT step brings in.
+      if (deep) deep.src = afterSrc;
+      stack.classList.remove("is-advancing");
+      void stack.offsetWidth; // flush the snap-back before transitions come back on
+      stack.classList.remove("no-anim");
+      styleCarouselIndex[group] = nextIdx;
+    } finally {
+      styleCarouselBusy[group] = false;
+    }
+  }
+
+  // A card joining mid-cycle picks up whatever phase the ticker is already
+  // on (so its first turn may come in well under a full interval) -- that's
+  // the point: from then on it turns over with the others.
+  function startStyleCarousel(group, withImage, images) {
+    if (withImage.length < STYLE_CAROUSEL_MIN_IMAGES) return;
+    styleCarouselRunning.set(group, { withImage, images });
+    if (!styleCarouselTicker) {
+      styleCarouselTicker = setInterval(() => {
+        styleCarouselRunning.forEach((entry, runningGroup) => {
+          advanceStyleCarousel(runningGroup, entry.withImage, entry.images);
+        });
+      }, STYLE_CAROUSEL_INTERVAL_MS);
+    }
+  }
+
   // Puts each 修圖風格 card into its category's current state: the picked
-  // option's own thumbnail and label, or -- while nothing is picked there --
-  // one example image under a 「選擇…」prompt, with a second one tilted out
-  // from behind it so the card reads as a set to open rather than a single
-  // photo. Once picked, that back photo goes: the card is showing a choice,
-  // not an invitation. Called whenever those radios change (app.js) or the
+  // option's own thumbnail and label (carousel stopped, pinned to that one
+  // choice), or -- while nothing is picked there -- the looping example
+  // carousel above. Called whenever those radios change (app.js) or the
   // analysis preview re-renders.
   function syncStylePicks() {
     Object.entries(STYLE_OPTION_GROUPS).forEach(([group, { options, label }]) => {
@@ -649,24 +880,46 @@ window.PhotoAgentResults = (() => {
         : null;
       const images = STYLE_OPTION_IMAGES[group] || {};
       const withImage = options.filter((o) => images[o.value]);
-      const front = (opt && images[opt.value]) ? opt : withImage[0];
-      const back = opt ? null : withImage.find((o) => o.value !== front?.value);
 
       const card = document.querySelector(`.ap-style-card[data-style-group="${group}"]`);
       if (card) card.classList.toggle("is-picked", !!opt);
       const valueEl = document.querySelector(`.ap-style-card-value[data-style-group="${group}"]`);
       if (valueEl) valueEl.textContent = opt ? opt.label : `選擇${label}`;
-      [["front", front], ["back", back]].forEach(([layer, layerOpt]) => {
-        const img = document.querySelector(`.ap-style-card-${layer}[data-style-group="${group}"]`);
-        if (!img) return;
-        img.hidden = !layerOpt;
-        if (!layerOpt) return;
-        img.loading = "lazy";
-        img.decoding = "async";
-        img.src = styleThumbSrc(group, images[layerOpt.value]);
-      });
       const clearBtn = document.querySelector(`.ap-style-card-clear[data-style-group="${group}"]`);
       if (clearBtn) clearBtn.hidden = !opt;
+
+      if (opt) {
+        // A choice is made -- stop the carousel and pin the card to exactly
+        // that option, back photo hidden (unchanged from the original
+        // picked-state behavior).
+        stopStyleCarousel(group);
+        const { front: frontImg, back: backImg, deep: deepImg } = styleCardParts(group);
+        // An option with no example image of its own falls back to the
+        // category's first one, and to showing nothing at all if the
+        // category has no images -- styleThumbSrc calls .replace on what it
+        // is handed, so passing undefined throws. The pre-carousel code had
+        // this fallback (`(opt && images[opt.value]) ? opt : withImage[0]`);
+        // it was lost in the rewrite.
+        const pickedFile = images[opt.value]
+          || (withImage[0] ? images[withImage[0].value] : null);
+        if (frontImg) {
+          frontImg.hidden = !pickedFile;
+          if (pickedFile) setStyleThumb(frontImg, styleThumbSrc(group, pickedFile));
+        }
+        if (backImg) backImg.hidden = true;
+        if (deepImg) deepImg.hidden = true;
+        return;
+      }
+
+      if (!withImage.length) return;
+      // Don't restart an already-running carousel just because this ran
+      // again (a re-render, or a change on a DIFFERENT category) -- that
+      // would reset it back to frame 0 and cut the loop short every time.
+      if (!styleCarouselRunning.has(group)) {
+        styleCarouselIndex[group] = styleCarouselIndex[group] || 0;
+        renderStyleCarouselFrame(group, withImage, images);
+        startStyleCarousel(group, withImage, images);
+      }
     });
   }
 
