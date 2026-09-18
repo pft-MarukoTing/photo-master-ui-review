@@ -132,6 +132,7 @@ window.PhotoAgentDom = (() => {
     apStyleTypeRow: document.querySelector("#ap-style-type-row"),
     apStyleOptionsFrame: document.querySelector("#ap-style-options-frame"),
     apStyleOptionsTitle: document.querySelector("#ap-style-options-title"),
+    apStyleOptionsNote: document.querySelector("#ap-style-options-note"),
     apGroupPose: document.querySelector("#ap-group-pose"),
     apGroupAngle: document.querySelector("#ap-group-angle"),
     apGroupLighting: document.querySelector("#ap-group-lighting"),

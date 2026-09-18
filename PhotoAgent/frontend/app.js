@@ -8173,6 +8173,10 @@
   // since that map is private to results.js's module closure and isn't
   // exported for reuse here.
   const STYLE_GROUP_TITLES = { pose: "姿勢", angle: "拍攝角度", lighting: "光線", size: "取景範圍" };
+  const STYLE_GROUP_NOTE = "（圖例僅示意風格，實際呈現依原圖調整）";
+  const STYLE_GROUP_NOTES = {
+    pose: "（圖例僅示意風格，實際姿勢依原圖調整）",
+  };
 
   function styleGroupListEl(group) {
     return els[`ap${group[0].toUpperCase()}${group.slice(1)}List`];
@@ -8221,6 +8225,11 @@
     });
     if (els.apStyleOptionsTitle) {
       els.apStyleOptionsTitle.textContent = group ? (STYLE_GROUP_TITLES[group] || group) : "";
+    }
+    if (els.apStyleOptionsNote) {
+      const note = group ? (STYLE_GROUP_NOTES[group] || STYLE_GROUP_NOTE) : "";
+      els.apStyleOptionsNote.textContent = note || "";
+      els.apStyleOptionsNote.hidden = !note;
     }
     if (els.apStyleOptionsFrame) els.apStyleOptionsFrame.hidden = !group;
     // Freshly shown list starts scrolled to the top regardless of where a

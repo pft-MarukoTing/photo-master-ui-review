@@ -1641,14 +1641,14 @@
     }
     .ap-style-modal-box .ap-style-option-thumb { width: 100%; }
     .ap-style-modal-box .ap-style-scroll-hint { bottom: 10px; }
-    /* Header row for #ap-style-options-frame: category name top-left (set
-       from showStyleGroup, app.js, since the category row is hidden while
-       this frame is open), return button top-right. */
+    /* Header row for #ap-style-options-frame: category name followed by its
+       parenthetical caveat (both set from showStyleGroup, app.js, since the
+       category row is hidden while this frame is open). */
     .ap-style-options-hdr {
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0 4px;
       margin-bottom: 10px;
     }
     .ap-style-options-title {
@@ -1656,6 +1656,12 @@
       font-weight: 700;
       color: var(--text);
     }
+    .ap-style-options-note {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .ap-style-options-note[hidden] { display: none; }
     /* Positioning root for #ap-style-scroll-hint, which pins to this frame's
        own bottom edge rather than #ap-style-options-frame's scrollable child
        list -- see that element's own markup comment. Flex column filling
@@ -5716,6 +5722,7 @@
     <div class="step-list-frame" id="ap-style-options-frame" hidden>
       <div class="ap-style-options-hdr">
         <span class="ap-style-options-title" id="ap-style-options-title"></span>
+        <span class="ap-style-options-note" id="ap-style-options-note" hidden></span>
       </div>
       <ul id="ap-pose-list" class="ap-style-option-grid" data-style-group="pose" hidden></ul>
       <ul id="ap-angle-list" class="ap-style-option-grid" data-style-group="angle" hidden></ul>
