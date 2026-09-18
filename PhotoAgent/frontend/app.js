@@ -5983,8 +5983,13 @@
 
   // confirmLabel/danger default to the original delete-history-entry wording
   // (btn-danger red "刪除") -- callers for a non-destructive confirmation
-  // (e.g. handleLogout) override both so the button doesn't misleadingly
-  // read "刪除" for an action that isn't deleting anything.
+  // (e.g. handleLogout, or the 美化 no-changes prompt) override both so the
+  // button doesn't misleadingly read "刪除" for an action that isn't
+  // deleting anything. Either way this is the modal's one primary action
+  // (btn-danger or btn-grad, matching every other modal's single highlighted
+  // button) -- it must never fall back to btn-secondary, or it reads as a
+  // second, equally-weighted Cancel with nothing marking which button
+  // actually confirms.
   function showConfirmModal(message, { confirmLabel = "刪除", danger = true } = {}) {
     return new Promise((resolve) => {
       if (!els.confirmModal) {
@@ -5996,7 +6001,7 @@
       if (els.confirmModalOkBtn) {
         els.confirmModalOkBtn.textContent = confirmLabel;
         els.confirmModalOkBtn.classList.toggle("btn-danger", danger);
-        els.confirmModalOkBtn.classList.toggle("btn-secondary", !danger);
+        els.confirmModalOkBtn.classList.toggle("btn-grad", !danger);
       }
       const finish = (result) => {
         clearConfirmModalWait();
