@@ -1622,6 +1622,35 @@ window.PhotoAgentResults = (() => {
     if (els.apReviewPrompt) els.apReviewPrompt.hidden = activeReviewTab !== "prompt";
   }
 
+  // If a tab is only partly visible at the edge of the horizontal tab strip,
+  // reveal the whole button after selection without moving the page itself.
+  function revealReviewTab(button) {
+    const tabs = els.apReviewTabs;
+    if (!tabs || !button) return;
+    requestAnimationFrame(() => {
+      const tabsRect = tabs.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      const edgePadding = 4;
+      const visibleTabs = [...tabs.querySelectorAll(".ap-review-tab:not([hidden])")];
+      const buttonIndex = visibleTabs.indexOf(button);
+      const hasPreviousTab = buttonIndex > 0;
+      const hasNextTab = buttonIndex >= 0 && buttonIndex < visibleTabs.length - 1;
+      const previousTabPeek = hasPreviousTab ? 18 : edgePadding;
+      const nextTabPeek = hasNextTab ? 18 : edgePadding;
+      const visibleLeft = tabsRect.left + previousTabPeek;
+      const visibleRight = tabsRect.right - nextTabPeek;
+      let scrollDelta = 0;
+      if (buttonRect.left < visibleLeft) {
+        scrollDelta = buttonRect.left - visibleLeft;
+      } else if (buttonRect.right > visibleRight) {
+        scrollDelta = buttonRect.right - visibleRight;
+      }
+      if (Math.abs(scrollDelta) < 0.5) return;
+      const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+      tabs.scrollBy({ left: scrollDelta, behavior: reduceMotion ? "auto" : "smooth" });
+    });
+  }
+
   // Switches #ap-review-panel's active top-level tab -- wired once below to
   // the four static tab buttons (they're plain markup, not rebuilt per
   // render like the per-person avatar tabs above, so their listeners only
@@ -1646,6 +1675,7 @@ window.PhotoAgentResults = (() => {
       event.stopPropagation();
       if (els.apReviewPanel && !els.apReviewPanel.open) els.apReviewPanel.open = true;
       setActiveReviewTab(tab);
+      revealReviewTab(button);
     });
   });
 

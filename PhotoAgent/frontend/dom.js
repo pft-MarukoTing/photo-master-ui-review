@@ -118,6 +118,7 @@ window.PhotoAgentDom = (() => {
     apRecipeList: document.querySelector("#ap-recipe-list"),
     apAnalysisShell: document.querySelector("#ap-analysis-shell"),
     apReviewPanel: document.querySelector("#ap-review-panel"),
+    apReviewTabs: document.querySelector("#ap-review-tabs"),
     apReviewTabRecipe: document.querySelector("#ap-review-tab-recipe"),
     apReviewTabFace: document.querySelector("#ap-review-tab-face"),
     apReviewTabStyle: document.querySelector("#ap-review-tab-style"),
