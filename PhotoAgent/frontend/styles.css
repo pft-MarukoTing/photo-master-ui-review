@@ -4206,14 +4206,17 @@ body[data-theme="caramel"] .recipe-tags span {
   #header-actions-secondary #cost-btn,
   #header-actions-secondary #account-badge { padding: 0 8px; }
 
-  /* #reset-btn/#header-settings-btn additionally go icon-only there (the
-     rest keep their label) -- same treatment as #report-btn-spacer. Same
-     specificity note as above applies to gap:0 (index.html sets gap:6px
-     unconditionally on both). */
-  #reset-btn .btn-label,
-  #header-settings-btn .btn-label { display: none; }
-  #header-actions-secondary #reset-btn.btn,
-  #header-actions-secondary #header-settings-btn.btn { gap: 0; }
+  /* #header-settings-btn/#cost-btn additionally go icon-only there (the
+     rest -- #reset-btn/回到首頁 and #account-badge/最近照片 -- keep their
+     label, 回到首頁 being the one worth never hiding) -- same treatment as
+     #report-btn-spacer. Same specificity note as above applies to gap:0
+     (index.html sets gap:6px unconditionally on both #header-settings-btn.btn
+     and .account-badge, which #cost-btn also uses). #cost-btn's own label is
+     a bare <span> with no .btn-label class, unlike the .btn ones. */
+  #header-settings-btn .btn-label,
+  #cost-btn span { display: none; }
+  #header-actions-secondary #header-settings-btn.btn,
+  #header-actions-secondary #cost-btn { gap: 0; }
 
   /* Was 40px/60px -- .upload-container has a fixed calc(100vh - var(--header-h))
      height (see the base rule above), so that padding was eating straight
