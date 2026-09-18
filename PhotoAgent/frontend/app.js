@@ -41,7 +41,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger, updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -8215,19 +8215,16 @@
     }
   }
 
-  // 修圖風格 picker (#ap-style-modal): two-step picker -- a row of
-  // Pose/Angle/Lighting/Size buttons (ids ap-group-pose/-angle/-lighting/
-  // -size), then that type's #ap-*-list example-image grid underneath.
-  // showStyleGroup just flips which button/list pair is visible; it doesn't
+  // 修圖風格 picker (#ap-style-modal): the full-size example-image grid for
+  // one category at a time, opened by clicking that category's card in the
+  // review tab. showStyleGroup just flips which #ap-*-list is visible; it doesn't
   // touch which radio is checked in any of them (that's still plain radio
-  // input behavior, untouched by this). The trigger remains in the review
-  // tab, while this picker is a standalone modal.
+  // input behavior, untouched by this).
   const STYLE_GROUPS = ["pose", "angle", "lighting", "size"];
   // Chinese labels for #ap-style-options-title (showStyleGroup below) --
-  // kept in sync by hand with the .option-pill-label text above each pill
-  // (index.html) and with STYLE_OPTION_GROUPS' own labels in results.js,
-  // since that map is private to results.js's module closure and isn't
-  // exported for reuse here.
+  // kept in sync by hand with each .ap-style-card-name (index.html) and with
+  // STYLE_OPTION_GROUPS' own labels in results.js, since that map is private
+  // to results.js's module closure and isn't exported for reuse here.
   const STYLE_GROUP_TITLES = { pose: "姿勢", angle: "拍攝角度", lighting: "光線", size: "取景範圍" };
   const STYLE_GROUP_NOTE = "（圖例僅示意風格，實際呈現依原圖調整）";
   const STYLE_GROUP_NOTES = {
@@ -8265,18 +8262,13 @@
     if (els.apStyleScrollHint) els.apStyleScrollHint.hidden = !hasMoreBelow;
   }
 
-  // group === null hides every list and clears every category button's active
-  // state (no g in STYLE_GROUPS ever equals null). A concrete group opens its
-  // image list in the standalone modal while the category row remains inline
-  // in the 修圖風格 tab.
+  // group === null hides every list (no g in STYLE_GROUPS ever equals null).
   // #ap-style-options-title (top of that frame) is set to the same
-  // 姿勢/拍攝角度/光線/取景範圍 text as the now-hidden pill's own
-  // .option-pill-label (see STYLE_GROUP_TITLES above).
+  // 姿勢/拍攝角度/光線/取景範圍 text as the category's own
+  // .ap-style-card-name in the tab (see STYLE_GROUP_TITLES above).
   function showStyleGroup(group) {
     STYLE_GROUPS.forEach((g) => {
-      const btn = document.getElementById(`ap-group-${g}`);
       const list = styleGroupListEl(g);
-      if (btn) btn.classList.toggle("is-active", g === group);
       if (list) list.hidden = g !== group;
     });
     if (els.apStyleOptionsTitle) {
@@ -9800,8 +9792,7 @@
         const input = document.querySelector(`input[name="${name}"][value="${options[key]}"]`);
         if (input) input.checked = true;
       });
-      [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
-      updateStyleTriggerLabel();
+      syncStylePicks();
       syncRestoredPoseSuggestions(options.pose);
     }
     if (Array.isArray(recipeChecked) && els.apRecipeList) {
@@ -10521,8 +10512,13 @@
       if (e.target.dataset.close) closeStyleModal();
     });
   }
-  document.querySelectorAll(".ap-style-type-btn").forEach((btn) => {
+  document.querySelectorAll(".ap-style-card").forEach((btn) => {
     btn.addEventListener("click", () => openStyleModal(btn.dataset.styleGroup));
+  });
+  // A sibling of the card rather than a child, since a <button> can't contain
+  // another one -- see .ap-style-card-clear's own CSS (index.html).
+  document.querySelectorAll(".ap-style-card-clear").forEach((btn) => {
+    btn.addEventListener("click", () => clearStylePick(`ap-${btn.dataset.styleGroup}`));
   });
   // Keeps the has-more-above/-below scroll cue (and #ap-style-scroll-hint)
   // honest as the user actually scrolls each category's list, not just at
@@ -10555,13 +10551,6 @@
       attributeFilter: ["hidden"],
     });
   });
-  // The in-modal clear "x" on each Pose/Angle/Lighting/Size pill (a sibling
-  // of the pill's own button, not nested inside it -- see the CSS comment
-  // in index.html for why) -- same clearStylePick reset-to-default path the
-  // picked-chip row's own "x" uses.
-  document.querySelectorAll(".ap-style-type-clear").forEach((btn) => {
-    btn.addEventListener("click", () => clearStylePick(`ap-${btn.dataset.styleGroup}`));
-  });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
     if (els.errorModal && !els.errorModal.hidden) closeErrorModal();
@@ -10589,17 +10578,15 @@
   // Per-image ap-*-list radios: their <ul> elements are stable across
   // renderAnalysisPreview's re-fills (only the <li> children get replaced),
   // so a delegated listener attached once here keeps working for every
-  // future render. Picking an actual option closes the image modal and leaves
-  // the selected value on its inline category button. Clearing one back to
-  // "Auto" instead (a card/chip's own "x" -- clearStylePick, results.js,
-  // dispatches this same "change" event with value "default") stays in the
-  // current modal so another option can be picked immediately.
+  // future render. Picking an actual option closes the modal; clearing one
+  // back to 不指定 (a card's own "x" -- clearStylePick, results.js, dispatches
+  // this same "change" event) stays in it so another can be picked
+  // immediately.
   [["apPoseList", "pose"], ["apAngleList", "angle"], ["apLightingList", "lighting"], ["apSizeList", "size"]]
     .forEach(([elKey, key]) => {
       if (els[elKey]) {
         els[elKey].addEventListener("change", (e) => {
-          syncStyleTrigger(els[elKey]);
-          updateStyleTriggerLabel();
+          syncStylePicks();
           if (key === "pose") applyPoseSuggestions(e.target.value);
           if (e.target.value !== "default") closeStyleModal();
           updateInlineAnalysisContinueBtnState();

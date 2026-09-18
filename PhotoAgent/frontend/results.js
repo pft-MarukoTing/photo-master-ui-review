@@ -527,6 +527,12 @@ window.PhotoAgentResults = (() => {
     rejectedEntries.forEach(renderEntry);
   }
 
+  // The downscaled webp copies, not the ~2 MB source PNGs beside them -- all
+  // 18 are fetched on every render, for tiles at most 140px wide.
+  function styleThumbSrc(group, imageFile) {
+    return `assets/optional_style/${group}/thumbs/${imageFile.replace(/\.png$/, ".webp")}`;
+  }
+
   // Renders a grid of image-thumbnail buttons -- used only by the per-image
   // 修圖風格 tab's Pose/Angle/Lighting/Size lists (assets live in
   // assets/optional_style/<group>/, see STYLE_OPTION_IMAGES above).
@@ -551,8 +557,7 @@ window.PhotoAgentResults = (() => {
       // markup stays valid) so it stays a normal, always-present member of
       // the name="ap-pose" etc radio group -- clearStylePick and the rest of
       // the selection-reading code (readStyleSelectionsFromDom,
-      // syncStyleTrigger, updateStyleTriggerLabel) all depend on it being
-      // there to check/query.
+      // syncStylePicks) all depend on it being there to check/query.
       if (opt.value === "default") {
         const hiddenLi = document.createElement("li");
         hiddenLi.hidden = true;
@@ -570,7 +575,7 @@ window.PhotoAgentResults = (() => {
       if (imageFile) {
         thumb = document.createElement("img");
         thumb.className = "ap-style-option-thumb";
-        thumb.src = `assets/optional_style/${group}/${imageFile}`;
+        thumb.src = styleThumbSrc(group, imageFile);
         thumb.alt = opt.label;
       } else {
         thumb = document.createElement("span");
@@ -612,99 +617,55 @@ window.PhotoAgentResults = (() => {
     });
   }
 
-  // Updates a style-option pill's displayed value (e.g. "Playful") to match
-  // whichever radio in its list is currently checked -- called by app.js
-  // after the per-image 修圖風格 tab's Pose/Angle/Lighting/Size lists restore
-  // a saved pick or the user selects a new one. The type button and its
-  // option grid are siblings rather than nested, so the pill is found via
-  // the list's data-style-group attribute matching a .ap-style-type-btn.
-  function syncStyleTrigger(listElement) {
-    if (!listElement) return;
-    const group = listElement.dataset.styleGroup;
-    const valueEl = group && document.querySelector(`.ap-style-type-btn[data-style-group="${group}"] .ap-style-value`);
-    if (!valueEl) return;
-    const checked = listElement.querySelector("input:checked");
-    const label = checked?.closest("label")?.querySelector(".step-cb-label, .ap-style-option-label")?.textContent;
-    valueEl.textContent = label || "不指定";
+  // Checks one ap-pose/-angle/-lighting/-size radio and fires a real `change`
+  // event on it -- app.js's listener for those is delegated onto the enclosing
+  // #ap-*-list <ul>, so this one dispatch runs the same syncStylePicks/
+  // applyPoseSuggestions path a click on the option's own modal card would.
+  function selectStylePick(name, value) {
+    const input = document.querySelector(`input[name="${name}"][value="${value}"]`);
+    if (!input || input.checked) return;
+    input.checked = true;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
-  // Resets one ap-pose/-angle/-lighting/-size radio group back to its
-  // "default" option and fires a real `change` event on it -- app.js's
-  // per-image radio change listener is delegated onto the enclosing
-  // #ap-*-list <ul> (see the wireup at the bottom of app.js), so this single
-  // dispatch is all that's needed to run the exact same
-  // syncStyleTrigger/updateStyleTriggerLabel path a normal click on the
-  // "Auto" card would -- no separate copy of that logic here.
   function clearStylePick(name) {
-    const defaultInput = document.querySelector(`input[name="${name}"][value="default"]`);
-    if (!defaultInput || defaultInput.checked) return;
-    defaultInput.checked = true;
-    defaultInput.dispatchEvent(new Event("change", { bubbles: true }));
+    selectStylePick(name, "default");
   }
 
-  // Renders #ap-style-picker-value's picked-label row as removable chips
-  // (label + an "x" button) instead of plain renderTags spans -- each chip's
-  // "x" calls clearStylePick so a pick can be undone from here directly,
-  // without switching down into #ap-style-type-row and finding "Auto" in
-  // the grid.
-  function renderStylePickedChips(element, picks) {
-    element.innerHTML = "";
-    picks.forEach(({ name, label }) => {
-      const chip = document.createElement("span");
-      chip.className = "ap-style-picked-chip";
+  // Puts each 修圖風格 card into its category's current state: the picked
+  // option's own thumbnail and label, or -- while nothing is picked there --
+  // one example image under a 「選擇…」prompt, with a second one tilted out
+  // from behind it so the card reads as a set to open rather than a single
+  // photo. Once picked, that back photo goes: the card is showing a choice,
+  // not an invitation. Called whenever those radios change (app.js) or the
+  // analysis preview re-renders.
+  function syncStylePicks() {
+    Object.entries(STYLE_OPTION_GROUPS).forEach(([group, { options, label }]) => {
+      const checked = document.querySelector(`input[name="ap-${group}"]:checked`);
+      const opt = checked && checked.value !== "default"
+        ? options.find((o) => o.value === checked.value)
+        : null;
+      const images = STYLE_OPTION_IMAGES[group] || {};
+      const withImage = options.filter((o) => images[o.value]);
+      const front = (opt && images[opt.value]) ? opt : withImage[0];
+      const back = opt ? null : withImage.find((o) => o.value !== front?.value);
 
-      const text = document.createElement("span");
-      text.textContent = label;
-      chip.appendChild(text);
-
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "ap-style-picked-chip-remove";
-      removeBtn.setAttribute("aria-label", `清除${label}`);
-      removeBtn.textContent = "×";
-      removeBtn.addEventListener("click", () => clearStylePick(name));
-      chip.appendChild(removeBtn);
-
-      element.appendChild(chip);
+      const card = document.querySelector(`.ap-style-card[data-style-group="${group}"]`);
+      if (card) card.classList.toggle("is-picked", !!opt);
+      const valueEl = document.querySelector(`.ap-style-card-value[data-style-group="${group}"]`);
+      if (valueEl) valueEl.textContent = opt ? opt.label : `選擇${label}`;
+      [["front", front], ["back", back]].forEach(([layer, layerOpt]) => {
+        const img = document.querySelector(`.ap-style-card-${layer}[data-style-group="${group}"]`);
+        if (!img) return;
+        img.hidden = !layerOpt;
+        if (!layerOpt) return;
+        img.loading = "lazy";
+        img.decoding = "async";
+        img.src = styleThumbSrc(group, images[layerOpt.value]);
+      });
+      const clearBtn = document.querySelector(`.ap-style-card-clear[data-style-group="${group}"]`);
+      if (clearBtn) clearBtn.hidden = !opt;
     });
-  }
-
-  // Keeps #ap-style-picker-value (the removable-chip row at the top of the
-  // 修圖風格 tab body) in sync with whatever's currently picked across the 4
-  // ap-pose/-angle/-lighting/-size radio groups -- called whenever those
-  // radios change (app.js) or the analysis preview re-renders. Hidden
-  // entirely while everything's still Default/Auto, same non-default-only
-  // filtering as buildStyleOptionsText/buildStyleOptionTagLabels above.
-  // Reads the radios directly (same `input[name="..."]:checked` lookup as
-  // readStyleSelectionsFromDom, app.js) rather than depending on that
-  // function, since results.js has no access to app.js's internals.
-  // Also drives the .ap-style-type-clear "x" sitting on each Pose/Angle/
-  // Lighting/Size pill in #ap-style-type-row -- same non-default check as
-  // the picked-chip row, just a per-category on/off instead of building a
-  // label, so the two never disagree about which categories are currently
-  // overridden.
-  function updateStyleTriggerLabel() {
-    if (!els.apStylePickerValue) return;
-    const names = ["ap-pose", "ap-angle", "ap-lighting", "ap-size"];
-    const picks = [];
-    names.forEach((name) => {
-      const group = name.replace("ap-", "");
-      const checked = document.querySelector(`input[name="${name}"]:checked`);
-      const isNonDefault = !!checked && checked.value !== "default";
-      const clearBtn = document.querySelector(`.ap-style-type-clear[data-style-group="${group}"]`);
-      if (clearBtn) clearBtn.hidden = !isNonDefault;
-      // .ap-style-type-btn.is-picked (styles.css) recolors its own
-      // .ap-style-value so a category reading e.g. "Playful" instead of
-      // "Default" is visually distinct at a glance, same non-default check
-      // as the clear "x" above.
-      const groupBtn = document.getElementById(`ap-group-${group}`);
-      if (groupBtn) groupBtn.classList.toggle("is-picked", isNonDefault);
-      if (!isNonDefault) return;
-      const opt = STYLE_OPTION_GROUPS[group]?.options.find((o) => o.value === checked.value);
-      if (opt) picks.push({ name, label: opt.label });
-    });
-    renderStylePickedChips(els.apStylePickerValue, picks);
-    els.apStylePickerValue.hidden = picks.length === 0;
   }
 
   function joinParts(parts) {
@@ -2686,17 +2647,16 @@ window.PhotoAgentResults = (() => {
     // person subject; Angle applies to any subject (product/scene shots
     // benefit from camera-angle framing too). The actual retouch behavior
     // for these selections is not wired up yet -- this is UI only for now.
-    // The 修圖風格 tab renders these as image-thumbnail buttons
-    // (fillStyleOptionList).
+    // #ap-style-modal's full-size cards hold the radios that own the pick;
+    // the tab's own four cards are rendered from the same option lists by
+    // syncStylePicks.
     fillStyleOptionList(els.apPoseList, POSE_OPTIONS, "ap-pose", "default", "pose");
     fillStyleOptionList(els.apAngleList, ANGLE_OPTIONS, "ap-angle", "default", "angle");
     fillStyleOptionList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default", "lighting");
     fillStyleOptionList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default", "size");
-    [els.apPoseList, els.apAngleList, els.apLightingList, els.apSizeList].forEach(syncStyleTrigger);
-    updateStyleTriggerLabel();
+    syncStylePicks();
     const isPerson = analysis.subject_category === "人物";
-    if (els.apGroupPose) els.apGroupPose.hidden = !isPerson;
-    if (els.apGroupAngle) els.apGroupAngle.hidden = false;
+    if (els.apStyleCardPose) els.apStyleCardPose.hidden = !isPerson;
   }
 
   // Narrow re-fill of just #ap-recipe-list -- for when the panel is already
@@ -2710,8 +2670,8 @@ window.PhotoAgentResults = (() => {
   }
 
   return {
-    renderResult, renderAnalysisPreview, refreshRecipeList, syncStyleTrigger,
-    updateStyleTriggerLabel, clearStylePick, setCompareView, renderTags,
+    renderResult, renderAnalysisPreview, refreshRecipeList,
+    syncStylePicks, clearStylePick, setCompareView, renderTags,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,

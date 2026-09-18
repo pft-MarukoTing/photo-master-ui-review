@@ -1180,7 +1180,7 @@
     #ap-review-panel:has(#ap-review-tab-recipe.is-active) { --active-hue: var(--hue-recipe); }
     #ap-review-panel:has(#ap-review-tab-style.is-active)  { --active-hue: var(--hue-style); }
     #ap-review-panel:has(#ap-review-tab-prompt.is-active) { --active-hue: var(--hue-prompt); }
-    /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/.ap-style-type-row/
+    /* .ap-review-tab/.ap-face-tabs/#ap-recipe-list/
        .ap-style-option-grid/.ap-style-scroll-hint each set their own display
        (flex/grid) unconditionally -- an author rule for the same property
        always beats the browser's own [hidden]{display:none} UA rule
@@ -1190,7 +1190,6 @@
     .ap-review-tab[hidden],
     .ap-face-tabs[hidden],
     #ap-recipe-list[hidden],
-    .ap-style-type-row[hidden],
     .ap-style-option-grid[hidden],
     .ap-style-scroll-hint[hidden] { display: none; }
 
@@ -1604,57 +1603,98 @@
       max-height: 150px;
       overflow-y: auto;
     }
-    /* Removable selected-label chips for the 修圖風格 tab's picker (see
-       updateStyleTriggerLabel/renderStylePickedChips, results.js) -- one
-       small pill per pick (e.g. "Playful", "Low Shot"), each with its own
-       "x" to clear that one category back to Auto/Default without
-       switching away from #ap-style-type-row below. Sits directly in
-       .ap-review-style's own top-to-bottom flow (not a flex sibling
-       needing order/flex-basis tricks, unlike when this lived in
-       .ap-actions-row) -- the indent + left border still reads as
-       "summary of the picker below", not a disconnected floating row. */
-    .ap-review-style .ap-style-picked {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      margin-bottom: 10px;
-      padding-left: 10px;
-      border-left: 2px solid var(--border-2);
-    }
-    .ap-style-picked-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      padding: 2px 3px 2px 8px;
-      background: var(--card-2);
-      border: 1px solid var(--border-2);
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
+    .ap-style-intro {
+      margin: 0 0 12px;
+      font-size: 12.5px;
       color: var(--text-2);
     }
-    .ap-style-picked-chip-remove {
-      display: inline-flex;
+    .ap-style-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 12px;
+    }
+    .ap-style-card-wrap { position: relative; min-width: 0; }
+    .ap-style-card {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px 10px;
+      border: 1.5px solid var(--border-2);
+      border-radius: var(--radius);
+      background: var(--card-2);
+      cursor: pointer;
+      text-align: left;
+      transition: border-color .15s, background .15s, transform .15s;
+    }
+    .ap-style-card:hover { border-color: rgba(var(--accent-rgb),.4); transform: translateY(-1px); }
+    .ap-style-card:disabled { cursor: not-allowed; opacity: .7; transform: none; }
+    .ap-style-card.is-picked {
+      border-color: var(--accent);
+      background: rgba(var(--accent-rgb),.1);
+    }
+    .ap-style-card-name { font-size: 13px; font-weight: 700; color: var(--text); }
+    .ap-style-card-value {
+      font-size: 12px;
+      color: var(--text-2);
+      text-align: center;
+      word-break: break-word;
+    }
+    .ap-style-card.is-picked .ap-style-card-value { color: var(--accent); font-weight: 700; }
+    /* Vertical padding absorbs .ap-style-card-back's offset, so the tilted
+       back photo never pokes into the name above or the label below. */
+    .ap-style-card-thumbs {
+      display: flex;
+      justify-content: center;
+      padding: 4px 0;
+    }
+    .ap-style-card-stack {
+      position: relative;
+      width: 96px;
+      max-width: 100%;
+      aspect-ratio: 2 / 3;
+    }
+    .ap-style-card-back,
+    .ap-style-card-front {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 8px;
+      border: 1px solid var(--border-2);
+      background: var(--card);
+    }
+    .ap-style-card-back[hidden] { display: none; }
+    .ap-style-card-back {
+      transform: rotate(5deg) translate(4px, -3px);
+      opacity: .75;
+    }
+    .ap-style-card.is-picked .ap-style-card-front { border-color: var(--accent); }
+    .ap-style-card-clear {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 20px;
+      height: 20px;
+      display: flex;
       align-items: center;
       justify-content: center;
-      width: 14px;
-      height: 14px;
-      padding: 0;
       border: none;
       border-radius: 50%;
-      background: transparent;
+      background: var(--card-3);
       color: var(--text-3);
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1;
       cursor: pointer;
       transition: background .15s, color .15s;
     }
-    .ap-style-picked-chip-remove:hover { background: rgba(255,38,0,.14); color: var(--red); }
+    .ap-style-card-clear:hover { background: rgba(255,38,0,.14); color: var(--red); }
 
-    /* ── 修圖風格 tab (#ap-review-style): keep the review panel compact and
-       open the example-image choices in the standalone #ap-style-modal below. ── */
-    .ap-review-style { height: 100%; }
+    /* ── #ap-style-modal: the full-size example cards, opened by clicking a
+       category's card in the 修圖風格 tab. ── */
+    .ap-review-style { height: 100%; overflow-y: auto; }
     .error-modal-box.ap-style-modal-box {
       width: min(560px, calc(100vw - 40px));
       /* Same --header-h + 36px trim as .error-modal's own padding-top comment
@@ -1763,97 +1803,6 @@
     @keyframes apStyleScrollHintBob {
       0%, 100% { transform: translateX(-50%) translateY(0); }
       50% { transform: translateX(-50%) translateY(3px); }
-    }
-    /* Fixed 2-column grid (not flex-wrap) -- Pose/Angle/Lighting/Size's own
-       .ap-style-value text changes length with whatever's picked ("Pose" vs
-       "Pose · Playful"), which made a flex-wrap row reflow/reorder the pills
-       as selections changed. Grid pins each button to its own cell
-       regardless of its label's width, so the 2x2 layout never shifts. */
-    .ap-style-type-row {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      margin-bottom: 4px;
-    }
-    /* results.js toggles `hidden` directly on the button (id="ap-group-pose"
-       etc, e.g. hiding Pose for a non-person subject) -- hide its
-       .option-pill-label + wrapping grid cell along with it, so a hidden
-       category doesn't leave an orphaned label with no button under it.
-       Scoped to .ap-style-type-btn specifically (not just `button`) since
-       .ap-style-type-btn-wrap also holds .ap-style-type-clear now, which is
-       hidden for an entirely different, much more common reason (no pick
-       made yet) -- matching any hidden button here would hide the whole
-       group nearly all the time. No `>` combinator since .ap-style-type-btn
-       is now nested one level inside .ap-style-type-btn-wrap, not a direct
-       child of .option-pill-group. */
-    .ap-style-type-row .option-pill-group:has(.ap-style-type-btn[hidden]) { display: none; }
-    /* Clear-pick "x", overlaid on the pill's own corner -- .ap-style-type-btn
-       is itself a <button>, and a <button> can't validly contain another
-       one, so this is a sibling wrapped together with it in
-       .ap-style-type-btn-wrap (sized to just the pill, unlike
-       .option-pill-group which also includes the category label above it --
-       anchoring to that instead previously put the "x" up by the label,
-       which read as clearing the label/category rather than the pick).
-       Hidden/shown per-category by updateStyleTriggerLabel (results.js)
-       alongside the picked-chip row outside the modal; click wiring +
-       clearStylePick live in app.js/results.js respectively. */
-    .ap-style-type-btn-wrap { position: relative; }
-    .ap-style-type-clear {
-      position: absolute;
-      top: -6px;
-      right: -6px;
-      width: 18px;
-      height: 18px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      border: none;
-      border-radius: 50%;
-      background: var(--card-3);
-      color: var(--text-3);
-      font-size: 12px;
-      line-height: 1;
-      cursor: pointer;
-      box-shadow: 0 0 0 2px var(--card);
-      transition: background .15s, color .15s;
-    }
-    .ap-style-type-clear:hover { background: rgba(255,38,0,.14); color: var(--red); }
-    /* Full label always visible -- overrides .ap-style-trigger's fixed
-       height/nowrap (needed elsewhere for single-line pills) so a long pick
-       wraps onto a second line and grows the button instead of being
-       clipped or ellipsis-truncated. Grid row height follows the tallest
-       cell automatically, so a 2-line pill just makes its whole row taller.
-       Smaller + centered + no dropdown chevron -- these are plain buttons
-       that swap the option grid below, not an actual <details> dropdown, so
-       the ▾ affordance (shared with .ap-style-trigger elsewhere) doesn't
-       apply here; the category name already lives in .option-pill-label
-       above, so the pill only needs to read as "currently: X". */
-    .ap-style-type-btn {
-      width: 100%;
-      height: auto;
-      min-height: 30px;
-      padding: 4px 10px;
-      font-size: 13px;
-      white-space: normal;
-      justify-content: center;
-    }
-    .ap-style-type-btn::after { content: none; }
-    .ap-style-type-btn .ap-style-value {
-      white-space: normal;
-      word-break: break-word;
-      text-align: center;
-    }
-    .ap-style-type-btn.is-active {
-      border-color: var(--accent);
-      background: rgba(var(--accent-rgb),.14);
-      box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.14);
-    }
-    /* Set by updateStyleTriggerLabel (results.js) whenever this category's
-       checked radio isn't "default" -- recolors the value text (e.g.
-       "Playful") so a customized pick reads as visually distinct from the
-       plain neutral "Default"/"Auto" label at a glance. */
-    .ap-style-type-btn.is-picked .ap-style-value {
-      color: var(--accent);
     }
     /* auto-fit, not a fixed column count -- a fixed repeat(2, 1fr) left this
        panel's own #ap-options-card-inline column (wide on a PC-width
@@ -4042,17 +3991,6 @@
        entirely instead of opening a panel with one, already-selected row. */
     .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
-    /* The Pose/Angle/Lighting/Size category buttons (.ap-style-type-btn) are
-       real <button>s sharing this same .ap-style-trigger class -- unlike the
-       <summary>-based pickers above (which stay clickable-to-view even while
-       read-only-locked, see isAnalysisPreviewLocked/setAnalysisPreviewDisabled,
-       app.js), these get a real disabled attribute when locked, same as
-       .btn:disabled elsewhere (styles.css) -- no pointer-events:none needed
-       (that's only for the .is-single-option/.is-locked rules above, which
-       aren't natively disabled, just class-locked -- pairing it with a real
-       disabled attribute here would only make the not-allowed cursor below
-       stop rendering, since the element would no longer be the hit target). */
-    .ap-style-trigger:disabled { cursor: not-allowed; opacity: .7; }
   </style>
 </head>
 <body>
@@ -4892,48 +4830,64 @@
                       <div class="ap-body-reshape-control" id="ap-body-reshape-control" hidden aria-live="polite"></div>
                     </div>
                     <div class="ap-review-style" id="ap-review-style" hidden>
-                      <!-- Keep the four category buttons in the 修圖風格 tab;
-                           clicking one opens the standalone modal with only
-                           that category's example-image choices. -->
-                      <div class="ap-style-type-row" id="ap-style-type-row">
-                        <div class="option-pill-group">
-                          <span class="option-pill-label">姿勢</span>
-                          <div class="ap-style-type-btn-wrap">
-                            <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-pose" data-style-group="pose" hidden>
-                              <span class="ap-style-value">不指定</span>
-                            </button>
-                            <button type="button" class="ap-style-type-clear" data-style-group="pose" aria-label="清除姿勢" hidden>×</button>
-                          </div>
+                      <p class="ap-style-intro">換一種拍法，重新詮釋照片氛圍</p>
+                      <!-- Stacked preview images filled by fillStyleCardStack
+                           (results.js); clicking a card opens that category's
+                           full example-image grid in #ap-style-modal. -->
+                      <div class="ap-style-cards" id="ap-style-cards">
+                        <div class="ap-style-card-wrap" id="ap-style-card-pose" hidden>
+                          <button type="button" class="ap-style-card" data-style-group="pose">
+                            <span class="ap-style-card-name">姿勢</span>
+                            <span class="ap-style-card-thumbs">
+                              <span class="ap-style-card-stack">
+                                <img class="ap-style-card-back" data-style-group="pose" alt="" hidden>
+                                <img class="ap-style-card-front" data-style-group="pose" alt="">
+                              </span>
+                            </span>
+                            <span class="ap-style-card-value" data-style-group="pose">不指定</span>
+                          </button>
+                          <button type="button" class="ap-style-card-clear" data-style-group="pose" aria-label="清除姿勢" hidden>×</button>
                         </div>
-                        <div class="option-pill-group">
-                          <span class="option-pill-label">拍攝角度</span>
-                          <div class="ap-style-type-btn-wrap">
-                            <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-angle" data-style-group="angle">
-                              <span class="ap-style-value">不指定</span>
-                            </button>
-                            <button type="button" class="ap-style-type-clear" data-style-group="angle" aria-label="清除拍攝角度" hidden>×</button>
-                          </div>
+                        <div class="ap-style-card-wrap" id="ap-style-card-angle">
+                          <button type="button" class="ap-style-card" data-style-group="angle">
+                            <span class="ap-style-card-name">拍攝角度</span>
+                            <span class="ap-style-card-thumbs">
+                              <span class="ap-style-card-stack">
+                                <img class="ap-style-card-back" data-style-group="angle" alt="" hidden>
+                                <img class="ap-style-card-front" data-style-group="angle" alt="">
+                              </span>
+                            </span>
+                            <span class="ap-style-card-value" data-style-group="angle">不指定</span>
+                          </button>
+                          <button type="button" class="ap-style-card-clear" data-style-group="angle" aria-label="清除拍攝角度" hidden>×</button>
                         </div>
-                        <div class="option-pill-group">
-                          <span class="option-pill-label">光線</span>
-                          <div class="ap-style-type-btn-wrap">
-                            <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-lighting" data-style-group="lighting">
-                              <span class="ap-style-value">不指定</span>
-                            </button>
-                            <button type="button" class="ap-style-type-clear" data-style-group="lighting" aria-label="清除光線" hidden>×</button>
-                          </div>
+                        <div class="ap-style-card-wrap" id="ap-style-card-lighting">
+                          <button type="button" class="ap-style-card" data-style-group="lighting">
+                            <span class="ap-style-card-name">光線</span>
+                            <span class="ap-style-card-thumbs">
+                              <span class="ap-style-card-stack">
+                                <img class="ap-style-card-back" data-style-group="lighting" alt="" hidden>
+                                <img class="ap-style-card-front" data-style-group="lighting" alt="">
+                              </span>
+                            </span>
+                            <span class="ap-style-card-value" data-style-group="lighting">不指定</span>
+                          </button>
+                          <button type="button" class="ap-style-card-clear" data-style-group="lighting" aria-label="清除光線" hidden>×</button>
                         </div>
-                        <div class="option-pill-group">
-                          <span class="option-pill-label">取景範圍</span>
-                          <div class="ap-style-type-btn-wrap">
-                            <button type="button" class="ap-style-trigger ap-style-type-btn" id="ap-group-size" data-style-group="size">
-                              <span class="ap-style-value">不指定</span>
-                            </button>
-                            <button type="button" class="ap-style-type-clear" data-style-group="size" aria-label="清除取景範圍" hidden>×</button>
-                          </div>
+                        <div class="ap-style-card-wrap" id="ap-style-card-size">
+                          <button type="button" class="ap-style-card" data-style-group="size">
+                            <span class="ap-style-card-name">取景範圍</span>
+                            <span class="ap-style-card-thumbs">
+                              <span class="ap-style-card-stack">
+                                <img class="ap-style-card-back" data-style-group="size" alt="" hidden>
+                                <img class="ap-style-card-front" data-style-group="size" alt="">
+                              </span>
+                            </span>
+                            <span class="ap-style-card-value" data-style-group="size">不指定</span>
+                          </button>
+                          <button type="button" class="ap-style-card-clear" data-style-group="size" aria-label="清除取景範圍" hidden>×</button>
                         </div>
                       </div>
-                      <span class="ap-style-picked" id="ap-style-picker-value" hidden></span>
                     </div>
                     <div class="form-field ap-options-prompt" id="ap-review-prompt" hidden>
                       <div class="ap-prompt-label-row">
@@ -5766,10 +5720,10 @@
   </div>
 </div>
 
-<!-- Standalone 修圖風格 image picker: the category buttons stay in the
-     review tab; clicking one opens this modal directly on that category's
-     example-image grid. The radio lists stay here so the tab remains compact
-     while the image choices get a dedicated, scrollable viewing area. -->
+<!-- Standalone 修圖風格 image picker: clicking a category's card in the review
+     tab opens this modal directly on that category's example-image grid.
+     These radio lists hold the actual pick for all four categories (see
+     fillStyleOptionList / syncStylePicks, results.js). -->
 <div id="ap-style-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box ap-style-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-style-modal-title">
