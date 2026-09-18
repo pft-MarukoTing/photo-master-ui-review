@@ -2477,7 +2477,20 @@
     updateCostBtn();
   }
 
+  // Module-level (mirroring clearInlineAnalysisWait) so every exit from the
+  // pause screen can drop the listener, not just a real click: the button is
+  // shared with the revise panel, and a leaked handler re-runs its dead flow's
+  // finishSingleFlow on that panel's own click -- one extra edit job per leak.
+  let pendingResultsContinueHandler = null;
+
+  function clearPendingResultsWait() {
+    if (!pendingResultsContinueHandler) return;
+    els.inlineAnalysisContinueBtn.removeEventListener("click", pendingResultsContinueHandler);
+    pendingResultsContinueHandler = null;
+  }
+
   function closePendingResults() {
+    clearPendingResultsWait();
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
@@ -2489,9 +2502,11 @@
   // Same one-shot-listener shape as waitForInlineAnalysisAction.
   function waitForPendingResultsAction() {
     return new Promise((resolve) => {
-      function cleanup() {
-        els.inlineAnalysisContinueBtn.removeEventListener("click", continueHandler);
-      }
+      clearPendingResultsWait(); // drop any stale listener from an abandoned prior run
+      // Whatever takes over the screen next (a history record, a new upload,
+      // a batch) bumps historyViewToken -- a click arriving after that belongs
+      // to whatever is on screen now, not to this abandoned review.
+      const myToken = historyViewToken;
       // 美化's own pre-flight cost estimate -- singleFlowState.imageModel/
       // .imageQuality are kept live-synced with the visible picker
       // (applyModelQualityChange), so they already reflect whatever the user
@@ -2499,12 +2514,14 @@
       // leaves the review panel open for another click, same as before this
       // confirm existed.
       async function continueHandler() {
+        if (historyViewToken !== myToken) { clearPendingResultsWait(); return; }
         const est = preflightEditEstimate(singleFlowState.imageModel, singleFlowState.imageQuality);
         const confirmed = await showPreflightCostModal([{ label: "美化花費", modelLabel: est.label, cost: est.cost }]);
         if (!confirmed) return;
-        cleanup();
+        clearPendingResultsWait();
         resolve();
       }
+      pendingResultsContinueHandler = continueHandler;
       els.inlineAnalysisContinueBtn.addEventListener("click", continueHandler);
     });
   }
