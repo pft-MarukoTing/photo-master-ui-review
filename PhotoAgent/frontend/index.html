@@ -1329,6 +1329,7 @@
     .ap-face-tabs {
       display: flex;
       flex-wrap: wrap;
+      align-items: center;
       gap: 10px;
       padding: 0 10px;
     }
@@ -1345,10 +1346,34 @@
       display: inline-flex;
       border-radius: 50%;
     }
-    .ap-face-tab-wrap.is-active { box-shadow: 0 0 0 3px rgba(var(--accent-rgb),.18); }
+    /* A translucent ring alone blended into the thumbnail's own border at
+       this size, so the selected face was easy to miss at a glance. A solid
+       --card-2 gap plus a solid --accent ring (an opaque "target" outline,
+       not a soft glow) reads clearly regardless of what's in the photo
+       behind it. */
+    .ap-face-tab-wrap.is-active {
+      box-shadow: 0 0 0 2px var(--card-2), 0 0 0 4px var(--accent);
+    }
+    /* Everyone starts a notch below the row's old 44px so the active one has
+       somewhere to grow into (below) without the row itself getting any
+       taller. This is real width/height, not a transform -- a transform
+       paints outside the element's box without the flex row ever finding
+       out, which is exactly what made the row look like it was overflowing
+       when the active tab was scaled up instead. Growing the actual box
+       means the row's height is (once again) just "however tall its
+       tallest child really is", same as it's always been, and the active
+       tab's 44px real size is that original tallest size -- so the row's
+       own height never changes from what it was before any of this.
+       Width/height deliberately aren't in the transition below -- animating
+       them smoothly means for ~150ms BOTH the old and new active tab sit at
+       some in-between size, so the row's "tallest child" briefly dips below
+       44px and springs back once the swap finishes: the exact bounce this
+       was meant to fix. Swapping the size instantly keeps exactly one tab
+       at 44px on every single rendered frame, so the row's height never
+       moves at all. */
     .ap-face-tab {
-      width: 44px;
-      height: 44px;
+      width: 38px;
+      height: 38px;
       padding: 0;
       border: 1.5px solid var(--border-2);
       border-radius: 50%;
@@ -1358,7 +1383,11 @@
       transition: border-color .15s, transform .15s;
     }
     .ap-face-tab:hover { transform: translateY(-1px); }
-    .ap-face-tab-wrap.is-active .ap-face-tab { border-color: var(--accent); }
+    .ap-face-tab-wrap.is-active .ap-face-tab {
+      width: 44px;
+      height: 44px;
+      border-color: var(--accent);
+    }
     .ap-face-tab-img { width: 100%; height: 100%; object-fit: cover; display: block; }
     /* A face beyond the local crop cap, or a subjects[] entry the model found
        on its own with no backing local detection (results.js's sentToModel
