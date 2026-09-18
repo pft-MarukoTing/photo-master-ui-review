@@ -199,6 +199,7 @@ window.PhotoAgentDom = (() => {
     reportModalClose: document.querySelector("#report-modal-close"),
     reportModalName: document.querySelector("#report-modal-name"),
     reportModalNote: document.querySelector("#report-modal-note"),
+    reportModalScreenshotRow: document.querySelector("#report-modal-screenshot-row"),
     reportModalScreenshotCaptureBtn: document.querySelector("#report-modal-screenshot-capture-btn"),
     reportModalScreenshotStatus: document.querySelector("#report-modal-screenshot-status"),
     reportModalScreenshot: document.querySelector("#report-modal-screenshot"),

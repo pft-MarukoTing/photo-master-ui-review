@@ -689,6 +689,11 @@
     // renders, since a record opened via viewHistoryRecord's revealDetailExtra
     // (admin reports drawer) must show the button regardless of debug mode.
     if (els.showPromptBtn) els.showPromptBtn.hidden = !isDebug;
+    // #report-modal-screenshot-row's on-demand capture button is the only
+    // entry point into the screenshot-attachment feature (handleReportModal
+    // ScreenshotCapture); hiding the row outside debug mode keeps the whole
+    // feature testbed-only rather than just its label.
+    if (els.reportModalScreenshotRow) els.reportModalScreenshotRow.style.display = isDebug ? "" : "none";
     // #analysis-preview's own display (like #results-analysis-slot's, right
     // below) depends on 分析面板顯示於預覽右側 too, not just isDebug -- see
     // syncResultsAnalysisSlotForSidePanelLayout's own doc comment, which sets
