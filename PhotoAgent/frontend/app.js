@@ -5794,7 +5794,7 @@
     }
   }
 
-  const ARCHIVED_ANALYSIS_NOTICE = "這張照片是用舊版分析結果產生的，建議重新上傳並處理這張照片，以取得最新效果。";
+  const ARCHIVED_ANALYSIS_NOTICE = "這張照片還沒套用最新版本，重新處理一次就能得到更好的美化結果。";
 
   // Re-enters through the ordinary new-upload path instead of continuing or
   // rerunning the archived job. Fetch the source before resetApp clears the
@@ -5829,8 +5829,8 @@
     const sourceUrl = selectedFileSourceUrl;
     const canRestart = !!(sourceFile || sourceUrl);
     showNoticeModal(ARCHIVED_ANALYSIS_NOTICE, canRestart ? {
-      dismissLabel: "查看舊版",
-      actionLabel: "重新處理",
+      dismissLabel: "維持現況",
+      actionLabel: "重新美化",
       onAction: () => restartArchivedCase(sourceFile, sourceUrl)
     } : undefined);
   }
@@ -6401,7 +6401,7 @@
       const processingSpinner = '<div class="rc-spinner"></div>';
       li.innerHTML = `
         <div class="rc-media">${referenceThumb}${processingSpinner}</div>
-        <span class="rc-badge">${isArchivedJob ? "舊版封存" : (isAnalyzingJob ? "分析中" : "美化中")}</span>
+        <span class="rc-badge" hidden></span>
         <button type="button" class="history-cube-remove" aria-label="刪除紀錄">×</button>
         <span class="history-cube-check">
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
@@ -6445,6 +6445,10 @@
         // error_message (often a bare Python exception string) as-is.
         const failureReason = (s) => friendlyError({ message: s?.error_message || s?.error, code: s?.error });
         const archived = applyHistoryArchivedState(job, li);
+        // Only revealed once the status check above has actually resolved --
+        // showing it earlier would guess at a state (e.g. from job.stage
+        // alone) that this same check can immediately overturn.
+        if (badge) badge.hidden = false;
         // job.stage === "analyze" (see api.py's /analyze, account.py's
         // record_history) -- a paused-for-review upload (#start-btn's own
         // analyze-only flow, see .split-run in index.html) that
@@ -6579,6 +6583,7 @@
         }
       } catch (err) {
         const archived = applyHistoryArchivedState(job, li);
+        if (badge) badge.hidden = false;
         li.className = `history-cube batch-sidebar-item ${archived ? "archived" : "error"}`;
         if (badge) badge.textContent = archived ? "舊版封存" : "無法取得狀態";
         markHistoryTileSelectable(li, job);
