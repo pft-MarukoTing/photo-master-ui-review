@@ -1625,6 +1625,11 @@
       font-size: 12.5px;
       color: var(--text-2);
     }
+    .ap-prompt-intro {
+      margin: 0;
+      font-size: 12.5px;
+      color: var(--text-2);
+    }
     .ap-style-cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -4993,13 +4998,14 @@
                     </div>
                     <div class="form-field ap-options-prompt" id="ap-review-prompt" hidden>
                       <div class="ap-prompt-label-row">
-                        <label class="ap-label" for="prompt">個人化需求</label>
+                        <p class="ap-prompt-intro">說出你的想法，打造專屬美化效果</p>
                         <label class="batch-lock-toggle prompt-overwrite-toggle" id="prompt-overwrite-row">
                           <input type="checkbox" id="prompt-overwrite">
                           <span>取代 AI 原本規劃的美化方式</span>
                         </label>
                       </div>
                       <textarea id="prompt" class="field-ta" rows="4"
+                        aria-label="個人化需求"
                         placeholder="例如：增加亮度，調整成冷色調，模糊背景。"></textarea>
                     </div>
                   </div>
