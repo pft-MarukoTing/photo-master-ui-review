@@ -2890,6 +2890,14 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     overflow-x: hidden;
   }
   body.side-panel-layout #results-analysis-slot #ap-photo-summary {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+  /* Expanded means the overview returns to its full natural height. It must
+     not remain a flex-shrink target: the full card pushes the analysis shell
+     down, while #ap-options-card-inline's expanded-state overflow rule above
+     supplies the scrollbar for the combined column. */
+  body.side-panel-layout #results-analysis-slot #ap-photo-summary.ap-photo-summary--expanded {
     flex: 0 0 auto;
   }
   /* Collapsed #ap-analysis-shell: redesigned as a narrow vertical

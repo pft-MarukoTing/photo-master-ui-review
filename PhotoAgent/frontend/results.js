@@ -822,20 +822,24 @@ window.PhotoAgentResults = (() => {
 
   const PHOTO_SUMMARY_COMPACT_HEIGHT = 280;
   const PHOTO_SUMMARY_MOBILE_RATIO = 1 / 3;
-  const PHOTO_SUMMARY_COMPACT_MEDIA = "(max-width: 900px), (min-width: 901px) and (max-height: 760px)";
   let photoSummaryExpanded = false;
 
-  // Short desktop screens keep the summary readable without allowing it to
-  // consume the analysis shell's entire height. The button is only exposed
-  // when the natural summary actually overflows the compact height.
+  // In the desktop side-panel layout, reserve at least 60% of the shared
+  // results-canvas-row height for the analysis shell. The overview gets the
+  // remaining space, minus the action row and a small spacing allowance.
+  // This is based on the real panel height rather than a viewport-height
+  // breakpoint, so browser chrome and the step indicator are accounted for.
   function syncPhotoSummaryCompactState() {
     const summary = els.apPhotoSummary;
     const toggle = els.apPhotoSummaryToggle;
     if (!summary || !toggle) return;
     const isMobile = typeof window.matchMedia === "function"
       && window.matchMedia("(max-width: 900px)").matches;
-    const shouldCompactSummary = typeof window.matchMedia === "function"
-      && window.matchMedia(PHOTO_SUMMARY_COMPACT_MEDIA).matches;
+    const isDesktopSidePanel = !isMobile && (
+      document.body.classList.contains("side-panel-layout")
+      || !!els.resultsAnalysisSlot?.contains(els.apOptionsCardInline)
+    );
+    const shouldCompactSummary = isMobile || isDesktopSidePanel;
 
     summary.style.removeProperty("--ap-photo-summary-compact-height");
     summary.classList.remove("ap-photo-summary--compact", "ap-photo-summary--expanded");
@@ -846,7 +850,25 @@ window.PhotoAgentResults = (() => {
       return;
     }
 
-    const needsCompactToggle = summary.scrollHeight > PHOTO_SUMMARY_COMPACT_HEIGHT;
+    const naturalHeight = summary.scrollHeight;
+    let compactHeight = PHOTO_SUMMARY_COMPACT_HEIGHT;
+    if (isMobile) {
+      compactHeight = Math.ceil(naturalHeight * PHOTO_SUMMARY_MOBILE_RATIO);
+    } else {
+      const panelHeight = els.resultsAnalysisSlot?.clientHeight
+        || els.apOptionsCardInline?.clientHeight
+        || 0;
+      if (!panelHeight) {
+        toggle.hidden = true;
+        return;
+      }
+      const actionHeight = els.apOptionsCardInline?.querySelector(".ap-actions-row")?.offsetHeight || 0;
+      const analysisMinHeight = Math.max(260, Math.ceil(panelHeight * 0.6));
+      const availableHeight = panelHeight - analysisMinHeight - actionHeight - 18;
+      compactHeight = Math.max(110, Math.min(PHOTO_SUMMARY_COMPACT_HEIGHT, availableHeight));
+    }
+
+    const needsCompactToggle = naturalHeight > compactHeight;
     if (!needsCompactToggle) {
       photoSummaryExpanded = false;
       toggle.hidden = true;
@@ -854,12 +876,7 @@ window.PhotoAgentResults = (() => {
       return;
     }
 
-    if (isMobile) {
-      summary.style.setProperty(
-        "--ap-photo-summary-compact-height",
-        `${Math.ceil(summary.scrollHeight * PHOTO_SUMMARY_MOBILE_RATIO)}px`
-      );
-    }
+    summary.style.setProperty("--ap-photo-summary-compact-height", `${compactHeight}px`);
     toggle.hidden = false;
     toggle.textContent = photoSummaryExpanded ? "收合" : "查看更多";
     toggle.setAttribute("aria-expanded", String(photoSummaryExpanded));
@@ -874,10 +891,16 @@ window.PhotoAgentResults = (() => {
     els.apPhotoSummaryToggle.addEventListener("click", () => {
       photoSummaryExpanded = !photoSummaryExpanded;
       syncPhotoSummaryCompactState();
+      if (!photoSummaryExpanded && els.apOptionsCardInline) {
+        els.apOptionsCardInline.scrollTop = 0;
+      }
     });
   }
   if (els.apPhotoSummary && typeof ResizeObserver !== "undefined") {
-    new ResizeObserver(() => syncPhotoSummaryCompactState()).observe(els.apPhotoSummary);
+    const observer = new ResizeObserver(() => syncPhotoSummaryCompactState());
+    observer.observe(els.apPhotoSummary);
+    if (els.apOptionsCardInline) observer.observe(els.apOptionsCardInline);
+    if (els.resultsAnalysisSlot) observer.observe(els.resultsAnalysisSlot);
   }
   window.addEventListener("resize", syncPhotoSummaryCompactState);
 
@@ -2584,6 +2607,11 @@ window.PhotoAgentResults = (() => {
   // applyBatchReviewSelections), can read the same setting without it being
   // re-threaded through every call.
   function renderAnalysisPreview({ analysis, preset, expanded = true }) {
+    // This is a full render for a newly selected photo/RUN. The overview's
+    // disclosure state is view-local, so it must not carry an expanded card
+    // (or that card's scroll position) over from the previously shown image.
+    photoSummaryExpanded = false;
+    if (els.apOptionsCardInline) els.apOptionsCardInline.scrollTop = 0;
     setBodyReshapeReviewAnalysis(analysis, { resetState: true });
     reviewExpanded = expanded;
     // A fresh analysis always lands back on the 人像檢查 tab first (falls
