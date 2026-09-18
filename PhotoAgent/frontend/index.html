@@ -3037,7 +3037,7 @@
     #register-account-btn, #history-logout-btn { display: none; }
     /* #register-account-btn keeps its text label at every width, unlike
        #reload-batch-btn/#reset-btn (icon+label, moved down into
-       #header-actions-secondary under 560px instead, see
+       #header-actions-secondary under 900px instead, see
        setupCompactHeaderActions in app.js, so they can show their own label
        again). setupCompactHeaderActions moves this button along with them,
        but the id selector below already outranked ".header-actions
@@ -3060,7 +3060,7 @@
        #account-badge itself uses (.btn-sm's own 10px would otherwise still
        show, since height/padding/gap/font-size aren't the only things that
        differ). This sizing applies wherever #reset-btn currently sits --
-       .header-actions or, under 560px, #header-actions-secondary (see
+       .header-actions or, under 900px, #header-actions-secondary (see
        setupCompactHeaderActions, app.js) -- since it's an always-on id
        selector, not scoped to either row. */
     #reset-btn.btn {

@@ -416,8 +416,8 @@ body[data-theme="caramel"] .site-header {
   gap: 12px;
 }
 
-/* Populated by setupCompactHeaderActions (app.js) on narrow phones only --
-   every .header-actions button except #report-btn-spacer moves here so it
+/* Populated by setupCompactHeaderActions (app.js) at tablet width and below
+   only -- every .header-actions button except #report-btn-spacer moves here so it
    can show its full label instead of collapsing to icon-only up in
    .header-inner's single row. Right-aligned to match .header-actions'
    own position in that row. A plain (non-sticky) sibling of .site-header,

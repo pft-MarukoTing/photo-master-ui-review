@@ -1014,14 +1014,16 @@
     refreshCompactUploadSelectors = refresh;
   }
 
-  // Below 560px, a shrunk .logo plus every .header-actions button (each
+  // Below 900px (the same tablet/desktop line isSidePanelLayoutEnabled's
+  // callers use to drop the analysis panel below the preview instead of
+  // beside it), a shrunk .logo plus every .header-actions button (each
   // previously squeezed down to an icon-only pill to fit) still crowded a
-  // narrow phone once #account-badge/#admin-reports-btn were also showing.
-  // Move everything except #report-btn-spacer (the real #report-btn stays
-  // fixed-position, tracking that spacer regardless of where its siblings
-  // go) down into #header-actions-secondary instead, so they can show their
-  // full label again -- and back into .header-actions once the viewport is
-  // wide enough to hold them there normally.
+  // narrow viewport once #account-badge/#admin-reports-btn were also
+  // showing. Move everything except #report-btn-spacer (the real
+  // #report-btn stays fixed-position, tracking that spacer regardless of
+  // where its siblings go) down into #header-actions-secondary instead, so
+  // they can show their full label again -- and back into .header-actions
+  // once the viewport is wide enough to hold them there normally.
   function setupCompactHeaderActions() {
     const row = els.headerActions;
     const secondRow = els.headerActionsSecondary;
@@ -1029,7 +1031,7 @@
     if (!row || !secondRow || !spacer) return;
     const items = Array.from(row.children).filter((el) => el !== spacer);
     if (!items.length) return;
-    const mql = window.matchMedia("(max-width: 560px)");
+    const mql = window.matchMedia("(max-width: 900px)");
     const sync = () => {
       if (mql.matches) items.forEach((el) => secondRow.appendChild(el));
       else items.forEach((el) => row.insertBefore(el, spacer));
