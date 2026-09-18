@@ -1043,27 +1043,35 @@
        flat 14px inside the card's own colored edge (above), reading as two
        parallel lines with a dark gap between them instead of one. No
        compensating padding needed here (unlike #ap-face-tabs, whose
-       children are fixed-size avatars) since these tabs are flex:1 and
-       just grow to fill the wider row. */
+       children are fixed-size avatars) since the scroll row itself fills
+       the available width and the tabs keep their intrinsic widths. */
     .ap-review-tabs {
       display: flex;
       align-items: flex-end;
+      flex-wrap: nowrap;
       gap: 0;
       margin: 0 -14px;
+      min-width: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      overscroll-behavior-x: contain;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: thin;
     }
-    /* flex:1 (not shrink-to-content) so however many tabs are actually
-       visible -- 3 when 人像檢查 is hidden (no faces detected), 4 otherwise
-       -- always split the panel's full width evenly between themselves,
-       rather than sizing to their own label and leaving the rest of the row
-       empty. min-width:0 lets a tab shrink below its label's natural width
-       on a narrow phone instead of refusing to and forcing the row to
-       overflow/wrap. */
+    .ap-review-tabs::-webkit-scrollbar { height: 4px; }
+    .ap-review-tabs::-webkit-scrollbar-thumb {
+      background: var(--border-2);
+      border-radius: 999px;
+    }
+    /* Keep every tab at its natural width. On a narrow phone the row itself
+       scrolls horizontally, so labels stay readable instead of shrinking or
+       wrapping inside a tab. */
     .ap-review-tab {
       display: flex;
       align-items: center;
       justify-content: center;
-      flex: 1 1 0;
-      min-width: 0;
+      flex: 0 0 auto;
+      min-width: max-content;
       gap: 6px;
       padding: 7px 10px;
       border: 1px solid var(--border-2);
@@ -1077,6 +1085,14 @@
       white-space: nowrap;
       cursor: pointer;
       transition: background .15s, color .15s;
+    }
+    /* The label stays intrinsic-width so the scroll container, rather than
+       the tab, owns any overflow on narrow screens. */
+    .ap-review-tab-label {
+      flex: 0 0 auto;
+      min-width: max-content;
+      white-space: nowrap;
+      text-align: center;
     }
     /* line-height:1 above (not the default "normal") -- CJK glyphs pull in a
        fallback font (Inter above has no CJK coverage), and "normal"'s
@@ -1129,35 +1145,6 @@
        and inactive sizing is deliberately small now, not the earlier
        18px/19px. */
     .ap-review-tab.is-active .ic { width: 17px; height: 17px; }
-    /* These larger sizes are what actually clip/overlap 修圖建議 and friends
-       on a real phone (flex:1 with min-width:0 lets a tab shrink to fit, but
-       white-space:nowrap keeps the label one line, so past a point it just
-       visibly runs past its own tab into the next one's background instead
-       of wrapping) -- the active tab's own extra padding-top/font-size make
-       it the first to overflow, confirmed as high up as 412-414px (a common
-       real phone width, not just the ~360px this was first caught at) --
-       step back down toward the original sizing there. 520px comfortably
-       covers every phone-class width (the widest common phones are
-       ~430-480px logical), leaving the bump for genuinely wide contexts. */
-    @media (max-width: 520px) {
-      .ap-review-tab { font-size: 14px; }
-      .ap-review-tab .ic { width: 14px; height: 14px; }
-      .ap-review-tab.is-active { font-size: 14.5px; }
-      .ap-review-tab.is-active .ic { width: 14.5px; height: 14.5px; }
-    }
-    /* Same shrink, keyed to #ap-options-card-inline's own real width
-       (container-type/-name, styles.css) rather than the viewport's --
-       batch mode's .batch-sidebar eats into the canvas column's width
-       without the viewport itself ever narrowing, so a wide-viewport-but-
-       squeezed panel there never matched the @media rule above and kept
-       these tabs at full size, overflowing into each other exactly like a
-       narrow phone does. */
-    @container options-card-inline (max-width: 520px) {
-      .ap-review-tab { font-size: 14px; }
-      .ap-review-tab .ic { width: 14px; height: 14px; }
-      .ap-review-tab.is-active { font-size: 14.5px; }
-      .ap-review-tab.is-active .ic { width: 14.5px; height: 14.5px; }
-    }
     /* Each tab carries its own hue (--hue, set per id below) instead of one
        shared gray/purple -- the icon shows that hue at low opacity even at
        rest (some color identity before you've touched anything), full
@@ -4816,25 +4803,25 @@
                       <div class="ap-review-tabs" id="ap-review-tabs">
                         <button type="button" class="ap-review-tab is-active" id="ap-review-tab-face" hidden>
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="1.8"/><path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-                          人像檢查
+                          <span class="ap-review-tab-label">人像檢查</span>
                         </button>
                         <button type="button" class="ap-review-tab" id="ap-review-tab-recipe">
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="4" width="14" height="17" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M8.5 10.5l1.8 1.8L14.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 16l1.8 1.8L14.5 13.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                          修圖建議
+                          <span class="ap-review-tab-label">修圖建議</span>
                         </button>
                         <!-- 修圖風格分類按鈕留在 tab 內；點選分類後，
                              由 app.js 開啟 #ap-style-modal 顯示該分類的
                              example images。 -->
                         <button type="button" class="ap-review-tab" id="ap-review-tab-style">
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M3.5 20.5L12 12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><path d="M16 2.5l1.7 4L21.5 8l-3.8 1.5L16 13.5l-1.7-4L10.5 8l3.8-1.5L16 2.5z" fill="currentColor"/></svg>
-                          修圖風格
+                          <span class="ap-review-tab-label">修圖風格</span>
                         </button>
                         <!-- Was its own full-width block below this panel --
                              the body markup (#ap-review-prompt) is unchanged,
                              just moved in as this tab's content. -->
                         <button type="button" class="ap-review-tab" id="ap-review-tab-prompt">
                           <svg class="ic" width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M4 4h16v12H8l-4 4V4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
-                          補充指令
+                          <span class="ap-review-tab-label">補充指令</span>
                         </button>
                       </div>
                       <div class="ap-face-tabs" id="ap-face-tabs"></div>
