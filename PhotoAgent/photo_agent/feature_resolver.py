@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import re
 
+from config import STYLE_OPTION_VALUE_LABELS
+
 # The legacy prompt's own readers, deliberately shared rather than reimplemented
 # here: both builders must agree on which people a feature is in scope for,
 # including the per-person opt-out (_disabled_issue_subject_indices).
@@ -123,7 +125,7 @@ def _build_color_blocks(analysis, skin_corrections, face_tonal_corrections=(), l
     """Render one concise execution contract beneath the photo-specific target."""
     has_person = _has_person(analysis)
     if lighting_style:
-        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(lighting_style, lighting_style)
+        lighting_label = STYLE_OPTION_VALUE_LABELS["lighting"].get(lighting_style, lighting_style)
         scene_line = f"- Apply the selected {lighting_label} atmosphere coherently across the scene."
     else:
         scene_line = "- Let scene exposure and palette change wherever the approved plan calls for it."

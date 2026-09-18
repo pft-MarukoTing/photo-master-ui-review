@@ -4611,13 +4611,15 @@ def build_reviewed_light_color_target(analysis, fallback_intent="", lighting_sty
             "Reviewed finished result",
             "Use the approved correction plan below as the effective light-and-color target, together with any selected style.",
         ))
-    else:
+    elif not lighting_style:
+        # The analyzer's edit_intent predates the user's lighting selection and
+        # may ask for a competing warm or bright finish.
         intent = analysis.get("edit_intent") or fallback_intent
         if intent:
             fields.append(("Finished visual result", intent))
 
     if lighting_style:
-        lighting_label = {"gold": "Gold Tone", "soft": "Soft Glow"}.get(
+        lighting_label = STYLE_OPTION_VALUE_LABELS["lighting"].get(
             lighting_style, lighting_style
         )
         fields.append((
@@ -6179,10 +6181,13 @@ FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the o
 8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
 9. {definitive_edit_sources_faithful} are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
 
-    # Analyzer prose can restate a correction outside correction_plan. Once the
-    # user changes that plan, keep only descriptive context here; the reviewed
-    # plan and preserved choices below are the complete set of edit commands.
-    if rejected_corrections:
+    # Analyzer prose can restate a correction outside correction_plan or ask
+    # for a lighting mood that predates the user's style selection. In either
+    # case, keep only descriptive context; the reviewed plan and selected style
+    # carry the edit commands.
+    if rejected_corrections or (
+        selected_lighting_style and selected_lighting_style != "default"
+    ):
         analysis_block = f"""Photo context after user review:
 - Summary: {analysis.get("photo_summary") or ""}
 - Main subject: {analysis.get("main_subject") or ""}

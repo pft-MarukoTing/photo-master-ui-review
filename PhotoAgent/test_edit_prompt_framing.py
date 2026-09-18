@@ -272,6 +272,44 @@ class FullPrompt(unittest.TestCase):
         self.assertIn("Pose: Playful", sections["style_instruction"])
         self.assertIn("Lighting: Soft Glow", sections["style_instruction"])
 
+    def test_blue_toned_light_reaches_style_and_light_color_plan(self):
+        prompt, sections = build_edit_prompt(
+            {**ANALYSIS, "style_options": {"lighting": "cool"}},
+            PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
+            return_sections=True,
+        )
+        self.assertIn("Lighting: Blue Hour: Transform the photo with a clearly visible cool blue-hour atmosphere", sections["style_instruction"])
+        self.assertIn("shape subjects and background together", sections["style_instruction"])
+        self.assertIn("Keep faces in that ambient light, with exposure and shadow direction consistent with nearby surfaces", sections["style_instruction"])
+        self.assertIn("existing lamps keep their own color", sections["style_instruction"])
+        self.assertIn("Use the selected Blue Hour style as the final atmosphere", prompt)
+
+    def test_selected_lighting_replaces_stale_analysis_color_goal(self):
+        analysis = {
+            **ANALYSIS,
+            "style_options": {"lighting": "cool"},
+            "edit_intent": "營造溫暖的金色夕陽。",
+            "lighting_strategy": "保留暖色日光。",
+            "memory_color_strategy": "加強橘黃色調。",
+            "aesthetic_diagnosis": "畫面需要更暖。",
+        }
+        prompt = build_edit_prompt(
+            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
+        )
+        self.assertIn("Use the selected Blue Hour style as the final atmosphere", prompt)
+        for stale_goal in ("營造溫暖的金色夕陽", "保留暖色日光", "加強橘黃色調", "畫面需要更暖"):
+            self.assertNotIn(stale_goal, prompt)
+
+    def test_night_reaches_style_and_light_color_plan(self):
+        prompt, sections = build_edit_prompt(
+            {**ANALYSIS, "style_options": {"lighting": "night"}},
+            PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
+            return_sections=True,
+        )
+        self.assertIn("Lighting: Night: Transform the whole photo into a clearly recognizable night scene", sections["style_instruction"])
+        self.assertIn("existing light sources create gentle highlights on the subject and surroundings", sections["style_instruction"])
+        self.assertIn("Use the selected Night style as the final atmosphere", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()
