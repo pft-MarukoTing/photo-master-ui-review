@@ -708,15 +708,30 @@ def _blink_contracts(analysis):
             "eye_state": "naturally_open_and_matched_to_expression",
             "blink_user_forced": blink_user_forced,
         }
+        source_eye_states = (item.get("left_eye_state"), item.get("right_eye_state"))
+        # A narrowed-open eye opposite a blink-closed eye is not a reliable
+        # open-eye template: its aperture and exposed fold width are transient.
+        paired_blink_repair = (
+            all(state in {"fully_closed", "half_closed", "narrowed_open"} for state in source_eye_states)
+            and any(state in {"fully_closed", "half_closed"} for state in source_eye_states)
+        )
+        if paired_blink_repair:
+            endpoint["paired_blink_repair"] = True
         for key, source in (
             ("eyelid_target", "target_eye_state"),
             ("eyelid_strength", "repair_strength"),
             ("eyelid_adjustment", "eyelid_adjustment"),
         ):
+            # With a closed + half-closed/narrowed-open pair, neither source eye is an
+            # open-eye geometry reference.  Suppress planner prose that often
+            # calls the half-closed eye "already open" and repairs only the
+            # fully closed side; a deterministic paired instruction is rendered
+            # below instead.  Repair strength remains safe to retain.
+            if paired_blink_repair and key != "eyelid_strength":
+                continue
             value = str(strategy.get(source) or "").strip()
             if value:
                 endpoint[key] = _repair_strength(value, default="subtle") if key == "eyelid_strength" else value
-        source_eye_states = (item.get("left_eye_state"), item.get("right_eye_state"))
         if (
             "fully_closed" in source_eye_states
             or sum(state == "half_closed" for state in source_eye_states) == 2
@@ -1193,6 +1208,7 @@ def build_compact_editor_prompt(
     has_smile = "smile" in resolved_features
     has_laugh = any(item["final_state"].get("smile_level") == "laughing" for item in resolved)
     has_gaze = "gaze" in resolved_features
+    has_blink = "blink" in resolved_features
     has_facial_edit = bool(resolved_features & {"smile", "gaze", "blink"})
     has_joint_smile_gaze = any(
         {"smile", "gaze"}.issubset(set(item["features"])) for item in resolved
@@ -1252,14 +1268,18 @@ def build_compact_editor_prompt(
                     eyelid_text += f". Target eyelid state: {eyelid_target}"
             if eyelid_adjustment:
                 eyelid_text += f". Eyelid method: {eyelid_adjustment}"
-            eyelid_text += (
-                ". Final eyelid target: make both eyes clearly and comfortably open, with closely matched "
-                "perceived aperture and iris exposure at normal viewing size, regardless of captured closure. "
-                "Preserve all clearly visible natural left/right crease differences, including monolid/double-lid "
-                "type, fold count, height, depth, and continuity. If closure hides one crease and no genuine "
-                "difference is visible, use the clearer eye as reference. Reposition only the eyelid margin; "
-                "preserve upper-lid volume and each brow-to-eye contour, leaving neither eye puffy or visibly smaller"
-            )
+            if state.get("paired_blink_repair"):
+                eyelid_text += (
+                    ". Both source eyes are blink-affected; neither is an open-eye reference. "
+                    "Correct both together to one coherent resting-open eyelid shape, using source evidence "
+                    "only for stable crease identity, not the apparent fold width or crease-to-lash distance "
+                    "of a half-closed eye or narrowed-open eye. Judge two separate final features: closely matched "
+                    "eye-opening height and iris exposure, AND comparable modest visible crease-to-lash bands "
+                    "and upper-lid thickness when double lids are source-supported. Resolve a blink-compressed "
+                    "thick lid roll into a soft crease rather than preserving a puffy shelf or thickening the "
+                    "other lid. Do not leave the formerly closed eye with a hidden inner fold; preserve any "
+                    "genuine stable left/right crease-type difference"
+                )
             if not eyelid_text.endswith("."):
                 eyelid_text += "."
             state_lines.append(f"- {eyelid_text}")
@@ -1392,8 +1412,12 @@ def build_compact_editor_prompt(
             if has_head_aligned_gaze else ""
         )
         shared_face_rules.append(
-            "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, ear shape, and natural asymmetry. Preserve every source-visible upper-eyelid difference, including a genuine one-monolid/one-double-lid pattern. During an approved blink repair, use the clearer eye as a fallback only where closure hides the other crease and no genuine difference is visible; keep tissue volume and each side's brow-to-eye contour source-matched. Outside that repair, never create a new fold. Preserve lashes/brows, makeup, and all landmarks outside an explicitly authorized local movement."
+            "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, ear shape, and natural asymmetry. Preserve stable, source-supported upper-eyelid differences, including a genuine one-monolid/one-double-lid pattern. During an approved blink repair, a crease visible on a half-closed or narrowed-open eye establishes fold type only; its apparent width and distance from the lashes are distorted by the blink and do not establish a permanent left/right difference. Use the clearer eye as a fallback only where closure hides the other crease and no genuine stable difference is visible; keep tissue volume and each side's brow-to-eye contour source-matched. Outside that repair, never create a new fold. Preserve lashes/brows, makeup, and all landmarks outside an explicitly authorized local movement."
             + projection_exception
+        )
+    if has_blink:
+        shared_face_rules.append(
+            "- Shared blink-repair anatomy rule for every named blink target. Final eyelid target: treat the source closed-lid bulge as transient pose geometry, not final anatomy. Do not cut an opening into that bulge or lift it as one mass; form a true open eyelid by retracting the upper-lid margin and folding the broad closed-lid panel into the person's existing lid structure, leaving no mound above the opened eye. When one source eye is fully or half closed and the other is fully closed, half closed, or narrowed open, neither is an open-eye reference: correct both together, and do not copy either captured aperture, lid-margin shape, or transient fold width. Preserve canthi, eye-globe size, brow position, and genuine crease type. If one blink-affected eye visibly has a double-lid crease and the other eye's crease is hidden by closure without evidence of a genuine difference, reconstruct both as double lids with comparable visible crease-to-lash bands after opening; do not make the formerly closed eye an inner double lid with its crease hidden against the lashes while the other eye has a visible band. Finish both eyes naturally open. Check eye-opening height and iris exposure separately from visible crease-to-lash band width and upper-lid thickness; matching iris exposure alone does not fix a heavy fold beside a hidden one. Keep closely matched upper-lid curvature, peak position, and inner/outer taper, with neither eye puffy or visibly smaller."
         )
     if has_smile:
         shared_face_rules.append(
@@ -1408,7 +1432,7 @@ def build_compact_editor_prompt(
         )
     if has_joint_smile_gaze:
         shared_face_rules.append(
-            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter narrow the eyelids modestly through natural cheek lift while retaining canthi, source-visible upper-eyelid crease differences, recognizable eye openness, and iris visibility; an approved blink repair must not invent a new crease-type mismatch; avoid both fixed-open staring and exaggerated squinting."
+            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter narrow the eyelids modestly through natural cheek lift while retaining canthi, stable source-supported upper-eyelid crease differences, recognizable eye openness, and iris visibility; an approved blink repair must not invent a new crease-type or visible fold-width mismatch; avoid both fixed-open staring and exaggerated squinting."
         )
     if has_gaze:
         shared_face_rules.append(
