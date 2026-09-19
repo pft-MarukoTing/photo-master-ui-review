@@ -6651,6 +6651,86 @@
     return `<img class="history-cube-bg" src="${src}" alt="" aria-hidden="true"><img class="history-cube-main" src="${src}" alt="">`;
   }
 
+  function wireHistoryTileRemove(li, job) {
+    const removeBtn = li.querySelector(".history-cube-remove");
+    if (!removeBtn) return;
+    removeBtn.addEventListener("click", (e) => {
+      // Stop this from also bubbling into the tile's own click handler
+      // (viewHistoryRecord/viewProcessingHistoryRecord), attached once the
+      // status check in renderHistoryList resolves.
+      e.stopPropagation();
+      handleDeleteHistoryEntry(job, li);
+    });
+  }
+
+  // ── Live 美化中/分析中 tiles ──
+  // renderHistoryList checks each job's status once. Tiles still in
+  // progress (the drawer's or the upload page's 最近照片) are re-checked every
+  // few seconds -- status only, the cheap request -- and re-rendered in place
+  // once their job settles, instead of staying 美化中 until the whole list is
+  // reloaded (Home, tab refocus, reopening the drawer). Only while that list
+  // is actually on screen and the tab is visible; stops once none are left.
+  const HISTORY_TILE_POLL_MS = 4000;
+  // A job that never settles (e.g. its worker died) shouldn't be polled for
+  // the rest of the tab's life.
+  const HISTORY_TILE_POLL_MAX_MS = 15 * 60 * 1000;
+  const liveHistoryTiles = new Set(); // { job, li, container, rerender, since }
+  let historyTilePollTimer = null;
+
+  function historyTileInProgress(li) {
+    return li.classList.contains("processing") || li.classList.contains("analyzing");
+  }
+
+  function historyListShowing(container) {
+    if (container === els.historyList) return !!els.historyDrawer?.classList.contains("drawer-open");
+    return !!els.sections?.upload?.classList.contains("visible") && uploadGalleryActiveTab === "recent";
+  }
+
+  function watchHistoryTile(entry) {
+    liveHistoryTiles.add({ ...entry, since: Date.now() });
+    if (!historyTilePollTimer) historyTilePollTimer = setTimeout(pollHistoryTiles, HISTORY_TILE_POLL_MS);
+  }
+
+  async function pollHistoryTiles() {
+    historyTilePollTimer = null;
+    if (!document.hidden) {
+      await Promise.all([...liveHistoryTiles].map(async (entry) => {
+        const { job, li, container, rerender, since } = entry;
+        // Gone (the list was re-rendered) or given up on.
+        if (!li.isConnected || Date.now() - since > HISTORY_TILE_POLL_MAX_MS) {
+          liveHistoryTiles.delete(entry);
+          return;
+        }
+        if (!historyListShowing(container)) return;
+        const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+        let statuses;
+        try {
+          statuses = await Promise.all(jobIds.map((id) => getJobStatusCached(id, { path: job.path })));
+        } catch {
+          return; // transient -- try again next tick
+        }
+        // Same settle rules renderHistoryList's own branches use.
+        const settled = job.stage === "analyze"
+          ? statuses[0]?.status === "success" || statuses[0]?.status === "error"
+          : statuses.some((s) => s.status === "success") || statuses.every((s) => s.status === "error");
+        if (!settled || !li.isConnected) return;
+        liveHistoryTiles.delete(entry);
+        // A fresh copy of the still-in-progress tile (same markup, none of
+        // its listeners), so renderTileStatus can attach the settled state's
+        // own click handler without the 美化中 one also firing.
+        const fresh = li.cloneNode(true);
+        wireHistoryTileRemove(fresh, job);
+        li.replaceWith(fresh);
+        if (job.image_key && historyTileElsByKey.get(job.image_key) === li) historyTileElsByKey.set(job.image_key, fresh);
+        await rerender({ job, li: fresh });
+        if (historyTileInProgress(fresh)) watchHistoryTile({ job, li: fresh, container, rerender });
+      }));
+    }
+    if (liveHistoryTiles.size && !historyTilePollTimer) {
+      historyTilePollTimer = setTimeout(pollHistoryTiles, HISTORY_TILE_POLL_MS);
+    }
+  }
+
   async function renderHistoryList(jobs, { container = els.historyList, append = false } = {}) {
     if (!container) return;
     const isDrawer = container === els.historyList;
@@ -6738,20 +6818,14 @@
       `;
       currentGrid.appendChild(li);
       if (job.image_key) historyTileElsByKey.set(job.image_key, li);
-      const removeBtn = li.querySelector(".history-cube-remove");
-      if (removeBtn) {
-        removeBtn.addEventListener("click", (e) => {
-          // Stop this from also bubbling into the tile's own click handler
-          // (viewHistoryRecord/viewProcessingHistoryRecord), attached below
-          // once the status check resolves.
-          e.stopPropagation();
-          handleDeleteHistoryEntry(job, li);
-        });
-      }
+      wireHistoryTileRemove(li, job);
       return { job, li };
     });
 
-    await Promise.all(rows.map(async ({ job, li }) => {
+    // Named (rather than inline in the Promise.all below) so a 美化中/分析中
+    // tile can be re-rendered in place once its job settles -- see
+    // watchHistoryTile.
+    const renderTileStatus = async ({ job, li }) => {
       const badge = li.querySelector(".rc-badge");
       const media = li.querySelector(".rc-media");
       // job.runs holds every job_id from the same action (see
@@ -6928,6 +7002,14 @@
           showNoticeModal(err ? friendlyError(err) : "無法取得處理狀態，請稍後再試。");
         });
       }
+    };
+    // Every status check here is a one-off, so a tile still in progress
+    // would otherwise keep saying 美化中 until the whole list is reloaded.
+    // Watched as soon as its own status is in, not after the whole list's
+    // (which can take seconds longer on a first render).
+    await Promise.all(rows.map(async (row) => {
+      await renderTileStatus(row);
+      if (historyTileInProgress(row.li)) watchHistoryTile({ ...row, container, rerender: renderTileStatus });
     }));
   }
 
