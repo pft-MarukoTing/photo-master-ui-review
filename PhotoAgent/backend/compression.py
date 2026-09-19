@@ -4,7 +4,7 @@ Nothing between the browser and this app compresses today -- nginx.conf in
 this repo fronts the worker, not this Flask app -- so app.js (~575KB),
 index.html (~325KB), styles.css (~210KB) and every /result JSON (~150KB)
 went out uncompressed (measured: app.js 590KB -> 173KB, index.html
-331KB -> 84KB; JSON usually compresses further).
+331KB -> 84KB; /result JSON compresses similarly, ~3.4x).
 
 Skips anything already encoded, non-200 responses (a 304 has no body, a 206
 is a byte range of the uncompressed file), small bodies, and non-text types
@@ -12,6 +12,7 @@ is a byte range of the uncompressed file), small bodies, and non-text types
 too leaves responses that already carry Content-Encoding alone.
 """
 import gzip
+import threading
 from collections import OrderedDict
 
 from flask import request
@@ -33,17 +34,25 @@ COMPRESS_LEVEL = 6
 # app.js on every page load. Bounded -- the frontend is a few dozen files.
 _STATIC_CACHE_MAX = 64
 _static_cache = OrderedDict()
+# The backend runs threaded (run_backend.py) -- without this, one request
+# evicting an entry between another's get() and move_to_end() would raise
+# KeyError and 500 that static file. Compression itself stays outside the
+# lock so concurrent requests don't queue behind it.
+_static_cache_lock = threading.Lock()
 
 
 def _cached_gzip(etag, data):
-    body = _static_cache.get(etag)
-    if body is not None:
-        _static_cache.move_to_end(etag)
-        return body
+    with _static_cache_lock:
+        body = _static_cache.get(etag)
+        if body is not None:
+            _static_cache.move_to_end(etag)
+            return body
     body = gzip.compress(data, compresslevel=COMPRESS_LEVEL)
-    _static_cache[etag] = body
-    if len(_static_cache) > _STATIC_CACHE_MAX:
-        _static_cache.popitem(last=False)
+    with _static_cache_lock:
+        _static_cache[etag] = body
+        _static_cache.move_to_end(etag)
+        while len(_static_cache) > _STATIC_CACHE_MAX:
+            _static_cache.popitem(last=False)
     return body
 
 
