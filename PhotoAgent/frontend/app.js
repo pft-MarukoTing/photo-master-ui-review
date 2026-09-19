@@ -7776,6 +7776,36 @@
     }
   }
 
+  // #results-canvas-row is hidden while a history record loads (see
+  // viewHistoryRecord) and used to be revealed only by that same call when it
+  // was still the current one. A load superseded by anything other than
+  // another history view (Home, a 待美化 record, a new upload) therefore
+  // left the canvas invisible from then on -- blank results page until a
+  // reload. Tracking which call holds it lets every exit hand it back unless
+  // a newer history load has taken it over.
+  let historyCanvasRowHider = 0;
+
+  function hideHistoryCanvasRow(token) {
+    if (!els.resultsCanvasRow) return;
+    els.resultsCanvasRow.classList.add("no-transition");
+    els.resultsCanvasRow.style.visibility = "hidden";
+    historyCanvasRowHider = token;
+  }
+
+  // With a token: reveal only if that call still holds the row. Without one
+  // (resetApp): reveal whoever holds it. A no-op when nobody does, so it
+  // never touches a .no-transition some other flow added for itself.
+  function releaseHistoryCanvasRow(token) {
+    if (!historyCanvasRowHider) return;
+    if (token !== undefined && historyCanvasRowHider !== token) return;
+    historyCanvasRowHider = 0;
+    if (!els.resultsCanvasRow) return;
+    els.resultsCanvasRow.style.visibility = "";
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+    });
+  }
+
   // Reconstructs the full single-photo results view (recipe/analysis/QA
   // panel, RUN switcher, before/after compare, download) for a finished
   // history entry, pulling this job's data fresh from the backend instead of
@@ -7804,6 +7834,9 @@
     const myToken = historyViewToken;
     setCurrentCaseTimes(job, revealDetailExtra);
     const runs = await fetchAllHistoryRuns(job);
+    // Superseded while the runs were loading -- don't hide (or render into)
+    // a screen that now belongs to something else.
+    if (historyViewToken !== myToken) return;
     if (!runs.length) {
       showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
       return;
@@ -7837,10 +7870,7 @@
     // need real measurements while this runs) keeps it fully laid out but
     // paints nothing until it's explicitly revealed again once the new
     // record is completely ready, further down each branch below.
-    if (els.resultsCanvasRow) {
-      els.resultsCanvasRow.classList.add("no-transition");
-      els.resultsCanvasRow.style.visibility = "hidden";
-    }
+    hideHistoryCanvasRow(myToken);
 
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
@@ -7931,6 +7961,10 @@
       // browser's broken-image icon/alt text while this record's own photo
       // is a different one than whatever was on screen before.
       await setImgSrcPreloaded(els.originalImg, selectedFileSourceUrl);
+      // Superseded while the photo loaded -- hand the row back (if no newer
+      // history load holds it) instead of rendering this record over the
+      // screen that has since taken over.
+      if (historyViewToken !== myToken) { releaseHistoryCanvasRow(myToken); return; }
       els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
       showSection("results");
       // forceReopen: true -- this may be a genuinely different record than
@@ -7939,19 +7973,11 @@
       // showSingleResult itself preloads the RUN's image before painting, so
       // this doesn't return until that's done either.
       await showSingleResult({ forceReopen: true, revealDetailExtra });
-      if (historyViewToken === myToken) {
-        closeHistoryDrawer();
-        // Only for the call that's still current -- a superseded one (the
-        // user picked yet another record before this one finished) would
-        // otherwise reveal this now-stale render right on top of whatever
-        // the newer call is still busy preparing behind its own hidden row.
-        if (els.resultsCanvasRow) {
-          els.resultsCanvasRow.style.visibility = "";
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
-          });
-        }
-      }
+      if (historyViewToken === myToken) closeHistoryDrawer();
+      // Reveals only if no newer history load has hidden the row for itself
+      // -- a superseded call would otherwise show this now-stale render on
+      // top of what that newer call is still preparing behind it.
+      releaseHistoryCanvasRow(myToken);
       return;
     }
 
@@ -7999,17 +8025,8 @@
     applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna"));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
     applyAdvancedOptionsOption(record.result.analysis?._advanced_options);
-    if (historyViewToken === myToken) {
-      closeHistoryDrawer();
-      // Only for the call that's still current -- see the local-path
-      // branch's identical guard above for why.
-      if (els.resultsCanvasRow) {
-        els.resultsCanvasRow.style.visibility = "";
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
-        });
-      }
-    }
+    if (historyViewToken === myToken) closeHistoryDrawer();
+    releaseHistoryCanvasRow(myToken); // see the local-path branch above
   }
 
   // Example-photo gallery (.upload-gallery-col, always visible) -- fetched
@@ -10452,6 +10469,7 @@
     restoreAnalysisPreviewHome();
     closePendingResults();
     clearInlineAnalysisWait(); // results page's revise-panel listeners (see waitForInlineAnalysisAction)
+    releaseHistoryCanvasRow(); // a history load cut short by Home (see viewHistoryRecord)
     setFlowStage("idle"); // back to the upload screen -- nothing running
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
