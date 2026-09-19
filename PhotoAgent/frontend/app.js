@@ -4415,6 +4415,8 @@
     setFlowStage("analyzing"); // analysis is only just starting -- not finished yet
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.promptInput) els.promptInput.value = "";
+    // Same shared control as #prompt above -- a new photo starts with it off.
+    if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
     procVisual.classList.remove("done");
     procVisual.style.height = "";
     if (procTitle) procTitle.textContent = "正在分析照片";
@@ -7540,6 +7542,13 @@
       useCombinedJob: false
     };
     applySinglePassEditOption(singleFlowState.singlePassEdit);
+    // #prompt / #prompt-overwrite are shared with the results page's
+    // revise panel, which fills them from whatever record it last showed
+    // (backToProcessFromResults). finishSingleFlow reads them straight off
+    // the DOM, so without this a 待美化 record opened after another record
+    // showed -- and on 美化 actually sent -- that record's 個人化需求.
+    if (els.promptInput) els.promptInput.value = job.user_prompt || "";
+    if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!job.overwrite_prompt;
 
     await setImgSrcPreloaded(els.originalImg, selectedFileSourceUrl);
     if (historyViewToken !== myToken) return; // navigated away meanwhile
