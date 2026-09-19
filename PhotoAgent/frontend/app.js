@@ -7597,6 +7597,7 @@
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
+    pendingResultsActive = false; // see viewHistoryRecord
     // No result -- and so no prompts -- yet for #show-prompt-btn to show.
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.costBtn) els.costBtn.hidden = true;
@@ -7887,6 +7888,11 @@
     if (els.batchSidebar) els.batchSidebar.hidden = true;
     if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
+    // A 待美化 review this record replaced (opened from the drawer without
+    // going Home) left this set, and handleDownloadClick checks it first --
+    // 下載結果 on this finished record then saved the review's original
+    // photo instead of the result.
+    pendingResultsActive = false;
     // Some OTHER record's live revise (finishSingleFlow) may have left these
     // toggled to show its own "AI is working" overlay -- reset unconditionally
     // so that stale overlay never covers up whatever's actually being shown
