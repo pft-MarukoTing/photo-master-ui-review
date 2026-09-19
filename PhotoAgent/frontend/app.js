@@ -2804,8 +2804,13 @@
 
   // Resolves "continue" or "cancel" depending on which inline button the user
   // clicks -- same one-shot-listener shape as waitForPendingResultsAction,
-  // just with two possible outcomes instead of one.
-  function waitForInlineAnalysisAction() {
+  // just with two possible outcomes instead of one. getModelQuality feeds
+  // the cost estimate: the single-image flow's live pick by default; batch
+  // passes the record's own (singleFlowState is null in batch mode, so
+  // reading it there threw and 美化 did nothing).
+  function waitForInlineAnalysisAction(
+    getModelQuality = () => ({ model: singleFlowState.imageModel, quality: singleFlowState.imageQuality })
+  ) {
     return new Promise((resolve) => {
       clearInlineAnalysisWait();
       // Same guard waitForPendingResultsAction has: whatever takes over the
@@ -2828,7 +2833,8 @@
         // (waitForPendingResultsAction) -- this button is the same 美化
         // action, just for a later revise round, and still spends a real
         // edit call each time it's pressed.
-        const est = preflightEditEstimate(singleFlowState.imageModel, singleFlowState.imageQuality);
+        const { model, quality } = getModelQuality();
+        const est = preflightEditEstimate(model, quality);
         if (inlineReviseHasNoChanges()) {
           // Folded into the same "nothing changed, are you sure" prompt
           // (per the user's own request) instead of showing it and then a
@@ -9327,7 +9333,7 @@
     }
     updateInlineAnalysisContinueBtnState();
 
-    const action = await waitForInlineAnalysisAction();
+    const action = await waitForInlineAnalysisAction(() => effectiveModelQuality(record));
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Keep local review edits when the user closes the panel without
