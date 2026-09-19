@@ -15,7 +15,7 @@ from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNA
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, get_history, HISTORY_MAX_LEN, normalize_username, record_history
-from backend.services.compatibility import get_min_compatible_version
+from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
 from backend.services.report import delete_report, get_report_by_id, get_reports, is_admin, record_report, update_report_status
@@ -35,9 +35,27 @@ def _record_history_safely(user, job_id, path, image_key, action_id, params=None
             key: (params or {}).get(key)
             for key in ("preset", "image_quality", "image_model", "analysis_model", "aspect_ratio", "ai_photo_editing", "run_qa", "user_prompt", "overwrite_prompt", "run_count", "advanced_options", "single_pass_edit", "stage")
         }
+        if path == "local":
+            history_params["compatibility_version"] = _history_compatibility_version(params)
         record_history(normalize_username(user), job_id, path, image_key, action_id, params=history_params)
     except Exception:
         pass
+
+
+def _history_compatibility_version(params):
+    """compatibility_version of the analysis this history entry's latest
+    action runs on, stored on the entry so the history list can show the
+    "可更新" (outdated) badge without the frontend fetching every job's full
+    /result just to read analysis.compatibility_version off it.
+
+    /continue and /rerun carry the analysis itself. /analyze, /analyze-batch
+    and a combined /submit have the worker produce it, stamped with the
+    worker's current version -- the same value compatibility.py publishes.
+    """
+    analysis = (params or {}).get("analysis")
+    if isinstance(analysis, dict):
+        return get_compatibility_version(analysis)
+    return get_current_compatibility_version()
 
 
 def _parse_and_validate_params(form):

@@ -6414,34 +6414,63 @@
     applyHistoryArchivedState(historyJob);
   }
 
-  // The history row itself does not store a compatibility status. Resolve
-  // the same analysis object the analysis/result page would use, then apply
-  // the exact same isCompatible() rule that makes that page read-only.
+  // Per-job lookups for history rows that don't carry compatibility_version
+  // themselves (recorded before the backend started storing it). A finished
+  // job's analysis never changes, so one lookup per page load is enough --
+  // this used to re-download every such job's full /result (~150KB each) on
+  // every drawer open, Home and tab refocus.
+  const legacyArchiveBadgeCache = new Map();
+
+  // Resolve whether a history row's analysis is below the compatibility
+  // floor, applying the exact same isCompatible() rule that makes the
+  // analysis/result page read-only.
   async function historyJobNeedsArchiveBadge(job, jobIds, statuses) {
     try {
       await ensureCompatibilityConfigLoaded();
-      if (job.stage === "analyze") {
-        if (statuses[0]?.status !== "success") return false;
-        const analyzeResult = await getAnalyzeResult(jobIds[0]);
-        const analysis = analyzeResult.result?.analysis;
-        // Prefer the backend's authoritative result when available; the
-        // local check keeps this working with an older API response too.
-        return analyzeResult.result?.compatible === false
-          || (analysis ? !isCompatible(analysis) : false);
-      }
-
-      const doneIdx = statuses.findIndex((status) => status.status === "success");
+      const doneIdx = job.stage === "analyze"
+        ? (statuses[0]?.status === "success" ? 0 : -1)
+        : statuses.findIndex((status) => status.status === "success");
       if (doneIdx === -1) return false;
-      const result = await getJobRuns(jobIds[doneIdx], { path: job.path });
-      const analysis = result.result?.analysis
-        || result.runs?.find((run) => run.result?.analysis)?.result.analysis;
-      return analysis ? !isCompatible(analysis) : false;
+      // Rows recorded by the current backend carry the version of the
+      // analysis they run on (see api.py's _history_compatibility_version),
+      // so no per-row fetch is needed at all.
+      if (typeof job.compatibility_version === "number") {
+        return !isCompatible({ compatibility_version: job.compatibility_version });
+      }
+      // The pending lookup itself is cached, so the drawer and the upload
+      // page's gallery rendering the same row at once share one request.
+      const cacheKey = `${job.stage === "analyze" ? "analyze" : "result"}:${jobIds[doneIdx]}`;
+      let lookup = legacyArchiveBadgeCache.get(cacheKey);
+      if (!lookup) {
+        lookup = legacyHistoryJobNeedsArchiveBadge(job, jobIds, doneIdx);
+        legacyArchiveBadgeCache.set(cacheKey, lookup);
+        lookup.catch(() => legacyArchiveBadgeCache.delete(cacheKey));
+      }
+      return await lookup;
     } catch {
       // Compatibility lookup is supplemental to the ordinary job-status
       // render. A transient metadata failure must not turn a valid history
-      // tile into the unrelated "無法取得狀態" state.
+      // tile into the unrelated "無法取得狀態" state (and isn't cached, so the
+      // next render tries again).
       return false;
     }
+  }
+
+  // Older rows: read analysis.compatibility_version off the job's own result.
+  async function legacyHistoryJobNeedsArchiveBadge(job, jobIds, doneIdx) {
+    if (job.stage === "analyze") {
+      const analyzeResult = await getAnalyzeResult(jobIds[0]);
+      const analysis = analyzeResult.result?.analysis;
+      // Prefer the backend's authoritative result when available; the
+      // local check keeps this working with an older API response too.
+      return analyzeResult.result?.compatible === false
+        || (analysis ? !isCompatible(analysis) : false);
+    }
+
+    const result = await getJobRuns(jobIds[doneIdx], { path: job.path });
+    const analysis = result.result?.analysis
+      || result.runs?.find((run) => run.result?.analysis)?.result.analysis;
+    return analysis ? !isCompatible(analysis) : false;
   }
 
   function updateHistorySelectionButtons() {
