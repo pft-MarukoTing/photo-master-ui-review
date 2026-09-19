@@ -2405,6 +2405,10 @@
     // out elsewhere) -- restore it home first so the assumption holds
     // regardless of what the screen showed right before this.
     restoreOptionsCardHome();
+    // Drop a revise-panel wait a results page may have left on the shared
+    // 美化 button (e.g. a 待美化 record opened straight from the history
+    // drawer, which doesn't go through resetApp).
+    clearInlineAnalysisWait();
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset });
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
     // Step 2 already ran by the time this review screen shows -- populate
@@ -2804,7 +2808,16 @@
   function waitForInlineAnalysisAction() {
     return new Promise((resolve) => {
       clearInlineAnalysisWait();
+      // Same guard waitForPendingResultsAction has: whatever takes over the
+      // screen next (Home, a new upload, a history record) bumps
+      // historyViewToken, and a click after that belongs to it, not to this
+      // revise panel. The button is shared with the pending-review wait, so
+      // a handler left over from a results page would otherwise fire
+      // alongside the next photo's own 美化 handler and submit a second,
+      // paid /continue for it.
+      const myToken = historyViewToken;
       inlineAnalysisContinueHandler = async () => {
+        if (historyViewToken !== myToken) { clearInlineAnalysisWait(); return; }
         // Nothing to actually change vs. the existing result -- confirm the
         // user really wants to spend another edit call reproducing it rather
         // than silently blocking them, since re-running as-is (e.g. to redo
@@ -10432,6 +10445,7 @@
     // or it renders invisibly inside the now-hidden results section instead.
     restoreAnalysisPreviewHome();
     closePendingResults();
+    clearInlineAnalysisWait(); // results page's revise-panel listeners (see waitForInlineAnalysisAction)
     setFlowStage("idle"); // back to the upload screen -- nothing running
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
