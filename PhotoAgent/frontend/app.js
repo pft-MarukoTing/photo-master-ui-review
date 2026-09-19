@@ -1799,6 +1799,13 @@
   // the very next load/error on this element regardless of how many
   // switches raced in the meantime.
   const pendingPreloadMasks = new WeakMap();
+  // Settles an element's in-flight preload once a newer call on the same
+  // element takes over. Both calls assign imgEl.onload, so without this the
+  // older call's promise never resolved: e.g. a history record still loading
+  // its (multi-MB) original when the user opened a 待美化 record hung
+  // viewHistoryRecord forever, never handing #results-canvas-row back
+  // (blank results page) and leaving its tile stuck "opening".
+  const pendingPreloadSettlers = new WeakMap();
 
   async function setImgSrcPreloaded(imgEl, src) {
     if (imgEl.src === src && imgEl.complete) return;
@@ -1824,11 +1831,19 @@
     }
     if (mask) pendingPreloadMasks.set(imgEl, mask);
     imgEl.style.visibility = "hidden";
-    await new Promise((resolve) => {
-      imgEl.onload = () => { imgEl.onload = null; imgEl.onerror = null; resolve(); };
-      imgEl.onerror = () => { imgEl.onload = null; imgEl.onerror = null; resolve(); };
+    pendingPreloadSettlers.get(imgEl)?.(false);
+    let settle;
+    const loaded = await new Promise((resolve) => {
+      settle = resolve;
+      pendingPreloadSettlers.set(imgEl, resolve);
+      imgEl.onload = () => { imgEl.onload = null; imgEl.onerror = null; resolve(true); };
+      imgEl.onerror = () => { imgEl.onload = null; imgEl.onerror = null; resolve(true); };
       imgEl.src = src;
     });
+    if (pendingPreloadSettlers.get(imgEl) === settle) pendingPreloadSettlers.delete(imgEl);
+    // Superseded: the newer call now owns imgEl's visibility and the mask --
+    // revealing here would show its half-loaded image.
+    if (!loaded) return;
     imgEl.style.visibility = "";
     if (mask && pendingPreloadMasks.get(imgEl) === mask) pendingPreloadMasks.delete(imgEl);
     if (mask) mask.remove();
