@@ -2685,6 +2685,11 @@
     // NEXT case's build finally catches up).
     const readOnly = !isCompatible(analysis);
     setAnalysisPreviewDisabled(readOnly);
+    // Snapshot of the token as of entry -- both callers bump it right before
+    // handing this screen over to us (startSubmit, viewAnalyzeHistoryRecord),
+    // so it stays ours until the user opens some other record. The retry
+    // loop below checks it before re-rendering anything of this case's.
+    const myHistoryToken = historyViewToken;
     // Reset here, before the branch below -- a previous case left showing
     // (readOnly=true, still on screen since 維持現況 doesn't clear it) could
     // otherwise leak #ap-restart-actions into this one's normal edit flow.
@@ -2701,39 +2706,75 @@
       showArchivedAnalysisNotice();
       return; // no Continue button exists to wait for in this mode
     }
-    await waitForPendingResultsAction();
-    // Always proceeds straight into #canvas-loading below (no "cancel" branch
-    // here, unlike closeInlineAnalysisPanel's callers) -- skip
-    // .results-canvas-row's panel-close animation (styles.css) since there's
-    // no photo on screen for it to slide/grow against; removed again once
-    // canvas-loading is actually showing so a later, normal panel toggle
-    // still animates.
-    if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("no-transition");
-    closePendingResults();
-    setFlowStage("editing"); // finishSingleFlow below moves to "done" once it finishes
-    // Same "editing" loading overlay backToProcessFromResults' revise flow
-    // uses -- swaps the photo for the thinking-rings animation instead of
-    // navigating away from the results page.
-    setAnalysisPreviewDisabled(true);
-    if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
-    if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
-    if (els.canvasLoading) els.canvasLoading.hidden = false;
-    if (els.resultsCanvasRow) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
-      });
-    }
-    try {
-      await finishSingleFlow();
-    } finally {
-      if (els.canvasLoading) els.canvasLoading.hidden = true;
-      if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-      setAnalysisPreviewDisabled(false);
-      // Re-derives Run's own .is-blocked state -- finishSingleFlow's own
-      // auto-opened revise panel (showSingleResult -> backToProcessFromResults)
-      // already set this correctly moments ago, but this covers the rarer
-      // case where that never ran (e.g. an error before analysis.data landed).
-      updateInlineAnalysisContinueBtnState();
+    // Loops rather than running once: a 美化 that fails comes straight back
+    // to this same review page (see the catch below) and waits for another
+    // click, instead of dead-ending on an error card. The analysis is
+    // already paid for and still valid, so retrying it is one button press
+    // -- and for the two callers this is shared by, the review page IS the
+    // screen the user pressed 美化 from, which makes it the only honest place
+    // to land them back on.
+    for (;;) {
+      await waitForPendingResultsAction();
+      // Always proceeds straight into #canvas-loading below (no "cancel" branch
+      // here, unlike closeInlineAnalysisPanel's callers) -- skip
+      // .results-canvas-row's panel-close animation (styles.css) since there's
+      // no photo on screen for it to slide/grow against; removed again once
+      // canvas-loading is actually showing so a later, normal panel toggle
+      // still animates.
+      if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("no-transition");
+      closePendingResults();
+      setFlowStage("editing"); // finishSingleFlow below moves to "done" once it finishes
+      // Same "editing" loading overlay backToProcessFromResults' revise flow
+      // uses -- swaps the photo for the thinking-rings animation instead of
+      // navigating away from the results page.
+      setAnalysisPreviewDisabled(true);
+      if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
+      if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
+      if (els.canvasLoading) els.canvasLoading.hidden = false;
+      if (els.resultsCanvasRow) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+        });
+      }
+      let failure = null;
+      try {
+        await finishSingleFlow();
+      } catch (error) {
+        // Only handled here while this review is still what's on screen. If
+        // the user has moved on to another record mid-edit, rethrowing hands
+        // the failure to whichever caller started this flow -- both of their
+        // catches are token-guarded and will correctly drop it (the history
+        // tile reports it instead), and re-rendering this page over the
+        // record they're now looking at is exactly what must not happen.
+        if (historyViewToken !== myHistoryToken) throw error;
+        failure = error;
+      } finally {
+        if (els.canvasLoading) els.canvasLoading.hidden = true;
+        if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+        setAnalysisPreviewDisabled(false);
+        // Re-derives Run's own .is-blocked state -- finishSingleFlow's own
+        // auto-opened revise panel (showSingleResult -> backToProcessFromResults)
+        // already set this correctly moments ago, but this covers the rarer
+        // case where that never ran (e.g. an error before analysis.data landed).
+        updateInlineAnalysisContinueBtnState();
+      }
+      if (!failure) return;
+      // The edit stage died. Its rotation is still running at this point
+      // (nothing in finishSingleFlow's failure path drops it) and writes
+      // through setProcSub every couple of seconds, so it has to go before
+      // anything else is put on screen.
+      stopProcSubRotation();
+      // Back to the review page this click came from -- rebuilt through
+      // showPendingResults rather than left half-torn-down by
+      // closePendingResults above, which means this case's recipe/style
+      // controls come back at the analysis' own defaults; a failed attempt
+      // is a fresh review, not a resumed one.
+      await showPendingResults(analysis, preset);
+      if (historyViewToken !== myHistoryToken) return; // navigated away while it rebuilt
+      // Same modal, same friendlyError wrapping this job gets from its
+      // history tile once it settles as 失敗 -- shown over the review page so
+      // dismissing it leaves the user exactly where they can try again.
+      showNoticeModal(friendlyError(failure));
     }
   }
 
@@ -5186,6 +5227,10 @@
   // without leaving the results page -- the panel slides in beside the
   // photo canvas instead of navigating to the processing section.
   async function backToProcessFromResults() {
+    // Snapshot of the token as of entry, for the failure report at the tail --
+    // the record this panel belongs to is whatever put it on screen, and it
+    // stops being ours the moment the user opens a different one.
+    const myHistoryToken = historyViewToken;
     // singleFlowState.analysis is briefly null for a combined job (skip-review
     // + local path) -- it's only filled in from the first done RUN's result
     // after the whole multi-RUN job resolves (see finishSingleFlow), but
@@ -5297,10 +5342,14 @@
         requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
       });
     }
+    let failure = null;
     try {
       await finishSingleFlow();
     } catch (error) {
-      showError(friendlyError(error));
+      // Held, not reported here: the finally below is what restores the photo
+      // frame and settles the rotation, so reporting before it ran would put
+      // the message over a loading card that is about to be torn down anyway.
+      failure = error;
     } finally {
       // finishSingleFlow's own revealResultsIfNeeded already flips these back
       // as soon as RUN 1 lands, so this is only load-bearing when every RUN
@@ -5321,6 +5370,17 @@
       if (els.showPromptBtn) els.showPromptBtn.disabled = false;
       stopProcSubRotation();
     }
+    if (!failure) return;
+    // This one reported through the notice modal rather than showError:
+    // #error-msg lives inside #upload-section (index.html), so on this screen
+    // it wrote the reason into a hidden element and the revise simply looked
+    // like it had done nothing. The modal is also what this same job's
+    // history tile shows once it settles as 失敗, so the two agree. The frame
+    // restored by the finally above is the previous, still-valid result --
+    // dismissing this leaves the user on it, free to reopen the panel and try
+    // again.
+    if (historyViewToken !== myHistoryToken) return; // another record owns the screen now; its tile reports this
+    showNoticeModal(friendlyError(failure));
   }
 
   // ── Batch step 1: analyze every image, then show the review grid ─────────
