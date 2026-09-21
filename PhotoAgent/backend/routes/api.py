@@ -70,7 +70,7 @@ def _parse_and_validate_params(form):
         "preset": form.get("preset", "natural"),
         "image_quality": form.get("image_quality", "medium"),
         "image_model": form.get("image_model", "gpt-image-2"),
-        "analysis_model": form.get("analysis_model", "gpt-4.1-mini"),
+        "analysis_model": form.get("analysis_model", "gpt-5.6-luna"),
         "aspect_ratio": form.get("aspect_ratio", "auto"),
         "ai_photo_editing": str(form.get("ai_photo_editing", "true")).lower() == "true",
         "run_qa": str(form.get("run_qa", current_app.config.get("DEBUG_UI", False))).lower() == "true",

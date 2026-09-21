@@ -6367,6 +6367,68 @@
         </details>
       </div>
     </div>
+    <!-- This page's own copy of 人像設定, NOT the upload page's fold borrowed
+         in (ensureAdvancedSettingsFoldIn used to reparent #advanced-settings-
+         fold here, the way #side-panel-layout-row below used to be moved the
+         other way). Its own inputs, so showing a case's settings here leaves
+         whatever the upload page was set to untouched -- the same separation
+         #ap-analysis-model / #ap-image-model-quality / #ap-image-aspect-ratio
+         already have from their upload-page twins. Read/written through
+         readAdvancedOptionsFromDom("ap") / applyAdvancedOptionsOption(x, "ap"). -->
+    <details id="ap-advanced-settings-fold" class="settings-fold">
+      <summary>
+        <span class="option-pill-icon">
+          <svg width="15" height="15" fill="none" viewBox="0 0 24 24">
+            <circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M4 20c.5-4 3.5-6 8-6s7.5 2 8 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <span class="fold-summary-text">人像設定</span>
+      </summary>
+      <div class="settings-fold-body">
+        <p class="option-desc settings-fold-note">關閉後將鎖定所有人此項，需回到這裡重新開啟才能個別調整。</p>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">閉眼修正</span>
+            <span class="option-desc">偵測到閉眼或半閉眼時自動修正。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="ap-eye-closed-detection-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">眼神對焦修正</span>
+            <span class="option-desc">修正視線方向與眼神焦點。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="ap-eye-gaze-focus-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">髮絲整理</span>
+            <span class="option-desc">偵測到碎髮擋臉、髮絲翹起、毛躁、被風吹亂或瀏海結塊時自動整理。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="ap-hair-mess-detection-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+        <label class="option-row">
+          <div class="option-text">
+            <span class="option-label">笑容調整</span>
+            <span class="option-desc">為沒有笑的人自動加上自然笑容，已經在笑的人維持原樣。</span>
+          </div>
+          <label class="ios-switch">
+            <input id="ap-smile-adjustment-toggle" type="checkbox" checked>
+            <span class="ios-track"><span class="ios-thumb"></span></span>
+          </label>
+        </label>
+      </div>
+    </details>
     <div id="ap-editor-prompt-settings" class="option-pill-group" style="display:none;">
       <label class="option-row">
         <span class="option-text"><span class="option-label">Editor prompt 架構</span><span class="option-desc">可比較舊版與結構化 Compact prompt</span></span>

@@ -286,6 +286,13 @@ window.PhotoAgentDom = (() => {
     apSettingsModal: document.querySelector("#ap-settings-modal"),
     apSettingsModalClose: document.querySelector("#ap-settings-modal-close"),
     apSettingsModalBody: document.querySelector("#ap-settings-modal-body"),
+    // The results page's own 人像設定 copy, independent of the upload page's
+    // four toggles above -- see #ap-advanced-settings-fold in index.html.
+    apAdvancedSettingsFold: document.querySelector("#ap-advanced-settings-fold"),
+    apEyeClosedDetectionToggle: document.querySelector("#ap-eye-closed-detection-toggle"),
+    apEyeGazeFocusToggle: document.querySelector("#ap-eye-gaze-focus-toggle"),
+    apHairMessDetectionToggle: document.querySelector("#ap-hair-mess-detection-toggle"),
+    apSmileAdjustmentToggle: document.querySelector("#ap-smile-adjustment-toggle"),
     downloadProgressToast: document.querySelector("#download-progress-toast"),
     downloadProgressLabel: document.querySelector("#download-progress-label"),
     downloadProgressFill: document.querySelector("#download-progress-fill"),

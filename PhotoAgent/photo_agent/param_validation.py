@@ -199,7 +199,7 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["image_model"] = image_model
 
-    analysis_model = normalized.get("analysis_model", "gpt-4.1-mini")
+    analysis_model = normalized.get("analysis_model", "gpt-5.6-luna")
     if not isinstance(analysis_model, str) or analysis_model not in VALID_ANALYSIS_MODELS:
         raise RuntimeError(
             f"{EFFECT_NAME}: analysis_model must be one of {VALID_ANALYSIS_MODELS}",

@@ -30,6 +30,17 @@ window.PhotoAgentConfig = {
   // the Editor prompt 架構 picker is debug-only, so this is what every normal
   // run sends and what debug mode starts on.
   defaultEditorPromptStrategy: "resolved_compact",
+  // Mirrors photo_agent/param_validation.py's ADVANCED_OPTION_DEFAULTS, for the
+  // subset 人像設定 actually shows as toggles (calm_hair/smile_level are picked
+  // per person in the review panel, not here). What a fresh upload starts from,
+  // what resetSettingsToDefaults restores on both pages' copies of the fold,
+  // and what a case falls back to when its own values were never recorded.
+  defaultAdvancedOptions: {
+    eye_closed_detection: true,
+    gaze_contact_detection: true,
+    hair_mess_detection: true,
+    smile_adjustment: true
+  },
   imageModels: {
     "gpt-image-2": "GPT Image 2",
     "gpt-image-2.5-sunburst": "GPT Image 2.5 Sunburst",

@@ -1111,20 +1111,33 @@
   // can sync the pickers to what it actually used without also pushing that
   // onto singleFlowState/batchSettings, which may not be (or may be the
   // wrong) live session's state at that point.
-  function applyModelQualityOption(opt) {
+  // Writes the RESULTS page's copy only. Showing a case must never disturb the
+  // upload page's own pick: those controls belong to the next, unrelated
+  // upload, and startSubmit/startSubmitBatch read straight off them. The
+  // upload picker keeps itself in sync without help (wireOptionPicker sets its
+  // select's value and its own label before dispatching "change"), so the only
+  // caller that needs includeUpload is resetSettingsToDefaults.
+  function applyModelQualityOption(opt, { includeUpload = false } = {}) {
     if (!opt) return;
-    if (els.imageModelQualitySelect) els.imageModelQualitySelect.value = opt.value;
+    if (includeUpload && els.imageModelQualitySelect) els.imageModelQualitySelect.value = opt.value;
     if (els.apImageModelQualitySelect) els.apImageModelQualitySelect.value = opt.value;
-    [els.imageModelQualityPicker, els.apImageModelQualityPicker].forEach((picker) => {
+    const pickers = includeUpload
+      ? [els.imageModelQualityPicker, els.apImageModelQualityPicker]
+      : [els.apImageModelQualityPicker];
+    pickers.forEach((picker) => {
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.displayLabel || opt.label;
     });
   }
 
-  function applyModelQualityChange(value) {
+  // The upload page's controls are its own (see applyModelQualityOption), so
+  // includeUpload is only for a programmatic change made while the user is
+  // actually looking at the upload screen -- applyTwoStageEditChange's
+  // quality bump, which no picker interaction has already applied.
+  function applyModelQualityChange(value, { includeUpload = false } = {}) {
     const opt = findModelQualityOption(value);
     if (!opt) return;
-    applyModelQualityOption(opt);
+    applyModelQualityOption(opt, { includeUpload });
     if (singleFlowState) { singleFlowState.imageModel = opt.model; singleFlowState.imageQuality = opt.quality; }
     // A change made from #ap-image-model-quality while one batch case's
     // revise panel is open belongs to that case alone -- write it onto the
@@ -1203,18 +1216,31 @@
     const singlePassEdit = applySinglePassEditOption(!enabled);
 
     if (singleFlowState) singleFlowState.singlePassEdit = singlePassEdit;
+    // Per-case routing, same rule as applyModelQualityChange below. With both
+    // branches running unconditionally, flipping this on one case's revise
+    // panel also moved the batch-wide default that startInlineBatchReview
+    // falls back to -- so the next case opened, having no pick of its own,
+    // showed (and would run) the other case's flip.
     const batchRecord = currentDetailBatchRecord();
-    if (batchRecord) batchRecord.singlePassEdit = singlePassEdit;
-    if (batchSettings) batchSettings.singlePassEdit = singlePassEdit;
+    if (batchRecord) {
+      batchRecord.singlePassEdit = singlePassEdit;
+    } else if (batchSettings) {
+      batchSettings.singlePassEdit = singlePassEdit;
+    }
 
-    const current = findModelQualityOption(els.imageModelQualitySelect?.value);
+    // Nothing has touched a picker here, so this bump is the only thing that
+    // will move the visible control -- it has to land on whichever page the
+    // user is actually on.
+    const onUpload = !!els.sections.upload?.classList.contains("visible");
+    const current = findModelQualityOption(
+      (onUpload ? els.imageModelQualitySelect : els.apImageModelQualitySelect)?.value);
     if (!current || current.model !== "gpt-image-2") return;
     if (!enabled && current.quality === "low") {
       const medium = findModelQualityOptionByPair("gpt-image-2", "medium");
-      if (medium) applyModelQualityChange(medium.value);
+      if (medium) applyModelQualityChange(medium.value, { includeUpload: onUpload });
     } else if (enabled && current.quality === "medium") {
       const low = findModelQualityOptionByPair("gpt-image-2", "low");
-      if (low) applyModelQualityChange(low.value);
+      if (low) applyModelQualityChange(low.value, { includeUpload: onUpload });
     }
   }
 
@@ -1260,11 +1286,15 @@
   wireOptionPicker(els.analysisModelPicker, els.analysisModelSelect);
   wireOptionPicker(els.apAnalysisModelPicker, els.apAnalysisModelSelect);
 
-  function applyAnalysisModelOption(opt) {
+  // Results page's copy only, same rule as applyModelQualityOption above.
+  function applyAnalysisModelOption(opt, { includeUpload = false } = {}) {
     if (!opt) return;
-    if (els.analysisModelSelect) els.analysisModelSelect.value = opt.value;
+    if (includeUpload && els.analysisModelSelect) els.analysisModelSelect.value = opt.value;
     if (els.apAnalysisModelSelect) els.apAnalysisModelSelect.value = opt.value;
-    [els.analysisModelPicker, els.apAnalysisModelPicker].forEach((picker) => {
+    const pickers = includeUpload
+      ? [els.analysisModelPicker, els.apAnalysisModelPicker]
+      : [els.apAnalysisModelPicker];
+    pickers.forEach((picker) => {
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.label;
     });
@@ -1275,7 +1305,16 @@
     if (!opt) return;
     applyAnalysisModelOption(opt);
     if (singleFlowState) singleFlowState.analysisModel = opt.value;
-    if (batchSettings) batchSettings.analysisModel = opt.value;
+    // Same per-case routing as applyModelQualityChange/applyAspectRatioChange
+    // above -- a change made while one batch case's revise panel is open
+    // belongs to that case alone, not every other case reading the shared
+    // batchSettings.
+    const batchRecord = currentDetailBatchRecord();
+    if (batchRecord) {
+      batchRecord.analysisModel = opt.value;
+    } else if (batchSettings) {
+      batchSettings.analysisModel = opt.value;
+    }
   }
 
   // Only #analysis-model (upload page) gets a "change" listener --
@@ -1335,11 +1374,15 @@
   // Split out for the same reason as applyModelQualityOption above -- a
   // historical record just needs the pickers to show what it actually used,
   // not a state push or a live re-fit against whatever's on screen.
-  function applyAspectRatioOption(opt) {
+  // Results page's copy only, same rule as applyModelQualityOption above.
+  function applyAspectRatioOption(opt, { includeUpload = false } = {}) {
     if (!opt) return;
-    if (els.imageAspectRatioSelect) els.imageAspectRatioSelect.value = opt.value;
+    if (includeUpload && els.imageAspectRatioSelect) els.imageAspectRatioSelect.value = opt.value;
     if (els.apImageAspectRatioSelect) els.apImageAspectRatioSelect.value = opt.value;
-    [els.imageAspectRatioPicker, els.apImageAspectRatioPicker].forEach((picker) => {
+    const pickers = includeUpload
+      ? [els.imageAspectRatioPicker, els.apImageAspectRatioPicker]
+      : [els.apImageAspectRatioPicker];
+    pickers.forEach((picker) => {
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.label;
     });
@@ -1391,7 +1434,7 @@
     const batchRecord = currentDetailBatchRecord();
     const rawAnalysis = batchRecord ? batchRecord.analysis : singleFlowState?.analysis;
     if (!rawAnalysis) return;
-    const shownAnalysis = stripDisabledTopicItems(rawAnalysis, readAdvancedOptionsFromDom());
+    const shownAnalysis = stripDisabledTopicItems(rawAnalysis, readAdvancedOptionsFromDom("ap"));
     if (!correctionAxesIncludeCrop((shownAnalysis.correction_axes || [])[index])) return;
     const owner = batchRecord || singleFlowState;
     if (!input.checked) {
@@ -1460,39 +1503,50 @@
     });
   }
 
-  // Advanced Settings (人像修正設定) live in ONE shared fold (#advanced-settings-fold),
-  // folded into whichever of #settings-modal (upload page) / #ap-settings-modal
-  // (results page) is currently open -- see openSettingsModal/openApSettingsModal
-  // below. Reading them here (instead of inlining the same object literal at
-  // every call site) keeps the initial-submit read (startSubmit/startSubmitBatch)
-  // and a later revise's re-read (applyAdvancedOptionsChange below) sharing one
-  // source of truth.
-  function readAdvancedOptionsFromDom() {
+  // Advanced Settings (人像設定) exist as TWO independent copies, the same way
+  // 分析模型/修圖模型/長寬比 do: #advanced-settings-fold on the upload page
+  // (what a fresh submit sends) and #ap-advanced-settings-fold in the results
+  // page's own settings modal (what a case's revise panel shows and sends).
+  // Every read and write names which one it means, so displaying a case's
+  // settings can never disturb what the upload page is set to. They used to be
+  // one fold reparented between the two modals, which is exactly how a case's
+  // values ended up carried into the next, unrelated upload.
+  function advancedOptionControls(scope) {
+    return scope === "ap"
+      ? {
+        eyeClosed: els.apEyeClosedDetectionToggle,
+        gaze: els.apEyeGazeFocusToggle,
+        hair: els.apHairMessDetectionToggle,
+        smile: els.apSmileAdjustmentToggle,
+        strategy: els.apEditorPromptStrategySelect,
+      }
+      : {
+        eyeClosed: els.eyeClosedDetectionToggle,
+        gaze: els.eyeGazeFocusToggle,
+        hair: els.hairMessDetectionToggle,
+        smile: els.smileAdjustmentToggle,
+        strategy: els.editorPromptStrategySelect,
+      };
+  }
+
+  // `scope` is deliberately required, not defaulted: a call site that forgot to
+  // say which copy it means would silently read the other page's toggles, which
+  // is the whole class of bug this split exists to remove.
+  function readAdvancedOptionsFromDom(scope) {
+    const controls = advancedOptionControls(scope);
     return {
-      eye_closed_detection: els.eyeClosedDetectionToggle ? els.eyeClosedDetectionToggle.checked : true,
-      gaze_contact_detection: els.eyeGazeFocusToggle ? els.eyeGazeFocusToggle.checked : true,
-      hair_mess_detection: els.hairMessDetectionToggle ? els.hairMessDetectionToggle.checked : true,
-      smile_adjustment: els.smileAdjustmentToggle ? els.smileAdjustmentToggle.checked : true,
-      editor_prompt_strategy: els.apEditorPromptStrategySelect?.value || els.editorPromptStrategySelect?.value || DEFAULT_EDITOR_PROMPT_STRATEGY,
+      eye_closed_detection: controls.eyeClosed ? controls.eyeClosed.checked : true,
+      gaze_contact_detection: controls.gaze ? controls.gaze.checked : true,
+      hair_mess_detection: controls.hair ? controls.hair.checked : true,
+      smile_adjustment: controls.smile ? controls.smile.checked : true,
+      editor_prompt_strategy: controls.strategy?.value || DEFAULT_EDITOR_PROMPT_STRATEGY,
     };
   }
 
-  // The same strategy lives on the upload page and the results page, so a
-  // pick on either has to show up on the other.
-  function syncEditorPromptStrategy(source = "upload") {
-    const fromAp = source === "ap";
-    const strategy = (fromAp ? els.apEditorPromptStrategySelect?.value : els.editorPromptStrategySelect?.value) || DEFAULT_EDITOR_PROMPT_STRATEGY;
-    if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = strategy;
-    if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = strategy;
-  }
-
-  [
-    [els.editorPromptStrategySelect, "upload"], [els.apEditorPromptStrategySelect, "ap"],
-  ].forEach(([control, source]) => control?.addEventListener("change", () => {
-    syncEditorPromptStrategy(source);
-    applyAdvancedOptionsChange();
-  }));
-  syncEditorPromptStrategy();
+  // Only the results page's copy pushes onto a live case. The upload page's
+  // Editor prompt 架構 is simply read at submit time (readAdvancedOptionsFromDom
+  // ("upload")), so it needs no listener of its own.
+  els.apEditorPromptStrategySelect?.addEventListener("change", () => applyAdvancedOptionsChange());
 
   // Pose choices suggest compatible settings for every person in this photo.
   // They deliberately do not touch the shared 人像修正設定 modal; "-" is simply
@@ -1680,19 +1734,21 @@
   // applyModelQualityChange, so switching which batch record's revise panel
   // is open (startInlineBatchReview) can show that record's own effective
   // settings without also overwriting them.
-  function applyAdvancedOptionsOption(advancedOptions) {
+  function applyAdvancedOptionsOption(advancedOptions, scope) {
     if (!advancedOptions) return;
-    if (els.eyeClosedDetectionToggle) els.eyeClosedDetectionToggle.checked = !!advancedOptions.eye_closed_detection;
-    if (els.eyeGazeFocusToggle) els.eyeGazeFocusToggle.checked = !!advancedOptions.gaze_contact_detection;
-    if (els.hairMessDetectionToggle) els.hairMessDetectionToggle.checked = !!advancedOptions.hair_mess_detection;
+    const controls = advancedOptionControls(scope);
+    if (controls.eyeClosed) controls.eyeClosed.checked = !!advancedOptions.eye_closed_detection;
+    if (controls.gaze) controls.gaze.checked = !!advancedOptions.gaze_contact_detection;
+    if (controls.hair) controls.hair.checked = !!advancedOptions.hair_mess_detection;
     // Defaulted the way the backend defaults it (`.get(key, True)`) rather
     // than with !!: a record analyzed before 笑容調整 existed carries no such
     // key, and showing the switch off there would misreport what a revise of
     // it would actually do.
-    if (els.smileAdjustmentToggle) els.smileAdjustmentToggle.checked = advancedOptions.smile_adjustment !== false;
-    if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = advancedOptions.editor_prompt_strategy || DEFAULT_EDITOR_PROMPT_STRATEGY;
-    syncEditorPromptStrategy("upload");
-    syncFaceReviewAdvancedOptions(advancedOptions);
+    if (controls.smile) controls.smile.checked = advancedOptions.smile_adjustment !== false;
+    if (controls.strategy) controls.strategy.value = advancedOptions.editor_prompt_strategy || DEFAULT_EDITOR_PROMPT_STRATEGY;
+    // The per-person review these lock rows in only exists on the results
+    // page, so only that copy drives it.
+    if (scope === "ap") syncFaceReviewAdvancedOptions(advancedOptions);
   }
 
   // Lets a revise on the results page change these toggles and have it
@@ -1703,7 +1759,7 @@
   // applyModelQualityChange in that window (singleFlowState/batchSettings
   // are both still null).
   function applyAdvancedOptionsChange() {
-    const advancedOptions = readAdvancedOptionsFromDom();
+    const advancedOptions = readAdvancedOptionsFromDom("ap");
     if (singleFlowState) singleFlowState.advancedOptions = advancedOptions;
     const batchRecord = currentDetailBatchRecord();
     if (batchRecord) {
@@ -1714,6 +1770,48 @@
     syncFaceReviewAdvancedOptions(advancedOptions);
     refreshInlineRecipeList();
     updateInlineAnalysisContinueBtnState();
+  }
+
+  function defaultAdvancedOptions() {
+    return {
+      ...((window.PhotoAgentConfig || {}).defaultAdvancedOptions || {}),
+      editor_prompt_strategy: DEFAULT_EDITOR_PROMPT_STRATEGY
+    };
+  }
+
+  // One case's own 人像設定, in the order they become known: what its job was
+  // submitted with, else what its analysis froze at analyze time
+  // (_advanced_options, the same key a revise's buildEffectiveAnalysis falls
+  // back to), else the product defaults. Never "whatever the toggles happen to
+  // hold" -- for a record restored from history that is the previously-viewed
+  // case's, which is exactly what showing a case must not inherit. An empty
+  // object counts as "not recorded": a job predating advanced_options sends
+  // {}, and displaying that literally would show every switch off.
+  function recordAdvancedOptions(advancedOptions, analysis) {
+    if (advancedOptions && Object.keys(advancedOptions).length) return advancedOptions;
+    const frozen = analysis?._advanced_options;
+    if (frozen && Object.keys(frozen).length) return frozen;
+    return defaultAdvancedOptions();
+  }
+
+  // Puts both copies of every per-request setting back to the product default
+  // on a real fresh start, the same reason resetApp already re-does it for
+  // 生成張數 via applyRunCountChange(1). The upload page's own controls are the
+  // ones that matter here -- startSubmit/startSubmitBatch read straight off
+  // them -- but the results page's copies are reset too so the next case
+  // opened doesn't flash the last one's settings before its own are applied.
+  //
+  // This is also the ONLY writer of the upload-page controls besides the user's
+  // own picks there: showing a case (applyModelQualityOption et al., scope
+  // "ap") deliberately never touches them.
+  function resetSettingsToDefaults() {
+    const config = window.PhotoAgentConfig || {};
+    applyModelQualityOption(findModelQualityOption(config.defaultImageModelQuality), { includeUpload: true });
+    applyAnalysisModelOption(findAnalysisModelOption(config.defaultAnalysisModel), { includeUpload: true });
+    applyAspectRatioOption(findAspectRatioOption(config.defaultAspectRatio), { includeUpload: true });
+    applyAdvancedOptionsOption(defaultAdvancedOptions(), "upload");
+    applyAdvancedOptionsOption(defaultAdvancedOptions(), "ap");
+    applySinglePassEditOption(DEFAULT_SINGLE_PASS_EDIT);
   }
 
   // Re-filters whichever analysis the (currently open) inline revise panel
@@ -1733,7 +1831,7 @@
     const batchRecord = currentDetailBatchRecord();
     const analysis = batchRecord ? batchRecord.analysis : (singleFlowState && singleFlowState.analysis);
     if (!analysis) return;
-    refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom()));
+    refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom("ap")));
   }
 
   // "Set all" concept: flipping one of these OFF is the same as the user
@@ -1752,11 +1850,15 @@
   // them from `analysis`, so it never touches any other category's unsaved
   // per-person picks the way a full renderAnalysisPreview/renderFaceThumbnails
   // would.
+  //
+  // The results page's copy only. The upload page's four toggles drive nothing
+  // live -- there is no analysis on screen and no case to push onto yet, so
+  // they are simply read at submit time by readAdvancedOptionsFromDom("upload").
   const ADVANCED_OPTION_FACE_CATEGORIES = [
-    { control: els.eyeClosedDetectionToggle, category: "blink_issue" },
-    { control: els.eyeGazeFocusToggle, category: "gaze_issue" },
-    { control: els.hairMessDetectionToggle, category: "hair_issue" },
-    { control: els.smileAdjustmentToggle, category: "smile_issue" },
+    { control: els.apEyeClosedDetectionToggle, category: "blink_issue" },
+    { control: els.apEyeGazeFocusToggle, category: "gaze_issue" },
+    { control: els.apHairMessDetectionToggle, category: "hair_issue" },
+    { control: els.apSmileAdjustmentToggle, category: "smile_issue" },
   ];
   ADVANCED_OPTION_FACE_CATEGORIES.forEach(({ control, category }) => {
     if (!control) return;
@@ -2736,7 +2838,7 @@
       // 人像修正設定 (#advanced-settings-fold, folded into 設定 on either page) --
       // just as real an edit as the picks above, so it needs the same
       // before/after snapshot to unblock the Run button.
-      advancedOptions: readAdvancedOptionsFromDom(),
+      advancedOptions: readAdvancedOptionsFromDom("ap"),
       // Per-person "允許 AI 修正此項目" toggles (#ap-face-detail) -- same
       // reasoning as advancedOptions above, otherwise flipping only a face
       // toggle (nothing else) leaves inlineReviseHasNoChanges thinking
@@ -2792,7 +2894,7 @@
     const samePrompt = prompt === inlineReviseSnapshot.prompt;
     const sameModelQuality = modelQuality === inlineReviseSnapshot.modelQuality;
     const sameRunCount = runCount === inlineReviseSnapshot.runCount;
-    const advancedOptions = readAdvancedOptionsFromDom();
+    const advancedOptions = readAdvancedOptionsFromDom("ap");
     const sameAdvancedOptions = Object.keys(advancedOptions).every(
       (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
@@ -4011,16 +4113,17 @@
       // instead of resuming this stale index.
       procSubStage: null,
       procSubIndex: 0,
-      // Per-image 模型/畫質 + 長寬比 overrides (UI-only), set only once this
-      // image's own revise panel is used to change them -- null means
-      // "still inherits the batch-level default", same override rule as
-      // options above (see effectiveModelQuality/
-      // effectiveAspectRatio). Without their own slot here, every case's
+      // Per-image 模型/畫質 + 長寬比 + 分析模型 overrides (UI-only), set only
+      // once this image's own revise panel is used to change them -- null
+      // means "still inherits the batch-level default", same override rule
+      // as options above (see effectiveModelQuality/effectiveAspectRatio/
+      // effectiveAnalysisModel). Without their own slot here, every case's
       // revise panel wrote straight into the single shared `batchSettings`,
       // so picking a model on case 1 silently carried over to case 2.
       imageModel: null,
       imageQuality: null,
-      aspectRatio: null
+      aspectRatio: null,
+      analysisModel: null
     };
   }
 
@@ -4418,7 +4521,7 @@
     // -- bundled into one object instead of one variable per toggle, so a new
     // toggle only needs a new key here, not a new argument threaded through
     // analyzeAipoc/analyzeJob/singleFlowState/runCombinedMultiRun/submitJob.
-    const advancedOptions = readAdvancedOptionsFromDom();
+    const advancedOptions = readAdvancedOptionsFromDom("upload");
     const processingPath = els.processingPathSelect?.value || "local";
 
     els.startButton.disabled = true;
@@ -5081,7 +5184,8 @@
     renderAnalysisPreview({ analysis: stripDisabledTopicItems(singleFlowState.analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
     // Paint this record's global 人像修正設定 independently before restoring any
     // per-person choices. Pose below changes only the latter.
-    applyAdvancedOptionsOption(singleFlowState.advancedOptions || singleFlowState.analysis?._advanced_options);
+    applyAdvancedOptionsOption(
+      recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
     if (lastSingleSelections) {
       if (els.promptInput) els.promptInput.value = lastSingleSelections.userPrompt || "";
       if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = !!lastSingleSelections.overwritePrompt;
@@ -5129,7 +5233,7 @@
         userPrompt: els.promptInput ? els.promptInput.value.trim() : "",
         overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
         ...currentSelections,
-        advancedOptions: readAdvancedOptionsFromDom(),
+        advancedOptions: readAdvancedOptionsFromDom("ap"),
         faceIssueOverrides: getFaceIssueOverrides(),
         bodyReshapeEnabled: getBodyReshapeReviewEnabled()
       };
@@ -5205,7 +5309,7 @@
       aiPhotoEditing: els.aiEditToggle.checked,
       runQa: els.runQaToggle ? els.runQaToggle.checked : false,
       singlePassEdit: readSinglePassEditOption(),
-      advancedOptions: readAdvancedOptionsFromDom(),
+      advancedOptions: readAdvancedOptionsFromDom("upload"),
       path: els.processingPathSelect?.value || "local"
     };
 
@@ -5216,6 +5320,12 @@
     batchRecords.forEach((r) => {
       if (!r.uploadedAt) r.uploadedAt = uploadedAt;
       r.status = "analyzing";
+      // 分析模型 is settled here and only here: the analyze submission below
+      // sends batchSettings.analysisModel for the whole batch, and the
+      // results page's own #ap-analysis-model is read-only (changing it there
+      // would not re-analyze). Stamping it now means each case reports the
+      // model it was analyzed with even before it has been edited.
+      r.analysisModel = batchSettings.analysisModel;
       r.analysis = null;
       r.analyzeJobId = null;
       r.analyzeTimings = [];
@@ -5387,6 +5497,16 @@
     const stepStart = Date.now();
     if (!record.uploadedAt) record.uploadedAt = stepStart / 1000;
     record.modifiedAt = stepStart / 1000;
+    // Same freeze as editBatchItem's -- batch-auto analyzes and edits inside
+    // one job, so this is where this case's parameters are settled. Without it
+    // a later per-case revise (which reads effective*(record)) would start from
+    // whatever batchSettings holds by then rather than from what actually ran.
+    record.imageModel = batchSettings.imageModel;
+    record.imageQuality = batchSettings.imageQuality;
+    record.analysisModel = batchSettings.analysisModel;
+    record.aspectRatio = batchSettings.aspectRatio;
+    record.advancedOptions = { ...batchSettings.advancedOptions };
+    record.singlePassEdit = batchSettings.singlePassEdit;
     try {
       await runCombinedMultiRun({
         file: record.file,
@@ -5593,10 +5713,11 @@
     try {
       const userPrompt = (record.userPrompt || "").trim();
       const overwritePrompt = userPrompt ? !!record.overwritePrompt : false;
+      const advancedOptions = effectiveAdvancedOptions(record);
       const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked,
-        advancedOptions: effectiveAdvancedOptions(record),
+        advancedOptions,
         faceIssueOverrides: record.faceIssueOverrides,
         bodyReshapeEnabled: record.bodyReshapeEnabled
       });
@@ -5607,6 +5728,20 @@
       // change the result-page toggle after batchSettings was first created.
       const singlePassEdit = readSinglePassEditOption();
       batchSettings.singlePassEdit = singlePassEdit;
+      // Freeze onto this case what it is actually being submitted with. A case
+      // that simply took the batch-level default otherwise left its own slots
+      // null and re-read the live, batch-wide batchSettings every time its
+      // panel was reopened or it was re-run -- so a pick made afterwards, from
+      // another case's revise panel, retroactively changed both what this
+      // finished case reported and what re-running it would use. Copied, not
+      // aliased, so a later whole-batch change replaces nothing in place here
+      // (mirrors pipeline.py stamping dict(advanced_options) onto the analysis).
+      record.imageModel = modelQuality.model;
+      record.imageQuality = modelQuality.quality;
+      record.analysisModel = analysisModel;
+      record.aspectRatio = aspectRatio;
+      record.advancedOptions = { ...advancedOptions };
+      record.singlePassEdit = singlePassEdit;
       let stepStart = Date.now();
       if (batchSettings.path === "aipoc") {
         run.jobId = await submitJob({
@@ -7668,6 +7803,20 @@
       useCombinedJob: false
     };
     applySinglePassEditOption(singleFlowState.singlePassEdit);
+    // Same reason viewHistoryRecord syncs these (see its own comment there):
+    // the results page's pickers otherwise keep showing whatever the last
+    // case -- or the upload page, before this split gave each its own copy --
+    // had in them, while singleFlowState already holds THIS record's own
+    // parameters, restored from its job above. Display-only: singleFlowState
+    // is correct as-is and finishSingleFlow reads the four settings from it,
+    // but 人像設定 IS read back off the DOM (applyAdvancedOptionsChange,
+    // refreshInlineRecipeList), so leaving it stale changed what a revise of
+    // this record would actually send.
+    applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+    applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
+    applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+    applyAdvancedOptionsOption(
+      recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
     // #prompt / #prompt-overwrite are shared with the results page's
     // revise panel, which fills them from whatever record it last showed
     // (backToProcessFromResults). finishSingleFlow reads them straight off
@@ -7832,6 +7981,16 @@
             useCombinedJob: false
           };
           applySinglePassEditOption(singleFlowState.singlePassEdit);
+          // Same per-case picker sync as viewAnalyzeHistoryRecord/
+          // viewHistoryRecord: this job finished while its history tile was
+          // open, and showSingleResult below can auto-open the revise panel,
+          // which must show THIS record's settings rather than the last
+          // case's.
+          applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+          applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
+          applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+          applyAdvancedOptionsOption(
+            recordAdvancedOptions(singleFlowState.advancedOptions, restoredAnalysis), "ap");
           lastSingleSelections = selections;
           setCurrentCaseAnalysisVersion(restoredAnalysis);
         }
@@ -8087,11 +8246,12 @@
       applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
       applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
       // singleFlowState.advancedOptions itself is left unset by the historical
-      // reconstruction above (unlike imageModel/aspectRatio) -- reading off
-      // singleFlowState.analysis._advanced_options directly, the same key a
-      // later revise's buildEffectiveAnalysis falls back to, keeps this in
-      // sync with what a revise would actually use if left untouched.
-      applyAdvancedOptionsOption(singleFlowState.analysis?._advanced_options);
+      // reconstruction above (unlike imageModel/aspectRatio) -- falling back to
+      // singleFlowState.analysis._advanced_options, the same key a later
+      // revise's buildEffectiveAnalysis falls back to, keeps this in sync with
+      // what a revise would actually use if left untouched.
+      applyAdvancedOptionsOption(
+        recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
 
       // Awaited (not fire-and-forget) so this function's own promise only
       // resolves once the result photo is actually showing -- callers like
@@ -8165,7 +8325,7 @@
     ));
     applyAnalysisModelOption(findAnalysisModelOption(job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna"));
     applyAspectRatioOption(findAspectRatioOption(job.aspect_ratio || "auto"));
-    applyAdvancedOptionsOption(record.result.analysis?._advanced_options);
+    applyAdvancedOptionsOption(recordAdvancedOptions(null, record.result.analysis), "ap");
     if (historyViewToken === myToken) closeHistoryDrawer();
     releaseHistoryCanvasRow(myToken); // see the local-path branch above
   }
@@ -8558,15 +8718,15 @@
     }
   }
 
-  // Moves #advanced-settings-fold (人像修正設定) into whichever of its three
-  // homes should hold it right now, if it isn't already there -- it's one
-  // shared fold, not a separate copy of its inputs per page: by default it
-  // sits inline under the upload page's drop zone (#upload-inline-settings,
-  // re-themed into a pill there -- see index.html), and #ap-settings-modal
-  // (below) borrows it into its own body while that modal is open, same as
-  // it always has. Always collapsed when moved -- being one shared DOM node
-  // reparented (not rebuilt), its `open` state would otherwise survive both
-  // a close/reopen and a move to a different home.
+  // Moves #advanced-settings-fold (人像設定) between its two UPLOAD-page homes,
+  // if it isn't already in the one asked for: inline under the drop zone
+  // (#upload-inline-settings-row-2, re-themed into a pill there -- see
+  // index.html) or, on narrow viewports, row 1 alongside the collapsed
+  // settings menu (setupCompactUploadSelectors). It no longer travels to
+  // #ap-settings-modal: that page has its own #ap-advanced-settings-fold, so
+  // showing a case's settings there leaves this one alone. Always collapsed
+  // when moved -- being reparented (not rebuilt), its `open` state would
+  // otherwise survive both a close/reopen and a move to the other home.
   function ensureAdvancedSettingsFoldIn(body) {
     if (!els.advancedSettingsFold) return;
     if (body && els.advancedSettingsFold.parentElement !== body) {
@@ -8606,16 +8766,18 @@
 
   // Results/analysis-preview page settings overlay -- same shape as
   // openSettingsModal/closeSettingsModal above, just toggling
-  // #ap-settings-modal's own hidden attribute instead. Its 分析模型/生成模型/
-  // 長寬比/生成張數 pickers mirror the upload page's (applyModelQualityChange/
-  // applyAspectRatioChange/applyRunCountChange), so a change made here applies
-  // to the next edit without re-analyzing. Still the one other home
-  // #advanced-settings-fold reparents into (ensureAdvancedSettingsFoldIn
-  // above) -- resetApp moves it back to the upload page's inline row once
-  // this modal (and the results screen it belongs to) is left behind.
+  // #ap-settings-modal's own hidden attribute instead. Every per-request
+  // control in here (分析模型/生成模型/長寬比/生成張數/人像設定) is this page's
+  // OWN copy, showing and changing the case currently open rather than the
+  // upload page's pending pick -- a change applies to the next edit without
+  // re-analyzing. #advanced-settings-fold is no longer borrowed in here; see
+  // #ap-advanced-settings-fold in index.html.
   function openApSettingsModal() {
-    ensureAdvancedSettingsFoldIn(els.apSettingsModalBody);
     ensureTwoStageEditRowIn(els.apSettingsModalBody);
+    // Collapsed on every open, the way the borrowed fold was by
+    // ensureAdvancedSettingsFoldIn -- this copy is never reparented, so
+    // nothing else would reset an `open` left over from the last time.
+    if (els.apAdvancedSettingsFold) els.apAdvancedSettingsFold.open = false;
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
 
@@ -9445,7 +9607,7 @@
     applyModelQualityOption(findModelQualityOptionByPair(effMq.model, effMq.quality));
     applyAnalysisModelOption(findAnalysisModelOption(effectiveAnalysisModel(record)));
     applyAspectRatioOption(findAspectRatioOption(effectiveAspectRatio(record)));
-    applyAdvancedOptionsOption(effectiveAdvancedOptions(record));
+    applyAdvancedOptionsOption(effectiveAdvancedOptions(record), "ap");
 
     // Unlike the single-image flow (separate showPendingResults vs
     // backToProcessFromResults functions), batch mode reuses this one
@@ -10587,6 +10749,11 @@
     previewThumbUrl = "";
     originalImgThumbUrl = "";
     resetBatchState();
+    // 分析模型/修圖模型/長寬比/人像設定 back to the product defaults, for the same
+    // reason applyRunCountChange(1) above resets 生成張數: a pick made for one
+    // upload must not silently become the next, unrelated one's. After
+    // resetBatchState() so there is no live case state left to push onto.
+    resetSettingsToDefaults();
 
     els.fileInput.value = "";
     els.dzPreviewImg.removeAttribute("src");
@@ -10904,8 +11071,9 @@
     await setSelectedFile(image.file);
     if (selectedFile !== image.file) return;
 
-    // Mirrors the picks into both selects (and their picker labels) so the
-    // review panel opens showing the model/長寬比 this folder was produced with.
+    // Into the results page's own pickers, so the review panel opens showing
+    // the model/長寬比 this folder was produced with. Not the upload page's --
+    // those keep whatever the user has set there for their next upload.
     if (settings.modelQualityOpt.value) applyModelQualityChange(settings.modelQualityOpt.value);
     applyAnalysisModelChange(settings.analysisModel);
     applyAspectRatioChange(settings.aspectRatio);
@@ -10927,6 +11095,9 @@
       useCombinedJob: false
     };
     applySinglePassEditOption(singleFlowState.singlePassEdit);
+    // 人像設定 is read back off the DOM by a revise, so it has to show this
+    // folder's own frozen values rather than the last case's left-over ones.
+    applyAdvancedOptionsOption(recordAdvancedOptions(null, analysis), "ap");
     // Restores the style picks and prompt the imported run was produced with,
     // so the review panel opens showing them rather than defaults.
     lastSingleSelections = {
