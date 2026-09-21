@@ -4616,15 +4616,31 @@
         await runPendingReviewFlow(analysis, preset);
       }
     } catch (error) {
-      // Lets any not-yet-shown phrasings finish playing (fast-forwarded)
-      // before bailing back to the upload screen.
-      await finishProcSubRotation();
-      showSection("upload");
-      showError(friendlyError(error));
-      // Back to the upload screen -- unlike a successful finish (which now
-      // leaves analysis-preview open by default beside the results canvas),
-      // there's no results view here for it to belong to.
-      if (els.analysisPreview) els.analysisPreview.hidden = true;
+      // Only reported on screen while this run still owns it. The user can
+      // walk away from the processing screen mid-job by opening a history
+      // record (which bumps historyViewToken), and this failure is then news
+      // about a job they've stopped watching -- announcing it here means a
+      // hard navigation to the upload screen (#error-msg lives nowhere else),
+      // tearing them off the record they had just opened. The history tile
+      // carries it instead, and already does: pollHistoryTiles re-renders
+      // this job's still-美化中 tile as 失敗 the moment it settles, and
+      // clicking that tile opens this same reason in a modal
+      // (renderTileStatus's failed-tile branch, friendlyError and all). So
+      // staying quiet here loses nothing but the ambush.
+      if (historyViewToken === myHistoryToken) {
+        // Lets any not-yet-shown phrasings finish playing (fast-forwarded)
+        // before bailing back to the upload screen.
+        await finishProcSubRotation();
+        showSection("upload");
+        showError(friendlyError(error));
+        // Back to the upload screen -- unlike a successful finish (which now
+        // leaves analysis-preview open by default beside the results canvas),
+        // there's no results view here for it to belong to.
+        if (els.analysisPreview) els.analysisPreview.hidden = true;
+      }
+      // Whichever branch ran, the rotation itself is dropped by the finally
+      // below -- fast-forwarded above when there's still a processing screen
+      // to play it out on, instantly otherwise.
     } finally {
       els.startButton.disabled = false;
       if (els.startFullButton) els.startFullButton.disabled = false;
