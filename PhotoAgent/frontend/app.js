@@ -2468,6 +2468,12 @@
     if (!FLOW_STAGE_STEPS[stage]) return;
     flowStage = stage;
     renderStepIndicator();
+    // #page-scroll-hint gates on this stage (PAGE_SCROLL_HINT_STAGES), and
+    // entering/leaving 修圖中 happens in place on the results page -- no
+    // section change, and swapping the photo for the loading card need not
+    // change the document height, so neither of that cue's own triggers is
+    // guaranteed to fire. Tell it directly.
+    updatePageScrollHint();
   }
 
   function renderStepIndicator() {
@@ -8912,7 +8918,22 @@
   // This is the upload screen's one excluded case: it's a form, it has no
   // single element big enough to swallow the fold, and it isn't part of the
   // flow this cue belongs to.
-  const PAGE_SCROLL_HINT_SECTIONS = new Set(["processing", "results"]);
+  //
+  // Both of those screens are #results-section: the pending review is
+  // showPendingResults' state of it, and 結果 is the same section once the
+  // edit lands. #processing-section is NOT the review screen -- it is the
+  // 分析中 thinking-rings animation, which is why it's absent here.
+  const PAGE_SCROLL_HINT_SECTIONS = new Set(["results"]);
+  // ...and the section alone doesn't settle it, because 修圖中 is that same
+  // #results-section with the photo swapped for the #canvas-loading /
+  // #batch-main-loading animation. Both waiting screens are the same case:
+  // whatever is below the fold is a placeholder for content that hasn't
+  // arrived, so pointing at it promises something that isn't there, and the
+  // cue reads as if the page were already finished. The flow stage is what
+  // tells them apart -- 分析中 is "analyzing", 修圖中 is "editing", and it
+  // covers the batch flow (which animates in place, with no section change
+  // to key off) for free.
+  const PAGE_SCROLL_HINT_STAGES = new Set(["awaiting-review", "done"]);
   // showSection's event is the only thing that knows which screen is up
   // (dom.js owns .visible, and there's no getter) -- mirror it here rather
   // than re-deriving it from the DOM on every scroll event.
@@ -8945,6 +8966,7 @@
     // back changes only paint, not layout, and so wakes no observer.
     if (pageScrollHintDismissed
       || els.resultsCanvasRow?.style.visibility === "hidden"
+      || !PAGE_SCROLL_HINT_STAGES.has(flowStage)
       || !PAGE_SCROLL_HINT_SECTIONS.has(currentSectionName)) {
       hint.hidden = true;
       return;
