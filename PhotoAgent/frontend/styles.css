@@ -2667,8 +2667,9 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
    review panel, the analysis detail, 美化 itself once it isn't floating)
    sits a scroll away with nothing on screen saying so. Same pill +
    bobbing-arrow language as .ap-style-scroll-hint (index.html), which does
-   this job for the option grid's internal scroll; this is its page-level
-   counterpart and reads the document's own scroll position instead
+   this job for the option grid's internal scroll -- but a size up and a beat
+   faster, for the reasons noted at those two declarations below; this is its
+   page-level counterpart and reads the document's own scroll position instead
    (updatePageScrollHint, app.js), so it costs nothing on a tall screen
    where the page doesn't scroll at all.
    Stays centered on the viewport at every width, including below 900px
@@ -2690,7 +2691,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: center;
-  gap: 4px;
+  /* Type and icon are deliberately a size up from .ap-style-scroll-hint,
+     which is the same pill but reads against a panel it already sits inside.
+     This one has to hold its own over a full-bleed photo, at the far edge of
+     the viewport, against whatever that photo happens to contain -- at the
+     in-panel size it was easy to take for a caption on the image rather than
+     a control asking to be tapped. The padding stays where it was, so the
+     pill grows only by as much as its contents did and keeps hugging them
+     the same way rather than turning into a slab. */
+  gap: 6px;
   padding: 6px 14px;
   border-radius: 20px;
   /* Frosted glass rather than the --card-3 slab it used to be: this floats
@@ -2707,7 +2716,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
   border: 1px solid var(--border-2);
   color: var(--text-3);
-  font-size: 12.5px;
+  font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -2719,11 +2728,17 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 }
 /* display:flex above would otherwise beat the hidden attribute. */
 .page-scroll-hint[hidden] { display: none; }
-/* The whole pill bobs, same 3px/1.4s as .ap-style-scroll-hint (index.html).
+/* The whole pill bobs. Faster than .ap-style-scroll-hint's 1.4s, for the
+   same reason it's also bigger: that one marks an overflow the user is
+   already looking at, while this one has to catch an eye that has settled on
+   the photo and concluded the page ends there -- at 1.4s the movement is
+   slow enough to sit below notice in peripheral vision. Travel stays at 3px
+   -- shortening the period alone already raises the speed of the movement,
+   and growing both at once overshoots into fidgeting.
    Possible only because the centering is margin-based -- with the usual
    left:50% + translateX(-50%) the offset would have to be restated in every
    frame here and in the press state below. */
-.page-scroll-hint { animation: pageScrollHintBob 1.4s ease-in-out infinite; }
+.page-scroll-hint { animation: pageScrollHintBob 1s ease-in-out infinite; }
 @keyframes pageScrollHintBob {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(3px); }
