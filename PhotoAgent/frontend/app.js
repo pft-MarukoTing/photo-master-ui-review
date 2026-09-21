@@ -4673,7 +4673,14 @@
         // before bailing back to the upload screen.
         await finishProcSubRotation();
         showSection("upload");
-        showError(friendlyError(error));
+        // Same modal the history tile uses for this very job once it settles
+        // as 失敗 (renderTileStatus's failed-tile branch) -- one failure, one
+        // presentation, whether the user hears about it here or comes back to
+        // it later. #error-msg is still the right home for the upload page's
+        // own inline validation ("請先上傳一張照片。"), which sits next to the
+        // button it is about; a job that died minutes after being submitted
+        // is not that.
+        showNoticeModal(friendlyError(error));
         // Back to the upload screen -- unlike a successful finish (which now
         // leaves analysis-preview open by default beside the results canvas),
         // there's no results view here for it to belong to.
