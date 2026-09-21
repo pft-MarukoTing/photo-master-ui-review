@@ -1133,7 +1133,15 @@ window.PhotoAgentResults = (() => {
 
     summary.style.setProperty("--ap-photo-summary-compact-height", `${compactHeight}px`);
     toggle.hidden = false;
-    toggle.textContent = photoSummaryExpanded ? "收合" : "查看更多";
+    // 展開/收合, not 查看更多/收合: #page-scroll-hint (index.html) owns
+    // "查看更多" on these same screens, where it means "scroll the page",
+    // not "open this block in place". Two centered pills a screen apart
+    // reading the same words for different actions is the whole reason this
+    // one moved -- 展開 names what actually happens here, and pairs
+    // symmetrically with 收合 instead of leaving one half of the toggle
+    // phrased as a destination and the other as a verb. The pill's mark moved
+    // off the chevron for the same split (see .ap-photo-summary-toggle).
+    toggle.textContent = photoSummaryExpanded ? "收合" : "展開";
     toggle.setAttribute("aria-expanded", String(photoSummaryExpanded));
     if (photoSummaryExpanded) {
       summary.classList.add("ap-photo-summary--expanded");

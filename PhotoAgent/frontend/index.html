@@ -691,20 +691,29 @@
       transition: opacity .15s, background .15s, color .15s;
     }
     .ap-photo-summary-toggle::before {
-      /* A drawn border-corner chevron instead of a Unicode glyph (e.g. '⌄') --
-         that glyph has no real form in some fonts and falls back to a tofu
-         mark that sits low and off-center instead of centered in its box. */
+      /* A +/- rather than a chevron: everywhere else in the app a chevron
+         means "scroll that way" (.ap-style-scroll-hint, #page-scroll-hint),
+         and this toggle moves nothing -- it opens and closes a block in
+         place, which is what 展開/收合 name. Drawn from two gradient bars
+         instead of a '+' / '−' glyph, for the same reason the chevron it
+         replaces was drawn from border corners: a glyph's own metrics decide
+         where it sits in its box, and next to a 13px label it lands low and
+         off-centre. Collapsing shrinks the upright bar to nothing from its
+         own centre, so the mark performs 收合 rather than just labelling it. */
       content: '';
       display: inline-block;
-      width: 6px;
-      height: 6px;
-      margin-right: 5px;
-      border-right: 1.6px solid currentColor;
-      border-bottom: 1.6px solid currentColor;
-      transform: rotate(45deg);
-      transition: transform .15s;
+      flex-shrink: 0;
+      width: 9px;
+      height: 9px;
+      margin-right: 4px;
+      background:
+        linear-gradient(currentColor, currentColor) center / 9px 1.6px no-repeat,
+        linear-gradient(currentColor, currentColor) center / 1.6px 9px no-repeat;
+      transition: background-size .15s;
     }
-    .ap-photo-summary-toggle[aria-expanded="true"]::before { transform: rotate(-135deg); }
+    .ap-photo-summary-toggle[aria-expanded="true"]::before {
+      background-size: 9px 1.6px, 1.6px 0;
+    }
     .ap-photo-summary-toggle:hover {
       background: rgba(var(--accent-2-rgb),.24);
       color: var(--text);
