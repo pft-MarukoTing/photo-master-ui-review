@@ -2948,6 +2948,10 @@ window.PhotoAgentResults = (() => {
     syncStylePicks();
     const isPerson = analysis.subject_category === "人物";
     if (els.apStyleCardPose) els.apStyleCardPose.hidden = !isPerson;
+    if (els.apAdvancedSettingsFold) {
+      els.apAdvancedSettingsFold.hidden = !isPerson;
+      if (!isPerson) els.apAdvancedSettingsFold.open = false;
+    }
   }
 
   // Narrow re-fill of just #ap-recipe-list -- for when the panel is already
