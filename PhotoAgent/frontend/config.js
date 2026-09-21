@@ -56,9 +56,9 @@ window.PhotoAgentConfig = {
   imageModelQualityOptions: [
     { value: "gpt-image-2:low", model: "gpt-image-2", quality: "low", label: "GPT Image 2 · Standard", displayLabel: "Image 2 · Standard" },
     { value: "gpt-image-2:medium", model: "gpt-image-2", quality: "medium", label: "GPT Image 2 · Enhanced", displayLabel: "Image 2 · Enhanced" },
-    { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Sunburst · Efficient" },
+    { value: "gpt-image-2.5-sunburst:low", model: "gpt-image-2.5-sunburst", quality: "low", label: "GPT Image 2.5 Sunburst · Standard", displayLabel: "Sunburst · Standard" },
     { value: "gpt-image-2.5-sunburst:medium", model: "gpt-image-2.5-sunburst", quality: "medium", label: "GPT Image 2.5 Sunburst · Enhanced", displayLabel: "Sunburst · Enhanced" },
-    { value: "gpt-image-2.5-sunburst:high", model: "gpt-image-2.5-sunburst", quality: "high", label: "GPT Image 2.5 Sunburst · Premium", displayLabel: "Sunburst Premium" },
+    { value: "gpt-image-2.5-sunburst:high", model: "gpt-image-2.5-sunburst", quality: "high", label: "GPT Image 2.5 Sunburst · Premium", displayLabel: "Sunburst · Premium" },
     { value: "gpt-image-2.5-flare:low", model: "gpt-image-2.5-flare", quality: "low", label: "GPT Image 2.5 Flare · Standard", displayLabel: "Image 2.5 Flare" },
     { value: "gpt-image-2.5-flare:medium", model: "gpt-image-2.5-flare", quality: "medium", label: "GPT Image 2.5 Flare · Enhanced", displayLabel: "Image 2.5 Flare·Enhanced" },
     { value: "nano-banana-2", model: "nano-banana-2", quality: "medium", label: "Nano Banana 2", displayLabel: "Nano Banana 2" },
