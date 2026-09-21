@@ -2624,8 +2624,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
      tappable. An earlier version gave it a real background and a top border
      instead, which on a phone read as a permanent empty toolbar pinned to
      the bottom rather than a floating button. Run already carries its own
-     pill shape and shadow (.analysis-preview-action-right, index.html),
-     which is all "floating" needs.
+     filled pill shape (.analysis-preview-action-right, index.html), which is
+     all "floating" needs.
      Gated on .ap-settings-run-row actually having a visible child -- Run
      itself, or #ap-restart-actions (its archived-case 重新分析/重新一鍵美化
      split-run stand-in, shown once Run stays hidden past 維持現況) -- so a

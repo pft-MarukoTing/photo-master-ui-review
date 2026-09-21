@@ -294,7 +294,7 @@
       border: none;
       background: var(--mv-grad);
       color: #fff;
-      box-shadow: var(--shadow-accent);
+      box-shadow: none;
     }
     /* Pushes .ap-settings-run-row (Run) to the far right of .ap-actions-row
        -- used to also carry #ap-advanced-settings-btn as a pair before
@@ -342,7 +342,7 @@
       border: 1px solid rgba(var(--accent-rgb),.52);
       border-radius: 50%;
       color: var(--text-1);
-      box-shadow: 0 4px 14px rgba(var(--accent-rgb),.2), inset 0 1px 0 rgba(255,255,255,.18);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
       cursor: pointer;
       transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s;
     }
@@ -350,7 +350,7 @@
       background: linear-gradient(135deg, rgba(var(--accent-rgb),.4), rgba(var(--accent-2-rgb),.24));
       border-color: rgba(var(--accent-rgb),.72);
       color: var(--text-1);
-      box-shadow: 0 8px 22px rgba(var(--accent-rgb),.24), inset 0 1px 0 rgba(255,255,255,.16);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.16);
       transform: translateY(-2px);
     }
     .ap-case-settings-trigger:active { transform: translateY(0) scale(.96); }
@@ -385,7 +385,7 @@
       line-height: 1.6;
     }
     .analysis-preview-action-right:hover {
-      box-shadow: 0 14px 36px rgba(var(--accent-rgb),.34);
+      box-shadow: none;
       transform: translateY(-1px);
     }
     .analysis-preview-action:active { transform: scale(.96); }
