@@ -4636,7 +4636,18 @@
       // finishSingleFlow's own tail (openInlineAnalysisForCurrentContext)
       // just legitimately opened -- moving #ap-options-card-inline back home
       // and re-hiding #download-link right after they were shown.
-      if (pendingResultsActive) closePendingResults();
+      //
+      // Guarded by this run's own token for the same reason every render in
+      // here is: pendingResultsActive is screen-wide state, so once the user
+      // has navigated to a DIFFERENT record while this job was still running
+      // (viewAnalyzeHistoryRecord on a 待美化 case, which sets the flag again
+      // for ITS review panel), the flag no longer describes this run's
+      // abandoned panel at all -- closing it here tore down that other
+      // record's freshly-opened review panel the moment this job finished,
+      // leaving its photo on screen with no analysis beside it. Nothing is
+      // leaked by skipping it: whoever owns the screen now opened that panel
+      // itself and closes it on its own exits.
+      if (pendingResultsActive && historyViewToken === myHistoryToken) closePendingResults();
       // Safety net for the isCurrent()===false edge case, where
       // revealResultsIfNeeded/showPendingResults bail out without ever
       // consuming the rotation themselves -- instant, not fast-forwarded,
