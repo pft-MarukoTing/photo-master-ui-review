@@ -253,6 +253,7 @@ window.PhotoAgentDom = (() => {
     apOptionsCardInline: document.querySelector("#ap-options-card-inline"),
     apOptionsCardHome: document.querySelector("#ap-options-card-home"),
     stepIndicatorSlot: document.querySelector("#step-indicator-slot"),
+    pageScrollHint: document.querySelector("#page-scroll-hint"),
     reloadBatchBtn: document.querySelector("#reload-batch-btn"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),
     errorModal: document.querySelector("#error-modal"),

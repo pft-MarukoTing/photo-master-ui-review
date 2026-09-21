@@ -5594,6 +5594,27 @@
 
 </main>
 
+<!-- Page-level "there's more below this photo" cue for the 分析 (pending
+     review) and 結果 screens, both of which lead with a full-bleed preview
+     image: on a short viewport that image alone can fill everything under
+     the header, so the review panel / analysis detail below it reads as
+     "nothing else here" rather than "scroll". Page-scoped sibling of
+     <main> (position:fixed, so its place in the DOM is immaterial) instead
+     of living inside either section, because it's driven off the document's
+     own scroll position, not any one screen's markup.
+     Same pill + bobbing-arrow treatment as #ap-style-scroll-hint (the
+     option grid's in-panel version, styles above), but a real <button>: on
+     the screens this is for, the thing it's pointing at is a scroll away,
+     so letting the cue itself do that scroll is worth more than a label.
+     Styled in styles.css (beside the floating Run pill it shares a row
+     with); shown/hidden entirely by updatePageScrollHint (app.js), which
+     also latches it off for the rest of a screen's visit once the user has
+     scrolled or tapped it. -->
+<button id="page-scroll-hint" class="page-scroll-hint" type="button" hidden>
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span>查看更多</span>
+</button>
+
 <!-- Processing history: a slide-in drawer (not a full screen -- opened over
      whatever's currently showing, upload/processing/results alike) rather
      than one of the section-toggle "screens" above. Toggled via

@@ -8096,6 +8096,10 @@
     historyCanvasRowHider = 0;
     if (!els.resultsCanvasRow) return;
     els.resultsCanvasRow.style.visibility = "";
+    // The record is on screen now -- #page-scroll-hint was suppressed while
+    // this hold was up (see updatePageScrollHint) and nothing else will ask
+    // it to re-check, since revealing the row changes no layout.
+    updatePageScrollHint();
     requestAnimationFrame(() => {
       requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
     });
@@ -8897,6 +8901,81 @@
   function updateStyleOptionScrollCue(list) {
     const hasMoreBelow = updateListScrollCue(list);
     if (els.apStyleScrollHint) els.apStyleScrollHint.hidden = !hasMoreBelow;
+  }
+
+  // ── #page-scroll-hint: the same "there's more below" cue, for the page ──
+  // The 分析 (pending review) and 結果 screens both lead with a full-bleed
+  // preview photo. On a short viewport that photo plus the header and the
+  // step indicator is the entire first screenful, so the review panel /
+  // analysis detail under it is invisible AND unannounced -- nothing on
+  // screen distinguishes "scroll for the rest" from "that's the whole page".
+  // This is the upload screen's one excluded case: it's a form, it has no
+  // single element big enough to swallow the fold, and it isn't part of the
+  // flow this cue belongs to.
+  const PAGE_SCROLL_HINT_SECTIONS = new Set(["processing", "results"]);
+  // showSection's event is the only thing that knows which screen is up
+  // (dom.js owns .visible, and there's no getter) -- mirror it here rather
+  // than re-deriving it from the DOM on every scroll event.
+  let currentSectionName = "upload";
+  // Latched for the rest of this screen's visit the moment the user scrolls
+  // the page or taps the cue: either one means they've found what's below,
+  // so bringing it back every time they return to the top would be nagging
+  // about something already answered. Cleared only on the next section
+  // change -- showSection dispatches one even when the screen name doesn't
+  // actually change, so each leg of 分析 → 修圖中 → 結果 (and every arrival
+  // from 最近照片) counts as its own page and gets its own one chance.
+  let pageScrollHintDismissed = false;
+
+  function updatePageScrollHint() {
+    const hint = els.pageScrollHint;
+    if (!hint) return;
+    // Dismissal, screen and load state first, content height last: this runs
+    // on every scroll event and reading scrollHeight forces a layout, while
+    // these three cost nothing.
+    //
+    // The visibility check: a history record opened from 最近照片 keeps
+    // #results-canvas-row at visibility:hidden while it loads
+    // (hideHistoryCanvasRow) -- deliberately still laid out, so the results
+    // page has its full height while painting nothing. That is the one state
+    // where "this page scrolls" is true and "there's something down there to
+    // look at" isn't, and it's what put this cue under a blank screen during
+    // the jump. Read off the inline style hideHistoryCanvasRow itself writes
+    // (its only writer), not getComputedStyle, so it stays free. And
+    // releaseHistoryCanvasRow calls back in here, because handing the row
+    // back changes only paint, not layout, and so wakes no observer.
+    if (pageScrollHintDismissed
+      || els.resultsCanvasRow?.style.visibility === "hidden"
+      || !PAGE_SCROLL_HINT_SECTIONS.has(currentSectionName)) {
+      hint.hidden = true;
+      return;
+    }
+    // 24px of slack, not >0: a page overflowing by a hairline (sub-pixel
+    // rounding, a shadow's bleed, the floating Run pill's reserved
+    // padding-bottom landing a couple of px over) has nothing down there
+    // worth pointing at, and a cue that appears for it reads as broken.
+    hint.hidden = document.documentElement.scrollHeight - window.innerHeight - window.scrollY <= 24;
+  }
+
+  // The 8px floor keeps a rubber-band overscroll (or a browser restoring a
+  // previous scroll offset) from counting as "the user scrolled". Latched
+  // here rather than inside updatePageScrollHint because showSection clears
+  // the flag BEFORE doing its own scroll-to-top, and re-reading a still-
+  // stale scrollY in there would re-dismiss the screen we just reset.
+  function handlePageScroll() {
+    if (window.scrollY > 8) pageScrollHintDismissed = true;
+    updatePageScrollHint();
+  }
+
+  // Tapping the cue does the scroll it's asking for -- on the viewports this
+  // exists for, what it points at is a full swipe away. 72% of a screenful,
+  // not a full one: leaving the bottom of the photo in view keeps the move
+  // legible as "the page scrolled" rather than a jump to unrelated content.
+  // Dismissed explicitly, not left to the scroll it triggers: at the very
+  // bottom of a barely-scrollable page that scroll can be a no-op.
+  function handlePageScrollHintClick() {
+    pageScrollHintDismissed = true;
+    updatePageScrollHint();
+    window.scrollBy({ top: Math.round(window.innerHeight * 0.72), behavior: "smooth" });
   }
 
   // group === null hides every list (no g in STYLE_GROUPS ever equals null).
@@ -11336,6 +11415,26 @@
       els.accountBadge.hidden = !user || event.detail?.name === "upload";
     }
   });
+  // #page-scroll-hint's inputs: which screen is up (this event), where the
+  // page is scrolled to, and how tall its content is. The last one is the
+  // one that needs an observer rather than an event -- on both screens this
+  // covers, the content under the photo arrives (and the photo itself
+  // resolves to its real height) well after the section change, so a
+  // one-shot read at switch time would decide there's nothing below on
+  // exactly the pages there is. #page-scroll-hint is position:fixed and so
+  // contributes no height of its own, which is what keeps showing/hiding it
+  // from re-triggering the observer that showed it.
+  document.addEventListener("photoagent:sectionchange", (event) => {
+    currentSectionName = event.detail?.name || "upload";
+    pageScrollHintDismissed = false;
+    updatePageScrollHint();
+  });
+  window.addEventListener("scroll", handlePageScroll, { passive: true });
+  window.addEventListener("resize", updatePageScrollHint);
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(updatePageScrollHint).observe(document.body);
+  }
+  if (els.pageScrollHint) els.pageScrollHint.addEventListener("click", handlePageScrollHintClick);
   if (els.adminReportsBtn) els.adminReportsBtn.addEventListener("click", openReportsPage);
   if (els.reportsRefreshBtn) els.reportsRefreshBtn.addEventListener("click", refreshReportsList);
   if (els.reportsDrawerCloseBtn) els.reportsDrawerCloseBtn.addEventListener("click", closeReportsDrawer);

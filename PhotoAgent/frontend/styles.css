@@ -2661,6 +2661,79 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 }
+/* ── #page-scroll-hint: "查看更多" cue for the 分析 / 結果 screens ──
+   Both screens open with a full-bleed preview photo, which on a short
+   viewport can be the only thing under the header -- everything else (the
+   review panel, the analysis detail, 美化 itself once it isn't floating)
+   sits a scroll away with nothing on screen saying so. Same pill +
+   bobbing-arrow language as .ap-style-scroll-hint (index.html), which does
+   this job for the option grid's internal scroll; this is its page-level
+   counterpart and reads the document's own scroll position instead
+   (updatePageScrollHint, app.js), so it costs nothing on a tall screen
+   where the page doesn't scroll at all.
+   Stays centered on the viewport at every width, including below 900px
+   where the 美化 pill floats fixed in this same bottom band (see the rule
+   further up): the two share the row, 美化 anchored to the right gutter
+   and this to the page's center.
+   Centered by auto margins against left:0/right:0 rather than the usual
+   left:50% + translateX(-50%), which keeps the transform free for the press
+   state and out of every frame of the arrow's bob.
+   --text-3 rather than .ap-style-scroll-hint's --text-2: that one sits
+   inside a panel at rest, this one floats over a photo, and --text-2 on
+   --card-3 only just clears 4.5:1 in the light palettes. */
+.page-scroll-hint {
+  position: fixed;
+  left: 0;
+  right: 0;
+  width: fit-content;
+  margin-inline: auto;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  /* Frosted glass rather than the --card-3 slab it used to be: this floats
+     over the photo, and --glass-rgb is the token the app's other
+     float-over-imagery chrome already uses for exactly that (.canvas-btn,
+     which sits on the same photo at .3 + blur). Reads lighter and airier
+     than a solid card tone in the light palettes -- and, because the tone
+     flips per theme (near-white in the light ones, near-black in the dark),
+     it also pulls further from --text-3 than --card-3 did: 5.8-7.4:1 before,
+     9.8-13:1 now. .82 rather than .canvas-btn's .3 because this one carries
+     text, which can't ride on blur alone the way an icon can. */
+  background: rgba(var(--glass-rgb),.82);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  /* Above page content, below the floating 美化 pill (z-index 30, in the
+     max-width:900px block above) and below every overlay (drawer/modals/
+     fullscreen compare all sit at 1000+). */
+  z-index: 29;
+  box-shadow: var(--shadow-sm);
+}
+/* display:flex above would otherwise beat the hidden attribute. */
+.page-scroll-hint[hidden] { display: none; }
+/* The whole pill bobs, same 3px/1.4s as .ap-style-scroll-hint (index.html).
+   Possible only because the centering is margin-based -- with the usual
+   left:50% + translateX(-50%) the offset would have to be restated in every
+   frame here and in the press state below. */
+.page-scroll-hint { animation: pageScrollHintBob 1.4s ease-in-out infinite; }
+@keyframes pageScrollHintBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(3px); }
+}
+/* animation:none, or the running animation keeps overwriting transform and
+   the press never registers. */
+.page-scroll-hint:active { animation: none; transform: scale(.96); }
+@media (prefers-reduced-motion: reduce) {
+  .page-scroll-hint { animation: none; }
+}
 /* The panel keeps its processing-screen spacing (margin-top:32px) when it's
    shown there; strip that once it's on loan to this narrower side slot. */
 .results-analysis-slot .analysis-preview {
