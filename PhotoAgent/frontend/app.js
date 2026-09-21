@@ -664,6 +664,15 @@
       if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = DEFAULT_EDITOR_PROMPT_STRATEGY;
       if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = DEFAULT_EDITOR_PROMPT_STRATEGY;
     }
+    // 分析引擎 is read-only on the results page in the release build -- Step 2
+    // has already run by the time that page exists, so the picker is there to
+    // report which model produced the analysis, not to change it. Debug mode
+    // is the only build that offers other analysis models at all, and there
+    // comparing them is the entire point, so it unlocks the picker -- picking
+    // one re-analyzes the photo rather than relabeling an analysis that model
+    // never produced (see els.apAnalysisModelSelect's change listener).
+    if (els.apAnalysisModelPicker) els.apAnalysisModelPicker.classList.toggle("is-locked", !isDebug);
+    if (els.apAnalysisModelSelect) els.apAnalysisModelSelect.disabled = !isDebug;
     if (apAnalysisToggle) apAnalysisToggle.hidden = !isDebug;
     // #boxes-toggle-btn draws the raw analysis geometry over the photo, and
     // the recipe-tags ratio pill reports recommended_aspect_ratio -- both are
@@ -1100,6 +1109,100 @@
   wireOptionPicker(els.apImageModelQualityPicker, els.apImageModelQualitySelect);
   wireOptionPicker(els.apRunCountPicker, els.apRunCountSelect);
 
+  // ── Case settings trigger (#ap-case-settings-btn, index.html) ─────────────
+  // The controls it opens live in #ap-case-settings-modal; this is the part
+  // that makes them readable without opening it. The button is one icon on a
+  // row that belongs to 美化, so the reading happens in its tooltip rather
+  // than on its face. Two jobs:
+  //
+  //   1. Say what the version currently on screen actually ran with. Showing
+  //      a case writes the results-page copy of every picker (applyXOption
+  //      below, scope "ap"), so the live DOM already holds exactly that set
+  //      -- the summary just reads it back out.
+  //   2. Say when that stopped being true. A pick made here applies to the
+  //      NEXT edit, never to the image already rendered, so the instant the
+  //      user changes one the pill stops describing what they are looking at.
+  //      apCaseSettingsBaseline holds the last programmatically-applied set
+  //      (i.e. what this version ran with); any divergence raises the 已變更
+  //      flag, and changing back clears it again.
+  //
+  // 生成張數 is deliberately in neither: it is debug-only AND shared with the
+  // upload page's own picker (applyRunCountChange writes both copies), so it
+  // is not a value "this version" owns the way the others are.
+  let apCaseSettingsBaseline = null;
+
+  // The live results-page copies, i.e. what the next edit of this case would
+  // be submitted with. Also what a debug-mode re-analysis carries forward
+  // (restartArchivedCase's `settings`), so that restart changes only the one
+  // value that triggered it instead of silently reverting the rest to product
+  // defaults on the way through resetApp.
+  function apCaseSettingsValues() {
+    return {
+      analysisModel: els.apAnalysisModelSelect?.value || "",
+      imageModelQuality: els.apImageModelQualitySelect?.value || "",
+      aspectRatio: els.apImageAspectRatioSelect?.value || "",
+      advancedOptions: readAdvancedOptionsFromDom("ap"),
+    };
+  }
+
+  function snapshotApCaseSettings() {
+    return JSON.stringify(apCaseSettingsValues());
+  }
+
+  function apCaseSettingsSummaryText() {
+    const model = findModelQualityOption(els.apImageModelQualitySelect?.value);
+    const parts = [model?.displayLabel || model?.label].filter(Boolean);
+    const ratio = els.apImageAspectRatioSelect?.value;
+    // "auto" is the default and says nothing; anything else was a deliberate
+    // choice and belongs in the tooltip. 人像設定 stays out of it entirely --
+    // four toggles don't summarise into a phrase, and the dirty dot already
+    // covers the case that matters (someone changed them since this version
+    // ran), with the modal one click away for the detail.
+    if (ratio && ratio !== "auto") {
+      // "3:4（直）" -> "3:4": the shape hint earns its place in the picker's
+      // own list, where the options are read against each other, but here it
+      // only eats width the model name needs.
+      const label = findAspectRatioOption(ratio)?.label || ratio;
+      parts.push(label.split("（")[0]);
+    }
+    return parts.join(" · ") || "分析與美化設定";
+  }
+
+  function updateApCaseSettingsTrigger() {
+    const btn = els.apCaseSettingsBtn;
+    if (!btn) return;
+    // Only meaningful next to a live action: #inline-analysis-continue-btn (a
+    // case that can still be edited) or #ap-restart-actions (an archived one,
+    // whose settings are still worth reading even though it can only be
+    // restarted). Read-only historical playback shows neither, and gets no
+    // settings pill either -- there is no "next edit" for it to describe.
+    const runVisible = !!(els.inlineAnalysisContinueBtn && !els.inlineAnalysisContinueBtn.hidden);
+    const restartVisible = !!(els.apRestartActions && !els.apRestartActions.hidden);
+    btn.hidden = !(runVisible || restartVisible);
+    if (btn.hidden) closeApCaseSettingsModal();
+    const dirty = !!apCaseSettingsBaseline && apCaseSettingsBaseline !== snapshotApCaseSettings();
+    if (els.apCaseSettingsDirty) els.apCaseSettingsDirty.hidden = !dirty;
+    // The tooltip carries what the button used to say on its face. It can
+    // afford to name which of the two things it means -- the version on
+    // screen, or the next edit -- where a pill on this row could only have
+    // shown the values and left the user to work out which.
+    const summary = apCaseSettingsSummaryText();
+    const label = dirty
+      ? `開啟分析與美化設定：${summary}（設定與目前結果不同）`
+      : `開啟分析與美化設定：${summary}`;
+    btn.title = label;
+    btn.setAttribute("aria-label", label);
+  }
+
+  // fromUser separates the two writers of these controls: showing a case
+  // applies its settings programmatically (applyXOption), which is what the
+  // baseline must follow, while the user's own picks arrive through
+  // applyXChange and must NOT move it -- that divergence is the entire signal.
+  function refreshApCaseSettings({ fromUser = false } = {}) {
+    if (!fromUser) apCaseSettingsBaseline = snapshotApCaseSettings();
+    updateApCaseSettingsTrigger();
+  }
+
   // wireOptionPicker only refreshes a picker's own visible label
   // (.ap-style-value) when THAT picker itself is opened (rebuild runs on
   // its "toggle") -- so picking a model on the upload page kept the
@@ -1117,7 +1220,7 @@
   // upload picker keeps itself in sync without help (wireOptionPicker sets its
   // select's value and its own label before dispatching "change"), so the only
   // caller that needs includeUpload is resetSettingsToDefaults.
-  function applyModelQualityOption(opt, { includeUpload = false } = {}) {
+  function applyModelQualityOption(opt, { includeUpload = false, fromUser = false } = {}) {
     if (!opt) return;
     if (includeUpload && els.imageModelQualitySelect) els.imageModelQualitySelect.value = opt.value;
     if (els.apImageModelQualitySelect) els.apImageModelQualitySelect.value = opt.value;
@@ -1128,6 +1231,7 @@
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.displayLabel || opt.label;
     });
+    refreshApCaseSettings({ fromUser });
   }
 
   // The upload page's controls are its own (see applyModelQualityOption), so
@@ -1137,7 +1241,7 @@
   function applyModelQualityChange(value, { includeUpload = false } = {}) {
     const opt = findModelQualityOption(value);
     if (!opt) return;
-    applyModelQualityOption(opt, { includeUpload });
+    applyModelQualityOption(opt, { includeUpload, fromUser: true });
     if (singleFlowState) { singleFlowState.imageModel = opt.model; singleFlowState.imageQuality = opt.quality; }
     // A change made from #ap-image-model-quality while one batch case's
     // revise panel is open belongs to that case alone -- write it onto the
@@ -1287,7 +1391,7 @@
   wireOptionPicker(els.apAnalysisModelPicker, els.apAnalysisModelSelect);
 
   // Results page's copy only, same rule as applyModelQualityOption above.
-  function applyAnalysisModelOption(opt, { includeUpload = false } = {}) {
+  function applyAnalysisModelOption(opt, { includeUpload = false, fromUser = false } = {}) {
     if (!opt) return;
     if (includeUpload && els.analysisModelSelect) els.analysisModelSelect.value = opt.value;
     if (els.apAnalysisModelSelect) els.apAnalysisModelSelect.value = opt.value;
@@ -1298,6 +1402,7 @@
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.label;
     });
+    refreshApCaseSettings({ fromUser });
   }
 
   function applyAnalysisModelChange(value) {
@@ -1317,13 +1422,56 @@
     }
   }
 
-  // Only #analysis-model (upload page) gets a "change" listener --
-  // #ap-analysis-model has no radio inputs a user can actually click
-  // (`is-locked` blocks pointer events on its option list), so it never
-  // fires one.
   if (els.analysisModelSelect) {
     els.analysisModelSelect.addEventListener("change", () =>
       applyAnalysisModelChange(els.analysisModelSelect.value));
+  }
+
+  // #ap-analysis-model only becomes clickable in debug mode (applyDebugUiVisibility
+  // drops `is-locked` there; the release build's picker has no reachable radio
+  // inputs at all, so this never fires), and even then it cannot behave like
+  // its neighbours: 美化引擎/長寬比/人像設定 are read at edit time, so changing
+  // them just changes the next edit -- but the analysis has already run. The
+  // only honest response is to analyze the photo again. That goes through the
+  // same restart path an archived case uses, carrying this case's other
+  // settings so the re-analysis differs in exactly the one value just picked.
+  if (els.apAnalysisModelSelect) {
+    els.apAnalysisModelSelect.addEventListener("change", async () => {
+      if (!isDebugUiActive) return;
+      const value = els.apAnalysisModelSelect.value;
+      const previous = singleFlowState?.analysisModel
+        || currentDetailBatchRecord()?.analysisModel
+        || null;
+      if (!previous || value === previous) return;
+      // Put the picker back whenever the restart doesn't happen -- leaving it
+      // on the new value would claim this analysis came from a model it did
+      // not, which is the exact misreport the restart exists to avoid.
+      const restore = () => applyAnalysisModelOption(findAnalysisModelOption(previous));
+      const sourceFile = selectedFile;
+      const sourceUrl = selectedFileSourceUrl;
+      if (!sourceFile && !sourceUrl) {
+        showError("這筆紀錄沒有可重新分析的原始照片。");
+        restore();
+        return;
+      }
+      const confirmed = await showConfirmModal(
+        "換分析引擎必須重新分析這張照片，目前的分析結果與美化建議都會被取代。要繼續嗎？",
+        { confirmLabel: "重新分析", danger: false, costSteps: [analysisPreflightStep()] }
+      );
+      if (!confirmed) {
+        restore();
+        return;
+      }
+      const settings = { ...apCaseSettingsValues(), analysisModel: value };
+      closeApCaseSettingsModal();
+      hideError();
+      try {
+        await restartArchivedCase(sourceFile, sourceUrl, false, { settings });
+      } catch (error) {
+        showError(`無法重新載入原始照片，請稍後再試。\n${friendlyError(error)}`);
+        restore();
+      }
+    });
   }
 
   // Aspect-ratio preference -- "auto" (default) takes the output ratio from
@@ -1375,7 +1523,7 @@
   // historical record just needs the pickers to show what it actually used,
   // not a state push or a live re-fit against whatever's on screen.
   // Results page's copy only, same rule as applyModelQualityOption above.
-  function applyAspectRatioOption(opt, { includeUpload = false } = {}) {
+  function applyAspectRatioOption(opt, { includeUpload = false, fromUser = false } = {}) {
     if (!opt) return;
     if (includeUpload && els.imageAspectRatioSelect) els.imageAspectRatioSelect.value = opt.value;
     if (els.apImageAspectRatioSelect) els.apImageAspectRatioSelect.value = opt.value;
@@ -1386,12 +1534,13 @@
       const valueEl = picker?.querySelector(".ap-style-value");
       if (valueEl) valueEl.textContent = opt.label;
     });
+    refreshApCaseSettings({ fromUser });
   }
 
   function applyAspectRatioChange(value) {
     const opt = findAspectRatioOption(value);
     if (!opt) return;
-    applyAspectRatioOption(opt);
+    applyAspectRatioOption(opt, { fromUser: true });
     if (singleFlowState) singleFlowState.aspectRatio = opt.value;
     // Same per-case routing as applyModelQualityChange above -- a change from
     // #ap-image-aspect-ratio while one batch case's revise panel is open
@@ -1748,7 +1897,13 @@
     if (controls.strategy) controls.strategy.value = advancedOptions.editor_prompt_strategy || DEFAULT_EDITOR_PROMPT_STRATEGY;
     // The per-person review these lock rows in only exists on the results
     // page, so only that copy drives it.
-    if (scope === "ap") syncFaceReviewAdvancedOptions(advancedOptions);
+    if (scope === "ap") {
+      syncFaceReviewAdvancedOptions(advancedOptions);
+      // Programmatic apply (showing a case, or resetSettingsToDefaults) --
+      // this IS the case's own set, so it becomes the baseline the 已變更
+      // flag measures against.
+      refreshApCaseSettings();
+    }
   }
 
   // Lets a revise on the results page change these toggles and have it
@@ -1770,6 +1925,7 @@
     syncFaceReviewAdvancedOptions(advancedOptions);
     refreshInlineRecipeList();
     updateInlineAnalysisContinueBtnState();
+    refreshApCaseSettings({ fromUser: true });
   }
 
   function defaultAdvancedOptions() {
@@ -2584,6 +2740,10 @@
       els.inlineAnalysisContinueBtn.classList.remove("is-blocked");
       inlineReviseSnapshot = null;
     }
+    // Follows Run's own visibility everywhere it is toggled (see
+    // updateApCaseSettingsTrigger's own doc) -- the settings pill has nothing
+    // to configure on a screen with no action on it.
+    updateApCaseSettingsTrigger();
     pendingResultsActive = true;
     if (els.downloadLink) {
       // selectedFile is null for a history record reopened at this same
@@ -2632,6 +2792,7 @@
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.remove("showing-analysis");
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
+    updateApCaseSettingsTrigger();
     if (els.downloadLink) els.downloadLink.hidden = true;
     pendingResultsActive = false;
     restoreOptionsCardHome();
@@ -2699,6 +2860,7 @@
     await showPendingResults(analysis, preset);
     if (readOnly) {
       if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
+      updateApCaseSettingsTrigger();
       // Shown once the (already read-only-locked) screen has actually
       // finished loading in, not before -- the lock itself doesn't announce
       // itself otherwise, and a dimmed panel alone is easy to miss as "why
@@ -2825,6 +2987,7 @@
     // that doesn't (e.g. the plain "reviewable:false" historical-playback
     // path) correctly leaves it hidden.
     if (els.apRestartActions) els.apRestartActions.hidden = true;
+    updateApCaseSettingsTrigger();
     els.analysisPreview.hidden = false;
     if (els.resultsCanvasRow) els.resultsCanvasRow.classList.add("showing-analysis");
     // Mirrored onto #results-body too -- #batch-sidebar's width split (see
@@ -2840,6 +3003,7 @@
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
     if (els.apRestartActions) els.apRestartActions.hidden = true;
+    updateApCaseSettingsTrigger();
     restoreOptionsCardHome();
   }
 
@@ -2869,10 +3033,10 @@
   // apart from "left at default" -- must run after renderAnalysisPreview/
   // applyStyleSelections/applyBatchReviewSelections have already populated the
   // DOM for this round. Reads via readStyleSelectionsFromDom, defined below
-  // but hoisted. Also covers #ap-settings-modal's own two pickers (模型 and
-  // 生成張數) -- those aren't part of readStyleSelectionsFromDom since they're
-  // not "style" picks, but changing either is just as much a real edit as the
-  // recipe/style/prompt fields.
+  // but hoisted. Also covers two of #ap-case-settings-modal's own pickers
+  // (模型 and 生成張數) -- those aren't part of readStyleSelectionsFromDom
+  // since they're not "style" picks, but changing either is just as much a
+  // real edit as the recipe/style/prompt fields.
   function captureInlineReviseSnapshot() {
     const { options, recipeChecked } = readStyleSelectionsFromDom();
     inlineReviseSnapshot = {
@@ -6244,7 +6408,7 @@
   // skipReview mirrors startSubmit's own flag: false routes through 分析
   // (analyze, pause for review) same as the upload page's 分析 button;
   // true routes through the combined 一鍵美化 flow same as els.startFullButton.
-  async function restartArchivedCase(sourceFile, sourceUrl, skipReview = false) {
+  async function restartArchivedCase(sourceFile, sourceUrl, skipReview = false, { settings = null } = {}) {
     let file = sourceFile;
     if (!file) {
       if (!sourceUrl) throw new Error("這筆紀錄沒有可重新上傳的原始照片。");
@@ -6272,6 +6436,18 @@
     // whatever it hasn't set up yet (procThumb's src, procTitle, the sub-
     // message rotation) still lands well within this same already-brief
     // window, same as before.
+    // resetApp just put every control back to the product default
+    // (resetSettingsToDefaults). For an archived case that is right -- it is
+    // being re-uploaded from scratch. For a debug-mode analysis-engine swap
+    // it is not: that restart is meant to change one value and hold the rest
+    // still, so the caller hands them over and they go onto the UPLOAD-page
+    // copies, which are the ones startSubmit actually reads.
+    if (settings) {
+      applyAnalysisModelOption(findAnalysisModelOption(settings.analysisModel), { includeUpload: true });
+      applyModelQualityOption(findModelQualityOption(settings.imageModelQuality), { includeUpload: true });
+      applyAspectRatioOption(findAspectRatioOption(settings.aspectRatio), { includeUpload: true });
+      applyAdvancedOptionsOption(settings.advancedOptions, "upload");
+    }
     showSection("processing");
     await setSelectedFile(file);
     void startSubmit({ skipReview });
@@ -6289,6 +6465,7 @@
     // showing in Run's old spot for as long as this archived case stays on
     // screen, instead of the case going dead-ended after the first dismiss.
     if (els.apRestartActions) els.apRestartActions.hidden = !canRestart;
+    updateApCaseSettingsTrigger();
     // Each restart choice gets its OWN #preflight-cost-modal at click time
     // (same row builders #start-btn/#start-full-btn use, since both re-enter
     // through the exact same startSubmit({skipReview}) path) instead of a
@@ -8870,23 +9047,37 @@
 
   // Results/analysis-preview page settings overlay -- same shape as
   // openSettingsModal/closeSettingsModal above, just toggling
-  // #ap-settings-modal's own hidden attribute instead. Every per-request
-  // control in here (分析模型/生成模型/長寬比/生成張數/人像設定) is this page's
-  // OWN copy, showing and changing the case currently open rather than the
-  // upload page's pending pick -- a change applies to the next edit without
-  // re-analyzing. #advanced-settings-fold is no longer borrowed in here; see
-  // #ap-advanced-settings-fold in index.html.
+  // #ap-settings-modal's own hidden attribute instead. App preferences only:
+  // every per-request control it used to hold (分析引擎/美化引擎/長寬比/
+  // 生成張數/人像設定) now lives in #ap-case-settings-modal, opened from
+  // the summary pill next to 美化 instead of from this shared gear. 兩階段美化
+  // stays here deliberately -- it is one switch shared by both pages
+  // (ensureTwoStageEditRowIn moves the single row between them), not a value
+  // a case carries, so splitting it per-case would mean the same mirrored-
+  // state problem 人像設定 already had to be split to avoid.
   function openApSettingsModal() {
     ensureTwoStageEditRowIn(els.apSettingsModalBody);
-    // Collapsed on every open, the way the borrowed fold was by
-    // ensureAdvancedSettingsFoldIn -- this copy is never reparented, so
-    // nothing else would reset an `open` left over from the last time.
-    if (els.apAdvancedSettingsFold) els.apAdvancedSettingsFold.open = false;
     if (els.apSettingsModal) els.apSettingsModal.hidden = false;
   }
 
   function closeApSettingsModal() {
     if (els.apSettingsModal) els.apSettingsModal.hidden = true;
+  }
+
+  // Per-case settings overlay (#ap-case-settings-modal) -- the pickers that
+  // used to sit in openApSettingsModal's own body. Opened from the summary
+  // pill beside 美化 rather than from the shared gear, because unlike the
+  // preferences left behind in that modal, everything in here is stamped onto
+  // this case's next edit and belongs next to the button that starts it.
+  function openApCaseSettingsModal() {
+    // Collapsed on every open, same as #ap-advanced-settings-fold gets in
+    // openApSettingsModal -- nothing else resets an `open` left from last time.
+    if (els.apAdvancedSettingsFold) els.apAdvancedSettingsFold.open = false;
+    if (els.apCaseSettingsModal) els.apCaseSettingsModal.hidden = false;
+  }
+
+  function closeApCaseSettingsModal() {
+    if (els.apCaseSettingsModal) els.apCaseSettingsModal.hidden = true;
   }
 
   // Theme palette is global to both settings modals and persists per browser.
@@ -9041,6 +9232,37 @@
   // from 最近照片) counts as its own page and gets its own one chance.
   let pageScrollHintDismissed = false;
 
+  // Mirrors the max-width the floating-Run rules are scoped to (styles.css);
+  // above it .ap-actions-row is in normal flow and shares nothing with this cue.
+  const FLOATING_RUN_MAX_WIDTH = 900;
+
+  // How far to lift #page-scroll-hint so it clears the floating Run band
+  // rather than centering itself straight through it -- see the
+  // --page-scroll-hint-lift comment in styles.css for why it collides at all.
+  // Measured, not a constant: the band holds 美化 (one pill) or
+  // #ap-restart-actions' 重新分析/重新一鍵美化 pair, either one alongside the
+  // settings icon, and that group wraps to a second row on a narrow screen --
+  // so the one offset that would be wrong is a fixed one. Called from
+  // updatePageScrollHint, which already forces a layout for scrollHeight, so
+  // this measurement rides along with that flush instead of adding its own.
+  let lastPageScrollHintLift = null;
+
+  function syncPageScrollHintLift() {
+    const group = els.resultsCanvasRow?.querySelector(".ap-actions-row .ap-settings-run-row");
+    const floating = !!group
+      && window.innerWidth <= FLOATING_RUN_MAX_WIDTH
+      && Array.from(group.children).some((el) => !el.hidden);
+    // +10 = .ap-actions-row's own gap, so the cue sits off the band by the
+    // same distance the band's own contents sit off each other.
+    const lift = floating ? `${Math.round(group.getBoundingClientRect().height) + 10}px` : "0px";
+    // Only on an actual change: this runs on every scroll event, and writing
+    // the same value back still invalidates style for the whole document.
+    if (lift !== lastPageScrollHintLift) {
+      lastPageScrollHintLift = lift;
+      document.documentElement.style.setProperty("--page-scroll-hint-lift", lift);
+    }
+  }
+
   function updatePageScrollHint() {
     const hint = els.pageScrollHint;
     if (!hint) return;
@@ -9069,6 +9291,7 @@
     // rounding, a shadow's bleed, the floating Run pill's reserved
     // padding-bottom landing a couple of px over) has nothing down there
     // worth pointing at, and a cue that appears for it reads as broken.
+    syncPageScrollHintLift();
     hint.hidden = document.documentElement.scrollHeight - window.innerHeight - window.scrollY <= 24;
   }
 
@@ -9484,6 +9707,18 @@
 
   function showBatchMainError(record) {
     hideAllBatchMainViews();
+    // The reason line below is written through the very same
+    // #batch-main-loading-text the rotating phrasings target (see
+    // setProcSub), so any rotation still running -- this record's own,
+    // now-dead one, or a different record's still-live one -- simply
+    // overwrote it a second or two later, leaving the card reading
+    // "AI 正在美化…" underneath a 處理失敗 title. Paused rather than merely
+    // stopped: saving the active record's position first (same bookkeeping
+    // showBatchMainLoading does when the view switches away from a record
+    // that hasn't finished) lets a genuinely still-running OTHER record pick
+    // its rotation back up where it left off when the user returns to it.
+    if (activeBatchRotationRecord) activeBatchRotationRecord.procSubIndex = procSubRotateIndex;
+    stopProcSubRotation();
     if (!els.batchMainLoading) return;
     els.batchMainLoading.hidden = false;
     els.batchMainLoading.classList.add("is-error");
@@ -10933,10 +11168,11 @@
     // not whatever an unrelated earlier upload had picked.
     demoSelectedNames.clear();
     updateDemoImagesConfirmBtn();
-    // #advanced-settings-fold (人像修正設定) may currently be on loan inside
-    // #ap-settings-modal-body (see openApSettingsModal) if the results page's
-    // own 設定 was opened -- move it back to its default home, inline under
-    // the upload page's drop zone, now that resetApp is returning there.
+    // #advanced-settings-fold (人像修正設定) may currently be sitting in the
+    // upload page's compact row rather than its normal home under the drop
+    // zone (setupCompactUploadSelectors moves it when the selectors wrap) --
+    // put it back now that resetApp is returning there. The results page no
+    // longer borrows it at all; that page has its own #ap-advanced-settings-fold.
     ensureAdvancedSettingsFoldIn(els.uploadInlineSettingsRow2);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     previewUrl = "";
@@ -10977,6 +11213,7 @@
     if (els.inlineAnalysisActions) els.inlineAnalysisActions.hidden = true;
     if (els.analysisPreview) els.analysisPreview.hidden = true;
     if (els.apRestartActions) els.apRestartActions.hidden = true;
+    updateApCaseSettingsTrigger();
     // Clears whatever showArchivedAnalysisNotice's readOnly lock left behind
     // (setAnalysisPreviewDisabled(true) on #analysis-preview /
     // #ap-options-card-inline -- see isCompatible). Those are the same
@@ -11613,6 +11850,13 @@
       if (e.target.dataset.close) closeApSettingsModal();
     });
   }
+  if (els.apCaseSettingsBtn) els.apCaseSettingsBtn.addEventListener("click", openApCaseSettingsModal);
+  if (els.apCaseSettingsModalClose) els.apCaseSettingsModalClose.addEventListener("click", closeApCaseSettingsModal);
+  if (els.apCaseSettingsModal) {
+    els.apCaseSettingsModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeApCaseSettingsModal();
+    });
+  }
   // Applied immediately on load (not just once the settings modal is first
   // opened) since a review panel can already be showing by the time the
   // user ever opens 設定.
@@ -11729,6 +11973,7 @@
     if (els.reportScreenshotModal && !els.reportScreenshotModal.hidden) closeReportScreenshotModal();
     if (els.settingsModal && !els.settingsModal.hidden) closeSettingsModal();
     if (els.apSettingsModal && !els.apSettingsModal.hidden) closeApSettingsModal();
+    if (els.apCaseSettingsModal && !els.apCaseSettingsModal.hidden) closeApCaseSettingsModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();

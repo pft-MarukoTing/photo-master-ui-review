@@ -305,8 +305,84 @@
     .ap-actions-row .ap-settings-run-row {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
+      gap: 3px;
       margin-left: auto;
+      /* Two children now (the settings icon + 美化), and this row sits inside
+         a panel that can be as narrow as the side-panel layout allows -- let
+         the icon drop onto its own line rather than pushing 美化 out of the
+         panel. Right-aligned on both lines so 美化 stays where it has always
+         been. */
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    /* #ap-case-settings-btn -- the case's own settings, one icon. It shares a
+       row with 美化, whose job is to be pressed; spelling the values out here
+       competed with that for width and attention, so they live in the button's
+       title/aria-label instead (updateApCaseSettingsTrigger, app.js) and the
+       button itself stays the size of the gear it replaces. A plain <button>
+       opening a modal rather than a <details> dropdown: the pickers inside are
+       themselves <details> with absolutely-positioned panels, and nesting those
+       would have them spill out of their own container -- the same reason
+       setupCompactUploadSelectors sends the upload page's compact selectors to
+       #upload-selector-modal instead of into its menu panel. */
+    /* Sliders rather than the header's own gear (#header-settings-btn) or the
+       sparkle on every model picker: with no label on the button the glyph is
+       the only thing naming it, and it must not read as either of the two
+       things it deliberately isn't -- the app-wide 設定, or one more model
+       picker. */
+    .ap-case-settings-trigger {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),.28), rgba(var(--accent-2-rgb),.16));
+      border: 1px solid rgba(var(--accent-rgb),.52);
+      border-radius: 50%;
+      color: var(--text-1);
+      box-shadow: 0 4px 14px rgba(var(--accent-rgb),.2), inset 0 1px 0 rgba(255,255,255,.18);
+      cursor: pointer;
+      transition: background .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s;
+    }
+    .ap-case-settings-trigger:hover {
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),.4), rgba(var(--accent-2-rgb),.24));
+      border-color: rgba(var(--accent-rgb),.72);
+      color: var(--text-1);
+      box-shadow: 0 8px 22px rgba(var(--accent-rgb),.24), inset 0 1px 0 rgba(255,255,255,.16);
+      transform: translateY(-2px);
+    }
+    .ap-case-settings-trigger:active { transform: translateY(0) scale(.96); }
+    .ap-case-settings-trigger:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 3px;
+    }
+    /* Shown by updateApCaseSettingsTrigger once the settings no longer match
+       what this case actually ran with -- i.e. the moment they stop describing
+       the image on screen and start describing the next edit. Cornered on the
+       icon like a notification dot, with a ring in the row's own background so
+       it reads as attached to the button rather than floating over it. */
+    .ap-case-settings-dirty {
+      position: absolute;
+      top: 3px;
+      right: 3px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 2px var(--card);
+    }
+    .ap-case-settings-trigger:has(.ap-case-settings-dirty:not([hidden])) {
+      background: linear-gradient(135deg, rgba(var(--accent-rgb),.36), rgba(var(--accent-2-rgb),.22));
+      border-color: rgba(var(--accent-rgb),.68);
+      color: var(--text-1);
+    }
+    /* Leading note in #ap-case-settings-modal-body -- .option-desc's own color
+       and size, just not squeezed into an .option-row's right-hand column. */
+    .ap-case-settings-note {
+      margin: 0 0 4px;
+      line-height: 1.6;
     }
     .analysis-preview-action-right:hover {
       box-shadow: 0 14px 36px rgba(var(--accent-rgb),.34);
@@ -5085,6 +5161,35 @@
                        margin-left:auto still lives on this wrapper (see
                        styles below) to keep Run right-aligned. -->
                   <div class="ap-settings-run-row">
+                    <!-- Opens this case's own settings (#ap-case-settings-modal).
+                         Deliberately NOT a .split-run pair with 美化 beside it:
+                         every .split-run in this app is two RUN actions
+                         (分析/一鍵美化, 重新分析/重新一鍵美化), so hanging
+                         "open a panel" off one would give the same component
+                         two meanings. One icon, sitting next to the action it
+                         configures.
+
+                         updateApCaseSettingsTrigger (app.js) owns its title,
+                         its dirty dot and its `hidden`: the last follows
+                         whichever of #inline-analysis-continue-btn /
+                         #ap-restart-actions is currently showing, since this
+                         button is only ever meaningful next to one of those. -->
+                    <button id="ap-case-settings-btn" class="ap-case-settings-trigger" type="button" hidden>
+                      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 7h10M18 7h2M4 17h4M12 17h8"
+                          stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                        <circle cx="16" cy="7" r="2.2" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="10" cy="17" r="2.2" stroke="currentColor" stroke-width="1.8"/>
+                      </svg>
+                      <!-- The "these no longer match the image on screen" hint.
+                           A dot, not a word: it sits on a row whose whole job is
+                           the 美化 button, and a label there would compete with
+                           it for attention while saying less than the tooltip
+                           already does. updateApCaseSettingsTrigger (app.js)
+                           spells the state out in the button's title/aria-label,
+                           which is also where the values themselves live now. -->
+                      <span id="ap-case-settings-dirty" class="ap-case-settings-dirty" hidden></span>
+                    </button>
                     <!-- Moved out of #inline-analysis-actions (which keeps
                          just the cancel button) -- sits at the right end of
                          this pill row instead. Own hidden attribute now (was
@@ -6029,9 +6134,8 @@
      #advanced-settings-fold, 人像修正設定) moved out to sit inline under the
      upload page's drop zone instead (#upload-inline-settings, this same
      .upload-section markup) since those are only ever relevant pre-analysis;
-     this modal is still their shared home whenever the results page's own
-     #ap-settings-modal reparents #advanced-settings-fold out of that inline
-     row temporarily (ensureAdvancedSettingsFoldIn, app.js). -->
+     the results page keeps its own separate copies of all of them, so
+     nothing here is shared with it any more. -->
 <div id="settings-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
@@ -6095,13 +6199,12 @@
     <!-- Static markup position only -- ensureAdvancedSettingsFoldIn (app.js)
          moves this out of here on load, into its real default home inline
          under the upload page's drop zone (#upload-inline-settings, re-themed
-         into a pill there), since it's only ever relevant pre-analysis. Still
-         one shared fold, not a separate copy of these toggles per page: the
-         results page's own #ap-settings-modal borrows it back in
-         (openApSettingsModal, app.js) while that modal is open, and resetApp
-         moves it back to the upload row once the results screen is left
-         behind. Always collapsed when moved, regardless of which home it's
-         in. -->
+         into a pill there), since it's only ever relevant pre-analysis. This
+         is the UPLOAD page's copy only -- the results page has its own
+         #ap-advanced-settings-fold (in #ap-case-settings-modal), so a case's
+         toggles and a pending upload's no longer share state. The only
+         remaining moves are within the upload page itself
+         (setupCompactUploadSelectors). Always collapsed when moved. -->
     <details id="advanced-settings-fold" class="settings-fold">
       <summary>
         <!-- Shown in both homes: as the modal section title or as the upload
@@ -6271,16 +6374,15 @@
 <!-- Results/analysis-preview page settings overlay: opened by
      #header-settings-btn (see openContextSettingsModal/openApSettingsModal/
      closeApSettingsModal in app.js) -- same backdrop+box+close pattern as
-     #settings-modal above. Holds the 分析模型/生成模型/長寬比/生成張數 pickers
-     that used to sit inline in #ap-options-card-inline. 長寬比 mirrors the
-     upload page's own picker (applyAspectRatioChange in app.js) and applies
-     to the edit only -- the analysis is ratio-neutral and is never re-run
-     for it; the backend settles the output ratio per edit in
-     resolve_output_aspect_ratio. 分析模型 is shown read-only here
-     (`is-locked`, no unlock toggle -- see the inline `.ap-style-item.is-locked`
-     rules above) since Step 2 has already run by the time this modal is
-     reachable; changing it would not re-analyze, so only the upload page's
-     own #analysis-model picker is actually selectable. -->
+     #settings-modal above. App preferences ONLY now (主題配色/面板排列/
+     花費提示, plus 兩階段美化 reparented in by ensureTwoStageEditRowIn):
+     every per-request picker this used to hold (分析引擎/美化引擎/長寬比/
+     生成張數/人像設定) moved to #ap-case-settings-modal below, reached
+     from the summary pill sitting right next to 美化. The dividing line is
+     whether a control ends up in the job's own params (stamped into history,
+     see record_history) or is just how this browser likes to display things
+     -- one belongs to the case, the other to the app, and they were
+     previously indistinguishable behind one gear. -->
 <div id="ap-settings-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-settings-modal-title">
@@ -6301,6 +6403,78 @@
         <button type="button" class="theme-option is-selected" data-theme="caramel" aria-pressed="true"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
       </div>
     </div>
+    <!-- Only in this modal (analyze/results page) -- the layout it controls
+         (修圖建議面板 beside vs. below the preview) only exists once analysis
+         is showing, so it doesn't belong in the upload page's #settings-modal.
+         No longer reparented between modals (ensureSidePanelLayoutRowIn used
+         to move it in from #settings-modal-body); it lives only here now,
+         permanently. Persisted client-side (localStorage, SIDE_PANEL_LAYOUT_KEY
+         in app.js) since it's a display preference, not a per-request option
+         like the pickers above -- applies immediately to an already-open
+         review panel via getOptionsCardTarget/moveOptionsCardTo, no reload
+         needed. Only changes anything at >900px width (see styles.css's
+         "side-panel layout" section) -- narrower viewports keep today's
+         stacked-below layout regardless of this toggle, same breakpoint
+         .showing-analysis already collapses at. -->
+    <label id="side-panel-layout-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">分析面板顯示於預覽右側</span>
+        <span class="option-desc">寬螢幕時，將美化建議面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。</span>
+      </div>
+      <label class="ios-switch">
+        <input id="side-panel-layout-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
+    <!-- Same toggle as #settings-modal-body's own preflight-cost-toggle-row
+         (shared class, see its comment there) -- reachable from here too
+         since the results page's own gear button opens THIS modal, not
+         #settings-modal (openContextSettingsModal, app.js). -->
+    <label id="ap-preflight-cost-toggle-row" class="option-row">
+      <div class="option-text">
+        <span class="option-label">分析／美化前顯示預計花費</span>
+        <span class="option-desc">開啟後，按下「分析」「一鍵美化」「美化」時會先跳出預計花費供確認；關閉則直接送出，不再顯示相關內容。</span>
+      </div>
+      <label class="ios-switch">
+        <input class="preflight-cost-toggle" type="checkbox">
+        <span class="ios-track"><span class="ios-thumb"></span></span>
+      </label>
+    </label>
+  </div>
+  </div>
+</div>
+
+<!-- Per-case settings overlay, opened by #ap-case-settings-btn (the icon
+     next to 美化 in .ap-settings-run-row). Everything in here is a
+     per-request value that gets stamped onto this case's next edit (see
+     record_history's params, backend/services/account.py); everything that
+     is merely an app preference (主題配色/面板排列/花費提示/兩階段美化) stays
+     in #ap-settings-modal above. That split is the whole point of this
+     modal: the settings a case runs with now sit on the same row as the
+     button that runs them, one click away with their values in the trigger's
+     tooltip, instead of being buried among preferences behind the shared gear.
+
+     The controls moved here verbatim from #ap-settings-modal-body -- same
+     ids, same wiring (populate*/wireOptionPicker/applyXOption in app.js all
+     look elements up by id, not by parent, so none of them needed touching),
+     and the same .settings-modal-body shell, so each picker's own
+     absolutely-positioned panel lays out exactly as it did before the move.
+
+     分析引擎 stays read-only (`is-locked`) in the release build for the same
+     reason it always was -- Step 2 has already run by the time this is
+     reachable. In debug mode it IS selectable, since that build offers other
+     analysis models worth comparing; picking one there re-analyzes the photo
+     from scratch rather than silently mislabeling the analysis on screen
+     (see els.apAnalysisModelSelect's change listener in app.js). -->
+<div id="ap-case-settings-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="ap-case-settings-modal-title">
+    <div class="error-modal-hdr">
+      <span id="ap-case-settings-modal-title" class="settings-modal-title">分析與美化設定</span>
+      <button id="ap-case-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div id="ap-case-settings-modal-body" class="settings-modal-body">
+    <p class="option-desc ap-case-settings-note" id="ap-case-settings-note">查看或調整這張照片使用的分析模型、美化引擎與輸出選項。分析模型變更後會重新分析；其他設定會套用於下一次美化。</p>
     <div class="option-pill-group">
       <span class="option-pill-label">分析引擎</span>
       <details class="ap-style-item is-locked" name="ap-result-option-picker" id="ap-analysis-model-picker">
@@ -6468,44 +6642,7 @@
         </select>
       </label>
     </div>
-    <!-- Only in this modal (analyze/results page) -- the layout it controls
-         (修圖建議面板 beside vs. below the preview) only exists once analysis
-         is showing, so it doesn't belong in the upload page's #settings-modal.
-         No longer reparented between modals (ensureSidePanelLayoutRowIn used
-         to move it in from #settings-modal-body); it lives only here now,
-         permanently. Persisted client-side (localStorage, SIDE_PANEL_LAYOUT_KEY
-         in app.js) since it's a display preference, not a per-request option
-         like the pickers above -- applies immediately to an already-open
-         review panel via getOptionsCardTarget/moveOptionsCardTo, no reload
-         needed. Only changes anything at >900px width (see styles.css's
-         "side-panel layout" section) -- narrower viewports keep today's
-         stacked-below layout regardless of this toggle, same breakpoint
-         .showing-analysis already collapses at. -->
-    <label id="side-panel-layout-row" class="option-row">
-      <div class="option-text">
-        <span class="option-label">分析面板顯示於預覽右側</span>
-        <span class="option-desc">寬螢幕時，將美化建議面板顯示在預覽圖旁邊，而不是疊在下方；視窗較窄時仍會自動改回目前的排列。</span>
-      </div>
-      <label class="ios-switch">
-        <input id="side-panel-layout-toggle" type="checkbox">
-        <span class="ios-track"><span class="ios-thumb"></span></span>
-      </label>
-    </label>
-    <!-- Same toggle as #settings-modal-body's own preflight-cost-toggle-row
-         (shared class, see its comment there) -- reachable from here too
-         since the results page's own gear button opens THIS modal, not
-         #settings-modal (openContextSettingsModal, app.js). -->
-    <label id="ap-preflight-cost-toggle-row" class="option-row">
-      <div class="option-text">
-        <span class="option-label">分析／美化前顯示預計花費</span>
-        <span class="option-desc">開啟後，按下「分析」「一鍵美化」「美化」時會先跳出預計花費供確認；關閉則直接送出，不再顯示相關內容。</span>
-      </div>
-      <label class="ios-switch">
-        <input class="preflight-cost-toggle" type="checkbox">
-        <span class="ios-track"><span class="ios-thumb"></span></span>
-      </label>
-    </label>
-  </div>
+    </div>
   </div>
 </div>
 

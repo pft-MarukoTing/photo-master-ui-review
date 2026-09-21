@@ -287,6 +287,18 @@ window.PhotoAgentDom = (() => {
     apSettingsModal: document.querySelector("#ap-settings-modal"),
     apSettingsModalClose: document.querySelector("#ap-settings-modal-close"),
     apSettingsModalBody: document.querySelector("#ap-settings-modal-body"),
+    // Per-case settings, split out of #ap-settings-modal above: that one keeps
+    // the app preferences, this one holds every value that gets stamped onto
+    // the case's next edit. #ap-case-settings-btn is its trigger, living in
+    // .ap-settings-run-row next to 美化; the values themselves are written
+    // onto its title/aria-label, and #ap-case-settings-dirty is the dot that
+    // appears once they stop matching the image on screen (both driven by
+    // updateApCaseSettingsTrigger, app.js).
+    apCaseSettingsBtn: document.querySelector("#ap-case-settings-btn"),
+    apCaseSettingsDirty: document.querySelector("#ap-case-settings-dirty"),
+    apCaseSettingsModal: document.querySelector("#ap-case-settings-modal"),
+    apCaseSettingsModalClose: document.querySelector("#ap-case-settings-modal-close"),
+    apCaseSettingsModalBody: document.querySelector("#ap-case-settings-modal-body"),
     // The results page's own 人像設定 copy, independent of the upload page's
     // four toggles above -- see #ap-advanced-settings-fold in index.html.
     apAdvancedSettingsFold: document.querySelector("#ap-advanced-settings-fold"),

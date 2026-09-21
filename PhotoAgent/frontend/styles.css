@@ -2688,7 +2688,16 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   right: 0;
   width: fit-content;
   margin-inline: auto;
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  /* --page-scroll-hint-lift is 0 except while the floating Run band shares
+     this strip of viewport (below 900px, see the rule above). That band is
+     anchored to the right gutter while this centers itself, so on a narrow
+     screen the two run into each other -- 美化 on its own already came within
+     a pixel of this cue at 360px, and the settings icon beside it, or
+     #ap-restart-actions' 重新分析/重新一鍵美化 pair, overlaps it outright. The
+     lift puts the cue on its own line above the band, and is measured rather
+     than a constant because that band's height depends on which of those is
+     showing and whether it wrapped (syncPageScrollHintLift, app.js). */
+  bottom: calc(16px + var(--page-scroll-hint-lift, 0px) + env(safe-area-inset-bottom, 0px));
   display: flex;
   align-items: center;
   /* Type and icon sit well above .ap-style-scroll-hint's, which is the same
@@ -4462,6 +4471,10 @@ body[data-theme="caramel"] .recipe-tags span {
     padding: 0 14px;
     font-size: 13px;
     gap: 5px;
+  }
+  .results-canvas-row.showing-analysis #results-canvas-top #ap-options-card-inline .ap-case-settings-trigger {
+    width: 30px;
+    height: 30px;
   }
   /* #ap-restart-actions (Run's archived-case stand-in) shrunk to match, same
      proportions as .analysis-preview-action above. */
