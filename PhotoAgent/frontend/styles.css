@@ -2613,6 +2613,25 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: rgba(var(--on-surface-rgb),.45);
 }
 .version-strip-note svg { flex: 0 0 auto; }
+/* Touch replacement for the hover preview (.version-tile-preview disables
+   itself below @media max-width:560px, since hover has no meaning on touch):
+   opens #version-strip-preview-modal instead. Hidden by default, same as
+   .recent-photos-history-btn, and shown only at that same breakpoint. */
+.version-strip-preview-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border-2, var(--border));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.version-strip-preview-btn:hover { opacity: .7; }
 /* Two lanes side by side: the origin+divider fence (fixed, never scrolls)
    and .version-strip-versions (its own scroll container, built below). Kept
    as two elements rather than one shared overflow-x:auto -- with a single
@@ -2786,6 +2805,45 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+/* Floating enlarged copy of whichever #version-strip-track thumbnail the
+   pointer is resting on -- see showVersionTilePreview/hideVersionTilePreview,
+   app.js. position:fixed and JS-computed top/left (not CSS hover) because the
+   tile row scrolls inside an overflow:hidden lane that would otherwise clip
+   it, and because the popup has to flip above/below depending on where the
+   tile sits in the viewport. pointer-events:none so it can never itself
+   become the thing the mouse is over -- that would fire mouseleave on the
+   tile underneath and make the popup flicker shut the instant it appears. */
+.version-tile-preview {
+  position: fixed;
+  z-index: 60;
+  width: 168px;
+  height: 168px;
+  padding: 4px;
+  border: 1px solid var(--border-2, var(--border));
+  border-radius: var(--radius);
+  background: var(--card-2);
+  box-shadow: var(--shadow-lg);
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.94);
+  transition: opacity .12s ease, transform .12s ease;
+}
+.version-tile-preview.is-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+.version-tile-preview img {
+  /* contain, not cover: the row tiles crop to a square on purpose (a dense
+     strip of avatars), but this popup exists specifically to let the user
+     see more of the image than that crop shows -- cropping it again here
+     would defeat the point. The frame stays square; any letterboxing is
+     just the popup's own --card-2 background showing through. */
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: calc(var(--radius) - 4px);
+}
 @media (max-width: 560px) {
   .version-tile { width: 54px; height: 54px; }
   .version-origin-tile { width: 54px; height: 54px; }
@@ -2794,6 +2852,37 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   .version-strip { margin: 10px -12px -12px; padding: 8px 10px; }
   .version-strip-track { gap: 10px; }
   .version-strip-versions { gap: 10px; }
+  /* Hover has no meaning on touch, and the popup's own viewport-relative
+     math is tuned for a mouse-driven desktop layout -- simplest to just not
+     grow the feature at this width rather than debug it against touch. */
+  .version-tile-preview { display: none; }
+  .version-strip-preview-btn { display: inline-flex; }
+}
+
+/* #version-strip-preview-modal -- the mobile tap-to-preview modal opened by
+   .version-strip-preview-btn above. Reuses .version-tile/.version-origin-tile
+   wholesale (renderVersionStripPreviewGrid, app.js builds the exact same
+   markup as the strip itself) and just enlarges them here via descendant
+   overrides, so current/disabled/run-count styling all come for free instead
+   of being duplicated. */
+.version-strip-preview-modal-box {
+  width: min(420px, calc(100vw - 40px));
+  max-height: min(72vh, 560px);
+  display: flex;
+  flex-direction: column;
+}
+.version-strip-preview-modal-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 4px 2px 2px;
+  overflow-y: auto;
+}
+.version-strip-preview-modal-grid .version-tile,
+.version-strip-preview-modal-grid .version-origin-tile {
+  width: 92px;
+  height: 92px;
 }
 
 .result-case-times {

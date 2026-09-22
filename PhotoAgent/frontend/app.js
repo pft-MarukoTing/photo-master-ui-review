@@ -10185,6 +10185,45 @@
   // (stepping between two images of one case) just moves .is-current, so the
   // tiles' <img>s are never re-created and never re-request their thumbnails.
   let versionStripRuns = null;
+  // Mirrors whichever currentIdx the last renderVersionStrip call was given --
+  // kept around purely so openVersionStripPreviewModal (mobile's tap
+  // alternative to the hover preview, see below) can mark the right tile
+  // .is-current without needing its own copy of that argument threaded in.
+  let versionStripCurrentIdx = null;
+
+  // Positions #version-tile-preview over whichever tile the pointer is on,
+  // reusing that tile's own <img src> (see the element's comment in
+  // index.html for why that needs no extra fetch). Measured off
+  // getBoundingClientRect, same reasoning as revealVersionTile below: the
+  // tile's offsetParent is not the fixed-position popup's frame of
+  // reference, so only viewport-relative coordinates line up.
+  function showVersionTilePreview(tile, src) {
+    if (!els.versionTilePreview || !els.versionTilePreviewImg) return;
+    els.versionTilePreviewImg.src = src;
+    const popup = els.versionTilePreview;
+    const rect = tile.getBoundingClientRect();
+    // Rendered once off-screen first so its own (fixed 168px) size is known
+    // before the centring math below runs -- offsetWidth/Height on a
+    // display:none-free, opacity:0 element are still real, so this is just
+    // the popup's own box, not a layout read of the tile.
+    const popupW = popup.offsetWidth || 168;
+    const popupH = popup.offsetHeight || 168;
+    const gap = 10;
+    let top = rect.top - popupH - gap;
+    // Flips below the tile once there isn't room above it -- the strip sits
+    // near the bottom of the compare card, so "above" is right for most
+    // tiles but wrong for one sitting near the very top of the viewport.
+    if (top < 8) top = rect.bottom + gap;
+    let left = rect.left + rect.width / 2 - popupW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - popupW - 8));
+    popup.style.top = `${Math.round(top)}px`;
+    popup.style.left = `${Math.round(left)}px`;
+    popup.classList.add("is-visible");
+  }
+
+  function hideVersionTilePreview() {
+    if (els.versionTilePreview) els.versionTilePreview.classList.remove("is-visible");
+  }
 
   function hideVersionStrip() {
     if (!els.versionStrip) return;
@@ -10192,6 +10231,9 @@
     els.versionStrip.classList.remove("is-busy");
     if (els.versionStripTrack) els.versionStripTrack.textContent = "";
     versionStripRuns = null;
+    versionStripCurrentIdx = null;
+    hideVersionTilePreview();
+    closeVersionStripPreviewModal();
   }
 
   // One tile per result image, grouped under its version's label, oldest
@@ -10238,6 +10280,8 @@
       originImg.alt = "";
       originImg.loading = "lazy";
       originTile.append(originImg);
+      originTile.addEventListener("mouseenter", () => showVersionTilePreview(originTile, originImg.src));
+      originTile.addEventListener("mouseleave", hideVersionTilePreview);
       const originLabel = document.createElement("span");
       originLabel.className = "version-group-label";
       originLabel.textContent = "原圖";
@@ -10301,10 +10345,13 @@
         tile.title = runSwitcherLabel(runs, idx);
         tile.setAttribute("aria-label", tile.title);
         tile.addEventListener("click", () => selectRunAt(idx));
+        tile.addEventListener("mouseenter", () => showVersionTilePreview(tile, img.src));
+        tile.addEventListener("mouseleave", hideVersionTilePreview);
         groupTiles.append(tile);
       });
     }
     const current = runs[currentIdx];
+    versionStripCurrentIdx = currentIdx;
     if (els.versionStripCount) {
       els.versionStripCount.textContent = current && current.versionTotal
         ? `第 ${current.versionNumber}／${current.versionTotal} 組`
@@ -10326,6 +10373,87 @@
       // only just been appended and the track has no scroll extent yet.
       if (isCurrent) requestAnimationFrame(() => revealVersionTile(tile));
     });
+  }
+
+  // Touch has no hover, so .version-tile-preview turns itself off below the
+  // 560px breakpoint (see styles.css) and #version-strip-preview-btn (shown
+  // only at that same breakpoint, next to .version-strip-note) opens this
+  // modal instead -- a grid of the same tiles at roughly 1.5x size, reusing
+  // .version-tile/.version-origin-tile wholesale (only their width/height are
+  // overridden, in .version-strip-preview-modal-grid) so current/disabled/
+  // run-count styling all come for free. Rebuilt from scratch on every open
+  // rather than kept in sync like the strip's own tiles -- it's a disposable
+  // view of whatever versionStripRuns/versionStripCurrentIdx already hold, not
+  // something that needs to track a running job the way the strip does.
+  function renderVersionStripPreviewGrid() {
+    if (!els.versionStripPreviewModalGrid || !versionStripRuns) return;
+    const runs = versionStripRuns;
+    els.versionStripPreviewModalGrid.textContent = "";
+    const origin = document.createElement("div");
+    origin.className = "version-origin";
+    const originTile = document.createElement("div");
+    originTile.className = "version-origin-tile";
+    const originImg = document.createElement("img");
+    originImg.src = originalImgThumbUrl || sourceThumbnailUrl(runs[0].jobId);
+    originImg.alt = "";
+    originImg.loading = "lazy";
+    originTile.append(originImg);
+    const originLabel = document.createElement("span");
+    originLabel.className = "version-group-label";
+    originLabel.textContent = "原圖";
+    origin.append(originTile, originLabel);
+    els.versionStripPreviewModalGrid.append(origin);
+
+    let group = null;
+    let groupTiles = null;
+    let groupVersionId = null;
+    runs.forEach((run, idx) => {
+      if (!group || run.versionId !== groupVersionId) {
+        groupVersionId = run.versionId;
+        group = document.createElement("div");
+        group.className = "version-group";
+        groupTiles = document.createElement("div");
+        groupTiles.className = "version-group-tiles";
+        group.append(groupTiles);
+        els.versionStripPreviewModalGrid.append(group);
+      }
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "version-tile";
+      if (idx === versionStripCurrentIdx) tile.classList.add("is-current");
+      const img = document.createElement("img");
+      img.src = resultThumbnailUrl(run.jobId, { run: run.sourceRun });
+      img.alt = "";
+      img.loading = "lazy";
+      tile.append(img);
+      if (run.runsInVersion > 1) {
+        const chip = document.createElement("span");
+        chip.className = "version-tile-run";
+        chip.textContent = String(run.runInVersion);
+        tile.append(chip);
+      }
+      tile.title = runSwitcherLabel(runs, idx);
+      tile.setAttribute("aria-label", tile.title);
+      tile.disabled = !isSelectableRun(run);
+      // Tapping both selects the version AND closes the modal -- there's no
+      // reason to make a touch user close this, look at the (now current)
+      // strip tile, then tap it again just to actually switch to it.
+      tile.addEventListener("click", () => {
+        selectRunAt(idx);
+        closeVersionStripPreviewModal();
+      });
+      groupTiles.append(tile);
+    });
+  }
+
+  function openVersionStripPreviewModal() {
+    if (!els.versionStripPreviewModal || !versionStripRuns) return;
+    renderVersionStripPreviewGrid();
+    els.versionStripPreviewModal.hidden = false;
+  }
+
+  function closeVersionStripPreviewModal() {
+    if (els.versionStripPreviewModal) els.versionStripPreviewModal.hidden = true;
   }
 
   // Scrolls the strip only when the tile isn't already fully in view, and
@@ -12289,6 +12417,13 @@
       if (e.target.dataset.close) closeChangelogModal();
     });
   }
+  if (els.versionStripPreviewBtn) els.versionStripPreviewBtn.addEventListener("click", openVersionStripPreviewModal);
+  if (els.versionStripPreviewModalClose) els.versionStripPreviewModalClose.addEventListener("click", closeVersionStripPreviewModal);
+  if (els.versionStripPreviewModal) {
+    els.versionStripPreviewModal.addEventListener("click", (e) => {
+      if (e.target.dataset.close) closeVersionStripPreviewModal();
+    });
+  }
   els.resetButton.addEventListener("click", resetApp);
   if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", resetApp);
   if (els.compareToggleBtn) {
@@ -12578,6 +12713,7 @@
     if (els.apCaseSettingsModal && !els.apCaseSettingsModal.hidden) closeApCaseSettingsModal();
     if (els.promptsModal && !els.promptsModal.hidden) closePromptsModal();
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
+    if (els.versionStripPreviewModal && !els.versionStripPreviewModal.hidden) closeVersionStripPreviewModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
     if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();

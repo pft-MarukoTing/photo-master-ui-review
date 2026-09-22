@@ -5539,6 +5539,17 @@
                   </svg>
                   每次修圖皆由原圖重新產生
                 </span>
+                <!-- Mobile-only (@media max-width: 560px, styles.css): hover has no
+                     meaning on touch, so .version-tile-preview disables itself at
+                     that width -- this button is the touch replacement, opening
+                     #version-strip-preview-modal instead. Same icon-button pattern
+                     as #recent-photos-history-btn. -->
+                <button id="version-strip-preview-btn" class="version-strip-preview-btn" type="button" aria-label="放大檢視縮圖" title="放大檢視縮圖">
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M20 20l-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                  </svg>
+                </button>
               </div>
               <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label="這張照片的美化紀錄"></div>
             </div>
@@ -6114,6 +6125,22 @@
       <button id="changelog-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="changelog-modal-body" class="changelog-modal-body"></div>
+  </div>
+</div>
+
+<!-- Mobile tap-to-preview modal for #version-strip-track, opened by
+     #version-strip-preview-btn (renderVersionStripPreviewGrid, app.js).
+     Same shared backdrop+box modal shape as #changelog-modal above; the grid
+     body reuses .version-tile/.version-origin-tile wholesale at a larger size
+     (see .version-strip-preview-modal-grid, styles.css). -->
+<div id="version-strip-preview-modal" class="error-modal" hidden>
+  <div class="error-modal-backdrop" data-close="1"></div>
+  <div class="error-modal-box version-strip-preview-modal-box" role="dialog" aria-modal="true" aria-labelledby="version-strip-preview-modal-title">
+    <div class="error-modal-hdr">
+      <span id="version-strip-preview-modal-title" class="notice-modal-title">美化紀錄</span>
+      <button id="version-strip-preview-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
+    </div>
+    <div id="version-strip-preview-modal-grid" class="version-strip-preview-modal-grid"></div>
   </div>
 </div>
 
@@ -6695,6 +6722,22 @@
   <div class="download-progress-track">
     <div id="download-progress-fill" class="download-progress-fill"></div>
   </div>
+</div>
+
+<!-- Floating preview shown while the pointer rests on a #version-strip-track
+     thumbnail (origin tile or a version tile) -- see showVersionTilePreview,
+     app.js. Lives at the top level rather than inside the strip because
+     .version-strip-versions clips its contents to scroll the row
+     (overflow-x:auto/overflow-y:hidden); position:fixed only escapes that if
+     the element isn't a descendant of the clipping box in the first place.
+     Reuses the hovered tile's own <img src>, which the thumbnail endpoint
+     already serves at up to 320px (HISTORY_THUMBNAIL_MAX_SIDE) -- plenty for
+     a slightly-larger preview with no extra network request.
+     No [hidden] attribute: staying opacity:0 rather than display:none is what
+     lets the show/hide transition in styles.css actually animate, and
+     pointer-events:none already keeps it inert while invisible. -->
+<div id="version-tile-preview" class="version-tile-preview" aria-hidden="true">
+  <img id="version-tile-preview-img" alt="">
 </div>
 
 <!-- Shown by update-check.js when the server reports a newer frontend or
