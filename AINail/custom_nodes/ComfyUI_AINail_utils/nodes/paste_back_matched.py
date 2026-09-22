@@ -64,6 +64,47 @@ def mask_intersection_area(mask_a, mask_b, threshold=0.5):
     return (a & b).sum().item()
 
 
+def merge_overlapping_masks(masks, containment_thresh=0.9, threshold=0.5):
+    """Union together near-duplicate detections of the same object.
+
+    SAM3 sometimes emits two boxes/masks for one physical nail: a large one
+    covering the whole nail and a small one nested almost entirely inside it
+    (covering only part of it). Left as-is, the smaller mask can win a 1:1
+    match by IoU purely by chance, leaving the true full-extent mask (and
+    the pixels it alone covers) unused. Merge any pair where the smaller
+    mask's containment inside the larger one (intersection / smaller_area)
+    is at least `containment_thresh`, replacing both with their union, and
+    repeat until no more pairs qualify.
+    """
+    n = masks.shape[0]
+    if n <= 1:
+        return masks
+    m = masks
+    changed = True
+    while changed and m.shape[0] > 1:
+        n = m.shape[0]
+        flat = (m > threshold).float().reshape(n, -1)
+        areas = flat.sum(dim=1)
+        inter = flat @ flat.T
+        changed = False
+        for i in range(n):
+            for k in range(i + 1, n):
+                min_area = min(areas[i].item(), areas[k].item())
+                if min_area <= 0:
+                    continue
+                containment = inter[i, k].item() / min_area
+                if containment >= containment_thresh:
+                    merged = torch.max(m[i], m[k])
+                    keep = [idx for idx in range(n) if idx not in (i, k)]
+                    rest = m[keep] if keep else m[:0]
+                    m = torch.cat([rest, merged.unsqueeze(0)], dim=0)
+                    changed = True
+                    break
+            if changed:
+                break
+    return m
+
+
 class PasteBackMatched:
     """Paste generated nail crops back onto the original image, restricted to
     nails that actually existed in the pre-generation crop.
@@ -85,6 +126,11 @@ class PasteBackMatched:
     (nail/finger overlap area more than `finger_overlap_ratio`x larger after
     generation), the generated nail likely bled onto the finger — that nail's
     mask is excluded from pasting.
+
+    Before matching, near-duplicate detections of the same generated nail
+    (e.g. a small box nested almost entirely inside a larger one) are merged
+    by union (see `merge_overlapping_masks`), so the smaller one can't win a
+    match away from the true full-extent mask.
 
     For each hand:
       1. Match nail_masks_1[i] <-> nail_masks_2[j] by greedy highest-mask-IoU
@@ -141,6 +187,7 @@ class PasteBackMatched:
                 "dilate_pixels": ("INT", {"default": 10, "min": 0, "max": 64, "step": 1}),
                 "min_iou": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "finger_overlap_ratio": ("FLOAT", {"default": 3.0, "min": 1.0, "max": 20.0, "step": 0.1}),
+                "dedup_containment_thresh": ("FLOAT", {"default": 0.9, "min": 0.5, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -154,13 +201,15 @@ class PasteBackMatched:
                    crop_images, generated_images,
                    nail_boxes_1, nail_boxes_2, nail_masks_1, nail_masks_2,
                    finger_boxes, finger_masks,
-                   dilate_pixels, min_iou, finger_overlap_ratio):
+                   dilate_pixels, min_iou, finger_overlap_ratio,
+                   dedup_containment_thresh):
         orig = original_image[0].clone().float()   # [B, H, W, C]
         crops_info   = json.loads(crop_info[0])
         resizes_info = json.loads(resize_info[0])
         dilate_px    = dilate_pixels[0]
         min_iou_val  = min_iou[0]
         overlap_ratio = finger_overlap_ratio[0]
+        dedup_thresh = dedup_containment_thresh[0]
 
         for j, gen_image in enumerate(generated_images):
             c_info = crops_info[j]
@@ -175,6 +224,11 @@ class PasteBackMatched:
             hand_finger_masks = finger_masks[j]
             if hand_finger_masks.dim() == 2:
                 hand_finger_masks = hand_finger_masks.unsqueeze(0)
+
+            # Collapse near-duplicate detections of the same generated nail (e.g. a
+            # small box nested inside a large one) before matching, so the smaller
+            # one can't win a match away from the true full-extent mask.
+            hand_nail_masks_2 = merge_overlapping_masks(hand_nail_masks_2, dedup_thresh)
 
             nail_matches = match_by_iou_matrix(
                 mask_iou_matrix(hand_nail_masks_1, hand_nail_masks_2), min_iou_val
