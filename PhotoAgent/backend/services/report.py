@@ -30,7 +30,10 @@ def _case_for_report(username, job_id, image_key=None):
     from history availability just like screenshot upload already does."""
     try:
         if image_key:
-            case = get_history_entry(username, image_key)
+            # include_versions=False: a report only needs the case's lifecycle
+            # timestamps, and loading every version of it would read a second
+            # key for nothing.
+            case = get_history_entry(username, image_key, include_versions=False)
             if case:
                 return case
         return get_history_entry_for_job(username, job_id)

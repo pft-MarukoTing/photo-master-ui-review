@@ -1335,16 +1335,24 @@ window.PhotoAgentResults = (() => {
       // straight from the untouched original verdict and silently show the
       // toggle as off again.
       const wasUserForced = !!match._user_forced;
+      // The mirror of _user_forced (buildEffectiveAnalysis, app.js): the user
+      // turned OFF something the analyzer HAD flagged. Needed because that
+      // same write overwrites the verdict it overrides -- should_fix goes
+      // true -> false -- so without this a later version could not tell "the
+      // analyzer found nothing" (無需修正) from "the user said don't"
+      // (已設定不修正), and smile, whose adjust_safe is left flagged instead,
+      // came back looking as though the choice had never been made.
+      const wasUserDisabled = !isBodyReshape && !!match._user_disabled;
       // The "set all" global lock (#advanced-settings-fold's toggle for this
       // category) is applied at render time in buildPersonIssueItems below,
       // via faceIssueGloballyEnabled/reviewAdvancedOptions -- not baked in
       // here. So this stays the plain per-analysis verdict.
       const flagged = isBodyReshape
         ? match.should_edit !== false
-        : match[category.flagField] === category.flagWhen;
+        : match[category.flagField] === category.flagWhen || wasUserDisabled;
       const allowed = isBodyReshape
         ? match.should_edit !== false && !bodyDisabled
-        : match[category.flagField] === category.flagWhen || wasUserForced;
+        : (match[category.flagField] === category.flagWhen || wasUserForced) && !wasUserDisabled;
       return {
         label: category.label,
         flagged,

@@ -512,6 +512,31 @@ window.PhotoAgentApi = (() => {
     return data; // { user, jobs: [{ job_id, path, ts, preset, image_key }] }
   }
 
+  // One case with its full version list -- every edit ever run on this photo,
+  // oldest first. Deliberately NOT part of getHistory above: that endpoint is
+  // re-fetched on every page of the history drawer's infinite scroll, so it
+  // returns only the per-case summaries (backend/services/account.py splits
+  // the two on exactly this boundary). Versions are read only for the one
+  // case actually being opened.
+  // Identified by imageKey (a case opened from the history list) or by jobId
+  // (a case this session produced itself and only knows one job of) -- see
+  // the endpoint's own docstring in backend/routes/api.py.
+  async function getHistoryCase(user, { imageKey, jobId } = {}) {
+    const query = imageKey
+      ? `image_key=${encodeURIComponent(imageKey)}`
+      : `job_id=${encodeURIComponent(jobId)}`;
+    const response = await fetchWithRetry(
+      `${BASE_URL}/api/photo-agent/history/${encodeURIComponent(user)}/case?${query}`
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `取得處理紀錄失敗：HTTP ${response.status}`);
+    }
+    // { user, case: { ...summary, image_key, versions: [{ version_id, kind,
+    //   created_at, based_on, params, path, runs: [job_id], results: [...] }] } }
+    return data;
+  }
+
   // imageKey (job.image_key from getHistory) identifies which entry to
   // remove -- it's an S3 key path (contains "/"), so it's a query param
   // rather than a URL path segment.
@@ -672,6 +697,7 @@ window.PhotoAgentApi = (() => {
     resolveUserId,
     createAccount,
     getHistory,
+    getHistoryCase,
     deleteHistoryEntry,
     clearHistory,
     getJobStatusOnce,

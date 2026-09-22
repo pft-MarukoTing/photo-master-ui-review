@@ -31,6 +31,7 @@
     analyzeAipocBatch,
     createAccount,
     getHistory,
+    getHistoryCase,
     deleteHistoryEntry,
     clearHistory,
     getJobStatusOnce,
@@ -56,40 +57,97 @@
     return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
-  // Disables whichever arrow has no selectable ("done") RUN left on its
-  // side of the current one -- called after every updateRunSwitcher and
-  // whenever the current index changes.
-  function updateRunSwitcherArrows() {
-    if (!els.runSwitchPrev || !els.runSwitchNext || !currentRunList || currentRunIndex == null) return;
-    const hasPrevRun = currentRunList.slice(0, currentRunIndex).some((r) => r.status === "done");
-    const hasNextRun = currentRunList.slice(currentRunIndex + 1).some((r) => r.status === "done");
-    els.runSwitchPrev.disabled = !hasPrevRun;
-    els.runSwitchNext.disabled = !hasNextRun;
+  // A history version the user hasn't stepped onto yet carries no image or
+  // result at all ("unloaded", see fetchHistoryVersionRuns) but is still
+  // somewhere the arrows can go -- loadHistoryRun fetches it on arrival.
+  // Deliberately distinct from a live revise's "processing" RUN, which is
+  // genuinely not selectable yet because its image does not exist anywhere.
+  function isSelectableRun(run) {
+    return !!run && (run.status === "done" || run.status === "unloaded");
   }
 
-  // Steps to the next/previous *selectable* (status "done") RUN, skipping
-  // over any still-processing/errored ones. Shows #run-switch-loading over
-  // the still-visible current RUN (and disables both arrows) for as long as
-  // onSelectDone takes -- its target RUN's image can take a moment to fetch,
-  // and without this the button press looked like it did nothing until the
-  // new image suddenly popped in.
-  async function selectAdjacentRun(delta) {
+  // The slice of the run list the arrows are allowed to walk: the N images
+  // of ONE edit (a run_count>1 result), never across into another version.
+  // Moving between versions is the version strip's job -- an arrow that
+  // crossed a version boundary would swap the settings, the revise panel and
+  // the restored style picks out from under the user while looking like it
+  // had only stepped to the next picture.
+  //
+  // An untagged list (a live revise, a batch record) has no versions, so the
+  // range is simply the whole thing and nothing changes for those.
+  function arrowRunRange(runs, idx) {
+    const current = runs[idx];
+    if (!current || !current.versionId) return { from: 0, to: runs.length - 1 };
+    let from = idx;
+    let to = idx;
+    while (from > 0 && runs[from - 1].versionId === current.versionId) from -= 1;
+    while (to < runs.length - 1 && runs[to + 1].versionId === current.versionId) to += 1;
+    return { from, to };
+  }
+
+  // Shows/hides and enables/disables the arrows for whatever the current RUN
+  // is -- called after every updateRunSwitcher and whenever the index changes.
+  function updateRunSwitcherArrows() {
+    if (!els.runSwitchPrev || !els.runSwitchNext || !currentRunList || currentRunIndex == null) return;
+    const { from, to } = arrowRunRange(currentRunList, currentRunIndex);
+    // Hidden outright, not just disabled, when this version produced a single
+    // image: most versions do, and a permanently dead pair of arrows sitting
+    // over every one of them reads as something being broken.
+    const usable = to > from;
+    els.runSwitchPrev.hidden = !usable;
+    els.runSwitchNext.hidden = !usable;
+    // The counter labels what the arrows do, so it appears and disappears
+    // with them. Which VERSION is on screen is the strip's job -- it names
+    // every one of them and highlights the current -- so repeating it over
+    // the photo was only noise.
+    if (els.runCountLabel) {
+      els.runCountLabel.hidden = !usable;
+      els.runCountLabel.textContent = usable ? runSwitcherLabel(currentRunList, currentRunIndex) : "";
+    }
+    if (!usable) return;
+    els.runSwitchPrev.disabled = !currentRunList.slice(from, currentRunIndex).some(isSelectableRun);
+    els.runSwitchNext.disabled = !currentRunList.slice(currentRunIndex + 1, to + 1).some(isSelectableRun);
+  }
+
+  // Steps to the next/previous *selectable* RUN (see isSelectableRun),
+  // skipping over any still-processing/errored ones. Shows #run-switch-loading
+  // over the still-visible current RUN (and disables both arrows) for as long
+  // as onSelectDone takes -- its target RUN's image can take a moment to fetch,
+  // and for a not-yet-loaded history version onSelectDone is what goes and
+  // fetches it, so without this the button press looked like it did nothing
+  // until the new image suddenly popped in.
+  // Switches to the RUN at `idx`, whatever asked for it -- an arrow stepping
+  // one place (selectAdjacentRun below) or a version-strip tile jumping
+  // straight there. Everything both need in common lives here: the loading
+  // overlay, locking the controls for the duration, and recomputing the
+  // arrows for wherever we actually landed.
+  async function selectRunAt(idx) {
     if (!currentRunList || currentRunOnSelect == null || currentRunIndex == null) return;
-    let idx = currentRunIndex + delta;
-    while (idx >= 0 && idx < currentRunList.length && currentRunList[idx].status !== "done") idx += delta;
-    if (idx < 0 || idx >= currentRunList.length) return;
+    if (idx < 0 || idx >= currentRunList.length || idx === currentRunIndex) return;
+    if (!isSelectableRun(currentRunList[idx])) return;
     if (els.runSwitchLoading) els.runSwitchLoading.hidden = false;
     if (els.runSwitchPrev) els.runSwitchPrev.disabled = true;
     if (els.runSwitchNext) els.runSwitchNext.disabled = true;
+    if (els.versionStrip) els.versionStrip.classList.add("is-busy");
     try {
       await currentRunOnSelect(idx);
     } finally {
       if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+      if (els.versionStrip) els.versionStrip.classList.remove("is-busy");
       // Recomputes each arrow's real enabled/disabled state for the RUN we
       // landed on -- may differ from what we forced above, and must still
       // run even if onSelectDone above threw or bailed early.
       updateRunSwitcherArrows();
     }
+  }
+
+  async function selectAdjacentRun(delta) {
+    if (!currentRunList || currentRunIndex == null) return;
+    const { from, to } = arrowRunRange(currentRunList, currentRunIndex);
+    let idx = currentRunIndex + delta;
+    while (idx >= from && idx <= to && !isSelectableRun(currentRunList[idx])) idx += delta;
+    if (idx < from || idx > to) return;
+    return selectRunAt(idx);
   }
 
   if (els.runSwitchPrev) els.runSwitchPrev.addEventListener("click", () => selectAdjacentRun(-1));
@@ -2892,6 +2950,7 @@
       setAnalysisPreviewDisabled(true);
       if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
       if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
+      hideVersionStrip(); // see the matching call in backToProcessFromResults
       if (els.canvasLoading) els.canvasLoading.hidden = false;
       if (els.resultsCanvasRow) {
         requestAnimationFrame(() => {
@@ -3642,7 +3701,8 @@
       // Fetch the image via our own backend, not the presigned S3/AIPoC URL --
       // that URL has no CORS headers, so a browser-side fetch() of it is
       // blocked even though the same URL displays fine in an <img> tag.
-      const imageBuf = await fetchWithRetry(resultImageUrl(run.jobId, { path, run: run.run })).then((response) => response.arrayBuffer());
+      // run.sourceRun, not run.run -- see fetchVersionRuns.
+      const imageBuf = await fetchWithRetry(resultImageUrl(run.jobId, { path, run: run.sourceRun != null ? run.sourceRun : run.run })).then((response) => response.arrayBuffer());
       if (onItemDone) onItemDone();
       return { run, imageBuf };
     }));
@@ -4008,7 +4068,7 @@
       els.reportModalScreenshotStatus.textContent = "擷取畫面中…";
       els.reportModalScreenshotStatus.hidden = false;
     }
-    const blob = await captureReportScreenshot(myTarget.jobId, myTarget.path, myTarget.runNumber);
+    const blob = await captureReportScreenshot(myTarget.jobId, myTarget.path, myTarget.sourceRun);
     applyReportModalScreenshotPreview(myTarget, blob);
   }
 
@@ -4043,6 +4103,9 @@
       jobId: lastResult?.jobId || null,
       path: lastResult?.path || "local",
       runNumber: lastResult?.runNumber || null,
+      // What captureReportScreenshot's own same-origin image proxy needs --
+      // see fetchVersionRuns on why that isn't runNumber.
+      sourceRun: lastResult?.sourceRun != null ? lastResult.sourceRun : (lastResult?.runNumber || null),
       userPrompt
     };
     reportModalTarget = target;
@@ -4173,7 +4236,7 @@
     const runs = lastResultRuns();
     const current = runs.find((run) => run.run === lastResult.runNumber) || runs[0];
     try {
-      const imageBuf = await fetch(resultImageUrl(current.jobId, { path: lastResult.path, run: current.run })).then((response) => response.arrayBuffer());
+      const imageBuf = await fetch(resultImageUrl(current.jobId, { path: lastResult.path, run: current.sourceRun != null ? current.sourceRun : current.run })).then((response) => response.arrayBuffer());
       const blob = new Blob([imageBuf], { type: "image/png" });
       await saveImageToDevice(blob, buildDownloadImageFilename());
       // Same completion notice downloadZip shows -- this path bypasses that
@@ -5228,6 +5291,10 @@
     }
 
     revealResultsIfNeeded();
+    // Last, and only if this is still the record on screen: the strip it
+    // restores describes THIS case, and the fetch inside it gives the user
+    // time to navigate away.
+    if (isCurrent()) await refreshVersionsAfterEdit();
   }
 
   // Mirrors the backend's own per-request HTTP timeouts (openai_client.py /
@@ -5379,11 +5446,18 @@
       retryCount: 0
     };
 
-    lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: pick.jobId, runNumber: pick.run, path: singleFlowState.processingPath, runs };
+    // "下載全部" and the N-images badge have always meant the N images of
+    // ONE edit. singleRuns can now span a whole case (fetchHistoryVersionRuns),
+    // and bundling every version into one zip is a different feature with a
+    // different folder layout -- until that exists, both stay scoped to the
+    // version being looked at. A live revise's runs carry no versionId and
+    // are unaffected.
+    const versionRuns = pick.versionId ? runs.filter((r) => r.versionId === pick.versionId) : runs;
+    lastResult = { file: selectedFile, sourceUrl: selectedFileSourceUrl, resultText: result, jobId: pick.jobId, runNumber: pick.run, sourceRun: pick.sourceRun, path: singleFlowState.processingPath, runs: versionRuns };
     // currentTokenUsage() reads lastResult -- must run after it's (re)assigned
     // above, or this shows whatever record was last displayed (or nothing).
     updateCostBtn();
-    updateDownloadLinks(runs);
+    updateDownloadLinks(versionRuns);
     renderResult({ data, analysis: result.analysis, preset, imageModel: data.model });
     populateTimingSection(pick.timings);
     renderSingleRunSwitcher();
@@ -5502,6 +5576,12 @@
     // never got set.
     if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
+    // The strip describes results, and there is no result on screen for the
+    // whole of this wait -- leaving it up next to the processing animation
+    // invites a click that would land on a version the edit in flight is
+    // about to make stale. refreshVersionsAfterEdit brings it back, with the
+    // new version in it.
+    hideVersionStrip();
     if (els.canvasLoading) els.canvasLoading.hidden = false;
     if (els.resultsCanvasRow) {
       // Two rAFs: the first lets the browser commit the instant
@@ -7956,16 +8036,14 @@
     };
   }
 
-  // A "Run" click with run_count > 1 (two-stage manual path) submits N
-  // *separate* job_ids (runSingleItem/editBatchItem), all recorded together
-  // under one history entry's `runs` list by backend/services/account.py's
-  // action_id grouping -- fetch every one of them (each of which might
-  // itself be a combined job with its own internal multi-RUN shape too) and
-  // flatten into one run-numbered list, same shape either way. job.job_id is
-  // kept as a fallback for a history entry recorded before `runs` existed.
-  async function fetchAllHistoryRuns(job) {
-    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
-    const perJobData = await Promise.all(jobIds.map((id) => getJobRuns(id, { path: job.path }).catch(() => null)));
+  // One version's result images. A "Run" click with run_count > 1 (two-stage
+  // manual path) submits N *separate* job_ids (runSingleItem/editBatchItem),
+  // all recorded together under that one version's `runs` list by
+  // backend/services/account.py's action_id grouping -- fetch every one of
+  // them (each of which might itself be a combined job with its own internal
+  // multi-RUN shape too) and flatten, same shape either way.
+  async function fetchVersionRuns(jobIds, path) {
+    const perJobData = await Promise.all(jobIds.map((id) => getJobRuns(id, { path }).catch(() => null)));
     const flat = [];
     perJobData.forEach((data, idx) => {
       if (!data) return;
@@ -7973,15 +8051,266 @@
       const rawRuns = Array.isArray(data.runs) && data.runs.length
         ? data.runs
         : [{ image_url: data.image_url, result: data.result }];
-      rawRuns.forEach((r) => {
+      rawRuns.forEach((r, ri) => {
         if (!r.result) return; // this job/RUN hasn't actually finished
-        flat.push({ jobId, imageUrl: r.image_url, result: r.result });
+        // sourceRun is which RUN of its OWN job this image is -- the only
+        // thing /result/<job>/image?run=N accepts. Distinct from the `run`
+        // numberHistoryRuns assigns, which counts across the whole list and
+        // therefore across separate job_ids. They agree only for a single
+        // combined job, which is why this went unnoticed while that was the
+        // only multi-image shape the results page ever saw.
+        flat.push({ jobId, path, sourceRun: r.run != null ? r.run : ri + 1, imageUrl: r.image_url, result: r.result, status: "done" });
       });
     });
-    // Re-numbered sequentially regardless of each job's own internal RUN
-    // numbering -- these may come from entirely separate job_ids that each
-    // think of themselves as "RUN 1".
+    return flat;
+  }
+
+  // Re-numbers a flat run list sequentially regardless of each job's own
+  // internal RUN numbering -- these may come from entirely separate job_ids
+  // that each think of themselves as "RUN 1".
+  function numberHistoryRuns(flat) {
     return flat.map((r, i) => ({ run: i + 1, status: "done", timings: [], error: null, ...r }));
+  }
+
+  // Every version of one case flattened into the single list the prev/next
+  // switcher walks -- oldest version first, so stepping right moves forward
+  // in time (viewHistoryRecord starts on the newest).
+  //
+  // Only the newest version's images are fetched up front. Every other
+  // version contributes placeholders (status "unloaded") carrying just the
+  // job_id/RUN needed to go get them, which loadHistoryRun resolves when the
+  // user actually steps onto one. That split is the whole point of the
+  // endpoint: a case with 30 versions would otherwise cost 30 /result
+  // fetches -- each a full analysis + quality-check payload -- every time it
+  // is opened, for images nobody may ever look at.
+  //
+  // Returns null (not an empty list) for anything this can't describe --
+  // no account, a backend without the /case endpoint, or a case whose
+  // results have expired out of Redis -- so the caller falls back to the
+  // summary's own `runs` rather than showing an empty switcher.
+  async function fetchHistoryVersionRuns(job) {
+    const user = getCurrentUser();
+    if (!user || !job.image_key) return null;
+    let versions = null;
+    try {
+      const data = await getHistoryCase(user, { imageKey: job.image_key });
+      versions = data && data.case ? data.case.versions : null;
+    } catch (error) {
+      return null;
+    }
+    if (!Array.isArray(versions) || !versions.length) return null;
+    const shown = browsableVersions(versions);
+    if (!shown.length) return null;
+    const latest = shown[shown.length - 1];
+    const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || job.path);
+    return buildVersionRunList(shown, latestRuns, job.path);
+  }
+
+  // An analyze-only version is a real part of the case's history (it is the
+  // upload every later edit descends from) but has no result image, so there
+  // is nothing for an image switcher to land on.
+  function browsableVersions(versions) {
+    return versions.filter((v) => v.kind !== "analyze" && Array.isArray(v.results) && v.results.length);
+  }
+
+  // versions (oldest first) + the already-fetched runs of the newest one ->
+  // the flat, run-numbered list both the arrows and the version strip walk.
+  // Every version but the newest contributes placeholders; see
+  // fetchHistoryVersionRuns for why.
+  function buildVersionRunList(shown, latestRuns, fallbackPath) {
+    if (!shown.length || !latestRuns.length) return null;
+    const latest = shown[shown.length - 1];
+    const flat = [];
+    shown.forEach((version, vi) => {
+      const versionPath = version.path || fallbackPath;
+      const entries = version === latest ? latestRuns : version.results.map((r) => ({
+        jobId: r.job_id,
+        path: versionPath,
+        // Which RUN of its own job this image is -- kept separate from the
+        // `run` numberHistoryRuns assigns below, which counts across the
+        // whole case.
+        sourceRun: r.run,
+        imageUrl: null,
+        result: null,
+        status: "unloaded",
+      }));
+      entries.forEach((entry, ri) => {
+        flat.push({
+          ...entry,
+          versionId: version.version_id,
+          versionNumber: vi + 1,
+          versionTotal: shown.length,
+          // What this version was actually run with -- the per-case settings
+          // button reads it back out when the user steps onto this version
+          // (applyHistoryVersionContext).
+          versionParams: version.params || null,
+          versionCreatedAt: version.created_at || null,
+          runInVersion: ri + 1,
+          runsInVersion: entries.length,
+        });
+      });
+    });
+    return numberHistoryRuns(flat);
+  }
+
+  // Fetches one case and returns its browsable versions only if that case
+  // really is the one `jobId` just landed in -- its newest version has to
+  // contain that job. The check is what makes the several ways of naming a
+  // case below safe to just try in turn: a case key survives until the next
+  // case is opened, so it can be stale, and answering with someone else's
+  // history would file this result as a version of it.
+  async function caseVersionsHolding(user, lookup, jobId) {
+    let versions;
+    try {
+      const data = await getHistoryCase(user, lookup);
+      versions = data && data.case ? data.case.versions : null;
+    } catch (error) {
+      return null; // no history row, or a backend that doesn't take this lookup
+    }
+    if (!Array.isArray(versions)) return null;
+    const shown = browsableVersions(versions);
+    const latest = shown.length ? shown[shown.length - 1] : null;
+    if (!latest || !(latest.runs || []).includes(jobId)) return null;
+    return { shown, latest };
+  }
+
+  // Which case does a just-finished job belong to? Three ways in, tried until
+  // one comes back actually holding it:
+  //   1. currentCaseHistoryImageKey -- set whenever a case is opened from
+  //      history (setCurrentCaseTimes). Null for a photo uploaded and edited
+  //      in this same session, which never had a case key on the client.
+  //   2. the /case endpoint's job_id form, which resolves through the
+  //      backend's job index in one lookup.
+  //   3. the plain history list. Each summary carries image_key and its
+  //      latest version's job ids -- and the edit that just finished IS that
+  //      latest version, so the case is findable there. Slower (it reads
+  //      every case's summary) and therefore last, but it asks nothing of the
+  //      backend that was not already there, which is what keeps case 1's
+  //      fresh upload working against a deployment predating (2).
+  async function findCaseForJob(user, jobId) {
+    const direct = [];
+    if (currentCaseHistoryImageKey) direct.push({ imageKey: currentCaseHistoryImageKey });
+    direct.push({ jobId });
+    for (const lookup of direct) {
+      const found = await caseVersionsHolding(user, lookup, jobId);
+      if (found) return found;
+    }
+    let jobs;
+    try {
+      ({ jobs } = await getHistory(user, { limit: HISTORY_DRAWER_PAGE_SIZE }));
+    } catch (error) {
+      return null;
+    }
+    // Newest first, and this case's timestamp was just bumped by the edit --
+    // so it is at the front of the first page, never off the end of it.
+    const match = (jobs || []).find((entry) => (entry.runs || []).includes(jobId));
+    return match && match.image_key
+      ? caseVersionsHolding(user, { imageKey: match.image_key }, jobId)
+      : null;
+  }
+
+  // Puts the case's whole history back around a result that was just
+  // produced on this page. finishSingleFlow leaves singleRuns holding only
+  // the live run it just built -- untagged, so the version strip disappears
+  // at exactly the moment a new version has been created and there is most
+  // to compare against.
+  //
+  // Resolved by the new job's id, not a case key: a photo uploaded and
+  // edited in this same session never had one on the client. Bails without
+  // touching anything unless the case really does have more than one version
+  // -- a first-ever edit has nothing to show, and leaving the live list
+  // alone there keeps its per-RUN timings, which a re-fetch would drop.
+  async function refreshVersionsAfterEdit() {
+    // singleRuns is null for the ordinary single-RUN edit -- that path never
+    // builds a run list at all (see finishSingleFlow's runCount === 1
+    // branch), and lastResult is the only record of what it just produced.
+    // It is also the path most edits take, so it is the one that matters
+    // most here.
+    const live = singleRuns && singleRuns.length ? singleRuns : null;
+    if (live && live.some((r) => r.versionId)) return; // already showing versions
+    const user = getCurrentUser();
+    const anchor = live
+      ? (live[singleMirrorIndex] || live.find((r) => r.status === "done") || live[0])
+      : (lastResult && lastResult.jobId
+          ? { jobId: lastResult.jobId, sourceRun: lastResult.sourceRun, run: lastResult.runNumber || 1 }
+          : null);
+    if (!user || !anchor || !anchor.jobId) return;
+
+    const found = await findCaseForJob(user, anchor.jobId);
+    if (!found || found.shown.length < 2) return;
+    const { shown, latest } = found;
+    const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || "local");
+    const rebuilt = buildVersionRunList(shown, latestRuns, "local");
+    // Superseded while fetching -- the user opened a different record, or a
+    // further edit replaced the list this was computed against.
+    if (!rebuilt || (singleRuns && singleRuns.length ? singleRuns : null) !== live) return;
+    // Carry the just-finished run's step timings across -- they exist only in
+    // memory, and the re-fetched entries above came back without them.
+    if (live) {
+      rebuilt.forEach((entry) => {
+        const match = live.find((r) => r.jobId === entry.jobId && (r.sourceRun || r.run) === entry.sourceRun);
+        if (match && match.timings && match.timings.length) entry.timings = match.timings;
+      });
+    }
+    singleRuns = rebuilt;
+    const sameImage = rebuilt.findIndex((r) => r.jobId === anchor.jobId
+      && r.sourceRun === (anchor.sourceRun || anchor.run));
+    singleMirrorIndex = sameImage >= 0
+      ? sameImage
+      : rebuilt.findIndex((r) => r.versionId === latest.version_id);
+    renderSingleRunSwitcher();
+  }
+
+  // allVersions: true walks the case's whole edit history (viewHistoryRecord);
+  // false keeps the pre-v3 behaviour of returning only the latest version's
+  // results, which is still what the bulk-zip download builds its folders
+  // from. job.job_id is the fallback for a history entry recorded before
+  // `runs` existed.
+  async function fetchAllHistoryRuns(job, { allVersions = false } = {}) {
+    if (allVersions) {
+      const withVersions = await fetchHistoryVersionRuns(job);
+      if (withVersions) return withVersions;
+    }
+    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+    return numberHistoryRuns(await fetchVersionRuns(jobIds, job.path));
+  }
+
+  // Fills in one "unloaded" switcher entry (see fetchHistoryVersionRuns) in
+  // place. A single /result fetch covers every entry sharing that job_id -- a
+  // run_count>1 combined job returns all of its RUNs at once -- so siblings
+  // are filled from the same response rather than re-fetched one at a time
+  // when the user steps through them.
+  async function loadHistoryRun(runs, run) {
+    let data;
+    try {
+      data = await getJobRuns(run.jobId, { path: run.path || "local" });
+    } catch (error) {
+      run.status = "error";
+      run.error = friendlyError(error);
+      return false;
+    }
+    const rawRuns = Array.isArray(data.runs) && data.runs.length
+      ? data.runs
+      : [{ run: 1, image_url: data.image_url, result: data.result }];
+    runs.forEach((sibling) => {
+      if (sibling.jobId !== run.jobId || sibling.status !== "unloaded") return;
+      // A job that reported no RUN numbering at all (the single-result shape
+      // above) has exactly one image, and it is this sibling's.
+      const match = rawRuns.find((r) => r.run === sibling.sourceRun)
+        || (rawRuns.length === 1 ? rawRuns[0] : null);
+      if (!match || !match.result) return;
+      sibling.imageUrl = match.image_url;
+      sibling.result = match.result;
+      sibling.status = "done";
+    });
+    if (run.status !== "done") {
+      // The history row outlived the job's result in Redis. Marking it errored
+      // (rather than leaving it "unloaded") stops the arrows offering it again.
+      run.status = "error";
+      run.error = "這一版的結果已經無法取得。";
+      return false;
+    }
+    return true;
   }
 
   // Resumes a paused-for-review upload (#start-btn's own analyze-only flow)
@@ -8382,6 +8711,75 @@
     });
   }
 
+  // Points the whole results page at ONE version of a case: the revise
+  // panel's restored selections, singleFlowState (what a further edit would
+  // be submitted with) and the pickers behind the per-case settings button
+  // all come to describe that version rather than whichever one happens to
+  // be newest. Called once by viewHistoryRecord for the version it opens on,
+  // and again by the run switcher each time the user steps onto a different
+  // one -- 「這一版跑過的設定」 is exactly what that button promises, so it
+  // has to follow the image. Every applyXOption below is a programmatic
+  // (fromUser: false) write, so they re-baseline that button on this version
+  // rather than raising its 已變更 dot -- see refreshApCaseSettings's own doc.
+  //
+  // params: the version's own recorded params (fetchHistoryVersionRuns).
+  // fallbackParams is the case summary, which flattens the LATEST version's
+  // params onto itself -- right for the version viewHistoryRecord opens on,
+  // and the only thing available at all for a case with no version list
+  // (a pre-v3 entry, or a /case fetch that failed).
+  function applyHistoryVersionContext(run, fallbackParams) {
+    const params = run.versionParams || fallbackParams || {};
+    // params.* is absent (rather than falsy-but-present) only for an entry
+    // recorded before that field existed. Falling back to undefined here
+    // would silently submit ai_photo_editing=false on continue (the cheap
+    // local-only pass, not a real AI edit) -- extra-info.image_model (set
+    // only when an AI edit actually ran, see pipeline.py's finish_stage) is a
+    // more accurate fallback than a blind default for that one specifically.
+    const extraInfo = run.result["extra-info"] || {};
+    const { analysis: restoredAnalysis, selections } =
+      restoreReviseSelections(run.result.analysis, params.user_prompt, params.overwrite_prompt);
+    singleFlowState = {
+      analysis: restoredAnalysis,
+      analyzeJobId: run.jobId,
+      presetKey: params.preset || "natural",
+      preset: presets[params.preset] || presets.natural,
+      imageQuality: params.image_quality || extraInfo.image_quality || "medium",
+      imageModel: params.image_model || extraInfo.image_model || "gpt-image-2",
+      analysisModel: params.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
+      aspectRatio: params.aspect_ratio || "auto",
+      aiPhotoEditing: params.ai_photo_editing != null ? params.ai_photo_editing : !!extraInfo.image_model,
+      runQa: params.run_qa != null ? params.run_qa : true,
+      singlePassEdit: resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit),
+      processingPath: "local",
+      analyzeTimings: [],
+      useCombinedJob: false
+    };
+    applySinglePassEditOption(singleFlowState.singlePassEdit);
+    lastSingleSelections = selections;
+    setCurrentCaseAnalysisVersion(restoredAnalysis);
+
+    // #ap-options-card-inline's model/quality and aspect-ratio pickers are
+    // otherwise left showing whatever a previous record (or the upload page,
+    // or the version stepped off of) had picked -- sync them to what THIS
+    // version actually used. Only the picker, not applyModelQualityChange/
+    // applyAspectRatioChange's full side effects (pushing onto
+    // singleFlowState -- already correct, just set above -- and, for aspect
+    // ratio, re-fitting the preview, which the caller's own render handles).
+    applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
+    applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
+    applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
+    // singleFlowState.advancedOptions itself is left unset by the historical
+    // reconstruction above (unlike imageModel/aspectRatio) -- falling back to
+    // singleFlowState.analysis._advanced_options, the same key a later
+    // revise's buildEffectiveAnalysis falls back to, keeps this in sync with
+    // what a revise would actually use if left untouched. Kept last because
+    // it is the only one of the four that refreshes the per-case settings
+    // button unconditionally, even when handed a value that doesn't resolve
+    // to a known option.
+    applyAdvancedOptionsOption(
+      recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
+  }
+
   // Reconstructs the full single-photo results view (recipe/analysis/QA
   // panel, RUN switcher, before/after compare, download) for a finished
   // history entry, pulling this job's data fresh from the backend instead of
@@ -8409,7 +8807,11 @@
     historyViewToken += 1;
     const myToken = historyViewToken;
     setCurrentCaseTimes(job, revealDetailExtra);
-    const runs = await fetchAllHistoryRuns(job);
+    // Version browsing is local-path only for now: the AIPoC branch further
+    // down renders through showBatchDoneMain/renderRunSwitcher, which has no
+    // equivalent of applyHistoryVersionContext and would show older versions
+    // without ever re-pointing the page at them.
+    const runs = await fetchAllHistoryRuns(job, { allVersions: job.path === "local" });
     // Superseded while the runs were loading -- don't hide (or render into)
     // a screen that now belongs to something else.
     if (historyViewToken !== myToken) return;
@@ -8469,70 +8871,36 @@
 
     if (job.path === "local") {
       selectedFile = null;
-      // job.job_id doesn't exist on a history entry (job ids live in
-      // job.runs instead, see record_history/account.py) -- runs[0].jobId is
-      // the actual resolved job_id fetchAllHistoryRuns already looked up,
-      // and every job in this action shares the same source image anyway.
-      selectedFileSourceUrl = sourceImageUrl(runs[0].jobId);
-      originalImgThumbUrl = sourceThumbnailUrl(runs[0].jobId);
       singleRuns = runs;
-      singleMirrorIndex = null;
-      const firstDone = singleRuns[0];
-      // job.* comes from the history entry (backend/services/account.py) --
-      // absent (rather than falsy-but-present) only for an entry recorded
-      // before that field existed. Falling back to undefined here would
-      // silently submit ai_photo_editing=false on continue (the cheap local-
-      // only pass, not a real AI edit) -- extra-info.image_model (set only
-      // when an AI edit actually ran, see pipeline.py's finish_stage) is a
-      // more accurate fallback than a blind default for that one specifically.
-      const extraInfo = firstDone.result["extra-info"] || {};
-      const { analysis: restoredAnalysis, selections } = restoreReviseSelections(firstDone.result.analysis, job.user_prompt, job.overwrite_prompt);
-      singleFlowState = {
-        analysis: restoredAnalysis,
-        analyzeJobId: firstDone.jobId,
-        presetKey: job.preset || "natural",
-        preset: presets[job.preset] || presets.natural,
-        imageQuality: job.image_quality || extraInfo.image_quality || "medium",
-        imageModel: job.image_model || extraInfo.image_model || "gpt-image-2",
-        analysisModel: job.analysis_model || extraInfo.analysis_model || "gpt-5.6-luna",
-        aspectRatio: job.aspect_ratio || "auto",
-        aiPhotoEditing: job.ai_photo_editing != null ? job.ai_photo_editing : !!extraInfo.image_model,
-        runQa: job.run_qa != null ? job.run_qa : true,
-        singlePassEdit: resolvedSinglePassEdit(job.single_pass_edit, extraInfo.single_pass_edit),
-        processingPath: "local",
-        analyzeTimings: [],
-        useCombinedJob: false
-      };
-      applySinglePassEditOption(singleFlowState.singlePassEdit);
-      lastSingleSelections = selections;
-      setCurrentCaseAnalysisVersion(restoredAnalysis);
-
-      // #ap-options-card-inline's model/quality and aspect-ratio pickers are
-      // otherwise left showing whatever a previous record (or the upload
-      // page) had picked -- sync them to what THIS record actually used.
-      // Only the picker, not applyModelQualityChange/applyAspectRatioChange's
-      // full side effects (pushing onto singleFlowState -- already correct,
-      // just set above -- and, for aspect ratio, re-fitting the preview,
-      // which this record's own preview render below handles regardless).
+      // Open on the NEWEST version, which is what this page showed back when
+      // the latest edit was the only one a case kept. runs is oldest-version-
+      // first (fetchHistoryVersionRuns), so that is the last version in it,
+      // and its FIRST image -- the same "RUN 1 of this edit" this used to land
+      // on. A case with no version tagging at all (the fallback list) has only
+      // one edit in it and resolves to index 0, exactly as before.
+      const latestVersion = runs[runs.length - 1].versionNumber;
+      singleMirrorIndex = latestVersion == null
+        ? 0
+        : runs.findIndex((r) => r.versionNumber === latestVersion);
+      const firstDone = singleRuns[singleMirrorIndex];
+      // job.job_id doesn't exist on a history entry (job ids live in
+      // job.runs instead, see record_history/account.py) -- firstDone.jobId is
+      // the actual resolved job_id fetchAllHistoryRuns already looked up.
+      // Every version of a case is re-run from the same original photo, so
+      // which version's job serves it doesn't matter (see based_on in
+      // account.py for where that stops being true).
+      selectedFileSourceUrl = sourceImageUrl(firstDone.jobId);
+      originalImgThumbUrl = sourceThumbnailUrl(firstDone.jobId);
       // Must run BEFORE showSingleResult below: showSingleResult can
       // auto-open the inline revise panel (openInlineAnalysisForCurrentContext,
       // fire-and-forget but its snapshot capture runs synchronously), which
       // snapshots #ap-image-model-quality's *current* value as the "nothing
-      // changed yet" baseline -- syncing the picker only after that snapshot
+      // changed yet" baseline -- syncing the pickers only after that snapshot
       // was taken left the baseline on the previous record's stale model/
       // quality, so picking a model that happened to match that leftover
       // value (not this record's own) was wrongly treated as "no changes"
       // and silently blocked Run.
-      applyModelQualityOption(findModelQualityOptionByPair(singleFlowState.imageModel, singleFlowState.imageQuality));
-      applyAnalysisModelOption(findAnalysisModelOption(singleFlowState.analysisModel));
-      applyAspectRatioOption(findAspectRatioOption(singleFlowState.aspectRatio));
-      // singleFlowState.advancedOptions itself is left unset by the historical
-      // reconstruction above (unlike imageModel/aspectRatio) -- falling back to
-      // singleFlowState.analysis._advanced_options, the same key a later
-      // revise's buildEffectiveAnalysis falls back to, keeps this in sync with
-      // what a revise would actually use if left untouched.
-      applyAdvancedOptionsOption(
-        recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
+      applyHistoryVersionContext(firstDone, job);
 
       // Awaited (not fire-and-forget) so this function's own promise only
       // resolves once the result photo is actually showing -- callers like
@@ -9807,9 +10175,133 @@
     if (els.runSwitchNext) els.runSwitchNext.hidden = true;
     if (els.runCountLabel) { els.runCountLabel.hidden = true; els.runCountLabel.textContent = ""; }
     if (els.runProgress) els.runProgress.hidden = true;
+    hideVersionStrip();
     currentRunList = null;
     currentRunIndex = null;
     currentRunOnSelect = null;
+  }
+
+  // Rebuilt only when the run LIST itself changes -- every other render
+  // (stepping between two images of one case) just moves .is-current, so the
+  // tiles' <img>s are never re-created and never re-request their thumbnails.
+  let versionStripRuns = null;
+
+  function hideVersionStrip() {
+    if (!els.versionStrip) return;
+    els.versionStrip.hidden = true;
+    els.versionStrip.classList.remove("is-busy");
+    if (els.versionStripTrack) els.versionStripTrack.textContent = "";
+    versionStripRuns = null;
+  }
+
+  // One tile per result image, grouped under its version's label, oldest
+  // version on the left -- the same order and the same list the arrows walk,
+  // so the two stay in lockstep by construction.
+  //
+  // Shown only for a version-tagged list (a history case, see
+  // fetchHistoryVersionRuns). A live run_count>1 revise produces its images
+  // over the following minutes and has no versions to compare, so it keeps
+  // the arrows on their own rather than growing a strip that rearranges
+  // itself while the user watches.
+  function renderVersionStrip(runs, currentIdx) {
+    if (!els.versionStrip || !els.versionStripTrack) return;
+    if (!runs || runs.length <= 1 || !runs.some((r) => r.versionTotal)) {
+      hideVersionStrip();
+      return;
+    }
+    els.versionStrip.hidden = false;
+    if (versionStripRuns !== runs) {
+      versionStripRuns = runs;
+      els.versionStripTrack.textContent = "";
+      let group = null;
+      let groupTiles = null;
+      let groupVersionId = null;
+      runs.forEach((run, idx) => {
+        if (!group || run.versionId !== groupVersionId) {
+          groupVersionId = run.versionId;
+          group = document.createElement("div");
+          group.className = "version-group";
+          group.dataset.versionId = run.versionId || "";
+          groupTiles = document.createElement("div");
+          groupTiles.className = "version-group-tiles";
+          const label = document.createElement("span");
+          label.className = "version-group-label";
+          label.textContent = run.versionTotal ? `版本 ${run.versionNumber}` : `第 ${run.run} 張`;
+          group.append(groupTiles, label);
+          els.versionStripTrack.append(group);
+        }
+        const tile = document.createElement("button");
+        tile.type = "button";
+        tile.className = "version-tile";
+        tile.dataset.index = String(idx);
+        tile.setAttribute("role", "tab");
+        const img = document.createElement("img");
+        // The job's own thumbnail endpoint, indexed by sourceRun (which RUN
+        // of ITS job this image is) -- see fetchVersionRuns on why that is
+        // not run.run. Needs no /result payload, so an unloaded version's
+        // tile is just as real as the loaded one's.
+        img.src = resultThumbnailUrl(run.jobId, { run: run.sourceRun });
+        img.alt = "";
+        img.loading = "lazy";
+        tile.append(img);
+        if (run.runsInVersion > 1) {
+          const chip = document.createElement("span");
+          chip.className = "version-tile-run";
+          chip.textContent = String(run.runInVersion);
+          tile.append(chip);
+        }
+        tile.title = runSwitcherLabel(runs, idx);
+        tile.setAttribute("aria-label", tile.title);
+        tile.addEventListener("click", () => selectRunAt(idx));
+        groupTiles.append(tile);
+      });
+    }
+    const current = runs[currentIdx];
+    if (els.versionStripCount) {
+      els.versionStripCount.textContent = current && current.versionTotal
+        ? `共 ${current.versionTotal} 版`
+        : "";
+    }
+    els.versionStripTrack.querySelectorAll(".version-tile").forEach((tile) => {
+      const idx = Number(tile.dataset.index);
+      const run = runs[idx];
+      const isCurrent = idx === currentIdx;
+      tile.classList.toggle("is-current", isCurrent);
+      tile.setAttribute("aria-selected", isCurrent ? "true" : "false");
+      // Errored is the one state that outlives a re-render: loadHistoryRun
+      // sets it when a version's result is gone for good.
+      tile.disabled = !isSelectableRun(run);
+      tile.closest(".version-group").classList.toggle("is-current", isCurrent);
+      // The current version can sit well outside the visible part of the
+      // track in a long case (opening one lands on the newest, i.e. the far
+      // right). Deferred a frame because on a first render the tiles have
+      // only just been appended and the track has no scroll extent yet.
+      if (isCurrent) requestAnimationFrame(() => revealVersionTile(tile));
+    });
+  }
+
+  // Scrolls the strip only when the tile isn't already fully in view, and
+  // then centres it -- clicking a tile must never make the thing under the
+  // cursor jump, and a re-render that changes nothing must not move it
+  // either. Measured off getBoundingClientRect rather than offsetLeft: the
+  // tiles' offsetParent is whatever positioned ancestor the results layout
+  // happens to give them, which is not the scrolling track.
+  function revealVersionTile(tile) {
+    const track = els.versionStripTrack;
+    if (!track || !tile.isConnected) return;
+    const trackRect = track.getBoundingClientRect();
+    const tileRect = tile.getBoundingClientRect();
+    if (tileRect.left >= trackRect.left && tileRect.right <= trackRect.right) return;
+    track.scrollLeft += (tileRect.left + tileRect.width / 2) - (trackRect.left + trackRect.width / 2);
+  }
+
+  // Where the arrows currently are, within the one edit they can move in:
+  // "第 1 / 2 張" for a version-tagged case, plain "1 / 2" for a live
+  // run_count>1 revise or a batch record, which have no versions at all.
+  function runSwitcherLabel(runs, idx) {
+    const run = runs[idx];
+    if (run && run.versionId) return `第 ${run.runInVersion} / ${run.runsInVersion} 張`;
+    return `${idx + 1} / ${runs.length}`;
   }
 
   // Prev/next arrows + "N / total" label for one image's N edit results.
@@ -9825,14 +10317,12 @@
     currentRunList = runs;
     currentRunIndex = currentIdx;
     currentRunOnSelect = onSelectDone;
-    if (els.runSwitchPrev) els.runSwitchPrev.hidden = false;
-    if (els.runSwitchNext) els.runSwitchNext.hidden = false;
-    if (els.runCountLabel) {
-      els.runCountLabel.hidden = false;
-      els.runCountLabel.textContent = `${currentIdx + 1} / ${runs.length}`;
-    }
+    // The arrows and their counter are updateRunSwitcherArrows' call below --
+    // whether they are useful depends on the current version, not on the
+    // length of the whole list.
     updateRunProgressBar(runs);
     updateRunSwitcherArrows();
+    renderVersionStrip(runs, currentIdx);
   }
 
   // Selecting an adjacent run re-points the record's mirror fields at it and
@@ -9858,6 +10348,11 @@
 
   // Single-image counterpart of renderRunSwitcher: reads/writes the
   // module-level singleRuns/singleMirrorIndex instead of a batch record.
+  // Where renderRunSwitcher only ever steps between the N images of one edit,
+  // this list can also span a history case's whole edit history
+  // (fetchHistoryVersionRuns), which adds two things the batch one has no
+  // equivalent of: the target's images may not be fetched yet, and landing on
+  // a different version has to re-point the whole page at it.
   function renderSingleRunSwitcher() {
     const runs = singleRuns || [];
     if (runs.length <= 1) {
@@ -9865,11 +10360,35 @@
       return;
     }
 
-    const doneIdx = runs.findIndex((x) => x.status === "done");
+    const doneIdx = runs.findIndex(isSelectableRun);
     const current = (singleMirrorIndex != null && runs[singleMirrorIndex]) ? singleMirrorIndex : doneIdx;
-    updateRunSwitcher(runs, current, (idx) => {
+    const showing = runs[current];
+    updateRunSwitcher(runs, current, async (idx) => {
+      const run = runs[idx];
+      // An older version's images were never fetched (fetchHistoryVersionRuns
+      // loads only the newest up front) -- go get them now. selectAdjacentRun
+      // already has its loading overlay up over this whole callback.
+      if (run.status === "unloaded" && !(await loadHistoryRun(runs, run))) {
+        // Leaves the current image alone: loadHistoryRun has marked the
+        // target errored, so the arrows simply stop offering it.
+        showNoticeModal(run.error || "無法取得這一版的結果。");
+        return;
+      }
       singleMirrorIndex = idx;
-      return showSingleResult();
+      // Crossing into a different version makes the settings button, the
+      // revise panel and singleFlowState describe THAT version. Stepping
+      // between two images of the SAME version changes none of that, and
+      // must not clobber edits the user has made to the pickers meanwhile.
+      const versionChanged = !!run.versionId && (!showing || run.versionId !== showing.versionId);
+      if (versionChanged) applyHistoryVersionContext(run, null);
+      // forceReopen matters only when the revise panel is already open:
+      // openInlineAnalysisForCurrentContext returns early in that case, and
+      // backToProcessFromResults -- the only thing that repaints the recipe
+      // checklist, the style picks and 補充指令 from singleFlowState/
+      // lastSingleSelections -- never runs. Without it, editing the style on
+      // 版1 to produce 版2 and then stepping back to 版1 showed 版1's photo
+      // with 版2's style picks still in the panel beside it.
+      return showSingleResult({ forceReopen: versionChanged });
     });
   }
 
@@ -10322,7 +10841,7 @@
       return;
     }
     try {
-      const response = await fetch(preEditImageUrl(lastResult.jobId, { path: lastResult.path, run: lastResult.runNumber }));
+      const response = await fetch(preEditImageUrl(lastResult.jobId, { path: lastResult.path, run: lastResult.sourceRun != null ? lastResult.sourceRun : lastResult.runNumber }));
       if (!response.ok) {
         showPromptsModalText("（此結果沒有第一階段中間圖，可能是單階段模式或未啟用 AI 修圖）");
         return;
@@ -10937,17 +11456,33 @@
       delete effective._body_reshape_enabled;
     }
 
-    // The per-person "allow AI to fix this" toggle (#ap-face-detail,
+    // Did the ANALYZER flag this face issue, as opposed to the user having
+  // forced it on? _user_disabled counts: an issue already carrying it was
+  // flagged when it was first turned off, and that turn-off erased the
+  // verdict, so this is the only surviving record of it. Without reading it
+  // back here the flag would survive exactly one more version and then
+  // quietly drop, putting the row back to 無需修正 on the version after.
+  function analyzerFlaggedFaceIssue(issue, category) {
+    if (!issue || typeof issue !== "object") return false;
+    if (issue._user_disabled) return true;
+    return category === "smile_issue" ? issue.adjust_safe === true : issue.should_fix === true;
+  }
+
+  // The per-person "allow AI to fix this" toggle (#ap-face-detail,
     // getFaceIssueOverrides in results.js): { "subjectIndex:category": false }
     // for every should_fix/adjust_safe=true item the user turned off. Both
     // written onto a per-subject copy so the model's own original verdict on
     // `analysis` is never mutated, in case the user flips the toggle back on
     // a later revise:
-    //   1. should_fix (adjust_safe for smile_issue, opposite polarity) is
-    //      flipped to the "nothing to fix" value -- this alone is enough to
-    //      turn OFF a flagged blink/hair/gaze item, since build_edit_prompt
-    //      excludes a should_fix=false item from its own per-category target
-    //      list unless _user_forced (below) says otherwise.
+    //   1. should_fix is flipped to false -- this alone is enough to turn OFF
+    //      a flagged blink/hair/gaze item, since build_edit_prompt excludes a
+    //      should_fix=false item from its own per-category target list unless
+    //      _user_forced (below) says otherwise. smile_issue's adjust_safe is
+    //      deliberately NOT touched: resolve_smile_targets drops a disabled
+    //      subject via (2) before it ever reads adjust_safe, so writing it
+    //      changed no behaviour and only overwrote the analyzer's own verdict
+    //      -- which then became the next version's starting point, turning an
+    //      untouched 不建議調整 into 可以調整 one version later.
     //   2. analysis._disabled_face_issues names the same (subjectIndex,
     //      category) pairs directly, for build_edit_prompt to hard-exclude
     //      regardless of should_fix/adjust_safe -- the belt to should_fix's
@@ -10970,17 +11505,33 @@
         const issue = { ...subject[category] };
         const allowed = override !== false && (!override || override.allowed !== false);
         if (!allowed) {
+          // Whether the ANALYZER had flagged this, read BEFORE the write
+          // below overwrites the very field that says so.
+          const wasFlagged = analyzerFlaggedFaceIssue(subject[category], category);
           if (category === "body_reshape") issue.should_edit = false;
-          else if (category === "smile_issue") issue.adjust_safe = true;
-          else issue.should_fix = false;
+          else if (category !== "smile_issue") issue.should_fix = false;
           if (category !== "body_reshape") {
             disabledFaceIssues.push({ subject_index: subjectIndex, category });
+            // 3. _user_disabled is the mirror of _user_forced below, and the
+            //    only record that survives of a verdict this write erases.
+            //    Turning off a flagged blink/gaze/hair sets should_fix false,
+            //    which is indistinguishable from the analyzer having found
+            //    nothing -- so the next version rendered that as 無需修正
+            //    rather than 已設定不修正. Smile loses it differently (its
+            //    adjust_safe is left flagged) and so came back as 可以調整,
+            //    i.e. the choice silently undone. This one key fixes both,
+            //    and is only set where there was a real verdict to override.
+            if (wasFlagged) issue._user_disabled = true;
           }
         } else if (category === "body_reshape") {
           // An explicit per-person ON choice must re-enable a plan that was
           // previously saved with should_edit=false.
           issue.should_edit = true;
         } else if (override && typeof override === "object") {
+          // Turning it back on has to clear the flag a previous version's
+          // disable stamped, or this version would be written as disabled
+          // again and the re-enable would not survive.
+          delete issue._user_disabled;
           // "Forced" means that the user overrode a negative analyzer verdict,
           // not merely that an enabled row carries a per-person level. Keep an
           // automatically approved hair/blink/gaze repair on its normal prompt

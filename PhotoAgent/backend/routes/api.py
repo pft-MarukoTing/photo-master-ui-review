@@ -14,7 +14,7 @@ from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from pipeline import analyze_stage
-from backend.services.account import create_account, clear_history, delete_history_entry, get_history, HISTORY_MAX_LEN, normalize_username, record_history
+from backend.services.account import create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
@@ -272,6 +272,67 @@ def delete_history(user):
         return jsonify({"error": "image_key is required"}), 400
     delete_history_entry(name, image_key)
     return jsonify({"user": name, "deleted": image_key})
+
+
+@api_bp.get("/history/<user>/case")
+def get_history_case(user):
+    """One case with its full version list. Separate from /history/<user>
+    (which returns only the per-case summaries) because that endpoint is
+    re-fetched on every page of scrolling -- versions are read only for the
+    case actually being opened.
+
+    Identified either by image_key (a case opened from the history list,
+    which already has it) or by job_id (a case the client only knows one job
+    of -- a photo uploaded and edited in this same session never had a case
+    key on the client at all). job_id resolves through the job index, one
+    lookup, and the returned case carries its image_key either way.
+    """
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    image_key = request.args.get("image_key")
+    job_id = request.args.get("job_id")
+    if not image_key and not job_id:
+        return jsonify({"error": "image_key or job_id is required"}), 400
+    case = get_history_entry(name, image_key) if image_key else get_history_entry_for_job(name, job_id)
+    if not case:
+        return jsonify({"error": "case not found"}), 404
+    return jsonify({"user": name, "case": case})
+
+
+@api_bp.delete("/history/<user>/version")
+def delete_history_version(user):
+    """Removes one version of a case, or one single result image of it when
+    `job_id`/`run` narrow it further (a run_count>1 version holds several).
+    Same scope as delete_history above -- only the history pointer goes, the
+    underlying job and its S3 artifacts are left alone.
+
+    Deleting a case's last version deletes the case too, so the caller gets
+    `case_deleted` back rather than having to re-query to find that out.
+    """
+    try:
+        name = normalize_username(user)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    image_key = request.args.get("image_key")
+    version_id = request.args.get("version_id")
+    if not image_key or not version_id:
+        return jsonify({"error": "image_key and version_id are required"}), 400
+    job_id = request.args.get("job_id") or None
+    run = request.args.get("run")
+    if run is not None:
+        try:
+            run = int(run)
+        except (TypeError, ValueError):
+            return jsonify({"error": "run must be an integer"}), 400
+    if not delete_version(name, image_key, version_id, job_id=job_id, run=run):
+        return jsonify({"error": "version not found"}), 404
+    return jsonify({
+        "user": name,
+        "deleted": version_id,
+        "case_deleted": get_history_entry(name, image_key) is None,
+    })
 
 
 @api_bp.delete("/history/<user>/all")
