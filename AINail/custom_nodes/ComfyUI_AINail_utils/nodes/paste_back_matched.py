@@ -127,7 +127,7 @@ class PasteBackMatched:
     generation), the generated nail likely bled onto the finger — that nail's
     mask is excluded from pasting.
 
-    Before matching, near-duplicate detections of the same generated nail
+    Before matching, near-duplicate detections of the same nail on either side
     (e.g. a small box nested almost entirely inside a larger one) are merged
     by union (see `merge_overlapping_masks`), so the smaller one can't win a
     match away from the true full-extent mask.
@@ -225,9 +225,10 @@ class PasteBackMatched:
             if hand_finger_masks.dim() == 2:
                 hand_finger_masks = hand_finger_masks.unsqueeze(0)
 
-            # Collapse near-duplicate detections of the same generated nail (e.g. a
-            # small box nested inside a large one) before matching, so the smaller
-            # one can't win a match away from the true full-extent mask.
+            # Collapse near-duplicate detections of the same nail (e.g. a small box
+            # nested inside a large one) before matching, so the smaller one can't
+            # win a match away from the true full-extent mask.
+            hand_nail_masks_1 = merge_overlapping_masks(hand_nail_masks_1, dedup_thresh)
             hand_nail_masks_2 = merge_overlapping_masks(hand_nail_masks_2, dedup_thresh)
 
             nail_matches = match_by_iou_matrix(
