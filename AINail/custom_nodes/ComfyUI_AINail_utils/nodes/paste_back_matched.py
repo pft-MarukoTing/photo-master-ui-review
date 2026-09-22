@@ -121,7 +121,7 @@ class PasteBackMatched:
                 "nail_masks_2": ("MASK",),
                 "finger_boxes": ("STRING", {"forceInput": True}),
                 "finger_masks": ("MASK",),
-                "dilate_pixels": ("INT", {"default": 20, "min": 0, "max": 64, "step": 1}),
+                "dilate_pixels": ("INT", {"default": 10, "min": 0, "max": 64, "step": 1}),
                 "min_iou": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "finger_overlap_ratio": ("FLOAT", {"default": 3.0, "min": 1.0, "max": 20.0, "step": 0.1}),
             }
