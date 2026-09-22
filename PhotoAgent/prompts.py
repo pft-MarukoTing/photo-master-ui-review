@@ -26,8 +26,13 @@ def body_reshape_enabled():
 # holistic sentence.  Twenty characters is an intentional lower bound: a
 # command must name enough visible geometry to be useful to the editor.
 BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH = 20
-BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH = 240
-BODY_RESHAPE_FALLBACK_PROMPT = "自然調整可見身形輪廓與比例，保持解剖連續、原姿勢、衣物邊界及背景透視"
+# Head/neck proportion follow-through is part of a single Editor command for
+# substantial or proportion-risk edits.  Keep enough room for the body target,
+# independent head and neck amounts, and garment-follow-through wording; a
+# shorter limit would silently replace a valid detailed command with the
+# generic fallback during normalization.
+BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH = 360
+BODY_RESHAPE_FALLBACK_PROMPT = "自然調整可見身形輪廓，必要時順接頭部與頸部外圍，保持解剖連續、衣物邊界及背景透視"
 
 # These keys appeared at the analysis root in intermediate/debug artifacts.
 # They are accepted only as history input and removed before an edit request;
@@ -47,9 +52,9 @@ def _body_reshape_fallback_prompt(label=None, should_edit=True):
     label = " ".join(str(label or "此人物").split()).strip() or "此人物"
     if should_edit:
         return (
-            f"針對{label}調整可見身形輪廓與比例，保持自然解剖、原姿勢、衣物邊界及背景透視連續"
+            f"針對{label}調整可見身形輪廓，必要時順接頭部與頸部外圍，保持自然解剖、衣物邊界及背景透視連續"
         )
-    return f"{label}不進行身形修改，保留原始輪廓比例、姿勢、衣物邊界與背景透視連續"
+    return f"{label}不進行身形修改，保留原始身形與頭頸外圍輪廓、衣物邊界及背景透視連續"
 
 
 def normalize_body_reshape_edit_prompt(value, fallback=BODY_RESHAPE_FALLBACK_PROMPT):
@@ -4099,19 +4104,48 @@ def merge_eye_repair_strategies(analysis, repair_response):
 
 
 def build_body_reshape_planning_instruction(persons=None):
-    """Ask the analysis model for one detailed plan for every person."""
+    """Ask for one body-reshape plan per person, including head/neck outer-contour assessment."""
+
     if not body_reshape_enabled():
         return ""
-    people_text = _person_list_text(persons or []) if persons else "No separately identified person."
+
+    people_text = (
+        _person_list_text(persons or [])
+        if persons
+        else "No separately identified person."
+    )
+
     return f"""You are a professional portrait retoucher planning Body Reshape edits.
 
-Inspect the attached original photograph and analyze every listed person independently. Never transfer a body observation, region, amount, or instruction from one person to another. Return one plan for every supplied person, in the same order, using the supplied subject_index and local_detection_index unchanged. Body Reshape is enabled for this planning pass: when a person's visible body contour contains at least one safe, localizable, measurable geometric adjustment, treat should_edit=true as the default and provide a concrete Body Reshape recommendation. Do not set should_edit=false merely because the person looks natural, thin, or has no obvious defect; an obvious problem is not required when a modest, anatomically natural local contour adjustment is supported by the image. Whenever should_edit=true, edit_prompt must name at least one visible body region and state a concrete geometric increase or decrease; never pair true with preservation-only or vague wording. Set should_edit=false only when no body region can be safely identified and measured (for example, the relevant contours are materially occluded, out of frame, or cannot be distinguished from another object/person), and explain that evidence limitation in the report. Never invent a hidden measurement or force an edit when no safe visible target exists.
+Inspect the attached original photograph and analyze every listed person independently. Never transfer a body observation, region, amount, or instruction from one person to another. Return one plan for every supplied person, in the same order, using the supplied subject_index and local_detection_index unchanged.
 
-Each edit_prompt is a single Traditional-Chinese editor command of at least {BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH} and at most {BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH} Unicode characters. It must be detailed enough to name that person's visible body region or contour, geometric increase/decrease direction, and the visible local measurement or target amount when the image supports one. State that the existing garment follows the approved local contour without changing garment identity or coverage. Mention only static body geometry: never request a pose, action, gesture, head/body direction, joint angle, facial edit, skin edit, lighting edit, clothing redesign, or background reconstruction. Do not use vague text such as「微調輪廓」alone. Numeric percentages are allowed and must be interpreted as a total change of the named visible 2D measurement, not per side or hidden anatomy.
+Body Reshape is enabled for this planning pass, but first perform a whole-visible-silhouette body-type suitability check. If a person is already markedly thin or very slender overall — for example, the visible torso and limbs have minimal soft-tissue contour, a notably narrow overall silhouette, or prominent bony landmarks — do not propose further slimming merely because one local width can technically be measured. A clearly visible abdomen or waist is not by itself permission to narrow it. Set should_edit=false for a slimming direction, explain in the report that the existing visible body is already very lean and that another reduction would be disproportionate, and use a detailed preservation instruction. This is a visual proportion safeguard, not a medical diagnosis; do not infer it from clothing alone, and do not label a person over-thin from one narrow region, perspective, or pose in isolation. A thin-body no-op is valid even when a local contour is measurable and overrides the normal edit-default rule.
 
-The report is a Traditional-Chinese explanation of the visual evidence, the selected region and measurement, the direction and magnitude, and the limits that must be preserved. It is review context; edit_prompt is the exact text handed to Editor. Keep each person's instruction distinct by referring to the corresponding person and never merge multiple people into one sentence.
+For every other person, when a visible body contour contains at least one safe, localizable, measurable geometric adjustment, treat should_edit=true as the default and provide a concrete Body Reshape recommendation. An obvious defect is not required when a modest, anatomically natural local contour adjustment is supported by the image. A tasteful, modest slimming or contour refinement of one clearly visible body region — for example gently narrowing a waist, abdomen, thigh, or upper-arm outline toward a more balanced silhouette — is a valid, sufficient Body Reshape opportunity as long as the change stays anatomically plausible, keeps the person recognizably the same body type and identity, and stays within a subtle, localized amount.
 
-The editor must preserve identity, face, hair, hands, feet, anatomy, pose, expression, camera viewpoint, lighting, scene, background geometry, and every unlisted body region. Existing fabric, texture, seams, folds, and local clothing/skin boundaries may move only as necessary with an approved body contour. Do not move a person to their box coordinates or treat a box as a target silhouette.
+Whenever should_edit=true, edit_prompt must name at least one visible body region and state a concrete geometric increase or decrease; never pair true with preservation-only or vague wording. Set should_edit=false when either the person is already markedly thin for the requested slimming direction or no body region can be safely identified and measured (for example, the relevant contours are materially occluded, out of frame, or cannot be distinguished from another object/person). In both no-edit cases, explain the visual evidence and limitation in the report rather than inventing a target.
+
+A seated, bent, crossed, or otherwise non-standing pose does not by itself block editing, but any specific segment whose outer edge is overlapped by another limb, garment fold, furniture, another person, or the frame boundary is not a safely measurable target even when a different segment of the same person is; never substitute a nearby unoccluded contour as a stand-in for that segment's true width. When an edit is warranted, confine the primary body adjustment to the single most clearly visible, fully unoccluded local side or segment that supports it; do not widen that primary target to the opposite side, the whole waist/torso, or any adjacent segment unless that other side or segment is independently and just as clearly visible and unoccluded. Necessary, explicitly specified head/neck proportion compensation under the rules below is a permitted exception to this single-primary-region limit, not permission to reshape other unlisted regions. Never invent a hidden measurement or force an edit when no safe visible target exists.
+
+[Required head and neck outer-contour assessment]
+For every should_edit=true plan, assess the selected body contour together with the visible outer contour of the head and neck so the complete silhouette remains natural. Body Reshape may authorize only the named body contour and the minimum head outer-contour or neck outer-contour follow-through needed for proportion. Other feature endpoints remain owned by their own contracts and must not be added to this body command.
+
+- Classify the body change before writing the command. A modest/local change affects one clearly visible segment and is normally below 15% of that segment's original total width. A substantial change is any explicit total target of 15% or more, a change spanning two or more adjacent trunk regions, a broad torso/full-visible-silhouette change, a visibly large transition from a markedly heavy silhouette toward a much smaller silhouette, or a post-edit proportion risk in which the head would look oversized relative to the altered shoulders, torso, or limb even when the body amount is below 15%.
+- For a modest/local change, head and neck outer-contour compensation may be omitted only after a post-edit proportion check confirms that the head, neck, shoulders, torso, and edited limb still read naturally. A modest upper-arm or shoulder-adjacent edit is not automatically exempt: if the exact body change would make the head look too large or the neck transition look disproportionate, treat it as a proportion-risk case and require both outer-contour operations. For a substantial or proportion-risk change, head outer-contour and neck outer-contour compensation are mandatory whenever those contours are visible and measurable; never write that both remain unchanged. If a required contour is cropped, occluded, or unsafe to measure, do not approve the broad/proportion-risk body change as written—reduce it to a safe local target or set should_edit=false with the visibility limitation.
+
+- Head outer contour: when compensation is optional or mandatory under the classification above, uniformly scale the visible outer head contour as one coherent unit. State a concrete amount chosen from the visible proportions; use the same linear factor for width and height, and keep the original head-to-neck connection, tilt, direction, and pose. Do not blindly copy the body percentage and do not independently translate, rotate, stretch, or compress the head.
+- Neck outer contour: when compensation is optional or mandatory under the classification above, adjust only a clearly visible local outer width at a named level. Both boundaries must be visible for a total-width percentage; choose the amount from the visible body-to-neck proportions rather than copying the body percentage, and keep the neck centerline, visible length, head/shoulder attachment, and pose unchanged.
+- Choose head and neck outer-contour amounts independently from the primary body amount and keep each compensation no larger than necessary to restore a natural silhouette. Do not use a head or neck adjustment to justify a larger body change or to alter any unlisted region.
+- Apply visibility and occlusion checks independently to the head and neck outer contours. Do not guess hidden boundaries or modify a cropped/occluded connection. If no compensation is needed, leave the head and neck outer contours naturally connected and unchanged.
+- Every approved head or neck outer-contour adjustment must appear explicitly in edit_prompt with its region, geometric operation, direction, and amount. If no compensation is selected after the post-edit proportion check, state only that the head and neck outer contours remain naturally connected and unchanged; never use that unchanged clause for a substantial or proportion-risk target.
+
+Each edit_prompt is a single Traditional-Chinese editor command of at least {BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH} and at most {BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH} Unicode characters. Use concise clauses within that one command to include the primary body edit and any approved head/neck outer-contour compensation. It must name that person's visible body region or contour, geometric increase/decrease direction, and the visible local measurement or target amount when the image supports one. State that the existing garment follows the approved local contour without changing garment identity or coverage. For a substantial target, include both the mandatory head outer-contour and neck outer-contour operations with concrete amounts; never state that both remain unchanged. For a modest/local target, compensation may be omitted and the command may state only that the head and neck outer contours remain naturally connected and unchanged. Do not add unrelated feature endpoints or enumerate unrelated regions; use one generic remainder clause when needed.
+
+Mention only static geometry: never request a pose, action, gesture, head/body direction, joint angle, clothing redesign, or background reconstruction. The explicitly approved head outer-contour and neck outer-contour operations are the only additional proportion adjustments allowed beside the named body region. Do not use vague text such as「微調輪廓」alone. Numeric percentages refer to the original photograph and must be interpreted as a total change of the named visible 2D measurement, not per side or hidden anatomy; a head-scaling percentage applies equally to the head's original width and height.
+
+The report is a Traditional-Chinese explanation of the visual evidence, the selected region and measurement, the direction and magnitude, and the limits that must be preserved. For a no-edit person, explain whether the overall visible body is already markedly thin or whether visibility/occlusion prevents a safe target. For every edited person, explain the head and neck outer-contour assessment, the post-edit proportion check, which compensation is included or why those contours remain unchanged, and any visibility limitations. Describe anticipated effects of the plan, not an edited result you have not observed. The report is review context; edit_prompt is the exact text handed to Editor and must contain every approved geometric operation. Keep each person's instruction distinct by referring to the corresponding person and never merge multiple people into one sentence.
+
+The editor must preserve every unlisted body region, person, object, pose, camera viewpoint, lighting, scene, background geometry, and spatial relationship. Only the named body contour and any explicitly approved head or neck outer contour may change. Existing fabric, texture, seams, folds, and local clothing boundaries may move only as necessary with an approved contour, without changing garment identity or coverage. Do not move a person to their box coordinates or treat a box as a target silhouette.
 
 Return exactly this JSON object:
 {{
@@ -4337,17 +4371,23 @@ def build_body_reshape_edit_block(analysis):
         target_lines.append(
             f'- Subject: {item["subject_label"]}\n'
             f'  Approximate location in frame: {json.dumps(item["box"], ensure_ascii=False)}\n'
-            f'  Approved natural body adjustment:\n    {item["edit_prompt"]}'
+            f'  Approved body and outer-contour adjustment:\n    {item["edit_prompt"]}'
         )
     return """Body reshape execution instructions (analysis-approved):
-- Every listed instruction is mandatory for the named person and applies only to the visible static body geometry it names. Do not invent an unlisted body change; Body Reshape never authorizes posture, action, gesture, joint-angle, head direction, or body-direction changes. A separately selected pose style remains authoritative only for its own pose transformation.
+- Every listed instruction is mandatory for the named person and applies only to the visible static body geometry it names. The only additional geometry allowed by Body Reshape is a head outer contour or neck outer contour explicitly written in that same instruction. Do not invent an unlisted body change or broaden the command to another region; posture, action, gesture, joint-angle, head direction, and body direction remain outside this contract.
+- The planner's markedly-thin no-op safeguard has priority over any generic slimming preference. Do not invent or extend a slimming target for a person whose approved analysis says the overall visible body is already markedly thin; this block contains only active, approved targets.
 - Subject labels and boxes identify people only. Never move a person to box coordinates or treat a box as a target silhouette. Match each command to the named person's visible anatomy and clothing in the supplied image.
 - Complete each named increase/decrease at the exact amount printed in that person's instruction. A true no-op, tonal-only edit, blur, sharpening, or redrawn fold does not complete a geometric body command. A percentage is the total dimensional change of the named visible 2D local measurement, not per side, the whole person, bounding box, canvas, circumference, hidden depth, or hidden anatomy.
 - If adjacent waist and abdomen commands overlap, blend them into one continuous contour without applying the same percentage twice. Preserve every unlisted body region and every other person's geometry.
+- Keep each target command concise: execute only the named body contour and any explicitly named head/neck outer contour; do not expand it with a preservation-only list of unrelated regions.
+- Treat a target as substantial when its explicit total amount is 15% or more, it spans two or more adjacent trunk regions, it changes a broad torso/full visible silhouette, it describes a visibly large transition from a markedly heavy silhouette toward a much smaller silhouette, or the exact edit would make the head look oversized relative to an altered shoulder, torso, or limb. For an upper-arm or shoulder-adjacent target, compare the projected head-to-shoulder and head-to-upper-torso proportions after the exact arm change; do not rely on the numeric 8%/10% amount alone. A substantial or proportion-risk target is incomplete unless its approved instruction includes both head outer-contour and neck outer-contour operations with concrete amounts whenever those contours are visible and measurable; do not silently treat those contours as unchanged just because the primary body amount is below 15%.
+- For a substantial or proportion-risk target with a cropped, occluded, or otherwise unsafe head/neck contour, do not invent hidden geometry or an amount. The planner must have reduced or rejected that broad target; execute only the safe approved scope.
+- If a head outer contour is explicitly approved, apply one uniform width/height scale to the visible outer contour, keep its original head-to-neck connection, tilt, direction, and pose, and do not independently translate, rotate, stretch, or compress it. Its amount is independent from the body percentage.
+- If a neck outer contour is explicitly approved, adjust only the named visible local width where both boundaries are visible; keep the neck centerline, length, head/shoulder attachment, and pose unchanged. Its amount is independent from the body percentage. Blend the body-to-neck transition continuously and anatomically.
 - Preserve garment identity, type, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method. Within an approved body region, let the existing garment silhouette, fabric, texture, seams, folds, and local clothing/skin boundary follow the approved body contour continuously; this is required follow-through, not permission to redesign clothing.
 - Never lengthen or lower a top to cover the abdomen, raise a waistband to cover the waist, add or remove fabric, alter a neckline or sleeve, change clothing coverage, or use shadows/blur/folds to fake a body change.
 - Where an outer contour moves, continue only the narrow adjacent strip of the same background with matching texture and perspective. Do not reconstruct or warp the background, nearby people, objects, architecture, lines, or camera viewpoint.
-- Preserve face identity and facial anatomy, skin, hair, hands, feet, accessories, expression, pose, lighting, crop, perspective, and every unlisted region. Protect anatomy continuity and nearby content from smearing, bending, duplication, or displacement outside the necessary local follow-through above.
+- Preserve every unlisted region, person, object, pose, lighting, crop, perspective, and scene relationship. Protect anatomy continuity and nearby content from smearing, bending, duplication, or displacement outside the necessary local contour follow-through above.
 
 Targets:
 """ + "\n".join(target_lines)
