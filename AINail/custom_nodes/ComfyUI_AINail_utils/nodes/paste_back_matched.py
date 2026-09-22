@@ -84,7 +84,10 @@ class PasteBackMatched:
          match when intersection(finger_masks[f], nail_masks_2[j]) is at
          least `finger_overlap_ratio` times intersection(finger_masks[f],
          nail_masks_1[i]).
-      4. Union nail_masks_2 for the surviving j's -> composite mask.
+      4. Union nail_masks_1[i] with nail_masks_2[j] for each surviving (i, j)
+         -> composite mask. Including the old (crop) nail mask ensures the
+         full extent of the original nail is overwritten even when the new
+         nail is smaller/shorter, instead of leaving a stale sliver of it.
       5. Dilate, undo resize (generated image + mask -> hand square space),
          undo crop padding, alpha-blend the patch onto the original image.
 
@@ -167,7 +170,7 @@ class PasteBackMatched:
             finger_matches = match_boxes_by_iou(fb, b1, min_iou_val)
             nail1_to_finger = {i1: f for f, i1, _ in finger_matches}
 
-            matched_j = []
+            matched_pairs = []
             for i1, j2, _ in nail_matches:
                 f = nail1_to_finger.get(i1)
                 if f is not None:
@@ -176,9 +179,9 @@ class PasteBackMatched:
                     if area_2 >= overlap_ratio * area_1:
                         # Generated nail bled onto the finger far more than it originally did.
                         continue
-                matched_j.append(j2)
+                matched_pairs.append((i1, j2))
 
-            if not matched_j:
+            if not matched_pairs:
                 # No generated nail corresponds to a pre-existing nail: skip this hand entirely.
                 continue
 
@@ -194,8 +197,14 @@ class PasteBackMatched:
 
             resample = RESIZE_METHODS.get(r_info["method"], Image.LANCZOS)
 
-            # Union only the matched generated-nail masks -> composite [H_gen, W_gen]
-            composite_mask = hand_nail_masks_2[matched_j].max(dim=0).values.float()
+            # Union each matched pair's old (crop) + new (generated) nail mask, so the
+            # old nail's full extent gets overwritten even where the new nail is smaller
+            # -> composite [H_gen, W_gen]
+            matched_i1 = [i1 for i1, _ in matched_pairs]
+            matched_j2 = [j2 for _, j2 in matched_pairs]
+            composite_mask = torch.cat([
+                hand_nail_masks_1[matched_i1], hand_nail_masks_2[matched_j2],
+            ], dim=0).max(dim=0).values.float()
 
             # Dilate composite mask
             composite_mask = dilate_mask(composite_mask, dilate_px)
