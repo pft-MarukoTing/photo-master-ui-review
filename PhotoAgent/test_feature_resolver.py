@@ -126,6 +126,35 @@ class NestedIssueReading(unittest.TestCase):
         analysis["_disabled_face_issues"] = [{"subject_index": 0, "category": "blink_issue"}]
         self.assertEqual(build_feature_contracts(analysis), [])
 
+    def test_overlapping_faces_keep_their_own_final_states(self):
+        """Two people whose boxes nearly share a centre must not be merged."""
+        analysis = {
+            "_advanced_options": {
+                "eye_closed_detection": True,
+                "gaze_contact_detection": True,
+                "smile_adjustment": False,
+            },
+            "subjects": [
+                {
+                    "label": "front woman", "is_person": True,
+                    "box": {"x": .47, "y": .12, "w": .49, "h": .88},
+                    "blink_issue": {"should_fix": True, "reason": "both eyes closed"},
+                },
+                {
+                    "label": "back woman", "is_person": True,
+                    "box": {"x": .49, "y": .08, "w": .4, "h": .61},
+                    "gaze_issue": {"should_fix": True, "head_pose": "frontal"},
+                },
+            ],
+        }
+        resolved = resolve_feature_contracts(
+            build_feature_contracts(analysis), subject_count=2
+        )
+        self.assertEqual(
+            sorted((item["subject"], tuple(item["features"])) for item in resolved),
+            [("back woman", ("gaze",)), ("front woman", ("blink",))],
+        )
+
 
 class BodyReshapePromptRouting(unittest.TestCase):
     def test_compact_editor_prompt_routes_one_holistic_prompt_verbatim(self):

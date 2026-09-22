@@ -600,6 +600,7 @@ def _smile_contracts(analysis):
                 "box": subject.get("box") or {},
                 "current": None,
                 "target": level,
+                "_subject_index": index,
             }
             targets.append(target)
 
@@ -607,6 +608,7 @@ def _smile_contracts(analysis):
     for item in targets:
         contract = {
             "feature": "smile",
+            "subject_index": item.get("_subject_index"),
             "subject": item.get("label") or "畫面中的人物",
             "box": _box(item),
             "source_state": ({"smile_level": item["current"]} if item["current"] else {}),
@@ -660,6 +662,7 @@ def _gaze_contracts(analysis, include_gaze):
             dependent_changes.append("viewpoint_projected_facial_geometry")
         contract = {
             "feature": "gaze",
+            "subject_index": item.get("_subject_index"),
             "subject": item.get("subject_label") or "畫面中的人物",
             "box": _box(item),
             "endpoint": {
@@ -741,6 +744,7 @@ def _blink_contracts(analysis):
             endpoint["eyelid_strength"] = "strong"
         contract = {
             "feature": "blink",
+            "subject_index": item.get("_subject_index"),
             "subject": item.get("subject_label") or "畫面中的人物",
             "box": _box(item),
             "endpoint": endpoint,
@@ -804,6 +808,7 @@ def _hair_contracts(analysis):
             direct.extend(["fringe_distribution", "hair_sheen"])
         contract = {
             "feature": "hair",
+            "subject_index": index,
             "subject": subject.get("label") or "畫面中的人物",
             "box": _box(subject),
             "endpoint": {
@@ -902,7 +907,12 @@ def _safe_gaze_head_face_adjustment(value, *, allow_pose_change=False):
 
 
 def build_feature_contracts(analysis, *, include_gaze=True):
-    """Return active, editor-stage feature contracts from analysis/options."""
+    """Return active, editor-stage feature contracts from analysis/options.
+
+    Every contract carries its parent ``subjects[]`` index so the resolver
+    merges by identity; without it two overlapping faces are merged by box
+    proximity and one person's final state lands on the other.
+    """
     contracts = (
         _smile_contracts(analysis)
         + _gaze_contracts(analysis, include_gaze)
