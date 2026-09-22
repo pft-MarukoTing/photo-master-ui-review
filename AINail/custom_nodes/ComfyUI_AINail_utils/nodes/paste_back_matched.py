@@ -127,10 +127,10 @@ class PasteBackMatched:
     generation), the generated nail likely bled onto the finger — that nail's
     mask is excluded from pasting.
 
-    Before matching, near-duplicate detections of the same nail on either side
-    (e.g. a small box nested almost entirely inside a larger one) are merged
-    by union (see `merge_overlapping_masks`), so the smaller one can't win a
-    match away from the true full-extent mask.
+    Before matching, near-duplicate detections of the same nail/finger (e.g. a
+    small box nested almost entirely inside a larger one) are merged by union
+    (see `merge_overlapping_masks`), so the smaller one can't win a match away
+    from the true full-extent mask.
 
     For each hand:
       1. Match nail_masks_1[i] <-> nail_masks_2[j] by greedy highest-mask-IoU
@@ -225,11 +225,12 @@ class PasteBackMatched:
             if hand_finger_masks.dim() == 2:
                 hand_finger_masks = hand_finger_masks.unsqueeze(0)
 
-            # Collapse near-duplicate detections of the same nail (e.g. a small box
-            # nested inside a large one) before matching, so the smaller one can't
+            # Collapse near-duplicate detections of the same nail/finger (e.g. a small
+            # box nested inside a large one) before matching, so the smaller one can't
             # win a match away from the true full-extent mask.
             hand_nail_masks_1 = merge_overlapping_masks(hand_nail_masks_1, dedup_thresh)
             hand_nail_masks_2 = merge_overlapping_masks(hand_nail_masks_2, dedup_thresh)
+            hand_finger_masks = merge_overlapping_masks(hand_finger_masks, dedup_thresh)
 
             nail_matches = match_by_iou_matrix(
                 mask_iou_matrix(hand_nail_masks_1, hand_nail_masks_2), min_iou_val
