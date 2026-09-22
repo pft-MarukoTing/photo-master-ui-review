@@ -6,45 +6,53 @@ from PIL import Image
 from .paste_back import RESIZE_METHODS, dilate_mask
 
 
-def box_iou(a, b):
-    """IoU of two [x1, y1, x2, y2] boxes."""
-    ax1, ay1, ax2, ay2 = a
-    bx1, by1, bx2, by2 = b
-    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
-    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
-    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
-    if inter <= 0.0:
-        return 0.0
-    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
-    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+def mask_iou_matrix(masks_a, masks_b, threshold=0.5):
+    """Pairwise IoU matrix [N_a, N_b] between two [N, H, W] mask sets.
+
+    Computed as a single matmul over flattened binarized masks instead of a
+    per-pair python loop, so it stays cheap even at mask resolution (a
+    handful of nails/fingers against ~1024x1024 masks is a few milliseconds).
+    Box IoU is not used for matching: a large/merged box can spuriously
+    overlap several unrelated boxes, while the actual mask shapes disambiguate
+    correctly.
+    """
+    n_a, n_b = masks_a.shape[0], masks_b.shape[0]
+    if n_a == 0 or n_b == 0:
+        return torch.zeros((n_a, n_b))
+    a = (masks_a > threshold).float().reshape(n_a, -1)
+    b = (masks_b > threshold).float().reshape(n_b, -1)
+    inter = a @ b.T
+    area_a = a.sum(dim=1, keepdim=True)
+    area_b = b.sum(dim=1, keepdim=True).T
     union = area_a + area_b - inter
-    return inter / union if union > 0.0 else 0.0
+    return inter / union.clamp(min=1e-8)
 
 
-def match_boxes_by_iou(boxes_1, boxes_2, min_iou=0.0):
-    """Greedy one-to-one matching: highest-IoU pairs are assigned first.
+def match_by_iou_matrix(iou_matrix, min_iou=0.0):
+    """Greedy one-to-one matching over a precomputed IoU matrix [N_a, N_b].
 
-    Each box_1 gets at most one box_2 (and vice versa). A pair is only
-    eligible when its IoU is strictly greater than `min_iou`, so an
-    isolated box_1 with no overlapping box_2 is left unmatched.
+    Highest-IoU pairs are assigned first; each side is used at most once. A
+    pair is only eligible when its IoU is strictly greater than `min_iou`, so
+    an isolated entry with no overlapping counterpart is left unmatched.
 
     Returns a list of (i, j, iou) for matched pairs.
     """
+    n_a, n_b = iou_matrix.shape
     candidates = []
-    for i, b1 in enumerate(boxes_1):
-        for j, b2 in enumerate(boxes_2):
-            iou = box_iou(b1, b2)
+    for i in range(n_a):
+        for j in range(n_b):
+            iou = iou_matrix[i, j].item()
             if iou > min_iou:
                 candidates.append((iou, i, j))
     candidates.sort(key=lambda t: t[0], reverse=True)
 
-    used_1, used_2 = set(), set()
+    used_a, used_b = set(), set()
     matches = []
     for iou, i, j in candidates:
-        if i in used_1 or j in used_2:
+        if i in used_a or j in used_b:
             continue
-        used_1.add(i)
-        used_2.add(j)
+        used_a.add(i)
+        used_b.add(j)
         matches.append((i, j, iou))
     return matches
 
@@ -62,12 +70,15 @@ class PasteBackMatched:
 
     Compared to PasteBack, this node additionally receives the crop (i.e. the
     image actually fed into generation) and SAM3 "nail"/"finger" boxes/masks
-    detected on it and on the generated image. It matches nail_boxes_1 (crop)
-    to nail_boxes_2 (generated) by IoU so that only generated nails
+    detected on it and on the generated image. It matches nail_masks_1 (crop)
+    to nail_masks_2 (generated) by mask IoU so that only generated nails
     corresponding to a real, pre-existing nail get pasted back — any
     hallucinated/extra nail detected only in the generated image is ignored.
+    Matching uses the masks rather than the boxes: a large/merged detection
+    box can spuriously have high box-IoU with several unrelated smaller
+    boxes, while the actual mask shapes disambiguate correctly.
 
-    It additionally matches finger_boxes (crop) to nail_boxes_1 by the same
+    It additionally matches finger_masks (crop) to nail_masks_1 by the same
     IoU algorithm, to find which finger each pre-existing nail sits on. For a
     matched nail, if the generated nail mask has grown far past the finger
     mask compared to how much the original nail mask overlapped that finger
@@ -76,9 +87,9 @@ class PasteBackMatched:
     mask is excluded from pasting.
 
     For each hand:
-      1. Match nail_boxes_1[i] <-> nail_boxes_2[j] by greedy highest-IoU
+      1. Match nail_masks_1[i] <-> nail_masks_2[j] by greedy highest-mask-IoU
          assignment (no reuse of either side, and a match requires overlap).
-      2. Match finger_boxes[f] <-> nail_boxes_1[i] the same way, to find each
+      2. Match finger_masks[f] <-> nail_masks_1[i] the same way, to find each
          nail's finger.
       3. For each matched (i, j), if nail i has a matched finger f, drop the
          match when intersection(finger_masks[f], nail_masks_2[j]) is at
@@ -98,11 +109,14 @@ class PasteBackMatched:
       crop_images     : [N_hands] original image after crop+resize (what was fed to generation)
       generated_images: [N_hands] one generated hand image per hand
       nail_boxes_1    : [N_hands] JSON "[[x1,y1,x2,y2], ...]" — SAM3 "nail" boxes on crop_images
+                        (accepted for graph-wiring parity with nail_masks_1; not used for matching)
       nail_boxes_2    : [N_hands] JSON "[[x1,y1,x2,y2], ...]" — SAM3 "nail" boxes on generated_images
+                        (accepted for graph-wiring parity with nail_masks_2; not used for matching)
       nail_masks_1    : [N_hands] each [N_nails_1, H, W] — SAM3 "nail" masks on crop_images
       nail_masks_2    : [N_hands] each [N_nails_2, H, W] — SAM3 "nail" masks on generated_images,
                         index-aligned with nail_boxes_2
       finger_boxes    : [N_hands] JSON "[[x1,y1,x2,y2], ...]" — SAM3 "finger" boxes on crop_images
+                        (accepted for graph-wiring parity with finger_masks; not used for matching)
       finger_masks    : [N_hands] each [N_fingers, H, W] — SAM3 "finger" masks on crop_images,
                         index-aligned with finger_boxes
     """
@@ -152,10 +166,6 @@ class PasteBackMatched:
             c_info = crops_info[j]
             r_info = resizes_info[j]
 
-            b1 = json.loads(nail_boxes_1[j])
-            b2 = json.loads(nail_boxes_2[j])
-            fb = json.loads(finger_boxes[j])
-
             hand_nail_masks_1 = nail_masks_1[j]
             if hand_nail_masks_1.dim() == 2:
                 hand_nail_masks_1 = hand_nail_masks_1.unsqueeze(0)
@@ -166,8 +176,12 @@ class PasteBackMatched:
             if hand_finger_masks.dim() == 2:
                 hand_finger_masks = hand_finger_masks.unsqueeze(0)
 
-            nail_matches = match_boxes_by_iou(b1, b2, min_iou_val)
-            finger_matches = match_boxes_by_iou(fb, b1, min_iou_val)
+            nail_matches = match_by_iou_matrix(
+                mask_iou_matrix(hand_nail_masks_1, hand_nail_masks_2), min_iou_val
+            )
+            finger_matches = match_by_iou_matrix(
+                mask_iou_matrix(hand_finger_masks, hand_nail_masks_1), min_iou_val
+            )
             nail1_to_finger = {i1: f for f, i1, _ in finger_matches}
 
             matched_pairs = []
