@@ -7,14 +7,18 @@ class SSIMScore:
     """Compute whole-image SSIM between each crop_images[i] and generated_images[i].
 
     Inputs (collected via INPUT_IS_LIST):
-      crop_images     : [N] one crop (post crop+resize) per hand
+      crop_images      : [N] one crop (post crop+resize) per hand
       generated_images : [N] one generated image per hand
+      ssim_threshold    : minimum acceptable SSIM per pair
 
     If a pair's spatial size differs, generated_images[i] is resized to
     crop_images[i]'s size before comparison.
 
-    Output:
+    Outputs:
       ssim_scores : [N] one SSIM float per hand, same order as the inputs.
+      images      : [N] crop_images if any ssim_scores[i] < ssim_threshold
+                    (generation judged bad somewhere), otherwise generated_images
+                    (every pair passed the threshold).
     """
 
     INPUT_IS_LIST = True
@@ -25,16 +29,19 @@ class SSIMScore:
             "required": {
                 "crop_images": ("IMAGE",),
                 "generated_images": ("IMAGE",),
+                "ssim_threshold": ("FLOAT", {"default": 0.76, "min": 0.0, "max": 1.0, "step": 0.01}),
             }
         }
 
-    RETURN_TYPES = ("FLOAT",)
-    RETURN_NAMES = ("ssim_scores",)
-    OUTPUT_IS_LIST = (True,)
+    RETURN_TYPES = ("FLOAT", "IMAGE")
+    RETURN_NAMES = ("ssim_scores", "images")
+    OUTPUT_IS_LIST = (True, True)
     FUNCTION = "compute"
     CATEGORY = "AINail/image"
 
-    def compute(self, crop_images, generated_images):
+    def compute(self, crop_images, generated_images, ssim_threshold):
+        threshold = ssim_threshold[0]
+
         scores = []
         for crop, gen in zip(crop_images, generated_images):
             crop_np = crop.clamp(0, 1).cpu().numpy().astype(np.float64)   # [B, H, W, C]
@@ -57,7 +64,8 @@ class SSIMScore:
 
             scores.append(sum(frame_scores) / len(frame_scores))
 
-        return (scores,)
+        images = crop_images if any(s < threshold for s in scores) else generated_images
+        return (scores, images)
 
 
 NODE_CLASS_MAPPINGS = {
