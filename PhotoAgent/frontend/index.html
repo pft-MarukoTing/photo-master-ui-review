@@ -5512,26 +5512,37 @@
                  stay untouched -- the boxed header they used to sit in is gone. -->
             <strong id="orig-dim" hidden></strong>
             <strong id="model-name" hidden>AI 智能美化</strong>
-            </div>
-          </div>
-          <!-- Every edit this photo has ever been through, one tile per
-               result image, oldest on the left -- the direct-jump counterpart
-               of the prev/next arrows floating over the photo above, which
-               only step one image at a time. Built by renderVersionStrip
-               (app.js) from the same run list the arrows walk, and shown only
-               for a history case that actually has versions (a live
-               run_count>1 revise keeps the arrows alone).
+            <!-- Every edit this photo has ever been through, one tile per
+                 result image, oldest on the left -- the direct-jump counterpart
+                 of the prev/next arrows floating over the photo above, which
+                 only step one image at a time. Built by renderVersionStrip
+                 (app.js) from the same run list the arrows walk, and shown only
+                 for a history case that actually has versions (a live
+                 run_count>1 revise keeps the arrows alone).
 
-               Tiles come from /result/<job>/thumbnail, which reads the job's
-               own Redis state -- so an older version's tile renders without
-               that version's full result payload having been fetched at all
-               (see fetchHistoryVersionRuns' lazy loading). -->
-          <div id="version-strip" class="version-strip" hidden>
-            <div class="version-strip-head">
-              <span class="version-strip-title">編輯紀錄</span>
-              <span id="version-strip-count" class="version-strip-count"></span>
+                 Tiles come from /result/<job>/thumbnail, which reads the job's
+                 own Redis state -- so an older version's tile renders without
+                 that version's full result payload having been fetched at all
+                 (see fetchHistoryVersionRuns' lazy loading). -->
+            <div id="version-strip" class="version-strip" hidden>
+              <div class="version-strip-head">
+                <span class="version-strip-title">美化紀錄</span>
+                <span id="version-strip-count" class="version-strip-count"></span>
+                <!-- Pinned to the far right of the head, away from the title and the
+                     version count, because it is a standing fact about how the whole
+                     strip works rather than a status belonging to any one version. -->
+                <span class="version-strip-note">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="M12 11v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                    <circle cx="12" cy="7.8" r="1.1" fill="currentColor"/>
+                  </svg>
+                  每次修圖皆由原圖重新產生
+                </span>
+              </div>
+              <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label="這張照片的美化紀錄"></div>
             </div>
-            <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label="這張照片的編輯版本"></div>
+            </div>
           </div>
           <!-- Case lifecycle metadata. uploaded_at is fixed when this photo
                first enters history; modified_at is only present after an

@@ -10213,6 +10213,53 @@
     if (versionStripRuns !== runs) {
       versionStripRuns = runs;
       els.versionStripTrack.textContent = "";
+      // The original is pinned in front of the versions and fenced off with a
+      // divider, because every version is "original + that version's settings"
+      // re-run from scratch -- never "the previous version, edited further".
+      // /continue carries the prior job's srcKeys forward untouched, and srcKeys
+      // has pointed at the original since the first upload. Without this tile a
+      // flat row of thumbnails reads as a chain, which is the one thing it isn't.
+      //
+      // Deliberately not a button: #compare-toggle-btn on the photo is already the
+      // way to look at the original, and a second affordance that behaves
+      // differently while sitting inside a row of tiles that DO navigate would be
+      // worse than none. This tile answers "where did these come from", not "take
+      // me somewhere".
+      const origin = document.createElement("div");
+      origin.className = "version-origin";
+      const originTile = document.createElement("div");
+      originTile.className = "version-origin-tile";
+      const originImg = document.createElement("img");
+      // originalImgThumbUrl mirrors whatever #original-img is showing (a local blob
+      // for a fresh upload, sourceThumbnailUrl when opened from history) and
+      // survives version switching, since every version of a case shares one
+      // original. The fallback covers a render that beats it being set.
+      originImg.src = originalImgThumbUrl || sourceThumbnailUrl(runs[0].jobId);
+      originImg.alt = "";
+      originImg.loading = "lazy";
+      originTile.append(originImg);
+      const originLabel = document.createElement("span");
+      originLabel.className = "version-group-label";
+      originLabel.textContent = "原圖";
+      origin.append(originTile, originLabel);
+      const divider = document.createElement("div");
+      divider.className = "version-strip-divider";
+      divider.setAttribute("aria-hidden", "true");
+      // Origin and divider travel as one node so the fence can never drift away
+      // from what it fences: this wrapper is what stays fixed at the left
+      // edge while the version tiles scroll past it on a narrow screen -- it
+      // lives as a plain sibling of .version-strip-versions below, outside
+      // that lane's own scroll area, so it never needs to move at all.
+      const originFence = document.createElement("div");
+      originFence.className = "version-strip-origin";
+      originFence.append(origin, divider);
+      els.versionStripTrack.append(originFence);
+      // Its own scroll container, separate from originFence above -- so the
+      // native scrollbar this element grows only ever spans the versions,
+      // never the origin tile sitting to its left.
+      const versionsScroll = document.createElement("div");
+      versionsScroll.className = "version-strip-versions";
+      els.versionStripTrack.append(versionsScroll);
       let group = null;
       let groupTiles = null;
       let groupVersionId = null;
@@ -10224,11 +10271,12 @@
           group.dataset.versionId = run.versionId || "";
           groupTiles = document.createElement("div");
           groupTiles.className = "version-group-tiles";
-          const label = document.createElement("span");
-          label.className = "version-group-label";
-          label.textContent = run.versionTotal ? `版本 ${run.versionNumber}` : `第 ${run.run} 張`;
-          group.append(groupTiles, label);
-          els.versionStripTrack.append(group);
+          // No per-version label: the tiles are in order and the one in play
+          // already carries the accent border, so a number under each would
+          // only restate what the row shows. The 原圖 tile keeps its label
+          // because it is the one tile whose role is not obvious from position.
+          group.append(groupTiles);
+          versionsScroll.append(group);
         }
         const tile = document.createElement("button");
         tile.type = "button";
@@ -10259,7 +10307,7 @@
     const current = runs[currentIdx];
     if (els.versionStripCount) {
       els.versionStripCount.textContent = current && current.versionTotal
-        ? `共 ${current.versionTotal} 版`
+        ? `第 ${current.versionNumber}／${current.versionTotal} 組`
         : "";
     }
     els.versionStripTrack.querySelectorAll(".version-tile").forEach((tile) => {
@@ -10286,8 +10334,11 @@
   // either. Measured off getBoundingClientRect rather than offsetLeft: the
   // tiles' offsetParent is whatever positioned ancestor the results layout
   // happens to give them, which is not the scrolling track.
+  // .version-strip-versions, not els.versionStripTrack, is the element that
+  // actually scrolls -- the origin tile sits outside it as a fixed sibling.
   function revealVersionTile(tile) {
-    const track = els.versionStripTrack;
+    const track = els.versionStripTrack
+      && els.versionStripTrack.querySelector(".version-strip-versions");
     if (!track || !tile.isConnected) return;
     const trackRect = track.getBoundingClientRect();
     const tileRect = tile.getBoundingClientRect();

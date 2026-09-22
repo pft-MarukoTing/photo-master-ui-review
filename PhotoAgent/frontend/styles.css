@@ -2548,18 +2548,30 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 }
 /* ── Version strip ────────────────────────────────────────────────────────
    One clickable tile per result image the case has ever produced, laid out
-   left-to-right oldest-first, directly under the photo. Sits in
-   .results-canvas-col (NOT in #results-canvas-top, which display:contents
-   flattens into the row and which a short viewport turns into a fixed
-   photo/options flex column -- a third child there would have to fight for
-   that column's height budget). */
+   left-to-right oldest-first, directly under the photo. Lives INSIDE
+   .compare-card as its last child, so the photo and its history read as one
+   object instead of two stacked boxes. It therefore gets no border or card
+   of its own: negative margins bleed it out to the card's inner edges, and a
+   tinted band plus a single rule line are all that separate it from the
+   photo above. The bottom corners repeat the card's own radius so the bleed
+   doesn't square off the card.
+   background is --card-2, NOT the flatter --card .compare-card's own fill
+   sits on -- on every light theme --card is pure/near white (paper #fff,
+   lilac/caramel ~#FEFDFE, peach ==--bg), while .compare-card paints over it
+   with --card-2 plus a brand-tinted glow. A strip painted with --card would
+   cut across that glow as a flat white slab the instant it crosses the
+   border-top line. --card-2 is the same base .compare-card itself sits on,
+   so the seam is just the accent rule, not a colour jump. */
 .version-strip {
-  margin-top: 12px;
+  margin: 12px -12px -12px;
   padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--card);
+  border-top: 1px solid rgba(var(--accent-rgb),.28);
+  border-radius: 0 0 calc(var(--radius-lg) - 1.5px) calc(var(--radius-lg) - 1.5px);
+  background: var(--card-2);
 }
+/* Fullscreen is for looking at the one photo as large as it will go; the
+   history row would only eat that height. */
+.compare-card.is-fullscreen .version-strip { display: none; }
 .version-strip[hidden] { display: none; }
 /* Dimmed and inert for as long as a tile click is still fetching its
    version -- #run-switch-loading already covers the photo itself, but
@@ -2571,6 +2583,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 .version-strip-head {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
+  row-gap: 4px;
   gap: 8px;
   margin-bottom: 8px;
   padding: 0 2px;
@@ -2585,14 +2599,67 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: rgba(var(--on-surface-rgb),.45);
   font-variant-numeric: tabular-nums;
 }
-/* Horizontal scroll rather than wrap: a case can reach dozens of versions,
-   and a wrapping grid would silently push everything below it (the case
-   timestamps, the whole debug panel) further down the page each time the
-   user edits again. */
+/* Pushed to the far end of the head, away from the title and the count,
+   because it states how the whole strip works rather than anything about the
+   version currently shown. align-self keeps it off the head's baseline, which
+   its inline icon would otherwise sit awkwardly on. */
+.version-strip-note {
+  margin-left: auto;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: rgba(var(--on-surface-rgb),.45);
+}
+.version-strip-note svg { flex: 0 0 auto; }
+/* Two lanes side by side: the origin+divider fence (fixed, never scrolls)
+   and .version-strip-versions (its own scroll container, built below). Kept
+   as two elements rather than one shared overflow-x:auto -- with a single
+   scroller the native scrollbar thumb-track always spans the FULL element
+   width, so it would run underneath the origin tile too even though the
+   origin never moves. Splitting them means the visible scrollbar only ever
+   spans the part of the row that actually scrolls.
+   justify-content here (not on .version-strip-versions) is what centres the
+   fence+lane pair AS ONE ROW while it fits: .version-strip-versions below is
+   flex:0 1 auto, so it never grows to fill leftover track width on its own
+   -- it stays sized to its own content, leaving the centring to be done at
+   this level across both lanes together, exactly like a single un-split row
+   would. It only stops centring (falls back to flush-left, `safe`) once the
+   pair truly can't fit and the lane below has to shrink and start
+   scrolling. */
 .version-strip-track {
   display: flex;
   align-items: flex-start;
+  justify-content: safe center;
   gap: 14px;
+}
+/* Horizontal scroll rather than wrap: a case can reach dozens of versions,
+   and a wrapping grid would silently push everything below it (the case
+   timestamps, the whole debug panel) further down the page each time the
+   user edits again.
+   flex:0 1 auto (not 1 1 auto) is what keeps this lane from claiming all of
+   the track's leftover width for itself -- with flex-grow, it would always
+   stretch to fill the track and the centring above would have nothing left
+   to centre (the fence would end up pinned flush-left even when everything
+   fits). flex-shrink:1 + min-width:0 still let it give up that same content
+   sizing and clamp to whatever room the track actually has once the row
+   stops fitting, which is what turns overflow-x:auto into a real scroll
+   area instead of pushing the card wider (the usual flexbox overflow trap). */
+.version-strip-versions {
+  display: flex;
+  align-items: flex-start;
+  /* `safe` matters: with a plain `center`, an overflowing row centres itself
+     and pushes its first tiles out past scroll position 0, where they can
+     never be scrolled back to. `safe center` centres only while everything
+     fits and falls back to start-alignment the moment it doesn't. Mostly a
+     no-op now that the lane no longer stretches (see flex above -- when it
+     fits, the lane's box already equals its content, leaving nothing to
+     centre here); kept as a guard for rounding at the shrink boundary. */
+  justify-content: safe center;
+  gap: 14px;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 4px;
@@ -2619,7 +2686,53 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.version-group.is-current .version-group-label { color: var(--accent); }
+/* The source every version was produced from, not a version itself -- so it
+   reads as a source: dashed rather than solid, a muted label, and no hover or
+   current state, since it is the one tile in the row that cannot be selected. */
+.version-origin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.version-origin-tile {
+  width: 64px;
+  height: 64px;
+  border: 2px dashed rgba(var(--on-surface-rgb),.3);
+  border-radius: 9px;
+  background: rgba(var(--on-surface-rgb),.06);
+  overflow: hidden;
+}
+.version-origin-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: .85;
+}
+.version-origin .version-group-label { color: rgba(var(--on-surface-rgb),.5); }
+/* Sized to the tile row rather than stretched: only the origin column carries
+   a label now, so a stretched line would hang past the version tiles and make
+   the fence look crooked. */
+.version-strip-divider {
+  flex: 0 0 1px;
+  align-self: flex-start;
+  height: 64px;
+  background: var(--border);
+}
+/* The origin and its divider stay put at the left edge while the versions
+   scroll past them -- the original is the reference every tile to its right
+   is measured against, so scrolling it out of view defeats the point of
+   showing it. This needs no sticky/scroll trick: it lives outside
+   .version-strip-versions entirely (a plain sibling in .version-strip-track,
+   see above), so it simply never enters that lane's own scroll area. */
+.version-strip-origin {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 0 0 auto;
+}
 .version-tile {
   position: relative;
   width: 64px;
@@ -2675,8 +2788,12 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 }
 @media (max-width: 560px) {
   .version-tile { width: 54px; height: 54px; }
-  .version-strip { padding: 8px 10px; }
+  .version-origin-tile { width: 54px; height: 54px; }
+  .version-strip-divider { height: 54px; }
+  .version-strip-origin { gap: 10px; }
+  .version-strip { margin: 10px -12px -12px; padding: 8px 10px; }
   .version-strip-track { gap: 10px; }
+  .version-strip-versions { gap: 10px; }
 }
 
 .result-case-times {
