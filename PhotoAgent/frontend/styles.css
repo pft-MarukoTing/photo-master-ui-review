@@ -406,6 +406,51 @@ body[data-theme="caramel"] .site-header {
   color: transparent;
 }
 
+/* "DEV" stamp next to the wordmark (#logo-env-badge) -- the dev and poc
+   deployments look identical and are routinely open side by side in two
+   tabs, so the header (and the <title>) says which one you're on. The label
+   is hardcoded per branch rather than read from a config: the two
+   deployments don't share a checkout, so this file only ever ships to dev.
+   Deliberately monochrome, off the accent family: it's built from the
+   theme's own ink/border tokens, so it stays legible on the dark themes
+   (ocean/forest, --on-surface-rgb white) and the light ones
+   (paper/peach/lilac/caramel, --on-surface-rgb near-black) alike, instead of
+   picking one fixed warning color that would vanish into caramel's orange
+   accent. Fixed px size, unlike .logo's clamp() -- a stamp, not part of the
+   wordmark. */
+.logo-env-badge {
+  display: inline-block;
+  /* Rides the top of the wordmark like a superscript mark rather than
+     sitting on its baseline -- vertical-align: top lines it up with the top
+     of the line box, and the nudge drops it onto the cap height of the "P". */
+  vertical-align: top;
+  transform: translateY(4px);
+  margin-left: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: rgba(var(--on-surface-rgb), .08);
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+/* Phone widths: .logo's clamp() has scaled the wordmark from 40px down to
+   ~25px by here, so a stamp that kept its desktop size would read as bigger
+   relative to the wordmark, not smaller -- shrink it along with the logo,
+   and re-seat it on the cap height the smaller wordmark now has. */
+@media (max-width: 480px) {
+  .logo-env-badge {
+    transform: translateY(2px);
+    margin-left: 5px;
+    padding: 1px 4px;
+    font-size: 8px;
+    letter-spacing: .06em;
+  }
+}
+
 /* Reset/reload-batch buttons: shown across every screen (not just results),
    since .header-inner itself is global -- .header-inner's own
    justify-content:space-between is what actually pins this to the right,
