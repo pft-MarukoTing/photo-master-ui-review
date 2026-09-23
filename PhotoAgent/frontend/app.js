@@ -3630,12 +3630,25 @@
     return `photoMuse-${dateStr}-${timeStr}.zip`;
   }
 
-  function buildDownloadImageFilename() {
+  // Extension and content type of already-encoded image bytes, read from
+  // their magic number (the browser-side counterpart of image_tools.py's
+  // sniff_image_mime). Results are stored as JPEG now, but /result/<job_id>
+  // /image still serves genuine PNG bytes for jobs created before that, so
+  // download names and blob types follow the bytes instead of assuming one.
+  function imageFormatOf(buffer) {
+    const head = new Uint8Array(buffer, 0, Math.min(4, buffer.byteLength));
+    if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) {
+      return { ext: "png", mime: "image/png" };
+    }
+    return { ext: "jpg", mime: "image/jpeg" };
+  }
+
+  function buildDownloadImageFilename(extension = "jpg") {
     const pad = (n) => String(n).padStart(2, "0");
     const now = new Date();
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    return `photoMuse-${dateStr}-${timeStr}.png`;
+    return `photoMuse-${dateStr}-${timeStr}.${extension}`;
   }
 
   const PROMPT_KEYS = [
@@ -3668,9 +3681,9 @@
   // RUN's own .run index (not its position within whatever subset is being
   // zipped), so the same RUN always gets the same file name whether it's
   // downloaded alone or as part of "all RUNs"/a whole batch.
-  function resultFileNames(runNumber) {
+  function resultFileNames(runNumber, imageExt = "jpg") {
     return {
-      image: `result_${runNumber}.png`,
+      image: `result_${runNumber}.${imageExt}`,
       json: `result_${runNumber}.json`,
       prompts: `result_${runNumber}_prompts.json`
     };
@@ -3709,12 +3722,12 @@
     return { sourceBuf, runData };
   }
 
-  // Normal mode: source + one result_N.png per RUN, flat under `prefix` --
+  // Normal mode: source + one result_N image per RUN, flat under `prefix` --
   // no per-RUN subfolder, no JSON. Everyday users just want the pictures.
   function buildFlatImageFiles({ file, prefix }, sourceBuf, runData) {
     const files = sourceBuf ? [{ name: prefix + (file?.name || "source.jpg"), data: new Uint8Array(sourceBuf) }] : [];
     runData.forEach(({ run, imageBuf }) => {
-      files.push({ name: prefix + resultFileNames(run.run || 1).image, data: new Uint8Array(imageBuf) });
+      files.push({ name: prefix + resultFileNames(run.run || 1, imageFormatOf(imageBuf).ext).image, data: new Uint8Array(imageBuf) });
     });
     return files;
   }
@@ -3734,7 +3747,7 @@
       const promptsBytes = new TextEncoder().encode(buildPromptsJson(run.result.analysis?.prompts || {}));
       const tokenUsageBytes = new TextEncoder().encode(buildTokenUsageJson(tokenUsage));
       files.push(
-        { name: runPrefix + "result.png", data: new Uint8Array(imageBuf) },
+        { name: `${runPrefix}result.${imageFormatOf(imageBuf).ext}`, data: new Uint8Array(imageBuf) },
         { name: runPrefix + "result.json", data: jsonBytes },
         { name: runPrefix + "prompts.json", data: promptsBytes },
         { name: runPrefix + "token-usage.json", data: tokenUsageBytes }
@@ -3816,7 +3829,7 @@
   // actually tapped inside that sheet either way.
   async function saveImageToDevice(blob, filename) {
     if (isIOSDevice() && navigator.canShare) {
-      const file = new File([blob], filename, { type: blob.type || "image/png" });
+      const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
       if (navigator.canShare({ files: [file] })) {
         try {
           await navigator.share({ files: [file] });
@@ -4237,10 +4250,11 @@
     const current = runs.find((run) => run.run === lastResult.runNumber) || runs[0];
     try {
       const imageBuf = await fetch(resultImageUrl(current.jobId, { path: lastResult.path, run: current.sourceRun != null ? current.sourceRun : current.run })).then((response) => response.arrayBuffer());
-      const blob = new Blob([imageBuf], { type: "image/png" });
-      await saveImageToDevice(blob, buildDownloadImageFilename());
+      const format = imageFormatOf(imageBuf);
+      const blob = new Blob([imageBuf], { type: format.mime });
+      await saveImageToDevice(blob, buildDownloadImageFilename(format.ext));
       // Same completion notice downloadZip shows -- this path bypasses that
-      // shared function (a single PNG needs no zip), so it needs its own.
+      // shared function (a single image needs no zip), so it needs its own.
       showNoticeModal("已下載完成。");
     } catch (error) {
       showError("下載失敗，請稍後再試。");
@@ -12010,7 +12024,7 @@
   // ── Importing an exported result folder ───────────────────────────────────
   //
   // Dropping a folder shaped like the debug-UI zip (source photo at the root,
-  // run_N/{result.png,result.json} beneath it) loads that run's report and
+  // run_N/{result image,result.json} beneath it) loads that run's report and
   // image straight into the results view, and wires "重新處理" to re-run the
   // edit from the SAME analysis. Steps 3-6 then run again exactly as they
   // would for a live run -- including resolve_crop_box_with_report off the

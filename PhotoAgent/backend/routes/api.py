@@ -11,7 +11,7 @@ from werkzeug.utils import safe_join
 
 from aiserver_utils.queue import get_job_info
 from compatibility_version import get_compatibility_version, is_compatible
-from image_tools import create_preview_bytes, ensure_jpeg_bytes, HISTORY_THUMBNAIL_MAX_SIDE
+from image_tools import create_preview_bytes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
@@ -607,7 +607,10 @@ def result_image(job_id):
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download result image: {download_error}"}), 502
 
-    return Response(image_bytes, mimetype="image/png")
+    # Sniffed, not hardcoded: results are stored as JPEG now
+    # (job_processor.py's _write_result_artifacts), but jobs from before that
+    # kept genuine PNG bytes, and their keys are still in Redis.
+    return Response(image_bytes, mimetype=sniff_image_mime(image_bytes))
 
 
 @api_bp.get("/result/<job_id>/pre_edit_image")
@@ -642,7 +645,7 @@ def result_pre_edit_image(job_id):
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download stage-1 image: {download_error}"}), 502
 
-    return Response(image_bytes, mimetype="image/png")
+    return Response(image_bytes, mimetype=sniff_image_mime(image_bytes))
 
 
 def _ensure_jpeg_bytes_or_error(image_bytes):
@@ -748,9 +751,9 @@ def source_image(job_id):
     # content-type, so a HEIC/HEIF photo (most browsers can't render that in
     # an <img> tag under any label, see image_tools.py's own doc on this) would
     # otherwise come back looking like a broken image. ensure_jpeg_bytes
-    # normalizes it to a real JPEG first -- same reasoning as /result/<job_id>
-    # /image's hardcoded "image/png" mimetype, which is safe as-is since that
-    # one's bytes are always genuinely PNG-encoded already.
+    # normalizes it to a real JPEG first. (/result/<job_id>/image has the
+    # mirror-image problem and solves it by sniffing instead: its bytes are
+    # always a real image, just PNG or JPEG depending on the job's age.)
     jpeg_bytes, error_response = _ensure_jpeg_bytes_or_error(image_bytes)
     if error_response:
         return error_response

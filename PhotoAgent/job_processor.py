@@ -8,6 +8,7 @@ import time
 
 from aiserver_utils.queue import set_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
+from image_tools import ensure_jpeg_bytes, RESULT_JPEG_QUALITY
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
 from pipeline import analyze_stage, review_stage, finish_stage
 
@@ -31,7 +32,7 @@ def safe_task_folder(task_id):
 def derive_dst_keys(dst_key, include_pre_edit=False):
     prefix = dst_key.rsplit('/', 1)[0] + '/' if '/' in dst_key else ''
     keys = [
-        prefix + '0_res0_thumb_0.png',   # result image
+        prefix + '0_res0_thumb_0.jpg',   # result image
         prefix + '0_res0_thumb_1.json',  # result text (analysis + QA)
     ]
     if include_pre_edit:
@@ -40,7 +41,7 @@ def derive_dst_keys(dst_key, include_pre_edit=False):
         # actually ran, so this key is appended, not fixed-position, and
         # callers must pass the same include_pre_edit they used when writing
         # local artifacts (_write_result_artifacts) so keys/paths line up.
-        keys.append(prefix + '0_res0_thumb_2.png')
+        keys.append(prefix + '0_res0_thumb_2.jpg')
     return keys
 
 
@@ -55,16 +56,16 @@ def derive_run_dst_keys(dst_key, run_index, include_pre_edit=False):
     the artifact store, unlike derive_dst_keys' fixed single-result names."""
     prefix = dst_key.rsplit('/', 1)[0] + '/' if '/' in dst_key else ''
     keys = [
-        prefix + f'0_res0_thumb_0_run{run_index}.png',
+        prefix + f'0_res0_thumb_0_run{run_index}.jpg',
         prefix + f'0_res0_thumb_1_run{run_index}.json',
     ]
     if include_pre_edit:
-        keys.append(prefix + f'0_res0_thumb_2_run{run_index}.png')
+        keys.append(prefix + f'0_res0_thumb_2_run{run_index}.jpg')
     return keys
 
 
 def _write_result_artifacts(work_dir, result, suffix=''):
-    """Decode one finish_stage result into local files: the full-res PNG and
+    """Decode one finish_stage result into local files: the full-res JPEG and
     its JSON metadata, in the same order derive_dst_keys/derive_run_dst_keys
     list their S3 keys, so callers can zip them directly into
     upload_artifacts. (No thumbnail is generated here -- see
@@ -72,10 +73,23 @@ def _write_result_artifacts(work_dir, result, suffix=''):
     action or multi-run combined job actually ends up displayed by the
     history list is only decided client-side after the fact, so
     pre-generating one here would mostly go to waste. The thumbnail is
-    instead generated lazily on first request and cached back to S3.)"""
-    image_bytes = base64.b64decode(result["result_image"])
+    instead generated lazily on first request and cached back to S3.)
 
-    image_path = os.path.join(work_dir, f'0_res0_thumb_0{suffix}.png')
+    Stored as JPEG regardless of what the edit model handed back. The image
+    models return PNG today, but that is their default rather than anything
+    this pipeline pins down (see openai_client/gemini_client/mai_client,
+    which pass the raw b64 straight through), and a lossless screenshot-grade
+    encoding of a photograph costs several times the bytes for no visible
+    gain on every stored result and every download. Normalizing here -- the
+    one place every stored result passes through -- means the ".jpg" keys
+    below are always honest about their contents, which is also what gives
+    the S3 objects their image/jpeg content type (s3_process.py guesses it
+    from the key's extension)."""
+    image_bytes = ensure_jpeg_bytes(
+        base64.b64decode(result["result_image"]), quality=RESULT_JPEG_QUALITY
+    )
+
+    image_path = os.path.join(work_dir, f'0_res0_thumb_0{suffix}.jpg')
     with open(image_path, 'wb') as f:
         f.write(image_bytes)
 
@@ -87,9 +101,11 @@ def _write_result_artifacts(work_dir, result, suffix=''):
 
     pre_edit_b64 = result.get("pre_edit_image")
     if pre_edit_b64:
-        pre_edit_path = os.path.join(work_dir, f'0_res0_thumb_2{suffix}.png')
+        pre_edit_path = os.path.join(work_dir, f'0_res0_thumb_2{suffix}.jpg')
         with open(pre_edit_path, 'wb') as f:
-            f.write(base64.b64decode(pre_edit_b64))
+            f.write(ensure_jpeg_bytes(
+                base64.b64decode(pre_edit_b64), quality=RESULT_JPEG_QUALITY
+            ))
         paths.append(pre_edit_path)
 
     return paths

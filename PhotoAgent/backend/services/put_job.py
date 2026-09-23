@@ -69,10 +69,10 @@ def get_timestamp():
 
 def derive_thumbnail_key(key):
     """Sibling S3 key for a small JPEG thumbnail of any stored image, e.g.
-    ".../src.jpg" -> ".../src_thumb.jpg" or ".../0_res0_thumb_0.png" ->
+    ".../src.jpg" -> ".../src_thumb.jpg" or ".../0_res0_thumb_0.jpg" ->
     ".../0_res0_thumb_0_thumb.jpg". Always ".jpg" regardless of the
     original key's extension -- create_preview_bytes always produces JPEG
-    bytes, whether the source was a "src.jpg" upload or a "*.png" result.
+    bytes, and older jobs' result keys still end in ".png".
     Deterministic so callers (the /source/<job_id>/thumbnail and
     /result/<job_id>/thumbnail routes) never need a separately-stored
     pointer to find it -- used both for the source image (thumbnail

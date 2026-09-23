@@ -23,7 +23,7 @@ from aiserver_utils.s3_utils import get_bucket_name
 def _derive_output_keys(base_dst_key):
     prefix = base_dst_key.rsplit('/', 1)[0] + '/' if '/' in base_dst_key else ''
     return [
-        prefix + '0_res0_thumb_0.png',
+        prefix + '0_res0_thumb_0.jpg',
         prefix + '0_res0_thumb_1.json',
     ]
 

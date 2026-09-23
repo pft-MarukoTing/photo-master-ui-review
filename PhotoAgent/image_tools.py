@@ -50,6 +50,13 @@ VISION_PREVIEW_MAX_SIDE = 1024
 # rendered at a few dozen CSS pixels, not analyzed by a model.
 HISTORY_THUMBNAIL_MAX_SIDE = 320
 
+# Quality for the stored, full-resolution result image (job_processor.py's
+# _write_result_artifacts). Higher than _to_jpeg_bytes' own default, which
+# serves downscaled previews/thumbnails: this one is the deliverable the user
+# downloads, and it is already a re-encode of the edit model's output, so the
+# extra headroom keeps that second generation from showing.
+RESULT_JPEG_QUALITY = 95
+
 # Debug-only escape hatch for comparing analysis quality with vs. without the
 # preview downscale -- set PHOTOAGENT_SKIP_PREVIEW_RESIZE=1 in the worker's
 # environment to send the model the full-resolution photo instead. Only
@@ -253,7 +260,7 @@ def ensure_png_bytes(image_bytes: bytes) -> bytes:
     return _to_png_bytes(_open_rgb(image_bytes))
 
 
-def ensure_jpeg_bytes(image_bytes: bytes) -> bytes:
+def ensure_jpeg_bytes(image_bytes: bytes, quality: int = 88) -> bytes:
     """Re-encode arbitrary input bytes (HEIC/JPEG/WebP/PNG/...) as a real JPEG.
 
     Same reasoning as ensure_png_bytes, for the "serve the original upload
@@ -264,7 +271,26 @@ def ensure_jpeg_bytes(image_bytes: bytes) -> bytes:
     <img> tag under any label -- returning those bytes as-is looks like a
     broken image to the user even though the file itself is fine.
     """
-    return _to_jpeg_bytes(_open_rgb(image_bytes))
+    return _to_jpeg_bytes(_open_rgb(image_bytes), quality=quality)
+
+
+def sniff_image_mime(image_bytes: bytes, default: str = "image/jpeg") -> str:
+    """Content type of already-encoded image bytes, read from their magic
+    number rather than from a file name or S3 key.
+
+    Result images are stored as JPEG (see job_processor.py), but jobs created
+    before that change stored genuine PNG bytes under a ".png" key, and their
+    keys live on in Redis, so the routes that serve a stored result back have
+    to label whichever of the two they actually got. Sniffing the bytes covers
+    both without a per-job format flag to keep in sync.
+    """
+    if image_bytes[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if image_bytes[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    return default
 
 
 def image_to_data_url(image_bytes: bytes, mime_type: str = "image/jpeg") -> str:
