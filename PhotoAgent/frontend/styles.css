@@ -2819,6 +2819,11 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   width: 168px;
   height: 168px;
   padding: 4px;
+  /* Centres the letterboxed image inside the fixed square -- see the img
+     rule below for why the image sizes itself rather than filling the box. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--border-2, var(--border));
   border-radius: var(--radius);
   background: var(--card-2);
@@ -2833,14 +2838,22 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   transform: scale(1);
 }
 .version-tile-preview img {
-  /* contain, not cover: the row tiles crop to a square on purpose (a dense
-     strip of avatars), but this popup exists specifically to let the user
-     see more of the image than that crop shows -- cropping it again here
-     would defeat the point. The frame stays square; any letterboxing is
-     just the popup's own --card-2 background showing through. */
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+  /* Uncropped, unlike the row tiles: those crop to a square on purpose (a
+     dense strip of avatars), but this popup exists specifically to let the
+     user see more of the image than that crop shows. The popup frame stays
+     square; any letterboxing is just its own --card-2 background showing
+     through.
+     Done by letting the image size itself to its intrinsic ratio rather than
+     object-fit:contain inside a forced 100%/100% box: with that box the
+     element stayed square while the painted image letterboxed inside it, so
+     border-radius rounded the box's corners out in the blank margin and the
+     image's own corners -- the ones flush against the popup's edge -- stayed
+     square. Hugging the image makes element and photo the same rect, so the
+     radius lands on the photo. */
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
   display: block;
   border-radius: calc(var(--radius) - 4px);
 }
@@ -3751,6 +3764,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   height: auto;
   max-width: 100%;
   max-height: 480px;
+  /* Rounded here as well as on .photo-frame, not only there: the frame is a
+     FIXED 480px-tall box that the photo only fills on one axis, so the
+     frame's own overflow:hidden rounding lands in the blank space above and
+     below a width-constrained photo while the photo's own top corners --
+     flush against the frame's left/right edges -- stay square. Same radius
+     on the image itself means the corners round wherever the photo actually
+     reaches the frame edge. Matches .photo-frame-wrap > .compare-img, which
+     already carries it for the same reason. */
+  border-radius: var(--radius-lg);
 }
 
 /* setImgSrcPreloaded's own temporary clone (app.js) -- a direct child of the
