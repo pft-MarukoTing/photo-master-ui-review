@@ -2225,6 +2225,48 @@ body[data-theme="caramel"] .ios-thumb {
   color: var(--text-3);
   margin-right: 4px;
 }
+.ap-body-reshape-report {
+  margin: 8px 0 0 44px;
+}
+.ap-body-reshape-report-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 11px;
+  border: 1px solid rgba(var(--accent-2-rgb), .22);
+  border-radius: 999px;
+  background: rgba(var(--accent-2-rgb), .16);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+.ap-body-reshape-report-toggle::-webkit-details-marker { display: none; }
+.ap-body-reshape-report-toggle::marker { content: ""; }
+.ap-body-reshape-report-toggle::before {
+  content: "";
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 4px;
+  background:
+    linear-gradient(currentColor, currentColor) center / 9px 1.6px no-repeat,
+    linear-gradient(currentColor, currentColor) center / 1.6px 9px no-repeat;
+}
+.ap-body-reshape-report[open] .ap-body-reshape-report-toggle::before {
+  background-size: 9px 1.6px, 1.6px 0;
+}
+.ap-body-reshape-report-toggle:hover {
+  background: rgba(var(--accent-2-rgb), .24);
+  color: var(--text);
+}
+.ap-body-reshape-report-text {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 
 @media (max-width: 560px) {
   .ap-face-issue-row { gap: 6px; }

@@ -11570,10 +11570,9 @@
     const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
     const effective = { ...base };
 
-    // Keep each person's original body_reshape object on the request.  The
-    // per-person switch only changes `should_edit`; `edit_prompt` remains the
-    // analyzer's exact editor command and is never replaced by a shared or
-    // regenerated sentence.
+    // Keep each person's original body_reshape object on the request. Active
+    // plans retain Analyze's exact Editor command; analyzer no-ops intentionally
+    // have no edit_prompt and carry their explanation only in `report`.
     // ``null`` is the initial per-record value for a batch item, not an
     // explicit approval.  Only a real boolean should override the persisted
     // request-scoped decision on the analysis object; otherwise a saved

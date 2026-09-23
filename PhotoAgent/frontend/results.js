@@ -139,7 +139,9 @@ window.PhotoAgentResults = (() => {
   // transparency about what Analyze proposed.
   function bodyReshapePromptForDisplay(analysis) {
     if (!bodyReshapeEnabled) return "";
-    const prompt = analysis?.body_reshape?.edit_prompt;
+    const body = analysis?.body_reshape;
+    if (body?.should_edit === false) return "";
+    const prompt = body?.edit_prompt;
     return typeof prompt === "string" && prompt.trim() ? prompt.trim() : "";
   }
 
@@ -210,7 +212,7 @@ window.PhotoAgentResults = (() => {
       input.checked = active;
       icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
       icon.textContent = active ? "!" : "✓";
-      verdict.textContent = active ? "可以調整" : "不執行";
+      verdict.textContent = active ? "可以調整" : "已關閉";
       toggle.setAttribute("aria-label", active ? "關閉身形調整" : "開啟身形調整");
     };
     input.addEventListener("change", () => {
@@ -1237,7 +1239,7 @@ window.PhotoAgentResults = (() => {
     { field: "gaze_issue", label: "眼神對焦", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "hair_issue", label: "亂髮偵測", flagField: "should_fix", flagWhen: true, flagText: "需要修正", okText: "無需修正" },
     { field: "smile_issue", label: "笑容調整", flagField: "adjust_safe", flagWhen: true, flagText: "可以調整", okText: "不建議調整" },
-    { field: "body_reshape", label: "身形調整", flagField: "should_edit", flagWhen: true, flagText: "可以調整", okText: "不執行" }
+    { field: "body_reshape", label: "身形調整", flagField: "should_edit", flagWhen: true, flagText: "可以調整", okText: "無須修正" }
   ];
 
   // Every category the user can manually switch on even when the analyzer
@@ -1248,7 +1250,7 @@ window.PhotoAgentResults = (() => {
   // explicit-level path) turn that into a real edit instruction. Unlike hair,
   // blink/gaze have no per-person style level -- see LEVEL_SELECT_CATEGORIES
   // below -- so they don't appear in that second list.
-  const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue", "body_reshape"];
+  const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue"];
   const LEVEL_SELECT_CATEGORIES = ["hair_issue", "smile_issue"];
 
   // Intersection over the SMALLER of the two boxes' own area (the
@@ -1318,13 +1320,16 @@ window.PhotoAgentResults = (() => {
       const match = subject[category.field];
       if (!match || typeof match !== "object") return null;
       const isBodyReshape = category.field === "body_reshape";
-      const bodyPrompt = isBodyReshape && typeof match.edit_prompt === "string"
+      const bodyAnalysisStatus = isBodyReshape ? match.analysis_status || "" : "";
+      const bodyPrompt = isBodyReshape && match.should_edit !== false
+        && typeof match.edit_prompt === "string"
         ? match.edit_prompt.trim()
         : "";
-      // A body row is available whenever this person's original analysis JSON
-      // contains an editor command.  `should_edit` is optional in older
-      // records, so an omitted value keeps the historical default enabled.
-      if (isBodyReshape && (subject.is_person !== true || !bodyPrompt)) return null;
+      // A no-op body plan intentionally has no edit_prompt: keep its row so the
+      // user can see the "無須修正" verdict, but never expose an empty/fabricated
+      // Editor command. `should_edit` is optional in older active records.
+      if (isBodyReshape && subject.is_person !== true) return null;
+      if (isBodyReshape && match.should_edit !== false && !bodyPrompt) return null;
       const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(category.field);
       // buildEffectiveAnalysis (app.js) writes _user_forced/_user_level onto
       // this same subject[category.field] object at submit time, and the
@@ -1348,7 +1353,7 @@ window.PhotoAgentResults = (() => {
       // via faceIssueGloballyEnabled/reviewAdvancedOptions -- not baked in
       // here. So this stays the plain per-analysis verdict.
       const flagged = isBodyReshape
-        ? match.should_edit !== false
+        ? bodyAnalysisStatus === "error" || match.should_edit !== false
         : match[category.flagField] === category.flagWhen || wasUserDisabled;
       const allowed = isBodyReshape
         ? match.should_edit !== false && !bodyDisabled
@@ -1359,12 +1364,18 @@ window.PhotoAgentResults = (() => {
         flagText: category.flagText,
         okText: category.okText,
         reason: isBodyReshape ? (match.report || match.reason || "") : (match.reason || ""),
+        report: isBodyReshape && typeof match.report === "string" ? match.report.trim() : "",
+        promptDisplay: isBodyReshape && typeof match.prompt_display === "string"
+          ? match.prompt_display.trim() : "",
         editPrompt: isBodyReshape ? bodyPrompt : "",
+        analysisStatus: bodyAnalysisStatus,
         category: category.field,
         subjectIndex: index,
-        // Hair, smile, blink, gaze, and body reshape are all user-selectable transformations
-        // even when the analyzer recommends preserving them.
-        controllable: isBodyReshape || match[category.flagField] === category.flagWhen || isManualOverride,
+        // Body Reshape can only be toggled when Analyze supplied an executable
+        // command. A should_edit=false plan has no command to force on.
+        controllable: isBodyReshape
+          ? match.should_edit !== false && Boolean(bodyPrompt)
+          : match[category.flagField] === category.flagWhen || isManualOverride,
         allowed,
         level: category.field === "hair_issue"
           ? (match._user_level || "dynamic")
@@ -1668,8 +1679,9 @@ window.PhotoAgentResults = (() => {
         .map((subject, subjectIndex) => ({ subject, subjectIndex }))
         .filter(({ subject }) => subject?.is_person === true
           && subject.body_reshape && typeof subject.body_reshape === "object"
-          && typeof subject.body_reshape.edit_prompt === "string"
-          && subject.body_reshape.edit_prompt.trim())
+          && (subject.body_reshape.should_edit === false
+            || (typeof subject.body_reshape.edit_prompt === "string"
+              && subject.body_reshape.edit_prompt.trim())))
       : [];
     const bodyDisabledSubjects = new Set(
       (Array.isArray(analysis?._disabled_body_reshape_subjects)
@@ -2093,6 +2105,8 @@ window.PhotoAgentResults = (() => {
       toggle.classList.toggle("is-locked", !globallyEnabled);
       toggle.title = !globallyEnabled
         ? "此項目已在人像修正設定中關閉，需先在設定中開啟才能個別調整"
+        : issue.analysisStatus === "error"
+          ? "身形調整分析失敗，已停用；請重新分析"
         : issue.flagged
           ? "允許 AI 修正此項目"
           : isManualOverride
@@ -2147,10 +2161,13 @@ window.PhotoAgentResults = (() => {
         // nor "pending"/will-fix (red !) -- a third, muted state so it
         // doesn't misread as either while the row itself is uninteractive.
         const locked = !globallyEnabled;
-        icon.className = `adherence-icon ${locked ? "is-locked" : active ? "is-pending" : "is-done"}`;
-        icon.textContent = locked ? "–" : active ? "!" : "✓";
+        const failed = issue.analysisStatus === "error";
+        icon.className = `adherence-icon ${locked ? "is-locked" : failed ? "is-pending" : active ? "is-pending" : "is-done"}`;
+        icon.textContent = locked ? "–" : failed ? "!" : active ? "!" : "✓";
         resultLabel.textContent = locked
           ? "已於人像修正設定關閉"
+          : failed
+            ? "分析失敗"
           : !issue.flagged
             ? (isManualOverride && issue.allowed
                 ? `已手動開啟`
@@ -2222,16 +2239,35 @@ window.PhotoAgentResults = (() => {
       if (issue.category === "body_reshape" && issue.editPrompt) {
         const prompt = document.createElement("div");
         prompt.className = "ap-body-reshape-prompt ap-face-issue-prompt";
-        prompt.textContent = `${issue.editPrompt}`;
+        // Historical analyses have no prompt_display; retain their old text.
+        // The Editor still receives editPrompt, never this UI-only sentence.
+        prompt.textContent = issue.promptDisplay || issue.editPrompt;
         li.appendChild(prompt);
+      }
+
+      if (issue.category === "body_reshape" && issue.report) {
+        const report = document.createElement("details");
+        report.className = "ap-body-reshape-report";
+        report.open = !!issue.reportExpanded;
+        const toggle = document.createElement("summary");
+        toggle.className = "ap-body-reshape-report-toggle";
+        toggle.textContent = report.open ? "收合" : "展開";
+        const content = document.createElement("div");
+        content.className = "ap-body-reshape-report-text";
+        content.textContent = issue.report;
+        report.append(toggle, content);
+        report.addEventListener("toggle", () => {
+          issue.reportExpanded = report.open;
+          toggle.textContent = report.open ? "收合" : "展開";
+        });
+        li.appendChild(report);
       }
 
       // The model's own reasoning is debug-only detail (same gate as the
       // box overlay's legend) -- a regular user just needs the verdict, not
       // the analysis model's internal justification for it. Body Reshape is
-      // the exception: its report is not part of the review UI at all; the
-      // analyzed edit_prompt above is the only Body Reshape text shown to the
-      // user and is the sentence that can be sent to Editor.
+      // the exception: its report is available in the disclosure above, while
+      // edit_prompt remains the separate sentence that can be sent to Editor.
       if (issue.category !== "body_reshape" && issue.flagged && issue.reason && debugUiActive) {
         const reason = document.createElement("div");
         reason.className = "ap-face-issue-reason";
@@ -2242,138 +2278,6 @@ window.PhotoAgentResults = (() => {
       items.push(li);
     });
 
-    if (bodyReshapeEnabled && entry?.bodyAnalysisAvailable) {
-      const section = document.createElement("li");
-      section.className = "ap-body-reshape-section";
-      const masterRow = document.createElement("div");
-      masterRow.className = "ap-face-issue-row";
-
-      const toggle = document.createElement("label");
-      toggle.className = "ios-switch ap-face-issue-toggle";
-      const actionableBodyPoints = bodyKeyPoints.filter((point) => point.selectable !== false);
-      toggle.title = actionableBodyPoints.length ? "允許 AI 執行這位人物的身形調整" : "沒有可執行的身形調整";
-      const masterInput = document.createElement("input");
-      masterInput.type = "checkbox";
-      masterInput.disabled = !actionableBodyPoints.length || isReadOnlyLocked();
-      masterInput.checked = actionableBodyPoints.length && entry.bodyReshapeEnabled !== false;
-      const track = document.createElement("span");
-      track.className = "ios-track";
-      const thumb = document.createElement("span");
-      thumb.className = "ios-thumb";
-      track.appendChild(thumb);
-      toggle.appendChild(masterInput);
-      toggle.appendChild(track);
-      masterRow.appendChild(toggle);
-
-      const name = document.createElement("span");
-      name.className = "ap-face-issue-name";
-      name.textContent = "身形調整";
-      masterRow.appendChild(name);
-
-      const icon = document.createElement("span");
-      const verdict = document.createElement("span");
-      verdict.className = "step-cb-label";
-      masterRow.appendChild(icon);
-      masterRow.appendChild(verdict);
-      section.appendChild(masterRow);
-
-      const list = document.createElement("div");
-      list.className = "ap-body-reshape-list";
-      const pointControls = [];
-      if (bodyKeyPoints.length) {
-        bodyKeyPoints.forEach((point) => {
-          const row = document.createElement("div");
-          row.className = "ap-body-reshape-option";
-          const input = document.createElement("input");
-          input.type = "checkbox";
-          input.disabled = point.selectable === false || isReadOnlyLocked();
-          input.checked = point.selectable !== false && point.allowed !== false;
-          input.addEventListener("change", () => {
-            point.allowed = input.checked;
-            if (typeof refreshBodyReshape === "function") refreshBodyReshape();
-          });
-          const textLabel = document.createElement("label");
-          textLabel.className = "ap-body-reshape-option-label";
-          textLabel.appendChild(input);
-          const text = document.createElement("span");
-          text.textContent = bodyReshapeDisplayText(point.text);
-          textLabel.appendChild(text);
-          row.appendChild(textLabel);
-          const sliderRow = document.createElement("div");
-          sliderRow.className = "ap-body-reshape-slider-row";
-          const sliderLabel = document.createElement("span");
-          sliderLabel.className = "ap-body-reshape-slider-label";
-          sliderLabel.textContent = "調整幅度";
-          const strengthIndex = bodyReshapeStrengthIndex(point.targetPct);
-          const selectedStrength = bodyReshapeStrengthAt(strengthIndex);
-          const slider = document.createElement("input");
-          slider.type = "range";
-          slider.className = "ap-body-reshape-slider";
-          slider.min = "0";
-          slider.max = String(BODY_RESHAPE_STRENGTHS.length - 1);
-          slider.step = "1";
-          slider.value = String(strengthIndex);
-          slider.setAttribute("aria-label", `${bodyReshapeDisplayText(point.text)} 調整幅度`);
-          slider.setAttribute("aria-valuetext", `${selectedStrength.label}強度`);
-          const sliderControl = document.createElement("div");
-          sliderControl.className = "ap-body-reshape-slider-control";
-          sliderControl.appendChild(slider);
-          const strengthScale = document.createElement("div");
-          strengthScale.className = "ap-body-reshape-slider-scale";
-          BODY_RESHAPE_STRENGTHS.forEach((strength) => {
-            const mark = document.createElement("span");
-            mark.textContent = strength.label;
-            strengthScale.appendChild(mark);
-          });
-          sliderControl.appendChild(strengthScale);
-          slider.addEventListener("input", () => {
-            const strength = bodyReshapeStrengthAt(slider.value);
-            const nextIndex = BODY_RESHAPE_STRENGTHS.indexOf(strength);
-            slider.value = String(nextIndex);
-            point.targetPct = strength.targetPct;
-            point.amountTouched = true;
-            slider.setAttribute("aria-valuetext", `${strength.label}強度`);
-          });
-          sliderRow.appendChild(sliderLabel);
-          sliderRow.appendChild(sliderControl);
-          row.appendChild(sliderRow);
-          pointControls.push({ point, input, slider, row });
-          if (point.selectable === false && point.reason) {
-            row.title = `此項不會送入 edit：${point.reason}`;
-            row.classList.add("is-unavailable");
-            const reason = document.createElement("small");
-            reason.className = "ap-body-reshape-option-meta";
-            reason.textContent = `不執行：${point.reason}`;
-            row.appendChild(reason);
-          }
-          list.appendChild(row);
-        });
-      }
-      section.appendChild(list);
-
-      const refreshBodyReshape = () => {
-        const active = actionableBodyPoints.length > 0 && entry.bodyReshapeEnabled !== false;
-        masterInput.checked = active;
-        icon.className = `adherence-icon ${active ? "is-pending" : "is-done"}`;
-        icon.textContent = active ? "!" : "✓";
-        verdict.textContent = !actionableBodyPoints.length
-          ? "無需調整"
-          : (active ? "可以調整" : "不執行");
-        list.hidden = actionableBodyPoints.length > 0 ? !active : false;
-        pointControls.forEach(({ point, input, slider }) => {
-          const enabled = active && point.selectable !== false && !isReadOnlyLocked();
-          input.disabled = !enabled;
-          input.checked = enabled && point.allowed !== false;
-          slider.disabled = !enabled || point.allowed === false;
-        });
-      };
-      masterInput.addEventListener("change", () => {
-        entry.bodyReshapeEnabled = masterInput.checked;
-        refreshBodyReshape();
-      });
-      refreshBodyReshape();
-      items.push(section);
-    }
     return items;
   }
 

@@ -34,6 +34,52 @@ BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH = 20
 BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH = 360
 BODY_RESHAPE_FALLBACK_PROMPT = "自然調整可見身形輪廓，必要時順接頭部與頸部外圍，保持解剖連續、衣物邊界及背景透視"
 
+# prompt_display is a short review-only sentence, not the Editor command.
+# Models occasionally leave an English retouching term in that sentence even
+# when the rest of the response is Traditional Chinese. Normalize the small
+# set of common terms and remove any remaining Latin words at this boundary so
+# the review UI never exposes mixed-language copy. The detailed
+# edit_prompt is deliberately not passed through this helper.
+_BODY_RESHAPE_PROMPT_DISPLAY_REPLACEMENTS = (
+    (re.compile(r"\bsilhouette\b", re.I), "輪廓"),
+    (re.compile(r"\bcontour\b", re.I), "輪廓"),
+    (re.compile(r"\boutline\b", re.I), "輪廓"),
+    (re.compile(r"\bshape\b", re.I), "線條"),
+    (re.compile(r"\bsleeve\b", re.I), "袖型"),
+    (re.compile(r"\b(?:natural|naturally)\b", re.I), "自然"),
+    (re.compile(r"\b(?:clean|cleaner)\b", re.I), "俐落"),
+    (re.compile(r"\b(?:fit|fitting)\b", re.I), "貼合"),
+    (re.compile(r"局部幾何(?:調整|修改|修整)?|幾何(?:調整|修改|修整)?"), "輪廓修飾"),
+    (re.compile(r"可量測|可測量|量測|測量"), "可清楚辨識"),
+    (re.compile(r"比例補償"), "頭肩比例調整"),
+    (re.compile(r"總寬度"), "外緣線條"),
+)
+
+# These are low-information conclusions that models tend to repeat.  They are
+# replaced from the surrounding body-region words, so an arm explanation does
+# not receive the same ending as a waist, leg, or head/shoulder explanation.
+# The replacement is deliberately phrased as a visible photographic result,
+# not as a geometric operation.
+_BODY_RESHAPE_STOCK_PHRASE_RE = re.compile(
+    r"更俐落和諧|更俐落自然|俐落和諧|俐落自然|"
+    r"自然[、，,]和諧|自然且和諧|更和諧|更自然|更俐落"
+)
+
+_BODY_RESHAPE_REPORT_REPLACEMENTS = (
+    (re.compile(r"\bmarkedly\s+thin\b", re.I), "整體偏纖細"),
+    (re.compile(r"\bmodest\b", re.I), "小幅"),
+    (re.compile(r"\bbody\s+reshape\b", re.I), "身形調整"),
+    (re.compile(r"頭部(?:與|及|或)頸部外輪廓補償|頭頸外輪廓補償"), "頭肩比例另外修飾"),
+    (re.compile(r"局部幾何(?:調整|修改|修整)?"), "局部輪廓修整"),
+    (re.compile(r"比例補償"), "頭肩比例調整"),
+    (re.compile(r"可量測|可測量|量測|測量"), "可清楚辨識"),
+    (re.compile(r"總寬度"), "外緣寬度"),
+    (re.compile(r"比例檢查"), "頭肩比例觀察"),
+    (re.compile(r"比例風險"), "頭肩比例失衡疑慮"),
+    (re.compile(r"視覺和諧"), "符合畫面份量"),
+    (re.compile(r"不納入相關操作"), "不需另外處理"),
+    (re.compile(r"低於\s*15\s*[%％]\s*(?:的)?\s*(?:局部)?(?:調整|微調)"), "小幅局部修飾"),
+)
 # These keys appeared at the analysis root in intermediate/debug artifacts.
 # They are accepted only as history input and removed before an edit request;
 # ``_disabled_body_reshape_subjects`` is the one request-scoped review field
@@ -48,13 +94,16 @@ _BODY_RESHAPE_LEGACY_KEYS = (
 
 
 def _body_reshape_fallback_prompt(label=None, should_edit=True):
-    """Build a detailed, valid fallback while retaining person context."""
+    """Build an active-plan fallback while retaining person context."""
     label = " ".join(str(label or "此人物").split()).strip() or "此人物"
     if should_edit:
         return (
             f"針對{label}調整可見身形輪廓，必要時順接頭部與頸部外圍，保持自然解剖、衣物邊界及背景透視連續"
         )
-    return f"{label}不進行身形修改，保留原始身形與頭頸外圍輪廓、衣物邊界及背景透視連續"
+    # A no-op is explained by ``report`` only.  Supplying a preservation
+    # sentence here would make it look like an Editor command and could freeze
+    # independently approved face/style work.
+    return ""
 
 
 def normalize_body_reshape_edit_prompt(value, fallback=BODY_RESHAPE_FALLBACK_PROMPT):
@@ -81,6 +130,155 @@ def normalize_body_reshape_edit_prompt(value, fallback=BODY_RESHAPE_FALLBACK_PRO
     if re.search(r"^(?:[#*•●▪-]|\d+\s*[.)、．：:])\s*", text):
         return fallback_text
     return text
+
+
+def _body_reshape_outcome_phrase(text, offset, *, report=False):
+    """Choose a concrete visual outcome from the nearby named region."""
+    source = str(text)
+    start = max(0, offset - 160)
+    context = source[start:min(len(source), offset + 160)]
+    relative_offset = offset - start
+    cues = (
+        ("arm", re.compile(r"上臂|手臂|袖|肩臂")),
+        ("waist", re.compile(r"腰|腹|肚|下腹|側腹")),
+        ("leg", re.compile(r"腿|大腿|小腿|臀|髖")),
+        ("head", re.compile(r"頭|頸|肩")),
+        ("ratio", re.compile(r"整體比例|比例")),
+        ("overall", re.compile(r"份量|整體(?!比例)|胸|軀幹|身形")),
+    )
+    nearby = []
+    for name, pattern in cues:
+        matches = list(pattern.finditer(context))
+        if matches:
+            match = min(matches, key=lambda item: abs(item.start() - relative_offset))
+            nearby.append((abs(match.start() - relative_offset), name))
+    if nearby:
+        name = min(nearby, key=lambda item: item[0])[1]
+    else:
+        name = "generic"
+    if name == "arm":
+        return "更清楚地銜接肩線與袖口" if report else "更清楚"
+    if name == "waist":
+        return "更貼合腰腹弧線" if report else "更貼合身形"
+    if name == "leg":
+        return "更順著腿部姿態" if report else "更修長"
+    if name == "head":
+        return "更協調地銜接頭肩比例" if report else "更協調"
+    if name == "ratio":
+        return "更均衡"
+    if name == "overall":
+        return "更均衡地分配畫面份量" if report else "更均衡"
+    return "與畫面留白更平衡" if report else "更順暢"
+
+
+def _replace_body_reshape_stock_phrases(text, *, report=False):
+    """Replace repetitive aesthetic conclusions using local visual context."""
+    if not isinstance(text, str):
+        return ""
+    return _BODY_RESHAPE_STOCK_PHRASE_RE.sub(
+        lambda match: _body_reshape_outcome_phrase(text, match.start(), report=report),
+        text,
+    )
+
+
+def normalize_body_reshape_prompt_display(value, fallback=""):
+    """Return UI copy with no Latin words while preserving Chinese wording.
+
+    prompt_display is generated by the model and is intentionally kept
+    separate from the Editor command. A deterministic cleanup here prevents a
+    stray term such as silhouette from reaching the review UI without
+    weakening or rewriting the actual body-reshape instruction.
+    """
+    def clean(raw):
+        if not isinstance(raw, str):
+            return ""
+        text = " ".join(raw.split()).strip()
+        for pattern, replacement in _BODY_RESHAPE_PROMPT_DISPLAY_REPLACEMENTS:
+            text = pattern.sub(replacement, text)
+        text = _replace_body_reshape_stock_phrases(text)
+        text = re.sub(r"約?\s*\d+(?:\.\d+)?\s*[%％]", "", text)
+        # Unknown English words are not useful in this user-facing sentence.
+        # Remove complete Latin tokens rather than individual letters so a
+        # Chinese sentence remains readable after cleanup.
+        text = re.sub(r"[A-Za-z][A-Za-z0-9_./-]*", "", text)
+        text = re.sub(r"\s+", " ", text).strip()
+        text = re.sub(r"(?<=[\u3400-\u9fff])\s+(?=[\u3400-\u9fff])", "", text)
+        text = re.sub(r"\s+([，。！？、：；,.!?])", r"\1", text)
+        text = re.sub(r"([，。！？、：；]){2,}", r"\1", text)
+        return text.strip(" -—:：;；")[:120]
+
+    text = clean(value)
+    if text:
+        return text
+    return clean(fallback)
+
+
+def body_reshape_prompt_display_fallback(edit_prompt="", subject_label=""):
+    """Build a region-aware UI sentence when a planner omits prompt_display."""
+    source = str(edit_prompt or "")
+    if re.search(r"上臂|手臂|袖", source):
+        return "修飾上臂線條，讓袖口至手肘更清楚"
+    if re.search(r"腰|腹|肚|下腹|側腹", source):
+        return "收整腰腹外緣，讓衣著側線更貼合"
+    if re.search(r"腿|大腿|小腿|臀|髖", source):
+        return "修飾腿部外緣，讓下身線條更修長"
+    if re.search(r"頭|頸|肩", source):
+        return "調整頭肩外緣，讓整體比例更協調"
+    return f"修飾{subject_label or '身形'}外緣，讓畫面份量更均衡"
+
+
+def normalize_body_reshape_report(value, *, subject_label="", should_edit=True):
+    """Keep the review report photographic, specific, and Traditional Chinese.
+
+    Reports are review prose, not Editor commands. This boundary removes a
+    small set of leaked optimizer/API vocabulary and rewrites repeated stock
+    conclusions according to the nearby visible region. It intentionally
+    leaves the detailed ``edit_prompt`` untouched.
+    """
+    if not isinstance(value, str):
+        return ""
+    text = " ".join(value.split()).strip()
+    for pattern, replacement in _BODY_RESHAPE_REPORT_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
+    text = re.sub(
+        r"(?:原始|該)?(?:可見)?(?:局部)?外緣寬度(?:縮減|收窄|減少)?\s*"
+        r"(?:約|大約)?\s*\d+(?:\.\d+)?\s*[%％](?:的)?(?:幅度)?"
+        r"(?:向內)?(?:縮減|收窄|減少)?",
+        "局部外緣小幅收整",
+        text,
+    )
+    text = re.sub(
+        r"(?:約|大約)?\s*\d+(?:\.\d+)?\s*[%％](?:的)?(?:局部)?(?:調整|修整|微調)",
+        "小幅修整",
+        text,
+    )
+    text = re.sub(
+        r"(?:約|大約)?\s*\d+(?:\.\d+)?\s*[%％]\s*(?:的)?\s*局部(?:外緣)?寬度(?:縮減|收窄|減少)",
+        "小幅收整",
+        text,
+    )
+    text = re.sub(r"局部外緣寬度(?:縮減|收窄|減少)", "局部外緣收整", text)
+    text = re.sub(r"外緣寬度(?:縮減|收窄|減少)", "外緣收整", text)
+    text = re.sub(r"約?\s*\d+(?:\.\d+)?\s*[%％]", "小幅", text)
+    text = _replace_body_reshape_stock_phrases(text, report=True)
+    text = re.sub(r"可清楚辨識(?:並)?\s*可清楚辨識", "可清楚辨識", text)
+    text = re.sub(r"清楚可清楚辨識|清楚且可清楚辨識", "清楚辨識", text)
+    text = re.sub(r"更均衡[、，,]\s*(?:整體)?比例更均衡", "更均衡，讓整體比例更平衡", text)
+    text = re.sub(r"不需(?:要)?進行頭肩比例調整", "可維持頭肩比例", text)
+    text = re.sub(r"無需頭肩比例另外修飾|不進行頭肩比例調整", "頭肩比例維持現狀", text)
+    text = re.sub(r"頭頸輪廓也不納入本次指令", "頭頸比例維持現狀", text)
+    text = re.sub(r"替代測量區域", "替代判斷", text)
+    text = re.sub(
+        r"(?:不提出|不進行|暫不執行)(?:身形調整|Body Reshape)(?:修改|調整)?|身形調整\s*不執行",
+        "因此保留現有輪廓",
+        text,
+        flags=re.I,
+    )
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"(?<=[\u3400-\u9fff])\s+(?=[\u3400-\u9fff])", "", text)
+    text = re.sub(r"\s+([，。！？、：；,.!?])", r"\1", text)
+    text = re.sub(r"([，。！？、：；]){2,}", r"\1", text)
+    return text[:600]
 
 
 def _body_reshape_disabled_subjects(analysis):
@@ -111,25 +309,37 @@ def body_reshape_plan_entries(analysis, *, include_disabled=True):
         body = subject.get("body_reshape")
         if not isinstance(body, dict):
             continue
-        prompt = body.get("edit_prompt")
-        if not isinstance(prompt, str) or not prompt.strip():
-            legacy_points = body.get("key_points")
-            if isinstance(legacy_points, list):
-                prompt = "；".join(str(point).strip() for point in legacy_points if str(point).strip())
-        if not isinstance(prompt, str) or not prompt.strip():
-            continue
         should_edit = body.get("should_edit") is not False
-        prompt = normalize_body_reshape_edit_prompt(
-            prompt,
-            fallback=_body_reshape_fallback_prompt(subject.get("label"), should_edit),
-        )
+        prompt = ""
+        if should_edit:
+            prompt = body.get("edit_prompt")
+            if not isinstance(prompt, str) or not prompt.strip():
+                legacy_points = body.get("key_points")
+                if isinstance(legacy_points, list):
+                    prompt = "；".join(str(point).strip() for point in legacy_points if str(point).strip())
+            if not isinstance(prompt, str) or not prompt.strip():
+                continue
+            prompt = normalize_body_reshape_edit_prompt(
+                prompt,
+                fallback=_body_reshape_fallback_prompt(subject.get("label"), True),
+            )
+        subject_label = subject.get("label") or f"人物 {subject_index + 1}"
         entry = {
             "subject_index": subject_index,
             "local_detection_index": subject.get("local_detection_index", -1),
-            "subject_label": subject.get("label") or f"人物 {subject_index + 1}",
+            "subject_label": subject_label,
             "box": subject.get("box") or {},
             "edit_prompt": prompt,
-            "report": str(body.get("report") or "").strip(),
+            "prompt_display": (
+                normalize_body_reshape_prompt_display(
+                    body.get("prompt_display"),
+                    fallback=body_reshape_prompt_display_fallback(prompt, subject_label),
+                )
+                if should_edit else ""
+            ),
+            "report": normalize_body_reshape_report(
+                body.get("report"), subject_label=subject_label, should_edit=should_edit
+            ),
             "should_edit": should_edit,
             "disabled": subject_index in disabled,
         }
@@ -139,8 +349,15 @@ def body_reshape_plan_entries(analysis, *, include_disabled=True):
 
     # Keep old saved analyses readable.  A top-level prompt has no person
     # identity, so it is only a compatibility fallback when no nested plans
-    # exist; newly generated analyses always use the per-person branch above.
-    if not entries and not any(isinstance(s, dict) and isinstance(s.get("body_reshape"), dict) for s in subjects):
+    # exist for a real person; unrelated/non-person legacy objects must not
+    # suppress that fallback.
+    has_person_plan = any(
+        isinstance(subject, dict)
+        and subject.get("is_person") is True
+        and isinstance(subject.get("body_reshape"), dict)
+        for subject in subjects
+    )
+    if not entries and not has_person_plan:
         body = analysis.get("body_reshape")
         if isinstance(body, dict) and isinstance(body.get("edit_prompt"), str) and body.get("edit_prompt").strip():
             entries.append({
@@ -4117,18 +4334,18 @@ def build_body_reshape_planning_instruction(persons=None):
 
     return f"""You are a professional portrait retoucher planning Body Reshape edits.
 
-Inspect the attached original photograph and analyze every listed person independently. Never transfer a body observation, region, amount, or instruction from one person to another. Return one plan for every supplied person, in the same order, using the supplied subject_index and local_detection_index unchanged.
+Inspect the attached original photograph and analyze every listed person independently. Never transfer a body observation, region, amount, or instruction from one person to another. Return one plan for every supplied person, in the same order, using the supplied subject_index and local_detection_index unchanged. For each plan, the first sentence of report must contain that plan's exact supplied person label; the report may begin with the aesthetic reason, but identify the correct person before giving evidence. When should_edit=true, edit_prompt must begin exactly with「將{{exact supplied person label}}」. The user-facing prompt_display must describe only that same person's approved change. Do not substitute another person's label even when scanning the photograph in a different spatial order.
 
-Body Reshape is enabled for this planning pass, but first perform a whole-visible-silhouette body-type suitability check. If a person is already markedly thin or very slender overall — for example, the visible torso and limbs have minimal soft-tissue contour, a notably narrow overall silhouette, or prominent bony landmarks — do not propose further slimming merely because one local width can technically be measured. A clearly visible abdomen or waist is not by itself permission to narrow it. Set should_edit=false for a slimming direction, explain in the report that the existing visible body is already very lean and that another reduction would be disproportionate, and use a detailed preservation instruction. This is a visual proportion safeguard, not a medical diagnosis; do not infer it from clothing alone, and do not label a person over-thin from one narrow region, perspective, or pose in isolation. A thin-body no-op is valid even when a local contour is measurable and overrides the normal edit-default rule.
+Body Reshape is enabled for this planning pass, but first perform a whole-visible-silhouette body-type suitability check. If a person is already markedly thin or very slender overall — for example, the visible torso and limbs have minimal soft-tissue contour, a notably narrow overall silhouette, or prominent bony landmarks — do not propose further slimming merely because one local width can technically be measured. A clearly visible abdomen or waist is not by itself permission to narrow it. Set should_edit=false for a slimming direction, explain in the report that the existing visible body is already very lean and that another reduction would be disproportionate, and return edit_prompt as the empty string. This is a visual proportion safeguard, not a medical diagnosis; do not infer it from clothing alone, and do not label a person over-thin from one narrow region, perspective, or pose in isolation. A thin-body no-op is valid even when a local contour is measurable and overrides the normal edit-default rule.
 
 For every other person, when a visible body contour contains at least one safe, localizable, measurable geometric adjustment, treat should_edit=true as the default and provide a concrete Body Reshape recommendation. An obvious defect is not required when a modest, anatomically natural local contour adjustment is supported by the image. A tasteful, modest slimming or contour refinement of one clearly visible body region — for example gently narrowing a waist, abdomen, thigh, or upper-arm outline toward a more balanced silhouette — is a valid, sufficient Body Reshape opportunity as long as the change stays anatomically plausible, keeps the person recognizably the same body type and identity, and stays within a subtle, localized amount.
 
-Whenever should_edit=true, edit_prompt must name at least one visible body region and state a concrete geometric increase or decrease; never pair true with preservation-only or vague wording. Set should_edit=false when either the person is already markedly thin for the requested slimming direction or no body region can be safely identified and measured (for example, the relevant contours are materially occluded, out of frame, or cannot be distinguished from another object/person). In both no-edit cases, explain the visual evidence and limitation in the report rather than inventing a target.
+Whenever should_edit=true, edit_prompt must name at least one visible body region and state a concrete geometric increase or decrease; never pair true with preservation-only or vague wording. Set should_edit=false when either the person is already markedly thin for the requested slimming direction or no body region can be safely identified and measured (for example, the relevant contours are materially occluded, out of frame, or cannot be distinguished from another object/person). In both no-edit cases, explain the visual evidence and limitation in the report rather than inventing a target, and set edit_prompt="". The edit_prompt key remains required by the response format, but a false plan must never contain an Editor instruction, a preservation sentence,「不執行」, or other placeholder text.
 
 A seated, bent, crossed, or otherwise non-standing pose does not by itself block editing, but any specific segment whose outer edge is overlapped by another limb, garment fold, furniture, another person, or the frame boundary is not a safely measurable target even when a different segment of the same person is; never substitute a nearby unoccluded contour as a stand-in for that segment's true width. When an edit is warranted, confine the primary body adjustment to the single most clearly visible, fully unoccluded local side or segment that supports it; do not widen that primary target to the opposite side, the whole waist/torso, or any adjacent segment unless that other side or segment is independently and just as clearly visible and unoccluded. Necessary, explicitly specified head/neck proportion compensation under the rules below is a permitted exception to this single-primary-region limit, not permission to reshape other unlisted regions. Never invent a hidden measurement or force an edit when no safe visible target exists.
 
 [Required head and neck outer-contour assessment]
-For every should_edit=true plan, assess the selected body contour together with the visible outer contour of the head and neck so the complete silhouette remains natural. Body Reshape may authorize only the named body contour and the minimum head outer-contour or neck outer-contour follow-through needed for proportion. Other feature endpoints remain owned by their own contracts and must not be added to this body command.
+For every should_edit=true plan, assess the selected body contour together with the visible outer contour of the head and neck so the complete silhouette remains natural. Body Reshape may authorize only the named body contour and the minimum head outer-contour or neck outer-contour follow-through needed for proportion. Other feature endpoints remain owned by their own contracts and must not be added to this body command. Conversely, Body Reshape must never preserve, freeze, cancel, override, or reduce the priority of a separately approved non-body endpoint, including gaze-driven face orientation or head alignment. The body planner does not know which independent endpoints will be active at Editor time.
 
 - Classify the body change before writing the command. A modest/local change affects one clearly visible segment and is normally below 15% of that segment's original total width. A substantial change is any explicit total target of 15% or more, a change spanning two or more adjacent trunk regions, a broad torso/full-visible-silhouette change, a visibly large transition from a markedly heavy silhouette toward a much smaller silhouette, or a post-edit proportion risk in which the head would look oversized relative to the altered shoulders, torso, or limb even when the body amount is below 15%.
 - For a modest/local change, head and neck outer-contour compensation may be omitted only after a post-edit proportion check confirms that the head, neck, shoulders, torso, and edited limb still read naturally. A modest upper-arm or shoulder-adjacent edit is not automatically exempt: if the exact body change would make the head look too large or the neck transition look disproportionate, treat it as a proportion-risk case and require both outer-contour operations. For a substantial or proportion-risk change, head outer-contour and neck outer-contour compensation are mandatory whenever those contours are visible and measurable; never write that both remain unchanged. If a required contour is cropped, occluded, or unsafe to measure, do not approve the broad/proportion-risk body change as written—reduce it to a safe local target or set should_edit=false with the visibility limitation.
@@ -4136,21 +4353,36 @@ For every should_edit=true plan, assess the selected body contour together with 
 - Head outer contour: when compensation is optional or mandatory under the classification above, uniformly scale the visible outer head contour as one coherent unit. State a concrete amount chosen from the visible proportions; use the same linear factor for width and height, and keep the original head-to-neck connection, tilt, direction, and pose. Do not blindly copy the body percentage and do not independently translate, rotate, stretch, or compress the head.
 - Neck outer contour: when compensation is optional or mandatory under the classification above, adjust only a clearly visible local outer width at a named level. Both boundaries must be visible for a total-width percentage; choose the amount from the visible body-to-neck proportions rather than copying the body percentage, and keep the neck centerline, visible length, head/shoulder attachment, and pose unchanged.
 - Choose head and neck outer-contour amounts independently from the primary body amount and keep each compensation no larger than necessary to restore a natural silhouette. Do not use a head or neck adjustment to justify a larger body change or to alter any unlisted region.
-- Apply visibility and occlusion checks independently to the head and neck outer contours. Do not guess hidden boundaries or modify a cropped/occluded connection. If no compensation is needed, leave the head and neck outer contours naturally connected and unchanged.
-- Every approved head or neck outer-contour adjustment must appear explicitly in edit_prompt with its region, geometric operation, direction, and amount. If no compensation is selected after the post-edit proportion check, state only that the head and neck outer contours remain naturally connected and unchanged; never use that unchanged clause for a substantial or proportion-risk target.
+- Apply visibility and occlusion checks independently to the head and neck outer contours. Do not guess hidden boundaries or modify a cropped/occluded connection. If no compensation is needed, record that conclusion in report only; omit head and neck from edit_prompt rather than writing a broad unchanged instruction that could conflict with another feature contract.
+- Every approved head or neck outer-contour adjustment must appear explicitly in edit_prompt with its region, geometric operation, direction, and amount. If no compensation is selected after the post-edit proportion check, do not add a head/neck preservation clause to edit_prompt. Absence means Body Reshape authorizes no head/neck scaling; it does not freeze a separately approved non-body endpoint such as gaze-driven face orientation or head alignment.
 
-Each edit_prompt is a single Traditional-Chinese editor command of at least {BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH} and at most {BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH} Unicode characters. Use concise clauses within that one command to include the primary body edit and any approved head/neck outer-contour compensation. It must name that person's visible body region or contour, geometric increase/decrease direction, and the visible local measurement or target amount when the image supports one. State that the existing garment follows the approved local contour without changing garment identity or coverage. For a substantial target, include both the mandatory head outer-contour and neck outer-contour operations with concrete amounts; never state that both remain unchanged. For a modest/local target, compensation may be omitted and the command may state only that the head and neck outer contours remain naturally connected and unchanged. Do not add unrelated feature endpoints or enumerate unrelated regions; use one generic remainder clause when needed.
+For should_edit=true, edit_prompt is a single Traditional-Chinese editor command of at least {BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH} and at most {BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH} Unicode characters. Use concise clauses within that one command to include the primary body edit and any approved head/neck outer-contour compensation. It must name that person's visible body region or contour, geometric increase/decrease direction, and the visible local measurement or target amount when the image supports one. State only the necessary local garment follow-through: the existing garment follows the approved contour without changing garment identity or coverage. For a substantial target, include both the mandatory head outer-contour and neck outer-contour operations with concrete amounts; never state that both remain unchanged. For a modest/local target with no compensation, omit head and neck from edit_prompt entirely.
 
-Mention only static geometry: never request a pose, action, gesture, head/body direction, joint angle, clothing redesign, or background reconstruction. The explicitly approved head outer-contour and neck outer-contour operations are the only additional proportion adjustments allowed beside the named body region. Do not use vague text such as「微調輪廓」alone. Numeric percentages refer to the original photograph and must be interpreted as a total change of the named visible 2D measurement, not per side or hidden anatomy; a head-scaling percentage applies equally to the head's original width and height.
+Do not add any blanket preservation/remainder clause to edit_prompt. In particular, never write「其餘身體與場景保持不變」、「其他區域維持原狀」、「其餘部分不變」、「其他人物或背景保持不變」or an equivalent sentence. Such text can freeze or compete with independently approved gaze, blink, smile, hair, pose, crop, lighting, or style work. An omitted region is already outside Body Reshape authority; do not restate that boundary inside the per-person command. The report may explain why a target was accepted or rejected, but its prose must not be copied into edit_prompt.
 
-The report is a Traditional-Chinese explanation of the visual evidence, the selected region and measurement, the direction and magnitude, and the limits that must be preserved. For a no-edit person, explain whether the overall visible body is already markedly thin or whether visibility/occlusion prevents a safe target. For every edited person, explain the head and neck outer-contour assessment, the post-edit proportion check, which compensation is included or why those contours remain unchanged, and any visibility limitations. Describe anticipated effects of the plan, not an edited result you have not observed. The report is review context; edit_prompt is the exact text handed to Editor and must contain every approved geometric operation. Keep each person's instruction distinct by referring to the corresponding person and never merge multiple people into one sentence.
+Mention only static geometry: never request a pose, action, gesture, head/body direction, joint angle, clothing redesign, or background reconstruction. This means Body Reshape neither authorizes nor prohibits those properties; a separately approved feature or style contract remains authoritative for its own endpoint. The explicitly approved head outer-contour and neck outer-contour operations are the only additional proportion adjustments allowed beside the named body region. Do not use vague text such as「微調輪廓」alone. Numeric percentages refer to the original photograph and must be interpreted as a total change of the named visible 2D measurement, not per side or hidden anatomy; a head-scaling percentage applies equally to the head's original width and height.
 
-The editor must preserve every unlisted body region, person, object, pose, camera viewpoint, lighting, scene, background geometry, and spatial relationship. Only the named body contour and any explicitly approved head or neck outer contour may change. Existing fabric, texture, seams, folds, and local clothing boundaries may move only as necessary with an approved contour, without changing garment identity or coverage. Do not move a person to their box coordinates or treat a box as a target silhouette.
+The report is a concise Traditional-Chinese explanation written from a professional portrait photographer's perspective, not an engineering log. Keep it to two to four sentences: the first sentence must name the supplied person and state the visible aesthetic reason; then describe the specific contour, its relationship to clothing, pose, light, shadow, negative space, or visual weight, and the expected effect on the photograph. Include the supported direction and amount in natural wording only when useful, and describe head/neck decisions as visible head-to-shoulder or neck-to-torso proportion. For every edited person, mention the head/neck proportion conclusion and any visibility limit in photographic language. For a no-edit person, explain why the current silhouette suits the frame or identify the concrete occlusion that makes a reliable refinement impossible. Avoid internal identifiers, schema/pipeline terms, and phrases such as「局部幾何」、「可量測端點」、「比例補償」. Do not use「更俐落自然」、「俐落和諧」or「更自然」as a stock conclusion; replace them with an observable visual result. Do not call body size a defect, imply thinner is universally more attractive, or claim an edit has already succeeded. The report is review context; edit_prompt remains the exact text handed to Editor and must contain every approved geometric operation, while report prose must not be copied into it.
+Report wording rule: do not expose percentages, total-width measurements, internal thresholds, English classifications such as markedly thin or modest, the feature name Body Reshape, or validation terms such as「可量測」、「局部幾何」and「比例補償」. Put exact geometry in edit_prompt; in report, describe the visible styling reason and expected photographic result with concrete cues such as how a sleeve meets the elbow, how a waist edge meets nearby negative space, or how head-to-shoulder weight is balanced.
+
+Choose the explanation from the actual photograph instead of a fixed template, and give different people or regions different visual reasons. Ground the report in one or two concrete cues such as a jacket side seam that projects into the frame, a sleeve-to-elbow transition that carries excess visual weight, a waist edge that competes with the subject's negative space, a jacket front that no longer follows the torso, or a head-to-shoulder relationship that needs proportion review. For a no-op, explain the current silhouette's photographic strength or the exact overlap that prevents a trustworthy reading. These cues guide observation rather than provide text to copy; do not repeat the same adjective pair or sentence ending across people.
+
+For should_edit=true, prompt_display is one short Traditional-Chinese sentence (roughly 12–50 characters) for the user. It must name only the approved visible region and tell the user what visual difference to expect, using concrete photographic language rather than a generic compliment. Choose the wording from the image and vary it across regions or people; do not reuse「更俐落自然」、「俐落和諧」、「更自然」or「更和諧」as a stock ending. Examples of the intended specificity are：「收整腰側外緣，讓坐姿上衣側線貼合身形。」、「減輕短袖下方的上臂份量，讓袖口到手肘的線條更清楚。」、「整理外套前襟與腰側銜接，平衡軀幹的視覺重量。」、「調整腹部外緣與肩線份量，讓人物在畫面中更修長。」These are examples, not templates. Do not include percentages, engineering terms, Editor commands, garment-preservation rules, unsupported promises, or extra body/face/pose changes. Do not copy the full edit_prompt or report. For should_edit=false, set prompt_display="". This field is shown in the UI only and is never an Editor instruction.
+Prompt-display variation rule: choose the benefit that matches the named region—sleeve-to-elbow continuity for an arm, waist-to-garment fit for the middle body, leg flow for the lower body, shoulder-to-head balance for a substantial upper-body change, or subject-to-background spacing for a general contour. Two people must not receive the same adjective pair when their visible evidence differs.
+prompt_display 必須只使用繁體中文漢字與中文標點，不得出現任何英文字母或英文術語；例如 silhouette、contour、outline 一律改寫為「輪廓」，sleeve silhouette 一律寫成「袖型輪廓」。若模型草稿含有英文，請先轉成自然繁體中文再輸出。
+
+Report construction rule: before writing the prose, choose one dominant photographic cue from the supplied image—sleeve-to-elbow continuity, shoulder-to-sleeve transition, jacket front or side seam, waist/abdomen against the garment and nearby negative space, trouser or skirt flow, head-to-shoulder balance, or subject-to-background spacing. The report must name that cue and explain why it affects this frame; do not replace the explanation with a generic judgement such as「好看」、「自然」、「和諧」or「俐落」. Exact percentage and measurement language belongs only in edit_prompt; report may describe magnitude as「小幅」or「明顯」only when that helps the photographic explanation.
+
+Report variation rule: two people or two different body regions must not share the same opening, adjective pair, or final clause. Use the visual relationship that actually changes—for example「讓短袖下緣到手肘的轉折更清楚」、「使外套前襟沿腰側更貼合」、「平衡腰側與背景留白的份量」or「讓褲管線條順著腿部姿態延伸」—as guidance only, and write a fresh sentence grounded in the image. A no-op report must name the silhouette's existing compositional strength or the concrete overlap/crop that prevents a reliable reading.
+
+Prompt-display construction rule: prompt_display is a user-facing benefit sentence, not a shortened edit_prompt. Name only the approved region, then state the visible compositional result in Traditional Chinese. Select the result from the actual evidence (garment edge, line, spacing, or visual weight), vary the verb and ending across people, and never end with「更俐落自然」、「俐落和諧」、「更自然」、「更和諧」、「更好看」or a similarly empty compliment. Do not mention percentages, internal analysis, validation, or any other feature endpoint; when should_edit=false, return an empty string.
+
+Scope rule for planning only; do not copy or paraphrase it into edit_prompt: Body Reshape authorizes only the named body contour and any explicitly approved head or neck outer contour. Separately approved feature/style endpoints remain authoritative. Existing fabric, texture, seams, folds, local clothing boundaries, and the narrow adjacent background strip may follow only as necessary for the approved contour, without changing garment identity or coverage. Do not move a person to their box coordinates or treat a box as a target silhouette.
 
 Return exactly this JSON object:
 {{
   "body_reshape_plans": [
-    {{"subject_index": 0, "local_detection_index": 0, "should_edit": true, "report": "...", "edit_prompt": "..."}}
+    {{"subject_index": 0, "local_detection_index": 0, "should_edit": true, "report": "...", "prompt_display": "...", "edit_prompt": "..."}}
   ]
 }}
 
@@ -4164,9 +4396,13 @@ _BODY_RESHAPE_PLAN_SCHEMA = _schema_object({
     "local_detection_index": _schema_integer(),
     "should_edit": _schema_boolean(),
     "report": {"type": "string", "minLength": BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH, "maxLength": 600},
+    "prompt_display": {"type": "string", "minLength": 0, "maxLength": 120},
     "edit_prompt": {
         "type": "string",
-        "minLength": BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH,
+        # Structured Outputs cannot express a minLength conditional on the
+        # sibling should_edit flag.  Empty is valid only for a no-op; the merge
+        # boundary below enforces the active-plan minimum.
+        "minLength": 0,
         "maxLength": BODY_RESHAPE_EDIT_PROMPT_MAX_LENGTH,
     },
 })
@@ -4187,24 +4423,32 @@ def build_body_reshape_planning_response_schema(person_count=None):
 def _normalize_body_subject_plan(subject, subject_index, body):
     if not isinstance(body, dict):
         return None
-    label = subject.get("label") if isinstance(subject, dict) else None
-    prompt = body.get("edit_prompt")
-    if not isinstance(prompt, str) or not prompt.strip():
-        points = body.get("key_points")
-        if isinstance(points, list):
-            prompt = "；".join(str(point).strip() for point in points if str(point).strip())
-    if not isinstance(prompt, str) or not prompt.strip():
-        return None
     should_edit = body.get("should_edit") is not False
-    normalized = {
-        "edit_prompt": normalize_body_reshape_edit_prompt(
-            prompt, fallback=_body_reshape_fallback_prompt(label, should_edit)
-        ),
-        "should_edit": should_edit,
-    }
+    label = subject.get("label") if isinstance(subject, dict) else None
+    normalized = {"should_edit": should_edit}
+    if body.get("analysis_status") == "error":
+        normalized["analysis_status"] = "error"
+    if should_edit:
+        prompt = body.get("edit_prompt")
+        if not isinstance(prompt, str) or not prompt.strip():
+            points = body.get("key_points")
+            if isinstance(points, list):
+                prompt = "；".join(str(point).strip() for point in points if str(point).strip())
+        if not isinstance(prompt, str) or not prompt.strip():
+            return None
+        normalized["edit_prompt"] = normalize_body_reshape_edit_prompt(
+            prompt, fallback=_body_reshape_fallback_prompt(label, True)
+        )
+        display = body.get("prompt_display")
+        normalized["prompt_display"] = normalize_body_reshape_prompt_display(
+            display,
+            fallback=body_reshape_prompt_display_fallback(prompt, label or ""),
+        )
     report = body.get("report")
     if isinstance(report, str) and report.strip():
-        normalized["report"] = report.strip()[:600]
+        normalized["report"] = normalize_body_reshape_report(
+            report, subject_label=label or "", should_edit=should_edit
+        )
     normalized["subject_index"] = subject_index
     normalized["local_detection_index"] = body.get(
         "local_detection_index", subject.get("local_detection_index", -1)
@@ -4287,33 +4531,153 @@ def merge_body_reshape_plans(analysis, response):
         returned_detection = plan.get("local_detection_index", -1)
         if returned_detection != expected_detection:
             raise ValueError("body reshape local_detection_index mismatch for subject_index {}".format(subject_index))
-        prompt = plan.get("edit_prompt")
-        # Accept one old-version key_points array while migrating saved test
-        # fixtures; new API responses always use edit_prompt.
-        if not isinstance(prompt, str) or not prompt.strip():
-            points = plan.get("key_points")
-            prompt = "；".join(str(point).strip() for point in points or [] if str(point).strip()) if isinstance(points, list) else ""
+        subject_label = " ".join(str(subject.get("label") or "person").split()).strip()
+        report = " ".join(str(plan.get("report") or "").split()).strip()
+        report_first_sentence = re.split(r"[。！？!?\n]", report, maxsplit=1)[0]
+        if subject_label not in report_first_sentence:
+            raise ValueError(
+                "body reshape report subject mismatch for subject_index {}: expected label {!r}".format(
+                    subject_index, subject_label
+                )
+            )
         should_edit = plan.get("should_edit") is not False
         body = {
             "subject_index": subject_index,
             "local_detection_index": returned_detection,
             "should_edit": should_edit,
-            "edit_prompt": normalize_body_reshape_edit_prompt(
-                prompt, fallback=_body_reshape_fallback_prompt(subject.get("label"), should_edit)
-            ),
         }
-        report = plan.get("report")
-        if isinstance(report, str) and report.strip():
-            body["report"] = report.strip()[:600]
+        if should_edit:
+            prompt = plan.get("edit_prompt")
+            # Accept one old-version key_points array while migrating saved test
+            # fixtures; new API responses always use edit_prompt.
+            if not isinstance(prompt, str) or not prompt.strip():
+                points = plan.get("key_points")
+                prompt = "；".join(
+                    str(point).strip() for point in points or [] if str(point).strip()
+                ) if isinstance(points, list) else ""
+            compact_prompt = " ".join(str(prompt or "").split()).strip().strip('"“”')
+            if len(compact_prompt) < BODY_RESHAPE_EDIT_PROMPT_MIN_LENGTH:
+                raise ValueError(
+                    "body reshape should_edit=true requires a detailed edit_prompt"
+                )
+            if not compact_prompt.startswith("將" + subject_label):
+                raise ValueError(
+                    "body reshape edit_prompt subject mismatch for subject_index {}: expected prefix {!r}".format(
+                        subject_index, "將" + subject_label
+                    )
+                )
+            body["edit_prompt"] = normalize_body_reshape_edit_prompt(
+                prompt, fallback=_body_reshape_fallback_prompt(subject.get("label"), True)
+            )
+            # Older responses may omit this UI-only field; provide a concise,
+            # region-aware fallback instead of hiding the active Body plan.
+            body["prompt_display"] = normalize_body_reshape_prompt_display(
+                plan.get("prompt_display"),
+                fallback=body_reshape_prompt_display_fallback(prompt, subject_label),
+            )
+        body["report"] = normalize_body_reshape_report(
+            report, subject_label=subject_label, should_edit=should_edit
+        )
         subject["body_reshape"] = body
         seen.add(subject_index)
     missing = sorted(expected - seen)
     if missing:
         raise ValueError("body reshape plans missing subject_index values: {}".format(missing))
     cleaned.pop("body_reshape", None)
+    cleaned.pop("_body_reshape_status", None)
+    cleaned.pop("_body_reshape_error", None)
+    cleaned.pop("_body_reshape_partial_failures", None)
     cleaned.pop("_body_reshape_enabled", None)
     cleaned.pop("_disabled_body_reshape_subjects", None)
     return cleaned
+
+
+def merge_body_reshape_plans_partial(analysis, response):
+    """Merge independently valid plans while isolating invalid people.
+
+    The strict merge remains the normal path. This recovery path is used only
+    after that strict merge fails: each returned plan is validated against
+    synthetic no-op plans for the other people, so a bad subject cannot make
+    a valid person's command disappear. Missing or invalid people become an
+    explicit analysis_status=error no-op and are reported to the caller.
+    """
+    if not body_reshape_enabled():
+        return strip_body_reshape(analysis), []
+    plans = response.get("body_reshape_plans") if isinstance(response, dict) else None
+    if not isinstance(plans, list):
+        raise ValueError("body reshape planning response must contain body_reshape_plans")
+    base = sanitize_body_reshape_analysis(analysis or {})
+    subjects = [subject for subject in (base.get("subjects") or [])]
+    expected = {
+        index for index, subject in enumerate(subjects)
+        if isinstance(subject, dict) and subject.get("is_person") is True
+    }
+
+    def no_op_plan(subject_index, reason):
+        subject = subjects[subject_index]
+        label = " ".join(str(subject.get("label") or "person").split()).strip()
+        report = f"{label}{reason}"
+        return {
+            "subject_index": subject_index,
+            "local_detection_index": subject.get("local_detection_index", -1),
+            "should_edit": False,
+            "report": report[:600],
+            "edit_prompt": "",
+        }
+
+    valid = {}
+    failures = []
+    seen = set()
+    for position, plan in enumerate(plans):
+        failure = {"position": position}
+        if not isinstance(plan, dict):
+            failure["reason"] = "body reshape plan entry is not an object"
+            failures.append(failure)
+            continue
+        subject_index = plan.get("subject_index")
+        failure["subject_index"] = subject_index
+        if (
+            isinstance(subject_index, bool)
+            or not isinstance(subject_index, int)
+            or subject_index not in expected
+        ):
+            failure["reason"] = f"invalid body reshape subject_index {subject_index}"
+            failures.append(failure)
+            continue
+        if subject_index in seen:
+            failure["reason"] = f"duplicate body reshape subject_index {subject_index}"
+            failures.append(failure)
+            continue
+        seen.add(subject_index)
+        trial = [
+            plan if index == subject_index else no_op_plan(
+                index, "本次回應未包含此人物的可驗證身形指令，保留原狀。"
+            )
+            for index in sorted(expected)
+        ]
+        try:
+            merge_body_reshape_plans(base, {"body_reshape_plans": trial})
+        except Exception as exc:
+            failure["reason"] = str(exc)
+            failures.append(failure)
+        else:
+            valid[subject_index] = plan
+
+    final_plans = [
+        valid[index] if index in valid else no_op_plan(
+            index, "本次沒有足夠可靠的身形判讀，為維持畫面比例，先保留目前輪廓。"
+        )
+        for index in sorted(expected)
+    ]
+    merged = merge_body_reshape_plans(base, {"body_reshape_plans": final_plans})
+    if failures:
+        for subject_index in sorted(expected - set(valid)):
+            body = merged["subjects"][subject_index].get("body_reshape")
+            if isinstance(body, dict):
+                body["analysis_status"] = "error"
+        merged["_body_reshape_status"] = "partial_error"
+        merged["_body_reshape_partial_failures"] = failures
+    return merged, failures
 
 
 def merge_body_reshape_edit_prompt(analysis, response):
@@ -4336,6 +4700,9 @@ def strip_body_reshape(analysis):
         return analysis
     cleaned = dict(analysis)
     cleaned.pop("body_reshape", None)
+    cleaned.pop("_body_reshape_status", None)
+    cleaned.pop("_body_reshape_error", None)
+    cleaned.pop("_body_reshape_partial_failures", None)
     cleaned.pop("_body_reshape_enabled", None)
     cleaned.pop("_disabled_body_reshape_subjects", None)
     raw_subjects = analysis.get("subjects")
@@ -4374,20 +4741,11 @@ def build_body_reshape_edit_block(analysis):
             f'  Approved body and outer-contour adjustment:\n    {item["edit_prompt"]}'
         )
     return """Body reshape execution instructions (analysis-approved):
-- Every listed instruction is mandatory for the named person and applies only to the visible static body geometry it names. The only additional geometry allowed by Body Reshape is a head outer contour or neck outer contour explicitly written in that same instruction. Do not invent an unlisted body change or broaden the command to another region; posture, action, gesture, joint-angle, head direction, and body direction remain outside this contract.
-- The planner's markedly-thin no-op safeguard has priority over any generic slimming preference. Do not invent or extend a slimming target for a person whose approved analysis says the overall visible body is already markedly thin; this block contains only active, approved targets.
-- Subject labels and boxes identify people only. Never move a person to box coordinates or treat a box as a target silhouette. Match each command to the named person's visible anatomy and clothing in the supplied image.
-- Complete each named increase/decrease at the exact amount printed in that person's instruction. A true no-op, tonal-only edit, blur, sharpening, or redrawn fold does not complete a geometric body command. A percentage is the total dimensional change of the named visible 2D local measurement, not per side, the whole person, bounding box, canvas, circumference, hidden depth, or hidden anatomy.
-- If adjacent waist and abdomen commands overlap, blend them into one continuous contour without applying the same percentage twice. Preserve every unlisted body region and every other person's geometry.
-- Keep each target command concise: execute only the named body contour and any explicitly named head/neck outer contour; do not expand it with a preservation-only list of unrelated regions.
-- Treat a target as substantial when its explicit total amount is 15% or more, it spans two or more adjacent trunk regions, it changes a broad torso/full visible silhouette, it describes a visibly large transition from a markedly heavy silhouette toward a much smaller silhouette, or the exact edit would make the head look oversized relative to an altered shoulder, torso, or limb. For an upper-arm or shoulder-adjacent target, compare the projected head-to-shoulder and head-to-upper-torso proportions after the exact arm change; do not rely on the numeric 8%/10% amount alone. A substantial or proportion-risk target is incomplete unless its approved instruction includes both head outer-contour and neck outer-contour operations with concrete amounts whenever those contours are visible and measurable; do not silently treat those contours as unchanged just because the primary body amount is below 15%.
-- For a substantial or proportion-risk target with a cropped, occluded, or otherwise unsafe head/neck contour, do not invent hidden geometry or an amount. The planner must have reduced or rejected that broad target; execute only the safe approved scope.
-- If a head outer contour is explicitly approved, apply one uniform width/height scale to the visible outer contour, keep its original head-to-neck connection, tilt, direction, and pose, and do not independently translate, rotate, stretch, or compress it. Its amount is independent from the body percentage.
-- If a neck outer contour is explicitly approved, adjust only the named visible local width where both boundaries are visible; keep the neck centerline, length, head/shoulder attachment, and pose unchanged. Its amount is independent from the body percentage. Blend the body-to-neck transition continuously and anatomically.
-- Preserve garment identity, type, design, color, material, pattern, construction, openings, layering, front/back order, coverage relationship, and wearing method. Within an approved body region, let the existing garment silhouette, fabric, texture, seams, folds, and local clothing/skin boundary follow the approved body contour continuously; this is required follow-through, not permission to redesign clothing.
-- Never lengthen or lower a top to cover the abdomen, raise a waistband to cover the waist, add or remove fabric, alter a neckline or sleeve, change clothing coverage, or use shadows/blur/folds to fake a body change.
-- Where an outer contour moves, continue only the narrow adjacent strip of the same background with matching texture and perspective. Do not reconstruct or warp the background, nearby people, objects, architecture, lines, or camera viewpoint.
-- Preserve every unlisted region, person, object, pose, lighting, crop, perspective, and scene relationship. Protect anatomy continuity and nearby content from smearing, bending, duplication, or displacement outside the necessary local contour follow-through above.
+- Execute every target for its named person, but only the body/head/neck contours explicitly named there. Labels and boxes identify the person; they are not target positions or silhouettes. Do not infer another body change. Separately approved non-body or style endpoints—including gaze-driven face orientation or head alignment—remain mandatory.
+- Apply each printed direction and amount exactly. A percentage is the total change of that named visible local 2D measurement, not per side or of the whole person/canvas. Apply overlapping waist/abdomen measurements once as one continuous contour. Tonal changes, blur, sharpening, or redrawn folds cannot substitute for the required geometry.
+- Change head or neck geometry only when the target explicitly names it. Scale an approved head outer contour uniformly in width and height; adjust only the named visible neck width, keeping its centerline and attachments coherent. Use each printed amount independently and add no unlisted compensation.
+- Move the existing garment silhouette, texture, seams, folds, and clothing/skin boundary continuously with an approved contour while preserving garment identity, design, material, pattern, construction, layering, openings, coverage, and wearing method. Never add/remove fabric or change coverage to fake the result.
+- Continue only the narrow adjacent strip of the same background where an outer contour moves. Do not infer extra body geometry from this block, and do not warp, smear, duplicate, or displace content as a consequence of that local contour repair. This local artifact constraint never freezes or overrides another approved feature or style endpoint.
 
 Targets:
 """ + "\n".join(target_lines)
