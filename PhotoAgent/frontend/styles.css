@@ -2706,8 +2706,11 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   font-variant-numeric: tabular-nums;
 }
 /* The source every version was produced from, not a version itself -- so it
-   reads as a source: dashed rather than solid, a muted label, and no hover or
-   current state, since it is the one tile in the row that cannot be selected. */
+   reads as a source: a quiet solid frame instead of the dashed one it used to
+   have (dashes drew more attention than the versions they sit next to), a
+   muted label, a slightly dimmed image, and no hover or current state, since
+   it is the one tile in the row that cannot be selected. Keeps the 2px border
+   width of .version-tile so both columns line up at the same outer size. */
 .version-origin {
   display: flex;
   flex-direction: column;
@@ -2718,7 +2721,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 .version-origin-tile {
   width: 64px;
   height: 64px;
-  border: 2px dashed rgba(var(--on-surface-rgb),.3);
+  border: 2px solid rgba(var(--on-surface-rgb),.14);
   border-radius: 9px;
   background: rgba(var(--on-surface-rgb),.06);
   overflow: hidden;
@@ -2734,11 +2737,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 /* Sized to the tile row rather than stretched: only the origin column carries
    a label now, so a stretched line would hang past the version tiles and make
    the fence look crooked. */
+/* --border-2 rather than --border: this line separates two different kinds of
+   thing (source vs. versions), so it has to stay readable next to the origin
+   tile's own faint frame. Still a token, not a hardcoded rgba, so the tinted
+   themes keep their own border hue instead of picking up an on-surface grey. */
 .version-strip-divider {
   flex: 0 0 1px;
   align-self: flex-start;
   height: 64px;
-  background: var(--border);
+  background: var(--border-2);
 }
 /* The origin and its divider stay put at the left edge while the versions
    scroll past them -- the original is the reference every tile to its right
@@ -2873,13 +2880,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 }
 
 /* #version-strip-preview-modal -- the mobile tap-to-preview modal opened by
-   .version-strip-preview-btn above. Reuses .version-tile/.version-origin-tile
-   wholesale (renderVersionStripPreviewGrid, app.js builds the exact same
-   markup as the strip itself) and just enlarges them here via descendant
-   overrides, so current/disabled/run-count styling all come for free instead
-   of being duplicated. */
+   .version-strip-preview-btn above. Reuses .version-tile wholesale
+   (renderVersionStripPreviewGrid, app.js builds the same tile markup as the
+   strip itself) and just enlarges them here via descendant overrides, so
+   current/disabled/run-count styling all come for free instead of being
+   duplicated. The origin tile is deliberately not rendered into this grid --
+   this modal exists to pick a version, and the original is the one tile that
+   cannot be picked. */
 .version-strip-preview-modal-box {
-  width: min(420px, calc(100vw - 40px));
+  width: min(380px, calc(100vw - 24px));
   max-height: min(72vh, 560px);
   display: flex;
   flex-direction: column;
@@ -2892,10 +2901,30 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   padding: 4px 2px 2px;
   overflow-y: auto;
 }
-.version-strip-preview-modal-grid .version-tile,
-.version-strip-preview-modal-grid .version-origin-tile {
-  width: 92px;
-  height: 92px;
+/* Two per row, not three. The whole point of this modal is that the 54px
+   strip tiles are too small to judge a result by on a phone, and 92px was
+   still squinting distance; 128px is the largest that leaves two of them
+   plus the 16px grid gap inside the box on a 360px-wide phone
+   (360 - 24 box inset - 44 .error-modal-box padding - 4 grid padding = 288
+   >= 128 + 16 + 128). Anything narrower than that falls back to one per row
+   on its own, via the grid's wrap. */
+.version-strip-preview-modal-grid .version-tile {
+  width: 128px;
+  height: 128px;
+}
+/* contain, not the strip's cover: at 54px a cropped square is just a
+   thumbnail, but this modal is where a result actually gets judged, and a
+   cover crop there hides exactly the edges an edit may have changed. The
+   tile's own background shows through as the letterbox. */
+.version-strip-preview-modal-grid .version-tile img {
+  object-fit: contain;
+}
+/* A version that produced several runs keeps them in one group, and at this
+   tile size three of them no longer fit across the box -- let the group wrap
+   into a block instead of pushing its own row wider than the modal. */
+.version-strip-preview-modal-grid .version-group-tiles {
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .result-case-times {

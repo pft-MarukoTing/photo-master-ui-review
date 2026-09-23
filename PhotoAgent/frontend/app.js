@@ -10389,21 +10389,10 @@
     if (!els.versionStripPreviewModalGrid || !versionStripRuns) return;
     const runs = versionStripRuns;
     els.versionStripPreviewModalGrid.textContent = "";
-    const origin = document.createElement("div");
-    origin.className = "version-origin";
-    const originTile = document.createElement("div");
-    originTile.className = "version-origin-tile";
-    const originImg = document.createElement("img");
-    originImg.src = originalImgThumbUrl || sourceThumbnailUrl(runs[0].jobId);
-    originImg.alt = "";
-    originImg.loading = "lazy";
-    originTile.append(originImg);
-    const originLabel = document.createElement("span");
-    originLabel.className = "version-group-label";
-    originLabel.textContent = "原圖";
-    origin.append(originTile, originLabel);
-    els.versionStripPreviewModalGrid.append(origin);
-
+    // No origin tile here, unlike the strip: the strip keeps the original
+    // pinned because it is the reference the row scrolls past, but this modal
+    // is opened to pick a version, and the one tile that cannot be picked
+    // just takes room from the ones that can.
     let group = null;
     let groupTiles = null;
     let groupVersionId = null;
