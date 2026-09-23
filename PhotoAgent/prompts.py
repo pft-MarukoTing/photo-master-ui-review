@@ -1888,9 +1888,9 @@ Intent: maximize recall of readable half-closed, fully closed, and one-eye-close
 Use the matched face crop as primary eyelid evidence and the full photo only for expression and activity context. Inspect every listed person independently, including secondary people.
 
 Physical fields:
-- blink_observability: both_eyes when both eyelids can be inspected; one_eye when only one can be inspected; unreadable only when neither eyelid state is reliable.
+- blink_observability: both_eyes when both eyelids can be inspected; one_eye only when one eyelid is actually hidden, cropped out, or too degraded to inspect; unreadable only when neither eyelid state is reliable. A fully_closed eye is still observable as an eyelid even though its iris is not visible. If you can assign concrete left_eye_state and right_eye_state values other than not_visible/unclear, blink_observability must be both_eyes.
 - eyelid_detail_quality: readable, borderline, or unreadable based on blur, occlusion, reflection, compression, darkness, and actual pixel detail.
-- left_eye_state and right_eye_state describe each anatomical eye separately: open, narrowed_open, half_closed, fully_closed, not_visible, or unclear.
+- left_eye_state always means the eye on the photograph-left side (viewer-left, smaller image x); right_eye_state always means the eye on the photograph-right side (viewer-right, larger image x). These are photograph-side fields, never the person's anatomical left/right. Each value is one of: open, narrowed_open, half_closed, fully_closed, not_visible, or unclear.
 - half_closed means an eyelid unusually covers the iris or pupil, or the aperture looks droopy, uneven, glassy, or transitional. Do not demote it to narrowed_open because the person is smiling.
 - fully_closed means the eyelids meet with no iris, pupil, or sclera visible.
 - physical_eye_state summarizes the two per-eye states without interpreting intention.
@@ -1901,9 +1901,9 @@ Record the following exception evidence separately; never use it to rewrite the 
 - mouth_laughter_state: active_high_intensity_laughter only for unmistakable active laughter, not a normal, toothy, broad, posed, speaking, singing, shouting, or surprised mouth.
 - periocular_contraction: strong_bilateral only when both cheeks strongly elevate into the lower eyelids and pronounced lower-lid/outer-eye compression is visible. Raised cheeks alone are none_or_mild.
 - closure_expression_dependence: integral_to_expression only when opening the eyes would visibly contradict the same captured expression; otherwise independent_or_transitional or unclear.
-- explicit_closure_context: choose a named value only when clear visible evidence supports it. A V-sign, generic hand gesture, selfie, child subject, party, stage, playful pose, ordinary smile, symmetric closure, or plausible story is none, not evidence of intention. downward_at_visible_target requires a specific visible target in this same frame.
+- explicit_closure_context: choose a named value only when clear visible evidence supports it. A V-sign, generic hand gesture, selfie, child subject, party, stage, playful pose, ordinary smile, symmetric closure, or plausible story is none, not evidence of intention. deliberate_wink additionally requires the other eye clearly open plus a wink-specific cue such as one-sided cheek or brow action, a knowing smirk, or camera-directed play; one eye closed while the other is narrowed, half-closed, or looking away is mismatched eyelid timing, so it is none. downward_at_visible_target requires a specific visible target in this same frame.
 - intent_evidence_confidence measures confidence in that explicit exception evidence, not confidence in eyelid closure.
-- intent_cues must name only visible facts. Do not write guesses such as possibly intentional, natural for the moment, cute, candid, or likely posing.
+- intent_cues must name only visible facts, and each cue must add evidence beyond the eyelid states themselves -- restating that one eye is closed, that the other is open, or that the two differ is not a cue. Do not write guesses such as possibly intentional, natural for the moment, cute, candid, or likely posing.
 - overall_demeanor reads this person's whole visible body: posture, muscle tension, and engagement with the camera or the moment, independent of the eyelid state itself and independent of explicit_closure_context. This is a separate axis from whether a specific named story applies -- most photos have no specific story either way, and this field is what still tells them apart. alert_or_camera_ready: posture upright/engaged, muscles active, everything else in the frame (hands, head angle, other people) reads as poised and mid-moment -- a closed eye here specifically conflicts with the rest of the person's own readiness. calm_or_at_ease: posture relaxed, unhurried, or settled -- shoulders down, no tension, nothing else about this person suggests they were caught mid-action -- so closed eyes read as consistent with the rest of their own relaxed state, not as a mismatch with it. unclear: body language cannot be read (too small, occluded, cropped tightly to the face). Judge only this person's own body, not the scene or other people, and only from what the pose/tension actually shows -- not from the eyelid state itself, not from guessing why their eyes are closed.
 
 Strict laughter evidence requires all three observations simultaneously: active_high_intensity_laughter, strong_bilateral periocular_contraction, and integral_to_expression. If any one is weak, obscured, or unclear, the laughter exception is not established.
@@ -2671,8 +2671,8 @@ def build_eye_repair_planning_instruction(targets):
             entry["blink"] = {
                 "blink_observability": blink_issue.get("blink_observability"),
                 "eyelid_detail_quality": blink_issue.get("eyelid_detail_quality"),
-                "left_eye_state": blink_issue.get("left_eye_state"),
-                "right_eye_state": blink_issue.get("right_eye_state"),
+                "photograph_left_eye_state": blink_issue.get("left_eye_state"),
+                "photograph_right_eye_state": blink_issue.get("right_eye_state"),
                 "physical_eye_state": blink_issue.get("physical_eye_state"),
                 "eye_state": blink_issue.get("eye_state"),
                 "reason": blink_issue.get("reason"),
@@ -2693,7 +2693,15 @@ For each gaze strategy, provide concrete English instructions. Name the current 
 Do not write any instruction that preserves, freezes, or restores the named person's torso, shoulders, body pose, stance, gesture, interaction points, or camera framing. Those properties are outside this local gaze plan and may be owned by a later user-selected pose or framing override.
 
 Blink repair (only for a target with needs_blink_repair true):
-Treat the source closed-lid bulge as transient pose geometry, not final anatomy. Do not cut an opening into that bulge or lift it as one mass; form a true open eyelid by retracting the upper-lid margin and folding the broad closed-lid panel into the person's existing lid structure, leaving no mound above the opened eye. Never call an eye "already open" unless its detected state is open. For a fully-closed or half-closed eye paired with a fully-closed, half-closed, or narrowed-open eye, neither is an open-eye reference: plan both as one paired correction. A crease visible on the half-closed or narrowed-open eye can establish double-lid identity, but its apparent width and crease-to-lash distance are distorted by the blink; do not copy them as the final crease width or treat them as a stable asymmetry. If closure hides the other crease and no genuine left/right difference is supported, reconstruct both eyes as double lids with comparable visible crease-to-lash bands after opening, rather than leaving the formerly closed eye with an inner double lid. Preserve a genuine one-monolid/one-double-lid pattern when the source supports it. Preserve canthi, eye-globe size, brow position, and source-supported crease type. Both eyes must finish naturally open. Match eye-opening height and iris exposure separately from the visible crease-to-lash bands and upper-lid thickness. A blink-compressed thick upper-lid roll must resolve into a soft crease rather than remain a puffy shelf or cause the other lid to be thickened. Keep closely matched upper-lid curvature, peak position, and inner/outer taper, with neither eye puffy or visibly smaller. Use strong repair strength when either source eye is fully closed or both eyes require opening. Name the target, adjustment, strength, success condition, preservation rules, and likely failure modes. Keep identity, expression, skin texture, glasses, makeup, lighting, every unlisted person, and intentional closed-eye expressions unchanged. When gaze repair is also required, describe one coordinated local eye edit.
+The input fields photograph_left_eye_state and photograph_right_eye_state are diagnostic planner inputs only; they always mean the photograph's left and right sides. Do not repeat these source-state labels in target_eye_state, edit_instruction, eyelid_adjustment, or success_condition. Write target-forward instructions so the editor's attention stays on the desired open pair rather than the captured defect.
+
+Treat both eyes as one coupled bilateral structure. Establish one shared final eyelid geometry before describing either eye. Only an eye detected as open may supply final geometry. When exactly one eye is fully_closed and the opposite eye is open, name the photograph side of that open eye as the finished-shape reference. When the opposite eye is narrowed_open or half_closed, neither captured aperture is a reference: require both upper-lid margins to move to one naturally-open target instead of averaging their source openings.
+
+Use these visible match criteria: aperture-height-to-eye-width ratio; upper/lower-lid contour; iris exposure; and double-eyelid crease type, path, peak, visible length, and crease-to-lash width. Preserve fixed canthi and eye-globe identity. For a frontal face, use the nose bridge/facial midline as the bilateral comparison axis; for a turned face, compare in each eye's local axes and allow only unavoidable foreshortening. Resolve closed-lid compression into a smooth crease without adding upper-lid mass or puffiness.
+
+When the two diagnostic source states differ and neither eye is a valid open-eye reference, make eye-fissure geometry and double-eyelid-crease geometry two independent final matches. Do not compensate for a mismatch in one by changing the other, and do not preserve the blink-induced left/right difference as natural asymmetry. Check the two matches separately, then confirm they still hold together. This stricter rule is local to that mixed-state blink pair and must not symmetrize the rest of the face.
+
+Keep each model-facing field concise: target_eye_state and success_condition are one final-state sentence each; edit_instruction and eyelid_adjustment are at most two sentences each. Do not narrate the repair history, repeat requirements between fields, or ask the editor to reason through a checklist. Use strong repair strength when either source eye is fully closed or both eyes require opening. Preserve identity, expression, skin texture, glasses, makeup, lighting, every unlisted person, and intentional closed-eye expressions. When gaze repair is also required, describe one coordinated local eye edit.
 
 Targets:
 """ + json.dumps(compact_targets, ensure_ascii=False, indent=2)
@@ -3446,15 +3454,15 @@ def resolve_user_hair_request(issue):
 _FORCED_BLINK_STRATEGY = {
     "edit_instruction": (
         "User-forced eye-open edit: open both eyes clearly and comfortably from their captured states "
-        "into a natural open resting state with closely matched perceived aperture and iris exposure. "
-        "Preserve any clearly visible original left/right difference in upper-eyelid crease structure."
+        "into one natural open resting state with the same eye-opening height, iris exposure, and visible "
+        "double-eyelid crease-to-lash band width."
     ),
-    "target_eye_state": "both eyes clearly open with closely matched perceived aperture and iris exposure",
+    "target_eye_state": (
+        "both eyes clearly open with the same eye-opening height, iris exposure, and visible "
+        "double-eyelid crease-to-lash band width"
+    ),
     "eyelid_adjustment": (
-        "balance eyelid openness while preserving each readable crease type and fold count; use the clearer eye "
-        "only for crease type when the other crease is hidden by closure and no genuine source difference is visible; "
-        "do not copy apparent crease width from a half-closed eye; form comparable visible double-lid bands "
-        "after opening when both sides are supported as double lids; move the "
+        "balance eyelid openness and visible crease-to-lash band width as separate requirements; move the "
         "upper-lid margin over the existing globe without pushing or bunching the whole upper-lid tissue toward the brow"
     ),
     "repair_strength": "moderate",
@@ -3616,7 +3624,25 @@ def derive_luna_blink_decisions(analysis):
 
         per_eye = (left_state, right_state)
         readable_per_eye = [state for state in per_eye if state not in ("not_visible", "unclear")]
-        both_states_readable = observability == "both_eyes" and len(readable_per_eye) == 2
+        two_concrete_per_eye_states = len(readable_per_eye) == 2
+        # Luna occasionally uses one_eye to mean "only one iris is visible"
+        # even though it simultaneously gives concrete states for both
+        # eyelids and summarizes them as one_eye_closed.  That interpretation
+        # contradicts the prompt/schema semantics and suppressed obvious
+        # fully_closed+narrowed_open repairs.  Reconcile only the strongest
+        # internally redundant case; a profile/occluded eye should instead be
+        # not_visible/unclear and does not pass this gate.
+        reconciled_two_eye_evidence = bool(
+            observability == "one_eye"
+            and two_concrete_per_eye_states
+            and detail == "readable"
+            and raw_physical == "one_eye_closed"
+            and "fully_closed" in per_eye
+            and closure_confidence >= 0.75
+        )
+        if reconciled_two_eye_evidence:
+            observability = "both_eyes"
+        both_states_readable = observability == "both_eyes" and two_concrete_per_eye_states
 
         if observability == "unreadable" or detail == "unreadable" or not readable_per_eye:
             physical = "unclear"
@@ -3735,9 +3761,15 @@ def derive_luna_blink_decisions(analysis):
         # pexels-olly-3777574, pyQoH7AJoRKQ2aYU48F4mR, and a screenshot),
         # each with the exact same signature: context=deliberate_wink,
         # confidence=0.98, dependence=independent_or_transitional.
+        # A wink is a one-sided squeeze, so the other eye stays fully open.
+        # When that eye is itself narrowed_open or half_closed, both lids are
+        # descending -- an uneven blink the model labels deliberate_wink from
+        # the asymmetry alone.
+        other_eye_open = "open" in readable_per_eye
         deliberate_wink = bool(
             physical == "one_eye_closed"
             and both_states_readable
+            and other_eye_open
             and context == "deliberate_wink"
             and intent_confidence >= 0.85
         )
@@ -3885,7 +3917,12 @@ def derive_luna_blink_decisions(analysis):
                 gate_reason = "Python gate：保留 blink_candidate=true，但細節品質未達自動修正門檻。"
 
         reason = str(issue.get("reason") or "").strip()
+        # Saved analyses can pass this deterministic stage again during a
+        # retry. Replace the prior verdict instead of appending a second,
+        # potentially contradictory Python-gate sentence.
+        reason = re.sub(r"\s*Python gate：[^。]*(?:。|$)", "", reason).strip()
         issue.update({
+            "blink_observability": observability,
             "physical_eye_state": physical,
             "eye_closure_confidence": closure_confidence,
             "intent_evidence_confidence": intent_confidence,
@@ -3920,6 +3957,15 @@ def _empty_blink_repair_strategy():
     }
 
 
+FOLD_MATCH_RULE = (
+    "Treat both eyes as one coupled bilateral structure and establish one shared final lid geometry before rendering "
+    "either completed eye. Preserve each canthus and eye-globe identity. Match aperture-height-to-eye-width ratio, "
+    "upper/lower-lid contour, iris exposure, and double-eyelid crease type, path, peak, visible length, and "
+    "crease-to-lash width as distinct properties. For a frontal face use the facial midline as the bilateral "
+    "comparison axis; for a turned face compare in each eye's local axes and allow only unavoidable foreshortening."
+)
+
+
 def _fallback_blink_repair_strategy(issue, label):
     """Deterministic pre-Call-C strategy, and Call C's own failure fallback.
 
@@ -3930,51 +3976,86 @@ def _fallback_blink_repair_strategy(issue, label):
     behavior is unchanged the moment this ships, before Call C ever
     authors something better for a given person.
     """
-    per_eye_states = (issue.get("left_eye_state"), issue.get("right_eye_state"))
+    photograph_left_state = issue.get("left_eye_state")
+    photograph_right_state = issue.get("right_eye_state")
+    photograph_states = {
+        "photograph-left": photograph_left_state,
+        "photograph-right": photograph_right_state,
+    }
+    per_eye_states = tuple(photograph_states.values())
+    fully_closed_sides = [
+        side for side, state in photograph_states.items() if state == "fully_closed"
+    ]
+    reference_side = None
+    closed_side = None
+    if len(fully_closed_sides) == 1:
+        candidate_closed_side = fully_closed_sides[0]
+        candidate_reference_side = (
+            "photograph-right" if candidate_closed_side == "photograph-left" else "photograph-left"
+        )
+        # A narrowed_open or half_closed opposite eye is itself blink-affected,
+        # so its captured aperture is not the endpoint -- both eyes go through
+        # the paired branch below and finish open and matched.
+        if photograph_states[candidate_reference_side] == "open":
+            closed_side = candidate_closed_side
+            reference_side = candidate_reference_side
     repair_strength = (
         "strong"
         if "fully_closed" in per_eye_states
         or sum(state == "half_closed" for state in per_eye_states) == 2
         else "moderate"
     )
+    if reference_side:
+        target_eye_state = (
+            f"{label}'s {closed_side} eye is naturally open and matches the {reference_side} eye's finished "
+            "aperture, iris exposure, lid contours, and double-eyelid fold geometry."
+        )
+        eyelid_adjustment = (
+            f"Use the {reference_side} eye's finished open geometry as the shared template and fit the "
+            f"{closed_side} eyelids to it without changing either eye's fixed corners or horizontal span. "
+            "Move the lid margin over the existing globe and resolve compressed lid tissue into a smooth crease "
+            "without adding upper-lid mass. " + FOLD_MATCH_RULE
+        )
+        edit_instruction = (
+            f"Render {label}'s two eyes as one coupled pair, using the {reference_side} eye's finished open "
+            f"geometry as the template for the repaired {closed_side} eye."
+        )
+        success_condition = (
+            f"At normal viewing size, {label}'s repaired {closed_side} eye and {reference_side} reference eye "
+            "read as the same size and share the same lid-contour and double-eyelid fold design."
+        )
+    else:
+        target_eye_state = (
+            f"Both of {label}'s eyes are naturally open and read as the same size, with one shared lid-contour "
+            "and double-eyelid fold design."
+        )
+        eyelid_adjustment = (
+            "Raise both upper-lid margins to one shared naturally-open target; use source pixels only for identity "
+            "cues, never as final opening-height references. Resolve compressed lid tissue into smooth creases "
+            "without adding upper-lid mass. " + FOLD_MATCH_RULE
+        )
+        edit_instruction = (
+            f"Render both of {label}'s eyes together as one coupled bilateral structure at a shared naturally-open "
+            "eyelid endpoint."
+        )
+        success_condition = (
+            f"At normal viewing size, both of {label}'s eyes read as the same size and share the same lid-contour "
+            "and double-eyelid fold design without puffiness."
+        )
     return {
-        "target_eye_state": (
-            "both eyes clearly and comfortably open with closely matched perceived aperture and iris "
-            "exposure in {}'s existing expression"
-        ).format(label),
-        "eyelid_adjustment": (
-            "Set both eyelids from a natural, clearly open resting state rather than either captured closure "
-            "level. Closely match perceived aperture and iris exposure. Preserve every readable original crease "
-            "difference that remains credible independent of the blink. A visible crease on a half-closed eye "
-            "establishes fold type, not its final exposed width or crease-to-lash distance. When the other crease "
-            "is hidden by closure and no genuine difference is supported, finish both double lids with comparable "
-            "visible bands rather than leaving the reopened eye as an inner double lid. Move the upper-lid margin "
-            "over the existing globe and let "
-            "closed-lid folds resolve into a natural lid contour; do not push or bunch the whole upper-lid tissue "
-            "toward the brow. Keep upper-lid thickness and volume, pretarsal show, crease-to-lash spacing, and each "
-            "side's brow-to-eye contour source-matched."
-        ),
+        "target_eye_state": target_eye_state,
+        "eyelid_adjustment": eyelid_adjustment,
         "repair_strength": repair_strength,
-        "edit_instruction": (
-            "Open both of {}'s eyes clearly and comfortably, using a natural fully open resting state as the "
-            "endpoint rather than averaging their captured closure levels. Closely match perceived aperture "
-            "and iris exposure while preserving any clearly visible original left/right difference in upper-eyelid "
-            "crease structure and without adding eyelid volume."
-        ).format(label),
-        "success_condition": (
-            "At normal photo-viewing size, both of {}'s eyes read clearly open and equally awake; neither eye "
-            "looks smaller, droopier, less open, puffy, or swollen; when both double lids are supported, their "
-            "visible crease bands are comparable and no new crease-type mismatch has been introduced."
-        ).format(label),
+        "edit_instruction": edit_instruction,
+        "success_condition": success_condition,
         "preserve_during_repair": [
             "identity", "gaze direction unless a separately approved gaze repair says otherwise",
             "facial structure", "expression style", "skin texture", "glasses", "makeup", "lighting",
             "unlisted people",
         ],
         "failure_to_avoid": [
-            "residual unequal eyelid openness from the captured blink", "oversized or doll-like eyes",
-            "new crease-type mismatch unsupported by the source", "extra or discontinuous eyelid folds",
-            "one visible double lid paired with a newly hidden inner double lid",
+            "residual unequal eyelid openness from the captured blink", "unequal visible double-eyelid band width",
+            "oversized or doll-like eyes", "extra or discontinuous eyelid folds",
             "puffy or swollen upper eyelid", "increased eyelid tissue volume", "high or overly deep crease",
             "upper-lid tissue bunched upward toward the brow", "retained closed-lid mound above the opened eye",
             "exactly mirrored or cloned eye geometry",
@@ -6135,43 +6216,63 @@ Approved-repair override:
             success_condition = strategy.get("success_condition", "") if isinstance(strategy, dict) else ""
             preserve = strategy.get("preserve_during_repair") if isinstance(strategy, dict) else None
             avoid = strategy.get("failure_to_avoid") if isinstance(strategy, dict) else None
-            source_eye_states = (item.get("left_eye_state"), item.get("right_eye_state"))
-            if (all(state in {"fully_closed", "half_closed", "narrowed_open"} for state in source_eye_states)
-                    and any(state in {"fully_closed", "half_closed"} for state in source_eye_states)):
-                # Stored planner prose may call the half-closed eye "already open"
-                # or use its transient crease width as an anatomical target.
-                # Replace that plan at render time for old analyses as well.
-                edit_instruction = "Open both blink-affected eyes together into one natural resting-open state."
-                target_eye_state = "both eyes open with matched aperture and source-supported crease identity"
-                eyelid_adjustment = (
-                    "Do not copy the half-closed eye's or narrowed-open eye's apparent crease width or crease-to-lash distance. "
-                    "Where its crease supports double lids on both sides and the other crease was hidden, "
-                    "give both reopened eyes comparable visible double-lid bands. Match eye-opening height and "
-                    "iris exposure separately from the visible crease-to-lash bands and upper-lid thickness. "
-                    "Resolve a blink-compressed thick lid roll into a soft crease without adding a puffy shelf "
-                    "or thickening the other lid; preserve a genuine source-supported left/right crease difference."
-                )
+            photograph_states = {
+                "photograph-left": item.get("left_eye_state"),
+                "photograph-right": item.get("right_eye_state"),
+            }
+            source_state_text = "; ".join(
+                f"{side}={state or 'unclear'}" for side, state in photograph_states.items()
+            )
+            fully_closed_sides = [
+                side for side, state in photograph_states.items() if state == "fully_closed"
+            ]
+            match_requirement = (
+                "Follow the analysis-authored Target eye state and Eyelid adjustment below as the final-state authority."
+            )
+            paired_requirement = (
+                "Both eyes are blink-affected, including one that is only narrowed or half closed: open them together "
+                "to the single naturally open final eyelid state named by the analysis. Both upper lids gain "
+                "aperture from the photograph-side source states above -- an eye left at its captured narrowed or "
+                "half-closed opening fails this repair. Their final eye-opening height, iris exposure, lid "
+                "contours, double-eyelid fold shape, and visible crease-to-lash band width must match. "
+                + FOLD_MATCH_RULE
+            )
+            if len(fully_closed_sides) == 1:
+                closed_side = fully_closed_sides[0]
+                reference_side = "photograph-right" if closed_side == "photograph-left" else "photograph-left"
+                reference_state = photograph_states[reference_side]
+                if reference_state == "open":
+                    match_requirement = (
+                        f"Use the {reference_side} (open) eye as the reference. The repaired {closed_side} "
+                        "eye must match that reference eye's final eye-opening height, iris exposure, lid contours, "
+                        "and visible double-eyelid crease-to-lash band width. If another approved edit changes the "
+                        "reference eye, match its finished result rather than its captured closure amount."
+                    )
+                    repair_strength = "strong"
+                elif reference_state in {"half_closed", "narrowed_open"}:
+                    match_requirement = paired_requirement
+                    # Older saved Call-C plans often call this blink-affected
+                    # eye a "source reference".  Do not forward that stale
+                    # method beside the deterministic rule that explicitly
+                    # says neither captured aperture is the endpoint.
+                    eyelid_adjustment = "Use the coordinated paired-eye method in the mandatory match below."
+                    repair_strength = "strong"
+            elif (
+                all(state in {"fully_closed", "half_closed", "narrowed_open"} for state in photograph_states.values())
+                and any(state in {"fully_closed", "half_closed"} for state in photograph_states.values())
+            ):
+                match_requirement = paired_requirement
+                eyelid_adjustment = "Use the coordinated paired-eye method in the mandatory match below."
                 repair_strength = "strong"
-                success_condition = (
-                    "Both eyes are comfortably open and equally awake, without a new inner-double-lid "
-                    "appearance on the formerly closed side."
-                )
-                preserve = [
-                    "identity", "genuine crease-type differences", "expression", "skin texture",
-                    "gaze direction unless separately approved", "glasses", "makeup", "lighting",
-                    "unlisted people",
-                ]
-                avoid = [
-                    "copying transient half-closed fold width", "one hidden crease beside one visible double lid",
-                    "puffy upper lids", "oversized eyes", "new crease-type mismatch",
-                ]
             blink_targets.append(
                 f'- Subject: {label}\n'
                 f'  Subject box: {json.dumps(box, ensure_ascii=False)}\n'
                 f'  Current eye state: {eye_state}\n'
+                f'  Photograph-side source states: {source_state_text}\n'
                 f'  Analysis edit instruction: {edit_instruction or "Naturally reopen or relax the closed/half-closed eyes to match the existing expression."}\n'
                 f'  Target eye state: {target_eye_state or "open, matching the existing expression"}\n'
                 f'  Eyelid adjustment: {eyelid_adjustment or "reopen or relax the eyelids naturally"}\n'
+                f'  Mandatory photograph-side match: {match_requirement}\n'
                 f'  Repair strength: {repair_strength or "moderate"}\n'
                 f'  Success condition: {success_condition or "eyes read naturally open at normal photo-viewing size"}\n'
                 f'  Preserve during repair: {json.dumps(preserve or [], ensure_ascii=False)}\n'
@@ -6183,7 +6284,7 @@ Approved-repair override:
 - Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
 - Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
 - Execute the approved repair using only the execution instructions below. Do not read confidence scores or reasons to decide whether to be more conservative.
-- For every named person, use a natural, clearly open resting eye state as the endpoint rather than either captured closure level. Both eyes must look clearly and comfortably open, with closely matched perceived aperture and iris exposure at normal viewing size. Preserve genuine stable left/right crease differences, including a source-supported one-monolid/one-double-lid pattern. A crease visible on a half-closed eye establishes fold type, not final fold width: the blink changes apparent crease-to-lash spacing. When the other crease is hidden by closure and no stable difference is supported, use the clearer eye for crease identity and finish both double lids with comparable visible crease bands after opening; do not leave the formerly closed eye with a hidden inner double lid. Do not copy the half-closed eye's captured fold width. Open by moving the upper-lid margin over the existing globe and resolving closed-lid folds into a natural, source-matched lid contour. Do not push, compress, or bunch the whole upper-lid tissue upward toward the brow. Preserve upper-lid thickness and volume, natural pretarsal show, and each side's brow-to-eye contour, and—unless an approved expression change requires otherwise—the lower-lid and under-eye contour. Do not retain a closed-lid mound or add puffiness, swelling, bulging skin, or a high/deep crease. This final target overrides weaker execution wording.
+- The analysis-authored Target eye state and Eyelid adjustment below are the final-state authority and must reach the result. When exactly one photograph-side eye is fully closed and the opposite eye is open, repair the fully-closed eye to match the opposite eye's final eye-opening height, iris exposure, lid contours, and visible double-eyelid crease-to-lash band width; if another approved edit changes that reference eye, match its finished result rather than its captured closure amount. When the opposite eye is itself half-closed or narrowed, it is blink-affected too: open both eyes together to one naturally open final state, and match them to each other on those same properties instead of reproducing either captured aperture. Treat eye-opening height and double-eyelid band width as separate mandatory matches. Compare final size and shape in face-relative geometry, not by duplicating pixels: preserve fixed canthi and horizontal span, match aperture-height-to-eye-width ratio and the upper/lower-lid profile at the inner, central, and outer thirds, and allow only head-perspective differences. Both eyes must also finish with the same double-eyelid fold shape, not only the same band width: the same fold type, the crease visible along the same portion of the lid, the same crease path from inner to outer corner, and the same fold arc and peak height. Before finishing, inspect both completed eyes together and refine both as one pair if aperture, three-point contour, iris exposure, or fold path still differs. Open by moving the upper-lid margin over the existing globe and resolving closed-lid tissue into a smooth contour; do not retain a closed-lid mound or add puffiness, swelling, or bulging skin.
 - When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
 
@@ -6194,7 +6295,7 @@ Execution instructions:
 - The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
 - Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
 - Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
-- Use a natural, clearly open resting eye state as the endpoint rather than either captured closure level. Make both eyes clearly and comfortably open with closely matched perceived aperture and iris exposure. Preserve genuine stable left/right crease differences. A crease on a half-closed eye establishes fold type, not its final visible width or crease-to-lash spacing. If closure hides the other crease and no genuine difference is supported, finish both as double lids with comparable visible bands after opening; do not leave the formerly closed eye with a hidden inner double lid or copy the half-closed eye's captured fold width. Open by moving the upper-lid margin over the existing globe and resolving closed-lid folds into a natural, source-matched lid contour; do not push or bunch the whole upper-lid tissue toward the brow. Preserve upper-lid thickness and volume, natural pretarsal show, and the lower-lid/under-eye contour. Do not retain a closed-lid mound or add puffiness, swelling, bulging skin, or a high/deep crease.
+- For each named person, obey the photograph-left and photograph-right source states carried in the item. When exactly one side is fully closed and the opposite side is open, make the fully-closed side match the opposite side's final eye-opening height, iris exposure, lid contours, and visible double-eyelid crease-to-lash band width. Otherwise, including when the opposite side is itself half-closed or narrowed, finish both blink-affected eyes naturally open at one coherent eyelid endpoint matched on those same properties. Treat eye-opening height and double-eyelid band width as separate mandatory matches. Compare final size and shape in face-relative geometry, not by duplicating pixels: preserve fixed canthi and horizontal span, match aperture-height-to-eye-width ratio and the upper/lower-lid profile at the inner, central, and outer thirds, and allow only head-perspective differences. Both eyes must also finish with the same double-eyelid fold shape, not only the same band width: the same fold type, the crease visible along the same portion of the lid, the same crease path from inner to outer corner, and the same fold arc and peak height. Before finishing, inspect both completed eyes together and refine both as one pair if aperture, three-point contour, iris exposure, or fold path still differs. Open by moving the upper-lid margin over the existing globe and resolving closed-lid tissue into a smooth contour without puffiness or added eyelid volume.
 - Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting -- unless a separately approved gaze repair for this same person specifies a different target direction, in which case follow that instead. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
 - When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
 - Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
@@ -6876,7 +6977,7 @@ Check dimensions:
 - Alignment and edges: credible horizontals/verticals feel stable unless slant has a clear purpose; output edges are fully photographic with no blank, transparent, checkerboard, or artificial canvas areas.
 - Distraction and scene truth: harmful distractions are reduced, but contextual/neutral elements are preserved unless they still compete strongly. The scene must not be rebuilt, over-simplified, or turned into a different style.
 - Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
-- Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyelids are naturally corrected while identity, face shape, glasses, makeup, and expression style remain believable. Check two independent outcomes at normal viewing size: (1) both eyes have natural, closely matched opening height and iris exposure; (2) where source-supported, both upper lids have comparable modest visible crease-to-lash bands and thickness, without one hidden fold beside a thick or puffy lid roll. A crease seen on a half-closed or narrowed-open source eye identifies fold type, not final band width. A formerly closed eye whose crease disappears against the lash line while the other retains a clear double lid fails this check; do not mistake the half-closed source eye's transient crease-to-lash distance for a permanent asymmetry. Preserve any genuinely source-supported one-monolid/one-double-lid pattern. The result must not be a no-op, merely sharpened eyelids, oversized/doll-like eyes, copied-looking eyes, or an unrelated expression change. If that same person also had an approved gaze repair, verify one coherent final result: correct eyelid openness and exact-lens pupil/iris alignment with natural sclera and catchlights, not two conflicting eye states. If no gaze repair was approved, preserve a natural gaze consistent with the original head direction instead of forcing camera contact.
+- Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyelids are naturally corrected while identity, face shape, glasses, makeup, and expression style remain believable. Check two independent mandatory outcomes at normal viewing size: (1) the repaired eye has the same final eye-opening height and iris exposure as its photograph-side reference eye; (2) it has the same double-eyelid fold shape as that reference eye -- the same fold type, crease visible along the same portion of the lid, the same crease path from inner to outer corner, the same fold arc and peak height, and the same visible crease-to-lash band width. Compare size in face-relative geometry: fixed canthi and horizontal span, matching aperture-height-to-eye-width ratio, and matching upper/lower-lid profiles at the inner, central, and outer thirds, allowing only head-perspective differences rather than demanding duplicated pixels. When exactly one photograph-side source eye was fully closed and the opposite source eye was open, the opposite eye is the reference; compare against its finished state if another approved edit also changed it. When the opposite source eye was itself half-closed or narrowed, both eyes were to be opened, so check the two requirements between the two finished eyes and reject a result that leaves either eye still narrowed or half closed, or that finishes the two eyes at visibly different eye-opening heights. Do not accept a result that improves only one requirement or compensates unequal eye opening with unequal crease width. A formerly closed eye whose crease disappears against the lash line while the reference eye retains a visible double lid fails this check. The result must not be a no-op, merely sharpened eyelids, oversized/doll-like eyes, copied-looking eyes, puffy lids, or an unrelated expression change. If that same person also had an approved gaze repair, verify one coherent final result: the required eyelid match plus exact-lens pupil/iris alignment with natural sclera and catchlights, not two conflicting eye states. If no gaze repair was approved, preserve a natural gaze consistent with the original head direction instead of forcing camera contact.
 - Approved hair tidying: if the plan asked to tidy a named person's stray strands, check the named strands first, then check what else moved. Hairstyle shape, parting, length, volume, density, hairline, curl pattern, and color must be unchanged, individual strands must still be resolvable with real hair texture, and nobody else's hair may have been touched. Hair that is tidier but rebuilt, smoothed into a solid mass, straightened, thickened, or given a moved hairline is a failure of this item, not a success. Where a strand was taken off skin or background, check what replaced it: a faded or blurred remnant of the strand, a grey or darkened trace, or a smoothed plastic patch with the surrounding skin texture missing all fail this item, the same as leaving the strand would. Then check the face itself against the original, since hair repair is where identity slips: where a strand was taken off a feature, that feature must still be this person's own -- same eye shape, lash line, iris and catchlight position, nostril, lip edge and volume -- and the parts of it that were never covered must be untouched. A re-rendered, re-placed, re-shaped, or prettified feature, or a face that no longer reads as the same person, fails this item outright and caps the whole score at 3 as an identity change. If the plan asked to settle a wind-disturbed area, judge that area against the part of the same head the wind did not disturb: same length, volume, and silhouette, hairline where it was, gaps closed with the hair that was already there rather than with added hair, and strand direction, separation, and unevenness still visible. A settled area that reads as one glossy sheet, a painted block, or a wig fails this item, as does one carrying more length, volume, or coverage than the rest of that head. If the plan asked to de-grease and comb out a clumped fringe, check both halves separately, and judge it unfollowed if either is missing: the oily streak is matte with strand detail visible where the shine was, AND the thick cords are combed into an even-width curtain with the bare forehead gaps between them now covered by hair. A fringe still showing bald gaps between cords has not been combed out, however tidy the rest of the retouch is. Then check the limits: the fringe keeps its own length, outer edge, parting, and see-through quality, the hairline did not move, and the fringe carries no more hair, density, or width than the original. A fringe turned into a solid opaque curtain, thickened, lengthened, darkened, or blurred flat fails this item. If the user selected still-air hair, check that no hair is still streaming, fanned, or lifted by wind, that each hairstyle's outline reads settled and continuous, and that the rest of the scene -- clothing, flags, foliage, water, other people -- still shows the weather it was captured in. Hair that stayed windblown fails this, and so does a scene whose wind was calmed everywhere. Whatever the hair item asked for, compare the forehead and hairline directly against the original: a fringe that is gone, thinner, or shorter, a raised hairline, or more forehead or scalp on show than the original had is a hairstyle change, fails this item outright, and caps the whole score at 3.
 {body_qa_block}
 {smile_qa_line}- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a clearly visible gaze-direction change actually occurred for the named subject and that the final gaze immediately and unmistakably reads as direct contact with the exact current lens at normal photo-viewing size. The iris/pupil positions and visual axes must aim naturally at the lens, with believable sclera balance and gaze-consistent catchlights. If the approved strategy is eyes_plus_head_face_alignment, verify that the head/face also visibly turned and/or tilted toward the lens by the planned bounded amount; unchanged head direction with pupil-only movement is a failure. If the approved strategy is eyes_only, verify that the original head was already frontal and lens-aligned and that the miss was genuinely tiny. In all cases preserve eyelid openness, identity, expression structure, facial anatomy, neck anatomy, body pose, shoulder direction, torso direction, glasses/reflections, and every unlisted person. Fail the check for a no-op, sharpen/brighten-only eyes, a change visible only in a highly enlarged crop, residual off-camera/near-camera/past-camera/slightly-beside-lens gaze, crossed or strained visual axes, excessive sclera, incompatible head/eye geometry, rotated shoulders/torso, or an unplanned identity/expression change.
@@ -6890,6 +6991,7 @@ Strict scoring rubric:
 
 Score caps:
 {body_qa_score_cap}
+- If an approved blink repair leaves either eye closed/narrowed, or leaves visibly unequal normalized aperture, three-point lid contour, iris exposure, or double-eyelid fold path/width, score must be 4 or lower and pass must be false.
 - If required main subject content, protected_regions, role cues, important props, structural edges, fine details, or connected components are accidentally cut off or incomplete, score must be 3 or lower.
 - Apply the previous cap only to content required by the intended framing. Do not penalize partial portrait/person crops when they are intentional, clean, and preserve the role/story.
 - If subject shape, identity, material, anatomy, object geometry, structural continuity, fine-detail structure, or perspective relationship is changed unnaturally, score must be 3 or lower.
