@@ -3683,7 +3683,7 @@
     const now = new Date();
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    return `photoMuse-${dateStr}-${timeStr}.zip`;
+    return `PhotoMaster-${dateStr}-${timeStr}.zip`;
   }
 
   // Extension and content type of already-encoded image bytes, read from
@@ -3704,7 +3704,7 @@
     const now = new Date();
     const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
     const timeStr = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-    return `photoMuse-${dateStr}-${timeStr}.${extension}`;
+    return `PhotoMaster-${dateStr}-${timeStr}.${extension}`;
   }
 
   const PROMPT_KEYS = [
