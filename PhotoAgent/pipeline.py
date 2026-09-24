@@ -43,9 +43,13 @@ from prompts import (
     apply_rejected_reframing,
     subject_issue_items,
     _disabled_issue_subject_indices,
+    approved_blink_items,
 )
 
 from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
+BLINK_REPAIR_IMAGE_MODEL = "gpt-image-2.5-sunburst"
+BLINK_REPAIR_QUALITY = "high"
+
 EDIT_PHOTO_BY_MODEL = {
     "gpt-image-2": edit_photo,
     "gpt-image-1.5": partial(edit_photo, model="gpt-image-1.5"),
@@ -482,6 +486,9 @@ def finish_stage(
             )
             if gaze_fix_approved:
                 edit_quality = "medium"
+        # An approved blink repair only comes out reliably on Sunburst at its top tier.
+        if approved_blink_items(analysis):
+            image_model, edit_quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
         edit_result, edit_prompt = _run_edit_photo_compat(

@@ -6137,6 +6137,19 @@ def build_smile_block(analysis):
 {_smile_craft_rules({'gentle' if level == 'auto' else level})}"""
 
 
+def approved_blink_items(analysis):
+    """Blink items the edit call is approved to repair, after the user's toggle and per-person overrides."""
+    if not (analysis.get("_advanced_options") or {}).get("eye_closed_detection", True):
+        return []
+    disabled_indices = _disabled_issue_subject_indices(analysis, "blink_issue")
+    return [
+        {k: v for k, v in item.items() if k != "_subject_index"}
+        for item in (resolve_user_blink_request(i) for i in subject_issue_items(analysis, "blink_issue"))
+        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
+        and item.get("_subject_index") not in disabled_indices
+    ]
+
+
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False, return_sections=False):
     analysis = strip_disabled_topic_items(analysis)
     if not body_reshape_enabled():
@@ -6372,14 +6385,7 @@ Approved-repair override:
     # skin.
     has_person = _has_person(analysis)
     blink_block = ""
-    blink_disabled_indices = _disabled_issue_subject_indices(analysis, "blink_issue")
-    resolved_blink_issues = [resolve_user_blink_request(item) for item in eye_blink_issues]
-    blink_items_to_fix = [
-        {k: v for k, v in item.items() if k != "_subject_index"}
-        for item in resolved_blink_issues
-        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
-        and item.get("_subject_index") not in blink_disabled_indices
-    ] if eye_closed_detection_enabled else []
+    blink_items_to_fix = approved_blink_items(analysis)
     # blink_repair_strategy otherwise only exists on luna's
     # _BLINK_DETECTION_LUNA_SCHEMA (derive_luna_blink_decisions always sets it
     # once Call B has run) -- a non-luna model's blink_issue never carries
