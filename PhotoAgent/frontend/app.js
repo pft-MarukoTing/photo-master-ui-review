@@ -3120,6 +3120,10 @@
   // with a prior round's non-default picks already restored (applyStyleSelections/
   // applyBatchReviewSelections), not just fresh defaults.
   let inlineReviseSnapshot = null;
+  // Which batch record the inline revise panel was last rendered for
+  // (startInlineBatchReview) -- see openInlineAnalysisForCurrentContext's
+  // "already showing" guard for why that has to be checked, not assumed.
+  let inlinePanelBatchRecord = null;
 
   function clearInlineAnalysisWait() {
     if (inlineAnalysisContinueHandler) {
@@ -10863,6 +10867,7 @@
   async function startInlineBatchReview(record) {
     hideError();
     clearInlineAnalysisWait();
+    inlinePanelBatchRecord = record;
 
     // Sync (display-only, no state push -- same as viewHistoryRecord below)
     // #ap-image-model-quality/#ap-image-aspect-ratio/人像修正設定 to THIS case's
@@ -11077,8 +11082,17 @@
   // wants the normal guarded behavior, since nothing about which record is
   // shown actually changed there.
   function openInlineAnalysisForCurrentContext(forceReopen = false) {
-    if (!forceReopen && els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis")) return;
     const record = currentDetailBatchRecord();
+    // "Already showing" only counts as "nothing to do" when the open panel is
+    // THIS record's. Switching to a batch photo that is still processing
+    // (showBatchMainLoading) hides the canvas row without removing
+    // .showing-analysis from it, so the previously viewed photo's panel stays
+    // "open" underneath -- when this photo's edit then finished,
+    // refreshIfSelected's re-render (no forceReopen) hit this guard and left
+    // the other photo's recipe/style/prompt on screen beside this photo's
+    // result.
+    const panelShowing = els.resultsCanvasRow && els.resultsCanvasRow.classList.contains("showing-analysis");
+    if (!forceReopen && panelShowing && (!record || inlinePanelBatchRecord === record)) return;
     if (record) {
       // Dispatched without await on purpose -- this function is called from
       // render paths that must not block on a panel the user may never submit.
@@ -12088,6 +12102,9 @@
     setCurrentCaseTimes();
     singleRuns = null;
     singleMirrorIndex = null;
+    // The batch whose revise panel this pointed at is gone -- don't keep its
+    // record alive, or compare the next batch's records against it.
+    inlinePanelBatchRecord = null;
     // A stale 生成張數 (RUN count) left over from earlier in this same
     // session -- either the user's own explicit pick on the upload/review
     // picker (applyRunCountChange), or one restored from a multi-run history
