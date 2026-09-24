@@ -6,7 +6,9 @@ Imports only prompts.py, so it runs without PIL/numpy/cv2:
 """
 
 import unittest
+from unittest.mock import patch
 
+import prompts
 from prompts import (
     _build_crop_instruction_block,
     _canvas_shape_difference,
@@ -160,6 +162,13 @@ class CropInstructionBlock(unittest.TestCase):
 
 
 class FullPrompt(unittest.TestCase):
+    def setUp(self):
+        """This file asserts the crop-only framing text, so it must not read
+        whatever the expand knobs happen to be turned to (see prompts.py)."""
+        patcher = patch.object(prompts, "EXPAND_PERMISSION_RETAINED_THRESHOLD", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_raw_editor_receives_one_finished_light_color_target(self):
         analysis = {
             **ANALYSIS,

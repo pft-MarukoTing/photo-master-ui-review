@@ -254,6 +254,41 @@ def _compact_raw_crop_instruction(
         return result + local_shape_exception if has_body_reshape else result
 
     if raw.startswith("Reframing:"):
+        # The analysis decided this frame is reached by extending. Rebuilt from
+        # the raw block's own numbers rather than summarized, because the
+        # sentence this branch would otherwise produce says the opposite.
+        plan = re.search(
+            r"continuing the scene past the photograph's (top and bottom|left and right), "
+            r"not by cropping into it: the subject already fills the (width|height).*?"
+            r"Carry the scene about (\d+)% further in (width|height)",
+            raw, re.S,
+        )
+        if plan:
+            edges, filled_axis, grown, grow_axis = plan.groups()
+            trim = re.search(r"about (\d+)% of the (width|height) still leaves the frame", raw)
+            aspect_match = re.search(r"Target output aspect ratio:\s*([^\.\n]+)", raw)
+            aspect = aspect_match.group(1).strip() if aspect_match else "the stated output ratio"
+            result = (
+                f"Reframe to {aspect} by continuing the same real scene past the photograph's {edges} edges, "
+                f"about {grown}% further in {grow_axis} -- the subject already fills the {filled_axis}, so nothing "
+                f"already visible leaves the frame on that axis. "
+                + (
+                    f"Then let about {trim.group(1)}% of the {trim.group(2)} go from its outer edges, guided by the "
+                    "subject, never by narrowing what stays. "
+                    if trim else ""
+                )
+                + "What you add must match the existing perspective, lighting, depth, materials, and background "
+                "logic: never blank borders, padding, empty bands, stretched edges, or scenery from somewhere "
+                "else. Extend and crop only; scale uniformly. "
+                + (
+                    "Preserve tilt, relative placement, and unlisted proportions while applying the holistic body "
+                    "instruction."
+                    if has_body_reshape else
+                    "Preserve internal proportions, tilt, relative sizes, spacing, and overlap."
+                )
+            )
+            return result + local_shape_exception if has_body_reshape else result
+
         aspect_match = re.search(r"Target output aspect ratio:\s*([^\.\n]+)", raw)
         tightness_match = re.search(r"Roughly how tight:\s*([^\.\n]+)", raw)
         aspect = aspect_match.group(1).strip() if aspect_match else "the stated output ratio"
@@ -293,10 +328,27 @@ def _compact_raw_crop_instruction(
                 if has_body_reshape else
                 " Trim top or bottom content as needed rather than flattening people or objects."
             )
+        # The raw builder's expand-permitted consequence, which offers a second
+        # way to reach the shape. Detected separately because it deliberately
+        # does not claim content must leave the frame.
+        expanding = "cannot both survive as they are" in raw
+        if expanding:
+            consequence = (
+                " Crop to reach it: let side content fall outside the frame rather than narrowing people or objects"
+                if "full width and the frame's shape" in raw else
+                " Crop to reach it: let top or bottom content fall outside the frame rather than flattening people "
+                "or objects"
+            ) + (
+                ". If the subject already fills that axis and cropping would cut into it, instead continue the same "
+                "real scene past the photograph's edge -- matching perspective, lighting, depth, and materials, "
+                "only as far as the shape needs -- and keep everything the photograph shows, at its own proportions. "
+                "Never blank borders, padding, empty bands, stretched edges, or scenery from somewhere else."
+            )
         closer = " Come in visibly closer than the original." if "Closer framing was requested" in raw else ""
+        operations = "Crop or extend the scene, and scale uniformly." if expanding else "Crop and scale uniformly."
         result = (
             f"Reframe to {aspect}; {tightness}.{consequence}{closer} Frame the visible main subject and meaningful "
-            "context comfortably inside. Crop and scale uniformly. "
+            f"context comfortably inside. {operations} "
             + (
                 "Preserve tilt, relative placement, and unlisted proportions while applying the holistic body instruction."
                 if has_body_reshape else

@@ -530,6 +530,158 @@ def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: d
     return ctx
 
 
+def _aspect_ratio_reason(pref, label, measured, resolved_crop, planned_for_pref):
+    """How this output ratio was settled, for the review screen and the report.
+
+    planned_for_pref: whether the analysis was written for this very preference.
+    A fixed W:H the user switched to afterwards is fitted onto composition notes
+    describing a different shape, and the line says so rather than implying the
+    framing was planned for it.
+    """
+    if pref == "auto":
+        if measured is None:
+            return "AI 未提出裁切建議，維持原圖比例。"
+        if resolved_crop is not None:
+            return (
+                f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）於支援清單中選出最接近的「{label}」；"
+                "並完成 ROI／保護區域約束後確認此裁切可執行。"
+            )
+        return (
+            f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）選擇候選比例，"
+            "但套用 ROI／保護區域約束後裁切擴回完整畫面，因此維持原圖比例。"
+        )
+    if pref == "original":
+        if resolved_crop is not None:
+            return "使用者選擇維持原圖比例；本機完成 ROI／保護區域約束後確認此同比例裁切可執行。"
+        return "AI 未提出裁切建議，維持原圖比例。"
+    if planned_for_pref:
+        return (
+            f"分析時即以使用者指定的輸出比例「{label}」規劃構圖；"
+            + ("本機完成 ROI／保護區域約束後確認此裁切可執行。" if resolved_crop is not None
+               else "本機幾何解析後不需要額外構圖裁切。")
+        )
+    return (
+        f"使用者在分析後改選輸出比例「{label}」，構圖說明仍為分析時比例所寫；"
+        + ("本機將原裁切提案 fit 到此比例並完成 ROI／保護區域約束。" if resolved_crop is not None
+           else "本機幾何解析後不需要額外構圖裁切。")
+    )
+
+
+# How far the scene may be carried past the photograph's edge, as a multiplier
+# on the extended axis. Reaching 9:16 from a square purely by extending would
+# need 1.78 and 16:9 from a 3:4 would need 2.37 -- more invented picture than
+# photograph. Capping it turns "crop or expand" into a split: at 1.35 the crop
+# on the other axis falls from 44% to 24% for both of those.
+REFRAME_MAX_EXTENSION = 1.35
+
+
+def plan_reframe_extension(crop_box, image_width, image_height, target_label):
+    """How to reach `target_label` from `crop_box` by extending rather than by
+    cropping alone. None when the rectangle is already that shape, when the
+    inputs are unusable, or when there is nothing to extend.
+
+    Returns axis/edges for the prompt, `extension` as a multiplier on that
+    axis, and `kept_other_axis` as the fraction of the other one that survives
+    -- 1.0 whenever the cap is generous enough to need no crop at all.
+    """
+    target = parse_aspect_ratio(target_label)
+    if not target or not image_width or not image_height or not crop_box:
+        return None
+    box_w = float(crop_box.get("w") or 0) * image_width
+    box_h = float(crop_box.get("h") or 0) * image_height
+    if box_w <= 0 or box_h <= 0:
+        return None
+
+    box_ratio = box_w / box_h
+    drift = target / box_ratio - 1
+    if abs(drift) <= GEOMETRY_RATIO_TOLERANCE:
+        return None
+
+    # Narrower target: the box is too wide, so height grows. Wider: width does.
+    needed = box_ratio / target if drift < 0 else target / box_ratio
+    extension = min(needed, REFRAME_MAX_EXTENSION)
+    return {
+        "axis": "height" if drift < 0 else "width",
+        "edges": "top and bottom" if drift < 0 else "left and right",
+        "extension": extension,
+        "kept_other_axis": min(1.0, extension / needed),
+        "capped": needed > REFRAME_MAX_EXTENSION,
+    }
+
+
+def crop_resolution_ratio_label(analysis, image_width, image_height, target_label):
+    """The ratio a crop rectangle should be fitted to.
+
+    The output canvas ratio, except in expand mode: there the rectangle is
+    deliberately not that shape, and re-fitting it to the canvas is what
+    silently turns the decision back into a crop.
+    """
+    box = (analysis or {}).get("crop_box") or {}
+    if not (analysis or {}).get("reframe_extension") or not box:
+        return target_label
+    width = float(box.get("w") or 1.0) * (image_width or 0)
+    height = float(box.get("h") or 1.0) * (image_height or 0)
+    if width <= 0 or height <= 0:
+        return target_label
+    return f"{width:.4f}:{height:.4f}"
+
+
+# Breathing room demanded before the veto calls a crop comfortable: the subject
+# span has to fit inside the crop with this much of the frame to spare, not
+# merely touch its edges.
+REFRAME_EXPAND_VETO_MARGIN = 0.05
+
+
+def crop_would_cut_a_subject(analysis, image_width, image_height, target_label):
+    """Whether reaching `target_label` by cropping alone must cut into
+    something the analysis named as a subject.
+
+    This is local geometry's veto over reframe_mode, and it deliberately checks
+    only the one claim the expand branch is chosen on -- "any rectangle of this
+    shape would cut into a person, a face, a held object" -- rather than
+    second-guessing the taste of it. When every named subject fits inside the
+    crop with room to spare, that claim is arithmetically false and the crop
+    stands. None when there is nothing to measure, which leaves the analysis's
+    own choice alone.
+
+    subjects[] is measured rather than subject_extent_box: that box routinely
+    reaches a frame edge for a subject the camera already cut (see
+    _hard_crop_protection_boxes), which would make every photo look uncroppable
+    and turn this check into a rubber stamp.
+    """
+    target = parse_aspect_ratio(target_label)
+    if not target or not image_width or not image_height:
+        return None
+    source = image_width / image_height
+    if source <= 0:
+        return None
+    # The axis a crop has to take content from, and the fraction of it that
+    # survives: min() picks the losing axis on its own.
+    horizontal = target < source
+    retained = min(target / source, source / target)
+    if retained >= 1 - GEOMETRY_RATIO_TOLERANCE:
+        return None
+
+    spans = []
+    for subject in analysis.get("subjects") or []:
+        box = normalize_roi_box(subject.get("box"))
+        if box:
+            spans.append((box["x"], box["x"] + box["w"]) if horizontal
+                         else (box["y"], box["y"] + box["h"]))
+    for box in _hard_crop_protection_boxes(analysis):
+        spans.append((box["x"], box["x"] + box["w"]) if horizontal
+                     else (box["y"], box["y"] + box["h"]))
+    if not spans:
+        return None
+
+    needed = max(end for _, end in spans) - min(start for start, _ in spans)
+    return needed > retained - REFRAME_EXPAND_VETO_MARGIN
+
+
+def reframe_mode_is_expand(analysis):
+    return str((analysis or {}).get("reframe_mode") or "").strip().lower() == "expand"
+
+
 def apply_derived_aspect_ratio(
     analysis: dict, image_width: int, image_height: int, aspect_ratio_pref: str = "auto",
 ) -> dict:
@@ -561,12 +713,43 @@ def apply_derived_aspect_ratio(
     if source_crop:
         ctx["crop_box"] = {**source_crop, "aspect_ratio": label}
 
+    # Decided during analysis, while the composition notes were being written
+    # -- only that pass can see whether the subject still has room to lose.
+    extension_plan = (
+        plan_reframe_extension(ctx.get("crop_box"), image_width, image_height, label)
+        if reframe_mode_is_expand(analysis) and label not in {"original", ""} else None
+    )
+    override = None
+    if extension_plan and crop_would_cut_a_subject(
+        analysis, image_width, image_height, label,
+    ) is False:
+        override = (
+            "分析建議延伸畫面，但本機量測顯示所有主體都能完整納入此比例的裁切框，"
+            "因此改以裁切達成。"
+        )
+        extension_plan = None
+    expanding = extension_plan is not None
+    ctx["reframe_extension"] = extension_plan
+    ctx["reframe_mode_override"] = override
+
     resolved_crop = None
     fixed_shape_without_crop = pref not in {"auto", "original"}
     if image_width and image_height and (
         (source_crop or {}).get("enabled") is True or fixed_shape_without_crop
     ):
         geometry_ratio = label if label != "original" else f"{image_width}:{image_height}"
+        if expanding:
+            # The rectangle is not meant to be this shape: geometry crops only
+            # as much of the other axis as the extension cap cannot cover.
+            kept = extension_plan["kept_other_axis"]
+            base = ctx.get("crop_box") or {}
+            box_w = float(base.get("w") or 1.0)
+            box_h = float(base.get("h") or 1.0)
+            if extension_plan["axis"] == "height":
+                box_w *= kept
+            else:
+                box_h *= kept
+            geometry_ratio = f"{box_w * image_width:.4f}:{box_h * image_height:.4f}"
         geometry_ctx = dict(ctx)
         geometry_ctx["recommended_aspect_ratio"] = geometry_ratio
         geometry_ctx["crop_box"] = {
@@ -590,15 +773,24 @@ def apply_derived_aspect_ratio(
             resolved_crop["w"] * image_width / (resolved_crop["h"] * image_height)
         )
     else:
-        label = label if fixed_shape_without_crop else "original"
+        label = label if (fixed_shape_without_crop or expanding) else "original"
         ctx["recommended_aspect_ratio"] = label
         source_crop = ctx.get("crop_box") or {}
+        # An extension that covers the whole shape difference legitimately
+        # keeps the complete frame: nothing is cropped because nothing needs to
+        # be, which is not the same as "no reframing happened".
+        no_crop_reason = (
+            f"分析判定主體已填滿畫面，改以向{'上下' if expanding and extension_plan['axis'] == 'height' else '左右'}"
+            f"延伸場景達成「{label}」，原畫面完整保留、不裁切。"
+            if expanding else
+            "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。"
+        )
         ctx["crop_box"] = {
             **source_crop,
             "enabled": False,
             "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0,
             "aspect_ratio": label,
-            "reason": "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。",
+            "reason": no_crop_reason,
         }
         ctx["crop_candidates"] = []
         ctx["crop_intent"] = {
@@ -607,8 +799,11 @@ def apply_derived_aspect_ratio(
             "subject_anchor": "center", "looking_direction": "unknown",
             "remove_edge_distractions": [],
         }
-        ctx["crop_recommendation"] = "本機幾何解析後沒有可執行的構圖裁切，維持完整畫面。"
-        ctx["composition_strategy"] = "本機幾何解析後選擇完整原圖構圖，不執行裁切。"
+        ctx["crop_recommendation"] = no_crop_reason
+        ctx["composition_strategy"] = (
+            no_crop_reason if expanding else
+            "本機幾何解析後選擇完整原圖構圖，不執行裁切。"
+        )
 
     candidates = analysis.get("crop_candidates")
     if candidates and resolved_crop:
@@ -619,17 +814,11 @@ def apply_derived_aspect_ratio(
             for c in candidates
         ]
 
-    ctx["aspect_ratio_reason"] = (
-        f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）於支援清單中選出最接近的「{label}」；"
-        "並完成 ROI／保護區域約束後確認此裁切可執行。"
-        if pref == "auto" and measured is not None and resolved_crop is not None else
-        f"本機依 AI 建議裁切框的實際比例（{measured:.3f}）選擇候選比例，但套用 ROI／保護區域約束後裁切擴回完整畫面，因此維持原圖比例。"
-        if pref == "auto" and measured is not None else
-        f"依使用者選擇的輸出比例「{label}」完成裁切框與 ROI／保護區域約束解析。"
-        if resolved_crop is not None else
-        f"使用者選擇的輸出比例為「{label}」；本機幾何解析後不需要額外構圖裁切。"
-        if pref not in {"auto", "original"} else
-        "AI 未提出裁切建議，維持原圖比例。"
+    ctx["aspect_ratio_reason"] = (override + " " if override else "") + _aspect_ratio_reason(
+        pref, label, measured, resolved_crop,
+        planned_for_pref=str(
+            analysis.get("_aspect_ratio_pref_at_analysis") or ""
+        ).strip().lower() == pref,
     )
     # Debug/report fields: what the local decision was based on.
     if pref == "auto":
@@ -779,6 +968,7 @@ def output_geometry_warnings(
     crop_plan: dict,
     image_width: int,
     image_height: int,
+    expanding: bool = False,
 ) -> list:
     """Check, deterministically, that an edit really came back with the geometry
     it was asked for. Returns human-readable warnings for the QA report (empty
@@ -805,7 +995,7 @@ def output_geometry_warnings(
     warnings = []
 
     crop_ratio = crop_plan_pixel_ratio(crop_plan, image_width, image_height)
-    if crop_ratio:
+    if crop_ratio and not expanding:
         drift = crop_ratio / requested - 1
         if abs(drift) > GEOMETRY_RATIO_TOLERANCE:
             warnings.append(

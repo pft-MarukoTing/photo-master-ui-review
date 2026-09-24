@@ -250,6 +250,13 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     step2_duration = time.time() - t0
     logger.info("Step 2 done in %.2fs: subject=%s scene=%s", step2_duration, analysis.get("subject_category"), analysis.get("scene_category"))
 
+    # Records which aspect-ratio preference was active when this analysis ran,
+    # so a later edit under a *different* preference (e.g. user picked "keep
+    # original" here but switches to "Auto" on the analyze-preview screen
+    # before regenerating) knows recommended_aspect_ratio="original" was
+    # forced by that earlier choice, not a genuine model judgment -- see
+    # build_edit_prompt's use of this field.
+    analysis["_aspect_ratio_pref_at_analysis"] = aspect_ratio
     # Geometry, not model-authored prose, owns the executable output ratio.
     # Resolve every preference here so the review screen already shows the
     # fitted crop and locally inserted ratio text. The finish-stage repeats
@@ -275,7 +282,8 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         persons = portrait_qc_persons(analysis)
         repair_targets = eye_repair_targets(analysis)
         analysis["prompts"] = {
-            "photo_analysis": build_overall_analysis_instruction(aspect_ratio, advanced_options),
+            "photo_analysis": build_overall_analysis_instruction(
+                aspect_ratio, advanced_options, source_size=get_image_dimensions(image_bytes)),
             "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
             "photo_analysis_eye_repair_planning": (
                 build_eye_repair_planning_instruction(repair_targets)
@@ -289,7 +297,9 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     else:
         persons = portrait_qc_persons(analysis)
         analysis["prompts"] = {
-            "photo_analysis": build_analysis_instruction(aspect_ratio, advanced_options, analysis_model),
+            "photo_analysis": build_analysis_instruction(
+                aspect_ratio, advanced_options, analysis_model,
+                source_size=get_image_dimensions(image_bytes)),
             "photo_analysis_body_reshape": (
                 build_body_reshape_planning_instruction(persons)
                 if persons and body_reshape_enabled() else None
@@ -301,13 +311,6 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     analysis["usage"] = {
         "Step 2 - photo_analysis": step2_usage,
     }
-    # Records which aspect-ratio preference was active when this analysis ran,
-    # so a later edit under a *different* preference (e.g. user picked "keep
-    # original" here but switches to "Auto" on the analyze-preview screen
-    # before regenerating) knows recommended_aspect_ratio="original" was
-    # forced by that earlier choice, not a genuine model judgment -- see
-    # build_edit_prompt's use of this field.
-    analysis["_aspect_ratio_pref_at_analysis"] = aspect_ratio
     # Carry the edit-stage toggles on the analysis so the two-stage flow and
     # debug-UI /rerun both hand them back automatically, with the stored
     # analysis recording which corrections that run allowed.

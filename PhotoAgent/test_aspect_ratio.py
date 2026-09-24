@@ -8,6 +8,21 @@ from PIL import Image
 
 import gemini_client
 import openai_client
+import prompts
+import image_tools
+from image_tools import (
+    crop_resolution_ratio_label,
+    crop_would_cut_a_subject,
+    plan_reframe_extension,
+)
+from prompts import (
+    build_analysis_instruction,
+    build_edit_prompt,
+    build_overall_analysis_instruction,
+    expand_permitted,
+)
+from config import PRESETS, PRESET_PROMPTS
+from photo_agent.feature_resolver import _compact_raw_crop_instruction
 from image_tools import (
     AUTO_ASPECT_RATIO_LABELS,
     _allowed_auto_ratio_labels,
@@ -412,6 +427,13 @@ class OutputGeometryCheckTests(unittest.TestCase):
 
 
 class OpenAIAspectRatioTests(unittest.TestCase):
+    def setUp(self):
+        """These assert the crop-only wording, so they must not read whatever
+        the expand knobs happen to be turned to (see ExpandPermissionTests)."""
+        patcher = patch.object(prompts, "EXPAND_PERMISSION_RETAINED_THRESHOLD", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_extreme_requested_ratio_stays_within_openai_three_to_one_limit(self):
         for width, height in ((1, 8), (8, 1)):
             output_width, output_height = (
@@ -555,6 +577,373 @@ class GeometryWarningWiringTests(unittest.TestCase):
             )
 
         self.assertEqual(out["result_text"]["quality_check"]["warnings"], ["測試用幾何警告"])
+
+
+def _policy_block(instruction):
+    return instruction.split("## Aspect-ratio policy")[-1]
+
+
+class AnalysisAspectRatioPolicyTests(unittest.TestCase):
+    """The analysis prompt's three branches, on both analyzer paths."""
+
+    BUILDERS = (build_analysis_instruction, build_overall_analysis_instruction)
+
+    def test_a_fixed_ratio_is_planned_for_not_merely_labelled(self):
+        for build in self.BUILDERS:
+            with self.subTest(build=build.__name__):
+                policy = _policy_block(build("4:5"))
+                self.assertIn("The user explicitly requested 4:5", policy)
+                self.assertIn("Plan the composition for a 4:5 frame", policy)
+                # The supported-set wording belongs to auto, where the model
+                # still picks; here the pick is already made.
+                self.assertNotIn("Select recommended_aspect_ratio only from", policy)
+
+    def test_a_fixed_ratio_closes_the_fall_back_to_original_escape_hatch(self):
+        # Both instruction bodies tell the model to answer "original" when no
+        # reframing looks beneficial, which would discard the user's choice.
+        for build in self.BUILDERS:
+            with self.subTest(build=build.__name__):
+                policy = _policy_block(build("16:9"))
+                self.assertIn('Never answer "original"', policy)
+                self.assertIn("that fallback does not apply", policy)
+
+    def test_auto_and_original_are_unchanged_by_the_new_branch(self):
+        for build in self.BUILDERS:
+            for pref, marker in (("auto", "Select recommended_aspect_ratio only from"),
+                                 ("original", "keep the original photo's aspect ratio")):
+                with self.subTest(build=build.__name__, pref=pref):
+                    self.assertIn(marker, _policy_block(build(pref)))
+
+    def test_both_analyzer_paths_share_one_policy_block(self):
+        for pref in ("auto", "original", "3:2"):
+            with self.subTest(pref=pref):
+                self.assertEqual(
+                    _policy_block(build_analysis_instruction(pref)),
+                    _policy_block(build_overall_analysis_instruction(pref)),
+                )
+
+
+class AspectRatioReasonTests(unittest.TestCase):
+    """Whether the ratio was planned for or fitted on afterwards."""
+
+    def _reason(self, pref, pref_at_analysis):
+        analysis = _analysis("3:2", crop_enabled=True)
+        analysis["_aspect_ratio_pref_at_analysis"] = pref_at_analysis
+        return apply_derived_aspect_ratio(
+            analysis, 1200, 800, aspect_ratio_pref=pref,
+        )["aspect_ratio_reason"]
+
+    def test_analysis_planned_for_this_ratio_says_so(self):
+        reason = self._reason("4:5", "4:5")
+        self.assertIn("分析時即以使用者指定的輸出比例「4:5」規劃構圖", reason)
+
+    def test_a_ratio_picked_after_the_analysis_is_marked_as_fitted_on(self):
+        reason = self._reason("4:5", "auto")
+        self.assertIn("使用者在分析後改選輸出比例「4:5」", reason)
+        self.assertIn("構圖說明仍為分析時比例所寫", reason)
+
+    def test_original_no_longer_reads_as_a_named_output_ratio(self):
+        self.assertIn("使用者選擇維持原圖比例", self._reason("original", "original"))
+
+
+class ExpandPermissionTests(unittest.TestCase):
+    """The gate that lets the edit model reach the output shape by extending
+    the scene instead of cropping its way there."""
+
+    SQUARE = (1600, 1600)
+    PLAN = {"x": 0.198, "y": 0.0, "w": 0.5625, "h": 1.0, "aspectRatio": "9:16"}
+
+    def setUp(self):
+        """Pin both knobs to their intended values: the module's own may be
+        turned up for hands-on testing, and these assert the logic, not that."""
+        for name, value in (
+            ("EXPAND_PERMISSION_RETAINED_THRESHOLD", 1.0),
+            ("EXPAND_PERMISSION_ANY_PREFERENCE", False),
+        ):
+            patcher = patch.object(prompts, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def _block(self, allow_expand, plan=None, source_size=None):
+        return prompts._build_crop_instruction_block(
+            plan or self.PLAN, source_size=source_size or self.SQUARE,
+            allow_expand=allow_expand,
+        )
+
+    def test_analyzer_is_asked_for_every_shape_that_differs_at_all(self):
+        """The size of the gap does not decide -- a square filled edge to edge
+        by its subject can want extending at 3:4, where a crop costs 25%."""
+        for label in ("9:16", "3:4", "4:5"):
+            self.assertTrue(expand_permitted(label, label, self.SQUARE), label)
+        self.assertTrue(expand_permitted("16:9", "16:9", (960, 1280)))
+
+    def test_nothing_to_decide_when_the_canvas_is_the_photograph_s_shape(self):
+        self.assertFalse(expand_permitted("1:1", "1:1", self.SQUARE))
+        # Within the shape-comparison tolerance, so not a different shape.
+        self.assertFalse(expand_permitted("4:5", "4:5", (1122, 1402)))
+
+    def test_a_shape_the_user_did_not_name_is_not_asked(self):
+        self.assertFalse(expand_permitted("auto", "9:16", self.SQUARE))
+        self.assertFalse(expand_permitted("original", "9:16", self.SQUARE))
+
+    def test_threshold_of_zero_keeps_every_ratio_crop_only(self):
+        with patch.object(prompts, "EXPAND_PERMISSION_RETAINED_THRESHOLD", 0):
+            self.assertFalse(expand_permitted("9:16", "9:16", self.SQUARE))
+
+    def test_lowering_the_threshold_restricts_the_question_to_wide_gaps(self):
+        with patch.object(prompts, "EXPAND_PERMISSION_RETAINED_THRESHOLD", 0.6):
+            self.assertTrue(expand_permitted("9:16", "9:16", self.SQUARE))
+            self.assertFalse(expand_permitted("3:4", "3:4", self.SQUARE))
+
+    def test_any_preference_knob_reaches_auto(self):
+        with patch.object(prompts, "EXPAND_PERMISSION_ANY_PREFERENCE", True):
+            self.assertTrue(expand_permitted("auto", "9:16", self.SQUARE))
+
+    def test_closed_gate_leaves_the_crop_only_wording_untouched(self):
+        block = self._block(allow_expand=False)
+        self.assertIn("left and right edges cannot both be inside it", block)
+        self.assertNotIn("past the photograph", block)
+        self.assertIn("Two operations", block)
+
+    def test_open_gate_offers_extending_with_cropping_still_the_default(self):
+        block = self._block(allow_expand=True)
+        self.assertIn("Cropping is the default answer", block)
+        self.assertIn("If the subject already fills the width", block)
+        self.assertIn("Three operations", block)
+        # The crop-only claim is false once extending is on the table.
+        self.assertNotIn("cannot both be inside it", block)
+
+    def test_open_gate_still_forbids_padding_and_foreign_scenery(self):
+        block = self._block(allow_expand=True)
+        for banned in ("blank borders", "checkerboard padding", "empty bands",
+                       "stretched edges", "not already part of this place"):
+            self.assertIn(banned, block)
+
+    def test_compact_prompt_carries_the_permission_through(self):
+        """The default editor strategy is resolved_compact, which rebuilds the
+        crop sentence from scratch -- a permission it does not know about is
+        dropped without a trace."""
+        compact = _compact_raw_crop_instruction(
+            self._block(allow_expand=True), crop_plan=self.PLAN,
+            approved_crop_correction=True,
+        )
+        self.assertIn("continue the same real scene past the photograph", compact)
+        self.assertIn("Crop or extend the scene", compact)
+
+        crop_only = _compact_raw_crop_instruction(
+            self._block(allow_expand=False), crop_plan=self.PLAN,
+            approved_crop_correction=True,
+        )
+        self.assertNotIn("past the photograph", crop_only)
+        self.assertIn("Crop and scale uniformly", crop_only)
+
+    def test_analysis_policy_asks_the_analyzer_to_decide(self):
+        wide = build_analysis_instruction("9:16", source_size=self.SQUARE)
+        self.assertIn("record the decision in reframe_mode", wide)
+        self.assertIn("would take 44% of its width", wide)
+        self.assertIn("past the photograph's top and bottom edges", wide)
+        # A modest gap is asked too: the decision is about the picture.
+        modest = build_analysis_instruction("3:4", source_size=self.SQUARE)
+        self.assertIn("record the decision in reframe_mode", modest)
+        self.assertIn("would take 25% of its width", modest)
+        # Not a shape the user named, and a shape with nothing to extend: the
+        # field is still declared (with its "crop" default), the question is not.
+        for pref in ("auto", "1:1"):
+            self.assertNotIn(
+                "record the decision in reframe_mode",
+                build_analysis_instruction(pref, source_size=self.SQUARE),
+            )
+        # Both analyzer paths share the one policy.
+        self.assertIn("record the decision in reframe_mode",
+                      build_overall_analysis_instruction("9:16", source_size=self.SQUARE))
+
+    def test_reframe_mode_is_a_two_value_enum_with_a_stated_default(self):
+        """Free text here produced "original", "preserve_original" and "裁切"
+        across 45 analyses: strict mode requires the field on every call, so a
+        run whose policy never mentions it was filling it blind."""
+        for schema in (prompts.ANALYSIS_RESPONSE_SCHEMA,
+                       prompts.ANALYSIS_RESPONSE_SCHEMA_OVERALL):
+            self.assertEqual(
+                schema["schema"]["properties"]["reframe_mode"]["enum"],
+                ["crop", "expand"],
+            )
+        # Named in both skeletons, so the default is stated even on the calls
+        # the expand policy is not injected into.
+        for pref in ("auto", "original", "9:16"):
+            for build in (build_analysis_instruction, build_overall_analysis_instruction):
+                instruction = build(pref, source_size=self.SQUARE)
+                self.assertIn('"reframe_mode"', instruction)
+                self.assertIn('一律填', instruction)
+
+    def test_unknown_source_size_keeps_the_analysis_crop_only(self):
+        """The choice depends on how far this shape is from the source's, so
+        an analysis that cannot be told the source shape must not be asked."""
+        self.assertNotIn(
+            "record the decision in reframe_mode", build_analysis_instruction("9:16"))
+
+    def test_extension_plan_splits_the_gap_at_the_cap(self):
+        box = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
+        # 1:1 -> 3:4 needs 1.33, under the cap: extend only, crop nothing.
+        under = plan_reframe_extension(box, 1600, 1600, "3:4")
+        self.assertEqual(under["axis"], "height")
+        self.assertFalse(under["capped"])
+        self.assertAlmostEqual(under["kept_other_axis"], 1.0, places=3)
+        # 1:1 -> 9:16 needs 1.78: capped, so the rest still comes off the width.
+        over = plan_reframe_extension(box, 1600, 1600, "9:16")
+        self.assertTrue(over["capped"])
+        self.assertAlmostEqual(over["extension"], image_tools.REFRAME_MAX_EXTENSION, places=3)
+        self.assertLess(over["kept_other_axis"], 1.0)
+        # Still much gentler on the picture than cropping the whole way.
+        self.assertGreater(over["kept_other_axis"], 0.5625)
+        # A rectangle already at the target has nothing to extend.
+        self.assertIsNone(plan_reframe_extension(
+            {"x": 0.2, "y": 0.0, "w": 0.5625, "h": 1.0}, 1600, 1600, "9:16"))
+
+    def test_expand_mode_keeps_the_rectangle_off_the_canvas_shape(self):
+        """Refitting the crop to the canvas is what silently turns the decision
+        back into a crop -- it happens again in the edit client."""
+        analysis = {
+            "reframe_mode": "expand",
+            "crop_box": {"enabled": True, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+            "roi_box": {"x": 0.1, "y": 0.1, "w": 0.8, "h": 0.8},
+        }
+        resolved = apply_derived_aspect_ratio(analysis, 1600, 1600, aspect_ratio_pref="9:16")
+        plan = resolved["reframe_extension"]
+        self.assertIsNotNone(plan)
+        self.assertEqual(plan["axis"], "height")
+        box = resolved["crop_box"]
+        self.assertGreater(box["w"] / box["h"], 0.5625 * 1.2)
+        self.assertEqual(
+            crop_resolution_ratio_label(resolved, 1600, 1600, "9:16").count(":"), 1)
+        self.assertNotEqual(
+            crop_resolution_ratio_label(resolved, 1600, 1600, "9:16"), "9:16")
+
+    def test_crop_mode_is_untouched_by_any_of_this(self):
+        analysis = {
+            "reframe_mode": "crop",
+            "crop_box": {"enabled": True, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+        }
+        resolved = apply_derived_aspect_ratio(analysis, 1600, 1600, aspect_ratio_pref="9:16")
+        self.assertIsNone(resolved["reframe_extension"])
+        self.assertEqual(crop_resolution_ratio_label(resolved, 1600, 1600, "9:16"), "9:16")
+
+    def test_decided_plan_reaches_the_edit_model_through_the_compact_prompt(self):
+        plan = plan_reframe_extension(
+            {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}, 1600, 1600, "9:16")
+        raw = prompts._build_crop_instruction_block(
+            self.PLAN, source_size=self.SQUARE, expand_plan=plan)
+        self.assertIn("is reached by continuing the scene past", raw)
+        compact = _compact_raw_crop_instruction(
+            raw, crop_plan=self.PLAN, approved_crop_correction=True)
+        self.assertIn("continuing the same real scene past the photograph's top and bottom", compact)
+        self.assertIn("further in height", compact)
+        self.assertIn("of the width go from its outer edges", compact)
+        self.assertNotIn("Crop and scale uniformly", compact)
+
+    def test_full_cover_extension_still_reaches_the_editor(self):
+        """The best case -- an extension that covers the whole shape difference
+        and crops nothing -- used to take the "No crop." branch and hand the
+        edit model "do not reframe, expand canvas, add borders" over a canvas
+        of a different shape, which is the pair that guarantees a squeeze."""
+        analysis = {
+            "reframe_mode": "expand",
+            "recommended_aspect_ratio": "1200:1600",
+            "crop_box": {"enabled": True, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+        }
+        resolved = apply_derived_aspect_ratio(analysis, 1600, 1600, aspect_ratio_pref="3:4")
+        self.assertFalse(resolved["crop_box"]["enabled"])
+        self.assertAlmostEqual(resolved["reframe_extension"]["kept_other_axis"], 1.0)
+        # The requested shape is genuinely reached, so the label must not fall
+        # back to "original" the way a crop that resolved to nothing does.
+        self.assertEqual(resolved["recommended_aspect_ratio"], "3:4")
+        self.assertIn("延伸場景", resolved["crop_box"]["reason"])
+
+        resolved["recommended_aspect_ratio"] = "1200:1600"
+        prompt, sections = build_edit_prompt(
+            resolved, PRESETS["natural"], PRESET_PROMPTS["natural"], "", None,
+            aspect_ratio_pref="3:4", source_size=self.SQUARE, return_sections=True,
+        )
+        block = sections["crop_instruction"]
+        self.assertIn("continuing the scene past the photograph's top and bottom", block)
+        self.assertNotIn("No crop.", block)
+        compact = _compact_raw_crop_instruction(
+            block, crop_plan=None, approved_crop_correction=False)
+        self.assertIn("continuing the same real scene past", compact)
+        # ...and nothing left in the prompt still forbids it.
+        priority = next(l for l in prompt.splitlines() if l.startswith("1. "))
+        self.assertNotIn("expand canvas", priority)
+        self.assertNotIn("boundaries as final", priority)
+
+    def test_veto_checks_only_the_claim_expand_is_chosen_on(self):
+        """Local geometry's veto: "any rectangle of this shape would cut into a
+        subject" is arithmetic, and when it is false the crop stands."""
+        # Ten people spanning the frame edge to edge -- the real run that
+        # motivated this. A 3:4 crop keeps 75% of the width and must cut two.
+        crowd = {"subjects": [
+            {"box": {"x": 0.00, "y": 0.1, "w": 0.10, "h": 0.5}},
+            {"box": {"x": 0.75, "y": 0.4, "w": 0.25, "h": 0.5}},
+        ]}
+        self.assertTrue(crop_would_cut_a_subject(crowd, 1600, 1600, "3:4"))
+        # One subject with room around it: every shape here holds it.
+        solo = {"subjects": [{"box": {"x": 0.35, "y": 0.1, "w": 0.30, "h": 0.8}}]}
+        self.assertFalse(crop_would_cut_a_subject(solo, 1600, 1600, "3:4"))
+        # Nothing to measure, and a canvas of the source's own shape.
+        self.assertIsNone(crop_would_cut_a_subject({}, 1600, 1600, "3:4"))
+        self.assertIsNone(crop_would_cut_a_subject(solo, 1600, 1600, "1:1"))
+
+    def test_veto_turns_an_unjustified_expand_back_into_a_crop(self):
+        analysis = {
+            "reframe_mode": "expand",
+            "subjects": [{"box": {"x": 0.35, "y": 0.1, "w": 0.30, "h": 0.8}}],
+            "roi_box": {"x": 0.38, "y": 0.12, "w": 0.24, "h": 0.5},
+            "crop_box": {"enabled": True, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+        }
+        resolved = apply_derived_aspect_ratio(analysis, 1600, 1600, aspect_ratio_pref="3:4")
+        self.assertIsNone(resolved["reframe_extension"])
+        self.assertIsNotNone(resolved["reframe_mode_override"])
+        # The override is on the record, not applied silently.
+        self.assertIn("改以裁切達成", resolved["aspect_ratio_reason"])
+
+    def test_veto_leaves_a_justified_expand_alone(self):
+        analysis = {
+            "reframe_mode": "expand",
+            "subjects": [
+                {"box": {"x": 0.00, "y": 0.1, "w": 0.10, "h": 0.5}},
+                {"box": {"x": 0.75, "y": 0.4, "w": 0.25, "h": 0.5}},
+            ],
+            "crop_box": {"enabled": True, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+        }
+        resolved = apply_derived_aspect_ratio(analysis, 1600, 1600, aspect_ratio_pref="3:4")
+        self.assertIsNotNone(resolved["reframe_extension"])
+        self.assertIsNone(resolved["reframe_mode_override"])
+
+    def test_a_decided_crop_is_not_offered_the_permission_again(self):
+        """The threshold permission is for analyses that predate the decision.
+        Handing it to one that chose "crop" reopens a settled question."""
+        decided = {
+            "reframe_mode": "crop", "recommended_aspect_ratio": "944:1680",
+            "crop_box": dict(self.PLAN),
+        }
+        prompt = build_edit_prompt(
+            decided, PRESETS["natural"], PRESET_PROMPTS["natural"], "", self.PLAN,
+            aspect_ratio_pref="9:16", source_size=self.SQUARE,
+        )
+        self.assertNotIn("past the photograph", prompt)
+        self.assertIn("cannot both be inside it", prompt)
+
+    def _faithful_priority(self, aspect_ratio_pref):
+        analysis = {"recommended_aspect_ratio": "9:16", "crop_box": dict(self.PLAN)}
+        prompt = build_edit_prompt(
+            analysis, PRESETS["natural"], PRESET_PROMPTS["natural"], "", self.PLAN,
+            aspect_ratio_pref=aspect_ratio_pref, source_size=self.SQUARE,
+        )
+        return next(l for l in prompt.splitlines() if l.startswith("1. Reframe as described"))
+
+    def test_retouch_priority_stops_forbidding_what_the_crop_block_offers(self):
+        """Two opposed instructions is the failure mode this branch exists to
+        avoid: the edit model cannot weigh one prompt source against another."""
+        self.assertNotIn("expand canvas", self._faithful_priority("9:16"))
+        self.assertIn("expand canvas", self._faithful_priority("original"))
 
 
 if __name__ == "__main__":

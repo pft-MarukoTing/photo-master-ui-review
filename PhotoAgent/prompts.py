@@ -718,6 +718,8 @@ Return exactly this JSON shape:
   "memory_color_strategy": "依 edit_intent 說明場景的白平衡、冷暖、色相與飽和度安排。膚色獨立保護，維持每個人的原生深淺、底調與色度，允許曝光調整並只修正非預期偏色。",
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
+  "reframe_mode": "crop 或 expand 二選一。除非本回合的長寬比政策明確要求你做這個選擇，否則一律填 \"crop\"。",
+  "reframe_mode_reason": "選擇的理由；政策未要求選擇時填空字串。",
   "crop_box": {
     "enabled": true,
     "x": 0.0,
@@ -2291,6 +2293,34 @@ _ASPECT_RATIO_POLICY_AUTO = """
 - Downstream deterministic geometry will fit the crop rectangle to this selected ratio, so protect the ROI, subject extent, and protected regions with enough breathing room.
 """
 
+# Formatted with the W:H label the user picked. Unlike the auto policy, the
+# ratio is an input to the composition here, not an outcome of it.
+_ASPECT_RATIO_POLICY_FIXED = """
+## Aspect-ratio policy
+
+- The user explicitly requested {ratio} as the output shape, so the choice is already made: set recommended_aspect_ratio to "{ratio}". Never answer "original" or any other value, and ignore every earlier rule that lets you fall back to "original" when no reframing seems beneficial -- that fallback does not apply once the user has named the shape.
+- Plan the composition for a {ratio} frame from the start. Do not compose for the source shape and leave the ratio to be reached afterwards; the rectangle you return is the composition that gets executed.
+- crop_box.aspect_ratio and every crop candidate aspect_ratio must be "{ratio}", and each crop_box's own x/y/w/h must itself compute to it: (w * original_image_width) : (h * original_image_height) must equal {ratio}.
+- Set crop_box.enabled to false only when the complete source frame already has this shape and no reframing improves it. Otherwise return an enabled crop, including when it ends up close to full frame.
+- {ratio} may differ sharply from the source frame, so reaching it can cost much more of the photo than a freely chosen ratio would. Keep the ROI, subject extent, and protected regions inside the crop with breathing room; when the shape cannot hold all of them, keep the ROI and name in crop_box.reason what was given up.
+- Downstream deterministic geometry still fits the rectangle to {ratio} exactly, so a proposal that is already exactly that shape is the one that survives unchanged.
+"""
+
+# Appended to the fixed-ratio policy only when the gap between the source and
+# the requested shape is wide enough that a crop has to eat into the subject
+# (EXPAND_PERMISSION_RETAINED_THRESHOLD). The mode is decided here, during
+# composition, rather than by the edit model: only the analysis can see whether
+# the subject still has room to lose, and a mode chosen after the composition
+# notes are written would contradict them.
+_ASPECT_RATIO_POLICY_EXPAND = """
+- {ratio} is not this photograph's shape, so reaching it by cropping alone would take {lost_pct}% of its {lost_axis}. Decide how it is reached and record the decision in reframe_mode:
+  - "crop": the photograph has {lost_axis} to spare. The subject, ROI and protected regions still sit comfortably inside a {ratio} rectangle, and what leaves the frame is background, edge clutter, or context the picture does not need. This is the normal answer -- prefer it whenever the photograph allows it.
+  - "expand": the subject already fills the {lost_axis}, so any {ratio} rectangle that keeps the composition intact would cut into a person, a face, a held object, or the structure the picture is built on. The scene is then continued past the photograph's {grow_edges} instead, and nothing already visible leaves the frame.
+- Decide this from the photograph, not from the {lost_pct}%. A small cost is still the wrong answer when the subject is already tight against both {lost_axis} edges, and a large one is still right when the {lost_axis} is mostly background. A crowded group filling the frame edge to edge, a subject already cropped close at the {lost_axis}, or a composition whose meaning depends on both {lost_axis} edges are the cases for "expand"; a subject with space around it is a "crop".
+- State the reason in reframe_mode_reason: what specifically would be cut, or what specifically has room to go.
+- When you choose "expand", compose crop_box for the photograph's own shape rather than for {ratio} -- the framing you would choose if the output shape were not a constraint. Deterministic geometry then continues the scene past the {grow_edges} to reach {ratio}, so a crop_box that is already exactly {ratio} would defeat the choice. When you choose "crop", compose it for {ratio} exactly, as the rules above require.
+"""
+
 _OVERALL_ANALYSIS_PERSONA = """You are a senior photography director, colorist, and high-end retoucher.
 Analyze the uploaded photo and return only valid JSON. Keep the JSON keys in English. Every user-visible string value must be Traditional Chinese.
 
@@ -2393,6 +2423,8 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "memory_color_strategy": "依 edit_intent 說明場景的白平衡、冷暖、色相與飽和度安排。膚色獨立保護，維持每個人的原生深淺、底調與色度，允許曝光調整並只修正非預期偏色。",
   "evaluation_criteria": ["完成後用來判斷成功的標準。"],
   "crop_recommendation": "若需要裁切，說明裁哪裡與為什麼；不需要則說明保留原構圖。",
+  "reframe_mode": "crop 或 expand 二選一。除非本回合的長寬比政策明確要求你做這個選擇，否則一律填 \"crop\"。",
+  "reframe_mode_reason": "選擇的理由；政策未要求選擇時填空字串。",
   "crop_box": {
     "enabled": true,
     "x": 0.0,
@@ -2578,13 +2610,35 @@ def portrait_qc_persons(analysis):
     return persons
 
 
-def _aspect_ratio_policy_suffix(aspect_ratio_pref):
-    if aspect_ratio_pref == "original":
+# Any W:H reaching here has already passed param_validation.VALID_ASPECT_RATIOS;
+# "auto" and "original" are the only two non-numeric preferences.
+_FIXED_ASPECT_RATIO_PREF = re.compile(r"^\d+(?:\.\d+)?\s*:\s*\d+(?:\.\d+)?$")
+
+
+def _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size=None):
+    """source_size: the photograph's own (width, height). Without it the
+    expand clause is left out -- the choice it describes depends on how far
+    this shape is from that one, so an unknown source keeps crop-only."""
+    pref = str(aspect_ratio_pref or "auto").strip().lower()
+    if pref == "original":
         return _ASPECT_RATIO_POLICY_ORIGINAL
-    return _ASPECT_RATIO_POLICY_AUTO
+    if not _FIXED_ASPECT_RATIO_PREF.match(pref):
+        return _ASPECT_RATIO_POLICY_AUTO
+
+    policy = _ASPECT_RATIO_POLICY_FIXED.format(ratio=pref)
+    if not expand_permitted(pref, pref, source_size):
+        return policy
+    narrower = _canvas_shape_difference(pref, source_size) == "narrower"
+    return policy + _ASPECT_RATIO_POLICY_EXPAND.format(
+        ratio=pref,
+        lost_pct=round((1 - _cross_direction_retained(pref, source_size)) * 100),
+        lost_axis="width" if narrower else "height",
+        grow_edges="top and bottom edges" if narrower else "left and right edges",
+    )
 
 
-def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None):
+def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None,
+                                      source_size=None):
     """Call A of the gpt-5.6-luna two-pass split (see the module comment
     above _FACE_CROP_EVIDENCE_SECTION): everything ANALYSIS_INSTRUCTION does
     except judging blink/hair/gaze/smile, which the portrait-QC pass
@@ -2607,7 +2661,7 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_option
     )
     if not body_reshape_enabled():
         instruction = _without_body_reshape_prompt_lines(instruction)
-    return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref)
+    return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size)
 
 
 def build_portrait_qc_instruction(persons):
@@ -2709,7 +2763,8 @@ Targets:
 
 
 
-def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, analysis_model=None):
+def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, analysis_model=None,
+                              source_size=None):
     """Build analysis instructions with one authoritative aspect-ratio policy.
 
     advanced_options: the Upload page's Advanced Settings. Detection/repair
@@ -2732,24 +2787,7 @@ def build_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None, 
         instruction = instruction.replace(_BLINK_WINK_DEFAULT_BULLET_LUNA, _BLINK_WINK_DEFAULT_BULLET_LEGACY)
     if not body_reshape_enabled():
         instruction = _without_body_reshape_prompt_lines(instruction)
-    if aspect_ratio_pref == "original":
-        return instruction + """
-## Aspect-ratio policy
-
-- The user explicitly requested that the final output keep the original photo's aspect ratio.
-- Set recommended_aspect_ratio to "original".
-- If crop_box.enabled is true, crop_box.aspect_ratio must be "original" (or blank).
-- Every crop candidate must preserve the source aspect ratio.
-- Do not select a named ratio that changes the original proportions.
-"""
-    return instruction + """
-## Aspect-ratio policy
-
-- Select recommended_aspect_ratio only from the supported output set declared above.
-- crop_box.aspect_ratio and every crop candidate aspect_ratio must equal recommended_aspect_ratio exactly.
-- The normalized x/y/w/h values are a composition proposal, not permission to use a different ratio.
-- Downstream deterministic geometry will fit the crop rectangle to this selected ratio, so protect the ROI, subject extent, and protected regions with enough breathing room.
-"""
+    return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size)
 
 
 # ── Structured output schema for Step 2 (photo analysis) ──────────────────────
@@ -3117,6 +3155,8 @@ ANALYSIS_RESPONSE_SCHEMA = {
         "memory_color_strategy": _schema_string(),
         "evaluation_criteria": _schema_string_array(),
         "crop_recommendation": _schema_string(),
+        "reframe_mode": _schema_enum(("crop", "expand")),
+        "reframe_mode_reason": _schema_string(),
         "crop_box": _CROP_BOX_SCHEMA,
         "crop_candidates": _schema_array_of(_CROP_CANDIDATE_SCHEMA),
         "crop_intent": _CROP_INTENT_SCHEMA,
@@ -5198,6 +5238,16 @@ FRAME_SHAPE_SOURCE = (
     + UNIFORM_SCALE_ONLY
 )
 
+# Same sentence for the branch that may extend: "taking in more of the
+# surrounding scene" reads as widening the crop inside the photograph, which is
+# not on offer once the frame already reaches its edges, so the third operation
+# is named outright instead of left to be inferred.
+FRAME_SHAPE_SOURCE_EXPAND = (
+    "Three operations, in any combination, get the photograph onto this canvas shape: cropping -- choosing where "
+    "the frame's edges fall -- continuing the scene past the photograph's own edge, and uniform scaling. "
+    + UNIFORM_SCALE_ONLY
+)
+
 
 def _parse_ratio_label(label):
     """"1088:1456" / "4:5" -> a float. None for "original", blank, or anything
@@ -5308,9 +5358,139 @@ def _describe_crop_tightness(w, h):
     return "a tight frame filled by the subject"
 
 
+# An upper bound on the retained fraction, not the decision. At 1.0 the analysis
+# is asked to choose for every requested shape that differs from the
+# photograph's at all, which is the intent: how much a crop would cost is only
+# half the question, and the other half -- whether the subject still has room to
+# lose -- is not arithmetic. A square filled edge to edge by its subject can
+# want extending at 3:4, where a crop costs only 25%. Lower it to ask only on
+# wide gaps; 0 keeps every ratio crop-only.
+EXPAND_PERMISSION_RETAINED_THRESHOLD = 1.0
+
+# Whether "auto" and "original" get the permission too. Normally they do not:
+# under auto the model chose the shape itself and can choose one the photograph
+# already fits, and original has no shape difference to bridge.
+EXPAND_PERMISSION_ANY_PREFERENCE = False
+
+
+def _cross_direction_retained(aspect_label, source_size):
+    """Fraction of the source frame a crop to `aspect_label` can keep at most.
+
+    min(r_target/r_source, r_source/r_target): 1.0 when the shapes match, and
+    it falls as the two diverge, in either direction. None when undeterminable.
+    """
+    target = _parse_ratio_label(aspect_label)
+    if not target or not source_size:
+        return None
+    try:
+        source_w, source_h = float(source_size[0]), float(source_size[1])
+    except (TypeError, ValueError, IndexError):
+        return None
+    if source_w <= 0 or source_h <= 0 or target <= 0:
+        return None
+    source = source_w / source_h
+    return min(target / source, source / target)
+
+
+def expand_permitted(aspect_ratio_pref, aspect_label, source_size):
+    """Whether this output shape is far enough from the source's to let the
+    edit model extend the scene rather than crop its way there.
+
+    Normally only a shape the user named explicitly -- see
+    EXPAND_PERMISSION_ANY_PREFERENCE. A same-shape canvas never reaches the
+    expand wording regardless, since there is no axis to extend.
+    """
+    if not EXPAND_PERMISSION_RETAINED_THRESHOLD:
+        return False
+    pref = str(aspect_ratio_pref or "auto").strip().lower()
+    if pref in {"auto", "original"} and not EXPAND_PERMISSION_ANY_PREFERENCE:
+        return False
+    # A canvas of the photograph's own shape has no axis to extend, so there is
+    # nothing to decide. Same tolerance as every other shape comparison here.
+    if _canvas_shape_difference(aspect_label, source_size) not in {"narrower", "wider"}:
+        return False
+    retained = _cross_direction_retained(aspect_label, source_size)
+    return retained is not None and retained < EXPAND_PERMISSION_RETAINED_THRESHOLD
+
+
+# Replaces the crop-only consequence when extending is permitted: reaching the
+# shape no longer forces content out, so the choice -- give up the sides, or
+# carry the scene further -- is stated as the choice it now is.
+_EXPAND_SHAPE_CONSEQUENCE = {
+    "narrower": (
+        "This frame is narrower than the photograph you were given, so the photograph's full width and the "
+        "frame's shape cannot both survive as they are. Cropping is the default answer: let something along the "
+        "sides fall outside the final frame, guided by the subject, rather than narrowing the people and objects "
+        "in it. If the subject already fills the width, so that cropping to this shape would cut into it or "
+        "collapse the composition, carry the scene further above and below instead and keep the subject whole."
+    ),
+    "wider": (
+        "This frame is wider than the photograph you were given, so the photograph's full height and the frame's "
+        "shape cannot both survive as they are. Cropping is the default answer: let something along the top or "
+        "bottom fall outside the final frame, guided by the subject, rather than flattening the people and objects "
+        "in it. If the subject already fills the height, so that cropping to this shape would cut into it or "
+        "collapse the composition, carry the scene further out to the sides instead and keep the subject whole."
+    ),
+}
+
+_EXPAND_ALLOWANCE = (
+    "Extending means continuing the same real scene past the photograph's edge with matching perspective, "
+    "lighting, depth, materials, and background logic -- never blank borders, transparent or checkerboard "
+    "padding, empty bands, smeared or stretched edges, or scenery that was not already part of this place. "
+    "Extend only as far as the shape needs, and only on the one side or pair of sides that reaching it requires; "
+    "everything the photograph already shows stays in the final frame at its own proportions."
+)
+
+
+def _expand_plan_lines(plan):
+    """The analysis decided this frame is reached by extending, so it is stated
+    as the instruction it is, not as a permission to weigh. `plan` is
+    image_tools.plan_reframe_extension's output."""
+    axis, edges = plan["axis"], plan["edges"]
+    other = "width" if axis == "height" else "height"
+    grown = round((plan["extension"] - 1) * 100)
+    lines = [
+        f"This frame is reached by continuing the scene past the photograph's {edges}, not by cropping into it: "
+        f"the subject already fills the {other}, so there is nothing there to give up. Carry the scene about "
+        f"{grown}% further in {axis} across the {edges}, keeping everything the photograph already shows inside "
+        f"the final frame at its own proportions.",
+    ]
+    if plan["kept_other_axis"] < 0.97:
+        lines.append(
+            f"That extension does not cover the whole shape difference on its own, so about "
+            f"{round((1 - plan['kept_other_axis']) * 100)}% of the {other} still leaves the frame -- take it from "
+            f"the {other}'s outer edges, guided by the subject, and never by narrowing what stays."
+        )
+    lines.append(_EXPAND_ALLOWANCE)
+    return lines
+
+
 def _build_crop_instruction_block(
     crop_plan, require_tighter=False, source_size=None, has_body_reshape=False,
+    allow_expand=False, expand_plan=None, target_ratio_label=None,
 ):
+    # Before the no-crop branch below: an extension that covers the whole shape
+    # difference needs no crop at all -- the best case -- and that branch would
+    # answer it with "do not reframe, expand canvas, add borders" over a canvas
+    # of a different shape, which is the one instruction pair that guarantees a
+    # squeezed result.
+    if expand_plan:
+        aspect = (
+            (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio")
+            or target_ratio_label or "the stated output ratio"
+        )
+        lines = [
+            "Reframing:",
+            f"- Target output aspect ratio: {aspect}. The output canvas has to be this shape.",
+        ]
+        if crop_plan:
+            lines.append(
+                f"- Roughly how tight: {_describe_crop_tightness(crop_plan['w'], crop_plan['h'])}."
+            )
+        lines.extend(_expand_plan_lines(expand_plan))
+        lines.append(f"{FRAME_SHAPE_SOURCE_EXPAND} {_content_shape_rule(has_body_reshape)}")
+        return "\n".join(lines)
+
     if not crop_plan:
         return (
             "No crop. The supplied image boundaries are the final frame. Do not reframe, expand canvas, add "
@@ -5331,8 +5511,11 @@ def _build_crop_instruction_block(
         f"- Target output aspect ratio: {aspect}. The output canvas has to be this shape.",
         f"- Roughly how tight: {_describe_crop_tightness(crop_plan['w'], crop_plan['h'])}.",
     ]
+    expanding = allow_expand and shape_difference in _EXPAND_SHAPE_CONSEQUENCE
     if shape_difference:
-        consequence = _CANVAS_SHAPE_CONSEQUENCE[shape_difference]
+        consequence = (
+            _EXPAND_SHAPE_CONSEQUENCE if expanding else _CANVAS_SHAPE_CONSEQUENCE
+        )[shape_difference]
         if shape_difference == "same" and _crop_has_visible_trim(crop_plan["w"], crop_plan["h"]):
             consequence = (
                 "This frame keeps the photograph's canvas shape while visibly tightening the composition. "
@@ -5366,7 +5549,11 @@ def _build_crop_instruction_block(
             " Closer framing was requested, so come in closer than the original frame; you choose where the edges land."
         )
     lines.append(guidance)
-    lines.append(f"{FRAME_SHAPE_SOURCE} {_content_shape_rule(has_body_reshape)}")
+    if expanding:
+        lines.append(_EXPAND_ALLOWANCE)
+        lines.append(f"{FRAME_SHAPE_SOURCE_EXPAND} {_content_shape_rule(has_body_reshape)}")
+    else:
+        lines.append(f"{FRAME_SHAPE_SOURCE} {_content_shape_rule(has_body_reshape)}")
     return "\n".join(lines)
 
 
@@ -6537,6 +6724,27 @@ Execution rule:
 
 This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit behavior. Preserve the subject, required framing, scene context, and protected details more conservatively than the previous output."""
 
+    # Whether the Crop instruction below may offer extending the scene as an
+    # alternative to cropping. Read here as well as inside the block so the
+    # retouch priorities stop forbidding the very thing it offers.
+    # Decided during analysis and carried on the analysis object; the flag
+    # below is the older threshold-only permission, kept for an analysis that
+    # predates the decision.
+    expand_plan = (
+        None if has_wider_size_override or has_closer_size_override
+        else analysis.get("reframe_extension")
+    )
+    # Once the analysis has answered, the edit model is not asked again: an
+    # analysis that chose "crop" must not also be handed the conditional
+    # permission, which would reopen a decision already made -- and offering
+    # that choice to this model was measured to change nothing anyway.
+    mode_decided = bool(str(analysis.get("reframe_mode") or "").strip())
+    allow_expand = not mode_decided and not has_wider_size_override and not has_closer_size_override and expand_permitted(
+        aspect_ratio_pref,
+        (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio"),
+        source_size,
+    )
+
     framing_focus = analysis.get("_framing_focus") or {}
     focus_block = ""
     if framing_focus.get("size") == "closer":
@@ -6570,7 +6778,8 @@ Feature one subject: {focus_label}. Identify that subject in the photograph and 
     else:
         crop_instruction_block = _build_crop_instruction_block(
             crop_plan, require_tighter=has_closer_size_override, source_size=source_size,
-            has_body_reshape=has_body_reshape,
+            has_body_reshape=has_body_reshape, allow_expand=allow_expand,
+            expand_plan=expand_plan, target_ratio_label=rec_aspect,
         )
     crop_priority_line_style = (
         "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
@@ -6581,9 +6790,14 @@ Feature one subject: {focus_label}. Identify that subject in the photograph and 
         (
             "Reframe as described in the Crop instruction above, judging the frame's edges from the photograph's "
             "own content and subject rather than from stated coordinates. Beyond the frame you settle on, do not "
-            "add blank borders, transparent/checkerboard padding, or artificial empty side bands, unless a selected "
-            "closer framing-size override explicitly asks for closer framing within it."
-            if crop_plan else
+            "add blank borders, transparent/checkerboard padding, or artificial empty side bands"
+            + (
+                "; where that instruction allows the scene to be carried past the photograph's edge, what you add "
+                "is continued scene, never padding."
+                if allow_expand or expand_plan else
+                ", unless a selected closer framing-size override explicitly asks for closer framing within it."
+            )
+            if crop_plan or expand_plan else
             "Treat the supplied image boundaries as final unless a selected closer framing-size override explicitly asks for closer framing. "
             "Never add blank borders, transparent/checkerboard padding, or artificial empty side bands."
         )
@@ -6591,8 +6805,14 @@ Feature one subject: {focus_label}. Identify that subject in the photograph and 
     crop_priority_line_faithful = (
         "Reframe as described in the Crop instruction above, judging the frame's edges from the photograph's own "
         "content and subject rather than from stated coordinates. Beyond the frame you settle on, do not "
-        "additionally expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands."
-        if crop_plan else
+        + (
+            "add borders, create transparent/checkerboard padding, or invent empty side bands; canvas beyond the "
+            "photograph's edge is added only as the continued scene that instruction describes, and only as far as "
+            "the output shape needs."
+            if allow_expand or expand_plan else
+            "additionally expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands."
+        )
+        if crop_plan or expand_plan else
         "Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create "
         "transparent/checkerboard padding, or invent empty side bands."
     )

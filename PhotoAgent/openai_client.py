@@ -18,6 +18,7 @@ from image_tools import (
     detect_face_crops,
     image_to_data_url,
     get_image_dimensions,
+    crop_resolution_ratio_label,
     resolve_crop_box_with_report,
     apply_framing_size,
     apply_aspect_ratio_preference,
@@ -334,7 +335,9 @@ def _analyze_photo_single_pass(image_bytes: bytes, aspect_ratio: str = "auto", a
 
     face_crops = detect_face_crops(image_bytes)
     content = [
-        {"type": "input_text", "text": build_analysis_instruction(aspect_ratio, advanced_options, analysis_model)},
+        {"type": "input_text", "text": build_analysis_instruction(
+            aspect_ratio, advanced_options, analysis_model,
+            source_size=get_image_dimensions(image_bytes))},
         {"type": "input_image", "image_url": data_url},
         *_face_crop_content_items(face_crops),
     ]
@@ -615,7 +618,9 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
     face_crop_items = _face_crop_content_items(face_crops)
 
     content_a = [
-        {"type": "input_text", "text": build_overall_analysis_instruction(aspect_ratio, advanced_options)},
+        {"type": "input_text", "text": build_overall_analysis_instruction(
+            aspect_ratio, advanced_options,
+            source_size=get_image_dimensions(image_bytes))},
         {"type": "input_image", "image_url": data_url},
         *face_crop_items,
     ]
@@ -783,9 +788,18 @@ def edit_photo(
         output_w, output_h = (int(v) for v in size_param.lower().split("x", 1))
         effective_ratio_label = f"{output_w}:{output_h}"
     framed_analysis["recommended_aspect_ratio"] = effective_ratio_label
+    # In expand mode the rectangle is not the canvas's shape and must not be
+    # refitted to it -- the canvas is reached by extending, not by cropping.
+    crop_ratio_label = crop_resolution_ratio_label(
+        framed_analysis, img_w, img_h, effective_ratio_label,
+    )
     if framed_analysis.get("crop_box"):
-        framed_analysis["crop_box"]["aspect_ratio"] = effective_ratio_label
-    crop_plan = resolve_crop_box_with_report(framed_analysis.get("crop_box"), framed_analysis, img_w, img_h)["cropBox"]
+        framed_analysis["crop_box"]["aspect_ratio"] = crop_ratio_label
+    crop_geometry_ctx = dict(framed_analysis)
+    crop_geometry_ctx["recommended_aspect_ratio"] = crop_ratio_label
+    crop_plan = resolve_crop_box_with_report(
+        crop_geometry_ctx.get("crop_box"), crop_geometry_ctx, img_w, img_h,
+    )["cropBox"]
     raw_prompt, raw_prompt_sections = build_edit_prompt(
         framed_analysis, preset, preset_prompt, user_direction, crop_plan,
         revision_feedback, aspect_ratio_pref=aspect_ratio,
@@ -819,7 +833,10 @@ def edit_photo(
     return {
         "image_b64": b64,
         "usage": {"model": model, "usage": data.get("usage")},
-        "geometry_warnings": output_geometry_warnings(b64, effective_ratio_label, crop_plan, img_w, img_h),
+        "geometry_warnings": output_geometry_warnings(
+            b64, effective_ratio_label, crop_plan, img_w, img_h,
+            expanding=bool(framed_analysis.get("reframe_extension")),
+        ),
         "raw_prompt": raw_prompt,
         "prompt_resolution": resolution_metadata,
         "prompt_strategy": prompt_strategy,
