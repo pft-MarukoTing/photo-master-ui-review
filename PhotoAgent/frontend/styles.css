@@ -4200,13 +4200,13 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
    actually applied to this RUN -- describes the GENERATED result, so hidden
    while viewing Original. Floats at the bottom of the photo frame (like
    .canvas-btn above; the photo is contained, not cropped, so on a portrait
-   shot this lands on the card's background instead of on the image),
-   split into two jobs by side: the picks read out on the
-   left, and on the right the single thing in this row anyone can press,
-   .recipe-tag-personalize below. They used to be one undifferentiated line of
+   shot this lands on the card's background instead of on the image).
+   Two things sit here side by side, centred as one group: the picks, read out
+   as a single quiet label, and .recipe-tag-personalize below -- the one thing
+   in this row anyone can press. They used to be an undifferentiated line of
    identical pills, which made the pressable one findable only by noticing its
-   border was solid where the others were dashed. Position now carries that
-   distinction before any styling does. */
+   border was solid where the others were dashed; the two now look nothing
+   alike instead. */
 .recipe-tags {
   position: absolute;
   left: 10px;
@@ -4219,41 +4219,41 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
      tags, so each label shrinks (and truncates its own text) rather than
      wrapping onto a second line, which would eat into the photo above it. */
   flex-wrap: nowrap;
-  justify-content: flex-start;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
 }
-/* Left-alignment only earns its keep as one half of the left/right split --
-   with no button on the right, a lone label hanging off the left edge just
-   looks stranded, so the row falls back to centering itself. */
-.recipe-tags:not(:has(.recipe-tag-personalize)) { justify-content: center; }
 .compare-card:not(.showing-generated) .recipe-tags { display: none; }
-/* The read-out half: quiet labels marked as one set by a dashed rule under
-   the text. None of the pill chrome they used to wear (no border, no shadow,
-   no 999px) -- that chrome is exactly what made them look pressable, and the
-   row has a real button in it now to be confused with.
-   What they can't do is sit as bare text: the photo is object-fit:contain,
-   so on a portrait shot this row lands on the card's own background rather
-   than on imagery, and there is no one text colour that survives both. So
-   each label carries the same faint --glass-rgb wash the rest of this page's
+/* The read-out label: quiet, marked as a read-out by a dashed rule under the
+   text. None of the pill chrome it used to wear (no border, no shadow, no
+   999px) -- that chrome is exactly what made it look pressable, and the row
+   has a real button in it now to be confused with.
+   What it can't do is sit as bare text: the photo is object-fit:contain, so
+   on a portrait shot this row lands on the card's own background rather than
+   on imagery, and there is no one text colour that survives both. So it
+   carries the same --glass-rgb wash the rest of this page's
    float-over-imagery chrome uses (.page-scroll-hint, .personalize-popover),
-   thin enough to read as a tint rather than a chip, which gives var(--text-2)
-   a surface that tracks the theme whatever is behind it. The rule is drawn
-   with text-decoration, not border-bottom, so it stays under the text instead
-   of turning into the wash's bottom edge. */
+   which gives var(--text) a surface that tracks the theme whatever is behind
+   it -- but faded out towards the top rather than cut off at an edge, so it
+   reads as the photo dimming under the text instead of as a chip. That fade
+   is why the wash lives on a pseudo-element: the mask has to take the blur
+   with it, and masking the label itself would fade the type too. The rule is
+   drawn with text-decoration, not border-bottom, so it stays under the text
+   instead of turning into the wash's bottom edge. */
 .recipe-tags span {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
   flex: 0 1 auto;
-  padding: 3px 8px 4px;
-  border-radius: var(--radius-sm);
-  background: rgba(var(--glass-rgb),.42);
-  backdrop-filter: blur(14px) saturate(1.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.2);
-  color: var(--text-2);
+  padding: 3px 9px 5px;
+  /* Full --text at 700: this sits on a deliberately thin wash and shrinks to
+     8px (fitRecipeTagsRow), where --text-2's muting and a lighter weight
+     compound into something you have to squint at. Being quieter than the
+     button next to it is the wash's job, not the type's. */
+  color: var(--text);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -4263,9 +4263,35 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
-/* Without blur the wash has to carry the separation on its own. */
+/* z-index -1 keeps this behind the label's own text (a positioned pseudo
+   would otherwise paint over it) without escaping .recipe-tags' stacking
+   context, so it still sits above the photo. Excluded from the personalize
+   button, whose ::before is the speech-bubble icon. */
+.recipe-tags span:not(.recipe-tag-personalize)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: var(--radius-sm);
+  /* Accent-tinted rather than the neutral --glass-rgb the popover starts
+     from: a white veil over a pale card (or a black one over a dark card)
+     has no hue of its own and just reads as dirty grey. Mixing through
+     --card keeps it in the theme's own family AND makes it follow light/dark
+     without a separate patch, since --card is what flips. */
+  background: color-mix(in srgb, color-mix(in srgb, var(--accent) 16%, var(--card)) 40%, transparent);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  /* Held flat well past the text's own height, so only the top edge dissolves
+     -- start the fade lower and the wash is gone before it has done anything
+     for the type sitting on it. */
+  mask-image: linear-gradient(to top, #000 0%, #000 62%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to top, #000 0%, #000 62%, transparent 100%);
+}
+/* Without blur the tint has to carry the separation on its own. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .recipe-tags span { background: rgba(var(--glass-rgb),.78); }
+  .recipe-tags span:not(.recipe-tag-personalize)::before {
+    background: color-mix(in srgb, var(--accent) 12%, var(--card));
+  }
 }
 
 /* The one thing in that row anyone can press: "個人化" opens
@@ -4275,19 +4301,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
    bare underlined text -- so it reads as a control at a glance instead of
    asking anyone to compare border styles.
 
-   order/margin-left push it to the far right whatever else the row holds
-   (the debug ratio tag renders after it, and belongs with the read-out half
-   on the left), and auto on a nowrap row is also what keeps the gap between
-   the two halves from collapsing as the labels shrink.
+   order keeps it last in the group whatever else the row holds -- the debug
+   ratio tag renders after it but belongs with the read-out.
 
    --accent-pale-color is the one accent-family token that is light in every
    theme, so a fixed near-black label sits on it safely everywhere -- unlike
    var(--text), which would invert to white on the light palettes and vanish
-   into a pale fill. No text-shadow here: this label is on its own solid fill,
-   not on the photo. */
+   into a pale fill. */
 .recipe-tags span.recipe-tag-personalize {
   order: 1;
-  margin-left: auto;
   padding: 5px 12px;
   border: none;
   border-radius: 999px;
@@ -4302,7 +4324,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   backdrop-filter: blur(16px) saturate(1.3);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
   color: #16151a;
-  text-shadow: none;
+  /* The dashed rule is the read-out label's marker; this one is a button. */
+  text-decoration: none;
   box-shadow: 0 4px 14px rgba(0,0,0,.35);
   cursor: pointer;
   transition: filter .2s, box-shadow .2s, transform .2s;
@@ -4379,11 +4402,8 @@ body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize:hover {
    The tail below repeats BOTH values exactly: any mismatch shows as a seam. */
 .personalize-popover {
   position: absolute;
-  /* Pinned to the same right edge as the button that opens it (.recipe-tags'
-     own inset), not centered: its tail points at that button, and a centered
-     bubble would leave the tail clamped out at its own corner reaching for
-     something further right. */
-  right: 10px;
+  left: 50%;
+  transform: translateX(-50%);
   bottom: 54px;
   z-index: 6;
   width: min(360px, calc(100% - 32px));
@@ -4410,9 +4430,8 @@ body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize:hover {
   content: "";
   position: absolute;
   top: 100%;
-  /* Fallback only (JS sets the var before the panel is ever shown): the
-     button's own end of the row, since both are pinned to the same edge. */
-  left: var(--personalize-tail-x, calc(100% - 40px));
+  /* Fallback only -- JS sets the var before the panel is ever shown. */
+  left: var(--personalize-tail-x, calc(50% + 16px));
   width: 22px;
   height: 13px;
   transform: translateX(-16px);
