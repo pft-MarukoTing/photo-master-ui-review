@@ -1,7 +1,7 @@
 import json
 import numpy as np
 import torch
-from PIL import Image
+from PIL import Image, ImageFilter
 
 from .paste_back import RESIZE_METHODS, dilate_mask
 
@@ -62,6 +62,20 @@ def mask_intersection_area(mask_a, mask_b, threshold=0.5):
     a = mask_a > threshold
     b = mask_b > threshold
     return (a & b).sum().item()
+
+
+def feather_mask(mask, feather_px):
+    """Gaussian-blur a [H, W] mask's edges by `feather_px` (no-op if <= 0).
+
+    Dilation alone leaves a hard 0/1 edge; blurring it afterward turns that
+    into a smooth ramp so the alpha blend doesn't show a visible seam.
+    """
+    if feather_px <= 0:
+        return mask
+    arr = (mask.clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)
+    pil_mask = Image.fromarray(arr, mode="L").filter(ImageFilter.GaussianBlur(radius=feather_px))
+    blurred = np.array(pil_mask).astype(np.float32) / 255.0
+    return torch.from_numpy(blurred).to(mask.device)
 
 
 def merge_overlapping_masks(masks, containment_thresh=0.9, threshold=0.5):
@@ -145,8 +159,10 @@ class PasteBackMatched:
          -> composite mask. Including the old (crop) nail mask ensures the
          full extent of the original nail is overwritten even when the new
          nail is smaller/shorter, instead of leaving a stale sliver of it.
-      5. Dilate, undo resize (generated image + mask -> hand square space),
-         undo crop padding, alpha-blend the patch onto the original image.
+      5. Dilate, then feather the now-hard dilated edge with a Gaussian blur
+         (`feather_pixels`) so the blend doesn't show a hard seam. Undo
+         resize (generated image + mask -> hand square space), undo crop
+         padding, alpha-blend the patch onto the original image.
 
     Inputs (all collected via INPUT_IS_LIST):
       original_image  : [1] single original photo
@@ -188,6 +204,7 @@ class PasteBackMatched:
                 "min_iou": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "finger_overlap_ratio": ("FLOAT", {"default": 3.0, "min": 1.0, "max": 20.0, "step": 0.1}),
                 "dedup_containment_thresh": ("FLOAT", {"default": 0.9, "min": 0.5, "max": 1.0, "step": 0.01}),
+                "feather_pixels": ("INT", {"default": 5, "min": 0, "max": 32, "step": 1}),
             }
         }
 
@@ -202,7 +219,7 @@ class PasteBackMatched:
                    nail_boxes_1, nail_boxes_2, nail_masks_1, nail_masks_2,
                    finger_boxes, finger_masks,
                    dilate_pixels, min_iou, finger_overlap_ratio,
-                   dedup_containment_thresh):
+                   dedup_containment_thresh, feather_pixels):
         orig = original_image[0].clone().float()   # [B, H, W, C]
         crops_info   = json.loads(crop_info[0])
         resizes_info = json.loads(resize_info[0])
@@ -210,6 +227,7 @@ class PasteBackMatched:
         min_iou_val  = min_iou[0]
         overlap_ratio = finger_overlap_ratio[0]
         dedup_thresh = dedup_containment_thresh[0]
+        feather_px   = feather_pixels[0]
 
         for j, gen_image in enumerate(generated_images):
             c_info = crops_info[j]
@@ -276,8 +294,9 @@ class PasteBackMatched:
                 hand_nail_masks_1[matched_i1], hand_nail_masks_2[matched_j2],
             ], dim=0).max(dim=0).values.float()
 
-            # Dilate composite mask
+            # Dilate composite mask, then soften its now-hard edge into a smooth ramp
             composite_mask = dilate_mask(composite_mask, dilate_px)
+            composite_mask = feather_mask(composite_mask, feather_px)
 
             # Undo resize — generated image -> hand square space [B, size, size, C]
             frames = []
