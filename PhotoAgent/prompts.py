@@ -3999,10 +3999,11 @@ def _empty_blink_repair_strategy():
 
 FOLD_MATCH_RULE = (
     "Treat both eyes as one coupled bilateral structure and establish one shared final lid geometry before rendering "
-    "either completed eye. Preserve each canthus and eye-globe identity. Match aperture-height-to-eye-width ratio, "
-    "upper/lower-lid contour, iris exposure, and double-eyelid crease type, path, peak, visible length, and "
-    "crease-to-lash width as distinct properties. For a frontal face use the facial midline as the bilateral "
-    "comparison axis; for a turned face compare in each eye's local axes and allow only unavoidable foreshortening."
+    "either completed eye. Preserve each canthus and eye-globe identity. Match final opening degree, eye size "
+    "and shape, visible iris width and exposure, upper/lower-lid contour, and double-eyelid crease type, path, "
+    "peak, visible length, and crease-to-lash width as distinct properties. For a frontal face use the facial midline "
+    "as the bilateral comparison axis; for a turned face compare in each eye's local axes and allow only "
+    "unavoidable foreshortening."
 )
 
 

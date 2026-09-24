@@ -1618,9 +1618,9 @@ def build_compact_editor_prompt(
         shared_face_rules.append(identity_rule + projection_exception)
     if has_blink:
         shared_face_rules.append(
-            "- Shared eye-pair target for every named blink repair: finish both eyes at the same final aperture. "
-            "Match the visible opening width and height, upper- and lower-lid shape, upper-lid crease count and "
-            "height, and visible double-eyelid band width."
+            "- Shared eye-pair target for every named blink repair: finish both eyes with the same natural degree "
+            "of opening. Match their opening size and shape, visible iris width, upper- and lower-lid contours, "
+            "and double-eyelid fold shape and visible width."
         )
         shared_face_rules.append(
             "- Retract each upper-lid margin as needed and fold blink-compressed lid tissue into a smooth crease over "

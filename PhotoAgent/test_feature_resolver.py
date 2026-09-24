@@ -266,9 +266,9 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertNotIn("Target eyelid state: open, matching the left man's existing expression", prompt)
         self.assertNotIn("Eyelid method: Lift the upper lids", prompt)
         self.assertIn("match the final upper- and lower-lid contours across the facial midline", prompt)
-        self.assertIn("Match the visible opening width and height", prompt)
-        self.assertIn("upper-lid crease count and height", prompt)
-        self.assertIn("visible double-eyelid band width", prompt)
+        self.assertIn("opening size and shape", prompt)
+        self.assertIn("visible iris width", prompt)
+        self.assertIn("double-eyelid fold shape and visible width", prompt)
         self.assertEqual(prompt.count("Shared eye-pair target for every named blink repair"), 1)
         self.assertNotIn("PRIMARY EYE-PAIR REPAIR", prompt)
         self.assertNotIn("FINAL VISUAL GATE", prompt)
@@ -321,7 +321,7 @@ class BlinkRepairStrategy(unittest.TestCase):
                 self.assertNotIn("asymmetric_blink_pair", final_state)
                 self.assertIn("open both blink-affected eyes to the same natural, comfortably open final aperture", prompt)
                 self.assertIn("Retract each upper-lid margin by the amount it needs", prompt)
-                self.assertIn("upper-lid crease count and height", prompt)
+                self.assertIn("visible iris width", prompt)
                 self.assertEqual(prompt.count("Shared eye-pair target for every named blink repair"), 1)
 
     def test_turned_face_uses_local_eye_axes_instead_of_frontal_mirroring(self):
@@ -353,12 +353,13 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertIn("Eye-pair repair (strong bilateral correction)", prompt)
         self.assertIn("open both eyes together to the same natural, comfortably open final aperture", prompt)
         self.assertIn("Lift the photograph-left upper lid farther than the photograph-right upper lid", prompt)
-        self.assertIn("upper-lid crease count and height", prompt)
+        self.assertIn("visible iris width", prompt)
         self.assertNotIn("Eyelid method: Lift the upper lids", prompt)
         self.assertNotIn("Keep the captured iris/pupil direction, sclera balance, and catchlights", prompt)
         self.assertIn("Set both irises, pupils, sclera balances, and catchlights coherently as one binocular pair", prompt)
         self.assertIn("Photograph-side source states: photograph-left=fully_closed; photograph-right=narrowed_open", legacy_prompt)
         self.assertIn("Both eyes are blink-affected, including one that is only narrowed or half closed", legacy_prompt)
+        self.assertIn("visible iris width", legacy_prompt)
         self.assertNotIn("Eyelid adjustment: Lift the upper lids", legacy_prompt)
         self.assertIn("two independent mandatory outcomes", qa_prompt)
 
@@ -400,7 +401,7 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertIn("Subject: left man", prompt)
         self.assertIn("Subject: right woman", prompt)
         self.assertEqual(prompt.count("Shared eye-pair target for every named blink repair"), 1)
-        self.assertEqual(prompt.count("upper-lid crease count and height"), 1)
+        self.assertEqual(prompt.count("visible iris width"), 1)
 
     def test_no_strategy_keeps_the_generic_sentence(self):
         prompt, _ = build_compact_editor_prompt(blink_analysis(), "", "", {})
@@ -421,8 +422,8 @@ class BlinkRepairStrategy(unittest.TestCase):
         }
         prompt, _ = build_compact_editor_prompt(analysis, "", "", {})
         self.assertIn("the same smile- or laughter-shaped final aperture", prompt)
-        self.assertIn("upper-lid crease count and height", prompt)
-        self.assertIn("visible double-eyelid band width", prompt)
+        self.assertIn("visible iris width", prompt)
+        self.assertIn("double-eyelid fold shape and visible width", prompt)
         self.assertIn("Eyelid method: Lift the upper lids to the captured lash line", prompt)
         self.assertNotIn("Analysis final eyelid state:", prompt)
         self.assertNotIn("blink endpoint, not independent smile-induced squint", prompt)
@@ -442,9 +443,9 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertIn("the same smile- or laughter-shaped final aperture", prompt)
         self.assertIn("matched natural periocular narrowing", prompt)
         self.assertIn("Lift the photograph-left upper lid farther than the photograph-right upper lid", prompt)
-        self.assertIn("Match the visible opening width and height", prompt)
-        self.assertIn("upper-lid crease count and height", prompt)
-        self.assertIn("visible double-eyelid band width", prompt)
+        self.assertIn("opening size and shape", prompt)
+        self.assertIn("visible iris width", prompt)
+        self.assertIn("double-eyelid fold shape and visible width", prompt)
         self.assertEqual(prompt.count("Shared eye-pair target for every named blink repair"), 1)
         self.assertNotIn("five bilateral matches", prompt)
         self.assertNotIn("FINAL VISUAL GATE", prompt)
@@ -469,7 +470,7 @@ class BlinkRepairStrategy(unittest.TestCase):
             prompt,
         )
         self.assertNotIn("photograph-right eye's finished open eyelid geometry", prompt)
-        self.assertIn("upper-lid crease count and height", prompt)
+        self.assertIn("visible iris width", prompt)
 
     def test_analyzer_treats_closed_half_closed_difference_as_capture_state(self):
         self.assertIn("mismatched transitional eyelid states", _BLINK_DETECTION_LUNA_SECTION)
@@ -534,7 +535,7 @@ class BlinkRepairStrategy(unittest.TestCase):
                     f"for the repaired {closed_side} eye",
                     prompt,
                 )
-                self.assertIn("visible double-eyelid band width", prompt)
+                self.assertIn("double-eyelid fold shape and visible width", prompt)
                 self.assertNotIn("preserve any genuine stable left/right crease-type difference", prompt.lower())
                 final_state = audit["resolved_features"][0]["final_state"]
                 self.assertEqual(final_state["closed_photograph_side"], closed_side)
@@ -1191,7 +1192,7 @@ Framing-size override requirement: This is a true wider-framing transformation. 
         self.assertIn("the same smile- or laughter-shaped final aperture", prompt)
         self.assertIn("matched natural periocular narrowing", prompt)
         self.assertIn("Shared eye-pair target for every named blink repair", prompt)
-        self.assertIn("upper-lid crease count and height", prompt)
+        self.assertIn("visible iris width", prompt)
         self.assertNotIn("Primary local correction", prompt)
         self.assertNotIn("may not independently narrow either eyelid after repair", prompt)
         self.assertNotIn("blink endpoint, not independent smile-induced squint", prompt)
