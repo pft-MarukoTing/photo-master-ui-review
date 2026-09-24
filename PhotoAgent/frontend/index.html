@@ -2518,10 +2518,7 @@
        overlays an actual photo and still needs the white-on-glass contrast
        trick; only the real batch-sidebar list rows (never a .history-cube)
        should get the darker, flat-background treatment below. */
-    body[data-theme="paper"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge,
-    body[data-theme="peach"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge,
-    body[data-theme="lilac"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge,
-    body[data-theme="caramel"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge {
+    body[data-theme-mode="light"] .batch-sidebar-item.analyzed:not(.history-cube) .rc-badge {
       background: rgba(var(--accent-rgb),.16);
       border-color: rgba(var(--accent-rgb),.4);
       /* color-mix, not var(--accent) directly -- some themes' accent (e.g.
@@ -2531,19 +2528,13 @@
       color: color-mix(in srgb, var(--accent) 55%, #000);
       text-shadow: none;
     }
-    body[data-theme="paper"] .batch-sidebar-item.done:not(.history-cube) .rc-badge,
-    body[data-theme="peach"] .batch-sidebar-item.done:not(.history-cube) .rc-badge,
-    body[data-theme="lilac"] .batch-sidebar-item.done:not(.history-cube) .rc-badge,
-    body[data-theme="caramel"] .batch-sidebar-item.done:not(.history-cube) .rc-badge {
+    body[data-theme-mode="light"] .batch-sidebar-item.done:not(.history-cube) .rc-badge {
       background: rgba(1,179,123,.16);
       border-color: rgba(1,179,123,.4);
       color: #045c3f;
       text-shadow: none;
     }
-    body[data-theme="paper"] .batch-sidebar-item.error:not(.history-cube) .rc-badge,
-    body[data-theme="peach"] .batch-sidebar-item.error:not(.history-cube) .rc-badge,
-    body[data-theme="lilac"] .batch-sidebar-item.error:not(.history-cube) .rc-badge,
-    body[data-theme="caramel"] .batch-sidebar-item.error:not(.history-cube) .rc-badge {
+    body[data-theme-mode="light"] .batch-sidebar-item.error:not(.history-cube) .rc-badge {
       background: rgba(220,60,60,.16);
       border-color: rgba(220,60,60,.4);
       color: #8a1a1a;
@@ -3277,11 +3268,13 @@
     }
     /* #header-settings-btn sits in the same row (right after #account-badge,
        the row's last child) -- same compact-pill override as #reset-btn
-       above, same reasons. #changelog-btn (right before it in the row)
-       shares the same override so both read as the same size/shape pill
-       instead of #changelog-btn falling back to a taller, square .btn-sm. */
+       above, same reasons. #changelog-btn (right before it in the row) and
+       #theme-toggle-btn (last in the row, beside #report-btn-spacer) share
+       the same override so all three read as the same size/shape pill
+       instead of falling back to a taller, square .btn-sm. */
     #header-settings-btn.btn,
-    #changelog-btn.btn {
+    #changelog-btn.btn,
+    #theme-toggle-btn.btn {
       height: 32px;
       padding: 0 14px;
       gap: 6px;
@@ -4207,27 +4200,49 @@
   // applies on the very first frame -- without this, the body renders
   // attribute-less (default/purple) until app.js runs at the bottom of the
   // page, causing a purple-to-theme flash on every load. Fallback here must
-  // match applyTheme()/setupThemePicker() in app.js.
+  // match applyTheme()/setupThemeToggle() in app.js.
   (function () {
     try {
-      var THEME_KEYS = ["default", "ocean", "forest", "paper", "peach", "lilac", "caramel"];
+      // Only the themes #theme-toggle-btn can actually reach (THEME_CYCLE /
+      // THEME_LABELS, app.js) -- a key that app.js would reject has to be
+      // rejected here too, or a browser holding a since-hidden theme (peach,
+      // ocean, forest, paper) would get it painted for one frame and then
+      // replaced by caramel once app.js runs: the exact flash this script
+      // exists to prevent, just in the other direction.
+      var THEME_KEYS = ["default", "purple-light", "lilac-dark", "lilac", "caramel-dark", "caramel"];
+      // Mirrors THEME_MODE in app.js -- the light-only patches in styles.css
+      // key off body[data-theme-mode], so it has to be on the body from the
+      // first frame too, not just the palette itself.
+      var THEME_MODE = {
+        "default": "dark",
+        "purple-light": "light",
+        "lilac-dark": "dark",
+        "lilac": "light",
+        "caramel-dark": "dark",
+        "caramel": "light"
+      };
       var THEME_SCROLLBAR_RGB = {
         "default": "147,51,234",
-        "ocean": "14,165,194",
-        "forest": "16,185,129",
-        "paper": "29,78,216",
-        "peach": "207,81,69",
+        "purple-light": "124,58,237",
+        "lilac-dark": "201,103,162",
         "lilac": "136,71,136",
+        "caramel-dark": "241,170,66",
         "caramel": "185,81,27"
       };
-      var saved = localStorage.getItem("photomaster-theme");
+      // Read on its own so a blocked/throwing localStorage still leaves the
+      // default theme fully applied below -- that default is a LIGHT theme, so
+      // swallowing the whole block on throw would strand the page without its
+      // data-theme-mode and paint black shadows over white cards.
+      var saved = null;
+      try { saved = localStorage.getItem("photomaster-theme"); } catch (_) { /* storage may be blocked */ }
       var theme = THEME_KEYS.indexOf(saved) !== -1 ? saved : "caramel";
       document.documentElement.style.setProperty(
         "--scrollbar-accent-rgb",
         THEME_SCROLLBAR_RGB[theme]
       );
       if (theme !== "default") document.body.dataset.theme = theme;
-    } catch (_) { /* storage may be blocked */ }
+      document.body.dataset.themeMode = THEME_MODE[theme];
+    } catch (_) { /* never block first paint on a theming failure */ }
   })();
 </script>
 
@@ -4324,6 +4339,28 @@
           <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span id="account-badge-label"></span>
+      </button>
+      <!-- Cycles through the fixed theme list on every click (applyTheme's
+           caller in app.js just advances to the next entry) -- pulled out of
+           the two settings modals' #settings-modal-body/#ap-settings-modal-body
+           (used to be a 4-swatch grid picker there) since a single-purpose
+           toggle needs no modal detour, and it's reachable from every screen
+           this way instead of only the ones with a gear button open.
+           Deliberately last inside .header-actions, right before
+           #report-btn-spacer, so it renders immediately to that (visually
+           fixed) button's left; also excluded from setupCompactHeaderActions'
+           sweep into #header-actions-secondary (app.js) so that stays true on
+           narrow phones too, not just desktop. The swatch span's background
+           is repainted per theme by applyTheme, and so is the label -- this
+           button no longer opens a picker naming every option, so it names the
+           current theme itself instead. The markup below holds caramel's name
+           because caramel is the fallback both here and in applyTheme, so the
+           common first load needs no swap at all; a browser holding one of the
+           other five sees this text for the one frame before app.js runs,
+           exactly as the swatch class beside it already did. -->
+      <button id="theme-toggle-btn" class="btn btn-secondary btn-sm" type="button" title="點擊切換主題">
+        <span id="theme-toggle-swatch" class="theme-swatch theme-toggle-swatch theme-swatch-caramel" aria-hidden="true"></span>
+        <span class="btn-label">暖陽</span>
       </button>
       <!-- Invisible, non-interactive stand-in for #report-btn (a real
            position:fixed element living outside <header> -- see its own
@@ -6201,18 +6238,6 @@
       <button id="settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="settings-modal-body" class="settings-modal-body">
-    <div class="theme-picker" aria-label="主題配色">
-      <div class="theme-picker-heading">
-        <span class="option-pill-label">主題配色</span>
-        <span class="theme-picker-current" aria-live="polite">淺色・焦糖</span>
-      </div>
-      <div class="theme-options">
-        <button type="button" class="theme-option" data-theme="default" aria-pressed="false"><span class="theme-swatch theme-swatch-purple"></span><span>深色・紫</span></button>
-        <button type="button" class="theme-option" data-theme="peach" aria-pressed="false"><span class="theme-swatch theme-swatch-peach"></span><span>淺色・暖橘</span></button>
-        <button type="button" class="theme-option" data-theme="lilac" aria-pressed="false"><span class="theme-swatch theme-swatch-lilac"></span><span>淺色・紫丁香</span></button>
-        <button type="button" class="theme-option is-selected" data-theme="caramel" aria-pressed="true"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
-      </div>
-    </div>
     <div class="option-pill-group" id="image-run-count-wrap">
       <span class="option-pill-label">生成張數</span>
       <details class="ap-style-item" name="upload-option-picker" id="image-run-count-picker">
@@ -6431,7 +6456,7 @@
 <!-- Results/analysis-preview page settings overlay: opened by
      #header-settings-btn (see openContextSettingsModal/openApSettingsModal/
      closeApSettingsModal in app.js) -- same backdrop+box+close pattern as
-     #settings-modal above. App preferences ONLY now (主題配色/面板排列/
+     #settings-modal above. App preferences ONLY now (主題/面板排列/
      花費提示, plus 兩階段美化 reparented in by ensureTwoStageEditRowIn):
      every per-request picker this used to hold (分析引擎/美化引擎/長寬比/
      生成張數/人像設定) moved to #ap-case-settings-modal below, reached
@@ -6448,18 +6473,6 @@
       <button id="ap-settings-modal-close" class="error-modal-close" type="button" aria-label="關閉">×</button>
     </div>
     <div id="ap-settings-modal-body" class="settings-modal-body">
-    <div class="theme-picker" aria-label="主題配色">
-      <div class="theme-picker-heading">
-        <span class="option-pill-label">主題配色</span>
-        <span class="theme-picker-current" aria-live="polite">淺色・焦糖</span>
-      </div>
-      <div class="theme-options">
-        <button type="button" class="theme-option" data-theme="default" aria-pressed="false"><span class="theme-swatch theme-swatch-purple"></span><span>深色・紫</span></button>
-        <button type="button" class="theme-option" data-theme="peach" aria-pressed="false"><span class="theme-swatch theme-swatch-peach"></span><span>淺色・暖橘</span></button>
-        <button type="button" class="theme-option" data-theme="lilac" aria-pressed="false"><span class="theme-swatch theme-swatch-lilac"></span><span>淺色・紫丁香</span></button>
-        <button type="button" class="theme-option is-selected" data-theme="caramel" aria-pressed="true"><span class="theme-swatch theme-swatch-caramel"></span><span>淺色・焦糖</span></button>
-      </div>
-    </div>
     <!-- Only in this modal (analyze/results page) -- the layout it controls
          (修圖建議面板 beside vs. below the preview) only exists once analysis
          is showing, so it doesn't belong in the upload page's #settings-modal.
@@ -6505,7 +6518,7 @@
      next to 美化 in .ap-settings-run-row). Everything in here is a
      per-request value that gets stamped onto this case's next edit (see
      record_history's params, backend/services/account.py); everything that
-     is merely an app preference (主題配色/面板排列/花費提示/兩階段美化) stays
+     is merely an app preference (主題/面板排列/花費提示/兩階段美化) stays
      in #ap-settings-modal above. That split is the whole point of this
      modal: the settings a case runs with now sit on the same row as the
      button that runs them, one click away with their values in the trigger's

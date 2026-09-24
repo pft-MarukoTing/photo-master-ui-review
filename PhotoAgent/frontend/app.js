@@ -1144,15 +1144,17 @@
   // narrow viewport once #account-badge/#admin-reports-btn were also
   // showing. Move everything except #report-btn-spacer (the real
   // #report-btn stays fixed-position, tracking that spacer regardless of
-  // where its siblings go) down into #header-actions-secondary instead, so
-  // they can show their full label again -- and back into .header-actions
-  // once the viewport is wide enough to hold them there normally.
+  // where its siblings go) and #theme-toggle-btn (kept pinned directly to
+  // that spacer's left on every layout, not just desktop) down into
+  // #header-actions-secondary instead, so the rest can show their full
+  // label again -- and back into .header-actions once the viewport is wide
+  // enough to hold them there normally.
   function setupCompactHeaderActions() {
     const row = els.headerActions;
     const secondRow = els.headerActionsSecondary;
     const spacer = els.reportBtnSpacer;
     if (!row || !secondRow || !spacer) return;
-    const items = Array.from(row.children).filter((el) => el !== spacer);
+    const items = Array.from(row.children).filter((el) => el !== spacer && el !== els.themeToggleBtn);
     if (!items.length) return;
     const mql = window.matchMedia("(max-width: 900px)");
     const sync = () => {
@@ -9523,56 +9525,136 @@
     if (els.apCaseSettingsModal) els.apCaseSettingsModal.hidden = true;
   }
 
-  // Theme palette is global to both settings modals and persists per browser.
-  // Keeping the controls duplicated in the two modal bodies means the same
-  // setting is reachable from the upload and results contexts.
+  // Theme palette is global (#theme-toggle-btn, header) and persists per
+  // browser. THEME_CYCLE is the fixed click order, and these three objects are
+  // the single source of truth for what counts as a selectable theme: a key
+  // missing from THEME_LABELS is treated as invalid by applyTheme and falls
+  // back to caramel. ocean/forest/paper/peach keep their full body[data-theme]
+  // CSS (styles.css) but are deliberately absent here -- hiding a theme means
+  // dropping it from these lists, not deleting its stylesheet, so it can be
+  // brought back by re-adding the key alone. peach ("淺色・暖橘") is hidden as
+  // of this change; anyone who had it saved lands on caramel at next load.
+  //
+  // Each of the three families ships both a light and a dark palette, and
+  // THEME_CYCLE walks them in pairs (dark then light of one family, then the
+  // next family) so a single click is always the small step -- same hue, other
+  // brightness -- and every second click is the bigger one.
   const THEME_KEY = "photomaster-theme";
+  const THEME_CYCLE = [
+    "default", "purple-light",
+    "lilac-dark", "lilac",
+    "caramel-dark", "caramel",
+  ];
+  // The six names are independent rather than three family names under a
+  // 深色/淺色 prefix: the prefix scheme forced one noun to describe both halves
+  // of a family, and the two halves are not the same palette -- purple-light is
+  // violet+indigo where default is neon purple+hot pink, so "紫" was accurate
+  // for neither. Each name now answers only for its own accent pair:
+  //   極光  #A855F7 neon purple + #EC4899 hot pink, on near-black
+  //   鳶尾  #7C3AED violet + #4F46E5 indigo -- the iris flower's own two colors
+  //   夜霞  #C967A2 rose + #B788C8 light violet, floating on near-black
+  //   藕荷  #9C539C mauve + #C967A2 rose -- the traditional colour name for it
+  //   燼火  #F1AA42 gold + #D56723 orange, embers on near-black
+  //   暖陽  #D56723 orange + #F1AA42 gold, warm sun on cream
+  // No two share a character, on purpose: the old 紫 / 紫丁香 pair was the
+  // linguistic form of the same "these two look alike" complaint the colours
+  // themselves drew. Keep that rule when editing this map -- caramel's first
+  // name here was 蜜光, which collided with 極光 on 光 and had to be redone.
+  // Brightness is no longer spelled out either, so the word has to carry it
+  // (極光/夜霞/燼火 read dark, 鳶尾/藕荷/暖陽 read light) together with the
+  // swatch beside the label. 燼火 vs 暖陽 is the pair that leans on this
+  // hardest, since both are the same orange+gold: embers against sunlight.
+  // All six are two glyphs -- see the width lock in styles.css, which is
+  // measured off that fact.
   const THEME_LABELS = {
-    default: "深色・紫",
-    ocean: "深色・海洋",
-    forest: "深色・森林",
-    paper: "淺色・紙張",
-    peach: "淺色・暖橘",
-    lilac: "淺色・紫丁香",
-    caramel: "淺色・焦糖",
-    caramel: "淺色・焦糖",
+    default: "極光",
+    "purple-light": "鳶尾",
+    "lilac-dark": "夜霞",
+    lilac: "藕荷",
+    "caramel-dark": "燼火",
+    caramel: "暖陽",
+  };
+  const THEME_SWATCH_CLASS = {
+    default: "theme-swatch-purple",
+    "purple-light": "theme-swatch-purple-light",
+    "lilac-dark": "theme-swatch-lilac-dark",
+    lilac: "theme-swatch-lilac",
+    "caramel-dark": "theme-swatch-caramel-dark",
+    caramel: "theme-swatch-caramel",
+  };
+  // Drives body[data-theme-mode], which every light-only patch in styles.css
+  // keys off (see the note beside the palettes there) -- a theme added to the
+  // maps above but missing here would render with :root's dark-tuned black
+  // shadows over its light cards, so the two lists have to stay in step.
+  const THEME_MODE = {
+    default: "dark",
+    "purple-light": "light",
+    "lilac-dark": "dark",
+    lilac: "light",
+    "caramel-dark": "dark",
+    caramel: "light",
   };
   const THEME_SCROLLBAR_RGB = {
     default: "147,51,234",
+    "purple-light": "124,58,237",
     ocean: "14,165,194",
     forest: "16,185,129",
     paper: "29,78,216",
     peach: "207,81,69",
+    "lilac-dark": "201,103,162",
     lilac: "136,71,136",
+    "caramel-dark": "241,170,66",
     caramel: "185,81,27",
   };
   function applyTheme(theme, persist = true) {
     const selected = Object.prototype.hasOwnProperty.call(THEME_LABELS, theme) ? theme : "caramel";
     document.body.dataset.theme = selected;
     if (selected === "default") delete document.body.dataset.theme;
+    // Set even for dark themes (rather than only when light) so the attribute
+    // always states the answer -- "no attribute" would otherwise mean both
+    // "dark theme" and "applyTheme never ran".
+    document.body.dataset.themeMode = THEME_MODE[selected];
     document.documentElement.style.setProperty(
       "--scrollbar-accent-rgb",
       THEME_SCROLLBAR_RGB[selected]
     );
-    document.querySelectorAll(".theme-option").forEach((option) => {
-      const active = option.dataset.theme === selected;
-      option.classList.toggle("is-selected", active);
-      option.setAttribute("aria-pressed", String(active));
-    });
-    document.querySelectorAll(".theme-picker-current").forEach((label) => {
-      label.textContent = THEME_LABELS[selected];
-    });
+    if (els.themeToggleBtn) {
+      // The button's label IS the current theme's name -- the swatch says which
+      // color, the text says which of the six, and the pair needs no separate
+      // noun for "theme". All six names are two glyphs, but they are not all
+      // the same rendered width, so the label is still width-locked in CSS
+      // (#theme-toggle-btn .btn-label) to the widest: this button sits
+      // immediately left of #report-btn-spacer, and #report-btn is
+      // position:fixed off that spacer's measured position, so letting the
+      // label resize would shift the whole header -- and the fixed button with
+      // it -- on every click.
+      const label = els.themeToggleBtn.querySelector(".btn-label");
+      if (label) label.textContent = THEME_LABELS[selected];
+      // title no longer repeats the name now that it is visible; it carries the
+      // affordance the noun-label used to imply instead.
+      els.themeToggleBtn.setAttribute("aria-label", `主題：${THEME_LABELS[selected]}（點擊切換）`);
+      els.themeToggleBtn.title = "點擊切換主題";
+    }
+    const swatch = document.getElementById("theme-toggle-swatch");
+    if (swatch) {
+      Object.values(THEME_SWATCH_CLASS).forEach((cls) => swatch.classList.remove(cls));
+      swatch.classList.add(THEME_SWATCH_CLASS[selected]);
+    }
     if (persist) {
       try { localStorage.setItem(THEME_KEY, selected); } catch (_) { /* storage may be blocked */ }
     }
   }
-  function setupThemePicker() {
+  function setupThemeToggle() {
     let saved = "caramel";
     try { saved = localStorage.getItem(THEME_KEY) || "caramel"; } catch (_) { /* storage may be blocked */ }
     applyTheme(saved, false);
-    document.querySelectorAll(".theme-option").forEach((option) => {
-      option.addEventListener("click", () => applyTheme(option.dataset.theme));
-    });
+    if (els.themeToggleBtn) {
+      els.themeToggleBtn.addEventListener("click", () => {
+        const current = THEME_CYCLE.indexOf(document.body.dataset.theme || "default");
+        const next = THEME_CYCLE[(current + 1) % THEME_CYCLE.length];
+        applyTheme(next);
+      });
+    }
   }
 
   // #header-settings-btn (index.html) is the single, always-visible entry
@@ -12799,7 +12881,7 @@
   // dismissing that notice to reveal it again). Force-resolving it as a
   // cancel here is a no-op whenever it's already closed.
   document.addEventListener("photoagent:sectionchange", () => preflightCostModalHandlers?.cancel());
-  setupThemePicker();
+  setupThemeToggle();
   if (els.headerSettingsBtn) els.headerSettingsBtn.addEventListener("click", openContextSettingsModal);
   if (els.settingsModalClose) els.settingsModalClose.addEventListener("click", closeSettingsModal);
   if (els.settingsModal) {

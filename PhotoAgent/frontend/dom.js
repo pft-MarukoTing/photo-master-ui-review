@@ -80,6 +80,7 @@ window.PhotoAgentDom = (() => {
     headerActions: document.querySelector(".header-actions"),
     // Populated by setupCompactHeaderActions (app.js) on narrow phones only.
     headerActionsSecondary: document.querySelector("#header-actions-secondary"),
+    themeToggleBtn: document.querySelector("#theme-toggle-btn"),
     logoHomeBtn: document.querySelector("#logo-home-btn"),
     showPromptBtn: document.querySelector("#show-prompt-btn"),
     promptsModal: document.querySelector("#prompts-modal"),
