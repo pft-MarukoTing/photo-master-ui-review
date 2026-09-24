@@ -225,6 +225,152 @@ class SAM3Grounding(io.ComfyNode):
         return io.NodeOutput(comfy_masks, vis_tensor, boxes_json, scores_json)
 
 
+class SAM3GroundingDual(io.ComfyNode):
+    """
+    Text-based grounding detection using SAM3, sharing ONE image encoding
+    across two text prompts.
+
+    SAM3Grounding re-encodes the image (the expensive step, `set_image()`)
+    every time it is called. If you need to detect two different things on
+    the exact same image (e.g. "nail" and "finger" on the same hand crop),
+    calling SAM3Grounding twice pays for that encode twice even though the
+    image never changed. This node calls `set_image()` once, then
+    `set_text_prompt()` twice, reusing the cached image features for the
+    second prompt.
+
+    Simplified relative to SAM3Grounding: no box-prompt refinement (positive/
+    negative boxes). Use SAM3Grounding if you need that.
+    """
+
+    @classmethod
+    def define_schema(cls):
+        return io.Schema(
+            node_id="SAM3GroundingDual",
+            display_name="SAM3 Text Segmentation (Dual Prompt)",
+            category="SAM3/Grounding",
+            inputs=[
+                io.Custom("SAM3_MODEL_CONFIG").Input("sam3_model_config",
+                                              tooltip="SAM3 model config from LoadSAM3Model node"),
+                io.Image.Input("image",
+                               tooltip="Input image to perform segmentation on"),
+                io.String.Input("text_prompt_1", default="", multiline=False,
+                                tooltip="First text prompt to find (e.g. 'nail')"),
+                io.Float.Input("confidence_threshold_1", default=0.2, min=0.0, max=1.0, step=0.01,
+                               tooltip="Minimum confidence score to keep detections for text_prompt_1"),
+                io.Int.Input("max_detections_1", default=-1, min=-1, max=100, step=1, optional=True,
+                             tooltip="Maximum number of detections to return for text_prompt_1 (-1 for all)"),
+                io.String.Input("text_prompt_2", default="", multiline=False,
+                                tooltip="Second text prompt to find on the same image (e.g. 'finger')"),
+                io.Float.Input("confidence_threshold_2", default=0.2, min=0.0, max=1.0, step=0.01,
+                               tooltip="Minimum confidence score to keep detections for text_prompt_2"),
+                io.Int.Input("max_detections_2", default=-1, min=-1, max=100, step=1, optional=True,
+                             tooltip="Maximum number of detections to return for text_prompt_2 (-1 for all)"),
+            ],
+            outputs=[
+                io.Mask.Output(display_name="masks_1"),
+                io.Image.Output(display_name="visualization_1"),
+                io.String.Output(display_name="boxes_1"),
+                io.String.Output(display_name="scores_1"),
+                io.Mask.Output(display_name="masks_2"),
+                io.Image.Output(display_name="visualization_2"),
+                io.String.Output(display_name="boxes_2"),
+                io.String.Output(display_name="scores_2"),
+            ],
+        )
+
+    @staticmethod
+    def _extract_result(state, pil_image, img_w, img_h, max_detections):
+        """Same sort/truncate/format/visualization postprocessing as
+        SAM3Grounding._segment_grounding."""
+        import json
+
+        masks = state.get("masks", None)
+        boxes = state.get("boxes", None)
+        scores = state.get("scores", None)
+
+        if masks is None or len(masks) == 0:
+            empty_mask = torch.zeros(1, img_h, img_w)
+            return empty_mask, pil_to_comfy_image(pil_image), "[]", "[]"
+
+        if scores is not None and len(scores) > 0:
+            sorted_indices = torch.argsort(scores, descending=True)
+            masks = masks[sorted_indices]
+            boxes = boxes[sorted_indices] if boxes is not None else None
+            scores = scores[sorted_indices] if scores is not None else None
+
+        if max_detections > 0 and len(masks) > max_detections:
+            masks = masks[:max_detections]
+            boxes = boxes[:max_detections] if boxes is not None else None
+            scores = scores[:max_detections] if scores is not None else None
+
+        comfy_masks = masks_to_comfy_mask(masks)
+
+        vis_image = visualize_masks_on_image(pil_image, masks, boxes, scores, alpha=0.5)
+        vis_tensor = pil_to_comfy_image(vis_image)
+
+        boxes_list = tensor_to_list(boxes) if boxes is not None else []
+        scores_list = tensor_to_list(scores) if scores is not None else []
+        boxes_json = json.dumps(boxes_list, indent=2)
+        scores_json = json.dumps(scores_list, indent=2)
+        return comfy_masks, vis_tensor, boxes_json, scores_json
+
+    @classmethod
+    def execute(cls, sam3_model_config, image,
+                text_prompt_1, confidence_threshold_1=0.2, max_detections_1=-1,
+                text_prompt_2="", confidence_threshold_2=0.2, max_detections_2=-1):
+        """
+        Perform SAM3 grounding for two text prompts against a single image encoding.
+        """
+        from ._model_cache import get_or_build_model
+        import comfy.model_management
+
+        sam3_model = get_or_build_model(sam3_model_config)
+        comfy.model_management.load_models_gpu([sam3_model])
+
+        processor = sam3_model.processor
+        device = sam3_model.current_device
+
+        if hasattr(processor, 'sync_device_with_model'):
+            processor.sync_device_with_model()
+        elif hasattr(processor, 'device') and str(processor.device) != str(device):
+            processor.device = str(device)
+
+        log.info("Running dual text-based detection (shared image encoding)")
+        log.info(f"  Text prompt 1: '{text_prompt_1}' (threshold {confidence_threshold_1})")
+        log.info(f"  Text prompt 2: '{text_prompt_2}' (threshold {confidence_threshold_2})")
+
+        pil_image = comfy_image_to_pil(image)
+        img_w, img_h = pil_image.size
+        log.info(f"Image size: {pil_image.size}")
+
+        # Encode the image ONCE; both prompts reuse this via `state`.
+        processor.set_confidence_threshold(confidence_threshold_1)
+        state = processor.set_image(pil_image)
+
+        state = processor.set_text_prompt(text_prompt_1.strip(), state)
+        masks_1, vis_1, boxes_json_1, scores_json_1 = cls._extract_result(
+            state, pil_image, img_w, img_h, max_detections_1
+        )
+        log.info(f"Prompt 1 ('{text_prompt_1}'): {len(masks_1)} detections")
+
+        processor.set_confidence_threshold(confidence_threshold_2)
+        state = processor.set_text_prompt(text_prompt_2.strip(), state)
+        masks_2, vis_2, boxes_json_2, scores_json_2 = cls._extract_result(
+            state, pil_image, img_w, img_h, max_detections_2
+        )
+        log.info(f"Prompt 2 ('{text_prompt_2}'): {len(masks_2)} detections")
+
+        # Clean up state to free GPU memory
+        del state
+        gc.collect()
+        comfy.model_management.soft_empty_cache()
+
+        return io.NodeOutput(
+            masks_1, vis_1, boxes_json_1, scores_json_1,
+            masks_2, vis_2, boxes_json_2, scores_json_2,
+        )
+
+
 class SAM3CreateBox(io.ComfyNode):
     """
     Helper node to create a box prompt visually
@@ -862,6 +1008,7 @@ class SAM3MultipromptSegmentation(io.ComfyNode):
 # Register the nodes
 NODE_CLASS_MAPPINGS = {
     "SAM3Grounding": SAM3Grounding,
+    "SAM3GroundingDual": SAM3GroundingDual,
     "SAM3Segmentation": SAM3Segmentation,
     "SAM3MultipromptSegmentation": SAM3MultipromptSegmentation,
     "SAM3CreateBox": SAM3CreateBox,
@@ -872,6 +1019,7 @@ NODE_CLASS_MAPPINGS = {
 
 NODE_DISPLAY_NAME_MAPPINGS = {
     "SAM3Grounding": "SAM3 Text Segmentation",
+    "SAM3GroundingDual": "SAM3 Text Segmentation (Dual Prompt)",
     "SAM3Segmentation": "SAM3 Point Segmentation",
     "SAM3MultipromptSegmentation": "SAM3 Multiprompt Segmentation",
     "SAM3CreateBox": "SAM3 Create Box",
