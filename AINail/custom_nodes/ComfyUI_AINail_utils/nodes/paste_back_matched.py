@@ -5,6 +5,28 @@ from PIL import Image, ImageFilter
 
 from .paste_back import RESIZE_METHODS, dilate_mask
 
+# dilate_mask (torch max_pool2d) costs roughly H*W*kernel_size, so at the
+# 1024x1024 resolution nail_masks_1/nail_masks_2/finger_masks always come in
+# at, a single dilate_pixels=10 call takes ~470ms — the dominant cost of this
+# node. Benchmarked on a real 1024x1024 nail-shaped mask: computing dilate +
+# feather at this resolution instead, then upscaling straight to `size`
+# (scaling dilate_pixels/feather_pixels down by the same factor), gives a 23x
+# speedup with a mean abs mask difference of ~0.002 and >0.1 difference on
+# only ~0.8% of pixels, confined to the already-feathered edge band. Kept as
+# a hardcoded constant (not an input) since it must move together with the
+# scaled dilate/feather radii below, not be tuned independently.
+_MASK_COMPUTE_MAX_SIDE = 256
+
+
+def _resize_mask_to(mask, target_h, target_w):
+    """Lanczos-resize a [H, W] float mask tensor to an exact size."""
+    if mask.shape == (target_h, target_w):
+        return mask
+    arr = (mask.clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)
+    pil_mask = Image.fromarray(arr, mode="L").resize((target_w, target_h), Image.LANCZOS)
+    resized = np.array(pil_mask).astype(np.float32) / 255.0
+    return torch.from_numpy(resized).to(mask.device)
+
 
 def mask_iou_matrix(masks_a, masks_b, threshold=0.5):
     """Pairwise IoU matrix [N_a, N_b] between two [N, H, W] mask sets.
@@ -159,10 +181,13 @@ class PasteBackMatched:
          -> composite mask. Including the old (crop) nail mask ensures the
          full extent of the original nail is overwritten even when the new
          nail is smaller/shorter, instead of leaving a stale sliver of it.
-      5. Dilate, then feather the now-hard dilated edge with a Gaussian blur
-         (`feather_pixels`) so the blend doesn't show a hard seam. Undo
-         resize (generated image + mask -> hand square space), undo crop
-         padding, alpha-blend the patch onto the original image.
+      5. Downscale the composite mask to `_MASK_COMPUTE_MAX_SIDE` (scaling
+         dilate_pixels/feather_pixels down to match — dilation is the
+         dominant cost at full mask resolution), dilate, then feather the
+         now-hard dilated edge with a Gaussian blur so the blend doesn't show
+         a hard seam. Undo resize (generated image + mask -> hand square
+         space), undo crop padding, alpha-blend the patch onto the original
+         image.
 
     Inputs (all collected via INPUT_IS_LIST):
       original_image  : [1] single original photo
@@ -294,9 +319,23 @@ class PasteBackMatched:
                 hand_nail_masks_1[matched_i1], hand_nail_masks_2[matched_j2],
             ], dim=0).max(dim=0).values.float()
 
-            # Dilate composite mask, then soften its now-hard edge into a smooth ramp
-            composite_mask = dilate_mask(composite_mask, dilate_px)
-            composite_mask = feather_mask(composite_mask, feather_px)
+            # Dilate composite mask, then soften its now-hard edge into a smooth ramp.
+            # Do this at a small resolution (dilate_pixels/feather_pixels scaled down
+            # to match) instead of at full mask resolution — dilation's cost grows
+            # with resolution squared, so this is the dominant cost otherwise.
+            h_mask, w_mask = composite_mask.shape
+            compute_scale = _MASK_COMPUTE_MAX_SIDE / max(h_mask, w_mask)
+            if compute_scale < 1.0:
+                compute_h = max(1, round(h_mask * compute_scale))
+                compute_w = max(1, round(w_mask * compute_scale))
+                composite_mask = _resize_mask_to(composite_mask, compute_h, compute_w)
+                dilate_px_scaled = max(1, round(dilate_px * compute_scale)) if dilate_px > 0 else 0
+                feather_px_scaled = max(1, round(feather_px * compute_scale)) if feather_px > 0 else 0
+            else:
+                dilate_px_scaled = dilate_px
+                feather_px_scaled = feather_px
+            composite_mask = dilate_mask(composite_mask, dilate_px_scaled)
+            composite_mask = feather_mask(composite_mask, feather_px_scaled)
 
             # Undo resize — generated image -> hand square space [B, size, size, C]
             frames = []
@@ -311,10 +350,9 @@ class PasteBackMatched:
             patch = gen_square[:, pad_top:pad_top + ph, pad_left:pad_left + pw, :]
 
             # Undo resize — composite mask -> hand square space [size, size]
-            mask_np = (composite_mask.cpu().numpy() * 255).astype(np.uint8)
-            mask_pil = Image.fromarray(mask_np, mode='L')
-            mask_pil = mask_pil.resize((size, size), Image.LANCZOS)
-            mask_square = np.array(mask_pil).astype(np.float32) / 255.0
+            # (resizing directly from the small compute resolution, not back through
+            # the original mask resolution first)
+            mask_square = _resize_mask_to(composite_mask, size, size).cpu().numpy()
 
             # Extract mask patch from hand square (undo black padding) -> [ph, pw]
             mask_patch = mask_square[pad_top:pad_top + ph, pad_left:pad_left + pw]
