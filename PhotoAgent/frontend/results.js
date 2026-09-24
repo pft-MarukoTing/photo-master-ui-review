@@ -958,13 +958,117 @@ window.PhotoAgentResults = (() => {
     return qa.overall_status || "可展示";
   }
 
+  // A tag is normally just its label. The object form -- { label, onClick,
+  // className, title, controls } -- is for a pill that is also a control (the
+  // "個人化" pill in #recipe-tags, below): still a <span> so every
+  // .recipe-tags span rule and fitRecipeTagsRow's shrink loop apply to it
+  // unchanged, made operable via role/tabindex rather than by swapping in a
+  // <button> those rules miss. `title` is the hover tooltip that spells out
+  // what the pill does for anyone who reads the row before clicking it;
+  // `controls` names the panel it toggles, which also gets the pill an
+  // aria-expanded a screen reader can announce -- the visual cues that it is
+  // pressable (icon, solid border) say nothing to one.
   function renderTags(element, tags) {
     element.innerHTML = "";
-    tags.filter((tag) => typeof tag === "string" && tag.trim()).forEach((tag) => {
+    tags.forEach((tag) => {
+      const spec = typeof tag === "string" ? { label: tag } : (tag || {});
+      const label = typeof spec.label === "string" ? spec.label.trim() : "";
+      if (!label) return;
       const chip = document.createElement("span");
-      chip.textContent = tag.trim();
+      chip.textContent = label;
+      if (spec.className) chip.className = spec.className;
+      if (spec.title) chip.title = spec.title;
+      if (spec.onClick) {
+        chip.setAttribute("role", "button");
+        chip.setAttribute("tabindex", "0");
+        if (spec.controls) {
+          chip.setAttribute("aria-controls", spec.controls);
+          chip.setAttribute("aria-expanded", "false");
+        }
+        chip.addEventListener("click", spec.onClick);
+        chip.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          spec.onClick(event);
+        });
+      }
       element.appendChild(chip);
     });
+  }
+
+  // The 個人化需求 this run was actually submitted with. pipeline.py keeps the
+  // user's own wording as user_instruction.original_user_direction at the edit
+  // boundary; records made before that field existed only carry the reviewed
+  // (normalized) form, so fall back to it rather than dropping the pill for
+  // runs that genuinely had a request.
+  function getPersonalizationText(analysis) {
+    const instruction = (analysis && analysis.user_instruction) || {};
+    const text = instruction.original_user_direction || instruction.normalized_user_direction || "";
+    return typeof text === "string" ? text.trim() : "";
+  }
+
+  // #personalize-popover: the pill has no room for a whole sentence, so the
+  // request itself lives in a translucent panel floating over the photo.
+  // Dismissed by its X, by a click anywhere outside it, or by Escape -- that
+  // last one via app.js's single Escape chain (which also closes the
+  // fullscreen compare view), so a second document-level keydown listener
+  // here doesn't dismiss both at once. The pill is excluded from the outside
+  // check because mousedown lands before the pill's own click, which would
+  // otherwise close and immediately reopen the panel.
+  function handlePersonalizePopoverOutsideClick(event) {
+    if (els.personalizePopover && els.personalizePopover.contains(event.target)) return;
+    if (event.target.closest && event.target.closest(".recipe-tag-personalize")) return;
+    closePersonalizePopover();
+  }
+
+  // The panel is drawn as a speech bubble whose tail (styles.css:
+  // .personalize-popover::after) should point at the pill that opened it --
+  // but the pill's position moves with every re-render (the row is centred
+  // and its widths depend on how many style tags there are) and with every
+  // resize of #recipe-tags, so the tail's x is measured here and handed to
+  // CSS as --personalize-tail-x. Kept as an offset from the panel's own left
+  // edge, and clamped away from both ends so the tail can never hang off a
+  // rounded corner with nothing behind its root.
+  const PERSONALIZE_TAIL_EDGE_INSET = 18;
+  let personalizeAnchor = null;
+
+  function positionPersonalizeTail() {
+    const panel = els.personalizePopover;
+    if (!panel || panel.hidden || !personalizeAnchor || !personalizeAnchor.isConnected) return;
+    const panelRect = panel.getBoundingClientRect();
+    if (!panelRect.width) return;
+    const anchorRect = personalizeAnchor.getBoundingClientRect();
+    const anchorCenter = anchorRect.left + anchorRect.width / 2 - panelRect.left;
+    const min = PERSONALIZE_TAIL_EDGE_INSET;
+    const max = Math.max(min, panelRect.width - PERSONALIZE_TAIL_EDGE_INSET);
+    panel.style.setProperty("--personalize-tail-x", `${Math.min(Math.max(anchorCenter, min), max)}px`);
+  }
+
+  function openPersonalizePopover(text, anchor) {
+    if (!els.personalizePopover) return;
+    if (els.personalizePopoverText) els.personalizePopoverText.textContent = text;
+    personalizeAnchor = anchor || null;
+    if (personalizeAnchor) personalizeAnchor.setAttribute("aria-expanded", "true");
+    els.personalizePopover.hidden = false;
+    // After unhiding, so the panel actually has a box to measure against.
+    positionPersonalizeTail();
+    document.addEventListener("mousedown", handlePersonalizePopoverOutsideClick);
+  }
+
+  function closePersonalizePopover() {
+    if (!els.personalizePopover || els.personalizePopover.hidden) return;
+    els.personalizePopover.hidden = true;
+    if (personalizeAnchor) personalizeAnchor.setAttribute("aria-expanded", "false");
+    personalizeAnchor = null;
+    // Drop the measured tail x with it: the next open belongs to a different
+    // row (or a different record), and a stale inline value would win over
+    // the CSS fallback if that open can't measure its own pill.
+    els.personalizePopover.style.removeProperty("--personalize-tail-x");
+    document.removeEventListener("mousedown", handlePersonalizePopoverOutsideClick);
+  }
+
+  if (els.personalizePopoverClose) {
+    els.personalizePopoverClose.addEventListener("click", closePersonalizePopover);
   }
 
   // #recipe-tags stays on one row (styles.css: flex-wrap:nowrap) no matter
@@ -996,7 +1100,13 @@ window.PhotoAgentResults = (() => {
   // rotating a phone, or #compare-fullscreen-btn's toggle (app.js) all change
   // how much room the row actually has, independent of any fresh render.
   if (els.recipeTags && typeof ResizeObserver !== "undefined") {
-    new ResizeObserver(() => fitRecipeTagsRow(els.recipeTags)).observe(els.recipeTags);
+    new ResizeObserver(() => {
+      fitRecipeTagsRow(els.recipeTags);
+      // Same trigger list moves the 個人化 pill under an open bubble, so the
+      // tail has to follow it -- after the re-fit, whose font-size changes
+      // are themselves part of where the pill ends up.
+      positionPersonalizeTail();
+    }).observe(els.recipeTags);
   }
 
   function buildPhotoContentSummary(analysis) {
@@ -2521,6 +2631,10 @@ window.PhotoAgentResults = (() => {
   // reset to showing the result each time a (re)render brings in a fresh
   // image, so switching photos/runs doesn't leave a stale "original" view up.
   function setCompareView(showGenerated) {
+    // #recipe-tags (and with it the 個人化 pill this panel belongs to) is
+    // hidden while the Original is showing -- leave the panel up and it
+    // floats over the photo with nothing that opened it in sight.
+    if (!showGenerated) closePersonalizePopover();
     if (els.compareCard) els.compareCard.classList.toggle("showing-generated", showGenerated);
     const label = showGenerated ? "查看原始照片" : "查看輸出結果";
     if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
@@ -2583,8 +2697,34 @@ window.PhotoAgentResults = (() => {
     }
     els.modelName.textContent = pending ? "" : (data.model || imageModel);
     if (els.recipeTags) {
+      // A fresh render means a different run/record -- whatever request the
+      // panel was quoting is no longer the one on screen.
+      closePersonalizePopover();
+      const personalization = getPersonalizationText(analysis);
       renderTags(els.recipeTags, [
-        ...buildStyleOptionTagLabels(analysis.style_options),
+        // One chip for the whole read-out, slash-separated, rather than one
+        // per pick: they're a single sentence about this run ("this is the
+        // 俯拍 / 夜色 / 遠景 version"), and as separate chips they read as a
+        // set of separate somethings sitting next to the row's one real
+        // button. Joining them also stops the gaps and each chip's own
+        // padding from multiplying with the number of picks.
+        buildStyleOptionTagLabels(analysis.style_options).join(" / "),
+        personalization
+          ? {
+              label: "個人化",
+              className: "recipe-tag-personalize",
+              title: "點一下看這次填寫的個人化需求",
+              controls: "personalize-popover",
+              // event.currentTarget is the pill itself on both paths into
+              // this handler (renderTags binds the click on the chip and
+              // re-dispatches Enter/Space through the same call) -- that's
+              // what the bubble's tail is aimed at.
+              onClick: (event) => {
+                if (els.personalizePopover && !els.personalizePopover.hidden) closePersonalizePopover();
+                else openPersonalizePopover(personalization, event.currentTarget);
+              }
+            }
+          : "",
         debugUiActive ? `${buildAspectRatioTagLabel(analysis)}${ratioIsPreview ? "（預覽）" : ""}` : ""
       ]);
       fitRecipeTagsRow(els.recipeTags);
@@ -2879,6 +3019,7 @@ window.PhotoAgentResults = (() => {
   return {
     renderResult, renderAnalysisPreview, refreshRecipeList,
     syncStylePicks, clearStylePick, setCompareView, renderTags,
+    closePersonalizePopover,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,

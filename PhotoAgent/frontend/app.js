@@ -42,7 +42,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -13023,7 +13023,11 @@
     if (els.changelogModal && !els.changelogModal.hidden) closeChangelogModal();
     if (els.versionStripPreviewModal && !els.versionStripPreviewModal.hidden) closeVersionStripPreviewModal();
     if (els.apStyleModal && !els.apStyleModal.hidden) closeStyleModal();
-    if (isCompareFullscreen()) closeCompareFullscreen();
+    // Ahead of closeCompareFullscreen: the 個人化 panel floats inside the
+    // compare card, so it's the innermost thing Escape should dismiss --
+    // otherwise one press would close it and the fullscreen view together.
+    if (els.personalizePopover && !els.personalizePopover.hidden) closePersonalizePopover();
+    else if (isCompareFullscreen()) closeCompareFullscreen();
     if (els.batchSidebar && els.batchSidebar.classList.contains("drawer-open")) closeBatchDrawer();
     if (els.historyDrawer && els.historyDrawer.classList.contains("drawer-open")) closeHistoryDrawer();
     if (els.reportsDrawer && els.reportsDrawer.classList.contains("drawer-open")) closeReportsDrawer();

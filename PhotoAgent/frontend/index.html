@@ -5500,6 +5500,23 @@
                    populated with non-default picks (renderResult), and only
                    visible while showing the generated image, not Original. -->
               <div id="recipe-tags" class="recipe-tags"></div>
+              <!-- Opened by the "個人化" pill inside #recipe-tags above (only
+                   rendered when this run actually carried a 個人化需求) --
+                   a translucent panel floating over the photo that quotes
+                   that request verbatim, since the pill itself has no room
+                   for it. Closed by its own X, an outside click, Escape, or
+                   any re-render / Before-After switch (see results.js). -->
+              <div id="personalize-popover" class="personalize-popover" role="dialog" aria-label="個人化需求" hidden>
+                <div class="personalize-popover-head">
+                  <span class="personalize-popover-title">個人化需求</span>
+                  <button id="personalize-popover-close" class="personalize-popover-close" type="button" aria-label="關閉">
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                    </svg>
+                  </button>
+                </div>
+                <p id="personalize-popover-text" class="personalize-popover-text"></p>
+              </div>
               <!-- Colour key + numeric coords for #analysis-boxes above.
                    Bottom-right so it doesn't sit on .recipe-tags. -->
               <div id="analysis-boxes-legend" class="analysis-boxes-legend" hidden></div>

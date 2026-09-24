@@ -4198,10 +4198,15 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 
 /* Recipe tags: which non-default pose/angle/lighting/framing-size picks were
    actually applied to this RUN -- describes the GENERATED result, so hidden
-   while viewing Original. Floats centered over the bottom of the photo
-   itself (like .canvas-btn above) -- a near-opaque dark purple fill keeps it
-   legible over any photo, with a dashed accent border (echoing
-   .compare-card's own dashed frame) instead of a brighter gradient wash. */
+   while viewing Original. Floats at the bottom of the photo frame (like
+   .canvas-btn above; the photo is contained, not cropped, so on a portrait
+   shot this lands on the card's background instead of on the image),
+   split into two jobs by side: the picks read out on the
+   left, and on the right the single thing in this row anyone can press,
+   .recipe-tag-personalize below. They used to be one undifferentiated line of
+   identical pills, which made the pressable one findable only by noticing its
+   border was solid where the others were dashed. Position now carries that
+   distinction before any styling does. */
 .recipe-tags {
   position: absolute;
   left: 10px;
@@ -4209,25 +4214,44 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   bottom: 10px;
   z-index: 4;
   display: flex;
+  align-items: center;
   /* Always one row -- a wide/narrow photo can leave little room for several
-     tags, so each pill shrinks (and truncates its own text) rather than
+     tags, so each label shrinks (and truncates its own text) rather than
      wrapping onto a second line, which would eat into the photo above it. */
   flex-wrap: nowrap;
-  justify-content: center;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 6px;
 }
+/* Left-alignment only earns its keep as one half of the left/right split --
+   with no button on the right, a lone label hanging off the left edge just
+   looks stranded, so the row falls back to centering itself. */
+.recipe-tags:not(:has(.recipe-tag-personalize)) { justify-content: center; }
 .compare-card:not(.showing-generated) .recipe-tags { display: none; }
+/* The read-out half: quiet labels marked as one set by a dashed rule under
+   the text. None of the pill chrome they used to wear (no border, no shadow,
+   no 999px) -- that chrome is exactly what made them look pressable, and the
+   row has a real button in it now to be confused with.
+   What they can't do is sit as bare text: the photo is object-fit:contain,
+   so on a portrait shot this row lands on the card's own background rather
+   than on imagery, and there is no one text colour that survives both. So
+   each label carries the same faint --glass-rgb wash the rest of this page's
+   float-over-imagery chrome uses (.page-scroll-hint, .personalize-popover),
+   thin enough to read as a tint rather than a chip, which gives var(--text-2)
+   a surface that tracks the theme whatever is behind it. The rule is drawn
+   with text-decoration, not border-bottom, so it stays under the text instead
+   of turning into the wash's bottom edge. */
 .recipe-tags span {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
   flex: 0 1 auto;
-  padding: 5px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 22%, var(--card));
-  border: 1px dashed rgba(var(--accent-rgb),.55);
-  color: var(--text);
+  padding: 3px 8px 4px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--glass-rgb),.42);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  color: var(--text-2);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -4235,15 +4259,315 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   text-overflow: ellipsis;
   text-align: center;
   letter-spacing: -.1px;
-  box-shadow: 0 6px 16px rgba(0,0,0,.3);
+  text-decoration: underline dashed color-mix(in srgb, currentColor 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
-/* Same flat-black-shadow-on-light-card issue as --shadow-lg/--shadow-btn
-   (see their :root comment) -- retint per light theme instead of leaving
-   this one black too. Targets .recipe-tags span, not .recipe-tags itself --
-   the box-shadow being retinted lives on each pill, not the flex container
-   wrapping them. */
-body[data-theme-mode="light"] .recipe-tags span {
-  box-shadow: 0 6px 16px rgba(var(--on-surface-rgb),.12);
+/* Without blur the wash has to carry the separation on its own. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .recipe-tags span { background: rgba(var(--glass-rgb),.78); }
+}
+
+/* The one thing in that row anyone can press: "個人化" opens
+   #personalize-popover with the 個人化需求 this run was submitted with. Now
+   that its neighbours have given up their pill chrome, it takes the opposite
+   treatment of the pair -- a filled, shadowed, rounded button against their
+   bare underlined text -- so it reads as a control at a glance instead of
+   asking anyone to compare border styles.
+
+   order/margin-left push it to the far right whatever else the row holds
+   (the debug ratio tag renders after it, and belongs with the read-out half
+   on the left), and auto on a nowrap row is also what keeps the gap between
+   the two halves from collapsing as the labels shrink.
+
+   --accent-pale-color is the one accent-family token that is light in every
+   theme, so a fixed near-black label sits on it safely everywhere -- unlike
+   var(--text), which would invert to white on the light palettes and vanish
+   into a pale fill. No text-shadow here: this label is on its own solid fill,
+   not on the photo. */
+.recipe-tags span.recipe-tag-personalize {
+  order: 1;
+  margin-left: auto;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 999px;
+  /* Tinted glass rather than a solid fill, so the photo carries on through it
+     like it does through every other float-over-imagery surface here. It can
+     afford much less transparency than those, though: this one has a label to
+     keep legible AND is the row's only control, so it has to stay the most
+     solid thing in it. Blurred for the same reason .personalize-popover is --
+     a thin tint over a busy photo shows through as texture unless what's
+     behind it is flattened first. */
+  background: color-mix(in srgb, var(--accent-pale-color) 70%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  color: #16151a;
+  text-shadow: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  cursor: pointer;
+  transition: filter .2s, box-shadow .2s, transform .2s;
+}
+.recipe-tags span.recipe-tag-personalize:hover {
+  /* Brightness rather than another color: --accent-pale-color is a different
+     hue per theme, and there's no paler token above it to step up to. */
+  filter: brightness(1.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,.42);
+  transform: translateY(-1px);
+}
+.recipe-tags span.recipe-tag-personalize:active { transform: scale(.96); }
+/* Without blur the tint has to hold the label on its own. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .recipe-tags span.recipe-tag-personalize { background: var(--accent-pale-color); }
+}
+/* Flat black under a pale fill on a pale card reads as dirt, not lift. */
+body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize {
+  box-shadow: 0 3px 10px rgba(var(--on-surface-rgb),.16);
+}
+body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize:hover {
+  box-shadow: 0 5px 14px rgba(var(--on-surface-rgb),.22);
+}
+.recipe-tags span.recipe-tag-personalize:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb),.9);
+  outline-offset: 2px;
+}
+/* ...and the glyph that says what pressing it gets you. It's the same speech
+   bubble the button opens -- tail down on the right, matching
+   .personalize-popover::after -- rather than a generic "info" marker, and it
+   still reads at the 8px fitRecipeTagsRow shrinks this row to on a phone,
+   where no hover state exists to explain anything.
+   Sized in em so it shrinks in step with the label through that same loop,
+   and drawn as a mask over currentColor so it stays whatever the label is
+   without a fill baked into the SVG. */
+.recipe-tags span.recipe-tag-personalize::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: .35em;
+  background-color: currentColor;
+  mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M21%204H3v12h10l5%204v-4h3z'/%3E%3C/svg%3E");
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%3E%3Cpath%20d='M21%204H3v12h10l5%204v-4h3z'/%3E%3C/svg%3E");
+  mask-size: contain;
+  -webkit-mask-size: contain;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+  mask-position: center;
+  -webkit-mask-position: center;
+  opacity: .85;
+}
+
+/* The panel that pill opens -- the request itself, quoted in full, shaped as
+   a speech bubble (rounded body + a tail below it) pointing down at the
+   個人化 pill that opened it, floating over the photo just above
+   .recipe-tags (whose row owns the bottom ~10px plus its own height, hence
+   this one's bottom offset). Frosted glass on --glass-rgb, the token the
+   app's other text-carrying float-over-imagery chrome uses (.page-scroll-hint;
+   .canvas-btn sits at .3 because an icon can ride on blur alone, text can't),
+   so the tone flips with the theme instead of going near-invisible on the
+   light palettes.
+
+   No 1px outline, unlike the rest of that chrome: an outline would have to
+   trace the tail too, and a bordered tail can only be faked by stacking two
+   opaque triangles -- which a translucent glass panel can't supply a fill
+   color for. The shadow does the separating work the border did instead.
+
+   The fill sits at .52, well below the .82 the other text-carrying chrome
+   uses, so the photo reads clearly through the bubble. Past roughly this
+   point the tint stops being what makes the quote legible and the blur is,
+   hence blur(32px) here against that chrome's 18px -- a busy photo behind a
+   thin tint still shows through as texture unless it's blurred flat first.
+   The tail below repeats BOTH values exactly: any mismatch shows as a seam. */
+.personalize-popover {
+  position: absolute;
+  /* Pinned to the same right edge as the button that opens it (.recipe-tags'
+     own inset), not centered: its tail points at that button, and a centered
+     bubble would leave the tail clamped out at its own corner reaching for
+     something further right. */
+  right: 10px;
+  bottom: 54px;
+  z-index: 6;
+  width: min(360px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(var(--glass-rgb),.52);
+  backdrop-filter: blur(32px) saturate(1.4);
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+/* The bubble's tail. Sits entirely BELOW the body (top:100%, no overlap) and
+   repeats its exact fill: two translucent layers overlapping would darken the
+   seam into a visible line right where the two are meant to read as one
+   shape. Its tip is placed at --personalize-tail-x -- the 個人化 pill's own
+   center, measured and set by positionPersonalizeTail (results.js), clamped
+   there so the tail can't slide off the body's rounded ends -- hence the
+   translateX matching the tip's offset inside the clip path. This is also why
+   the panel above must not set `overflow`: it would crop the tail away. */
+.personalize-popover::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  /* Fallback only (JS sets the var before the panel is ever shown): the
+     button's own end of the row, since both are pinned to the same edge. */
+  left: var(--personalize-tail-x, calc(100% - 40px));
+  width: 22px;
+  height: 13px;
+  transform: translateX(-16px);
+  background: rgba(var(--glass-rgb),.52);
+  backdrop-filter: blur(32px) saturate(1.4);
+  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  clip-path: polygon(0 0, 100% 0, 16px 100%);
+}
+/* display:flex above would otherwise beat the hidden attribute. */
+.personalize-popover[hidden] { display: none; }
+/* Belt-and-braces alongside setCompareView's own close (results.js): this
+   panel describes the generated result, same as the row that opens it. */
+.compare-card:not(.showing-generated) .personalize-popover { display: none; }
+.personalize-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.personalize-popover-title {
+  /* A step below the quote below it -- this is the label, the request is the
+     content -- but not so small the pair stops reading as one block. */
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: var(--text-2);
+}
+.personalize-popover-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgba(var(--on-surface-rgb),.16);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: background .2s, border-color .2s, color .2s;
+}
+.personalize-popover-close:hover {
+  background: rgba(var(--accent-rgb),.28);
+  border-color: rgba(var(--accent-rgb),.55);
+  color: var(--text);
+}
+.personalize-popover-text {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  /* The scroll cap lives here rather than on the bubble: `overflow` up there
+     would crop the ::after tail off. A long request scrolls inside the quote
+     instead of growing the bubble over the whole photo. Raised alongside the
+     font-size above so the cap still lands on a whole number of lines (9 at
+     15px/1.6) rather than slicing one in half. */
+  max-height: 216px;
+  overflow: auto;
+  /* The user's own wording, shown verbatim -- keep their line breaks, and
+     let a long unbroken run wrap instead of widening the panel. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text);
+}
+/* --shadow-md is one of the tokens :root leaves tuned for dark, so it needs
+   the usual retint on a light surface. */
+body[data-theme-mode="light"] .personalize-popover {
+  box-shadow: 0 12px 32px rgba(var(--on-surface-rgb),.14);
+}
+/* ...and the same asymmetry one step further, this time on the glass itself.
+   A translucent panel reads as whatever its backdrop averages out to, and
+   that is the whole effect on the dark themes: a photo averages to something
+   mid-tone, which under a dark wash is exactly the "dark glass" it should
+   be. The light themes then ask the same mid-tone to pass for one of the
+   near-white surfaces surrounding it, and a mid-tone that isn't white just
+   reads as gray -- no amount of brightness() on the backdrop closes that gap,
+   because the thing being brightened still averages far below the card tone
+   the eye is comparing it against.
+
+   So the light palettes trade the see-through for the surface the bubble's
+   own neighbours are made of. Plain white was the wrong destination: the
+   only other thing floating on this photo is the .recipe-tags row 40px
+   below, and those pills are an accent wash over --card -- a white slab
+   beside them reads as a foreign object, not as the panel that row opened.
+   What makes the dark version read as glass is not its alpha but that the
+   photo's VARIATION survives it: a .52 wash over an unfiltered backdrop
+   still passes a 0.04-0.45 spread, so the rail highlights and dark wood
+   stay visible as different tones through the panel. Transparency is that
+   spread. A version that keeps the photo's average but flattens its range
+   looks like a solid slab no matter how low its alpha goes -- which is what
+   crushing contrast to .25 did here: it bought the legibility floor by
+   erasing the very thing being asked for.
+
+   So this splits the two jobs. The floor comes from the wash's own alpha,
+   the one lever that lifts every tone equally and so costs no variation.
+   contrast() only takes the edge off the extremes (.55, not .25), and
+   brightness() lands the result in the upper half where near-black
+   var(--text) has room. That leaves roughly a 0.55-0.91 band -- floor high
+   enough for the quote against any photo including a near-black one, and a
+   0.36 spread, within a hair of the dark side's 0.42, so the same shapes
+   read through. saturate() goes up to put back the color the contrast step
+   drains, or the see-through turns milky.
+
+   The dark themes keep the .52 glass above untouched -- there the photo's
+   own mid-tone IS the right color, so it needs no help. Body and ::after
+   tail stay identical here too, or the seam between them shows. */
+body[data-theme-mode="light"] .personalize-popover,
+body[data-theme-mode="light"] .personalize-popover::after {
+  background: color-mix(in srgb, color-mix(in srgb, var(--accent) 30%, var(--card)) 45%, transparent);
+  backdrop-filter: blur(32px) saturate(1.5) contrast(.55) brightness(1.45);
+  -webkit-backdrop-filter: blur(32px) saturate(1.5) contrast(.55) brightness(1.45);
+}
+/* Without backdrop-filter there is no floor at all -- a .45 wash leaves over
+   half the quote's backdrop as raw photo. Every engine the app targets
+   supports it, so this is a safety net rather than a path anyone is expected
+   to take: give up the see-through entirely rather than the text. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  body[data-theme-mode="light"] .personalize-popover,
+  body[data-theme-mode="light"] .personalize-popover::after {
+    background: color-mix(in srgb, var(--accent) 16%, var(--card));
+  }
+}
+
+/* On a phone the bubble is sized against the photo, not the desktop's fixed
+   360px -- the width cap stopped binding long ago, so the desktop paddings
+   and the 216px of quote were eating most of a portrait frame. Everything
+   scales down together (the type by one step, not to the tag row's 8px
+   floor: this is body copy someone has to read, and it's the only thing in
+   the bubble). The scroll cap goes to a share of the viewport rather than a
+   fixed height so it stays a slice of the photo rather than most of a short
+   one, still landing on whole 13px/1.6 lines. The tail shrinks with it, and
+   its clip-path tip and translateX have to move together -- the tip's offset
+   inside the box IS what the transform cancels. */
+@media (max-width: 560px) {
+  .personalize-popover {
+    bottom: 48px;
+    width: calc(100% - 20px);
+    gap: 4px;
+    padding: 9px 11px;
+  }
+  .personalize-popover::after {
+    width: 18px;
+    height: 11px;
+    transform: translateX(-13px);
+    clip-path: polygon(0 0, 100% 0, 13px 100%);
+  }
+  .personalize-popover-title { font-size: 12px; }
+  .personalize-popover-text {
+    font-size: 13px;
+    max-height: min(146px, 26vh);
+  }
+  .personalize-popover-close {
+    width: 20px;
+    height: 20px;
+  }
 }
 
 /* Prev/next arrows for switching between this photo's N edit RUNs -- float
