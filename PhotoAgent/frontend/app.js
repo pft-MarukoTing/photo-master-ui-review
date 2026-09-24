@@ -85,6 +85,51 @@
     return { from, to };
   }
 
+  // The N images of the NEWEST edit in a run list -- the version-tagged tail
+  // for a list rebuilt from a case's history (fetchHistoryVersionRuns /
+  // refreshBatchVersionsAfterEdit), the whole list for an untagged one (a
+  // live revise). Everything that has always meant "this photo's current
+  // edit" -- the sidebar's 美化完成 (n/N) badge, 下載全部, the revise panel's
+  // pre-filled 生成張數 -- reads this instead of the full list, so growing
+  // a batch record's list into its whole history changes none of them.
+  function latestVersionRuns(runs) {
+    if (!Array.isArray(runs) || !runs.length) return [];
+    const latestId = runs[runs.length - 1].versionId;
+    return latestId ? runs.filter((r) => r.versionId === latestId) : runs;
+  }
+
+  // The run a batch record is currently showing (its mirror), or null.
+  function batchRecordShownRun(record) {
+    const runs = record && record.runs;
+    if (!Array.isArray(runs) || !runs.length || record.mirrorIndex == null) return null;
+    return runs[record.mirrorIndex] || null;
+  }
+
+  // The images of whichever edit a batch record is currently showing -- its
+  // version's slice of a version-tagged list, the whole list otherwise.
+  function batchRecordShownVersionRuns(record) {
+    const runs = (record && record.runs) || [];
+    const shown = batchRecordShownRun(record);
+    return shown && shown.versionId ? runs.filter((r) => r.versionId === shown.versionId) : runs;
+  }
+
+  // Is this batch record currently showing an image from an OLDER version
+  // than its newest one (stepped onto via the 美化紀錄 strip)? The sidebar
+  // keys off this to keep showing what the photo currently IS rather than
+  // whatever older version the main view happens to be on.
+  function batchRecordOnOlderVersion(record) {
+    const runs = record && record.runs;
+    const shown = batchRecordShownRun(record);
+    const latestId = shown ? runs[runs.length - 1].versionId : null;
+    return !!(shown && shown.versionId && latestId && shown.versionId !== latestId);
+  }
+
+  // An older version from before a compatibility_version bump can be looked
+  // at but not continued from -- continue_job rejects its analysis. The
+  // single-image flow's own counterpart is showArchivedAnalysisNotice, whose
+  // 重新分析/重新一鍵美化 actions drive the single flow and don't apply here.
+  const BATCH_ARCHIVED_VERSION_NOTICE = "這一組是用舊版分析產生的，無法以它繼續美化。請在「美化紀錄」切回最新一組後再美化。";
+
   // Shows/hides and enables/disables the arrows for whatever the current RUN
   // is -- called after every updateRunSwitcher and whenever the index changes.
   function updateRunSwitcherArrows() {
@@ -3195,8 +3240,11 @@
   // the cost estimate: the single-image flow's live pick by default; batch
   // passes the record's own (singleFlowState is null in batch mode, so
   // reading it there threw and 美化 did nothing).
+  // getBlockedNotice: optional -- returns a message when 美化 must not run at
+  // all right now (shown instead, panel stays open), null otherwise.
   function waitForInlineAnalysisAction(
-    getModelQuality = () => ({ model: singleFlowState.imageModel, quality: singleFlowState.imageQuality })
+    getModelQuality = () => ({ model: singleFlowState.imageModel, quality: singleFlowState.imageQuality }),
+    getBlockedNotice = () => null
   ) {
     return new Promise((resolve) => {
       clearInlineAnalysisWait();
@@ -3210,6 +3258,8 @@
       const myToken = historyViewToken;
       inlineAnalysisContinueHandler = async () => {
         if (historyViewToken !== myToken) { clearInlineAnalysisWait(); return; }
+        const blockedNotice = getBlockedNotice();
+        if (blockedNotice) { showNoticeModal(blockedNotice); return; }
         // Nothing to actually change vs. the existing result -- confirm the
         // user really wants to spend another edit call reproducing it rather
         // than silently blocking them, since re-running as-is (e.g. to redo
@@ -6241,7 +6291,10 @@
   // has none.
   function doneRunsForBatchRecord(record) {
     if (Array.isArray(record.runs) && record.runs.length) {
-      return record.runs.filter((run) => run.status === "done");
+      // Newest edit only -- an older version stepped onto via the 美化紀錄
+      // strip flips to "done" once loaded, and must not start riding along
+      // in 下載全部 just because the user happened to look at it.
+      return latestVersionRuns(record.runs).filter((run) => run.status === "done");
     }
     return (record.status === "done" && record.result) ? batchRecordRuns(record) : [];
   }
@@ -6333,10 +6386,14 @@
 
     const media = document.createElement("div");
     media.className = "rc-media";
+    // Newest edit only (see latestVersionRuns) -- both for the n/N badge
+    // below and for the thumbnail: stepping onto an older version in the
+    // 美化紀錄 strip changes the main view, not what this photo currently is.
+    const runs = latestVersionRuns(record.runs || []);
     const img = document.createElement("img");
-    img.src = record.imageUrl || record.previewUrl;
+    const latestDone = batchRecordOnOlderVersion(record) ? runs.find((x) => x.status === "done") : null;
+    img.src = (latestDone && latestDone.imageUrl) || record.imageUrl || record.previewUrl;
     media.appendChild(img);
-    const runs = record.runs || [];
     const runsRunning = runs.filter((x) => x.status === "processing").length;
     if (record.status === "analyzing" || record.status === "processing" || runsRunning) {
       const spinner = document.createElement("div");
@@ -10259,7 +10316,10 @@
   // over the following minutes and has no versions to compare, so it keeps
   // the arrows on their own rather than growing a strip that rearranges
   // itself while the user watches.
-  function renderVersionStrip(runs, currentIdx) {
+  // originThumbUrl: the 原圖 tile's image when the caller knows it better
+  // than the page-wide originalImgThumbUrl -- a batch record passes its own
+  // thumbnail, since that global tracks the single-image flow's photo.
+  function renderVersionStrip(runs, currentIdx, originThumbUrl) {
     if (!els.versionStrip || !els.versionStripTrack) return;
     if (!runs || runs.length <= 1 || !runs.some((r) => r.versionTotal)) {
       hideVersionStrip();
@@ -10290,7 +10350,7 @@
       // for a fresh upload, sourceThumbnailUrl when opened from history) and
       // survives version switching, since every version of a case shares one
       // original. The fallback covers a render that beats it being set.
-      originImg.src = originalImgThumbUrl || sourceThumbnailUrl(runs[0].jobId);
+      originImg.src = originThumbUrl || originalImgThumbUrl || sourceThumbnailUrl(runs[0].jobId);
       originImg.alt = "";
       originImg.loading = "lazy";
       originTile.append(originImg);
@@ -10491,7 +10551,7 @@
   // and the single-image results view; `onSelectDone(idx)` decides what
   // re-pointing to that run means for the caller (batch re-renders via
   // syncRecordMirror+showBatchDoneMain, single via showSingleResult).
-  function updateRunSwitcher(runs, currentIdx, onSelectDone) {
+  function updateRunSwitcher(runs, currentIdx, onSelectDone, { originThumbUrl } = {}) {
     if (runs.length <= 1) {
       resetRunSwitcher();
       return;
@@ -10504,7 +10564,7 @@
     // length of the whole list.
     updateRunProgressBar(runs);
     updateRunSwitcherArrows();
-    renderVersionStrip(runs, currentIdx);
+    renderVersionStrip(runs, currentIdx, originThumbUrl);
   }
 
   // Selecting an adjacent run re-points the record's mirror fields at it and
@@ -10521,11 +10581,77 @@
 
     const doneIdx = runs.findIndex((x) => x.status === "done");
     const current = (record.mirrorIndex != null && runs[record.mirrorIndex]) ? record.mirrorIndex : doneIdx;
-    updateRunSwitcher(runs, current, (idx) => {
+    const showing = runs[current];
+    updateRunSwitcher(runs, current, async (idx) => {
+      const run = runs[idx];
+      // Same lazy load as renderSingleRunSwitcher: a version-tagged list
+      // (refreshBatchVersionsAfterEdit) only fetched its newest version up
+      // front, so an older one's image/result has to be fetched on arrival.
+      if (run.status === "unloaded" && !(await loadHistoryRun(runs, run))) {
+        showNoticeModal(run.error || "無法取得這一版的結果。");
+        return;
+      }
+      // Superseded while loading -- a new revise replaced this record's list.
+      if (record.runs !== runs) return;
       record.mirrorIndex = idx;
       syncRecordMirror(record);
-      return showBatchDoneMain(record, settings);
-    });
+      // Same rule as renderSingleRunSwitcher: crossing into a different
+      // version points this record's revise settings at THAT version;
+      // stepping between two images of one version changes none of them and
+      // must not clobber picks the user has made in the panel meanwhile.
+      // Live batch records only -- a read-only historical record shown
+      // through showBatchDoneMain (viewHistoryRecord) has no revise to feed.
+      const versionChanged = !!run.versionId && (!showing || run.versionId !== showing.versionId)
+        && batchRecords.includes(record);
+      if (versionChanged) applyBatchVersionContext(record, run);
+      // forceReopen for the same reason renderSingleRunSwitcher passes it:
+      // with the revise panel already open, openInlineAnalysisForCurrentContext
+      // would otherwise no-op and leave the previous version's picks on screen
+      // beside this version's photo.
+      await showBatchDoneMain(record, settings, versionChanged);
+    }, { originThumbUrl: record.thumbUrl || record.previewUrl });
+  }
+
+  // Batch counterpart of applyHistoryVersionContext: points one batch
+  // record's per-image revise state -- the analysis a 美化 continues from,
+  // recipe/style picks, 補充指令, Body decision, model/quality, analysis
+  // model, aspect ratio, advanced options, single-pass edit -- at the version
+  // `run` belongs to, from that version's own recorded params. Writes only to
+  // this record (never singleFlowState, never another record), and only the
+  // fields startInlineBatchReview/editBatchItem read per image; preset,
+  // ai_photo_editing and run_qa stay batch-wide (batchSettings) as they
+  // always have been. The panel itself is repainted from these by the
+  // caller's forceReopen -> startInlineBatchReview.
+  function applyBatchVersionContext(record, run) {
+    if (!run || !run.result || !run.result.analysis) return;
+    const params = run.versionParams || {};
+    // Same fallbacks as applyHistoryVersionContext for an entry recorded
+    // before a given param existed, except that the batch's own current pick
+    // stands in where that function falls back to a hard-coded default.
+    const extraInfo = run.result["extra-info"] || {};
+    const { analysis: restoredAnalysis, selections } =
+      restoreReviseSelections(run.result.analysis, params.user_prompt, params.overwrite_prompt);
+    record.analysis = restoredAnalysis;
+    // A finished edit's own job carries the original's srcKeys forward, so
+    // /continue accepts it as the base for the next edit (see
+    // applyHistoryVersionContext's analyzeJobId). Unused on the AIPoC path,
+    // which resubmits record.file itself.
+    record.analyzeJobId = run.jobId;
+    record.options = selections.options;
+    record.recipeChecked = selections.recipeChecked;
+    record.userPrompt = selections.userPrompt;
+    record.overwritePrompt = selections.overwritePrompt;
+    record.bodyReshapeEnabled = selections.bodyReshapeEnabled;
+    // Per-person 人像修正 overrides aren't recorded per version -- the
+    // restored analysis's own issue states are the baseline, same as a
+    // history case in the single flow (lastSingleSelections has none there).
+    record.faceIssueOverrides = null;
+    record.imageModel = params.image_model || extraInfo.image_model || batchSettings.imageModel;
+    record.imageQuality = params.image_quality || extraInfo.image_quality || batchSettings.imageQuality;
+    record.analysisModel = params.analysis_model || extraInfo.analysis_model || batchSettings.analysisModel;
+    record.aspectRatio = params.aspect_ratio || batchSettings.aspectRatio;
+    record.advancedOptions = recordAdvancedOptions(null, restoredAnalysis);
+    record.singlePassEdit = resolvedSinglePassEdit(params.single_pass_edit, extraInfo.single_pass_edit);
   }
 
   // Single-image counterpart of renderRunSwitcher: reads/writes the
@@ -10669,13 +10795,22 @@
     // image was edited more than once. sourceUrl is buildImageFiles'
     // fallback for when there's no local File object (record.file) to read
     // straight from -- see fetchImageDownloadData.
-    lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, path: settings.path, runs: record.runs };
+    // Scoped to the version on screen, same as showSingleResult's
+    // versionRuns: once refreshBatchVersionsAfterEdit has grown record.runs
+    // into the photo's whole history, "下載全部" still means the N images of
+    // the one edit being looked at. An untagged (live) list is unaffected.
+    // sourceRun is what the per-image download/report fetches index by for a
+    // history entry (see fetchVersionRuns) -- undefined, as before, for a
+    // live run.
+    const shownRun = batchRecordShownRun(record);
+    const versionRuns = shownRun && shownRun.versionId ? batchRecordShownVersionRuns(record) : record.runs;
+    lastResult = { file: record.file, sourceUrl: record.previewUrl, resultText: record.result, jobId: record.jobId, runNumber: record.runNumber, sourceRun: shownRun && shownRun.versionId ? shownRun.sourceRun : undefined, path: settings.path, runs: versionRuns };
     // currentTokenUsage() reads currentBatchRecord/lastResult -- must run
     // after lastResult is (re)assigned above, since a historical AIPoC
     // record reached via viewHistoryRecord never sets currentBatchRecord,
     // leaving lastResult as the only correct source for this record's cost.
     updateCostBtn();
-    updateDownloadLinks(record.runs);
+    updateDownloadLinks(versionRuns);
     renderResult({
       data,
       analysis: record.result.analysis,
@@ -10769,7 +10904,12 @@
     // bulk #run-count in the sidebar only ever applies to a *first* continue,
     // so a revise needs its own visible/adjustable count, same as single-image.
     if (els.apRunCountWrap) els.apRunCountWrap.hidden = !isDebugUiActive;
-    if (els.apRunCountSelect) els.apRunCountSelect.value = String((record.runs || []).length || 1);
+    // The shown edit's own count (batchRecordShownVersionRuns), not the length
+    // of the whole 美化紀錄 list refreshBatchVersionsAfterEdit may have grown
+    // this into -- same "what it was configured with when it ran" rule as the
+    // rest of this panel, which applyBatchVersionContext points at whichever
+    // version is on screen.
+    if (els.apRunCountSelect) els.apRunCountSelect.value = String(batchRecordShownVersionRuns(record).length || 1);
     openInlineAnalysisPanel();
     // The "run with no changes just reproduces the same result" guard
     // (inlineReviseHasNoChanges) only makes sense when there's an existing
@@ -10784,7 +10924,15 @@
     }
     updateInlineAnalysisContinueBtnState();
 
-    const action = await waitForInlineAnalysisAction(() => effectiveModelQuality(record));
+    const action = await waitForInlineAnalysisAction(
+      () => effectiveModelQuality(record),
+      // Only for an OLDER version stepped onto via the 美化紀錄 strip -- the
+      // case this notice describes. A record's own current analysis keeps its
+      // old behaviour: an imported folder goes through /rerun, which has no
+      // compatibility gate, and /continue answers an outdated one itself.
+      () => (batchRecordOnOlderVersion(record) && record.analysis && !isCompatible(record.analysis)
+        ? BATCH_ARCHIVED_VERSION_NOTICE : null)
+    );
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Keep local review edits when the user closes the panel without
@@ -10850,6 +10998,65 @@
 
     const failed = newRuns.filter((run) => run.status === "error");
     if (failed.length) showError(failed[0].error || "重新處理失敗，請稍後再試。");
+
+    // Last, same position as finishSingleFlow's refreshVersionsAfterEdit:
+    // brings this photo's earlier edits back as the 美化紀錄 strip.
+    await refreshBatchVersionsAfterEdit(record);
+  }
+
+  // Batch counterpart of refreshVersionsAfterEdit. startInlineBatchReview
+  // leaves record.runs holding only the live runs it just built -- untagged,
+  // so the strip (renderVersionStrip only shows for a version-tagged list)
+  // never appeared for a batch photo however many times it was re-edited.
+  // Rebuilds the list from the photo's case history, exactly like the single
+  // flow, and bails without touching anything unless the case really has
+  // more than one version.
+  //
+  // Only the revise path calls this, not "Run all" (continueBatchRecords):
+  // a photo's first edit in a batch has one version by definition, so the
+  // lookup would come back with nothing to show for every photo in it.
+  async function refreshBatchVersionsAfterEdit(record) {
+    const live = Array.isArray(record.runs) && record.runs.length ? record.runs : null;
+    if (!live || live.some((r) => r.versionId)) return;
+    const user = getCurrentUser();
+    const mirrored = record.mirrorIndex != null ? live[record.mirrorIndex] : null;
+    const anchor = mirrored && mirrored.status === "done" ? mirrored : live.find((r) => r.status === "done");
+    if (!user || !anchor || !anchor.jobId) return;
+
+    const found = await findCaseForJob(user, anchor.jobId);
+    if (!found || found.shown.length < 2) return;
+    const { shown, latest } = found;
+    const path = batchSettings.path || "local";
+    const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || path);
+    const rebuilt = buildVersionRunList(shown, latestRuns, path);
+    // Superseded while fetching -- another revise of this same photo
+    // replaced the list this was computed against.
+    if (!rebuilt || record.runs !== live) return;
+
+    // A live batch run and its rebuilt entry are the same image when they
+    // share a job id -- editBatchItem submits one job per run, so the live
+    // run's own `run` (its position, 1..N) is not that job's RUN number and
+    // can't be compared against entry.sourceRun. Only when several live runs
+    // share one job (a combined multi-RUN job) does the RUN number decide.
+    const sameImage = (liveRun, entry) => {
+      if (!liveRun || liveRun.jobId !== entry.jobId) return false;
+      const siblings = live.filter((r) => r.jobId === liveRun.jobId).length;
+      const liveSourceRun = liveRun.sourceRun != null ? liveRun.sourceRun : liveRun.run;
+      return siblings === 1 || liveSourceRun === entry.sourceRun;
+    };
+    // Carry the just-finished runs' step timings across -- they exist only
+    // in memory, and the re-fetched entries came back without them.
+    rebuilt.forEach((entry) => {
+      const match = live.find((r) => sameImage(r, entry));
+      if (match && match.timings && match.timings.length) entry.timings = match.timings;
+    });
+    record.runs = rebuilt;
+    const anchorIdx = rebuilt.findIndex((entry) => sameImage(anchor, entry));
+    const latestIdx = rebuilt.findIndex((r) => r.versionId === latest.version_id);
+    record.mirrorIndex = anchorIdx >= 0 ? anchorIdx : (latestIdx >= 0 ? latestIdx : null);
+    syncRecordMirror(record);
+    updateBatchSidebarItem(record);
+    refreshIfSelected(record);
   }
 
   // Dispatches "檢視分析結果" to whichever flow is actually active: a single
