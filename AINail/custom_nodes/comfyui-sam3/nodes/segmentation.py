@@ -64,6 +64,12 @@ class SAM3Grounding(io.ComfyNode):
                                                      tooltip="Optional box prompts to exclude specific regions from detection. Connect from SAM3CombineBoxes node."),
                 io.Int.Input("max_detections", default=-1, min=-1, max=100, step=1, optional=True,
                              tooltip="Maximum number of detections to return (-1 for all)"),
+                io.Boolean.Input("compute_visualization", default=False, optional=True,
+                                  tooltip="Draw mask/box/score overlays for the visualization output. "
+                                          "This drawing step costs roughly as much as the detection itself, "
+                                          "so it's off by default -- ComfyUI computes every declared output "
+                                          "regardless of whether it's wired to anything downstream, so "
+                                          "leaving this on costs time even with visualization unconnected."),
             ],
             outputs=[
                 io.Mask.Output(display_name="masks"),
@@ -76,7 +82,7 @@ class SAM3Grounding(io.ComfyNode):
     @classmethod
     def execute(cls, sam3_model_config, image, confidence_threshold=0.2,
                 text_prompt="", positive_boxes=None, negative_boxes=None,
-                max_detections=-1):
+                max_detections=-1, compute_visualization=False):
         """
         Perform SAM3 grounding with text prompts
         """
@@ -110,14 +116,14 @@ class SAM3Grounding(io.ComfyNode):
 
         result = cls._segment_grounding(
             sam3_model, pil_image, img_w, img_h, confidence_threshold, text_prompt,
-            positive_boxes, negative_boxes, max_detections
+            positive_boxes, negative_boxes, max_detections, compute_visualization
         )
 
         return result
 
     @staticmethod
     def _segment_grounding(sam3_model, pil_image, img_w, img_h, confidence_threshold, text_prompt,
-                           positive_boxes, negative_boxes, max_detections):
+                           positive_boxes, negative_boxes, max_detections, compute_visualization):
         """
         Grounding mode - text-based detection with optional box refinement.
         """
@@ -167,11 +173,12 @@ class SAM3Grounding(io.ComfyNode):
             log.info(f"No detections found for prompt: '{text_prompt}' at threshold {confidence_threshold}")
             log.info("TIP: Try lowering the confidence_threshold or check if the object is in the image")
             empty_mask = torch.zeros(1, img_h, img_w)
+            empty_vis = pil_to_comfy_image(pil_image) if compute_visualization else torch.zeros(1, img_h, img_w, 3)
             # Clean up state
             del state
             gc.collect()
             comfy.model_management.soft_empty_cache()
-            return io.NodeOutput(empty_mask, pil_to_comfy_image(pil_image), "[]", "[]")
+            return io.NodeOutput(empty_mask, empty_vis, "[]", "[]")
 
         log.info(f"Found {len(masks)} detections above threshold {confidence_threshold}")
 
@@ -196,16 +203,19 @@ class SAM3Grounding(io.ComfyNode):
         # Convert masks to ComfyUI format
         comfy_masks = masks_to_comfy_mask(masks)
 
-        # Create visualization
-        log.info("Creating visualization...")
-        vis_image = visualize_masks_on_image(
-            pil_image,
-            masks,
-            boxes,
-            scores,
-            alpha=0.5
-        )
-        vis_tensor = pil_to_comfy_image(vis_image)
+        # Create visualization (skipped by default -- see compute_visualization tooltip)
+        if compute_visualization:
+            log.info("Creating visualization...")
+            vis_image = visualize_masks_on_image(
+                pil_image,
+                masks,
+                boxes,
+                scores,
+                alpha=0.5
+            )
+            vis_tensor = pil_to_comfy_image(vis_image)
+        else:
+            vis_tensor = torch.zeros(1, img_h, img_w, 3)
 
         # Convert boxes and scores to JSON strings for output
         boxes_list = tensor_to_list(boxes) if boxes is not None else []
@@ -265,6 +275,13 @@ class SAM3GroundingDual(io.ComfyNode):
                                tooltip="Minimum confidence score to keep detections for text_prompt_2"),
                 io.Int.Input("max_detections_2", default=-1, min=-1, max=100, step=1, optional=True,
                              tooltip="Maximum number of detections to return for text_prompt_2 (-1 for all)"),
+                io.Boolean.Input("compute_visualization", default=False, optional=True,
+                                  tooltip="Draw mask/box/score overlays for visualization_1/visualization_2. "
+                                          "This drawing step (per prompt) costs roughly as much as the actual "
+                                          "detection itself, so it's off by default -- ComfyUI computes every "
+                                          "declared output regardless of whether it's wired to anything "
+                                          "downstream, so leaving this on costs time even with the "
+                                          "visualization outputs unconnected."),
             ],
             outputs=[
                 io.Mask.Output(display_name="masks_1"),
@@ -279,9 +296,12 @@ class SAM3GroundingDual(io.ComfyNode):
         )
 
     @staticmethod
-    def _extract_result(state, pil_image, img_w, img_h, max_detections):
+    def _extract_result(state, pil_image, img_w, img_h, max_detections, compute_visualization):
         """Same sort/truncate/format/visualization postprocessing as
-        SAM3Grounding._segment_grounding."""
+        SAM3Grounding._segment_grounding. The visualization draw step is
+        skipped entirely when `compute_visualization` is False, since it
+        costs roughly as much as the detection itself and ComfyUI always
+        computes every declared output whether or not it's wired downstream."""
         import json
 
         masks = state.get("masks", None)
@@ -290,7 +310,11 @@ class SAM3GroundingDual(io.ComfyNode):
 
         if masks is None or len(masks) == 0:
             empty_mask = torch.zeros(1, img_h, img_w)
-            return empty_mask, pil_to_comfy_image(pil_image), "[]", "[]"
+            if compute_visualization:
+                empty_vis = pil_to_comfy_image(pil_image)
+            else:
+                empty_vis = torch.zeros(1, img_h, img_w, 3)
+            return empty_mask, empty_vis, "[]", "[]"
 
         if scores is not None and len(scores) > 0:
             sorted_indices = torch.argsort(scores, descending=True)
@@ -305,8 +329,11 @@ class SAM3GroundingDual(io.ComfyNode):
 
         comfy_masks = masks_to_comfy_mask(masks)
 
-        vis_image = visualize_masks_on_image(pil_image, masks, boxes, scores, alpha=0.5)
-        vis_tensor = pil_to_comfy_image(vis_image)
+        if compute_visualization:
+            vis_image = visualize_masks_on_image(pil_image, masks, boxes, scores, alpha=0.5)
+            vis_tensor = pil_to_comfy_image(vis_image)
+        else:
+            vis_tensor = torch.zeros(1, img_h, img_w, 3)
 
         boxes_list = tensor_to_list(boxes) if boxes is not None else []
         scores_list = tensor_to_list(scores) if scores is not None else []
@@ -317,7 +344,8 @@ class SAM3GroundingDual(io.ComfyNode):
     @classmethod
     def execute(cls, sam3_model_config, image,
                 text_prompt_1, confidence_threshold_1=0.2, max_detections_1=-1,
-                text_prompt_2="", confidence_threshold_2=0.2, max_detections_2=-1):
+                text_prompt_2="", confidence_threshold_2=0.2, max_detections_2=-1,
+                compute_visualization=False):
         """
         Perform SAM3 grounding for two text prompts against a single image encoding.
         """
@@ -349,14 +377,14 @@ class SAM3GroundingDual(io.ComfyNode):
 
         state = processor.set_text_prompt(text_prompt_1.strip(), state)
         masks_1, vis_1, boxes_json_1, scores_json_1 = cls._extract_result(
-            state, pil_image, img_w, img_h, max_detections_1
+            state, pil_image, img_w, img_h, max_detections_1, compute_visualization
         )
         log.info(f"Prompt 1 ('{text_prompt_1}'): {len(masks_1)} detections")
 
         processor.set_confidence_threshold(confidence_threshold_2)
         state = processor.set_text_prompt(text_prompt_2.strip(), state)
         masks_2, vis_2, boxes_json_2, scores_json_2 = cls._extract_result(
-            state, pil_image, img_w, img_h, max_detections_2
+            state, pil_image, img_w, img_h, max_detections_2, compute_visualization
         )
         log.info(f"Prompt 2 ('{text_prompt_2}'): {len(masks_2)} detections")
 
