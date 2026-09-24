@@ -1364,10 +1364,6 @@ def build_compact_editor_prompt(
         item["final_state"].get("method") == "eyes_plus_head_face_alignment"
         for item in resolved
     )
-    has_asymmetric_blink_pair = any(
-        item["final_state"].get("asymmetric_blink_pair")
-        for item in resolved
-    )
     correction_axes = analysis.get("correction_axes") or []
     for item in resolved:
         state_lines = []
@@ -1398,86 +1394,60 @@ def build_compact_editor_prompt(
             eyelid_target = str(state.get("eyelid_target") or "").strip().rstrip(".。")
             eyelid_adjustment = str(state.get("eyelid_adjustment") or "").strip().rstrip(".。")
             if state.get("paired_blink_repair"):
-                # Sunburst follows one short final-state construction more
-                # reliably than a chronology that repeats the captured closed
-                # and half-closed states.  Treat the eyes as one bilateral
-                # object and keep analyzer prose out of this authoritative
-                # paired branch.
-                strength_text = f" at {eyelid_strength} correction strength" if eyelid_strength else ""
-                paired_eye_lines = [(
-                    f"PRIMARY EYE-PAIR REPAIR — render one coupled bilateral edit{strength_text}, not two "
-                    "independent eye edits. This is the subject's highest-priority local correction."
-                ), (
-                    "Final target: both eyes are naturally open and form one coordinated pair in the final expression."
-                )]
-                if smile:
-                    paired_eye_lines.append(
-                        "Build this eye pair inside the final smile; balanced cheek lift may shape both lower "
-                        "lids equally, but it may not reduce either final aperture."
-                    )
+                strength_text = f"{eyelid_strength} " if eyelid_strength else ""
+                opening_target = (
+                    "the same smile- or laughter-shaped final aperture, with matched natural periocular narrowing"
+                    if smile else
+                    "the same natural, comfortably open final aperture"
+                )
                 closed_side = state.get("closed_photograph_side")
                 reference_side = state.get("reference_photograph_side")
                 if closed_side and reference_side:
-                    paired_eye_lines.append(
-                        f"Use the {reference_side} eye's finished open eyelid geometry as the shared template. "
-                        f"Fit the repaired {closed_side} eye to that template while keeping its own iris texture, "
-                        "lashes, makeup, and fixed inner and outer corners."
+                    reference_geometry = (
+                        "finished expression-shaped eyelid geometry"
+                        if smile else
+                        "finished open eyelid geometry"
                     )
+                    paired_eye_lines = [
+                        f"Eye-pair repair ({strength_text}correction): use the {reference_side} eye's "
+                        f"{reference_geometry} as the common design for the repaired {closed_side} eye; retain each "
+                        "eye's own iris, lashes, and makeup."
+                    ]
+                elif state.get("asymmetric_blink_pair"):
+                    opening_rank = {"fully_closed": 0, "half_closed": 1, "narrowed_open": 2, "open": 3}
+                    left_rank = opening_rank[state["photograph_left_eye_state"]]
+                    right_rank = opening_rank[state["photograph_right_eye_state"]]
+                    more_closed_side = "photograph-left" if left_rank < right_rank else "photograph-right"
+                    less_closed_side = "photograph-right" if left_rank < right_rank else "photograph-left"
+                    paired_eye_lines = [
+                        f"Eye-pair repair ({strength_text}bilateral correction): open both eyes together to "
+                        f"{opening_target}. Lift the {more_closed_side} upper lid farther than the "
+                        f"{less_closed_side} upper lid so both finished eyes have matching opening height and "
+                        "iris exposure. Match their upper- and lower-lid contours and natural double-eyelid folds."
+                    ]
                 else:
-                    paired_eye_lines.append(
-                        "Neither captured eye is a final-shape reference. Use the source eyes only for identity "
-                        "cues—iris identity, lashes, and makeup—not for captured opening height or left/right "
-                        "eyelid asymmetry. "
-                        "Raise both upper-lid margins to the shared naturally-open target rather than averaging "
-                        "the two source apertures."
-                    )
-                if state.get("asymmetric_blink_pair"):
-                    paired_eye_lines.append(
-                        "For this asymmetric blink-pair repair, match two independent final structures with equal "
-                        "priority: (1) the visible eye fissures—their horizontal length, vertical height, aspect "
-                        "ratio, opening amount, and upper/lower-lid contours; and (2) the double-eyelid creases—their "
-                        "type, height above the lashes, width, path, arc, peak, visible length, and inner/outer "
-                        "endpoints. Do not improve either structure by making the other less matched."
-                    )
+                    paired_eye_lines = [
+                        f"Eye-pair repair ({strength_text}bilateral correction): open both blink-affected eyes to "
+                        f"{opening_target}. Retract each upper-lid margin by the amount it needs to reach this "
+                        "shared endpoint, then form matching smooth upper-lid creases."
+                    ]
                 if state.get("head_pose") == "frontal":
                     paired_eye_lines.append(
-                        "This face is frontal: use the nose bridge and facial midline as the bilateral comparison "
-                        "axis. With each canthus and horizontal eye span fixed, match the mirrored lid geometry; "
-                        "do not use perspective to excuse a visible left/right size difference."
+                        "For this frontal face, match the final upper- and lower-lid contours across the facial midline while "
+                        "keeping the eye centers and interocular distance stable."
                     )
                 else:
                     paired_eye_lines.append(
-                        "Compare the eyes in their own local eye axes. With each canthus and horizontal span "
-                        "fixed, match normalized lid geometry and allow only unavoidable projection from head yaw."
+                        "For this turned face, match the final lid contours in each eye's local axis with natural "
+                        "perspective projection."
                     )
-                if state.get("asymmetric_blink_pair"):
-                    paired_eye_lines.append(
-                        "Do not preserve or introduce a left/right mismatch in the repaired eye region as natural "
-                        "variation, and do not trade a larger eye against a narrower crease or a smaller eye against "
-                        "a higher crease. Before finishing, compare eye-fissure geometry and crease geometry "
-                        "separately, then verify that both matches remain correct together."
-                    )
-                else:
-                    paired_eye_lines.append(
-                        "Match aperture-height-to-eye-width ratio, upper/lower-lid contour, iris exposure, and "
-                        "double-eyelid crease path and crease-to-lash width across the finished pair."
-                    )
-                paired_eye_lines.append(
-                    "Move the lid margins over the existing globes and resolve compressed lid tissue into smooth "
-                    "creases without adding puffiness or upper-lid mass."
-                )
                 state_lines.extend(f"- {line}" for line in paired_eye_lines)
                 eyelid_text = None
             elif smile:
-                # Smile owns expression intensity, but blink owns the final
-                # eyelid geometry. Render one endpoint so cheek lift cannot
-                # reintroduce unequal apertures after the blink repair.
                 eyelid_text = (
-                    "Build the smile and blink repair as one final facial state. The blink endpoint, not independent "
-                    "smile-induced squint, owns both eyes' final eyelid geometry"
+                    "Set both eyes to the same smile- or laughter-shaped final aperture, with matched natural "
+                    "periocular narrowing"
                 )
-                if eyelid_target:
-                    eyelid_text += f". Analysis final eyelid state: {eyelid_target}"
             elif state.get("blink_user_forced"):
                 # Forced means the analyzer itself found nothing to fix here --
                 # unlike the branch below, "accidentally closed/half-closed"
@@ -1635,22 +1605,32 @@ def build_compact_editor_prompt(
             " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed."
             if has_head_aligned_gaze else ""
         )
-        shared_face_rules.append(
-            "- Fixed identity geometry: retain the source-matched head/face width-to-length ratio, skeletal jaw/chin contour, cheekbone placement, baseline eye–nose–mouth landmark layout, eye-globe size and interocular/canthus positions, nose bridge/tip/nostril geometry, philtrum length, and ear shape. During an approved blink repair, the required final eyelid state owns eye-opening height and visible double-eyelid crease-to-lash band width; no general preservation rule may restore a conflicting captured eyelid difference. Preserve lashes/brows, makeup, tissue volume, brow position, and all landmarks outside the explicitly authorized local eyelid movement."
-            + projection_exception
+        identity_rule = (
+            "- Fixed identity geometry: retain head/face proportions, jaw and cheekbone structure, the baseline "
+            "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
+            "length, and ear shape."
         )
+        if has_blink:
+            identity_rule += (
+                " For each named blink repair, adjust only the eyelid margins, crease, and minimally necessary lid "
+                "endpoints; preserve brows, eye centers, globes, lashes, makeup, and surrounding anatomy."
+            )
+        shared_face_rules.append(identity_rule + projection_exception)
     if has_blink:
         shared_face_rules.append(
-            "- Blink-repair boundary: reshape only the mobile eyelids and reconstruct only the eye pixels newly revealed by opening them. Treat closed-lid compression as transient pose geometry, not identity. Preserve fixed canthi, eye-globe size, brow position, lashes, makeup, skin texture, and surrounding facial anatomy; the subject-specific eye-pair target above is authoritative for final lid geometry."
+            "- Shared eye-pair target for every named blink repair: finish both eyes at the same final aperture. "
+            "Match the visible opening width and height, upper- and lower-lid shape, upper-lid crease count and "
+            "height, and visible double-eyelid band width."
+        )
+        shared_face_rules.append(
+            "- Retract each upper-lid margin as needed and fold blink-compressed lid tissue into a smooth crease over "
+            "the existing globe. Keep both final openings and creases equally clear under the original lighting, "
+            "lashes, makeup, and lid shadows."
         )
     if has_smile:
         shared_face_rules.append(
             "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, and visible dental characteristics rather than regenerating or beautifying the whole face."
         )
-        if has_blink:
-            shared_face_rules.append(
-                "- Where smile and blink repair affect the same subject, the smile may coordinate cheek and periocular tension but may not independently narrow either eyelid after repair. The blink endpoint is authoritative for both final apertures and lid contours; keep the two sides' smile-related cheek response balanced around that matched eye pair."
-            )
         shared_face_rules.append(
             "- Retain the original skin age and fold pattern. Existing crow's-feet, under-eye creases, and nasolabial folds may compress minimally but must not become deeper, darker, sharper, longer, or more numerous."
         )
@@ -1660,7 +1640,8 @@ def build_compact_editor_prompt(
         )
     if has_joint_smile_gaze:
         shared_face_rules.append(
-            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. For a subject without blink repair, laughter may narrow the eyelids modestly through natural cheek lift, applied evenly to both sides while retaining canthi, recognizable eye openness, and iris visibility. For a subject with blink repair, do not apply that narrowing as a separate step: the blink endpoint and photograph-side pair match are authoritative; avoid both fixed-open staring and exaggerated squinting."
+            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter "
+            "narrow both eyelids together through natural cheek lift while retaining clear iris visibility."
         )
     if has_gaze:
         shared_face_rules.append(
@@ -1854,20 +1835,6 @@ def build_compact_editor_prompt(
         "a duplicated, detached, or mismatched limb, or a hand without five correctly jointed fingers."
         if "pose" in style_options else ""
     )
-    if has_asymmetric_blink_pair:
-        primary_local_block = (
-            "Primary local correction (highest visual priority):\n"
-            "- Complete each named asymmetric blink-pair repair before other edits. Its subject-specific final "
-            "eye-pair contract is authoritative, and later expression, lighting, or texture work may not disturb it.\n\n"
-        )
-    elif has_blink:
-        primary_local_block = (
-            "Primary local correction (highest visual priority):\n"
-            "- Complete every named eye-pair repair as one coupled bilateral edit; later expression, lighting, "
-            "or texture work may not disturb the finished pair.\n\n"
-        )
-    else:
-        primary_local_block = ""
     # Each block carries the blank lines it needs: both slots sit flush against
     # their neighbours in the template below, so a no-pose prompt keeps the
     # original layout with style and user direction after Finish.
@@ -1896,7 +1863,7 @@ Required framing:
 Other approved corrections:
 {correction_block}
 {style_before_states_block}
-{primary_local_block}Resolved subject final states:
+Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
 {shared_face_block}{hair_boundary_block}{body_boundary_block}
