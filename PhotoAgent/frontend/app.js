@@ -5255,7 +5255,10 @@
       } else {
         finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser() });
       }
-      addTiming("提交後續處理", Date.now() - stepStart);
+      // Timings go into one shared list (dom.js) that belongs to whichever
+      // record is on screen -- once the user has moved to another record,
+      // this job's entries would show up in THAT record's 處理時間.
+      if (isCurrent()) addTiming("提交後續處理", Date.now() - stepStart);
 
       stepStart = Date.now();
       await pollJobStatus(finalJobId, { path: processingPath });
@@ -5264,14 +5267,14 @@
       stepStart = Date.now();
       ({ image_url: imageUrl, result } = await getJobResult(finalJobId, { path: processingPath }));
       const t = (result["extra-info"] || {}).timings || {};
-      addTiming("AI 美化中", finishWaitDuration, [
+      if (isCurrent()) addTiming("AI 美化中", finishWaitDuration, [
         { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
         { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
         { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
         { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
         { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
       ]);
-      addTiming("取得結果", Date.now() - stepStart);
+      if (isCurrent()) addTiming("取得結果", Date.now() - stepStart);
 
       const extraInfo = result["extra-info"] || {};
       const usedImageModelLabel = extraInfo.image_model
@@ -5686,11 +5689,18 @@
       // fast-forward here in that same all-RUNs-failed case -- the success
       // path already consumed it via revealResultsIfNeeded, so this resolves
       // instantly then.
-      await finishProcSubRotation();
-      if (els.canvasLoading) els.canvasLoading.hidden = true;
-      if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
-      if (els.showPromptBtn) els.showPromptBtn.disabled = false;
-      stopProcSubRotation();
+      // Only while this record still owns the screen: #canvas-loading, the
+      // photo frame and the rotating status text are shared by every record.
+      // Once the user has opened another one (and possibly started ITS
+      // revise), tearing these down here hid that record's own loading card
+      // and froze its status text while its edit was still running.
+      if (historyViewToken === myHistoryToken) {
+        await finishProcSubRotation();
+        if (els.canvasLoading) els.canvasLoading.hidden = true;
+        if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+        if (els.showPromptBtn) els.showPromptBtn.disabled = false;
+        stopProcSubRotation();
+      }
     }
     if (!failure) return;
     // This one reported through the notice modal rather than showError:
