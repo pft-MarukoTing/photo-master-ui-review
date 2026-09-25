@@ -34,7 +34,7 @@ window.PhotoAgentApi = (() => {
     return path === "aipoc" ? "/api/photo-agent/aipoc" : "/api/photo-agent";
   }
 
-  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, advancedOptions, runCount, user, actionId, singlePassEdit, path = "local" }) {
+  async function submitJob({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, analysis, selections, advancedOptions, runCount, user, actionId, singlePassEdit, path = "local" }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("preset", preset);
@@ -59,6 +59,9 @@ window.PhotoAgentApi = (() => {
     // AIPoC-only: the analysis already shown on the preview screen, so the
     // remote worker can reuse it (stage="finish") instead of re-analyzing.
     if (analysis) form.append("analysis", JSON.stringify(analysis));
+    // The review screen's choices, applied onto `analysis` server-side
+    // (photo_agent/selections.py) -- see buildEditSelections in app.js.
+    if (analysis && selections) form.append("selections", JSON.stringify(selections));
     // Local path only: how many independent edit variations job_processor.py
     // generates from ONE shared analysis, entirely within this single job.
     if (runCount) form.append("run_count", String(runCount));
@@ -321,12 +324,13 @@ window.PhotoAgentApi = (() => {
     return data; // { status, result: { analysis } }
   }
 
-  async function continueJob(jobId, { analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
+  async function continueJob(jobId, { analysis, selections, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/continue/${encodeURIComponent(jobId)}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         analysis,
+        selections: selections || null,
         preset,
         image_quality: imageQuality,
         image_model: imageModel || "gpt-image-2",
@@ -357,10 +361,11 @@ window.PhotoAgentApi = (() => {
   // continueJob's sibling for an imported result folder: same stage="finish"
   // job, but the photo rides along with the request because there is no
   // earlier job holding it.
-  async function rerunJob({ file, analysis, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
+  async function rerunJob({ file, analysis, selections, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, userPrompt, overwritePrompt, user, actionId, singlePassEdit }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
     form.append("analysis", JSON.stringify(analysis));
+    if (selections) form.append("selections", JSON.stringify(selections));
     form.append("preset", preset);
     form.append("image_quality", imageQuality);
     form.append("image_model", imageModel || "gpt-image-2");

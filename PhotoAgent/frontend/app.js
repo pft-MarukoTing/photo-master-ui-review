@@ -348,7 +348,7 @@
   // Internal Body Reshape switch. This initial value mirrors config.js and is
   // replaced by the backend's /api/config response below. The server still
   // enforces the flag for every analysis/edit request; this value only controls
-  // feature visibility and whether the read-only prompt is retained on submit.
+  // feature visibility; apply_selections reads the same flag server-side.
   let isBodyReshapeEnabled = window.PhotoAgentConfig?.enableBodyReshape !== false;
   // This deployment's own compatibility_version (compatibility_version.py), fetched
   // via /api/config below as compatibilityVersion -- "compatibility" (not
@@ -1963,7 +1963,7 @@
   // (skips anything already out of sync rather than mis-aligning it further).
   // Called with the SAME advancedOptions both when rendering 修圖建議
   // (renderAnalysisPreview's callers, refreshInlineRecipeList) and when
-  // building the submitted analysis (buildEffectiveAnalysis) -- so
+  // building the submitted analysis (apply_selections, server-side) -- so
   // recipeChecked (read straight off however many checkboxes actually got
   // rendered) always lines up with correction_plan's post-strip length on
   // both ends, with no separate index-remapping needed.
@@ -2042,7 +2042,7 @@
 
   // One case's own 人像設定, in the order they become known: what its job was
   // submitted with, else what its analysis froze at analyze time
-  // (_advanced_options, the same key a revise's buildEffectiveAnalysis falls
+  // (_advanced_options, the same key a revise's apply_selections falls
   // back to), else the product defaults. Never "whatever the toggles happen to
   // hold" -- for a record restored from history that is the previously-viewed
   // case's, which is exactly what showing a case must not inherit. An empty
@@ -5066,8 +5066,9 @@
     lastSingleSelections = { userPrompt, overwritePrompt, ...selections, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled };
     // No analysis yet in combined mode -- nothing to fold recipe/style
     // adjustments into, since the combined job computes its own from scratch.
-    const effectiveAnalysis = useCombinedJob ? null : buildEffectiveAnalysis(
-      analysis, { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled });
+    const editAnalysis = useCombinedJob ? null : analysis;
+    const editSelections = useCombinedJob ? null : buildEditSelections(
+      { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled });
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -5250,9 +5251,9 @@
       let finalJobId, imageUrl, result;
 
       if (processingPath === "aipoc") {
-        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), path: "aipoc" });
+        finalJobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: editAnalysis, selections: editSelections, user: getCurrentUser(), path: "aipoc" });
       } else {
-        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser() });
+        finalJobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser() });
       }
       addTiming("提交後續處理", Date.now() - stepStart);
 
@@ -5340,7 +5341,7 @@
 
       const actionId = generateActionId();
       await runBatchPool(myRuns, async (run) => {
-        await runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId });
+        await runSingleItem(run, { analyzeJobId, editAnalysis, editSelections, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId });
         doneCount += 1;
         updateRunProgress();
         // autoOpenPanel: false -- this fires per-RUN, not just once at the
@@ -5396,14 +5397,14 @@
       : rerunJob({ file, ...payload });
   }
 
-  async function runSingleItem(run, { analyzeJobId, effectiveAnalysis, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId }) {
+  async function runSingleItem(run, { analyzeJobId, editAnalysis, editSelections, userPrompt, overwritePrompt, presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, processingPath, analyzeTimings, actionId }) {
     try {
       let stepStart = Date.now();
 
       if (processingPath === "aipoc") {
-        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: effectiveAnalysis, user: getCurrentUser(), actionId, path: "aipoc" });
+        run.jobId = await submitJob({ file: selectedFile, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, analysis: editAnalysis, selections: editSelections, user: getCurrentUser(), actionId, path: "aipoc" });
       } else {
-        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: effectiveAnalysis, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
+        run.jobId = await submitFinishJob(analyzeJobId, selectedFile, { analysis: editAnalysis, selections: editSelections, preset: presetKey, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, overwritePrompt, user: getCurrentUser(), actionId });
       }
       const submitMs = Date.now() - stepStart;
 
@@ -6128,7 +6129,7 @@
       const userPrompt = (record.userPrompt || "").trim();
       const overwritePrompt = userPrompt ? !!record.overwritePrompt : false;
       const advancedOptions = effectiveAdvancedOptions(record);
-      const effectiveAnalysis = buildEffectiveAnalysis(record.analysis, {
+      const editSelections = buildEditSelections({
         options: effectiveOptions(record),
         recipeChecked: record.recipeChecked,
         advancedOptions,
@@ -6170,14 +6171,16 @@
           singlePassEdit,
           userPrompt,
           overwritePrompt,
-          analysis: effectiveAnalysis,
+          analysis: record.analysis,
+          selections: editSelections,
           user: getCurrentUser(),
           actionId,
           path: "aipoc"
         });
       } else {
         run.jobId = await submitFinishJob(record.analyzeJobId, record.file, {
-          analysis: effectiveAnalysis,
+          analysis: record.analysis,
+          selections: editSelections,
           preset: batchSettings.presetKey,
           imageQuality: modelQuality.quality,
           imageModel: modelQuality.model,
@@ -8065,9 +8068,9 @@
   // never shrinks and lastSingleSelections.recipeChecked always stays index-
   // aligned to it. Historical playback (viewHistoryRecord) has no choice but
   // to start from result.analysis, which -- if the last revise unchecked
-  // anything -- is already that filtered, shrunk version (buildEffectiveAnalysis
+  // anything -- is already that filtered, shrunk version (apply_selections
   // drops unchecked items from correction_plan/retouch_recipe entirely before
-  // submitting). Left as-is, a previously-unchecked item would just be gone
+  // the edit runs). Left as-is, a previously-unchecked item would just be gone
   // for good the next time this job's history is revisited. This restores it:
   // merges each rejected_* array back onto its kept counterpart (order:
   // kept items first, then whatever was rejected -- the original interleaving
@@ -8848,7 +8851,7 @@
     // singleFlowState.advancedOptions itself is left unset by the historical
     // reconstruction above (unlike imageModel/aspectRatio) -- falling back to
     // singleFlowState.analysis._advanced_options, the same key a later
-    // revise's buildEffectiveAnalysis falls back to, keeps this in sync with
+    // revise's apply_selections falls back to, keeps this in sync with
     // what a revise would actually use if left untouched. Kept last because
     // it is the only one of the four that refreshes the per-case settings
     // button unconditionally, even when handed a value that doesn't resolve
@@ -11851,257 +11854,24 @@
     return { options, recipeChecked };
   }
 
-  // Applies the user's recipe checkbox edits and style-option overrides onto a
-  // copy of `analysis` before it's sent to the backend. This is what makes the
-  // user's revisions the highest-priority version of the recipe: unchecked
-  // items are dropped from correction_plan/retouch_recipe (correction_plan is
-  // what the edit model actually reads) AND recorded as rejected_corrections,
-  // which the edit prompt turns into an explicit "do not do this" instruction
-  // -- simply omitting them isn't enough, since other analysis fields (e.g.
-  // aesthetic_diagnosis, lighting_strategy) could still lead the model to make
-  // the same change anyway. Any non-default pose/angle/lighting/size pick is
-  // attached as style_options for the edit prompt.
-  function buildEffectiveAnalysis(analysis, {
+  // Packages the user's review choices (修圖建議 checkboxes, pose/angle/
+  // lighting/size picks, 人像修正設定 toggles, per-person face overrides, the
+  // Body Reshape switch) for the finish request. The backend applies them onto
+  // the reviewed analysis (photo_agent/selections.py's apply_selections) --
+  // this used to happen here, as buildEffectiveAnalysis, so only the rewritten
+  // analysis ever reached the server. recipeChecked stays indexed against the
+  // same stripDisabledTopicItems(analysis, advancedOptions) list the review
+  // screen rendered; the backend strips with those same toggles first.
+  function buildEditSelections({
     options, recipeChecked, advancedOptions, faceIssueOverrides, bodyReshapeEnabled
   } = {}) {
-    // Applied BEFORE the recipeChecked split below, and on the same
-    // `advancedOptions` #ap-recipe-list was just rendered/refreshed with
-    // (renderAnalysisPreview's callers, refreshInlineRecipeList) -- so
-    // recipeChecked (read straight off however many checkboxes actually got
-    // rendered) lines up positionally with `base`'s correction_plan, same as
-    // it always has with the raw `analysis` before this existed.
-    const base = advancedOptions ? stripDisabledTopicItems(analysis, advancedOptions) : analysis;
-    const effective = { ...base };
-
-    // Keep each person's original body_reshape object on the request. Active
-    // plans retain Analyze's exact Editor command; analyzer no-ops intentionally
-    // have no edit_prompt and carry their explanation only in `report`.
-    // ``null`` is the initial per-record value for a batch item, not an
-    // explicit approval.  Only a real boolean should override the persisted
-    // request-scoped decision on the analysis object; otherwise a saved
-    // ``_body_reshape_enabled: false`` must stay disabled when the record is
-    // reopened for editing.
-    const bodyReviewEnabled = typeof bodyReshapeEnabled === "boolean"
-      ? bodyReshapeEnabled
-      : effective._body_reshape_enabled !== false;
-    const disabledBodySubjects = new Set(
-      (Array.isArray(effective._disabled_body_reshape_subjects)
-        ? effective._disabled_body_reshape_subjects : [])
-        .filter((index) => Number.isInteger(index) && index >= 0)
-    );
-    let hasNestedBodyPlans = false;
-    if (Array.isArray(effective.subjects)) {
-      effective.subjects = effective.subjects.map((subject, subjectIndex) => {
-        if (!subject || typeof subject !== "object") return subject;
-        const copy = { ...subject };
-        const body = copy.body_reshape;
-        if (body && typeof body === "object") {
-          if (!isBodyReshapeEnabled) {
-            delete copy.body_reshape;
-          } else {
-            hasNestedBodyPlans = true;
-            const bodyCopy = { ...body };
-            if (!bodyReviewEnabled || disabledBodySubjects.has(subjectIndex)) {
-              bodyCopy.should_edit = false;
-            }
-            copy.body_reshape = bodyCopy;
-          }
-        }
-        return copy;
-      });
-    }
-    delete effective._disabled_body_reshape_subjects;
-    delete effective._disabled_body_reshape_key_points;
-    delete effective._body_reshape_amount_overrides;
-    delete effective._body_reshape_execution_plan;
-    [
-      "key_points", "raw_key_points", "target_pct", "effective_target_pct",
-      "planner_target_pct", "planner_default_target_pct",
-      "body_reshape_execution", "body_reshape_execution_plan",
-    ].forEach((key) => delete effective[key]);
-    if (hasNestedBodyPlans) {
-      // Nested plans are now the source of truth.  Do not leave a legacy
-      // top-level prompt or global flag that could duplicate/suppress only
-      // part of the per-person hand-off.
-      delete effective.body_reshape;
-      delete effective._body_reshape_enabled;
-    } else if (isBodyReshapeEnabled) {
-      const prompt = effective.body_reshape?.edit_prompt;
-      if (typeof prompt === "string" && prompt.trim()) {
-        effective.body_reshape = { edit_prompt: prompt.trim() };
-        if (bodyReviewEnabled) delete effective._body_reshape_enabled;
-        else effective._body_reshape_enabled = false;
-      } else {
-        delete effective.body_reshape;
-        delete effective._body_reshape_enabled;
-      }
-    } else {
-      delete effective.body_reshape;
-      delete effective._body_reshape_enabled;
-    }
-
-    // Did the ANALYZER flag this face issue, as opposed to the user having
-  // forced it on? _user_disabled counts: an issue already carrying it was
-  // flagged when it was first turned off, and that turn-off erased the
-  // verdict, so this is the only surviving record of it. Without reading it
-  // back here the flag would survive exactly one more version and then
-  // quietly drop, putting the row back to 無需修正 on the version after.
-  function analyzerFlaggedFaceIssue(issue, category) {
-    if (!issue || typeof issue !== "object") return false;
-    if (issue._user_disabled) return true;
-    return category === "smile_issue" ? issue.adjust_safe === true : issue.should_fix === true;
-  }
-
-  // The per-person "allow AI to fix this" toggle (#ap-face-detail,
-    // getFaceIssueOverrides in results.js): { "subjectIndex:category": false }
-    // for every should_fix/adjust_safe=true item the user turned off. Both
-    // written onto a per-subject copy so the model's own original verdict on
-    // `analysis` is never mutated, in case the user flips the toggle back on
-    // a later revise:
-    //   1. should_fix is flipped to false -- this alone is enough to turn OFF
-    //      a flagged blink/hair/gaze item, since build_edit_prompt excludes a
-    //      should_fix=false item from its own per-category target list unless
-    //      _user_forced (below) says otherwise. smile_issue's adjust_safe is
-    //      deliberately NOT touched: resolve_smile_targets drops a disabled
-    //      subject via (2) before it ever reads adjust_safe, so writing it
-    //      changed no behaviour and only overwrote the analyzer's own verdict
-    //      -- which then became the next version's starting point, turning an
-    //      untouched 不建議調整 into 可以調整 one version later.
-    //   2. analysis._disabled_face_issues names the same (subjectIndex,
-    //      category) pairs directly, for build_edit_prompt to hard-exclude
-    //      regardless of should_fix/adjust_safe -- the belt to should_fix's
-    //      suspenders, and the only thing that actually blocks smile: an
-    //      explicit (non-auto) smile level in resolve_smile_targets is a user
-    //      override that ignores adjust_safe entirely, so only this hard
-    //      exclusion can still stop it for a person who was opted out.
-    if (faceIssueOverrides && Object.keys(faceIssueOverrides).length && Array.isArray(base.subjects)) {
-      const subjects = (effective.subjects || base.subjects).map((subject) => {
-        if (!subject || typeof subject !== "object") return subject;
-        return { ...subject, ...(subject.body_reshape && typeof subject.body_reshape === "object"
-          ? { body_reshape: { ...subject.body_reshape } } : {}) };
-      });
-      const disabledFaceIssues = [];
-      Object.entries(faceIssueOverrides).forEach(([key, override]) => {
-        const [subjectIndexStr, category] = key.split(":");
-        const subjectIndex = Number(subjectIndexStr);
-        const subject = subjects[subjectIndex];
-        if (!subject || !subject[category] || typeof subject[category] !== "object") return;
-        const issue = { ...subject[category] };
-        const allowed = override !== false && (!override || override.allowed !== false);
-        if (!allowed) {
-          // Whether the ANALYZER had flagged this, read BEFORE the write
-          // below overwrites the very field that says so.
-          const wasFlagged = analyzerFlaggedFaceIssue(subject[category], category);
-          if (category === "body_reshape") issue.should_edit = false;
-          else if (category !== "smile_issue") issue.should_fix = false;
-          if (category !== "body_reshape") {
-            disabledFaceIssues.push({ subject_index: subjectIndex, category });
-            // 3. _user_disabled is the mirror of _user_forced below, and the
-            //    only record that survives of a verdict this write erases.
-            //    Turning off a flagged blink/gaze/hair sets should_fix false,
-            //    which is indistinguishable from the analyzer having found
-            //    nothing -- so the next version rendered that as 無需修正
-            //    rather than 已設定不修正. Smile loses it differently (its
-            //    adjust_safe is left flagged) and so came back as 可以調整,
-            //    i.e. the choice silently undone. This one key fixes both,
-            //    and is only set where there was a real verdict to override.
-            if (wasFlagged) issue._user_disabled = true;
-          }
-        } else if (category === "body_reshape") {
-          // An explicit per-person ON choice must re-enable a plan that was
-          // previously saved with should_edit=false.
-          issue.should_edit = true;
-        } else if (override && typeof override === "object") {
-          // Turning it back on has to clear the flag a previous version's
-          // disable stamped, or this version would be written as disabled
-          // again and the re-enable would not survive.
-          delete issue._user_disabled;
-          // "Forced" means that the user overrode a negative analyzer verdict,
-          // not merely that an enabled row carries a per-person level. Keep an
-          // automatically approved hair/blink/gaze repair on its normal prompt
-          // path. Blink/gaze carry no level at all (no style choice for them,
-          // unlike hair/smile), so this branch no longer requires one.
-          if (override.level) issue._user_level = override.level;
-          if (category === "hair_issue") issue._user_forced = issue.should_fix !== true;
-          else if (category === "smile_issue") issue._user_forced = true;
-          else if (category === "blink_issue" || category === "gaze_issue") issue._user_forced = issue.should_fix !== true;
-        }
-        subject[category] = issue;
-      });
-      effective.subjects = subjects;
-      effective._disabled_face_issues = disabledFaceIssues;
-    }
-
-    // `analysis` already carries its own _advanced_options, baked in at
-    // analyze time (pipeline.py's analyze_stage) -- overwrite it with
-    // whatever the toggles in #advanced-settings-fold currently read as, so
-    // a revise from the results page (where 設定 -> 人像修正設定 can reopen and
-    // change them) actually reaches build_edit_prompt's detected_issues
-    // filtering and the gaze-repair pass, both of which read this key off
-    // the analysis object at finish time rather than off a fresh request
-    // field.
-    if (advancedOptions) effective._advanced_options = advancedOptions;
-
-    if (Array.isArray(recipeChecked) && recipeChecked.length) {
-      const keepChecked = (arr) =>
-        Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] !== false) : arr;
-      const dropChecked = (arr) =>
-        Array.isArray(arr) ? arr.filter((_, i) => recipeChecked[i] === false) : [];
-      effective.correction_plan = keepChecked(base.correction_plan);
-      effective.retouch_recipe = keepChecked(base.retouch_recipe);
-      effective.rejected_corrections = dropChecked(base.correction_plan);
-      // retouch_recipe's own dropped text (correction_plan's is the internal/
-      // technical description build_edit_prompt reads; this is the
-      // human-readable one fillCheckList actually displays) -- without this,
-      // a later re-render fed this same (now-shrunk) analysis back -- e.g.
-      // viewHistoryRecord revisiting a job whose last revise unchecked
-      // something -- has no way to show that item again at all, checked or
-      // not; it's just gone.
-      effective.rejected_retouch_recipe = dropChecked(base.retouch_recipe);
-      // Same index split for the axis tags (correction_axes[i] pairs with
-      // correction_plan[i]). These are what let build_edit_prompt strip the
-      // matching "do X" clauses out of its own light/color direction and add a
-      // "reproduce the original's X" rule -- the rejected item text alone can't
-      // drive that, being free prose. The kept axes matter too:
-      // resolve_rejected_axes subtracts them, so a rejected "brighten the frame"
-      // doesn't lock contrast for an approved "darken the busy background" that
-      // shares the tag. It also validates the alignment and flattens the
-      // nesting, so nothing here needs to inspect the values.
-      effective.correction_axes = keepChecked(base.correction_axes);
-      effective.rejected_axes = dropChecked(base.correction_axes);
-      // The analysis model also wrote, per item, what to preserve instead if
-      // that item gets unchecked (correction_inverse). Only the dropped ones
-      // are of any use, and they carry the item's own scope -- "brighten the
-      // subject" inverts to pinning the subject, where the generic per-axis
-      // rule pins the whole frame and over-suppresses.
-      effective.rejected_preserve = dropChecked(base.correction_inverse);
-    }
-
-    // A previous rejected-reframe run keeps the analyzer's original crop
-    // proposal in a private snapshot.  Restore it only when the crop recipe is
-    // approved again; while it remains unchecked, the backend's original-frame
-    // resolver stays authoritative.
-    const keptCrop = (effective.correction_axes || []).some(correctionAxesIncludeCrop);
-    const rejectedCrop = (effective.rejected_axes || []).some(correctionAxesIncludeCrop);
-    if (keptCrop && !rejectedCrop && effective._rejected_reframing_source) {
-      Object.assign(effective, effective._rejected_reframing_source);
-      delete effective._rejected_reframing_source;
-      delete effective._preserve_original_composition;
-    }
-
-    const styleOptions = {};
-    Object.entries(options || {}).forEach(([key, value]) => {
-      if (value && value !== "default") styleOptions[key] = value;
-    });
-    // Always assign (even {}), not just when non-empty -- `effective` starts
-    // as a spread of `analysis`, which already has its own style_options
-    // from whatever was picked last time (a prior revise, or a historical
-    // record's own baked-in pick). Only conditionally assigning meant
-    // clearing every pick back to Default left that stale object in place
-    // instead of erasing it, so the "cleared" style silently kept applying.
-    effective.style_options = styleOptions;
-
-    return effective;
+    return {
+      options: options || {},
+      recipe_checked: Array.isArray(recipeChecked) ? recipeChecked : null,
+      advanced_options: advancedOptions || null,
+      face_issue_overrides: faceIssueOverrides || null,
+      body_reshape_enabled: typeof bodyReshapeEnabled === "boolean" ? bodyReshapeEnabled : null
+    };
   }
 
   // Read the radio/checkbox selections back onto the record so per-image choices

@@ -13,6 +13,7 @@ from aiserver_utils.queue import get_job_info
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
+from photo_agent.selections import apply_selections, validate_selections
 from pipeline import analyze_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
@@ -56,6 +57,28 @@ def _history_compatibility_version(params):
     if isinstance(analysis, dict):
         return get_compatibility_version(analysis)
     return get_current_compatibility_version()
+
+
+def _apply_review_selections(analysis, raw_selections):
+    """Returns (effective_analysis, None) or (None, error_message).
+
+    `raw_selections` is the review screen's choices (dict, or a JSON string
+    from a multipart form), applied onto the analysis the user reviewed -- see
+    photo_agent/selections.py. Absent selections pass the analysis through
+    untouched, which is what an older frontend that still sends an
+    already-rewritten analysis relies on.
+    """
+    if raw_selections is None or raw_selections == "":
+        return analysis, None
+    if isinstance(raw_selections, str):
+        try:
+            raw_selections = json.loads(raw_selections)
+        except (TypeError, ValueError):
+            return None, "selections must be valid JSON"
+    error = validate_selections(raw_selections)
+    if error:
+        return None, error
+    return apply_selections(analysis, raw_selections), None
 
 
 def _parse_and_validate_params(form):
@@ -909,6 +932,10 @@ def continue_job(job_id):
         # prevents an old analysis from reaching finish_stage.
         return jsonify({"error": "analysis_compatibility_version_outdated"}), 409
 
+    analysis, error = _apply_review_selections(analysis, body.get("selections"))
+    if error:
+        return jsonify({"error": error}), 400
+
     params, error = _parse_and_validate_params(body)
     if error:
         return jsonify({"error": error}), 400
@@ -973,6 +1000,9 @@ def rerun():
         return jsonify({"error": "analysis must be valid JSON"}), 400
     if not isinstance(analysis, dict) or "subject_category" not in analysis:
         return jsonify({"error": "analysis must be the analysis object from a result.json"}), 400
+    analysis, error = _apply_review_selections(analysis, request.form.get("selections"))
+    if error:
+        return jsonify({"error": error}), 400
 
     params, error = _parse_and_validate_params(request.form)
     if error:
@@ -1141,6 +1171,9 @@ def aipoc_submit():
             return jsonify({"error": "analysis must be valid JSON"}), 400
         if not isinstance(analysis, dict) or "subject_category" not in analysis:
             return jsonify({"error": "analysis (from /aipoc/analyze) is invalid"}), 400
+        analysis, error = _apply_review_selections(analysis, request.form.get("selections"))
+        if error:
+            return jsonify({"error": error}), 400
 
     from backend.services import aipoc_client
 

@@ -1353,7 +1353,7 @@ window.PhotoAgentResults = (() => {
   ];
 
   // Every category the user can manually switch on even when the analyzer
-  // itself found nothing to fix -- app.js's buildEffectiveAnalysis sets
+  // itself found nothing to fix -- photo_agent/selections.py's apply_selections sets
   // issue._user_forced for the face categories when a toggle is flipped on
   // an unflagged row, and prompts.py's resolve_user_hair_request/
   // resolve_user_blink_request/resolve_user_gaze_request (plus smile's own
@@ -1422,7 +1422,7 @@ window.PhotoAgentResults = (() => {
 
   // subjectIndex/category identify the underlying analysis.subjects[i][category]
   // field this entry came from -- the toggle in buildPersonIssueItems writes
-  // back through them (getFaceIssueOverrides), and buildEffectiveAnalysis (app.js)
+  // back through them (getFaceIssueOverrides), and apply_selections (photo_agent/selections.py)
   // uses the same pair to flip should_fix/adjust_safe before submission.
   function faceIssueEntries(subject, index, bodyDisabled = false) {
     if (!subject) return [];
@@ -1441,7 +1441,7 @@ window.PhotoAgentResults = (() => {
       if (isBodyReshape && subject.is_person !== true) return null;
       if (isBodyReshape && match.should_edit !== false && !bodyPrompt) return null;
       const isManualOverride = MANUAL_OVERRIDE_CATEGORIES.includes(category.field);
-      // buildEffectiveAnalysis (app.js) writes _user_forced/_user_level onto
+      // apply_selections (photo_agent/selections.py) writes _user_forced/_user_level onto
       // this same subject[category.field] object at submit time, and the
       // backend echoes analysis back verbatim -- so a completed record (or a
       // freshly re-rendered revise) carries the *previous* manual-on decision
@@ -1450,7 +1450,7 @@ window.PhotoAgentResults = (() => {
       // straight from the untouched original verdict and silently show the
       // toggle as off again.
       const wasUserForced = !!match._user_forced;
-      // The mirror of _user_forced (buildEffectiveAnalysis, app.js): the user
+      // The mirror of _user_forced (apply_selections, photo_agent/selections.py): the user
       // turned OFF something the analyzer HAD flagged. Needed because that
       // same write overwrites the verdict it overrides -- should_fix goes
       // true -> false -- so without this a later version could not tell "the
@@ -1502,7 +1502,7 @@ window.PhotoAgentResults = (() => {
 
   // Flattened { "subjectIndex:category": false } for every flagged issue the
   // user turned off in the face modal -- read once at submit time
-  // (buildEffectiveAnalysis, app.js) rather than kept in sync continuously,
+  // (buildEditSelections, app.js) rather than kept in sync continuously,
   // matching how recipeChecked is read fresh off the recipe checkboxes.
   function getFaceIssueOverrides() {
     const overrides = {};
