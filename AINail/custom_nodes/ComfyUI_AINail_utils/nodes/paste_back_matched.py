@@ -287,8 +287,14 @@ class PasteBackMatched:
             for i1, j2, _ in nail_matches:
                 f = nail1_to_finger.get(i1)
                 if f is not None:
-                    area_1 = mask_intersection_area(hand_finger_masks[f], hand_nail_masks_1[i1])
-                    area_2 = mask_intersection_area(hand_finger_masks[f], hand_nail_masks_2[j2])
+                    # SAM3's "finger" mask inconsistently includes or excludes the nail tip
+                    # (e.g. palm-facing poses with long nails), which destabilizes area_1 when
+                    # measured against the raw finger mask. Union it with the matched original
+                    # nail mask first: this pins area_1 to the nail's own (stable) area, since
+                    # nail_masks_1[i1] is now fully contained in finger_region by construction.
+                    finger_region = torch.max(hand_finger_masks[f], hand_nail_masks_1[i1])
+                    area_1 = mask_intersection_area(finger_region, hand_nail_masks_1[i1])
+                    area_2 = mask_intersection_area(finger_region, hand_nail_masks_2[j2])
                     if area_2 >= overlap_ratio * area_1:
                         # Generated nail bled onto the finger far more than it originally did.
                         continue
