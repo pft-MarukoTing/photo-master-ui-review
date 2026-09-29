@@ -14,7 +14,7 @@ from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, ensure_jpeg_bytes, sniff_image_mime, HISTORY_THUMBNAIL_MAX_SIDE
 from photo_agent.param_validation import normalize_advanced_options, validate_photo_agent_request
 from photo_agent.selections import apply_selections, validate_selections
-from pipeline import analyze_stage
+from pipeline import analyze_stage, reframe_stage
 from backend.services.account import create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
@@ -1023,6 +1023,86 @@ def rerun():
     action_id = request.form.get("action_id") or job_id
     _record_history_safely(request.form.get("user"), job_id, "local", engine_params["srcKeys"][0], action_id, params=params)
     return jsonify({"job_id": job_id}), 202
+
+
+def _reframe_request(body, analysis):
+    """Shared checks for the reframing routes. Returns (params, None) or
+    (None, (response, status))."""
+    if not isinstance(analysis, dict) or "subject_category" not in analysis:
+        return None, (jsonify({"error": "analysis (from /analyze/result) is required"}), 400)
+    if not is_compatible(analysis, min_version=get_min_compatible_version()):
+        return None, (jsonify({"error": "analysis_compatibility_version_outdated"}), 409)
+    params, error = _parse_and_validate_params(body)
+    if error:
+        return None, (jsonify({"error": error}), 400)
+    params["stage"] = "reframe"
+    params["analysis"] = analysis
+    return params, None
+
+
+# Results-page 長寬比 change: re-plan only the composition (pipeline.reframe_stage).
+# The result is an analysis, fetched through /analyze/result like any other.
+@api_bp.post("/reframe/<job_id>")
+def reframe_job(job_id):
+    body = request.get_json(silent=True) or {}
+    params, failure = _reframe_request(body, body.get("analysis"))
+    if failure:
+        return failure
+
+    prior = get_job_info(job_id, keyToGet=["srcKeys"])
+    if not prior or not prior.get("srcKeys"):
+        return jsonify({"error": "Prior job not found"}), 404
+
+    engine_params = get_engine_params_template()
+    engine_params["srcKeys"] = prior["srcKeys"]
+    engine_params["acts"][0]["params"] = params
+    return jsonify({"job_id": enqueue(engine_params, src_content=None)}), 202
+
+
+@api_bp.post("/reframe")
+def reframe_upload():
+    """/reframe/<job_id> for an analysis with no prior job (an imported
+    result folder): the photo is uploaded with the request."""
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        return jsonify({"error": "image file is required"}), 400
+    try:
+        analysis = json.loads(request.form.get("analysis") or "null")
+    except json.JSONDecodeError:
+        return jsonify({"error": "analysis must be valid JSON"}), 400
+    params, failure = _reframe_request(request.form, analysis)
+    if failure:
+        return failure
+
+    engine_params = get_engine_params_template()
+    engine_params["acts"][0]["params"] = params
+    return jsonify({"job_id": enqueue(engine_params, src_content=[image.read()])}), 202
+
+
+@api_bp.post("/aipoc/reframe")
+def aipoc_reframe():
+    """Synchronous /reframe for the AIPoC path, whose preview analysis is
+    local too (see /aipoc/analyze)."""
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        return jsonify({"error": "image file is required"}), 400
+    try:
+        analysis = json.loads(request.form.get("analysis") or "null")
+    except json.JSONDecodeError:
+        return jsonify({"error": "analysis must be valid JSON"}), 400
+    params, failure = _reframe_request(request.form, analysis)
+    if failure:
+        return failure
+
+    try:
+        reframed = reframe_stage(
+            image.read(), analysis,
+            aspect_ratio=params.get("aspect_ratio", "auto"),
+            analysis_model=params["analysis_model"],
+        )
+    except Exception as exc:
+        return jsonify({"error": f"重新構圖失敗：{exc}"}), 502
+    return jsonify({"status": "success", "analysis": reframed})
 
 
 @api_bp.post("/aipoc/analyze")

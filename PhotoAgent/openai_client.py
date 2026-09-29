@@ -32,6 +32,8 @@ from prompts import (
     ANALYSIS_INSTRUCTION,
     ANALYSIS_RESPONSE_SCHEMA,
     ANALYSIS_RESPONSE_SCHEMA_OVERALL,
+    REFRAME_RESPONSE_SCHEMA,
+    build_reframe_instruction,
     build_analysis_instruction,
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
@@ -713,6 +715,35 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
         # for why this path still returns a single {"model", "usage"} shape.
         "reasoning_effort": ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
     }
+
+
+def reframe_composition(image_bytes: bytes, analysis: dict, aspect_ratio: str = "auto", analysis_model: str = ANALYSIS_MODEL):
+    """Re-plan only the composition of an existing analysis for another
+    aspect-ratio preference (see prompts.build_reframe_instruction).
+
+    Returns (reframe_json, usage_info, prompt_text).
+    """
+    data_url = image_to_data_url(create_preview_bytes(image_bytes), "image/jpeg")
+    before_photo, after_photo = build_reframe_instruction(
+        analysis, aspect_ratio, source_size=get_image_dimensions(image_bytes),
+    )
+    content = [
+        {"type": "input_text", "text": before_photo},
+        {"type": "input_image", "image_url": data_url},
+        {"type": "input_text", "text": after_photo},
+    ]
+    payload = _responses_payload(
+        analysis_model, content, text_format=REFRAME_RESPONSE_SCHEMA,
+        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    )
+    data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo reframing failed")
+    reframe = _parse_json_from_text(_extract_output_text(data))
+    usage = {
+        "model": analysis_model,
+        "usage": data.get("usage"),
+        "reasoning_effort": ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    }
+    return reframe, usage, f"{before_photo}\n\n[photo]\n\n{after_photo}"
 
 
 def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):

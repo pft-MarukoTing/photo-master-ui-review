@@ -7,6 +7,7 @@ from typing import Optional
 
 from compatibility_version import CURRENT_COMPATIBILITY_VERSION
 from config import MODELS
+from engine_result_code import RESULT_INVALID_PARAMETER
 from image_tools import (
     apply_derived_aspect_ratio,
     create_local_enhanced_bytes,
@@ -25,6 +26,7 @@ from openai_client import (
     edit_photo,
     edit_gaze_only as edit_gaze_only_openai,
     quality_check_photo,
+    reframe_composition,
 )
 from prompts import (
     build_analysis_instruction,
@@ -44,9 +46,13 @@ from prompts import (
     subject_issue_items,
     _disabled_issue_subject_indices,
     approved_blink_items,
+    composition_state,
+    merge_reframe_result,
+    restore_composition_state,
+    with_reframing_proposal,
 )
-
 from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
+
 BLINK_REPAIR_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 BLINK_REPAIR_QUALITY = "high"
 
@@ -330,6 +336,62 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # shape produced it -- see compatibility_version.py for how that's read back.
     analysis["compatibility_version"] = CURRENT_COMPATIBILITY_VERSION
     return analysis
+
+
+def _next_reframe_stage_key(usage):
+    """Each reframe call gets its own usage key so repeated reframes add up instead of overwriting."""
+    key, n = "Step 2b - photo_reframe", 1
+    while key in usage:
+        n += 1
+        key = f"Step 2b - photo_reframe ({n})"
+    return key
+
+
+def reframe_stage(
+    image_bytes: bytes,
+    analysis: dict,
+    aspect_ratio: str = "auto",
+    analysis_model: str = MODELS["analysis"],
+) -> dict:
+    """Step 2b: re-plan the composition of an existing analysis for a 長寬比
+    picked on the results page, leaving every other finding as analyzed.
+
+    Each ratio's resolved composition is kept in _composition_by_ratio, so
+    returning to a ratio already planned costs no further call.
+    """
+    if analysis.get("_skipped_analysis"):
+        raise RuntimeError("跳過分析的結果沒有構圖可以重新規劃。", RESULT_INVALID_PARAMETER)
+    pref = str(aspect_ratio or "auto").strip().lower()
+    base = with_reframing_proposal(analysis)
+    planned_for = str(base.get("_aspect_ratio_pref_at_analysis") or "auto").strip().lower()
+    by_ratio = dict(base.get("_composition_by_ratio") or {})
+    by_ratio.setdefault(planned_for, composition_state(base))
+
+    if pref in by_ratio:
+        logger.info("Step 2b: reusing the composition already planned for %s", pref)
+        reframed = restore_composition_state(base, by_ratio[pref])
+    else:
+        t0 = time.time()
+        logger.info("Step 2b: reframing for aspect_ratio=%s (planned for %s)", pref, planned_for)
+        reframe, usage, prompt_text = reframe_composition(
+            image_bytes, base, pref, analysis_model=analysis_model,
+        )
+        reframed = merge_reframe_result(base, reframe, pref)
+        img_w, img_h = get_image_dimensions(image_bytes)
+        reframed = apply_derived_aspect_ratio(reframed, img_w, img_h, aspect_ratio_pref=pref)
+        reframed["prompts"] = {**(reframed.get("prompts") or {}), "photo_reframe": prompt_text}
+        prior_usage = reframed.get("usage") or {}
+        stage_key = _next_reframe_stage_key(prior_usage)
+        reframed["timings"] = {**(reframed.get("timings") or {}), stage_key: time.time() - t0}
+        reframed["usage"] = {**prior_usage, stage_key: usage}
+        by_ratio[pref] = composition_state(reframed)
+        logger.info(
+            "Step 2b done: %s (crop measured %s)",
+            reframed.get("recommended_aspect_ratio"), reframed.get("crop_box_measured_ratio"),
+        )
+
+    reframed["_composition_by_ratio"] = by_ratio
+    return reframed
 
 
 def review_stage(

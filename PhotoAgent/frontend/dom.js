@@ -249,6 +249,8 @@ window.PhotoAgentDom = (() => {
     runSwitchPrev: document.querySelector("#run-switch-prev"),
     runSwitchNext: document.querySelector("#run-switch-next"),
     runSwitchLoading: document.querySelector("#run-switch-loading"),
+    reframeLoading: document.querySelector("#reframe-loading"),
+    reframeLoadingText: document.querySelector("#reframe-loading-text"),
     versionStrip: document.querySelector("#version-strip"),
     versionStripCount: document.querySelector("#version-strip-count"),
     versionStripTrack: document.querySelector("#version-strip-track"),

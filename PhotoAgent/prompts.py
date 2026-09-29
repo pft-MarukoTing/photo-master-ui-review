@@ -2495,17 +2495,11 @@ _OUTPUT_ALIGNMENT_RULES_OVERALL = f"""## Execution contract
 
 """
 
-_COORDINATE_GEOMETRY_RULES_OVERALL = """## Coordinate and geometry rules
-Intent: Produce normalized subject and crop geometry that downstream framing logic can use safely and consistently.
+_COORDINATE_FRAME_RULE = """- crop_box, roi_box, subject_extent_box, and protected_regions use normalized original-image coordinates. x/y are top-left, w/h are width/height: the origin (x=0, y=0) is the photo's own top-left corner, x increases toward the photo's right edge, y increases toward its bottom edge.
+"""
 
-- crop_box, roi_box, subject_extent_box, and protected_regions use normalized original-image coordinates. x/y are top-left, w/h are width/height: the origin (x=0, y=0) is the photo's own top-left corner, x increases toward the photo's right edge, y increases toward its bottom edge.
-- Any "left"/"right"/"middle" wording -- in a subjects[].label, a reason field, or anywhere else describing where someone or something sits in the frame -- is always from the viewer's perspective looking at the photo (the side with the smaller x is "left"), never that person's own anatomical left/right. Keep this the same reference frame you use when writing box x/y/w/h for that same entry, so the coordinates and the words describing them never disagree about which side of the frame something is on.
-- roi_box is the focal area. subject_extent_box is the semantic subject area required by the intended framing; it is not automatically every visible body part, foreground object, furniture piece, or background element.
-- subjects lists the candidate main subjects (people, animals, products, food, objects) ordered so index 0 is the photo's true main subject -- what the photo is actually about, consistent with main_subject, roi_box, and the composition intent. prominence means semantic importance as the subject, NOT which element is merely brightest, most colorful, or most saturated. Incidental background or decor -- flowers, plants, props, tableware, posters, scenery -- must rank lower than the real subject even when it is visually eye-catching; e.g. in a food photo the dish is the subject, not a bright vase of flowers behind it. Always output at least one entry, even for a single-subject photo.
-- Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
-- For a person-type subject whose face is visible anywhere in the photo, subjects[].box must include that entire visible head. A box that starts at or below the chin/neck/shoulders and excludes the face -- even if it otherwise fits the rest of the visible body tightly and looks "correct" by itself -- is wrong and must be corrected; the head is not an optional part of a person subject's box.
-""" + "\n" + """- For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
-- protected_regions contain only indispensable subject details and role cues retained by the selected composition. When crop_box.enabled=true, keep every protected region inside crop_box with breathing room; leave optional background structure and intentionally trimmed subject/body edges outside these boxes.
+# Shared with the results-page reframing pass (build_reframe_instruction).
+_CROP_GEOMETRY_RULES = """- protected_regions contain only indispensable subject details and role cues retained by the selected composition. When crop_box.enabled=true, keep every protected region inside crop_box with breathing room; leave optional background structure and intentionally trimmed subject/body edges outside these boxes.
 - Choose "original" with crop_box.enabled=false when the captured boundaries support the intended subject emphasis, balance, context, and edge cleanliness as well as any viable crop.
 - A same-ratio or near-full composition crop remains valid when it removes an edge distraction, strengthens the subject anchor, or gives the frame a cleaner visual endpoint. Do not enable crop_box only to straighten the horizon or correct perspective; alignment owns its own minimal cleanup trim.
 - The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
@@ -2516,6 +2510,17 @@ Intent: Produce normalized subject and crop geometry that downstream framing log
 - Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
 - Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
 """
+
+_COORDINATE_GEOMETRY_RULES_OVERALL = """## Coordinate and geometry rules
+Intent: Produce normalized subject and crop geometry that downstream framing logic can use safely and consistently.
+
+""" + _COORDINATE_FRAME_RULE + """- Any "left"/"right"/"middle" wording -- in a subjects[].label, a reason field, or anywhere else describing where someone or something sits in the frame -- is always from the viewer's perspective looking at the photo (the side with the smaller x is "left"), never that person's own anatomical left/right. Keep this the same reference frame you use when writing box x/y/w/h for that same entry, so the coordinates and the words describing them never disagree about which side of the frame something is on.
+- roi_box is the focal area. subject_extent_box is the semantic subject area required by the intended framing; it is not automatically every visible body part, foreground object, furniture piece, or background element.
+- subjects lists the candidate main subjects (people, animals, products, food, objects) ordered so index 0 is the photo's true main subject -- what the photo is actually about, consistent with main_subject, roi_box, and the composition intent. prominence means semantic importance as the subject, NOT which element is merely brightest, most colorful, or most saturated. Incidental background or decor -- flowers, plants, props, tableware, posters, scenery -- must rank lower than the real subject even when it is visually eye-catching; e.g. in a food photo the dish is the subject, not a bright vase of flowers behind it. Always output at least one entry, even for a single-subject photo.
+- Each subjects[].box must tightly frame EXACTLY ONE individual person/animal/object, never a group. In a multi-person or multi-object scene, output one separate entry per individual, each with its own tight box; do NOT return a single box that spans several subjects or most of the frame. If there are four people, subjects must contain four entries, each boxing one person -- index 0 is only the single most prominent one, not all four. This holds even when main_subject or photo_summary describe the group as a whole; subjects is always per-individual so a downstream close-up can isolate exactly one.
+- For a person-type subject whose face is visible anywhere in the photo, subjects[].box must include that entire visible head. A box that starts at or below the chin/neck/shoulders and excludes the face -- even if it otherwise fits the rest of the visible body tightly and looks "correct" by itself -- is wrong and must be corrected; the head is not an optional part of a person subject's box.
+""" + "\n" + """- For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
+""" + _CROP_GEOMETRY_RULES
 
 _COMPOSITION_DECISION_FRAMEWORK = """## Composition decision framework
 Intent: Choose framing from subject meaning, scene context, visual balance, useful empty space, and preservation needs rather than a fixed composition formula.
@@ -3188,6 +3193,256 @@ _SUBJECT_SCHEMA_OVERALL = _schema_object({
 ANALYSIS_RESPONSE_SCHEMA_OVERALL = copy.deepcopy(ANALYSIS_RESPONSE_SCHEMA)
 ANALYSIS_RESPONSE_SCHEMA_OVERALL["name"] = "photo_analysis_overall"
 ANALYSIS_RESPONSE_SCHEMA_OVERALL["schema"]["properties"]["subjects"] = _schema_array_of(_SUBJECT_SCHEMA_OVERALL)
+
+
+# ── Results-page reframing pass ────────────────────────────────────────────────
+# Picking a different 長寬比 after analysis re-plans only the composition. The
+# subjects, focal area and every non-framing retouch item stay as analyzed, so
+# the retouch the user already reviewed is not rewritten.
+
+REFRAME_FIELDS = (
+    "composition_intent", "framing_intent", "layout_method", "portrait_framing",
+    "composition_strategy", "visual_balance_strategy", "empty_space_strategy",
+    "distraction_strategy", "recommended_aspect_ratio", "aspect_ratio_reason",
+    "subject_extent_box", "protected_regions", "crop_recommendation",
+    "reframe_mode", "reframe_mode_reason", "crop_box", "crop_candidates",
+    "crop_intent", "crop_risk",
+)
+
+# One ratio's resolved composition. Writing these keys back restores it
+# without another call; a None value means the key was absent.
+COMPOSITION_STATE_KEYS = REFRAME_FIELDS + (
+    "correction_plan", "correction_axes", "correction_inverse", "retouch_recipe",
+    "_reframing_geometry_source", "auto_aspect_ratio", "reframe_extension",
+    "reframe_mode_override", "aspect_ratio_source", "crop_box_measured_ratio",
+    "_aspect_ratio_pref_at_analysis",
+)
+
+# Review and geometry state derived from the previous composition.
+_REFRAME_STALE_KEYS = (
+    "_rejected_reframing_source", "_preserve_original_composition", "applied_crop_plan",
+    "rejected_corrections", "rejected_retouch_recipe", "rejected_axes", "rejected_preserve",
+    "_reframing_geometry_source", "reframe_extension", "reframe_mode_override",
+    "auto_aspect_ratio", "aspect_ratio_source", "crop_box_measured_ratio",
+)
+
+_REVIEW_ARRAY_KEYS = ("correction_plan", "correction_axes", "retouch_recipe", "correction_inverse")
+
+_REFRAME_RECIPE_PREFIX_RE = re.compile(r"^\s*重新構圖\s*[:：]")
+
+_REFRAME_PERSONA = """You are a senior photography director. This photograph has already been analyzed: its subjects, focal area and retouch plan below are settled. The user has since chosen a different output aspect-ratio preference, so the one decision to make again is the composition -- where the frame's edges fall for that preference.
+
+Return only valid JSON. Keep the JSON keys in English. Every user-visible string value must be Traditional Chinese.
+
+"""
+
+_REFRAME_RETURN_SHAPE = """Return exactly this JSON shape:
+{
+  "composition_intent": "這個輸出比例下最適合的構圖意圖。",
+  "framing_intent": "取景意圖，例如 close-up / upper-body / half-body / full-body / environmental / object-complete / context-preserving。",
+  "layout_method": "center / thirds / symmetry / diagonal / vertical-horizontal / leading-lines / pattern / negative-space，加上中文理由。",
+  "portrait_framing": "若不是人像可寫不適用；若是人像，說明框法。",
+  "composition_strategy": "構圖與裁切策略。",
+  "visual_balance_strategy": "左右與上下視覺重量如何處理。",
+  "empty_space_strategy": "留白在新畫框中的功能，或如何縮減、重新平衡。",
+  "distraction_strategy": "依新畫框重新判定哪些元素是干擾、脈絡或中性背景，以及每個干擾的具體處理方式。",
+  "recommended_aspect_ratio": "依下方長寬比政策填寫。",
+  "aspect_ratio_reason": "為什麼這個輸出比例與畫框最適合主體、陪襯、留白與畫面意圖。",
+  "subject_extent_box": {"x": 0.15, "y": 0.08, "w": 0.70, "h": 0.82, "reason": "新畫框需要保留的完整語意主體。"},
+  "protected_regions": [{"label": "", "x": 0.0, "y": 0.0, "w": 0.1, "h": 0.1, "reason": "新畫框中不可裁掉或貼邊的區域。"}],
+  "crop_recommendation": "若裁切，說明裁哪裡與為什麼；不裁切則說明保留原構圖。",
+  "reframe_mode": "crop 或 expand，依下方長寬比政策；政策未要求選擇時填 \\"crop\\"。",
+  "reframe_mode_reason": "選擇的理由；政策未要求選擇時填空字串。",
+  "crop_box": {"enabled": true, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "aspect_ratio": "", "reason": "裁切理由。"},
+  "crop_candidates": [{"id": "ai-primary", "label": "主要建議裁切", "crop_box": {"enabled": true, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "aspect_ratio": ""}, "composition_intent": "", "tradeoffs": ""}],
+  "crop_intent": {"trim_left": false, "trim_right": false, "trim_top": false, "trim_bottom": false, "subject_anchor": "center", "looking_direction": "unknown", "remove_edge_distractions": []},
+  "crop_risk": {"needs_validation": false, "risk_level": "low", "reasons": []},
+  "reframe_item": {"enabled": true, "correction_plan": "給編修模型的構圖指令。", "retouch_recipe": "重新構圖：給使用者看的構圖結果。", "correction_inverse": "取消此項時維持原構圖的說法。"}
+}
+
+"""
+
+_REFRAME_TASK = """## Reframing task
+Intent: Choose the strongest final frame for the output-ratio preference stated after the photo, for this same retouch.
+
+- Work from the settled subjects and focal area rather than re-identifying them. Decide the composition intent and framing intent for that preference first, then place crop_box to serve them. Compare the complete frame with at least one materially different viable crop, and return the viable alternatives in crop_candidates with their tradeoffs.
+- A selected composition crop is visibly consequential: it normally removes at least 8% of the original span on one axis (w <= 0.92 or h <= 0.92) and changes subject scale, placement, or edge content.
+- subject_extent_box and protected_regions start from the settled ones and end describing the selected frame: every indispensable subject detail and role cue stays, and only what this frame deliberately trims leaves them.
+- Every composition field describes the selected frame alone. Alignment stays as settled; tilt and perspective are not part of this decision.
+- reframe_item is the single review item that carries this framing decision, enabled exactly when the selected frame differs from the captured one -- a crop, or reframe_mode "expand". Its correction_plan is the precise editor instruction for the crop, trim, repositioning, or extension; its retouch_recipe starts with "重新構圖：" and names only the semantic result; its correction_inverse restores the original aspect ratio, outer boundaries, subject scale and placement, and empty-space balance, and says nothing about tilt or perspective. None of these, nor any other prose field, contains a numeric aspect ratio: local geometry inserts the resolved ratio afterwards.
+
+"""
+
+
+def _crop_tagged(entry):
+    return "crop" in _axis_set([entry])
+
+
+def _reframe_settled_facts(analysis, source_size):
+    axes = analysis.get("correction_axes") or []
+    plan = analysis.get("correction_plan") or []
+    other_items = (
+        [item for item, entry in zip(plan, axes) if not _crop_tagged(entry)]
+        if len(plan) == len(axes) else []
+    )
+    subjects = [
+        {key: subject.get(key) for key in ("label", "box", "is_person", "prominence")}
+        for subject in analysis.get("subjects") or [] if isinstance(subject, dict)
+    ]
+    settled = {
+        "photo_summary": analysis.get("photo_summary"),
+        "main_subject": analysis.get("main_subject"),
+        "roi_anchor": analysis.get("roi_anchor"),
+        "alignment_strategy": analysis.get("alignment_strategy"),
+        "subjects": subjects,
+        "roi_box": analysis.get("roi_box"),
+        "subject_extent_box": analysis.get("subject_extent_box"),
+        "protected_regions": analysis.get("protected_regions") or [],
+        "other_retouch_items": other_items,
+    }
+    size_line = (
+        f"Original image size: {int(source_size[0])} x {int(source_size[1])} pixels.\n"
+        if source_size else ""
+    )
+    return (
+        "## Settled analysis\n"
+        + size_line
+        + json.dumps(settled, ensure_ascii=False, indent=2)
+        + "\n"
+    )
+
+
+def build_reframe_instruction(analysis, aspect_ratio_pref="auto", source_size=None):
+    """(before_photo, after_photo) text for the reframing pass.
+
+    Everything that stays the same for one photo precedes the photo, and the
+    ratio policy follows it, so repeated reframes of a photo share a cacheable
+    prefix.
+    """
+    pref = str(aspect_ratio_pref or "auto").strip().lower()
+    before_photo = (
+        _REFRAME_PERSONA
+        + _REFRAME_RETURN_SHAPE
+        + _REFRAME_TASK
+        + "## Coordinate and geometry rules\n"
+        + _COORDINATE_FRAME_RULE
+        + _CROP_GEOMETRY_RULES
+        + "\n"
+        + _COMPOSITION_DECISION_FRAMEWORK
+        + "\n"
+        + _reframe_settled_facts(analysis, source_size)
+    )
+    after_photo = (
+        f"## Output aspect-ratio preference for this pass: {pref}\n"
+        + _aspect_ratio_policy_suffix(pref, source_size)
+    )
+    return before_photo, after_photo
+
+
+_ANALYSIS_PROPERTIES = ANALYSIS_RESPONSE_SCHEMA["schema"]["properties"]
+
+REFRAME_RESPONSE_SCHEMA = {
+    "type": "json_schema",
+    "name": "photo_reframe",
+    "strict": True,
+    "schema": _schema_object({
+        **{field: copy.deepcopy(_ANALYSIS_PROPERTIES[field]) for field in REFRAME_FIELDS},
+        "reframe_item": _schema_object({
+            "enabled": _schema_boolean(),
+            "correction_plan": _schema_string(),
+            "retouch_recipe": _schema_string(),
+            "correction_inverse": _schema_string(),
+        }),
+    }),
+}
+
+
+def with_reframing_proposal(analysis):
+    """`analysis` with a declined reframe's saved proposal put back, so the
+    composition it holds is the one the analyzer planned."""
+    prior = analysis.get("_rejected_reframing_source")
+    if not isinstance(prior, dict):
+        return analysis
+    restored = copy.deepcopy(analysis)
+    restored.update(copy.deepcopy(prior))
+    for key in ("_rejected_reframing_source", "_preserve_original_composition", "applied_crop_plan"):
+        restored.pop(key, None)
+    return restored
+
+
+def composition_state(analysis):
+    return {key: copy.deepcopy(analysis.get(key)) for key in COMPOSITION_STATE_KEYS}
+
+
+def restore_composition_state(analysis, state):
+    restored = copy.deepcopy(analysis)
+    for key in _REFRAME_STALE_KEYS:
+        restored.pop(key, None)
+    for key, value in (state or {}).items():
+        if value is None:
+            restored.pop(key, None)
+        else:
+            restored[key] = copy.deepcopy(value)
+    return restored
+
+
+def _replace_reframe_item(analysis, item):
+    """Swap the crop-tagged review item for the reframing pass's one, in every
+    review array still aligned with correction_axes."""
+    axes = list(analysis.get("correction_axes") or [])
+    arrays = {key: list(analysis.get(key) or []) for key in _REVIEW_ARRAY_KEYS}
+    aligned = [key for key in _REVIEW_ARRAY_KEYS if len(arrays[key]) == len(axes)]
+    if "correction_plan" not in aligned or "retouch_recipe" not in aligned:
+        logger.warning(
+            "review arrays not aligned with correction_axes (%s); keeping the previous reframing item",
+            {key: len(arrays[key]) for key in _REVIEW_ARRAY_KEYS},
+        )
+        return analysis
+
+    crop_indices = [index for index, entry in enumerate(axes) if _crop_tagged(entry)]
+    for index in reversed(crop_indices):
+        remaining = [
+            axis for axis in (axes[index] if isinstance(axes[index], list) else [axes[index]])
+            if not _crop_tagged(axis)
+        ]
+        if remaining:
+            arrays["correction_axes"][index] = remaining
+        else:
+            for key in aligned:
+                del arrays[key][index]
+
+    recipe = str(item.get("retouch_recipe") or "").strip()
+    if item.get("enabled") and recipe:
+        if not _REFRAME_RECIPE_PREFIX_RE.match(recipe):
+            recipe = f"重新構圖：{recipe}"
+        new_item = {
+            "correction_plan": str(item.get("correction_plan") or "").strip() or recipe,
+            "correction_axes": ["crop"],
+            "retouch_recipe": recipe,
+            "correction_inverse": str(item.get("correction_inverse") or "").strip(),
+        }
+        position = crop_indices[0] if crop_indices else len(arrays["correction_plan"])
+        for key in aligned:
+            arrays[key].insert(position, new_item[key])
+
+    for key in _REVIEW_ARRAY_KEYS:
+        if key in analysis or arrays[key]:
+            analysis[key] = arrays[key]
+    return analysis
+
+
+def merge_reframe_result(analysis, reframe, aspect_ratio_pref):
+    """`analysis` with its composition replaced by a reframing pass's answer,
+    planned for `aspect_ratio_pref`. Local geometry still has to resolve it."""
+    merged = copy.deepcopy(analysis)
+    for key in _REFRAME_STALE_KEYS:
+        merged.pop(key, None)
+    for field in REFRAME_FIELDS:
+        if field in reframe:
+            merged[field] = copy.deepcopy(reframe[field])
+    _replace_reframe_item(merged, reframe.get("reframe_item") or {})
+    merged["_aspect_ratio_pref_at_analysis"] = str(aspect_ratio_pref or "auto").strip().lower()
+    return merged
 
 # Call B's per-person output shape (build_portrait_qc_instruction) -- one
 # entry per person handed to Call B. subject_index is the stable merge key;

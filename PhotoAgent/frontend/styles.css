@@ -4063,6 +4063,35 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 #run-switch-loading {
   background: none;
 }
+.reframe-loading-text {
+  position: absolute;
+  top: calc(50% + 26px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 0 16px;
+  text-align: center;
+  color: #fff;
+  font-size: 14px;
+}
+#ap-recipe-list li.is-reframing .step-cb-label {
+  display: none;
+}
+#ap-recipe-list .reframe-busy-label {
+  color: var(--text-3);
+}
+#ap-recipe-list .reframe-busy-label::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-left: 8px;
+  vertical-align: -1px;
+  border: 2px solid rgba(var(--on-surface-rgb), .25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: rc-spin .8s linear infinite;
+}
 
 /* Glass icon buttons, right-aligned in .canvas-header-row (see above).
    Icon-only, so title/aria-label (kept in sync in setCompareView) carry the

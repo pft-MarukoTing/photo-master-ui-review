@@ -393,6 +393,38 @@ window.PhotoAgentApi = (() => {
     return data.job_id;
   }
 
+  // Results-page 長寬比 change: re-plan only the composition. local returns a
+  // job id whose result comes through getAnalyzeResult; aipoc answers inline.
+  async function reframeJob({ jobId, file, analysis, aspectRatio, analysisModel, path = "local" }) {
+    let response;
+    if (path === "local" && jobId) {
+      response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reframe/${encodeURIComponent(jobId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          analysis,
+          aspect_ratio: aspectRatio || "auto",
+          analysis_model: analysisModel || "gpt-5.6-luna"
+        })
+      });
+    } else {
+      const form = new FormData();
+      form.append("image", file, file.name || "photo.jpg");
+      form.append("analysis", JSON.stringify(analysis));
+      form.append("aspect_ratio", aspectRatio || "auto");
+      form.append("analysis_model", analysisModel || "gpt-5.6-luna");
+      response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/${path === "aipoc" ? "aipoc/reframe" : "reframe"}`, {
+        method: "POST",
+        body: form
+      });
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `送出重新構圖失敗：HTTP ${response.status}`);
+    }
+    return data; // local: { job_id }; aipoc: { status, analysis }
+  }
+
   async function analyzeAipoc({ file, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, userPrompt, advancedOptions }) {
     const form = new FormData();
     form.append("image", file, file.name || "photo.jpg");
@@ -697,6 +729,7 @@ window.PhotoAgentApi = (() => {
     getAnalyzeResult,
     continueJob,
     rerunJob,
+    reframeJob,
     analyzeAipoc,
     analyzeAipocBatch,
     resolveUserId,

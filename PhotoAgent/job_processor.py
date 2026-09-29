@@ -10,7 +10,7 @@ from aiserver_utils.queue import set_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import ensure_jpeg_bytes, RESULT_JPEG_QUALITY
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
-from pipeline import analyze_stage, review_stage, finish_stage
+from pipeline import analyze_stage, reframe_stage, review_stage, finish_stage
 
 
 def build_job_metadata(task_info):
@@ -161,21 +161,29 @@ class PhotoAgentJobProcessor:
             with open(image_path, 'rb') as f:
                 image_bytes = f.read()
 
-            if stage == "analyze":
-                self.logger.info(task_id, f'[{EFFECT_NAME}] Running analyze_stage ({len(image_bytes)} bytes)')
-                analysis = analyze_stage(
-                    image_bytes,
-                    aspect_ratio=params.get("aspect_ratio", "auto"),
-                    advanced_options=params.get("advanced_options", {}),
-                    analysis_model=params["analysis_model"],
-                )
+            if stage in ("analyze", "reframe"):
+                self.logger.info(task_id, f'[{EFFECT_NAME}] Running {stage}_stage ({len(image_bytes)} bytes)')
+                if stage == "reframe":
+                    analysis = reframe_stage(
+                        image_bytes,
+                        params["analysis"],
+                        aspect_ratio=params.get("aspect_ratio", "auto"),
+                        analysis_model=params["analysis_model"],
+                    )
+                else:
+                    analysis = analyze_stage(
+                        image_bytes,
+                        aspect_ratio=params.get("aspect_ratio", "auto"),
+                        advanced_options=params.get("advanced_options", {}),
+                        analysis_model=params["analysis_model"],
+                    )
 
                 analysis_path = os.path.join(work_dir, 'analysis.json')
                 with open(analysis_path, 'w', encoding='utf-8') as f:
                     json.dump(analysis, f, ensure_ascii=False, indent=2)
 
                 analysis_key = derive_analysis_key(request["dst_key"])
-                self.logger.info(task_id, f'[{EFFECT_NAME}] analyze_stage done, uploading artifact')
+                self.logger.info(task_id, f'[{EFFECT_NAME}] {stage}_stage done, uploading artifact')
                 self.upload_artifacts(task_id, [analysis_path], [analysis_key])
 
                 job_results = {f"{request['act_id']}_res0": {"cusKeys": [analysis_key]}}

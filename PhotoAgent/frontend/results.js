@@ -302,6 +302,30 @@ window.PhotoAgentResults = (() => {
     return { ...analysis, retouch_recipe: recipe };
   }
 
+  // Mirror of prompts._REFRAME_STALE_KEYS -- keep the two lists in sync.
+  const REFRAME_STALE_KEYS = [
+    "_rejected_reframing_source", "_preserve_original_composition", "applied_crop_plan",
+    "rejected_corrections", "rejected_retouch_recipe", "rejected_axes", "rejected_preserve",
+    "_reframing_geometry_source", "reframe_extension", "reframe_mode_override",
+    "auto_aspect_ratio", "aspect_ratio_source", "crop_box_measured_ratio"
+  ];
+
+  function restoreCompositionState(analysis, state) {
+    const restored = { ...analysis };
+    REFRAME_STALE_KEYS.forEach((key) => delete restored[key]);
+    Object.entries(state || {}).forEach(([key, value]) => {
+      if (value == null) delete restored[key];
+      else restored[key] = value;
+    });
+    return restored;
+  }
+
+  // The result on screen takes a reframed composition too, so the ratio
+  // preview below fits the new crop rather than the one the photo was made with.
+  function applyCompositionToRender(state) {
+    if (lastRender) lastRender = { ...lastRender, analysis: restoreCompositionState(lastRender.analysis, state) };
+  }
+
   function previewAspectRatio(pref) {
     if (!lastRender || !pref) return;
     const resultAnalysis = lastRender.analysis;
@@ -3021,6 +3045,7 @@ window.PhotoAgentResults = (() => {
     syncStylePicks, clearStylePick, setCompareView, renderTags,
     closePersonalizePopover,
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
+    restoreCompositionState, applyCompositionToRender,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,
     renderFaceReviewCards,

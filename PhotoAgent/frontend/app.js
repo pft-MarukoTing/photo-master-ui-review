@@ -27,6 +27,7 @@
     getAnalyzeResult,
     continueJob,
     rerunJob,
+    reframeJob,
     analyzeAipoc,
     analyzeAipocBatch,
     createAccount,
@@ -42,7 +43,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -1721,7 +1722,133 @@
   }
   if (els.apImageAspectRatioSelect) {
     els.apImageAspectRatioSelect.addEventListener("change", () =>
-      applyAspectRatioChange(els.apImageAspectRatioSelect.value));
+      handleUserAspectRatioPick(els.apImageAspectRatioSelect.value));
+  }
+
+  let reframeInFlight = false;
+
+  // A 長寬比 picked on the results page re-plans the composition for it
+  // (pipeline.reframe_stage) once the user accepts the extra analysis call.
+  // A ratio this photo already has a composition for is swapped in for free.
+  // Internal ratio writes (applyRejectedReframingRatio) bypass this.
+  async function handleUserAspectRatioPick(value) {
+    const batchRecord = currentDetailBatchRecord();
+    const owner = batchRecord || singleFlowState;
+    const previous = batchRecord ? effectiveAspectRatio(batchRecord) : (singleFlowState?.aspectRatio || "auto");
+    const analysis = owner?.analysis;
+    const plannedFor = analysis?._aspect_ratio_pref_at_analysis || "auto";
+    if (!analysis || analysis._skipped_analysis || value === previous || value === plannedFor) {
+      applyAspectRatioChange(value);
+      return;
+    }
+    const saved = analysis._composition_by_ratio?.[value];
+    if (saved) {
+      adoptReframedAnalysis(owner, restoreCompositionState(analysis, saved), saved);
+      applyAspectRatioChange(value);
+      return;
+    }
+
+    const restore = () => applyAspectRatioOption(findAspectRatioOption(previous), { fromUser: true });
+    if (reframeInFlight) {
+      restore();
+      return;
+    }
+    const path = batchRecord ? (batchSettings?.path || "local") : (singleFlowState.processingPath || "local");
+    const jobId = batchRecord ? batchRecord.analyzeJobId : singleFlowState.analyzeJobId;
+    const file = batchRecord ? batchRecord.file : selectedFile;
+    if (!(path === "local" && jobId) && !file) {
+      showError("這筆紀錄沒有可重新構圖的原始照片。");
+      restore();
+      return;
+    }
+    const confirmed = await showConfirmModal(
+      "改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；其他美化建議維持不變。要繼續嗎？",
+      { confirmLabel: "重新構圖", danger: false }
+    );
+    if (!confirmed) {
+      restore();
+      return;
+    }
+
+    reframeInFlight = true;
+    setReframeBusy(true, value);
+    hideError();
+    try {
+      const reframed = await requestReframe({
+        jobId, file, analysis, aspectRatio: value, path,
+        analysisModel: owner.analysisModel || batchSettings?.analysisModel
+      });
+      if ((currentDetailBatchRecord() || singleFlowState) !== owner || owner.analysis !== analysis) return;
+      adoptReframedAnalysis(owner, reframed, reframed._composition_by_ratio?.[value]);
+      applyAspectRatioChange(value);
+    } catch (error) {
+      showError(`重新構圖失敗：${error.message || error}`);
+      restore();
+    } finally {
+      reframeInFlight = false;
+      setReframeBusy(false);
+    }
+  }
+
+  async function requestReframe({ jobId, file, analysis, aspectRatio, analysisModel, path }) {
+    const data = await reframeJob({ jobId, file, analysis, aspectRatio, analysisModel, path });
+    if (path === "aipoc") return data.analysis;
+    await pollJobStatus(data.job_id, { path: "local" });
+    return (await getAnalyzeResult(data.job_id)).result.analysis;
+  }
+
+  // The recipe list is rebuilt from the new analysis; every item the reframe
+  // left unchanged keeps the checked state the user gave it.
+  function adoptReframedAnalysis(owner, analysis, state) {
+    const labelOf = (li) => li.querySelector(".step-cb-label")?.textContent || "";
+    const checkedByLabel = new Map();
+    els.apRecipeList?.querySelectorAll("li").forEach((li) => {
+      const input = li.querySelector('input[type="checkbox"]');
+      if (input) checkedByLabel.set(labelOf(li), input.checked);
+    });
+    owner.analysis = analysis;
+    if (state) applyCompositionToRender(state);
+    refreshRecipeList(stripDisabledTopicItems(analysis, readAdvancedOptionsFromDom("ap")));
+    els.apRecipeList?.querySelectorAll("li").forEach((li) => {
+      const input = li.querySelector('input[type="checkbox"]');
+      const label = labelOf(li);
+      if (input && checkedByLabel.has(label) && !/^重新構圖\s*[:：]/.test(label)) {
+        input.checked = checkedByLabel.get(label);
+      }
+    });
+  }
+
+  function reframeLoadingMessage(pref) {
+    if (pref === "auto") return "由 AI 選擇比例並重新構圖中…";
+    if (pref === "original") return "依原圖比例重新構圖中…";
+    return `依 ${pref} 重新構圖中…`;
+  }
+
+  function setReframeBusy(busy, pref = "") {
+    if (els.reframeLoading) els.reframeLoading.hidden = !busy;
+    if (els.reframeLoadingText) els.reframeLoadingText.textContent = busy ? reframeLoadingMessage(pref) : "";
+    els.apRecipeList?.querySelectorAll("li").forEach((li) => {
+      const reframeItem = /^重新構圖\s*[:：]/.test(li.querySelector(".step-cb-label")?.textContent || "");
+      const reframing = busy && reframeItem;
+      li.classList.toggle("is-reframing", reframing);
+      li.querySelector(".reframe-busy-label")?.remove();
+      if (reframing) {
+        const note = document.createElement("span");
+        note.className = "reframe-busy-label";
+        note.textContent = "重新構圖中…";
+        li.querySelector("label")?.appendChild(note);
+      }
+    });
+    [els.inlineAnalysisContinueBtn, els.inlineAnalysisBatchRunBtn].forEach((btn) => {
+      if (!btn) return;
+      if (busy) {
+        btn.dataset.reframeHeld = btn.disabled ? "1" : "";
+        btn.disabled = true;
+      } else if ("reframeHeld" in btn.dataset) {
+        btn.disabled = btn.dataset.reframeHeld === "1";
+        delete btn.dataset.reframeHeld;
+      }
+    });
   }
 
   // 生成張數 (single-image RUN count) can now be preset on the upload screen,
@@ -11518,7 +11645,7 @@
   // pixel is touched) vs 修圖 (the actual edit call plus its repair/QA
   // follow-ups) for #cost-modal. Step 4 (crop_validation) never appears here
   // -- it's deterministic geometry with no model call, so it never has usage.
-  const ANALYSIS_COST_STAGES = ["Step 2 - photo_analysis", "Step 3 - user_instruction_review"];
+  const ANALYSIS_COST_STAGES = ["Step 2 - photo_analysis", "Step 2b - photo_reframe", "Step 3 - user_instruction_review"];
   const EDIT_COST_STAGES = ["Step 5 - image_edit", "Step 5b - gaze_repair_pass", "Step 6 - quality_check"];
 
   // Raw model ids (MODEL_PRICING/entry.model's own id, e.g. "gpt-5.6-luna")
@@ -11667,7 +11794,7 @@
       const priced = stageCost(entry);
       if (!priced) return;
       hasStage = true;
-      if (ANALYSIS_COST_STAGES.includes(stage)) {
+      if (ANALYSIS_COST_STAGES.includes(stage.replace(/ \(\d+\)$/, ""))) {
         analysisCost += priced.cost;
         if (entry.model) analysisModels.add(friendlyModelLabel(entry.model));
       } else if (EDIT_COST_STAGES.includes(stage)) {
