@@ -2302,7 +2302,7 @@ _ASPECT_RATIO_POLICY_FIXED = """
 - Plan the composition for a {ratio} frame from the start. Do not compose for the source shape and leave the ratio to be reached afterwards; the rectangle you return is the composition that gets executed.
 - crop_box.aspect_ratio and every crop candidate aspect_ratio must be "{ratio}", and each crop_box's own x/y/w/h must itself compute to it: (w * original_image_width) : (h * original_image_height) must equal {ratio}.
 - Set crop_box.enabled to false only when the complete source frame already has this shape and no reframing improves it. Otherwise return an enabled crop, including when it ends up close to full frame.
-- {ratio} may differ sharply from the source frame, so reaching it can cost much more of the photo than a freely chosen ratio would. Keep the ROI, subject extent, and protected regions inside the crop with breathing room; when the shape cannot hold all of them, keep the ROI and name in crop_box.reason what was given up.
+- {ratio} may differ sharply from the source frame, so reaching it can cost much more of the photo than a freely chosen ratio would. Keep the ROI, subject extent and protected regions with breathing room. If they do not fit, resolve crop versus expand below first; only for crop, keep the ROI and name the loss in crop_box.reason.
 - Downstream deterministic geometry still fits the rectangle to {ratio} exactly, so a proposal that is already exactly that shape is the one that survives unchanged.
 """
 
@@ -2311,14 +2311,16 @@ _ASPECT_RATIO_POLICY_FIXED = """
 # (EXPAND_PERMISSION_RETAINED_THRESHOLD). The mode is decided here, during
 # composition, rather than by the edit model: only the analysis can see whether
 # the subject still has room to lose, and a mode chosen after the composition
-# notes are written would contradict them.
+# notes are written would contradict them. The 35% mirrors
+# image_tools.REFRAME_MAX_EXTENSION.
 _ASPECT_RATIO_POLICY_EXPAND = """
-- {ratio} is not this photograph's shape, so reaching it by cropping alone would take {lost_pct}% of its {lost_axis}. Decide how it is reached and record the decision in reframe_mode:
-  - "crop": the photograph has {lost_axis} to spare. The subject, ROI and protected regions still sit comfortably inside a {ratio} rectangle, and what leaves the frame is background, edge clutter, or context the picture does not need. This is the normal answer -- prefer it whenever the photograph allows it.
-  - "expand": the subject already fills the {lost_axis}, so any {ratio} rectangle that keeps the composition intact would cut into a person, a face, a held object, or the structure the picture is built on. The scene is then continued past the photograph's {grow_edges} instead, and nothing already visible leaves the frame.
-- Decide this from the photograph, not from the {lost_pct}%. A small cost is still the wrong answer when the subject is already tight against both {lost_axis} edges, and a large one is still right when the {lost_axis} is mostly background. A crowded group filling the frame edge to edge, a subject already cropped close at the {lost_axis}, or a composition whose meaning depends on both {lost_axis} edges are the cases for "expand"; a subject with space around it is a "crop".
-- State the reason in reframe_mode_reason: what specifically would be cut, or what specifically has room to go.
-- When you choose "expand", compose crop_box for the photograph's own shape rather than for {ratio} -- the framing you would choose if the output shape were not a constraint. Deterministic geometry then continues the scene past the {grow_edges} to reach {ratio}, so a crop_box that is already exactly {ratio} would defeat the choice. When you choose "crop", compose it for {ratio} exactly, as the rules above require.
+- A {ratio} crop removes {lost_pct}% of the photograph's {lost_axis}. Decide reframe_mode before sacrificing subjects to fit the ratio.
+- First identify a jointly portrayed group or a single focal subject, using the settled subjects and their shared activity. Spectators at the same event are not automatically co-subjects.
+- For a jointly portrayed group, choose "expand" when the best {ratio} crop excludes an included member's face, expression or participation. Keep the group as the photographic subject; a narrower central subgroup is not an equivalent replacement. Member preservation takes priority over central ROI emphasis.
+- For a single focal subject, choose "crop" when the face, defining expression and primary action remain clear. An intentional portrait trim may remove peripheral body parts and incidental background.
+- Expansion continues the scene beyond the {grow_edges}, adds at most 35% to the {grow_axis}, and reduces the crop needed from the {lost_axis}. Retain as many group members and shared actions as this plan allows; residual cropping does not itself cancel the expand choice. Use "crop" if continuation would require inventing a person's body instead of extending the existing scene.
+- In reframe_mode_reason, name the group members a pure crop excludes, or the focal expression/action a crop retains.
+- For "expand", compose crop_box in the source shape; for "crop", compose the best exact {ratio} frame.
 """
 
 _OVERALL_ANALYSIS_PERSONA = """You are a senior photography director, colorist, and high-end retoucher.
@@ -2639,6 +2641,7 @@ def _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size=None):
         lost_pct=round((1 - _cross_direction_retained(pref, source_size)) * 100),
         lost_axis="width" if narrower else "height",
         grow_edges="top and bottom edges" if narrower else "left and right edges",
+        grow_axis="height" if narrower else "width",
     )
 
 

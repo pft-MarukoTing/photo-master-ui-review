@@ -739,22 +739,22 @@ class ExpandPermissionTests(unittest.TestCase):
 
     def test_analysis_policy_asks_the_analyzer_to_decide(self):
         wide = build_analysis_instruction("9:16", source_size=self.SQUARE)
-        self.assertIn("record the decision in reframe_mode", wide)
-        self.assertIn("would take 44% of its width", wide)
-        self.assertIn("past the photograph's top and bottom edges", wide)
+        self.assertIn("Decide reframe_mode before sacrificing subjects to fit the ratio.", wide)
+        self.assertIn("removes 44% of the photograph's width", wide)
+        self.assertIn("beyond the top and bottom edges, adds at most 35% to the height", wide)
         # A modest gap is asked too: the decision is about the picture.
         modest = build_analysis_instruction("3:4", source_size=self.SQUARE)
-        self.assertIn("record the decision in reframe_mode", modest)
-        self.assertIn("would take 25% of its width", modest)
+        self.assertIn("Decide reframe_mode before sacrificing subjects to fit the ratio.", modest)
+        self.assertIn("removes 25% of the photograph's width", modest)
         # Not a shape the user named, and a shape with nothing to extend: the
         # field is still declared (with its "crop" default), the question is not.
         for pref in ("auto", "1:1"):
             self.assertNotIn(
-                "record the decision in reframe_mode",
+                "Decide reframe_mode before sacrificing subjects to fit the ratio.",
                 build_analysis_instruction(pref, source_size=self.SQUARE),
             )
         # Both analyzer paths share the one policy.
-        self.assertIn("record the decision in reframe_mode",
+        self.assertIn("Decide reframe_mode before sacrificing subjects to fit the ratio.",
                       build_overall_analysis_instruction("9:16", source_size=self.SQUARE))
 
     def test_reframe_mode_is_a_two_value_enum_with_a_stated_default(self):
@@ -779,7 +779,7 @@ class ExpandPermissionTests(unittest.TestCase):
         """The choice depends on how far this shape is from the source's, so
         an analysis that cannot be told the source shape must not be asked."""
         self.assertNotIn(
-            "record the decision in reframe_mode", build_analysis_instruction("9:16"))
+            "Decide reframe_mode before sacrificing subjects to fit the ratio.", build_analysis_instruction("9:16"))
 
     def test_extension_plan_splits_the_gap_at_the_cap(self):
         box = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
