@@ -3779,7 +3779,7 @@ _FORCED_GAZE_STRATEGY = {
         "this edit."
     ),
     # eyes_only reads as "keep the head/face angle unchanged" downstream (see
-    # build_gaze_only_edit_prompt's execution-by-method rule), which is only
+    # build_eye_repair_pass_prompt's execution-by-method rule), which is only
     # valid for an already near-frontal head with a tiny miss -- too narrow a
     # licence for a user-forced request where the actual starting gaze/head
     # angle is unknown and may be far off-camera. eyes_plus_head_face_alignment
@@ -3821,7 +3821,7 @@ def resolve_user_gaze_request(issue):
     Mirrors resolve_user_blink_request: a fixed "look at the camera" repair
     target via gaze_repair_strategy, applied only when the user manually
     enables a should_fix=false row. Used both by build_edit_prompt's own
-    gaze_block and by pipeline._run_gaze_repair_pass's independent second
+    gaze_block and by pipeline._run_eye_repair_pass's independent second
     pass, which re-derives its own item list from analysis rather than
     reusing build_edit_prompt's -- both call sites need this applied, or a
     forced gaze fix silently never executes under the two-stage
@@ -6654,7 +6654,12 @@ Approved-repair override:
     blink_has_repair_strategy = any(
         isinstance(item.get("blink_repair_strategy"), dict) for item in blink_items_to_fix
     )
-    if blink_items_to_fix and blink_has_repair_strategy:
+    if blink_items_to_fix and not single_pass_edit:
+        blink_block = """Eye-state preservation instruction (highest priority):
+- Do not perform any accidental-blink or closed-eye repair in this pass, even though the analysis approved one for a named subject -- that repair is deliberately deferred to a separate, later edit pass and is completely out of scope for this pass.
+- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, the edit intent, and correction_plan were all written to describe the approved fix, not to authorize performing it in this pass.
+- Preserve every visible person's eyelid state exactly as captured."""
+    elif blink_items_to_fix and blink_has_repair_strategy:
         blink_targets = []
         for item in blink_items_to_fix:
             label = item.get("subject_label", "unnamed subject")
@@ -6868,8 +6873,8 @@ Execution instructions:
     ] if gaze_contact_detection_enabled else []
     gaze_block = ""
     # Two-stage flow (single_pass_edit=False): any approved gaze
-    # repair is 100% Step 5b's job (pipeline._run_gaze_repair_pass calls
-    # build_gaze_only_edit_prompt as an isolated second pass on this call's own
+    # repair is 100% Step 5b's job (pipeline._run_eye_repair_pass calls
+    # build_eye_repair_pass_prompt as an isolated second pass on this call's own
     # output), so this call must leave gaze untouched even when a fix is
     # approved -- attempting it here too would let this pass's own no-op or
     # partial attempt slip through as the final result if Step 5b is ever
@@ -7276,20 +7281,19 @@ User extra direction:
     return prompt
 
 
-def build_gaze_only_edit_prompt(gaze_items):
-    """Prompt for the Step 5b gaze-only repair pass (pipeline._run_gaze_repair_pass):
-    a second, full-image edit call on Step 5's own output, asking for nothing
-    but the approved gaze fix(es).
+def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):
+    """Prompt for the two-stage eye pass (pipeline._run_eye_repair_pass): a second,
+    full-image edit call on Step 5's own output, asking for nothing but the
+    approved gaze and/or blink repair(s).
 
-    Step 5 bundles every gaze fix into one call together with exposure/crop/
-    skin/style/etc, and at low image quality that call reliably applies the
-    coarse, whole-frame changes but often no-ops the fine, localized iris/
-    pupil movement -- confirmed by comparing several before/after test photos
-    where the analysis's edit_instruction was just as clear and specific in
-    the cases that failed as in the ones that worked. A second call whose
-    prompt contains nothing but the gaze fix gives the same quality tier's
-    budget and the model's full attention to just this one change, for every
-    approved subject at once.
+    Step 5 bundles every fix into one call together with exposure/crop/skin/
+    style/etc, and that call reliably applies the coarse, whole-frame changes
+    but often no-ops or under-applies the fine, localized eye work. A second
+    call whose prompt contains nothing but the eye repairs gives the model its
+    full attention for just those changes, for every approved subject at once.
+
+    blink_targets/blink_rules come from feature_resolver.build_blink_pass_targets,
+    so an eyelid repair is worded exactly as a single-pass Step 5 would word it.
 
     An earlier version of this pass cropped to each face and pasted the
     edited crop back in. Workable in principle, but the crop's own edit call
@@ -7301,6 +7305,7 @@ def build_gaze_only_edit_prompt(gaze_items):
     seam to paste and nothing separate to keep consistent: the model edits
     and returns the entire photo itself.
     """
+    blink_by_subject = {t.get("subject_index"): t for t in blink_targets}
     targets = []
     for item in gaze_items:
         label = item.get("subject_label") or "the subject"
@@ -7313,6 +7318,12 @@ def build_gaze_only_edit_prompt(gaze_items):
         target_gaze_read = strategy.get("target_gaze_read") or "both eyes clearly and directly looking at the camera lens"
         strategy_type = strategy.get("strategy_type") or "eyes_plus_head_face_alignment"
         repair_strength = strategy.get("repair_strength") or "moderate"
+        blink = blink_by_subject.pop(item.get("_subject_index"), None) if item.get("_subject_index") is not None else None
+        expression_line = ""
+        if blink:
+            expression_line = "\n  Eyelid repair (render together with the gaze change as one eye edit):\n" + "\n".join(
+                f"  {line}" for line in blink["lines"]
+            )
         targets.append(
             f"- Subject: {label}\n"
             f"  Approximate location in frame: {json.dumps(box, ensure_ascii=False)}\n"
@@ -7322,22 +7333,46 @@ def build_gaze_only_edit_prompt(gaze_items):
             f"  Sclera/catchlight adjustment: {sclera_catchlight_adjustment}\n"
             f"  Target result: {target_gaze_read}\n"
             f"  Approved repair method: {strategy_type} at {repair_strength} strength."
+            f"{expression_line}"
+        )
+    for blink in list(blink_by_subject.values()):
+        targets.append(
+            f"- Subject: {blink['label']}\n"
+            f"  Approximate location in frame: {json.dumps(blink['box'], ensure_ascii=False)}\n"
+            "  Eyelid repair:\n" + "\n".join(f"  {line}" for line in blink["lines"])
         )
     targets_block = "\n".join(targets)
+    has_gaze, has_blink = bool(gaze_items), bool(blink_targets)
 
-    return f"""You are editing the supplied image, which is already a finished, fully-graded photograph. Do not treat it as a draft.
-
-This is the ONLY task for this edit: redirect the named subject's or subjects' gaze so they clearly and directly look at the camera lens. Nothing else about this image should change -- not exposure, color, crop, framing, background, clothing, pose, expression, or any person other than the ones named below.
-
-{targets_block}
-
-Scope is limited to the named subject's eye direction and the exact bounded head/face alignment explicitly approved for that subject. If the photo contains other people who are not named above, they are completely out of scope: do not touch their eyes, gaze, expression, pose, hair, or anything else about them, even if their gaze also looks imperfect. For the named subject, preserve eyebrows, eyelid openness and crease shape, mouth, expression, identity, neck anatomy, torso, shoulders, and body pose. The head/face may turn or tilt only when the approved repair method is eyes_plus_head_face_alignment; never rotate the shoulders or torso to simulate that head correction.
+    if has_gaze and has_blink:
+        task = "carry out the eye repairs listed for each named subject below -- redirecting the gaze so it clearly and directly looks at the camera lens, and/or opening accidentally closed or half-closed eyelids"
+        scope = "Scope is limited to each named subject's listed repairs: eye direction and the exact bounded head/face alignment for a gaze repair, eyelid opening for an eyelid repair."
+        expression_scope = "For the named subject, preserve eyebrows, mouth, expression, identity, neck anatomy, torso, shoulders, and body pose, and preserve eyelid openness and crease shape wherever no eyelid repair is listed."
+    elif has_blink:
+        task = "open the named subject's or subjects' accidentally closed or half-closed eyelids as described below"
+        scope = "Scope is limited to the named subject's eyelid opening and the eye details that opening moves."
+        expression_scope = "For the named subject, preserve the mouth, eyebrows, expression, identity, head angle, neck anatomy, torso, shoulders, and body pose."
+    else:
+        task = "redirect the named subject's or subjects' gaze so they clearly and directly look at the camera lens"
+        scope = "Scope is limited to the named subject's eye direction and the exact bounded head/face alignment explicitly approved for that subject."
+        expression_scope = "For the named subject, preserve eyebrows, eyelid openness and crease shape, mouth, expression, identity, neck anatomy, torso, shoulders, and body pose."
+    head_rule = " The head/face may turn or tilt only when the approved repair method is eyes_plus_head_face_alignment; never rotate the shoulders or torso to simulate that head correction." if has_gaze else ""
+    gaze_sections = f"""
 
 Execution by method:
 - eyes_plus_head_face_alignment: the head/face adjustment is required, not optional. Visibly but naturally turn and/or tilt the head/face toward the exact current lens, then align both pupils/irises to that lens. Do not merely shift the pupils while retaining an incompatible original head direction.
 - eyes_only: keep the head/face angle unchanged and reposition only the pupils/irises. This is reserved for an extremely small miss with an already lens-aligned frontal head.
 
-Go all the way to direct lens contact, not partway there. The completed correction must be immediately readable at normal photo-viewing size, without zooming into the face. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils and, when required, the head/face have moved far enough, move them further within natural anatomical limits rather than settling for a subtle, ambiguous shift. A clearly visible correction that unmistakably reads as direct eye contact is the right outcome; a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.
+Go all the way to direct lens contact, not partway there. The completed correction must be immediately readable at normal photo-viewing size, without zooming into the face. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils and, when required, the head/face have moved far enough, move them further within natural anatomical limits rather than settling for a subtle, ambiguous shift. A clearly visible correction that unmistakably reads as direct eye contact is the right outcome; a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.""" if has_gaze else ""
+    blink_section = "\n\nEyelid repair rules:\n" + "\n".join(blink_rules) if has_blink and blink_rules else ""
+
+    return f"""You are editing the supplied image, which is already a finished, fully-graded photograph. Do not treat it as a draft.
+
+This is the ONLY task for this edit: {task}. Nothing else about this image should change -- not exposure, color, crop, framing, background, clothing, pose, expression, or any person other than the ones named below.
+
+{targets_block}
+
+{scope} If the photo contains other people who are not named above, they are completely out of scope: do not touch their eyes, gaze, expression, pose, hair, or anything else about them, even if their gaze also looks imperfect. {expression_scope}{head_rule}{gaze_sections}{blink_section}
 
 Preserve everything else in the photograph exactly as supplied, especially: every other person in the frame, in full and completely unmodified; the named subject's expression, mouth, and eyebrows; and the entire background. Also preserve identity, face shape, skin texture, skin tone, hairstyle, glasses, makeup, lighting, clothing, pose, and composition. Do not add text, logos, watermarks, or new people. Do not crop, reframe, resize, or change the composition -- the output must be the same framing as the input, at the same size.
 """

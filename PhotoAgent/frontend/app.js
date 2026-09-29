@@ -5328,7 +5328,7 @@
                 { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
                 { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
                 { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-                { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+                { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
                 { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
               ] }
             ];
@@ -5400,7 +5400,7 @@
         { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
         { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
         { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-        { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+        { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
         { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
       ]);
       if (isCurrent()) addTiming("取得結果", Date.now() - stepStart);
@@ -5559,7 +5559,7 @@
           { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-          { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+          { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
         { label: "取得結果", duration: fetchMs }
@@ -6100,7 +6100,7 @@
               { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
               { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
               { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-              { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+              { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
               { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
             ] }
           ];
@@ -6356,7 +6356,7 @@
           { label: "Step 3：使用者補充指令", duration: secToMs(t["Step 3 - user_instruction_review"]) },
           { label: "Step 4：裁切驗證", duration: secToMs(t["Step 4 - crop_validation"]) },
           { label: "Step 5：美化執行", duration: secToMs(t["Step 5 - image_edit"]) },
-          { label: "Step 5b：眼神修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
+          { label: "Step 5b：眼部修正", duration: secToMs(t["Step 5b - gaze_repair_pass"]) },
           { label: "Step 6：品質檢查", duration: secToMs(t["Step 6 - quality_check"]) }
         ] },
         { label: "取得結果", duration: fetchMs }
@@ -11392,7 +11392,7 @@
     { label: "修圖（Legacy raw）", el: () => els.promptEditRaw, omitWhenEmpty: true },
     { label: "修圖（送給 Editor）", el: () => els.promptEdit },
     { label: "Feature Resolver 結果", el: () => els.promptEditResolution, omitWhenEmpty: true },
-    { label: "眼神修正（第二段）", el: () => els.promptGazeRepair },
+    { label: "眼部修正（第二段）", el: () => els.promptGazeRepair },
     // Unlike every stage above, this one has no #prompt-* element to read --
     // it's a same-origin image lazy-fetched on click (see
     // loadPromptsModalImageTab below) from whichever job/run `lastResult`
@@ -11400,7 +11400,7 @@
     // when Step 5b actually ran (pipeline.py's finish_stage), so a missing
     // image is a normal 404, handled by loadPromptsModalImageTab itself
     // rather than the empty-tab styling the text stages use.
-    { label: "第一階段中間圖（眼神修正前）", image: true },
+    { label: "第一階段中間圖（眼部修正前）", image: true },
     { label: "品質檢查", el: () => els.promptQa },
     { label: "處理時間", text: timingListAsText, emptyText: "（尚無處理時間記錄）" },
     { label: "API 用量與費用", text: tokenUsageAsText, emptyText: "（尚無用量記錄）" },

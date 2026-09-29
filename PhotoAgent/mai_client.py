@@ -199,6 +199,7 @@ def edit_photo(
             crop_plan,
             preset_key=preset_key,
             include_gaze=single_pass_edit,
+            include_blink=single_pass_edit,
             revision_feedback=revision_feedback,
             raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
             raw_style_instruction=raw_prompt_sections.get("style_instruction"),

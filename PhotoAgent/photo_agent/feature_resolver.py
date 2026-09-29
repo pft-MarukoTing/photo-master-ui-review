@@ -1041,7 +1041,7 @@ def _safe_gaze_head_face_adjustment(value, *, allow_pose_change=False):
     return " ".join(kept).strip()
 
 
-def build_feature_contracts(analysis, *, include_gaze=True):
+def build_feature_contracts(analysis, *, include_gaze=True, include_blink=True):
     """Return active, editor-stage feature contracts from analysis/options.
 
     Every contract carries its parent ``subjects[]`` index so the resolver
@@ -1051,7 +1051,7 @@ def build_feature_contracts(analysis, *, include_gaze=True):
     contracts = (
         _smile_contracts(analysis)
         + _gaze_contracts(analysis, include_gaze)
-        + _blink_contracts(analysis)
+        + (_blink_contracts(analysis) if include_blink else [])
         + _hair_contracts(analysis)
     )
     return contracts
@@ -1274,12 +1274,185 @@ def resolve_feature_contracts(contracts, subject_count=None):
     return resolved
 
 
+_IDENTITY_GEOMETRY_RULE = (
+    "- Fixed identity geometry: retain head/face proportions, jaw and cheekbone structure, the baseline "
+    "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
+    "length, and ear shape."
+)
+_BLINK_IDENTITY_SCOPE = (
+    " For each named blink repair, adjust only the eyelid margins, crease, and minimally necessary lid "
+    "endpoints; preserve brows, eye centers, globes, lashes, makeup, and surrounding anatomy."
+)
+_BLINK_PAIR_RULES = (
+    "- Shared eye-pair target for every named blink repair: finish both eyes with the same natural degree "
+    "of opening. Match their opening size and shape, visible iris width, upper- and lower-lid contours, "
+    "and double-eyelid fold shape and visible width.",
+    "- Retract each upper-lid margin as needed and fold blink-compressed lid tissue into a smooth crease over "
+    "the existing globe. Keep both final openings and creases equally clear under the original lighting, "
+    "lashes, makeup, and lid shadows.",
+)
+_EYE_MAKEUP_CARRY_RULE = (
+    "- Carry the original lash line/lashes, brow design, eyeliner, eyeshadow, mascara, false lashes, glasses, "
+    "and reflections through authorized movement without redesigning, enhancing, removing, or replacing them."
+)
+
+
+def _eye_state_lines(state, *, subject_has_blink, style_options, include_gaze_method=True):
+    """Eyelid and gaze lines for one resolved subject; include_gaze_method=False leaves the gaze method to another prompt."""
+    state_lines = []
+    smile = state.get("smile_level")
+    if state.get("eye_state"):
+        eyelid_strength = str(state.get("eyelid_strength") or "").strip()
+        eyelid_target = str(state.get("eyelid_target") or "").strip().rstrip(".。")
+        eyelid_adjustment = str(state.get("eyelid_adjustment") or "").strip().rstrip(".。")
+        if state.get("paired_blink_repair"):
+            strength_text = f"{eyelid_strength} " if eyelid_strength else ""
+            opening_target = (
+                "the same smile- or laughter-shaped final aperture, with matched natural periocular narrowing"
+                if smile else
+                "the same natural, comfortably open final aperture"
+            )
+            closed_side = state.get("closed_photograph_side")
+            reference_side = state.get("reference_photograph_side")
+            if closed_side and reference_side:
+                reference_geometry = (
+                    "finished expression-shaped eyelid geometry"
+                    if smile else
+                    "finished open eyelid geometry"
+                )
+                paired_eye_lines = [
+                    f"Eye-pair repair ({strength_text}correction): use the {reference_side} eye's "
+                    f"{reference_geometry} as the common design for the repaired {closed_side} eye; retain each "
+                    "eye's own iris, lashes, and makeup."
+                ]
+            elif state.get("asymmetric_blink_pair"):
+                opening_rank = {"fully_closed": 0, "half_closed": 1, "narrowed_open": 2, "open": 3}
+                left_rank = opening_rank[state["photograph_left_eye_state"]]
+                right_rank = opening_rank[state["photograph_right_eye_state"]]
+                more_closed_side = "photograph-left" if left_rank < right_rank else "photograph-right"
+                less_closed_side = "photograph-right" if left_rank < right_rank else "photograph-left"
+                paired_eye_lines = [
+                    f"Eye-pair repair ({strength_text}bilateral correction): open both eyes together to "
+                    f"{opening_target}. Lift the {more_closed_side} upper lid farther than the "
+                    f"{less_closed_side} upper lid so both finished eyes have matching opening height and "
+                    "iris exposure. Match their upper- and lower-lid contours and natural double-eyelid folds."
+                ]
+            else:
+                paired_eye_lines = [
+                    f"Eye-pair repair ({strength_text}bilateral correction): open both blink-affected eyes to "
+                    f"{opening_target}. Retract each upper-lid margin by the amount it needs to reach this "
+                    "shared endpoint, then form matching smooth upper-lid creases."
+                ]
+            if state.get("head_pose") == "frontal":
+                paired_eye_lines.append(
+                    "For this frontal face, match the final upper- and lower-lid contours across the facial midline while "
+                    "keeping the eye centers and interocular distance stable."
+                )
+            else:
+                paired_eye_lines.append(
+                    "For this turned face, match the final lid contours in each eye's local axis with natural "
+                    "perspective projection."
+                )
+            state_lines.extend(f"- {line}" for line in paired_eye_lines)
+            eyelid_text = None
+        elif smile:
+            eyelid_text = (
+                "Set both eyes to the same smile- or laughter-shaped final aperture, with matched natural "
+                "periocular narrowing"
+            )
+        elif state.get("blink_user_forced"):
+            # Forced means the analyzer itself found nothing to fix here --
+            # unlike the branch below, "accidentally closed/half-closed"
+            # would misdescribe the eye this row is actually about.
+            opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
+            eyelid_text = f"{opening} both eyes clearly and comfortably into a natural open resting state"
+            if eyelid_target:
+                eyelid_text += f". Target eyelid state: {eyelid_target}"
+        else:
+            if eyelid_target:
+                opening = f"Apply a {eyelid_strength} eyelid correction" if eyelid_strength else "Apply an eyelid correction"
+                eyelid_text = f"{opening} from the captured blink to the analysis-defined final eyelid state"
+            else:
+                opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
+                eyelid_text = f"{opening} both eyes clearly and comfortably from the captured blink into a natural open resting state"
+            if eyelid_target:
+                eyelid_text += f". Target eyelid state: {eyelid_target}"
+        if eyelid_text is not None:
+            if eyelid_adjustment:
+                eyelid_text += f". Eyelid method: {eyelid_adjustment}"
+            if not eyelid_text.endswith("."):
+                eyelid_text += "."
+            state_lines.append(f"- {eyelid_text}")
+    if include_gaze_method and state.get("gaze"):
+        gaze_method = state.get("method") or "eyes_only"
+        gaze_strength = state.get("strength") or "moderate"
+        eye_adjustment = _safe_gaze_eye_adjustment(state.get("eye_adjustment"))
+        head_face_adjustment = _safe_gaze_head_face_adjustment(
+            state.get("head_face_adjustment"),
+            allow_pose_change="pose" in style_options,
+        )
+        if gaze_method == "eyes_only":
+            gaze_method_text = (
+                f"Use a {gaze_strength} eyes-only correction and keep the original head/face angle fixed"
+            )
+        else:
+            bounded_head_change = head_face_adjustment or "only the minimum head/face alignment needed"
+            gaze_method_text = (
+                f"Use a {gaze_strength} eyes-plus-head/face correction, limited to {bounded_head_change}"
+            )
+        if eye_adjustment:
+            gaze_method_text += f"; iris/pupil movement: {eye_adjustment}"
+        state_lines.append(f"- {gaze_method_text}; reach clear direct lens contact.")
+    if state.get("coordinated_eye_edit"):
+        state_lines.append(
+            "- Render the final eyelid openness, iris/pupil direction, sclera balance, and catchlights as one coordinated local eye edit; do not reopen the eye to one gaze and then redirect it."
+        )
+    if subject_has_blink and not state.get("gaze"):
+        state_lines.append(
+            "- Inside the final eye pair, preserve the source-supported natural gaze target and head-compatible "
+            "binocular direction. Set both irises, pupils, sclera balances, and catchlights coherently as one "
+            "binocular pair under the original lighting; do not force camera contact."
+        )
+    elif smile and not state.get("gaze"):
+        state_lines.append("- Keep the captured iris/pupil direction, sclera balance, and catchlights.")
+    return state_lines
+
+def build_blink_pass_targets(analysis):
+    """Blink repairs for the two-stage eye pass (Step 5b), worded exactly as a single-pass Step 5 would word them.
+
+    Returns (targets, shared_rules); each target is {subject_index, label, box, lines}.
+    """
+    blink = _blink_contracts(analysis)
+    if not blink:
+        return [], []
+    resolved = resolve_feature_contracts(
+        _smile_contracts(analysis) + _gaze_contracts(analysis, True) + blink,
+        subject_count=len(analysis.get("subjects") or []),
+    )
+    style_options, _ = _style_change_footprint(analysis.get("style_options"))
+    targets = []
+    for item in resolved:
+        if "blink" not in item["features"]:
+            continue
+        targets.append({
+            "subject_index": item.get("subject_index"),
+            "label": item["subject"],
+            "box": item["box"],
+            "lines": _eye_state_lines(
+                item["final_state"], subject_has_blink=True, style_options=style_options,
+                include_gaze_method=False,
+            ),
+        })
+    rules = [_IDENTITY_GEOMETRY_RULE + _BLINK_IDENTITY_SCOPE, *_BLINK_PAIR_RULES, _EYE_MAKEUP_CARRY_RULE]
+    return targets, rules
+
+
 def build_compact_editor_prompt(
     analysis, preset_prompt, user_direction, crop_plan, *, preset_key="natural", include_gaze=True,
-    revision_feedback=None, raw_crop_instruction=None, raw_style_instruction=None,
+    include_blink=True, revision_feedback=None, raw_crop_instruction=None, raw_style_instruction=None,
 ):
     """Render one compact execution document from resolved final states."""
-    contracts = build_feature_contracts(analysis, include_gaze=include_gaze)
+    contracts = build_feature_contracts(analysis, include_gaze=include_gaze, include_blink=include_blink)
     resolved = resolve_feature_contracts(
         contracts, subject_count=len(analysis.get("subjects") or [])
     )
@@ -1389,120 +1562,9 @@ def build_compact_editor_prompt(
                 )
             else:
                 state_lines.append(f"- Render {smile_text} on the existing face—{replacement_guard}.")
-        if state.get("eye_state"):
-            eyelid_strength = str(state.get("eyelid_strength") or "").strip()
-            eyelid_target = str(state.get("eyelid_target") or "").strip().rstrip(".。")
-            eyelid_adjustment = str(state.get("eyelid_adjustment") or "").strip().rstrip(".。")
-            if state.get("paired_blink_repair"):
-                strength_text = f"{eyelid_strength} " if eyelid_strength else ""
-                opening_target = (
-                    "the same smile- or laughter-shaped final aperture, with matched natural periocular narrowing"
-                    if smile else
-                    "the same natural, comfortably open final aperture"
-                )
-                closed_side = state.get("closed_photograph_side")
-                reference_side = state.get("reference_photograph_side")
-                if closed_side and reference_side:
-                    reference_geometry = (
-                        "finished expression-shaped eyelid geometry"
-                        if smile else
-                        "finished open eyelid geometry"
-                    )
-                    paired_eye_lines = [
-                        f"Eye-pair repair ({strength_text}correction): use the {reference_side} eye's "
-                        f"{reference_geometry} as the common design for the repaired {closed_side} eye; retain each "
-                        "eye's own iris, lashes, and makeup."
-                    ]
-                elif state.get("asymmetric_blink_pair"):
-                    opening_rank = {"fully_closed": 0, "half_closed": 1, "narrowed_open": 2, "open": 3}
-                    left_rank = opening_rank[state["photograph_left_eye_state"]]
-                    right_rank = opening_rank[state["photograph_right_eye_state"]]
-                    more_closed_side = "photograph-left" if left_rank < right_rank else "photograph-right"
-                    less_closed_side = "photograph-right" if left_rank < right_rank else "photograph-left"
-                    paired_eye_lines = [
-                        f"Eye-pair repair ({strength_text}bilateral correction): open both eyes together to "
-                        f"{opening_target}. Lift the {more_closed_side} upper lid farther than the "
-                        f"{less_closed_side} upper lid so both finished eyes have matching opening height and "
-                        "iris exposure. Match their upper- and lower-lid contours and natural double-eyelid folds."
-                    ]
-                else:
-                    paired_eye_lines = [
-                        f"Eye-pair repair ({strength_text}bilateral correction): open both blink-affected eyes to "
-                        f"{opening_target}. Retract each upper-lid margin by the amount it needs to reach this "
-                        "shared endpoint, then form matching smooth upper-lid creases."
-                    ]
-                if state.get("head_pose") == "frontal":
-                    paired_eye_lines.append(
-                        "For this frontal face, match the final upper- and lower-lid contours across the facial midline while "
-                        "keeping the eye centers and interocular distance stable."
-                    )
-                else:
-                    paired_eye_lines.append(
-                        "For this turned face, match the final lid contours in each eye's local axis with natural "
-                        "perspective projection."
-                    )
-                state_lines.extend(f"- {line}" for line in paired_eye_lines)
-                eyelid_text = None
-            elif smile:
-                eyelid_text = (
-                    "Set both eyes to the same smile- or laughter-shaped final aperture, with matched natural "
-                    "periocular narrowing"
-                )
-            elif state.get("blink_user_forced"):
-                # Forced means the analyzer itself found nothing to fix here --
-                # unlike the branch below, "accidentally closed/half-closed"
-                # would misdescribe the eye this row is actually about.
-                opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
-                eyelid_text = f"{opening} both eyes clearly and comfortably into a natural open resting state"
-                if eyelid_target:
-                    eyelid_text += f". Target eyelid state: {eyelid_target}"
-            else:
-                if eyelid_target:
-                    opening = f"Apply a {eyelid_strength} eyelid correction" if eyelid_strength else "Apply an eyelid correction"
-                    eyelid_text = f"{opening} from the captured blink to the analysis-defined final eyelid state"
-                else:
-                    opening = f"Apply a {eyelid_strength} eyelid correction: open" if eyelid_strength else "Open"
-                    eyelid_text = f"{opening} both eyes clearly and comfortably from the captured blink into a natural open resting state"
-                if eyelid_target:
-                    eyelid_text += f". Target eyelid state: {eyelid_target}"
-            if eyelid_text is not None:
-                if eyelid_adjustment:
-                    eyelid_text += f". Eyelid method: {eyelid_adjustment}"
-                if not eyelid_text.endswith("."):
-                    eyelid_text += "."
-                state_lines.append(f"- {eyelid_text}")
-        if state.get("gaze"):
-            gaze_method = state.get("method") or "eyes_only"
-            gaze_strength = state.get("strength") or "moderate"
-            eye_adjustment = _safe_gaze_eye_adjustment(state.get("eye_adjustment"))
-            head_face_adjustment = _safe_gaze_head_face_adjustment(
-                state.get("head_face_adjustment"),
-                allow_pose_change="pose" in style_options,
-            )
-            if gaze_method == "eyes_only":
-                gaze_method_text = (
-                    f"Use a {gaze_strength} eyes-only correction and keep the original head/face angle fixed"
-                )
-            else:
-                bounded_head_change = head_face_adjustment or "only the minimum head/face alignment needed"
-                gaze_method_text = (
-                    f"Use a {gaze_strength} eyes-plus-head/face correction, limited to {bounded_head_change}"
-                )
-            if eye_adjustment:
-                gaze_method_text += f"; iris/pupil movement: {eye_adjustment}"
-            state_lines.append(f"- {gaze_method_text}; reach clear direct lens contact.")
-        if state.get("coordinated_eye_edit"):
-            state_lines.append(
-                "- Render the final eyelid openness, iris/pupil direction, sclera balance, and catchlights as one coordinated local eye edit; do not reopen the eye to one gaze and then redirect it."
-            )
-        if subject_has_blink and not state.get("gaze"):
-            state_lines.append(
-                "- Inside the final eye pair, preserve the source-supported natural gaze target and head-compatible "
-                "binocular direction. Set both irises, pupils, sclera balances, and catchlights coherently as one "
-                "binocular pair under the original lighting; do not force camera contact."
-            )
-        elif smile and not state.get("gaze"):
-            state_lines.append("- Keep the captured iris/pupil direction, sclera balance, and catchlights.")
+        state_lines.extend(_eye_state_lines(
+            state, subject_has_blink=subject_has_blink, style_options=style_options,
+        ))
         hair_level = state.get("hair_level")
         hair_correction_plan = str(state.get("hair_correction_plan") or "").strip()
         hair_action = state.get("hair_action")
@@ -1605,28 +1667,12 @@ def build_compact_editor_prompt(
             " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed."
             if has_head_aligned_gaze else ""
         )
-        identity_rule = (
-            "- Fixed identity geometry: retain head/face proportions, jaw and cheekbone structure, the baseline "
-            "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
-            "length, and ear shape."
-        )
+        identity_rule = _IDENTITY_GEOMETRY_RULE
         if has_blink:
-            identity_rule += (
-                " For each named blink repair, adjust only the eyelid margins, crease, and minimally necessary lid "
-                "endpoints; preserve brows, eye centers, globes, lashes, makeup, and surrounding anatomy."
-            )
+            identity_rule += _BLINK_IDENTITY_SCOPE
         shared_face_rules.append(identity_rule + projection_exception)
     if has_blink:
-        shared_face_rules.append(
-            "- Shared eye-pair target for every named blink repair: finish both eyes with the same natural degree "
-            "of opening. Match their opening size and shape, visible iris width, upper- and lower-lid contours, "
-            "and double-eyelid fold shape and visible width."
-        )
-        shared_face_rules.append(
-            "- Retract each upper-lid margin as needed and fold blink-compressed lid tissue into a smooth crease over "
-            "the existing globe. Keep both final openings and creases equally clear under the original lighting, "
-            "lashes, makeup, and lid shadows."
-        )
+        shared_face_rules.extend(_BLINK_PAIR_RULES)
     if has_smile:
         shared_face_rules.append(
             "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, and visible dental characteristics rather than regenerating or beautifying the whole face."
@@ -1648,9 +1694,7 @@ def build_compact_editor_prompt(
             "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
         )
     if has_facial_edit:
-        shared_face_rules.append(
-            "- Carry the original lash line/lashes, brow design, eyeliner, eyeshadow, mascara, false lashes, glasses, and reflections through authorized movement without redesigning, enhancing, removing, or replacing them."
-        )
+        shared_face_rules.append(_EYE_MAKEUP_CARRY_RULE)
     shared_face_block = (
         "\nShared facial execution rules:\n" + "\n".join(shared_face_rules)
         if shared_face_rules else ""

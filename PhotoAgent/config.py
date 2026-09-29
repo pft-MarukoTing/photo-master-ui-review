@@ -14,9 +14,9 @@ ENABLE_BODY_RESHAPE = False
 MODELS = {
     "image": "gpt-image-2",
     "analysis": "gpt-5.6-luna",
-    # Step 5b (pipeline._run_gaze_repair_pass) -- which model runs the
-    # second, gaze-only edit pass, independent of "image" above (Step 5's
-    # own model choice, itself overridable per request via image_model).
+    # Step 5b (pipeline._run_eye_repair_pass) -- which model runs the
+    # second edit pass when it repairs gaze only (a blink repair uses
+    # pipeline.BLINK_REPAIR_IMAGE_MODEL), independent of "image" above.
     "gaze_repair": "nano-banana-2",
 }
 

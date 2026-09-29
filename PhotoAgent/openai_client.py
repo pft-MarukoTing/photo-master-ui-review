@@ -45,7 +45,6 @@ from prompts import (
     merge_body_reshape_edit_prompt,
     merge_body_reshape_plans_partial,
     build_edit_prompt,
-    build_gaze_only_edit_prompt,
     build_quality_check_prompt,
     expand_subject_boxes_to_contain_faces,
     merge_portrait_qc_issues,
@@ -846,7 +845,7 @@ def edit_photo(
     if prompt_strategy == "resolved_compact":
         prompt_text, resolution_metadata = build_compact_editor_prompt(
             framed_analysis, preset_prompt, user_direction, crop_plan,
-            preset_key=preset_key, include_gaze=single_pass_edit,
+            preset_key=preset_key, include_gaze=single_pass_edit, include_blink=single_pass_edit,
             revision_feedback=revision_feedback,
             raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
             raw_style_instruction=raw_prompt_sections.get("style_instruction"),
@@ -892,14 +891,14 @@ def _post_image_edit(model: str, prompt_text: str, quality: str, size_param: str
     return data
 
 
-# ── Step 5b: gaze-only repair pass (OpenAI) ────────────────────────────────────
+# ── Step 5b: eye repair pass (OpenAI) ──────────────────────────────────────────
 
-def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", model: str = IMAGE_MODEL):
-    """Runs the approved gaze repair(s) as a second, isolated full-image edit
-    on top of Step 5's own output (see pipeline._run_gaze_repair_pass for why
+def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", model: str = IMAGE_MODEL):
+    """Runs the approved gaze/blink repair(s) as a second, isolated full-image edit
+    on top of Step 5's own output (see pipeline._run_eye_repair_pass for why
     this is a second whole-image call rather than a crop-and-paste). OpenAI
-    counterpart to gemini_client.edit_gaze_only -- which of the two runs is
-    picked by config.MODELS["gaze_repair"], independent of whichever model
+    counterpart to gemini_client.edit_eye_repair_pass; which one runs is
+    picked by pipeline._run_eye_repair_pass, independent of whichever model
     ran Step 5 itself.
 
     Returns (image_bytes, prompt_text, usage) -- usage is {"model", "usage"};
@@ -907,7 +906,7 @@ def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", m
     prompt in the "Sent to GPT" debug view regardless of which provider
     actually ran it.
     """
-    prompt_text = build_gaze_only_edit_prompt(gaze_items)
+    prompt_text = prompt
     img_w, img_h = get_image_dimensions(image_bytes)
     size_param = openai_edit_size_for_ratio(img_w, img_h) if supports_arbitrary_openai_size(model) else nearest_openai_edit_size(img_w, img_h)
     png_bytes = ensure_png_bytes(image_bytes)

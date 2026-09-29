@@ -18,7 +18,7 @@ from image_tools import (
     output_geometry_warnings,
     ensure_png_bytes,
 )
-from prompts import build_edit_prompt, build_gaze_only_edit_prompt
+from prompts import build_edit_prompt
 from photo_agent.feature_resolver import build_compact_editor_prompt
 from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
 
@@ -204,7 +204,7 @@ def edit_photo(
     if prompt_strategy == "resolved_compact":
         prompt_text, resolution_metadata = build_compact_editor_prompt(
             framed_analysis, preset_prompt, user_direction, crop_plan,
-            preset_key=preset_key, include_gaze=single_pass_edit,
+            preset_key=preset_key, include_gaze=single_pass_edit, include_blink=single_pass_edit,
             revision_feedback=revision_feedback,
             raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
             raw_style_instruction=raw_prompt_sections.get("style_instruction"),
@@ -246,11 +246,11 @@ def edit_photo(
     }, prompt_text
 
 
-# ── Step 5b: gaze-only repair pass (Gemini / "Nano Banana") ────────────────────
+# ── Step 5b: eye repair pass (Gemini / "Nano Banana") ─────────────────────────
 
-def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", model: str = NANO_BANANA_2_MODEL):
-    """Runs the approved gaze repair(s) as a second, isolated full-image edit
-    on top of Step 5's own output (see pipeline._run_gaze_repair_pass for why
+def edit_eye_repair_pass(image_bytes: bytes, prompt: str, quality: str = "low", model: str = NANO_BANANA_2_MODEL):
+    """Runs the approved gaze/blink repair(s) as a second, isolated full-image edit
+    on top of Step 5's own output (see pipeline._run_eye_repair_pass for why
     this is a second whole-image call rather than a crop-and-paste). Gemini
     counterpart to openai_client's OpenAI-only Step 5 pipeline -- used as the
     Step 5b model regardless of which model ran Step 5, since gpt-image-2 low
@@ -261,11 +261,11 @@ def edit_gaze_only(image_bytes: bytes, gaze_items: list, quality: str = "low", m
     re-crop or reframe what Step 5 already finished.
 
     Returns (image_bytes, prompt_text, usage) -- usage is {"model", "usage"};
-    same shape as openai_client.edit_gaze_only, so pipeline.py can surface
+    same shape as openai_client.edit_eye_repair_pass, so pipeline.py can surface
     this stage's prompt in the "Sent to GPT" debug view alongside every other
     one.
     """
-    prompt_text = build_gaze_only_edit_prompt(gaze_items)
+    prompt_text = prompt
     img_w, img_h = get_image_dimensions(image_bytes)
     api_ratio_label = _nearest_ratio_label(img_w / img_h if img_w and img_h else 1.0)
     image_config = {"imageSize": _image_size_for_model(quality, model), "aspectRatio": api_ratio_label}

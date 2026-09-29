@@ -16,7 +16,7 @@ from image_tools import (
 )
 from gemini_client import (
     edit_photo as edit_photo_gemini,
-    edit_gaze_only as edit_gaze_only_gemini,
+    edit_eye_repair_pass as edit_eye_repair_pass_gemini,
     NANO_BANANA_LITE_MODEL,
 )
 from mai_client import edit_photo as edit_photo_mai, MAI_IMAGE_26_MODEL
@@ -24,7 +24,7 @@ from openai_client import (
     analyze_photo,
     review_user_instruction,
     edit_photo,
-    edit_gaze_only as edit_gaze_only_openai,
+    edit_eye_repair_pass as edit_eye_repair_pass_openai,
     quality_check_photo,
     reframe_composition,
 )
@@ -33,6 +33,7 @@ from prompts import (
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
     build_eye_repair_planning_instruction,
+    build_eye_repair_pass_prompt,
     build_body_reshape_planning_instruction,
     body_reshape_enabled,
     strip_body_reshape,
@@ -51,6 +52,7 @@ from prompts import (
     restore_composition_state,
     with_reframing_proposal,
 )
+from photo_agent.feature_resolver import build_blink_pass_targets
 from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
 
 BLINK_REPAIR_IMAGE_MODEL = "gpt-image-2.5-sunburst"
@@ -68,16 +70,16 @@ EDIT_PHOTO_BY_MODEL = {
 
 # Step 5b's model is a separate choice from Step 5's (config.MODELS["gaze_repair"],
 # not image_model) -- picking gpt-image-2 low for Step 5 doesn't have to mean
-# gpt-image-2 low also runs the gaze-only pass. Keyed the same way as
+# gpt-image-2 low also runs the eye repair pass. Keyed the same way as
 # EDIT_PHOTO_BY_MODEL for the same reason: a one-line config swap between
 # providers while comparing which one repairs gaze more reliably.
-GAZE_REPAIR_BY_MODEL = {
-    "gpt-image-2": edit_gaze_only_openai,
-    "gpt-image-1.5": partial(edit_gaze_only_openai, model="gpt-image-1.5"),
-    "gpt-image-2.5-sunburst": partial(edit_gaze_only_openai, model="gpt-image-2.5-sunburst"),
-    "gpt-image-2.5-flare": partial(edit_gaze_only_openai, model="gpt-image-2.5-flare"),
-    "nano-banana-2": edit_gaze_only_gemini,
-    "nano-banana-lite": partial(edit_gaze_only_gemini, model=NANO_BANANA_LITE_MODEL),
+EYE_REPAIR_PASS_BY_MODEL = {
+    "gpt-image-2": edit_eye_repair_pass_openai,
+    "gpt-image-1.5": partial(edit_eye_repair_pass_openai, model="gpt-image-1.5"),
+    "gpt-image-2.5-sunburst": partial(edit_eye_repair_pass_openai, model="gpt-image-2.5-sunburst"),
+    "gpt-image-2.5-flare": partial(edit_eye_repair_pass_openai, model="gpt-image-2.5-flare"),
+    "nano-banana-2": edit_eye_repair_pass_gemini,
+    "nano-banana-lite": partial(edit_eye_repair_pass_gemini, model=NANO_BANANA_LITE_MODEL),
 }
 
 logger = logging.getLogger(__name__)
@@ -112,87 +114,56 @@ def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *
     return editor(image_bytes, analysis, quality, preset_key, **kwargs)
 
 
-def _run_gaze_repair_pass(image_b64: str, analysis: dict, quality: str):
-    """Step 5b: perform the approved gaze repair(s) as a second, isolated
-    whole-image edit on top of Step 5's own output.
+def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
+    """Step 5b: perform the approved gaze and/or blink repair(s) as a second,
+    isolated whole-image edit on top of Step 5's own output.
 
-    Runs on whichever model config.MODELS["gaze_repair"] names (see
-    GAZE_REPAIR_BY_MODEL above), independent of whichever model Step 5 itself
-    used. Under the two-call path (single_pass_edit=False), Step 5 is
-    told to leave gaze completely untouched even when a fix is approved (see
-    build_edit_prompt's single_pass_edit-gated gaze_block in prompts.py) --
-    this pass is the ONLY place any approved gaze redirection happens, not a
-    touch-up on top of a partial Step 5 attempt. That split exists because
-    on gpt-image-2 low specifically, a single call bundling the gaze fix
-    together with exposure/crop/skin/style/etc reliably applies the coarse,
-    whole-frame changes but often no-ops the fine, localized iris/pupil
-    movement -- confirmed by comparing several before/after test photos
-    where the analysis's edit_instruction was just as clear and specific in
-    the cases that failed as in the ones that worked. A second, isolated
-    call whose prompt contains nothing but the gaze fix gives the model's
-    full attention to just this one change, for every approved subject at
-    once -- which also sidesteps the multi-person matching problem a
-    crop-based approach would have (no need to figure out which detected
-    face is which named subject; the model sees the whole photo and every
-    name at once, same as Step 5 does today).
+    Under the two-call path (single_pass_edit=False), Step 5 is told to leave
+    gaze and eyelid state untouched even when a fix is approved (the
+    include_gaze/include_blink gates in feature_resolver and the deferred
+    blocks in build_edit_prompt), so this pass is the ONLY place those
+    repairs happen. A single call bundling them with exposure/crop/skin/style
+    reliably applies the coarse, whole-frame changes but often no-ops or
+    under-applies the fine, localized eye work; a call whose prompt contains
+    nothing but the eye repairs gives them the model's full attention.
 
-    Under single_pass_edit=True this pass never runs at all (see
-    finish_stage), so build_edit_prompt keeps the older bundled-attempt
-    behavior for that path instead -- Step 5 is the only edit call, so it
-    has to be the one that at least attempts the fix.
+    Model: a blink repair runs on BLINK_REPAIR_IMAGE_MODEL at
+    BLINK_REPAIR_QUALITY, the tier blink repair is reliable on; a gaze-only
+    pass runs on config.MODELS["gaze_repair"] at the requested quality.
 
-    An earlier version of this pass cropped to each face and pasted the
-    edited crop back in. Workable in principle, but the crop's own edit call
-    also regenerates its background (hair, collar, whatever the padding
-    captured), and that regeneration didn't reliably match the base image
-    closely enough to paste back invisibly -- it produced a doubled face and
-    a warped background pattern on real test photos, even after restricting
-    the paste to a re-detected eye region. A second whole-image call has no
-    seam to paste and nothing separate to keep consistent: the model edits
-    and returns the entire photo itself.
+    Each toggle (gaze_contact_detection / eye_closed_detection) and each
+    per-person opt-out (_disabled_issue_subject_indices) is honoured here as
+    well as in build_edit_prompt, since this pass rebuilds its own item lists
+    from the analysis. resolve_user_gaze_request / build_blink_pass_targets
+    turn a manually-forced row into a real repair target.
 
     Best-effort: the caller's try/except keeps the Step 5 image untouched if
     this fails, so it can only help, never regress a job.
 
     Returns (image_b64, prompt_text, usage) -- prompt_text and usage are None
-    when there was no approved gaze repair to run, matching every other
+    when there was no approved eye repair to run, matching every other
     stage's "no GPT call made" convention (see finish_stage's prompts dict).
-
-    Gated here on advanced_options["gaze_contact_detection"] -- the analysis
-    stage itself no longer reads this toggle at all (it always runs full gaze
-    detection, so each subject's gaze_issue reflects genuine judgement
-    regardless of the toggle); this plain dict lookup, plus build_edit_prompt's
-    own strip_disabled_topic_items call on correction_plan, are the only two
-    places the toggle is actually enforced, both at edit time.
-
-    Also skips (falls through to the empty-gaze_items return below) once
-    every subject with an approved gaze fix has been individually opted out
-    via _disabled_issue_subject_indices -- the same per-person "允許 AI 修正此
-    項目" toggle build_edit_prompt's own blink/hair/gaze_items_to_fix already
-    honor. Without this, a person the user explicitly excluded on the review
-    screen would still get their gaze redirected here, since this pass
-    rebuilds its own item list straight from analysis rather than reusing
-    build_edit_prompt's already-filtered list.
     """
-    if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
-        return image_b64, None, None
-    # resolve_user_gaze_request turns a manually-forced should_fix=false row
-    # into a real repair target -- required here too, since this pass rebuilds
-    # its own item list straight from analysis rather than reusing build_edit_
-    # prompt's gaze_items_to_fix, and a forced item that only cleared that
-    # other filter would otherwise never reach an actual edit call.
-    gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
-    gaze_items = [
-        resolve_user_gaze_request(item) for item in subject_issue_items(analysis, "gaze_issue")
-        if (item.get("should_fix") or item.get("_user_forced"))
-        and item.get("_subject_index") not in gaze_disabled_indices
-    ]
-    if not gaze_items:
+    gaze_items = []
+    if (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
+        gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
+        gaze_items = [
+            resolve_user_gaze_request(item) for item in subject_issue_items(analysis, "gaze_issue")
+            if (item.get("should_fix") or item.get("_user_forced"))
+            and item.get("_subject_index") not in gaze_disabled_indices
+        ]
+    blink_targets, blink_rules = build_blink_pass_targets(analysis)
+    if not gaze_items and not blink_targets:
         return image_b64, None, None
 
-    run_edit_gaze_only = GAZE_REPAIR_BY_MODEL.get(MODELS["gaze_repair"], edit_gaze_only_gemini)
+    if blink_targets:
+        model, quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY
+    else:
+        model = MODELS["gaze_repair"]
+    run_eye_repair_pass = EYE_REPAIR_PASS_BY_MODEL.get(model, edit_eye_repair_pass_gemini)
+    prompt = build_eye_repair_pass_prompt(gaze_items, blink_targets, blink_rules)
     result_bytes = base64.b64decode(image_b64)
-    edited_bytes, prompt_text, usage = run_edit_gaze_only(result_bytes, gaze_items, quality=quality)
+    edited_bytes, prompt_text, usage = run_eye_repair_pass(result_bytes, prompt, quality=quality)
     return base64.b64encode(edited_bytes).decode(), prompt_text, usage
 
 
@@ -238,7 +209,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     here, and only for calm_hair (an opt-in style request) -- the detection/
     repair toggles (eye_closed_detection, hair_mess_detection,
     gaze_contact_detection) no longer affect analysis at all; they're only
-    enforced later, at edit time (see _run_gaze_repair_pass and
+    enforced later, at edit time (see _run_eye_repair_pass and
     build_edit_prompt's strip_disabled_topic_items). Still stamped onto
     analysis["_advanced_options"] below regardless, since those edit-time
     consumers read it off the analysis object rather than as their own
@@ -448,12 +419,12 @@ def finish_stage(
     straight to the edit model, which is instructed to perform that crop
     itself as part of the edit.
 
-    single_pass_edit: skip Step 5b (see _run_gaze_repair_pass) and fall back
-    to having Step 5's own edit call bundle any approved gaze fix in with
-    everything else (build_edit_prompt's single_pass_edit-gated gaze_block,
-    prompts.py). Under the two-call path (single_pass_edit=False), Step 5 is
-    instead told to leave gaze completely untouched and Step 5b performs 100%
-    of any approved gaze redirection as an isolated second pass -- so
+    single_pass_edit: skip Step 5b (see _run_eye_repair_pass) and fall back
+    to having Step 5's own edit call bundle any approved gaze/blink fix in with
+    everything else (build_edit_prompt's single_pass_edit-gated gaze_block/
+    blink_block, prompts.py). Under the two-call path (single_pass_edit=False),
+    Step 5 is instead told to leave gaze and eyelid state untouched and Step 5b
+    performs 100% of any approved gaze/blink repair as an isolated second pass -- so
     single_pass_edit (the default) trades that dedicated pass's reliability
     for a single edit-model round trip. That bundled call is only trusted to
     apply an approved gaze fix reliably on gpt-image-2 at medium+, so when
@@ -537,7 +508,7 @@ def finish_stage(
         # Step 5 — AI edit
         t0 = time.time()
         # single_pass_edit's bundled call only reliably applies an approved
-        # gaze fix on gpt-image-2 at medium+ (see _run_gaze_repair_pass's
+        # gaze fix on gpt-image-2 at medium+ (see _run_eye_repair_pass's
         # docstring) -- bump up from the requested "low" here, but only when
         # this photo actually has one, since with no gaze fix to bundle
         # there's nothing that combination would fail to apply.
@@ -548,8 +519,8 @@ def finish_stage(
             )
             if gaze_fix_approved:
                 edit_quality = "medium"
-        # An approved blink repair only comes out reliably on Sunburst at its top tier.
-        if approved_blink_items(analysis):
+        # An approved blink repair only comes out reliably on Sunburst at its top tier; two-stage defers it to Step 5b.
+        if single_pass_edit and approved_blink_items(analysis):
             image_model, edit_quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
@@ -571,8 +542,8 @@ def finish_stage(
         image_b64 = edit_result["image_b64"]
         logger.info("Step 5 done in %.2fs: image returned", timings["Step 5 - image_edit"])
 
-        # Step 5b — gaze-only repair pass (best-effort; see
-        # _run_gaze_repair_pass for scope and why it exists). Never allowed to
+        # Step 5b — gaze/blink repair pass (best-effort; see
+        # _run_eye_repair_pass for scope and why it exists). Never allowed to
         # fail the job -- worst case is the Step 5 image passes through as-is.
         # Skipped entirely under single_pass_edit -- see finish_stage's own
         # docstring for that tradeoff.
@@ -585,7 +556,7 @@ def finish_stage(
         else:
             pre_edit_image_b64 = image_b64
             try:
-                image_b64, gaze_repair_prompt, gaze_repair_usage = _run_gaze_repair_pass(image_b64, analysis, quality)
+                image_b64, gaze_repair_prompt, gaze_repair_usage = _run_eye_repair_pass(image_b64, analysis, quality)
                 prompts["gaze_repair_pass"] = gaze_repair_prompt
                 usage["Step 5b - gaze_repair_pass"] = gaze_repair_usage
                 timings["Step 5b - gaze_repair_pass"] = time.time() - t0

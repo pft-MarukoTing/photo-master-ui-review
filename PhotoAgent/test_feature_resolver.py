@@ -346,7 +346,7 @@ class BlinkRepairStrategy(unittest.TestCase):
             "blink_repair_strategy": blink_strategy(),
         })
         prompt, audit = build_compact_editor_prompt(analysis, "", "", {})
-        legacy_prompt = build_edit_prompt(analysis, {}, "", "", {})
+        legacy_prompt = build_edit_prompt(analysis, {}, "", "", {}, single_pass_edit=True)
         qa_prompt = build_quality_check_prompt(analysis)
 
         self.assertTrue(audit["resolved_features"][0]["final_state"]["paired_blink_repair"])
@@ -370,7 +370,7 @@ class BlinkRepairStrategy(unittest.TestCase):
             "right_eye_state": "half_closed",
             "blink_repair_strategy": blink_strategy(),
         })
-        prompt = build_edit_prompt(analysis, {}, "", "", {})
+        prompt = build_edit_prompt(analysis, {}, "", "", {}, single_pass_edit=True)
         qa_prompt = build_quality_check_prompt(analysis)
 
         self.assertIn("Target eye state: open, matching the left man's existing expression", prompt)
