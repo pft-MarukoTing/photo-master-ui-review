@@ -268,6 +268,13 @@ class PasteBackMatched:
             if hand_finger_masks.dim() == 2:
                 hand_finger_masks = hand_finger_masks.unsqueeze(0)
 
+            if hand_nail_masks_1.shape[-2:] != hand_nail_masks_2.shape[-2:]:
+                raise ValueError(
+                    f"[PasteBackMatched] hand {j}: nail_masks_1 and nail_masks_2 must have "
+                    f"the same resolution, got {tuple(hand_nail_masks_1.shape[-2:])} vs "
+                    f"{tuple(hand_nail_masks_2.shape[-2:])}."
+                )
+
             # Collapse near-duplicate detections of the same nail/finger (e.g. a small
             # box nested inside a large one) before matching, so the smaller one can't
             # win a match away from the true full-extent mask.
