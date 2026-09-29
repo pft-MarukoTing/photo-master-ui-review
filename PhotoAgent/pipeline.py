@@ -41,6 +41,7 @@ from prompts import (
     get_body_reshape_edit_prompt,
     body_reshape_items,
     eye_repair_targets,
+    final_smile_by_subject,
     portrait_qc_persons,
     resolve_user_gaze_request,
     apply_rejected_reframing,
@@ -155,6 +156,12 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
     blink_targets, blink_rules = build_blink_pass_targets(analysis)
     if not gaze_items and not blink_targets:
         return image_b64, None, None
+    # Step 5 has already applied the smile setting; the gaze has to be redirected inside that expression.
+    final_smile = final_smile_by_subject(analysis)
+    gaze_items = [
+        {**item, "_final_smile": final_smile.get(item.get("_subject_index"), final_smile.get(None))}
+        for item in gaze_items
+    ]
 
     if blink_targets:
         model, quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY

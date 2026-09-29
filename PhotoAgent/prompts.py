@@ -6233,6 +6233,20 @@ def resolve_smile_targets(analysis):
     return targets
 
 
+def final_smile_by_subject(analysis):
+    """Each person's smile intensity after Step 5: the target it was asked for, else the captured reading.
+
+    Key None covers every person when no face was read but an explicit level was applied to the whole photo.
+    """
+    readings = _read_smile_states(analysis)
+    if not readings:
+        level = smile_level(analysis)
+        return {None: level} if level not in (None, "auto") else {}
+    final = {item["_subject_index"]: item["current"] for item in readings}
+    final.update({t["_subject_index"]: t["target"] for t in resolve_smile_targets(analysis)})
+    return final
+
+
 def _smile_craft_rules(target_levels=()):
     """Short execution rules, adding level-specific craft only when relevant."""
     rules = [
@@ -7307,6 +7321,7 @@ def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):
     """
     blink_by_subject = {t.get("subject_index"): t for t in blink_targets}
     targets = []
+    smiling = False
     for item in gaze_items:
         label = item.get("subject_label") or "the subject"
         box = item.get("box") or {}
@@ -7319,10 +7334,17 @@ def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):
         strategy_type = strategy.get("strategy_type") or "eyes_plus_head_face_alignment"
         repair_strength = strategy.get("repair_strength") or "moderate"
         blink = blink_by_subject.pop(item.get("_subject_index"), None) if item.get("_subject_index") is not None else None
+        expression = item.get("_final_smile")
         expression_line = ""
         if blink:
             expression_line = "\n  Eyelid repair (render together with the gaze change as one eye edit):\n" + "\n".join(
                 f"  {line}" for line in blink["lines"]
+            )
+        elif expression in ("gentle", "broad", "laughing"):
+            smiling = True
+            expression_line = (
+                f"\n  Expression in this image: {expression} ({SMILE_TARGET_DESCRIPTIONS[expression]}). "
+                f"The eye opening this expression gives overrides anything the adjustments above imply about how open the eyes are."
             )
         targets.append(
             f"- Subject: {label}\n"
@@ -7342,12 +7364,17 @@ def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):
             "  Eyelid repair:\n" + "\n".join(f"  {line}" for line in blink["lines"])
         )
     targets_block = "\n".join(targets)
+    smile_eye_rule = (
+        " A smiling subject's eyelids keep the narrowing their smile's cheek lift gives them, on both eyes together; "
+        "direct contact reads through the iris and catchlight visible inside that narrowed opening."
+        if smiling else ""
+    )
     has_gaze, has_blink = bool(gaze_items), bool(blink_targets)
 
     if has_gaze and has_blink:
         task = "carry out the eye repairs listed for each named subject below -- redirecting the gaze so it clearly and directly looks at the camera lens, and/or opening accidentally closed or half-closed eyelids"
         scope = "Scope is limited to each named subject's listed repairs: eye direction and the exact bounded head/face alignment for a gaze repair, eyelid opening for an eyelid repair."
-        expression_scope = "For the named subject, preserve eyebrows, mouth, expression, identity, neck anatomy, torso, shoulders, and body pose, and preserve eyelid openness and crease shape wherever no eyelid repair is listed."
+        expression_scope = "For the named subject, the expression as it appears in this image -- mouth, eyebrows, and, where no eyelid repair is listed, how far the eyelids are open -- is part of the finished result: redirect the gaze inside that eye opening, and preserve identity, neck anatomy, torso, shoulders, and body pose."
     elif has_blink:
         task = "open the named subject's or subjects' accidentally closed or half-closed eyelids as described below"
         scope = "Scope is limited to the named subject's eyelid opening and the eye details that opening moves."
@@ -7355,7 +7382,7 @@ def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):
     else:
         task = "redirect the named subject's or subjects' gaze so they clearly and directly look at the camera lens"
         scope = "Scope is limited to the named subject's eye direction and the exact bounded head/face alignment explicitly approved for that subject."
-        expression_scope = "For the named subject, preserve eyebrows, eyelid openness and crease shape, mouth, expression, identity, neck anatomy, torso, shoulders, and body pose."
+        expression_scope = "For the named subject, the expression as it appears in this image -- mouth, eyebrows, and how far the eyelids are open -- is part of the finished result: redirect the gaze inside that eye opening, and preserve crease shape, identity, neck anatomy, torso, shoulders, and body pose."
     head_rule = " The head/face may turn or tilt only when the approved repair method is eyes_plus_head_face_alignment; never rotate the shoulders or torso to simulate that head correction." if has_gaze else ""
     gaze_sections = f"""
 
@@ -7363,7 +7390,7 @@ Execution by method:
 - eyes_plus_head_face_alignment: the head/face adjustment is required, not optional. Visibly but naturally turn and/or tilt the head/face toward the exact current lens, then align both pupils/irises to that lens. Do not merely shift the pupils while retaining an incompatible original head direction.
 - eyes_only: keep the head/face angle unchanged and reposition only the pupils/irises. This is reserved for an extremely small miss with an already lens-aligned frontal head.
 
-Go all the way to direct lens contact, not partway there. The completed correction must be immediately readable at normal photo-viewing size, without zooming into the face. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils and, when required, the head/face have moved far enough, move them further within natural anatomical limits rather than settling for a subtle, ambiguous shift. A clearly visible correction that unmistakably reads as direct eye contact is the right outcome; a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.""" if has_gaze else ""
+Go all the way to direct lens contact, not partway there. The completed correction must be immediately readable at normal photo-viewing size, without zooming into the face. A gaze that only moved closer to the camera without fully arriving is the same failure as not moving it at all -- "improved" is not the target, "looking straight into the lens" is. If you are unsure whether the pupils and, when required, the head/face have moved far enough, move them further within natural anatomical limits -- never by opening the eyelids wider -- rather than settling for a subtle, ambiguous shift.{smile_eye_rule} A clearly visible correction that unmistakably reads as direct eye contact is the right outcome; a timid one that still reads as near-camera or off-camera is not. Do not leave any named subject's gaze unchanged, and do not stop at a partial correction.""" if has_gaze else ""
     blink_section = "\n\nEyelid repair rules:\n" + "\n".join(blink_rules) if has_blink and blink_rules else ""
 
     return f"""You are editing the supplied image, which is already a finished, fully-graded photograph. Do not treat it as a draft.
