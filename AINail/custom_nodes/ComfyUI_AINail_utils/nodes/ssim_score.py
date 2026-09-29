@@ -1,6 +1,7 @@
 import numpy as np
-from PIL import Image
 from skimage.metrics import structural_similarity
+
+from .image_ops import resize_via_pil
 
 # Downsizing to this max side (with win_size scaled down to match) was
 # benchmarked against 4 real crop/generated pairs spanning a true match, a
@@ -20,9 +21,7 @@ def _resize_to(np_img, target_h, target_w):
     """Lanczos-resize a [H, W, C] float32 image in [0, 1] to an exact size."""
     if np_img.shape[:2] == (target_h, target_w):
         return np_img
-    pil_img = Image.fromarray((np.clip(np_img, 0, 1) * 255).astype(np.uint8))
-    pil_img = pil_img.resize((target_w, target_h), Image.LANCZOS)
-    return np.array(pil_img).astype(np.float32) / 255.0
+    return resize_via_pil(np.clip(np_img, 0, 1), target_h, target_w)
 
 
 def _safe_win_size(win_size, h, w):

@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from PIL import Image, ImageFilter
 
+from .image_ops import resize_via_pil
 from .paste_back import RESIZE_METHODS, dilate_mask
 
 # dilate_mask (torch max_pool2d) costs roughly H*W*kernel_size, so at the
@@ -22,9 +23,8 @@ def _resize_mask_to(mask, target_h, target_w):
     """Lanczos-resize a [H, W] float mask tensor to an exact size."""
     if mask.shape == (target_h, target_w):
         return mask
-    arr = (mask.clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)
-    pil_mask = Image.fromarray(arr, mode="L").resize((target_w, target_h), Image.LANCZOS)
-    resized = np.array(pil_mask).astype(np.float32) / 255.0
+    arr = mask.clamp(0, 1).cpu().numpy()
+    resized = resize_via_pil(arr, target_h, target_w)
     return torch.from_numpy(resized).to(mask.device)
 
 
@@ -346,10 +346,7 @@ class PasteBackMatched:
             # Undo resize — generated image -> hand square space [B, size, size, C]
             frames = []
             for frame in gen_image.float():
-                np_frame = (frame.cpu().numpy() * 255).astype(np.uint8)
-                pil_img = Image.fromarray(np_frame)
-                pil_img = pil_img.resize((size, size), resample)
-                frames.append(np.array(pil_img).astype(np.float32) / 255.0)
+                frames.append(resize_via_pil(frame.cpu().numpy(), size, size, resample))
             gen_square = torch.from_numpy(np.stack(frames))  # [B, size, size, C]
 
             # Extract patch from hand square (undo black padding) -> [B, ph, pw, C]
