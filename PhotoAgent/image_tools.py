@@ -498,7 +498,8 @@ def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: d
     """Make review text describe locally resolved geometry, never stale LLM text."""
     ctx = dict(context)
     indices = _crop_review_indices(ctx)
-    if not crop_box:
+    expanding = bool(ctx.get("reframe_extension")) and ratio_label != "original"
+    if not crop_box and not expanding:
         if indices:
             remove = set(indices)
             for key in ("correction_plan", "correction_axes", "correction_inverse", "retouch_recipe"):
@@ -523,7 +524,7 @@ def _sync_reframing_review_contract(context: dict, ratio_label: str, crop_box: d
             recipe[index] = f"重新構圖：維持原圖比例，{recipe_detail}"
         else:
             plan[index] = f"以{ratio_label}輸出比例重新構圖；{plan_detail}"
-            recipe[index] = f"重新構圖：裁成{ratio_label}，{recipe_detail}"
+            recipe[index] = f"重新構圖：調整為{ratio_label}，{recipe_detail}"
     ctx["correction_plan"] = plan
     ctx["retouch_recipe"] = recipe
     ctx["crop_recommendation"] = plan[indices[0]]

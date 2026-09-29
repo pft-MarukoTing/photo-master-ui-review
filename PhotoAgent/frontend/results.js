@@ -285,18 +285,19 @@ window.PhotoAgentResults = (() => {
     const recipe = Array.isArray(analysis.retouch_recipe) ? [...analysis.retouch_recipe] : [];
     const plan = Array.isArray(analysis.correction_plan) ? [...analysis.correction_plan] : [];
     const axes = analysis.correction_axes || [];
+    const expanding = Boolean(analysis.reframe_extension) && ratioLabel !== "original";
     axes.forEach((entry, index) => {
       if (!axesIncludeReframing(entry) || index >= recipe.length) return;
       const detail = reframingDetail(recipe[index])
         || reframingDetail(plan[index])
         || reframingDetail(analysis.crop_box?.reason)
         || "依解析後的裁切框改善主體集中度與邊緣落點。";
-      if (!cropPlan) {
+      if (!cropPlan && !expanding) {
         recipe[index] = "重新構圖：此比例下維持完整原圖（沒有有效裁切）";
       } else if (ratioLabel === "original") {
         recipe[index] = `重新構圖：維持原圖比例，${detail}`;
       } else {
-        recipe[index] = `重新構圖：裁成${ratioLabel}，${detail}`;
+        recipe[index] = `重新構圖：調整為${ratioLabel}，${detail}`;
       }
     });
     return { ...analysis, retouch_recipe: recipe };
@@ -333,7 +334,7 @@ window.PhotoAgentResults = (() => {
       els.apRecipeList?.querySelectorAll('input[type="checkbox"]') || []
     );
     const recipeChecked = recipeInputs.map((input) => input.checked);
-    const reframeChecked = Array.from(els.apRecipeList?.querySelectorAll("li") || []).some(
+    const reframeChecked = FIXED_RATIO_RE.test(pref) || Array.from(els.apRecipeList?.querySelectorAll("li") || []).some(
       (item) => /^重新構圖\s*[:：]/.test(item.querySelector(".step-cb-label")?.textContent || "")
         && item.querySelector('input[type="checkbox"]')?.checked
     );
@@ -380,6 +381,7 @@ window.PhotoAgentResults = (() => {
       .forEach((input, index) => {
         if (index < recipeChecked.length) input.checked = recipeChecked[index];
       });
+    syncReframingRatioLock();
   }
 
   function aspectRatioDisplayValue(value) {
@@ -435,6 +437,79 @@ window.PhotoAgentResults = (() => {
   }
 
   const REFRAME_RECIPE_RE = /^重新構圖\s*[:：]/;
+  const FIXED_RATIO_RE = /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/;
+
+  // A user-specified ratio cannot be reached without reframing, so its
+  // reframing item stays checked until the ratio itself is changed.
+  function syncReframingRatioLock() {
+    hideReframeLockTip();
+    const pref = String(els.apImageAspectRatioSelect?.value || "").trim();
+    const ratio = FIXED_RATIO_RE.test(pref) ? pref : "";
+    els.apRecipeList?.querySelectorAll("li").forEach((li) => {
+      const input = li.querySelector('input[type="checkbox"]');
+      if (!input || !REFRAME_RECIPE_RE.test(li.querySelector(".step-cb-label")?.textContent || "")) return;
+      li.classList.toggle("is-ratio-locked", Boolean(ratio));
+      if (ratio) {
+        input.checked = true;
+        input.disabled = true;
+        input.dataset.ratioLocked = "1";
+        li.dataset.lockTip = `指定比例${ratio}需重新構圖，若需取消請把長寬比改成「維持原圖比例」`;
+      } else if (input.dataset.ratioLocked) {
+        delete input.dataset.ratioLocked;
+        delete li.dataset.lockTip;
+        input.disabled = isReadOnlyLocked();
+      }
+    });
+  }
+
+  // Lives on <body> so the recipe list's own scroll clipping cannot cut it off.
+  let reframeLockTip = null;
+  let reframeLockTipTimer = 0;
+
+  function hideReframeLockTip() {
+    clearTimeout(reframeLockTipTimer);
+    if (reframeLockTip) reframeLockTip.hidden = true;
+  }
+
+  function showReframeLockTip(li, { autoHide = false } = {}) {
+    const anchor = li.querySelector(".step-cb");
+    if (!anchor || !li.dataset.lockTip) return;
+    if (!reframeLockTip) {
+      reframeLockTip = document.createElement("div");
+      reframeLockTip.className = "reframe-lock-tip";
+      reframeLockTip.setAttribute("role", "tooltip");
+      document.body.appendChild(reframeLockTip);
+    }
+    reframeLockTip.textContent = li.dataset.lockTip;
+    reframeLockTip.hidden = false;
+    const rect = anchor.getBoundingClientRect();
+    const { offsetWidth: width, offsetHeight: height } = reframeLockTip;
+    const below = rect.bottom + 8;
+    reframeLockTip.style.left = `${Math.max(8, Math.min(rect.left - 6, window.innerWidth - width - 8))}px`;
+    reframeLockTip.style.top = `${below + height > window.innerHeight - 8 ? rect.top - height - 8 : below}px`;
+    clearTimeout(reframeLockTipTimer);
+    if (autoHide) reframeLockTipTimer = setTimeout(hideReframeLockTip, 3000);
+  }
+
+  // Mouse hover shows the tip on desktop; a tap shows it on touch screens.
+  if (els.apRecipeList) {
+    const lockedAnchor = (target) => target?.closest?.("li.is-ratio-locked .step-cb");
+    els.apRecipeList.addEventListener("pointerover", (event) => {
+      if (event.pointerType === "mouse" && lockedAnchor(event.target)) {
+        showReframeLockTip(event.target.closest("li"));
+      }
+    });
+    els.apRecipeList.addEventListener("pointerout", (event) => {
+      if (event.pointerType === "mouse" && lockedAnchor(event.target)
+        && !lockedAnchor(event.relatedTarget)) hideReframeLockTip();
+    });
+    els.apRecipeList.addEventListener("click", (event) => {
+      const li = event.target.closest?.("li.is-ratio-locked");
+      if (li) showReframeLockTip(li, { autoHide: true });
+    });
+    els.apRecipeList.addEventListener("scroll", hideReframeLockTip, { passive: true });
+    window.addEventListener("scroll", hideReframeLockTip, { passive: true, capture: true });
+  }
 
   function fillCheckList(element, items, fallbackItems) {
     if (!element) return;
@@ -490,6 +565,7 @@ window.PhotoAgentResults = (() => {
       li.appendChild(label);
       element.appendChild(li);
     });
+    if (element === els.apRecipeList) syncReframingRatioLock();
   }
 
   // Read-only variant of fillCheckList -- checked state reflects whether the
@@ -3044,7 +3120,7 @@ window.PhotoAgentResults = (() => {
     renderResult, renderAnalysisPreview, refreshRecipeList,
     syncStylePicks, clearStylePick, setCompareView, renderTags,
     closePersonalizePopover,
-    renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio,
+    renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio, syncReframingRatioLock,
     restoreCompositionState, applyCompositionToRender,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,

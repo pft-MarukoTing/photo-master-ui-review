@@ -280,7 +280,7 @@ class DerivedAspectRatioTests(unittest.TestCase):
         self.assertTrue(applied["crop_box"]["enabled"])
         self.assertAlmostEqual(applied["crop_box"]["w"] / applied["crop_box"]["h"], 4 / 5, places=3)
         self.assertTrue(applied["correction_plan"][0].startswith("以4:5輸出比例重新構圖；"))
-        self.assertEqual(applied["retouch_recipe"][0], "重新構圖：裁成4:5，收窄左右空間")
+        self.assertEqual(applied["retouch_recipe"][0], "重新構圖：調整為4:5，收窄左右空間")
 
     def test_user_ratio_change_refits_source_geometry_and_rewrites_text(self):
         analysis = self._review_analysis(
@@ -292,7 +292,7 @@ class DerivedAspectRatioTests(unittest.TestCase):
 
         self.assertEqual(changed["recommended_aspect_ratio"], "3:2")
         self.assertAlmostEqual(changed["crop_box"]["w"] / changed["crop_box"]["h"], 3 / 2, places=3)
-        self.assertIn("重新構圖：裁成3:2，", changed["retouch_recipe"][0])
+        self.assertIn("重新構圖：調整為3:2，", changed["retouch_recipe"][0])
         self.assertNotIn("4:5", changed["retouch_recipe"][0])
 
     def test_explicit_protection_expanding_crop_to_full_frame_removes_reframe_item(self):
@@ -873,6 +873,25 @@ class ExpandPermissionTests(unittest.TestCase):
         priority = next(l for l in prompt.splitlines() if l.startswith("1. "))
         self.assertNotIn("expand canvas", priority)
         self.assertNotIn("boundaries as final", priority)
+
+    @staticmethod
+    def _expand_review_analysis():
+        return {
+            "reframe_mode": "expand",
+            "crop_box": {"enabled": True, "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+            "correction_plan": ["裁成3:4並延伸上下天空", "提升整體曝光"],
+            "correction_axes": [["crop"], ["exposure"]],
+            "correction_inverse": ["維持原圖構圖", "維持原圖曝光"],
+            "retouch_recipe": ["重新構圖：裁成3:4，延伸上下天空", "稍微提亮照片"],
+        }
+
+    def test_full_cover_extension_keeps_its_reframe_item(self):
+        resolved = apply_derived_aspect_ratio(
+            self._expand_review_analysis(), 1600, 1600, aspect_ratio_pref="3:4")
+        self.assertIsNotNone(resolved["reframe_extension"])
+        # A full-cover extension crops nothing but still reframes, so its item stays reviewable.
+        self.assertEqual(resolved["retouch_recipe"][0], "重新構圖：調整為3:4，延伸上下天空")
+        self.assertEqual(resolved["correction_axes"][0], ["crop"])
 
     def test_veto_checks_only_the_claim_expand_is_chosen_on(self):
         """Local geometry's veto: "any rectangle of this shape would cut into a

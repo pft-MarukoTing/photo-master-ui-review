@@ -4080,6 +4080,29 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 #ap-recipe-list .reframe-busy-label {
   color: var(--text-3);
 }
+#ap-recipe-list li.is-ratio-locked label {
+  opacity: 1;
+}
+#ap-recipe-list li.is-ratio-locked .step-cb {
+  opacity: .5;
+}
+.reframe-lock-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(var(--on-surface-rgb),.16);
+  background: rgba(var(--glass-rgb),.92);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: var(--shadow-btn);
+  color: rgba(var(--on-surface-rgb),.85);
+  font-size: 13px;
+  line-height: 1.5;
+  pointer-events: none;
+}
+.reframe-lock-tip[hidden] { display: none; }
 #ap-recipe-list .reframe-busy-label::after {
   content: "";
   display: inline-block;
