@@ -445,7 +445,7 @@
       ],
       "dilate_pixels": 30,
       "min_iou": 0,
-      "finger_overlap_ratio": 5,
+      "finger_overlap_ratio": 3,
       "dedup_containment_thresh": 0.9,
       "feather_pixels": 5
     },
