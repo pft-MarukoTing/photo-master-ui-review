@@ -905,7 +905,7 @@
   // keeps working untouched; this only mirrors its options into a nicer-
   // looking front end. Skips options the select itself has hidden (e.g.
   // applyRunCountOptionLimit trimming the non-debug run-count choices).
-  function wireOptionPicker(details, select) {
+  function wireOptionPicker(details, select, { renderList, renderValue } = {}) {
     if (!details || !select) return;
     const summary = details.querySelector("summary");
     const valueEl = details.querySelector(".ap-style-value");
@@ -918,12 +918,19 @@
     // room below it in the viewport (e.g. the upload page's option pills
     // sitting near the bottom of the screen) -- otherwise it renders past
     // window.innerHeight and the user has to scroll the page to see it.
+    const isInlinePanel = () => panel && getComputedStyle(panel).position === "static";
+
     const repositionPanel = () => {
       if (!panel) return;
+      if (isInlinePanel()) {
+        panel.classList.remove("open-upward");
+        panel.style.left = panel.style.top = panel.style.bottom = panel.style.maxHeight = "";
+        return;
+      }
       if (details.closest(".upload-selector-modal-body")) {
         const rect = details.getBoundingClientRect();
         panel.classList.remove("open-upward");
-        panel.style.left = `${rect.left}px`;
+        panel.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - panel.offsetWidth - 8))}px`;
         // Keep the panel below the trigger when possible, but reserve a
         // small minimum viewport area so even a trigger near the bottom can
         // never place the panel outside the window.
@@ -934,6 +941,7 @@
         return;
       }
       panel.classList.remove("open-upward");
+      panel.style.left = "";
       const anchorRect = details.getBoundingClientRect();
       const panelRect = panel.getBoundingClientRect();
       const spaceBelow = window.innerHeight - anchorRect.bottom;
@@ -941,49 +949,65 @@
       if (spaceBelow < panelRect.height + 16 && spaceAbove > spaceBelow) {
         panel.classList.add("open-upward");
       }
+      const overflowRight = panelRect.right - (window.innerWidth - 8);
+      if (overflowRight > 0) {
+        panel.style.left = `${-Math.min(overflowRight, Math.max(0, panelRect.left - 8))}px`;
+      }
+    };
+
+    const showValue = (opt) => {
+      if (renderValue) renderValue(details, opt?.value);
+      else valueEl.textContent = opt?.dataset.displayLabel || opt?.textContent || "";
+    };
+
+    const createInput = (opt) => {
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = name;
+      input.value = opt.value;
+      input.checked = opt.value === select.value;
+      // Rebuilt from scratch on every open (see this function's own doc
+      // below) -- a plain setAnalysisPreviewDisabled(true) sweep run once,
+      // earlier, would already be gone by the time the user next opens
+      // this picker. isAnalysisPreviewLocked() re-checks the live lock
+      // state at creation time instead, so the panel stays fully openable
+      // (the content itself is never hidden) while picking a new option
+      // here just doesn't do anything.
+      input.disabled = isAnalysisPreviewLocked();
+      input.addEventListener("change", () => {
+        select.value = opt.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        showValue(opt);
+        details.open = false;
+      });
+      return input;
     };
 
     const rebuild = () => {
       list.innerHTML = "";
-      Array.from(select.options).filter((opt) => !opt.hidden).forEach((opt) => {
-        const li = document.createElement("li");
-        const label = document.createElement("label");
-        const cb = document.createElement("span");
-        cb.className = "step-cb";
-        const input = document.createElement("input");
-        input.type = "radio";
-        input.name = name;
-        input.value = opt.value;
-        input.checked = opt.value === select.value;
-        // Rebuilt from scratch on every open (see this function's own doc
-        // below) -- a plain setAnalysisPreviewDisabled(true) sweep run once,
-        // earlier, would already be gone by the time the user next opens
-        // this picker. isAnalysisPreviewLocked() re-checks the live lock
-        // state at creation time instead, so the panel stays fully openable
-        // (the content itself is never hidden) while picking a new option
-        // here just doesn't do anything.
-        input.disabled = isAnalysisPreviewLocked();
-        const box = document.createElement("span");
-        box.className = "step-cb-box";
-        cb.appendChild(input);
-        cb.appendChild(box);
-        const text = document.createElement("span");
-        text.className = "step-cb-label";
-        text.textContent = opt.textContent;
-        label.appendChild(cb);
-        label.appendChild(text);
-        li.appendChild(label);
-        list.appendChild(li);
-
-        input.addEventListener("change", () => {
-          select.value = opt.value;
-          select.dispatchEvent(new Event("change", { bubbles: true }));
-          valueEl.textContent = opt.dataset.displayLabel || opt.textContent;
-          details.open = false;
+      const options = Array.from(select.options).filter((opt) => !opt.hidden);
+      if (renderList) {
+        renderList(list, options, createInput);
+      } else {
+        options.forEach((opt) => {
+          const li = document.createElement("li");
+          const label = document.createElement("label");
+          const cb = document.createElement("span");
+          cb.className = "step-cb";
+          const box = document.createElement("span");
+          box.className = "step-cb-box";
+          cb.appendChild(createInput(opt));
+          cb.appendChild(box);
+          const text = document.createElement("span");
+          text.className = "step-cb-label";
+          text.textContent = opt.textContent;
+          label.appendChild(cb);
+          label.appendChild(text);
+          li.appendChild(label);
+          list.appendChild(li);
         });
-      });
-      const selected = select.selectedOptions[0];
-      valueEl.textContent = selected?.dataset.displayLabel || selected?.textContent || "";
+      }
+      showValue(select.selectedOptions[0]);
     };
 
     rebuild();
@@ -1015,6 +1039,7 @@
     details.addEventListener("toggle", () => {
       if (details.open) rebuild();
       repositionPanel();
+      if (details.open && isInlinePanel()) panel.scrollIntoView({ block: "nearest" });
     });
     window.addEventListener("resize", () => { if (details.open) repositionPanel(); });
     window.addEventListener("scroll", () => { if (details.open) repositionPanel(); }, true);
@@ -1265,11 +1290,7 @@
     // covers the case that matters (someone changed them since this version
     // ran), with the modal one click away for the detail.
     if (ratio && ratio !== "auto") {
-      // "3:4（直）" -> "3:4": the shape hint earns its place in the picker's
-      // own list, where the options are read against each other, but here it
-      // only eats width the model name needs.
-      const label = findAspectRatioOption(ratio)?.label || ratio;
-      parts.push(label.split("（")[0]);
+      parts.push(findAspectRatioOption(ratio)?.label || ratio);
     }
     return parts.join(" · ") || "分析與美化設定";
   }
@@ -1605,14 +1626,82 @@
     });
     select.value = window.PhotoAgentConfig.defaultAspectRatio || select.value;
   }
+
+  const FIXED_ASPECT_RATIO_RE = /^(\d+):(\d+)$/;
+
+  function aspectRatioIconSvg(value, size) {
+    const ratio = FIXED_ASPECT_RATIO_RE.exec(value || "");
+    let body;
+    if (ratio) {
+      const scale = 18 / Math.max(Number(ratio[1]), Number(ratio[2]));
+      const w = Number(ratio[1]) * scale;
+      const h = Number(ratio[2]) * scale;
+      body = `<rect x="${(24 - w) / 2}" y="${(24 - h) / 2}" width="${w}" height="${h}" rx="2"/>`;
+    } else if (value === "original") {
+      body = '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 17l5-4.5 4 3.5 3-2.5 4 3.5"/>';
+    } else {
+      body = '<path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8z"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"/>';
+    }
+    return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  }
+
+  function renderAspectRatioValue(details, value) {
+    const opt = findAspectRatioOption(value);
+    const icon = details?.querySelector(".ap-style-trigger .option-pill-icon");
+    const valueEl = details?.querySelector(".ap-style-value");
+    if (icon) icon.innerHTML = aspectRatioIconSvg(opt?.value, 15);
+    if (valueEl) valueEl.textContent = opt?.label || "";
+  }
+
+  function renderAspectRatioList(list, options, createInput) {
+    const smartRow = document.createElement("li");
+    smartRow.className = "ar-smart-row";
+    const shapeRow = document.createElement("li");
+    shapeRow.className = "ar-shape-row";
+    options.forEach((opt) => {
+      const config = findAspectRatioOption(opt.value);
+      const fixed = FIXED_ASPECT_RATIO_RE.test(opt.value);
+      const label = document.createElement("label");
+      label.className = fixed ? "ar-shape-option" : "ar-smart-option";
+      label.appendChild(createInput(opt));
+      label.insertAdjacentHTML("beforeend", aspectRatioIconSvg(opt.value, fixed ? 30 : 22));
+      const text = document.createElement("span");
+      text.className = "ar-option-text";
+      const name = document.createElement("b");
+      name.textContent = config?.label || opt.textContent;
+      text.appendChild(name);
+      const note = fixed ? config?.hint : config?.description;
+      if (note) {
+        const small = document.createElement("small");
+        small.textContent = note;
+        text.appendChild(small);
+      }
+      label.appendChild(text);
+      (fixed ? shapeRow : smartRow).appendChild(label);
+    });
+    if (smartRow.childElementCount) list.appendChild(smartRow);
+    if (shapeRow.childElementCount) {
+      const scale = document.createElement("li");
+      scale.className = "ar-scale";
+      ["← 直式", "方形", "橫式 →"].forEach((text) => {
+        const span = document.createElement("span");
+        span.textContent = text;
+        scale.appendChild(span);
+      });
+      list.appendChild(scale);
+      list.appendChild(shapeRow);
+    }
+  }
+
   populateAspectRatioSelect(els.imageAspectRatioSelect);
   populateAspectRatioSelect(els.apImageAspectRatioSelect);
   // The options only exist now, after applyDebugUiVisibility already ran, so
   // apply the gate here too rather than waiting for the next debug-mode change.
   applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebugUiActive);
   applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebugUiActive);
-  wireOptionPicker(els.imageAspectRatioPicker, els.imageAspectRatioSelect);
-  wireOptionPicker(els.apImageAspectRatioPicker, els.apImageAspectRatioSelect);
+  const aspectRatioPickerLayout = { renderList: renderAspectRatioList, renderValue: renderAspectRatioValue };
+  wireOptionPicker(els.imageAspectRatioPicker, els.imageAspectRatioSelect, aspectRatioPickerLayout);
+  wireOptionPicker(els.apImageAspectRatioPicker, els.apImageAspectRatioSelect, aspectRatioPickerLayout);
   wireOptionPicker(els.imageRunCountPicker, els.imageRunCountSelect);
 
   // Same mirroring contract as applyModelQualityChange above: keep both
@@ -1636,10 +1725,7 @@
     const pickers = includeUpload
       ? [els.imageAspectRatioPicker, els.apImageAspectRatioPicker]
       : [els.apImageAspectRatioPicker];
-    pickers.forEach((picker) => {
-      const valueEl = picker?.querySelector(".ap-style-value");
-      if (valueEl) valueEl.textContent = opt.label;
-    });
+    pickers.forEach((picker) => renderAspectRatioValue(picker, opt.value));
     syncReframingRatioLock();
     refreshApCaseSettings({ fromUser });
   }

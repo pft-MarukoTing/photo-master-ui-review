@@ -453,7 +453,7 @@ window.PhotoAgentResults = (() => {
         input.checked = true;
         input.disabled = true;
         input.dataset.ratioLocked = "1";
-        li.dataset.lockTip = `指定比例${ratio}需重新構圖，若需取消請把長寬比改成「維持原圖比例」`;
+        li.dataset.lockTip = `指定比例${ratio}需重新構圖，若需取消請把長寬比改成「原圖比例」`;
       } else if (input.dataset.ratioLocked) {
         delete input.dataset.ratioLocked;
         delete li.dataset.lockTip;

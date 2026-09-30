@@ -84,20 +84,20 @@ window.PhotoAgentConfig = {
   // are applied at edit time, so switching between them never re-runs the
   // analysis (see resolve_output_aspect_ratio). The W:H values must stay
   // within param_validation.py's VALID_ASPECT_RATIOS or the job is rejected.
-  // Grouped 方 → 橫 (widening) → 直 (heightening) rather than in the backend's
-  // own list order, so the picker reads as a shape choice.
+  // The W:H values run tallest → widest, so the picker's shape row reads as
+  // one continuous scale with 1:1 in the middle.
   aspectRatioOptions: [
-    { value: "auto", label: "Auto" },
-    { value: "original", label: "維持原圖比例" },
-    { value: "1:1", label: "1:1（方形）" },
-    { value: "5:4", label: "5:4（橫）" },
-    { value: "4:3", label: "4:3（橫）" },
-    { value: "3:2", label: "3:2（橫）" },
-    { value: "16:9", label: "16:9（橫）" },
-    { value: "4:5", label: "4:5（直）" },
-    { value: "3:4", label: "3:4（直）" },
-    { value: "2:3", label: "2:3（直）" },
-    { value: "9:16", label: "9:16（直）" }
+    { value: "auto", label: "AI 建議", description: "依照片內容自動決定" },
+    { value: "original", label: "原圖比例", description: "不改變照片長寬" },
+    { value: "9:16", label: "9:16", hint: "限動" },
+    { value: "2:3", label: "2:3", hint: "人像" },
+    { value: "3:4", label: "3:4", hint: "手機" },
+    { value: "4:5", label: "4:5", hint: "IG 貼文" },
+    { value: "1:1", label: "1:1", hint: "方形" },
+    { value: "5:4", label: "5:4", hint: "橫幅" },
+    { value: "4:3", label: "4:3", hint: "平板" },
+    { value: "3:2", label: "3:2", hint: "相機" },
+    { value: "16:9", label: "16:9", hint: "桌布" }
   ],
   defaultAspectRatio: "auto",
   presets: {
