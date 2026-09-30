@@ -660,21 +660,6 @@
     }
   }
 
-  // 長寬比: Auto and 維持原圖比例 are the choices a regular user needs. The fixed
-  // W:H frames are a testbed convenience -- useful for checking how one photo
-  // reframes across shapes, not something to put in front of everyone.
-  const GENERAL_ASPECT_RATIOS = ["auto", "original"];
-
-  function applyAspectRatioOptionLimit(select, isDebug) {
-    if (!select) return;
-    Array.from(select.options).forEach((opt) => {
-      opt.hidden = !isDebug && !GENERAL_ASPECT_RATIOS.includes(opt.value);
-    });
-    if (!isDebug && !GENERAL_ASPECT_RATIOS.includes(select.value)) {
-      select.value = window.PhotoAgentConfig.defaultAspectRatio || GENERAL_ASPECT_RATIOS[0];
-    }
-  }
-
   // Editor prompt 架構 is a debug-only picker, so outside debug mode every run
   // uses this one strategy -- kept in sync with the backend's own default
   // (photo_agent/param_validation.py DEFAULT_EDITOR_PROMPT_STRATEGY).
@@ -834,8 +819,6 @@
     syncResultsAnalysisSlotForSidePanelLayout();
     applyRunCountOptionLimit(els.imageRunCountSelect, isDebug);
     applyRunCountOptionLimit(els.apRunCountSelect, isDebug);
-    applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebug);
-    applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebug);
     applyAnalysisModelOptionLimit(els.analysisModelSelect, isDebug);
     applyAnalysisModelOptionLimit(els.apAnalysisModelSelect, isDebug);
     applyImageModelOptionLimit(els.imageModelQualitySelect, isDebug);
@@ -1695,10 +1678,6 @@
 
   populateAspectRatioSelect(els.imageAspectRatioSelect);
   populateAspectRatioSelect(els.apImageAspectRatioSelect);
-  // The options only exist now, after applyDebugUiVisibility already ran, so
-  // apply the gate here too rather than waiting for the next debug-mode change.
-  applyAspectRatioOptionLimit(els.imageAspectRatioSelect, isDebugUiActive);
-  applyAspectRatioOptionLimit(els.apImageAspectRatioSelect, isDebugUiActive);
   const aspectRatioPickerLayout = { renderList: renderAspectRatioList, renderValue: renderAspectRatioValue };
   wireOptionPicker(els.imageAspectRatioPicker, els.imageAspectRatioSelect, aspectRatioPickerLayout);
   wireOptionPicker(els.apImageAspectRatioPicker, els.apImageAspectRatioSelect, aspectRatioPickerLayout);
