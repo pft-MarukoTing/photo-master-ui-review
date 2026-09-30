@@ -1798,6 +1798,17 @@
       font-size: 12.5px;
       color: var(--text-2);
     }
+    /* Fill the review body's content box so the prompt textarea can extend
+       all the way to its bottom instead of stopping at its rows="4"
+       intrinsic height and leaving unused space below. */
+    #ap-review-prompt {
+      height: 100%;
+      min-height: 0;
+    }
+    #ap-review-prompt .field-ta {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
     .ap-style-cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
