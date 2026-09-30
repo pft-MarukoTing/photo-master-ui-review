@@ -244,9 +244,13 @@ def main() -> None:
     parser.add_argument("--log", type=Path, default=DEFAULT_LOG_PATH)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT_PATH)
     parser.add_argument("--last", type=int, default=None, help="only include the most recent N runs")
+    parser.add_argument("--verdict", choices=["good", "bad"], default=None,
+                         help="only include runs whose judge verdict matches this")
     args = parser.parse_args()
 
     records = load_records(args.log)
+    if args.verdict:
+        records = [r for r in records if (r.get("judge") or {}).get("verdict") == args.verdict]
     if args.last:
         records = records[-args.last:]
     if not records:
