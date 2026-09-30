@@ -72,7 +72,7 @@ def render_report(records: list, out_path: Path) -> Path:
             <span class="badge {badge_class}">{verdict}</span>
           </header>
           <div class="meta">
-            <span>provider: <code>{record.get("provider", "")}</code></span>
+            <span>generate: <code>{record.get("gen_model", "")}</code></span>
             <span>judge: <code>{record.get("judge_model", "")}</code></span>
             <span>checkpoint: <code>{record.get("checkpoint", "")}</code></span>
           </div>

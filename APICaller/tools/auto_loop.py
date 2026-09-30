@@ -153,6 +153,10 @@ async def run_iteration(args: argparse.Namespace, categories: dict, judge_prompt
 
     record = {
         "run_id": run_id,
+        "provider": args.provider,
+        "gen_model": args.gen_model or (gemini_client.DEFAULT_MODEL if args.provider == "gemini" else openai_client.DEFAULT_MODEL),
+        "checkpoint": args.checkpoint,
+        "judge_model": pipeline.JUDGE_MODEL,
         "source": str(a_path),
         "style_category": category,
         "style_item": item,
