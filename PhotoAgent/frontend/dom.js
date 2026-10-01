@@ -201,6 +201,7 @@ window.PhotoAgentDom = (() => {
     boxesTypeMenu: document.querySelector("#boxes-type-menu"),
     boxesTypeList: document.querySelector("#boxes-type-list"),
     analysisBoxes: document.querySelector("#analysis-boxes"),
+    portraitCheckOverlay: document.querySelector("#portrait-check-overlay"),
     analysisBoxesLegend: document.querySelector("#analysis-boxes-legend"),
     recipeTags: document.querySelector("#recipe-tags"),
     personalizePopover: document.querySelector("#personalize-popover"),

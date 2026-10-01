@@ -43,7 +43,7 @@
     reportScreenshotUrl
   } = window.PhotoAgentApi;
   const { initFromUrl, getCurrentUser, isGuestUser, setCurrentUser, clearCurrentUser, normalizeUsername } = window.PhotoAgentAccount;
-  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
+  const { renderResult, renderAnalysisPreview, refreshRecipeList, syncStylePicks, clearStylePick, setCompareView, renderTags, closePersonalizePopover, renderBoxTypeMenu, drawAnalysisBoxes, refreshPortraitCheckOverlay, setDebugUi: setResultsDebugUi, setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled, previewAspectRatio, syncReframingRatioLock, restoreCompositionState, applyCompositionToRender, getFaceIssueOverrides, applyFaceIssueOverrides, resetFaceReviewState, renderFaceReviewCards, setFaceIssueCategoryLock, syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion } = window.PhotoAgentResults;
   renderBoxTypeMenu();
 
   // Groups every job submitted from ONE "Run" click into the same history
@@ -10125,6 +10125,34 @@
     return !!els.compareCard?.classList.contains("is-fullscreen");
   }
 
+  // Toggling .is-fullscreen changes the rendered image rectangle through CSS.
+  // The overlay is positioned from getBoundingClientRect(), so redraw after
+  // the class change has reached layout (and once more after the next frame).
+  // The delayed pass also covers a responsive layout settling after the card
+  // leaves/returns to normal flow.
+  let compareOverlayRefreshTimer = null;
+  function refreshCompareOverlaysAfterLayout() {
+    const redraw = () => {
+      refreshPortraitCheckOverlay?.();
+      drawAnalysisBoxes();
+    };
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => {
+        redraw();
+        window.requestAnimationFrame(redraw);
+      });
+    } else {
+      redraw();
+    }
+    if (compareOverlayRefreshTimer !== null) {
+      window.clearTimeout(compareOverlayRefreshTimer);
+    }
+    compareOverlayRefreshTimer = window.setTimeout(() => {
+      compareOverlayRefreshTimer = null;
+      redraw();
+    }, 420);
+  }
+
   function openCompareFullscreen() {
     if (!els.compareCard || isCompareFullscreen()) return;
     const parent = els.compareCard.parentElement;
@@ -10132,6 +10160,7 @@
     els.compareCard.classList.add("is-fullscreen");
     if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = false;
     setCompareFullscreenBtnState(true);
+    refreshCompareOverlaysAfterLayout();
   }
 
   function closeCompareFullscreen() {
@@ -10141,6 +10170,7 @@
     if (parent) parent.style.height = "";
     if (els.compareFullscreenBackdrop) els.compareFullscreenBackdrop.hidden = true;
     setCompareFullscreenBtnState(false);
+    refreshCompareOverlaysAfterLayout();
   }
 
   function toggleCompareFullscreen() {

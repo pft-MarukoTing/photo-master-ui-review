@@ -5577,6 +5577,12 @@
                      drawAnalysisBoxes in results.js. -->
                 <div id="analysis-boxes" class="analysis-boxes" aria-hidden="true" hidden></div>
               </div>
+              <!-- Result-only portrait execution labels.  Keep this outside
+                   .photo-frame because that element clips its contents;
+                   the overlay is then sized and clipped to the generated image
+                   rectangle. Coordinates use the rendered image inside this
+                   wrapper and only open from the 人像檢查 button. -->
+              <div id="portrait-check-overlay" class="portrait-check-overlay" aria-live="polite" hidden></div>
               <!-- Shown while switching RUN/record/history entry (see
                    app.js's selectAdjacentRun/selectBatchRecord/the history-
                    list click handler) -- a sibling of .photo-frame, not
@@ -5608,10 +5614,9 @@
                   <path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </button>
-              <!-- Which optional recipe (pose/angle/lighting/framing size)
-                   options were actually applied to this RUN -- only ever
-                   populated with non-default picks (renderResult), and only
-                   visible while showing the generated image, not Original. -->
+              <!-- Which selected style or portrait-correction items were
+                   included in this RUN's Editor prompt -- only populated after
+                   an actual generated result, and hidden while showing Original. -->
               <div id="recipe-tags" class="recipe-tags"></div>
               <!-- Opened by the "個人化" pill inside #recipe-tags above (only
                    rendered when this run actually carried a 個人化需求) --

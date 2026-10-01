@@ -4806,9 +4806,14 @@ def _normalize_body_subject_plan(subject, subject_index, body):
     should_edit = body.get("should_edit") is not False
     label = subject.get("label") if isinstance(subject, dict) else None
     normalized = {"should_edit": should_edit}
+    # A review opt-out is not an analyzer no-op. Preserve its approved plan
+    # across saved versions; should_edit still gates Editor execution.
+    user_disabled = body.get("_user_disabled") is True
+    if user_disabled:
+        normalized["_user_disabled"] = True
     if body.get("analysis_status") == "error":
         normalized["analysis_status"] = "error"
-    if should_edit:
+    if should_edit or user_disabled:
         prompt = body.get("edit_prompt")
         if not isinstance(prompt, str) or not prompt.strip():
             points = body.get("key_points")

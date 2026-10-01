@@ -143,6 +143,8 @@ def _apply_body_reshape(effective, body_reshape_enabled, feature_enabled):
                 continue
             has_nested_plans = True
             if not review_enabled or subject_index in disabled_subjects:
+                if subject["body_reshape"].get("should_edit") is not False:
+                    subject["body_reshape"]["_user_disabled"] = True
                 subject["body_reshape"]["should_edit"] = False
 
     for key in _BODY_RESHAPE_PRIVATE_KEYS:
@@ -220,6 +222,8 @@ def _apply_face_issue_overrides(effective, overrides):
             # Read BEFORE the write below overwrites the field that says so.
             was_flagged = _analyzer_flagged_face_issue(issue, category)
             if category == "body_reshape":
+                if issue.get("should_edit") is not False:
+                    issue["_user_disabled"] = True
                 issue["should_edit"] = False
             elif category != "smile_issue":
                 issue["should_fix"] = False
@@ -228,6 +232,7 @@ def _apply_face_issue_overrides(effective, overrides):
                 if was_flagged:
                     issue["_user_disabled"] = True
         elif category == "body_reshape":
+            issue.pop("_user_disabled", None)
             # An explicit ON must re-enable a plan saved with should_edit=false.
             issue["should_edit"] = True
         elif isinstance(override, dict):

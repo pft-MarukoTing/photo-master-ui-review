@@ -4203,17 +4203,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   box-shadow: 0 6px 16px rgba(0,0,0,.2);
 }
 
-/* Recipe tags: which non-default pose/angle/lighting/framing-size picks were
-   actually applied to this RUN -- describes the GENERATED result, so hidden
-   while viewing Original. Floats at the bottom of the photo frame (like
-   .canvas-btn above; the photo is contained, not cropped, so on a portrait
-   shot this lands on the card's background instead of on the image).
-   Two things sit here side by side, centred as one group: the picks, read out
-   as a single quiet label, and .recipe-tag-personalize below -- the one thing
-   in this row anyone can press. They used to be an undifferentiated line of
-   identical pills, which made the pressable one findable only by noticing its
-   border was solid where the others were dashed; the two now look nothing
-   alike instead. */
+/* Result-only style read-out and controls: 個人化 opens its request,
+   while 人像檢查 opens per-person correction labels over the photo. */
 .recipe-tags {
   position: absolute;
   left: 10px;
@@ -4301,7 +4292,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   }
 }
 
-/* The one thing in that row anyone can press: "個人化" opens
+/* The 個人化 control in this row opens
    #personalize-popover with the 個人化需求 this run was submitted with. Now
    that its neighbours have given up their pill chrome, it takes the opposite
    treatment of the pair -- a filled, shadowed, rounded button against their
@@ -4323,7 +4314,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   /* Tinted glass rather than a solid fill, so the photo carries on through it
      like it does through every other float-over-imagery surface here. It can
      afford much less transparency than those, though: this one has a label to
-     keep legible AND is the row's only control, so it has to stay the most
+     keep legible and must remain distinct from the 人像檢查 control, so it has to stay the most
      solid thing in it. Blurred for the same reason .personalize-popover is --
      a thin tint over a busy photo shows through as texture unless what's
      behind it is flattened first. */
@@ -4368,7 +4359,8 @@ body[data-theme-mode="light"] .recipe-tags span.recipe-tag-personalize:hover {
    Sized in em so it shrinks in step with the label through that same loop,
    and drawn as a mask over currentColor so it stays whatever the label is
    without a fill baked into the SVG. */
-.recipe-tags span.recipe-tag-personalize::before {
+.recipe-tags span.recipe-tag-personalize::before,
+.recipe-tags .portrait-check-toggle::before {
   content: "";
   flex: 0 0 auto;
   width: 1.05em;
@@ -4594,6 +4586,138 @@ body[data-theme-mode="light"] .personalize-popover::after {
     width: 20px;
     height: 20px;
   }
+}
+
+/* Match 個人化: the portrait toggle is the same tinted-glass pill, with the
+   same hover, press and focus feedback. */
+.recipe-tags .portrait-check-toggle {
+  appearance: none;
+  order: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  flex: 0 1 auto;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-pale-color) 70%, transparent);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
+  color: #16151a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: -.1px;
+  white-space: nowrap;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+  cursor: pointer;
+  transition: filter .2s, box-shadow .2s, transform .2s;
+}
+.recipe-tags .portrait-check-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent-pale-color) 78%, transparent);
+}
+.recipe-tags .portrait-check-toggle:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 6px 18px rgba(0,0,0,.42);
+  transform: translateY(-1px);
+}
+.recipe-tags .portrait-check-toggle:active { transform: scale(.96); }
+.recipe-tags .portrait-check-toggle:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb),.9);
+  outline-offset: 2px;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .recipe-tags .portrait-check-toggle { background: var(--accent-pale-color); }
+}
+body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle {
+  box-shadow: 0 3px 10px rgba(var(--on-surface-rgb),.16);
+}
+body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
+  box-shadow: 0 5px 14px rgba(var(--on-surface-rgb),.22);
+}
+
+/* User-facing per-person execution labels. The overlay is sized to the
+   rendered image, not the fixed photo frame, so normalized face boxes stay
+   aligned even when the source image is letterboxed inside the frame. */
+.portrait-check-overlay {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  overflow: hidden;
+}
+.portrait-check-person {
+  --callout-radius: 13px;
+  --callout-padding-x: 11px;
+  --callout-padding-y: 8px;
+  --callout-tail-depth: 9px;
+  --callout-tail-width: 16px;
+  --callout-tail-safe-inset: 23px;
+  --callout-border: rgba(var(--on-surface-rgb), .14);
+  --callout-shadow: 0 2px 6px rgba(var(--on-surface-rgb), .12);
+  --portrait-bubble-fill: rgba(var(--glass-rgb), .9);
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: 44%;
+  min-height: calc(46px * var(--portrait-scale, 1));
+  padding: calc(var(--callout-padding-y) * var(--portrait-scale, 1)) calc(var(--callout-padding-x) * var(--portrait-scale, 1));
+  border: none;
+  border-radius: calc(var(--callout-radius) * var(--portrait-scale, 1));
+  background: transparent;
+  color: var(--text);
+  filter: drop-shadow(var(--callout-shadow));
+  font-size: clamp(10px, calc(12px * var(--portrait-scale, 1) + 2px), 14px);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: normal;
+  pointer-events: none;
+}
+body[data-theme-mode="light"] .portrait-check-person {
+  --portrait-bubble-fill: color-mix(in srgb, color-mix(in srgb, var(--accent) 12%, var(--card)) 88%, transparent);
+}
+/* One contour for fill and border avoids a doubled translucent seam. */
+.portrait-check-person::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--portrait-outline) 0 0 / 100% 100% no-repeat, var(--portrait-bubble-fill);
+  -webkit-mask: var(--portrait-tail-shape) 0 0 / 100% 100% no-repeat;
+  mask: var(--portrait-tail-shape) 0 0 / 100% 100% no-repeat;
+  pointer-events: none;
+}
+.portrait-check-person.points-up::before { top: calc(-1 * var(--portrait-tail-reach)); }
+.portrait-check-person.points-down::before { bottom: calc(-1 * var(--portrait-tail-reach)); }
+.portrait-check-person.points-left::before { left: calc(-1 * var(--portrait-tail-reach)); }
+.portrait-check-person.points-right::before { right: calc(-1 * var(--portrait-tail-reach)); }
+.portrait-check-person.is-right,
+.portrait-check-person.is-left { transform: none; }
+.portrait-check-person-items {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: clamp(3px, calc(4px * var(--portrait-scale, 1)), 4px);
+}
+.portrait-check-person-item {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(5px, calc(6px * var(--portrait-scale, 1)), 6px);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  white-space: nowrap;
+}
+.portrait-check-complete {
+  color: var(--text-2, var(--text));
+  font-weight: 600;
+  line-height: 1;
+  flex: 0 0 auto;
 }
 
 /* Prev/next arrows for switching between this photo's N edit RUNs -- float
