@@ -1,8 +1,3 @@
 .env
-out/
-pipeline_log.jsonl
-report.html
-qa_judge_results.json
 __pycache__/
 *.pyc
-pipeline_log_*.jsonl
