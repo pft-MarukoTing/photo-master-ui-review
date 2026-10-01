@@ -1728,6 +1728,7 @@
     // be sent to the edit model, and the report lines quoting it. The result
     // photo itself can't change without a re-run, so the preview says so.
     previewAspectRatio(opt.value);
+    updateInlineAnalysisContinueBtnState();
   }
 
   // Only composition reframing owns the aspect-ratio picker. Whole-frame
@@ -1839,14 +1840,16 @@
     reframeInFlight = true;
     setReframeBusy(true, value);
     hideError();
+    let reframed = false;
     try {
-      const reframed = await requestReframe({
+      const reframedAnalysis = await requestReframe({
         jobId, file, analysis, aspectRatio: value, path,
         analysisModel: owner.analysisModel || batchSettings?.analysisModel
       });
       if ((currentDetailBatchRecord() || singleFlowState) !== owner || owner.analysis !== analysis) return;
-      adoptReframedAnalysis(owner, reframed, reframed._composition_by_ratio?.[value]);
+      adoptReframedAnalysis(owner, reframedAnalysis, reframedAnalysis._composition_by_ratio?.[value]);
       applyAspectRatioChange(value);
+      reframed = true;
     } catch (error) {
       showError(`重新構圖失敗：${error.message || error}`);
       restore();
@@ -1854,6 +1857,23 @@
       reframeInFlight = false;
       setReframeBusy(false);
     }
+    if (reframed) await offerEditAfterReframe(owner, value);
+  }
+
+  // Asks whether to run 美化 on the new composition now; 立即美化 presses the
+  // panel's own 美化 button so the usual cost confirm and submit path apply.
+  async function offerEditAfterReframe(owner, pref) {
+    const done = pref === "auto" ? "已由 AI 選擇比例並完成重新構圖。"
+      : pref === "original" ? "已依原圖比例完成重新構圖。"
+        : `已依 ${pref} 完成重新構圖。`;
+    const editNow = await showConfirmModal(
+      `${done}要直接以新構圖美化照片，還是先繼續調整其他建議？`,
+      { confirmLabel: "立即美化", cancelLabel: "繼續調整", danger: false }
+    );
+    const btn = els.inlineAnalysisContinueBtn;
+    if (!editNow || !btn || btn.hidden || btn.disabled) return;
+    if ((currentDetailBatchRecord() || singleFlowState) !== owner) return;
+    btn.click();
   }
 
   async function requestReframe({ jobId, file, analysis, aspectRatio, analysisModel, path }) {
@@ -3350,6 +3370,7 @@
       overwritePrompt: els.promptOverwriteToggle ? els.promptOverwriteToggle.checked : false,
       modelQuality: els.apImageModelQualitySelect ? els.apImageModelQualitySelect.value : null,
       runCount: els.apRunCountSelect ? els.apRunCountSelect.value : null,
+      aspectRatio: els.apImageAspectRatioSelect ? els.apImageAspectRatioSelect.value : null,
       // 人像修正設定 (#advanced-settings-fold, folded into 設定 on either page) --
       // just as real an edit as the picks above, so it needs the same
       // before/after snapshot to unblock the Run button.
@@ -3409,12 +3430,14 @@
     const samePrompt = prompt === inlineReviseSnapshot.prompt;
     const sameModelQuality = modelQuality === inlineReviseSnapshot.modelQuality;
     const sameRunCount = runCount === inlineReviseSnapshot.runCount;
+    const sameAspectRatio = (els.apImageAspectRatioSelect ? els.apImageAspectRatioSelect.value : null)
+      === inlineReviseSnapshot.aspectRatio;
     const advancedOptions = readAdvancedOptionsFromDom("ap");
     const sameAdvancedOptions = Object.keys(advancedOptions).every(
       (key) => advancedOptions[key] === inlineReviseSnapshot.advancedOptions[key]);
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
     const sameBodyReshape = getBodyReshapeReviewEnabled() === inlineReviseSnapshot.bodyReshapeEnabled;
-    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount
+    return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAspectRatio
       && sameAdvancedOptions && sameFaceIssues && sameBodyReshape;
   }
 
@@ -6933,7 +6956,7 @@
   // label/value/model hierarchy every other cost display in the app uses.
   // Gated by isPreflightCostEstimateEnabled the same way showPreflightCostModal
   // is, so a caller doesn't have to check the setting itself.
-  function showConfirmModal(message, { confirmLabel = "刪除", danger = true, costSteps = null } = {}) {
+  function showConfirmModal(message, { confirmLabel = "刪除", cancelLabel = "取消", danger = true, costSteps = null } = {}) {
     return new Promise((resolve) => {
       if (!els.confirmModal) {
         resolve(window.confirm(message));
@@ -6949,6 +6972,7 @@
         }
         els.confirmModalCostRows.hidden = !steps?.length;
       }
+      if (els.confirmModalCancelBtn) els.confirmModalCancelBtn.textContent = cancelLabel;
       if (els.confirmModalOkBtn) {
         els.confirmModalOkBtn.textContent = confirmLabel;
         els.confirmModalOkBtn.classList.toggle("btn-danger", danger);
