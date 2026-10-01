@@ -9,7 +9,7 @@ per source" -- e.g. testing --source-dir against a large real-photo dataset
 without running every source against every reference in it.
 
 Usage (run inside the `apicaller` conda env, from the APICaller/ directory):
-    python tools/comfy_random_pair.py \\
+    python tasks/AINail/tools/comfy_random_pair.py \\
         --source-dir out/prompt_v5_locked \\
         --reference-dir /data/.../sam3_cropped_control_2 \\
         --checkpoint nail_salon_lora/nail_salon_lora_20260826.safetensors \\

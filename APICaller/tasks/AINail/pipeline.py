@@ -19,7 +19,7 @@ Steps:
 
 Usage:
     conda activate apicaller
-    python pipeline.py --provider gemini \\
+    python tasks/AINail/pipeline.py --provider gemini \\
         --checkpoint nail_salon_lora/nail_salon_lora_20260826.safetensors \\
         --comfyui-port 8450
 """
@@ -27,19 +27,24 @@ Usage:
 import argparse
 import asyncio
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
 
+HERE = Path(__file__).resolve().parent
+APICALLER_ROOT = HERE.parent.parent
+sys.path.insert(0, str(APICALLER_ROOT))  # api_caller package
+sys.path.insert(0, str(HERE))  # tools.comfyui_run (this task's own tools/) -- must win over APICaller/tools/
+
 from api_caller import gemini_client, openai_client
 from tools.comfyui_run import DEFAULT_WORKFLOW, run_pair
 
 TZ_UTC8 = timezone(timedelta(hours=8))
-HERE = Path(__file__).resolve().parent
-DEFAULT_ENV_PATH = HERE / ".env"
-DEFAULT_NAIL_PROMPT_PATH = HERE / "nail_prompt.txt"
-DEFAULT_JUDGE_PROMPT_PATH = HERE / "judge_prompt.txt"
+DEFAULT_ENV_PATH = APICALLER_ROOT / ".env"
+DEFAULT_NAIL_PROMPT_PATH = HERE / "prompts/nail_prompt.txt"
+DEFAULT_JUDGE_PROMPT_PATH = HERE / "prompts/judge_prompt.txt"
 DEFAULT_LOG_PATH = HERE / "pipeline_log.jsonl"
 
 JUDGE_JSON_SCHEMA = {

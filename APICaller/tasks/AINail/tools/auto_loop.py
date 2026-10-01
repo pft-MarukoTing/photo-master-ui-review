@@ -28,7 +28,7 @@ Every iteration:
      "before" photo whose ground-truth correction is F/E.
 
 Usage (run inside the apicaller conda env, from the APICaller/ directory):
-    python tools/auto_loop.py --iterations 5 \\
+    python tasks/AINail/tools/auto_loop.py --iterations 5 \\
         --checkpoint nail_salon_lora/nail_salon_lora_20260826.safetensors \\
         --comfyui-port 8450
 """
@@ -47,18 +47,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+HERE = Path(__file__).resolve().parent.parent
+APICALLER_ROOT = HERE.parent.parent
+sys.path.insert(0, str(APICALLER_ROOT))  # api_caller package
+sys.path.insert(0, str(HERE))  # pipeline, tools.comfyui_run, tools.nail_style_generate -- must win over APICaller/tools/
 import pipeline
 from api_caller import gemini_client, openai_client
 from tools.comfyui_run import DEFAULT_WORKFLOW, run_pair
 from tools.nail_style_generate import _slug, build_prompt, load_categories
 
 TZ_UTC8 = timezone(timedelta(hours=8))
-HERE = Path(__file__).resolve().parent.parent
-DEFAULT_ENV_PATH = HERE / ".env"
+DEFAULT_ENV_PATH = APICALLER_ROOT / ".env"
 DEFAULT_STYLE_YAML = HERE / "nail_style.yaml"
-DEFAULT_STYLE_TEMPLATE = HERE / "nail_prompt_uniform_styled.txt"
-DEFAULT_LOCK_EDIT_PROMPT = HERE / "nail_lock_edit_prompt.txt"
+DEFAULT_STYLE_TEMPLATE = HERE / "prompts/nail_prompt_uniform_styled.txt"
+DEFAULT_LOCK_EDIT_PROMPT = HERE / "prompts/nail_lock_edit_prompt.txt"
 DEFAULT_NATURAL_DIR = HERE / "out/natural_nail"
 DEFAULT_STYLE_POOL = Path("/data/home/rdmt/jack_lin/aitoolkit2/ai-toolkit2/datasets/sam3_cropped_control_2")
 IMG_EXTS = (".jpg", ".jpeg", ".png")

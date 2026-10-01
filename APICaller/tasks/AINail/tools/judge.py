@@ -6,7 +6,7 @@ Run from the APICaller/ directory.
 
 Usage:
     conda activate apicaller
-    python tools/judge.py --provider both \\
+    python tasks/AINail/tools/judge.py --provider both \\
         --images out/gemini_run1_gemini.png out/gemini_run2_gemini.png out/gemini_pipeline_result.jpg
 """
 
@@ -18,10 +18,10 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 from api_caller import gemini_client, openai_client
 
-DEFAULT_ENV_PATH = os.path.join(os.path.dirname(__file__), "..", ".env")
+DEFAULT_ENV_PATH = Path(__file__).resolve().parent.parent.parent.parent / ".env"
 
 DEFAULT_PROMPT = (
     "IMAGE 1 = SOURCE (原始手部照片，尚未套用新指甲風格前)。\n"

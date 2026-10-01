@@ -4,9 +4,9 @@
 
 Usage:
     conda activate apicaller
-    python report.py                      # all records in pipeline_log.jsonl -> report.html
-    python report.py --last 3             # only the most recent 3 runs
-    python report.py --log other.jsonl --out other_report.html
+    python tasks/AINail/report.py                      # all records in pipeline_log.jsonl -> report.html
+    python tasks/AINail/report.py --last 3             # only the most recent 3 runs
+    python tasks/AINail/report.py --log other.jsonl --out other_report.html
 """
 
 import argparse

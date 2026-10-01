@@ -15,7 +15,7 @@ docstring discussion in nail_style.yaml's commit for why that catalog isn't
 just handed to the model as prose.
 
 Usage (run inside the `apicaller` conda env, from the APICaller/ directory):
-    python tools/nail_style_generate.py --provider gemini --out-dir out/style_test
+    python tasks/AINail/tools/nail_style_generate.py --provider gemini --out-dir out/style_test
 """
 
 import argparse
@@ -27,13 +27,14 @@ from pathlib import Path
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+HERE = Path(__file__).resolve().parent.parent
+APICALLER_ROOT = HERE.parent.parent
+sys.path.insert(0, str(APICALLER_ROOT))
 from api_caller import gemini_client, openai_client
 
-HERE = Path(__file__).resolve().parent.parent
 DEFAULT_STYLE_YAML = HERE / "nail_style.yaml"
-DEFAULT_TEMPLATE_PATH = HERE / "nail_prompt_uniform_styled.txt"
-DEFAULT_ENV_PATH = HERE / ".env"
+DEFAULT_TEMPLATE_PATH = HERE / "prompts/nail_prompt_uniform_styled.txt"
+DEFAULT_ENV_PATH = APICALLER_ROOT / ".env"
 
 
 def _slug(text: str) -> str:

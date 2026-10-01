@@ -9,7 +9,7 @@ manually -- AINail/benchmark's own copy and its callers are untouched).
 
 Usage (run inside the `apicaller` conda env -- see setup.sh -- from the
 APICaller/ directory):
-    python tools/comfyui_run.py \\
+    python tasks/AINail/tools/comfyui_run.py \\
         --source ../nail_generation_samples/nail_openai.png \\
         --reference ../nail_generation_samples/nail_gemini.png \\
         --checkpoint nail_salon_lora/nail_salon_lora_20260826.safetensors \\
@@ -26,11 +26,11 @@ from pathlib import Path
 import requests
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 from api_caller import comfy_client
 
 TZ_UTC8 = timezone(timedelta(hours=8))
-REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 DEFAULT_WORKFLOW = REPO_ROOT / "AINail/workflows/nailSalon_workflow_20260924_api.json"
 JPEG_QUALITY = 95
 
