@@ -46,7 +46,7 @@ def render_report(records: list, out_path: Path) -> Path:
         judge = record.get("judge") or {}
         verdict = judge.get("verdict", "unknown")
         reason = judge.get("reason", "")
-        badge_class = "good" if verdict == "good" else "bad"
+        badge_class = {"good": "good", "bad": "bad"}.get(verdict, "unknown")
 
         images = []
         row_has_image = []
@@ -98,6 +98,8 @@ def render_report(records: list, out_path: Path) -> Path:
     --good-ink: #1f6b3a;
     --bad-bg: #f9e6e6;
     --bad-ink: #a3312a;
+    --unknown-bg: #faf1d9;
+    --unknown-ink: #8a6a1f;
     --code-bg: #eee7dc;
   }}
   @media (prefers-color-scheme: dark) {{
@@ -112,17 +114,21 @@ def render_report(records: list, out_path: Path) -> Path:
       --good-ink: #7fd99a;
       --bad-bg: #3a2224;
       --bad-ink: #e79b95;
+      --unknown-bg: #3a3220;
+      --unknown-ink: #e3c478;
       --code-bg: #2b2730;
     }}
   }}
   :root[data-theme="dark"] {{
     --bg: #17151a; --surface: #211e24; --border: #35313a; --ink: #eee8e0; --ink-soft: #a89f95;
     --accent: #b795cf; --good-bg: #1c3524; --good-ink: #7fd99a; --bad-bg: #3a2224; --bad-ink: #e79b95;
+    --unknown-bg: #3a3220; --unknown-ink: #e3c478;
     --code-bg: #2b2730;
   }}
   :root[data-theme="light"] {{
     --bg: #f6f3ef; --surface: #ffffff; --border: #e4ddd3; --ink: #241f1a; --ink-soft: #6b6259;
     --accent: #7a5c8f; --good-bg: #e3f1e6; --good-ink: #1f6b3a; --bad-bg: #f9e6e6; --bad-ink: #a3312a;
+    --unknown-bg: #faf1d9; --unknown-ink: #8a6a1f;
     --code-bg: #eee7dc;
   }}
   * {{ box-sizing: border-box; }}
@@ -148,6 +154,7 @@ def render_report(records: list, out_path: Path) -> Path:
   }}
   .badge.good {{ background: var(--good-bg); color: var(--good-ink); }}
   .badge.bad {{ background: var(--bad-bg); color: var(--bad-ink); }}
+  .badge.unknown {{ background: var(--unknown-bg); color: var(--unknown-ink); }}
   .meta {{ display: flex; gap: 1rem; flex-wrap: wrap; font-size: 0.82rem; color: var(--ink-soft); margin-bottom: 1rem; }}
   .meta code {{ background: var(--code-bg); padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.8rem; }}
   .images {{ display: flex; gap: 0.9rem; flex-wrap: wrap; margin-bottom: 1rem; }}
