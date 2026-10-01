@@ -9995,7 +9995,28 @@
     }
   }
 
+  // A caller can land in the middle of a re-layout that finishes later in the
+  // same task -- showPendingResults calls setFlowStage("awaiting-review")
+  // before it adds .showing-analysis, so at that instant the review panel is
+  // still unconstrained and the page measures thousands of px tall, then
+  // shrinks to one screenful a few lines later. The body ends the task the
+  // same size it started, so the ResizeObserver never fires and the cue stayed
+  // up on a page with nothing below. Re-checking once in the next animation
+  // frame -- after the task's remaining layout work, before anything is
+  // painted -- settles it without a visible flash. Coalesced, so the scroll
+  // and resize paths still cost one extra measurement per frame at most.
+  let pageScrollHintRecheckFrame = 0;
+
   function updatePageScrollHint() {
+    applyPageScrollHint();
+    if (pageScrollHintRecheckFrame) return;
+    pageScrollHintRecheckFrame = requestAnimationFrame(() => {
+      pageScrollHintRecheckFrame = 0;
+      applyPageScrollHint();
+    });
+  }
+
+  function applyPageScrollHint() {
     const hint = els.pageScrollHint;
     if (!hint) return;
     // Dismissal, screen and load state first, content height last: this runs
