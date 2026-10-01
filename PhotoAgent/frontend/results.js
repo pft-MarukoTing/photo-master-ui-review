@@ -193,6 +193,21 @@ window.PhotoAgentResults = (() => {
       .filter(Boolean);
   }
 
+  // Only retained, approved items whose command appears in this run's Editor
+  // prompt qualify. Do not infer execution from the original review list.
+  function buildExecutedRecipeItems(analysis, pending = false) {
+    if (pending || analysis?.user_instruction?.overwrite_prompt) return [];
+    const prompt = actualEditorPromptText(analysis);
+    if (!prompt) return [];
+    const plan = Array.isArray(analysis?.correction_plan) ? analysis.correction_plan : [];
+    const recipes = Array.isArray(analysis?.retouch_recipe) ? analysis.retouch_recipe : [];
+    return [...new Set(plan.flatMap((command, index) => {
+      if (typeof command !== "string" || !command.trim() || !prompt.includes(command.trim())) return [];
+      const label = recipes[index];
+      return [typeof label === "string" && label.trim() ? label.trim() : command.trim()];
+    }))];
+  }
+
   function buildExecutedFaceEditTagLabels(analysis, pending = false) {
     if (pending || analysis?.user_instruction?.overwrite_prompt) return [];
     const prompt = actualEditorPromptText(analysis);
@@ -1248,10 +1263,26 @@ window.PhotoAgentResults = (() => {
     panel.style.setProperty("--personalize-tail-x", `${Math.min(Math.max(anchorCenter, min), max)}px`);
   }
 
-  function openPersonalizePopover(text, anchor) {
+  function openPersonalizePopover(text, anchor, title = "個人化需求") {
     if (!els.personalizePopover) return;
     if (portraitCheckOverlayVisible) setPortraitCheckOverlayVisible(false);
-    if (els.personalizePopoverText) els.personalizePopoverText.textContent = text;
+    closePersonalizePopover();
+    els.personalizePopover.setAttribute("aria-label", title);
+    const heading = els.personalizePopover.querySelector(".personalize-popover-title");
+    if (heading) heading.textContent = title;
+    if (els.personalizePopoverText) {
+      els.personalizePopoverText.replaceChildren();
+      if (Array.isArray(text)) {
+        const list = document.createElement("ul");
+        list.className = "result-detail-list";
+        text.forEach((value) => {
+          const item = document.createElement("li");
+          item.textContent = value;
+          list.appendChild(item);
+        });
+        els.personalizePopoverText.appendChild(list);
+      } else els.personalizePopoverText.textContent = text;
+    }
     personalizeAnchor = anchor || null;
     if (personalizeAnchor) personalizeAnchor.setAttribute("aria-expanded", "true");
     els.personalizePopover.hidden = false;
@@ -1276,29 +1307,20 @@ window.PhotoAgentResults = (() => {
     els.personalizePopoverClose.addEventListener("click", closePersonalizePopover);
   }
 
-  // #recipe-tags stays on one row (styles.css: flex-wrap:nowrap) no matter
-  // how many/how long the picks are -- rather than truncating a cramped
-  // pill's text with "...", shrink every pill's font-size in lockstep until
-  // each one's full label actually fits (offsetWidth < scrollWidth is the
-  // standard "this element's text is being clipped" check), so the labels
-  // stay fully readable, just smaller. Resets to the base size first so a
-  // later re-render with fewer/shorter tags isn't left stuck at a previous
-  // shrink. -- shared recipeTagsResizeObserver (bottom of file) re-runs this
-  // whenever #recipe-tags itself changes width (window resize, fullscreen
-  // toggle, etc.), not just on a fresh render.
+  // Prefer readable labels; collapse controls to their tab icons when the
+  // actual result rail is too narrow (including embedded/fullscreen changes).
   const RECIPE_TAG_BASE_FONT_SIZE = 12;
-  const RECIPE_TAG_MIN_FONT_SIZE = 8;
   function fitRecipeTagsRow(container) {
     if (!container) return;
-    const chips = Array.from(container.children);
+    const chips = Array.from(container.children).filter((chip) => !chip.hidden);
     if (!chips.length) return;
-    let size = RECIPE_TAG_BASE_FONT_SIZE;
-    chips.forEach((chip) => { chip.style.fontSize = `${size}px`; });
-    const isClipped = () => chips.some((chip) => chip.scrollWidth > chip.clientWidth + 1);
-    while (size > RECIPE_TAG_MIN_FONT_SIZE && isClipped()) {
-      size -= 1;
-      chips.forEach((chip) => { chip.style.fontSize = `${size}px`; });
-    }
+    container.classList.remove("is-icon-only");
+    chips.forEach((chip) => { chip.style.fontSize = `${RECIPE_TAG_BASE_FONT_SIZE}px`; });
+    // Measure intrinsic button widths; flex shrinking would conceal overflow.
+    const required = chips.reduce((sum, chip) => sum + chip.scrollWidth, 0)
+      + Math.max(0, chips.length - 1) * 8;
+    container.classList.toggle("is-icon-only", required > container.clientWidth);
+
   }
 
   // Re-fit whenever #recipe-tags itself changes width -- window resize,
@@ -2872,7 +2894,7 @@ window.PhotoAgentResults = (() => {
 
   let portraitCheckOverlayVisible = false;
   function handlePortraitCheckOutsideClick(event) {
-    if (event.target.closest?.(".portrait-check-toggle")) return;
+    if (event.target.closest?.('.portrait-check-toggle[aria-controls="portrait-check-overlay"]')) return;
     setPortraitCheckOverlayVisible(false);
   }
   // Keep the observer alive for the lifetime of this results module. Some
@@ -3240,12 +3262,12 @@ window.PhotoAgentResults = (() => {
     // Keep ratio/style pills and the 人像檢查 toggle itself available.
     setPortraitExecutionTagVisibility(true);
     drawPortraitCheckOverlay();
-    const button = els.recipeTags?.querySelector(".portrait-check-toggle");
+    const button = els.recipeTags?.querySelector('.portrait-check-toggle[aria-controls="portrait-check-overlay"]');
     if (button) {
       button.setAttribute("aria-pressed", portraitCheckOverlayVisible ? "true" : "false");
-      button.textContent = "人像檢查";
+      button.setAttribute("title", "人像調整");
       button.setAttribute("aria-label", portraitCheckOverlayVisible
-        ? "收合人像檢查" : "顯示每位人物實際執行的人像修正");
+        ? "收合人像調整" : "顯示每位人物實際執行的人像修正");
       fitRecipeTagsRow(els.recipeTags);
     }
   }
@@ -3467,58 +3489,43 @@ window.PhotoAgentResults = (() => {
       closePersonalizePopover();
       const personalization = getPersonalizationText(analysis);
       const portraitEntries = buildPortraitInspectionEntries(analysis, pending);
-      const portraitLabels = new Set([
-        ...buildExecutedFaceEditTagLabels(analysis, pending),
-        ...portraitEntries.flatMap((entry) => entry.tags)
-      ]);
+      const recipeItems = buildExecutedRecipeItems(analysis, pending);
+      const styleItems = buildExecutedStyleOptionTagLabels(analysis.style_options, analysis, pending);
       renderTags(els.recipeTags, [
-        // One chip for the whole read-out, slash-separated, rather than one
-        // per pick: they're a single sentence about this run ("this is the
-        // 俯拍 / 夜色 / 遠景 version"), and as separate chips they read as a
-        // set of separate somethings sitting next to the row's one real
-        // button. Joining them also stops the gaps and each chip's own
-        // padding from multiplying with the number of picks.
-        buildExecutedStyleOptionTagLabels(analysis.style_options, analysis, pending).join(" / "),
-        personalization
-          ? {
-              label: "個人化",
-              className: "recipe-tag-personalize",
-              title: "點一下看這次填寫的個人化需求",
-              controls: "personalize-popover",
-              // event.currentTarget is the pill itself on both paths into
-              // this handler (renderTags binds the click on the chip and
-              // re-dispatches Enter/Space through the same call) -- that's
-              // what the bubble's tail is aimed at.
-              onClick: (event) => {
-                if (els.personalizePopover && !els.personalizePopover.hidden) closePersonalizePopover();
-                else openPersonalizePopover(personalization, event.currentTarget);
-              }
-            }
-          : "",
-        ...portraitLabels,
         debugUiActive ? `${buildAspectRatioTagLabel(analysis)}${ratioIsPreview ? "（預覽）" : ""}` : ""
       ]);
-      if (!pending && portraitEntries.length) {
+      const addControl = (label, tabId, content, portrait = false) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = "portrait-check-toggle";
-        button.textContent = "人像檢查";
-        button.title = "顯示每位人物實際執行的人像修正";
-        button.setAttribute("aria-pressed", "false");
-        button.setAttribute("aria-controls", "portrait-check-overlay");
-        button.setAttribute("aria-label", "顯示每位人物實際執行的人像修正");
+        button.className = portrait
+          ? "portrait-check-toggle result-detail-toggle"
+          : "portrait-check-toggle result-detail-toggle recipe-tag-personalize";
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.setAttribute(portrait ? "aria-pressed" : "aria-expanded", "false");
+        button.setAttribute("aria-controls", portrait ? "portrait-check-overlay" : "personalize-popover");
+        const icon = document.querySelector(`#${tabId} svg`);
+        if (icon) {
+          const copy = icon.cloneNode(true);
+          copy.setAttribute("aria-hidden", "true");
+          button.appendChild(copy);
+        }
+        const caption = document.createElement("b");
+        caption.className = "result-detail-label";
+        caption.textContent = label;
+        button.appendChild(caption);
         button.addEventListener("click", (event) => {
           event.preventDefault();
-          setPortraitCheckOverlayVisible(!portraitCheckOverlayVisible);
+          if (portrait) setPortraitCheckOverlayVisible(!portraitCheckOverlayVisible);
+          else if (personalizeAnchor === button && !els.personalizePopover.hidden) closePersonalizePopover();
+          else openPersonalizePopover(content, button, tabId === "ap-review-tab-prompt" ? "個人化需求" : label);
         });
         els.recipeTags.appendChild(button);
-      }
-      els.recipeTags.querySelectorAll("span").forEach((chip) => {
-        if (!chip.classList.contains("recipe-tag-personalize") && portraitLabels.has(chip.textContent.trim())) {
-          chip.classList.add("portrait-execution-tag");
-          chip.hidden = true;
-        }
-      });
+      };
+      if (!pending && portraitEntries.length) addControl("人像調整", "ap-review-tab-face", null, true);
+      if (recipeItems.length) addControl("美化項目", "ap-review-tab-recipe", recipeItems);
+      if (styleItems.length) addControl("美化風格", "ap-review-tab-style", styleItems);
+      if (!pending && personalization) addControl("個人化", "ap-review-tab-prompt", personalization);
       fitRecipeTagsRow(els.recipeTags);
     }
     drawPortraitCheckOverlay();

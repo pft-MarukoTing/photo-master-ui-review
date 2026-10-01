@@ -6519,3 +6519,13 @@ body[data-theme-mode="light"] .portrait-check-person {
     opacity: .7;
   }
 }
+
+/* Result controls reuse the personalization glass surface and tab icons. */
+.recipe-tags .result-detail-toggle { flex: 0 0 auto; gap: 5px; padding: 5px 9px; }
+.recipe-tags .result-detail-toggle::before { content: none; }
+.recipe-tags .result-detail-toggle svg { width: 14px; height: 14px; flex: 0 0 auto; }
+.recipe-tags .result-detail-label { font: inherit; }
+.recipe-tags.is-icon-only .result-detail-label { display: none; }
+.recipe-tags.is-icon-only .result-detail-toggle { padding: 7px; }
+.result-detail-list { margin: 0; padding-left: 1.25em; white-space: normal; }
+.result-detail-list li + li { margin-top: 6px; }
