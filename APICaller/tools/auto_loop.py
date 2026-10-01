@@ -199,15 +199,19 @@ async def run_iteration(args: argparse.Namespace, categories: dict, judge_prompt
             filename_prefix=f"apicaller/autoloop/{run_id}/{code_str}",
         )
 
-        mapping_rows.append({
+        # Written one row at a time (instead of batching all N until the loop
+        # finishes) so a crash partway through an expansion only orphans the
+        # one in-flight code, not every triple already written in this batch.
+        row = {
             "code": code_str,
             "batch": f"autoloop_{run_id}",
             "ref_original": f"{b_path.name} (repeated, single fixed reference)",
             "src_original": f"comfy-random-style: {style_ref.name} applied onto res/{code_str}.jpg",
             "res_original": lock_tmp.name,
-        })
+        }
+        append_mapping(MAPPING_CSV, [row])
+        mapping_rows.append(row)
 
-    append_mapping(MAPPING_CSV, mapping_rows)
     record["expanded"] = True
     record["codes"] = [r["code"] for r in mapping_rows]
     pipeline.append_log(LOOP_LOG, record)
