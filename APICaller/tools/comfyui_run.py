@@ -31,7 +31,7 @@ from api_caller import comfy_client
 
 TZ_UTC8 = timezone(timedelta(hours=8))
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_WORKFLOW = REPO_ROOT / "AINail/workflows/nailSalon_workflow_20260626_api.json"
+DEFAULT_WORKFLOW = REPO_ROOT / "AINail/workflows/nailSalon_workflow_20260924_api.json"
 JPEG_QUALITY = 95
 
 
