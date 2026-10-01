@@ -50,12 +50,22 @@ def mask_iou_matrix(masks_a, masks_b, threshold=0.5):
     return inter / union.clamp(min=1e-8)
 
 
-def match_by_iou_matrix(iou_matrix, min_iou=0.0):
-    """Greedy one-to-one matching over a precomputed IoU matrix [N_a, N_b].
+def match_by_iou_matrix(iou_matrix, min_iou=0.0, max_matches_a=1):
+    """Greedy matching over a precomputed IoU matrix [N_a, N_b].
 
-    Highest-IoU pairs are assigned first; each side is used at most once. A
-    pair is only eligible when its IoU is strictly greater than `min_iou`, so
-    an isolated entry with no overlapping counterpart is left unmatched.
+    Highest-IoU pairs are assigned first; each b is used at most once, each a
+    is used at most `max_matches_a` times (default 1, i.e. strict one-to-one).
+    A pair is only eligible when its IoU is strictly greater than `min_iou`,
+    so an isolated entry with no overlapping counterpart is left unmatched.
+
+    `max_matches_a` > 1 exists for SAM3 occasionally splitting one physical
+    nail into two detections on the generated side (e.g. an elaborate 3D nail
+    art design) that aren't nested enough for `merge_overlapping_masks` to
+    catch (two side-by-side pieces, not one contained in the other) — letting
+    the single original nail match both pieces lets the union-based composite
+    mask pick up both. Capped (not unlimited) so a nail with only incidental,
+    low-IoU overlap with several unrelated neighboring nails can't absorb all
+    of them.
 
     Returns a list of (i, j, iou) for matched pairs.
     """
@@ -68,12 +78,13 @@ def match_by_iou_matrix(iou_matrix, min_iou=0.0):
                 candidates.append((iou, i, j))
     candidates.sort(key=lambda t: t[0], reverse=True)
 
-    used_a, used_b = set(), set()
+    count_a = {}
+    used_b = set()
     matches = []
     for iou, i, j in candidates:
-        if i in used_a or j in used_b:
+        if j in used_b or count_a.get(i, 0) >= max_matches_a:
             continue
-        used_a.add(i)
+        count_a[i] = count_a.get(i, 0) + 1
         used_b.add(j)
         matches.append((i, j, iou))
     return matches
@@ -170,9 +181,12 @@ class PasteBackMatched:
 
     For each hand:
       1. Match nail_masks_1[i] <-> nail_masks_2[j] by greedy highest-mask-IoU
-         assignment (no reuse of either side, and a match requires overlap).
-      2. Match finger_masks[f] <-> nail_masks_1[i] the same way, to find each
-         nail's finger.
+         assignment (each j used at most once; each i up to twice, to absorb
+         the occasional case of SAM3 splitting one decorated nail into two
+         non-nested detections on the generated side; a match requires
+         overlap).
+      2. Match finger_masks[f] <-> nail_masks_1[i] the same way but strictly
+         one-to-one, to find each nail's finger.
       3. For each matched (i, j), if nail i has a matched finger f, drop the
          match when intersection(finger_masks[f], nail_masks_2[j]) is at
          least `finger_overlap_ratio` times intersection(finger_masks[f],
@@ -282,8 +296,11 @@ class PasteBackMatched:
             hand_nail_masks_2 = merge_overlapping_masks(hand_nail_masks_2, dedup_thresh)
             hand_finger_masks = merge_overlapping_masks(hand_finger_masks, dedup_thresh)
 
+            # max_matches_a=2: a single original nail may match up to two generated-side
+            # detections, since SAM3 occasionally splits one physical (often elaborately
+            # decorated) nail into two non-nested pieces on the generated side.
             nail_matches = match_by_iou_matrix(
-                mask_iou_matrix(hand_nail_masks_1, hand_nail_masks_2), min_iou_val
+                mask_iou_matrix(hand_nail_masks_1, hand_nail_masks_2), min_iou_val, max_matches_a=2
             )
             finger_matches = match_by_iou_matrix(
                 mask_iou_matrix(hand_finger_masks, hand_nail_masks_1), min_iou_val
