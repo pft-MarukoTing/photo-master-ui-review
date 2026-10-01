@@ -39,7 +39,6 @@ import csv
 import io
 import json
 import random
-import shutil
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -126,18 +125,20 @@ async def run_iteration(args: argparse.Namespace, categories: dict, judge_prompt
     run_id = datetime.now(TZ_UTC8).strftime("%Y%m%d_%H%M%S")
 
     natural_pick = random.choice(list_images(args.natural_dir))
-    a_path = A_DIR / f"{run_id}{natural_pick.suffix.lower()}"
-    A_DIR.mkdir(parents=True, exist_ok=True)
-    shutil.copy(natural_pick, a_path)
+    a_path = A_DIR / f"{run_id}.jpg"
+    to_jpeg(natural_pick, a_path)
     print(f"[1/4] A (natural source) = {a_path.name} (from {natural_pick.name})")
 
     category = random.choice(list(categories))
     item = random.choice(categories[category])
     style_text = f"{category} - {item}"
     prompt = build_prompt(style_template, style_text)
-    b_path = B_DIR / f"{run_id}_{_slug(category)}__{_slug(item)}.png"
+    b_raw = LOCK_TMP_DIR / f"{run_id}_b_raw.png"
     print(f"[2/4] B (styled reference) style={style_text!r} -> generating ...")
-    await gen_image(args.provider, prompt, b_path, args.gen_model)
+    await gen_image(args.provider, prompt, b_raw, args.gen_model)
+    b_path = B_DIR / f"{run_id}_{_slug(category)}__{_slug(item)}.jpg"
+    to_jpeg(b_raw, b_path)
+    b_raw.unlink()
     print(f"  B = {b_path.name}")
 
     c_path = C_DIR / f"{run_id}.jpg"
