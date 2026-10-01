@@ -84,43 +84,17 @@ accepts. `gemini-3.1-flash-image-preview` is the current default.
     a JSON-schema-constrained answer).
   - `comfy_client.py` -- synchronous ComfyUI HTTP client (upload/submit/poll),
     copied from `AINail/benchmark/comfy_client.py`.
-- `pipeline.py` -- the main entry point. Generates two hand photos, runs them
-  through ComfyUI's nail-transfer workflow, judges the result with both
-  providers, and appends one record to `pipeline_log.jsonl`.
-- `tools/` -- single-step ad-hoc scripts for testing one piece of the
-  pipeline in isolation (not imported by `pipeline.py`, except
-  `comfyui_run.py` which `pipeline.py` reuses for its ComfyUI step):
-  - `cli.py` -- generate or edit one image from a prompt.
-  - `comfyui_run.py` -- run one (source, reference) pair through ComfyUI.
-  - `judge.py` -- free-text judging of an arbitrary set of images.
-- `nail_prompt.txt` -- the default hand/nail-art generation prompt `pipeline.py`
-  and `tools/cli.py` read when no `--prompt`/`--prompt-file` is given.
-- `judge_prompt.txt` -- the default judging criteria `pipeline.py` reads
-  when no `--judge-prompt-file` is given (what counts as "good"/"bad" and
-  why). Kept external, same as `nail_prompt.txt`, so the criteria can be
-  edited or made more detailed without touching `pipeline.py`; the
-  Gemini-only "reply with nothing but JSON" instruction and the OpenAI JSON
-  schema are gateway/API mechanics, not judging criteria, so those stay in
-  `pipeline.py` and get combined with this file's text at call time.
+- `tools/cli.py` -- generate or edit one image from a prompt via either
+  provider.
+- `tasks/AINail/` -- the nail-transfer pipeline and tooling built on top of
+  `api_caller/`.
 
 ## Usage
 
 ```bash
-# main pipeline: generate x2 -> ComfyUI nail transfer -> judge x2 -> log
-python pipeline.py --provider gemini \
-    --checkpoint nail_salon_lora/nail_salon_lora_20260826.safetensors \
-    --comfyui-port 8450
-
-# same, with custom generation/judging criteria
-python pipeline.py --provider gemini --checkpoint ... --comfyui-port 8450 \
-    --prompt-file my_prompt.txt --judge-prompt-file my_judge_prompt.txt
-
-# ad-hoc single-step tools
+# ad-hoc single-step tool
 python tools/cli.py --provider both --prompt "a red bicycle on a beach" --out-dir ./out
 python tools/cli.py --mode edit --provider gemini --image in.png --prompt "..." --out-dir ./out
-python tools/comfyui_run.py --source a.png --reference b.png --checkpoint ... --comfyui-port 8450
-python tools/judge.py --provider both --images source.png reference.png result.jpg
 ```
 
-Run everything from the `APICaller/` directory (the `tools/` scripts add
-their parent dir to `sys.path` so `api_caller` still resolves).
+Run everything from the `APICaller/` directory.
