@@ -16,6 +16,7 @@ from config import STYLE_OPTION_VALUE_LABELS
 # here: both builders must agree on which people a feature is in scope for,
 # including the per-person opt-out (_disabled_issue_subject_indices).
 from prompts import (
+    OCCLUDED_PERSON_REMOVAL_RULE,
     _disabled_issue_subject_indices,
     _has_person,
     _read_smile_states,
@@ -24,6 +25,7 @@ from prompts import (
     has_approved_alignment_correction,
     build_body_reshape_edit_block,
     get_body_reshape_edit_prompt,
+    has_approved_distraction_removal,
     resolve_user_blink_request,
     resolve_user_gaze_request,
     resolve_user_hair_request,
@@ -1652,6 +1654,10 @@ def build_compact_editor_prompt(
         else:
             other_corrections.append(item)
     correction_block = "\n".join(f"- {item}" for item in other_corrections) or "- No additional approved local corrections."
+    removal_face_block = (
+        "\n\nRequired people cleanup during approved removal:\n- " + OCCLUDED_PERSON_REMOVAL_RULE
+        if has_approved_distraction_removal(analysis) else ""
+    )
     color_block, skin_block = _build_color_blocks(
         analysis, skin_corrections, face_tonal_corrections,
         lighting_style=style_options.get("lighting"),
@@ -1871,7 +1877,7 @@ def build_compact_editor_prompt(
     global_preservation = (
         "- Preserve the same identities, person count, scene identity, and photographic realism. Apply Body Reshape as one continuous overall-figure adjustment; the existing garment may follow the resulting geometry locally while retaining its identity and coverage. Keep every unlisted person and unrelated scene geometry unchanged. Keep face identity and facial anatomy unchanged except for separately approved smile, gaze, blink, or hair instructions, which remain active in their own contracts."
         if body_reshape_active else
-        "- Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform, add, or erase people/objects; authorized framing may place existing content outside the output frame."
+        "- Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform or add people/objects, or erase them outside an approved local removal; authorized framing may place existing content outside the output frame."
     )
     pose_completion_guard = (
         "\n- The result is incomplete if the selected subject keeps essentially the original body pose and only the "
@@ -1898,7 +1904,7 @@ def build_compact_editor_prompt(
     prompt = f"""{task_intro}
 
 Required framing:
-{compact_crop_block}
+{compact_crop_block}{removal_face_block}
 
 {visual_target_block}{pose_target_boundary}
 
