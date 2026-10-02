@@ -51,9 +51,14 @@ class SSIMScore:
       images      : [N] crop_images if any ssim_scores[i] < ssim_threshold
                     (generation judged bad somewhere), otherwise generated_images
                     (every pair passed the threshold).
+      status      : "Success" if every pair's score >= ssim_threshold, else "Internal Error".
+                    OUTPUT_NODE=True so this always lands in /history's outputs for this
+                    node_id (keyed "text"), whether or not `status` is wired downstream —
+                    same mechanism SaveImage uses for its "images" entry.
     """
 
     INPUT_IS_LIST = True
+    OUTPUT_NODE = True
 
     @classmethod
     def INPUT_TYPES(cls):
@@ -65,9 +70,9 @@ class SSIMScore:
             }
         }
 
-    RETURN_TYPES = ("FLOAT", "IMAGE")
-    RETURN_NAMES = ("ssim_scores", "images")
-    OUTPUT_IS_LIST = (True, True)
+    RETURN_TYPES = ("FLOAT", "IMAGE", "STRING")
+    RETURN_NAMES = ("ssim_scores", "images", "status")
+    OUTPUT_IS_LIST = (True, True, False)
     FUNCTION = "compute"
     CATEGORY = "AINail/image"
 
@@ -104,8 +109,14 @@ class SSIMScore:
 
             scores.append(sum(frame_scores) / len(frame_scores))
 
-        images = crop_images if any(s < threshold for s in scores) else generated_images
-        return (scores, images)
+        if all(s >= threshold for s in scores):
+            status = "Success"
+            images = generated_images
+        else:
+            status = "Internal Error"
+            images = crop_images
+
+        return {"ui": {"text": [status]}, "result": (scores, images, status)}
 
 
 NODE_CLASS_MAPPINGS = {
