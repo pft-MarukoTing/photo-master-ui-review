@@ -54,7 +54,7 @@
                     ]
                 }
             ],
-            "title": "LoRA Loader",
+            "title": "LoRA Loader (Lightning LoRA)",
             "properties": {
                 "cnr_id": "comfy-core",
                 "ver": "0.5.1",
@@ -632,6 +632,7 @@
         {
             "id": 80,
             "type": "easy showAnything",
+            "title": "easy showAnything (Crop Info)",
             "pos": [
                 539.6671657055781,
                 -504.54545478757046
@@ -677,6 +678,7 @@
         {
             "id": 67,
             "type": "PreviewImage",
+            "title": "PreviewImage (Hand Detection Viz)",
             "pos": [
                 141.1731937940832,
                 -1195.7732795732159
@@ -712,6 +714,7 @@
         {
             "id": 90,
             "type": "easy showAnything",
+            "title": "easy showAnything (Hand Boxes)",
             "pos": [
                 163.62351904224698,
                 -493.6783163765165
@@ -845,6 +848,7 @@
         {
             "id": 75,
             "type": "PreviewImage",
+            "title": "PreviewImage (Resized Debug)",
             "pos": [
                 398.5469328750832,
                 -1197.971917842859
@@ -880,6 +884,7 @@
         {
             "id": 66,
             "type": "SAM3Grounding",
+            "title": "SAM3Grounding (Detect Hand)",
             "pos": [
                 -162.5726313483408,
                 -737.8981985527307
@@ -1108,6 +1113,7 @@
         {
             "id": 72,
             "type": "PreviewImage",
+            "title": "PreviewImage (Generated/VAEDecode)",
             "pos": [
                 626.9833067873144,
                 -1197.049316317512
@@ -1400,6 +1406,7 @@
         {
             "id": 107,
             "type": "SAM3Grounding",
+            "title": "SAM3Grounding (Detect Generated Nails)",
             "pos": [
                 2473.398819136321,
                 32.42356374577989
@@ -1753,6 +1760,7 @@
         {
             "id": 111,
             "type": "PreviewImage",
+            "title": "PreviewImage (Crop Finger Detection Viz)",
             "pos": [
                 2991.811179480298,
                 -860.1849645662719
@@ -1788,6 +1796,7 @@
         {
             "id": 108,
             "type": "PreviewImage",
+            "title": "PreviewImage (Crop Nail Detection Viz)",
             "pos": [
                 3268.058752640038,
                 -853.6831433736221
@@ -1823,6 +1832,7 @@
         {
             "id": 109,
             "type": "PreviewImage",
+            "title": "PreviewImage (Generated Nail Detection Viz)",
             "pos": [
                 3551.7180404055453,
                 -848.3451162912671
@@ -2029,7 +2039,7 @@
                     ]
                 }
             ],
-            "title": "LoRA Loader",
+            "title": "LoRA Loader (AINail LoRA)",
             "properties": {
                 "cnr_id": "comfy-core",
                 "ver": "0.5.1",
@@ -2048,6 +2058,7 @@
         {
             "id": 113,
             "type": "easy showAnything",
+            "title": "easy showAnything (SSIM Score)",
             "pos": [
                 1215.2495414562884,
                 -1192.2232417505318

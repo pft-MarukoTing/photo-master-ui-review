@@ -54,7 +54,7 @@
                     ]
                 }
             ],
-            "title": "LoRA Loader",
+            "title": "LoRA Loader (Lightning LoRA)",
             "properties": {
                 "cnr_id": "comfy-core",
                 "ver": "0.5.1",
@@ -906,6 +906,7 @@
         {
             "id": 71,
             "type": "SAM3Grounding",
+            "title": "SAM3Grounding (Detect Generated Nails)",
             "pos": [
                 2676.256944166829,
                 138.91761836346305
@@ -1214,6 +1215,7 @@
         {
             "id": 75,
             "type": "PreviewImage",
+            "title": "PreviewImage (Resized Debug)",
             "pos": [
                 398.5469328750832,
                 -1197.971917842859
@@ -1335,6 +1337,7 @@
         {
             "id": 72,
             "type": "PreviewImage",
+            "title": "PreviewImage (Generated/VAEDecode)",
             "pos": [
                 626.9833067873144,
                 -1197.049316317512
@@ -1469,6 +1472,7 @@
         {
             "id": 80,
             "type": "easy showAnything",
+            "title": "easy showAnything (Crop Info)",
             "pos": [
                 539.6671657055781,
                 -504.54545478757046
@@ -1624,6 +1628,7 @@
         {
             "id": 66,
             "type": "SAM3Grounding",
+            "title": "SAM3Grounding (Detect Hand)",
             "pos": [
                 -162.5726313483408,
                 -737.8981985527307
@@ -1805,6 +1810,7 @@
         {
             "id": 90,
             "type": "easy showAnything",
+            "title": "easy showAnything (Hand Boxes)",
             "pos": [
                 163.62351904224698,
                 -493.6783163765165
@@ -1850,6 +1856,7 @@
         {
             "id": 67,
             "type": "PreviewImage",
+            "title": "PreviewImage (Hand Detection Viz)",
             "pos": [
                 141.1731937940832,
                 -1195.7732795732159
@@ -1932,7 +1939,7 @@
                     ]
                 }
             ],
-            "title": "LoRA Loader",
+            "title": "LoRA Loader (AINail LoRA)",
             "properties": {
                 "cnr_id": "comfy-core",
                 "ver": "0.5.1",
