@@ -4,6 +4,7 @@ import logging
 import re
 
 import config as _photoagent_config
+from aspect_ratio_rules import allowed_auto_ratio_labels
 from config import STYLE_OPTION_INSTRUCTIONS, STYLE_OPTION_LABELS, STYLE_OPTION_VALUE_LABELS
 
 logger = logging.getLogger(__name__)
@@ -614,7 +615,7 @@ Return exactly this JSON shape:
   "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景；針對每個判定為干擾的元素，說明具體且可執行的處理方式，避免只描述抽象的感受或意圖。",
   "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
-  "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
+  "recommended_aspect_ratio": "original 或 Aspect-ratio policy 列出的比例之一",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
   "subjects": [
     {
@@ -1390,11 +1391,10 @@ Intent: Produce normalized subject and crop geometry that downstream framing log
 - For every "Local face detector reference" you relied on to create a subjects[] entry (see "Zoomed face-crop images" above and its local_face_review requirement), that person's subjects[].box must fully contain the detected face box -- its top/left/right/bottom edges at or beyond the detected face box's own edges on every side, never cutting into or excluding it. A subjects[].box that does not contain the face detection it was created from is wrong and must be corrected before finalizing the analysis; this containment check is mandatory whenever such a detection exists, not merely a suggestion for when your own estimate looks "noticeably off". subjects[].box must still extend beyond just the face to cover that individual's full semantic extent -- containing the face box is a minimum, not the whole box.
 - protected_regions contain only indispensable subject details and role cues retained by the selected composition. When crop_box.enabled=true, keep every protected region inside crop_box with breathing room; leave optional background structure and intentionally trimmed subject/body edges outside these boxes.
 - If no reframing is beneficial or the crop is almost full frame, set recommended_aspect_ratio to "original" and crop_box.enabled to false.
-- The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
+- The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from the supported output set in the Aspect-ratio policy below.
 - Changing the outer canvas ratio never permits changing the internal proportions of the photographed content. Plan the new frame only by cropping/recomposition; never stretch or squash the original scene to fill it.
 - The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
 - This is not just a label match: each crop_box's own x/y/w/h must itself compute to that same ratio -- (w * original_image_width) : (h * original_image_height) must equal the stated aspect_ratio, for both crop_box and every crop_candidates[].crop_box. A correctly-labeled aspect_ratio paired with geometry sized for a different ratio is an error, not a valid answer.
-- Prefer ordinary photographic ratios (1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9). Use 1:4, 4:1, 1:8, or 8:1 only when strongly justified and subject safety remains excellent.
 - Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
 - Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
 
@@ -2287,7 +2287,7 @@ _ASPECT_RATIO_POLICY_ORIGINAL = """
 _ASPECT_RATIO_POLICY_AUTO = """
 ## Aspect-ratio policy
 
-- Select recommended_aspect_ratio only from the supported output set declared above.
+- Select recommended_aspect_ratio only from this supported output set: {ratios}. It holds only the shapes a crop can reach while keeping most of this photograph, so the output stays close to the shape it was shot in.
 - crop_box.aspect_ratio and every crop candidate aspect_ratio must equal recommended_aspect_ratio exactly.
 - The normalized x/y/w/h values are a composition proposal, not permission to use a different ratio.
 - Downstream deterministic geometry will fit the crop rectangle to this selected ratio, so protect the ROI, subject extent, and protected regions with enough breathing room.
@@ -2376,7 +2376,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景；針對每個判定為干擾的元素，說明具體且可執行的處理方式，避免只描述抽象的感受或意圖。",
   "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
-  "recommended_aspect_ratio": "original / 1:1 / 3:2 / 2:3 / 3:4 / 4:3 / 4:5 / 5:4 / 9:16 / 16:9 / 21:9 / 1:4 / 4:1 / 1:8 / 8:1",
+  "recommended_aspect_ratio": "original 或 Aspect-ratio policy 列出的比例之一",
   "aspect_ratio_reason": "為什麼這個輸出比例最適合主體、陪襯元素、留白與畫面意圖。",
   "subjects": [
     {
@@ -2504,11 +2504,10 @@ _COORDINATE_FRAME_RULE = """- crop_box, roi_box, subject_extent_box, and protect
 _CROP_GEOMETRY_RULES = """- protected_regions contain only indispensable subject details and role cues retained by the selected composition. When crop_box.enabled=true, keep every protected region inside crop_box with breathing room; leave optional background structure and intentionally trimmed subject/body edges outside these boxes.
 - Choose "original" with crop_box.enabled=false when the captured boundaries support the intended subject emphasis, balance, context, and edge cleanliness as well as any viable crop.
 - A same-ratio or near-full composition crop remains valid when it removes an edge distraction, strengthens the subject anchor, or gives the frame a cleaner visual endpoint. Do not enable crop_box only to straighten the horizon or correct perspective; alignment owns its own minimal cleanup trim.
-- The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from this supported output set: original, 1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9, 1:4, 4:1, 1:8, 8:1.
+- The output does not need to preserve the original canvas aspect ratio in auto mode. Choose exactly one value from the supported output set in the Aspect-ratio policy below.
 - Changing the outer canvas ratio never permits changing the internal proportions of the photographed content. Plan the new frame only by cropping/recomposition; never stretch or squash the original scene to fill it.
 - The crop_box.aspect_ratio and every crop_candidates[].crop_box.aspect_ratio must match recommended_aspect_ratio exactly. Do not describe one ratio while returning crop geometry intended for another ratio.
 - This is not just a label match: each crop_box's own x/y/w/h must itself compute to that same ratio -- (w * original_image_width) : (h * original_image_height) must equal the stated aspect_ratio, for both crop_box and every crop_candidates[].crop_box. A correctly-labeled aspect_ratio paired with geometry sized for a different ratio is an error, not a valid answer.
-- Prefer ordinary photographic ratios (1:1, 3:2, 2:3, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9). Use 1:4, 4:1, 1:8, or 8:1 only when strongly justified and subject safety remains excellent.
 - Choose aspect ratio from subject type, scene intent, supporting elements, empty-space function, visual balance, and breathing room.
 - Set crop_risk.needs_validation to true when composition is ambiguous, crop is aggressive, ROI is near an edge, protected regions are near edges, framing could be misread, or alignment/context tradeoffs need judgment.
 """
@@ -2622,6 +2621,14 @@ def portrait_qc_persons(analysis):
 _FIXED_ASPECT_RATIO_PREF = re.compile(r"^\d+(?:\.\d+)?\s*:\s*\d+(?:\.\d+)?$")
 
 
+def _auto_ratio_choices(source_size):
+    try:
+        source_ratio = float(source_size[0]) / float(source_size[1])
+    except (TypeError, ValueError, IndexError, ZeroDivisionError):
+        source_ratio = None
+    return ", ".join(("original",) + allowed_auto_ratio_labels(source_ratio))
+
+
 def _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size=None):
     """source_size: the photograph's own (width, height). Without it the
     expand clause is left out -- the choice it describes depends on how far
@@ -2630,7 +2637,7 @@ def _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size=None):
     if pref == "original":
         return _ASPECT_RATIO_POLICY_ORIGINAL
     if not _FIXED_ASPECT_RATIO_PREF.match(pref):
-        return _ASPECT_RATIO_POLICY_AUTO
+        return _ASPECT_RATIO_POLICY_AUTO.format(ratios=_auto_ratio_choices(source_size))
 
     policy = _ASPECT_RATIO_POLICY_FIXED.format(ratio=pref)
     if not expand_permitted(pref, pref, source_size):

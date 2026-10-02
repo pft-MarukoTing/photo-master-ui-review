@@ -49,6 +49,7 @@ COPY engine_result_code.py /app/
 COPY artifact_store.py   /app/
 COPY config.py           /app/
 COPY prompts.py          /app/
+COPY aspect_ratio_rules.py /app/
 COPY image_tools.py      /app/
 COPY sdl_face_detector.py /app/
 COPY models              /app/models

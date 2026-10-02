@@ -23,6 +23,7 @@ except Exception:
             pass
 
     aiutils_logger = _DroppedTelemetry()
+from aspect_ratio_rules import allowed_auto_ratio_labels
 from sdl_face_detector import SDLFaceDetector
 
 logger = logging.getLogger(__name__)
@@ -364,41 +365,6 @@ def _recommended_aspect_ratio(context: dict, fallback: str = "") -> str:
     )
 
 
-# The closed set of output ratios the edit APIs can be asked for in auto mode
-# -- the same list the analysis prompt used to choose from itself. "original"
-# (the source photo's own ratio) is always an extra candidate alongside these.
-AUTO_ASPECT_RATIO_LABELS = (
-    "1:1", "3:2", "2:3", "3:4", "4:3", "4:5", "5:4",
-    "9:16", "16:9" #, "21:9", "1:4", "4:1", "1:8", "8:1",
-)
-
-
-_AUTO_RATIO_LABELS_NEEDING_EXTREME_SOURCE = ("16:9", "9:16")
-_SOURCE_RATIO_MATCH_TOLERANCE = 0.02  # relative, so 1.74 counts as "already 16:9"
-
-
-def _source_at_least_as_extreme(source_ratio, label_ratio) -> bool:
-    """Is the source photo as far from square as this label, on the same side of
-    square? Equal (within tolerance) counts as yes."""
-    if not source_ratio or not label_ratio or source_ratio <= 0 or label_ratio <= 0:
-        return False
-    slack = math.log(1 + _SOURCE_RATIO_MATCH_TOLERANCE)
-    source, label = math.log(source_ratio), math.log(label_ratio)
-    if label > 0:  # landscape label -- the photo must be at least as wide
-        return source >= label - slack
-    return source <= label + slack  # portrait label -- at least as tall
-
-
-def _allowed_auto_ratio_labels(source_ratio: float) -> tuple:
-    """The auto-mode candidate labels for a photo of this shape -- the full set
-    minus the extremes the source photo isn't already at least as elongated as."""
-    return tuple(
-        label for label in AUTO_ASPECT_RATIO_LABELS
-        if label not in _AUTO_RATIO_LABELS_NEEDING_EXTREME_SOURCE
-        or _source_at_least_as_extreme(source_ratio, parse_aspect_ratio(label))
-    )
-
-
 def derive_aspect_ratio_from_crop(crop_box: dict, image_width: int, image_height: int):
     """Pick the output ratio from the crop geometry the analysis proposed,
     instead of from the ratio label it wrote.
@@ -414,9 +380,8 @@ def derive_aspect_ratio_from_crop(crop_box: dict, image_width: int, image_height
 
     The source photo's own ratio competes as "original" and is listed first, so
     a crop that keeps the original proportions (or a near-tie) keeps them
-    rather than being snapped onto a named ratio for no reason. 16:9 and 9:16
-    only compete for photos that are already at least that elongated (see
-    _allowed_auto_ratio_labels).
+    rather than being snapped onto a named ratio for no reason. Only labels
+    allowed_auto_ratio_labels permits for this source shape compete.
 
     Returns (label, measured_ratio); measured_ratio is None when there is no
     usable crop to measure, in which case the label is "original".
@@ -440,7 +405,7 @@ def derive_aspect_ratio_from_crop(crop_box: dict, image_width: int, image_height
     source_ratio = image_width / image_height
     choices = [("original", source_ratio)]
     choices += [(label, parse_aspect_ratio(label))
-                for label in _allowed_auto_ratio_labels(source_ratio)]
+                for label in allowed_auto_ratio_labels(source_ratio)]
     return _nearest_by_ratio(measured, choices), measured
 
 

@@ -23,9 +23,8 @@ from prompts import (
 )
 from config import PRESETS, PRESET_PROMPTS
 from photo_agent.feature_resolver import _compact_raw_crop_instruction
+from aspect_ratio_rules import AUTO_ASPECT_RATIO_LABELS, allowed_auto_ratio_labels
 from image_tools import (
-    AUTO_ASPECT_RATIO_LABELS,
-    _allowed_auto_ratio_labels,
     apply_derived_aspect_ratio,
     derive_aspect_ratio_from_crop,
     openai_edit_size_for_ratio,
@@ -183,7 +182,7 @@ class DerivedAspectRatioTests(unittest.TestCase):
         self.assertEqual(derive_aspect_ratio_from_crop(near_16_9, 1400, 800)[0], "16:9")
 
     def test_allowed_labels_drop_only_the_extremes(self):
-        square = _allowed_auto_ratio_labels(1.0)
+        square = allowed_auto_ratio_labels(1.0)
         self.assertNotIn("16:9", square)
         self.assertNotIn("9:16", square)
         self.assertEqual(
@@ -192,15 +191,29 @@ class DerivedAspectRatioTests(unittest.TestCase):
         # Exactly 16:9 / 9:16 qualifies, and so does anything more elongated
         # than that in the same direction (21:9, 1:2) -- those photos are
         # already past the extreme, so offering it takes nothing extra away.
-        self.assertIn("16:9", _allowed_auto_ratio_labels(16 / 9))
-        self.assertIn("16:9", _allowed_auto_ratio_labels(21 / 9))
-        self.assertIn("9:16", _allowed_auto_ratio_labels(9 / 16))
-        self.assertIn("9:16", _allowed_auto_ratio_labels(1 / 2))
+        self.assertIn("16:9", allowed_auto_ratio_labels(16 / 9))
+        self.assertIn("16:9", allowed_auto_ratio_labels(21 / 9))
+        self.assertIn("9:16", allowed_auto_ratio_labels(9 / 16))
+        self.assertIn("9:16", allowed_auto_ratio_labels(1 / 2))
         # Less elongated stays out, and neither extreme unlocks its transpose.
-        self.assertNotIn("16:9", _allowed_auto_ratio_labels(3 / 2))
-        self.assertNotIn("9:16", _allowed_auto_ratio_labels(2 / 3))
-        self.assertNotIn("9:16", _allowed_auto_ratio_labels(21 / 9))
-        self.assertNotIn("16:9", _allowed_auto_ratio_labels(1 / 2))
+        self.assertNotIn("16:9", allowed_auto_ratio_labels(3 / 2))
+        self.assertNotIn("9:16", allowed_auto_ratio_labels(2 / 3))
+        self.assertNotIn("9:16", allowed_auto_ratio_labels(21 / 9))
+        self.assertNotIn("16:9", allowed_auto_ratio_labels(1 / 2))
+
+    def test_allowed_labels_drop_ratios_a_crop_cannot_reach_without_losing_too_much(self):
+        portrait = allowed_auto_ratio_labels(2 / 3)
+        self.assertIn("1:1", portrait)  # keeps 67% of a 2:3 photo
+        for label in ("3:2", "4:3", "5:4"):
+            self.assertNotIn(label, portrait)
+        landscape = allowed_auto_ratio_labels(4 / 3)
+        self.assertIn("1:1", landscape)
+        self.assertNotIn("4:5", landscape)  # keeps 60%
+        self.assertNotIn("3:4", landscape)
+
+    def test_flipped_crop_snaps_to_the_nearest_allowed_ratio(self):
+        landscape_crop = {"enabled": True, "x": 0.0, "y": 0.2, "w": 1.0, "h": 4 / 9}
+        self.assertEqual(derive_aspect_ratio_from_crop(landscape_crop, 1000, 1500)[0], "1:1")
 
     def test_no_usable_crop_means_original(self):
         self.assertEqual(derive_aspect_ratio_from_crop(None, 1600, 1600), ("original", None))
@@ -613,6 +626,12 @@ class AnalysisAspectRatioPolicyTests(unittest.TestCase):
                                  ("original", "keep the original photo's aspect ratio")):
                 with self.subTest(build=build.__name__, pref=pref):
                     self.assertIn(marker, _policy_block(build(pref)))
+
+    def test_auto_policy_lists_only_the_ratios_allowed_for_this_photo(self):
+        for build in self.BUILDERS:
+            with self.subTest(build=build.__name__):
+                policy = _policy_block(build("auto", source_size=(1000, 1500)))
+                self.assertIn("supported output set: original, 1:1, 2:3, 3:4, 4:5.", policy)
 
     def test_both_analyzer_paths_share_one_policy_block(self):
         for pref in ("auto", "original", "3:2"):
