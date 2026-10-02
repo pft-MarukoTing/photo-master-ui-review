@@ -1265,14 +1265,15 @@ window.PhotoAgentResults = (() => {
 
   function openPersonalizePopover(text, anchor, title = "個人化需求") {
     if (!els.personalizePopover) return;
-    if (portraitCheckOverlayVisible) setPortraitCheckOverlayVisible(false);
     closePersonalizePopover();
     els.personalizePopover.setAttribute("aria-label", title);
     const heading = els.personalizePopover.querySelector(".personalize-popover-title");
     if (heading) heading.textContent = title;
     if (els.personalizePopoverText) {
       els.personalizePopoverText.replaceChildren();
-      if (Array.isArray(text)) {
+      if (text instanceof Node) {
+        els.personalizePopoverText.appendChild(text);
+      } else if (Array.isArray(text)) {
         const list = document.createElement("ul");
         list.className = "result-detail-list";
         text.forEach((value) => {
@@ -1753,7 +1754,7 @@ window.PhotoAgentResults = (() => {
       if (!subject || subject.is_person !== true || !Number.isInteger(match.index) || match.index < 0) return;
       if (represented.has(match.index)) return;
       represented.add(match.index);
-      sources.push({ subject, subjectIndex: match.index, box });
+      sources.push({ subject, subjectIndex: match.index, box, thumbnailBox: detectionBox });
     });
     subjects.forEach((subject, subjectIndex) => {
       if (!subject || subject.is_person !== true || represented.has(subjectIndex)) return;
@@ -1825,7 +1826,7 @@ window.PhotoAgentResults = (() => {
         .filter((index) => Number.isInteger(index) && index >= 0)
     );
     const sources = portraitInspectionSources(analysis);
-    return sources.map(({ subject, subjectIndex, box }) => {
+    return sources.map(({ subject, subjectIndex, box, thumbnailBox }) => {
       const issues = faceIssueEntries(subject, subjectIndex, disabledBodies.has(subjectIndex));
       const tags = [];
       EXECUTED_FACE_PROMPT_TAGS.forEach((definition) => {
@@ -1865,6 +1866,7 @@ window.PhotoAgentResults = (() => {
         subject,
         subjectIndex,
         box,
+        thumbnailBox,
         label: subject.label || `人物 ${subjectIndex + 1}`,
         tags: [...new Set(tags)]
       };
@@ -1968,6 +1970,50 @@ window.PhotoAgentResults = (() => {
       // best-effort thumbnail only, never worth failing the whole render.
       return "";
     }
+  }
+
+  function buildPortraitAdjustmentList(entries) {
+    const list = document.createElement("div");
+    list.className = "portrait-adjustment-list";
+    list.setAttribute("role", "list");
+    const original = els.originalImg;
+    const source = original?.src;
+    const thumbnails = [];
+    entries.forEach((entry) => {
+      const row = document.createElement("div");
+      row.className = "portrait-adjustment-row";
+      row.setAttribute("role", "listitem");
+      const thumbnail = document.createElement("img");
+      thumbnail.className = "portrait-adjustment-thumbnail";
+      thumbnail.alt = entry.label;
+      thumbnail.title = entry.label;
+      thumbnails.push({ thumbnail, box: entry.thumbnailBox });
+      const items = document.createElement("div");
+      items.className = "portrait-adjustment-items";
+      entry.tags.forEach((tag) => {
+        const item = document.createElement("span");
+        item.className = "portrait-adjustment-item";
+        item.setAttribute("aria-label", `${tag}，已完成`);
+        const check = document.createElement("span");
+        check.className = "portrait-check-complete";
+        check.setAttribute("aria-hidden", "true");
+        check.textContent = "✓";
+        item.append(check, document.createTextNode(tag));
+        items.appendChild(item);
+      });
+      row.append(thumbnail, items);
+      list.appendChild(row);
+    });
+    const fillThumbnails = () => {
+      if (!original || original.src !== source) return;
+      thumbnails.forEach(({ thumbnail, box }) => {
+        const dataUrl = cropFaceThumbnail(original, box);
+        if (dataUrl) thumbnail.src = dataUrl;
+      });
+    };
+    if (original?.complete) fillThumbnails();
+    else original?.addEventListener("load", fillThumbnails, { once: true });
+    return list;
   }
 
   // { box, issues }[] for the face tabs currently on screen -- kept
@@ -2892,411 +2938,6 @@ window.PhotoAgentResults = (() => {
     });
   }
 
-  let portraitCheckOverlayVisible = false;
-  function handlePortraitCheckOutsideClick(event) {
-    if (event.target.closest?.('.portrait-check-toggle[aria-controls="portrait-check-overlay"]')) return;
-    setPortraitCheckOverlayVisible(false);
-  }
-  // Keep the observer alive for the lifetime of this results module. Some
-  // browsers may collect an observer that is only held by a local setup
-  // variable even though its targets remain in the document.
-  let portraitOverlayResizeObserver = null;
-
-  // Detector face boxes are often tighter than the visible head. Reserve room
-  // around the hairline and sides, plus a small gap, before placing labels.
-  function portraitHeadObstacle(face) {
-    const faceWidth = face.right - face.left;
-    const faceHeight = face.bottom - face.top;
-    const side = Math.max(10, Math.min(32, faceWidth * 0.28));
-    const above = Math.max(12, Math.min(44, faceHeight * 0.5));
-    const below = Math.max(8, Math.min(20, faceHeight * 0.18));
-    return {
-      left: face.left - side,
-      top: face.top - above,
-      right: face.right + side,
-      bottom: face.bottom + below,
-    };
-  }
-
-  // Search image-local positions near the person's face before using an
-  // image edge. Faces, controls and already placed labels are hard obstacles.
-  function choosePortraitPanelPosition({ face, faces, buttons, placed, width, height, panelWidth, panelHeight }) {
-    const gap = 8;
-    const maxLeft = width - panelWidth - gap;
-    const maxTop = height - panelHeight - gap;
-    if (maxLeft < gap || maxTop < gap) return null;
-    const overlaps = (a, b, margin = 6) => (
-      a.left < b.right + margin && a.right > b.left - margin
-      && a.top < b.bottom + margin && a.bottom > b.top - margin
-    );
-    const faceCenterX = (face.left + face.right) / 2;
-    const faceCenterY = (face.top + face.bottom) / 2;
-    const preferRight = faceCenterX >= width / 2;
-    const preferBottom = face.bottom >= height / 2;
-    const isCentered = faceCenterX >= width * 0.44 && faceCenterX <= width * 0.56;
-    const positions = [];
-    const seen = new Set();
-    const add = (left, top) => {
-      left = Math.round(Math.min(Math.max(gap, left), maxLeft));
-      top = Math.round(Math.min(Math.max(gap, top), maxTop));
-      const key = `${left}:${top}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        positions.push({ left, top });
-      }
-    };
-    // Include exact positions beside/above/below the face; a regular grid
-    // fills gaps around other people and labels without jumping to a corner.
-    const nearLefts = [face.left - panelWidth - gap, face.right + gap, faceCenterX - panelWidth / 2];
-    const nearTops = [face.top, face.bottom - panelHeight, faceCenterY - panelHeight / 2,
-      face.top - panelHeight - gap, face.bottom + gap];
-    nearLefts.forEach((left) => nearTops.forEach((top) => add(left, top)));
-    const step = Math.max(10, Math.min(18, Math.round(Math.min(width, height) / 28)));
-    for (let top = gap; top <= maxTop; top += step) {
-      for (let left = gap; left <= maxLeft; left += step) add(left, top);
-      add(maxLeft, top);
-    }
-    for (let left = gap; left <= maxLeft; left += step) add(left, maxTop);
-    add(maxLeft, maxTop);
-
-    const valid = positions.map(({ left, top }) => {
-      const box = { left, top, right: left + panelWidth, bottom: top + panelHeight };
-      if (faces.some((other) => overlaps(box, other, 1))
-        || buttons.some((other) => overlaps(box, other, 6))
-        || placed.some((other) => overlaps(box, other))) return null;
-      const dx = Math.max(0, face.left - box.right, box.left - face.right);
-      const dy = Math.max(0, face.top - box.bottom, box.top - face.bottom);
-      const centerDistance = Math.hypot(left + panelWidth / 2 - faceCenterX,
-        top + panelHeight / 2 - faceCenterY);
-      const oppositeSide = !isCentered && (preferRight ? box.right <= face.left : box.left >= face.right);
-      const oppositeHalf = preferBottom ? box.bottom <= face.top : box.top >= face.bottom;
-      const atHorizontalEdge = left <= gap + 4 || left >= maxLeft - 4;
-      const atTopEdge = top <= gap + 4;
-      const atBottomEdge = top >= maxTop - 4;
-      return {
-        left, top, box,
-        edgeFallback: atBottomEdge || (atHorizontalEdge && atTopEdge),
-        score: Math.hypot(dx, dy) * 4 + centerDistance * 0.25
-          + (oppositeSide ? 24 : 0) + (oppositeHalf ? 40 : 0),
-      };
-    }).filter(Boolean);
-    // Prefer an interior, face-adjacent slot; the bottom edge and corners
-    // become available only when every other collision-free slot is gone.
-    const pool = valid.filter((position) => !position.edgeFallback);
-    const chosen = (pool.length ? pool : valid).sort((a, b) => a.score - b.score)[0];
-    if (!chosen) return null;
-    const side = chosen.box.right <= face.left ? "is-left"
-      : chosen.box.left >= face.right ? "is-right" : "is-corner";
-    return { ...chosen, side };
-  }
-
-  // Aim the speech-bubble tail from the panel edge nearest the named
-  // person's face. Keep its wider root clear of rounded corners.
-  function portraitBubblePointer(face, box, scale = 1, safeInset = 26 * scale) {
-    const centerX = (face.left + face.right) / 2;
-    const centerY = (face.top + face.bottom) / 2;
-    const insetX = Math.min(safeInset, (box.right - box.left) / 2);
-    const insetY = Math.min(safeInset, (box.bottom - box.top) / 2);
-    const x = Math.max(box.left + insetX, Math.min(centerX, box.right - insetX));
-    const y = Math.max(box.top + insetY, Math.min(centerY, box.bottom - insetY));
-    const candidates = [
-      { direction: "left", distance: Math.hypot(centerX - box.left, centerY - y) },
-      { direction: "right", distance: Math.hypot(centerX - box.right, centerY - y) },
-      { direction: "up", distance: Math.hypot(centerX - x, centerY - box.top) },
-      { direction: "down", distance: Math.hypot(centerX - x, centerY - box.bottom) },
-    ];
-    const nearest = candidates.sort((a, b) => a.distance - b.distance)[0];
-    return { direction: nearest.direction, x: x - box.left, y: y - box.top };
-  }
-
-  // One continuous outline keeps the translucent body, rounded tail and
-  // fine border seamless. Walk clockwise, inserting the tail on one edge.
-  function portraitBubbleTailMask(direction, pointer, width, height, reach, radius, scale = 1,
-    tailWidth = 16 * scale, border = "rgba(80, 65, 55, .14)") {
-    const r = Math.min(radius, width / 2, height / 2);
-    const bodyX = direction === "left" ? reach : 0;
-    const bodyY = direction === "up" ? reach : 0;
-    const n = (value) => Math.round(value * 100) / 100;
-    const point = (x, y) => `${n(x + bodyX)} ${n(y + bodyY)}`;
-    const edge = (side, length, desired) => {
-      const map = (u, v) => side === "up" ? point(u, -v)
-        : side === "right" ? point(width + v, u)
-        : side === "down" ? point(width - u, height + v) : point(-v, height - u);
-      if (direction !== side) return `L ${map(length - r, 0)} `;
-      const half = Math.min(tailWidth / 2, Math.max(0, (length - 2 * r - 4 * scale) / 2));
-      if (half < .5) return `L ${map(length - r, 0)} `;
-      const inset = r + half + 2 * scale;
-      const center = Math.max(inset, Math.min(length - inset, desired));
-      const nose = Math.min(1.2 * scale, half * .2);
-      return `L ${map(center - half, 0)} `
-        + `C ${map(center - half * .55, 0)} ${map(center - half * .28, reach * .7)} ${map(center - nose, reach * .9)} `
-        + `Q ${map(center, reach * 1.1)} ${map(center + nose, reach * .9)} `
-        + `C ${map(center + half * .28, reach * .7)} ${map(center + half * .55, 0)} ${map(center + half, 0)} `
-        + `L ${map(length - r, 0)} `;
-    };
-    const path = `M ${point(r, 0)} ` + edge("up", width, pointer.x)
-      + `Q ${point(width, 0)} ${point(width, r)} ` + edge("right", height, pointer.y)
-      + `Q ${point(width, height)} ${point(width - r, height)} ` + edge("down", width, width - pointer.x)
-      + `Q ${point(0, height)} ${point(0, height - r)} ` + edge("left", height, height - pointer.y)
-      + `Q ${point(0, 0)} ${point(r, 0)} Z`;
-    const viewWidth = width + (["left", "right"].includes(direction) ? reach : 0);
-    const viewHeight = height + (["up", "down"].includes(direction) ? reach : 0);
-    const svg = (attrs) => `url("data:image/svg+xml,${encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n(viewWidth)} ${n(viewHeight)}" preserveAspectRatio="none"><path d="${path}" ${attrs}/></svg>`)}")`;
-    const stroke = border.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
-    return {
-      mask: svg('fill="black"'),
-      outline: svg(`fill="none" stroke="${stroke}" stroke-width="1.4" stroke-linejoin="round"`),
-    };
-  }
-
-  function drawPortraitCheckOverlay() {
-    const overlay = els.portraitCheckOverlay;
-    if (!overlay) return;
-    const showingGenerated = !!els.compareCard?.classList.contains("showing-generated");
-    const entries = buildPortraitInspectionEntries(boxesAnalysis, false);
-    if (!portraitCheckOverlayVisible || !showingGenerated || !entries.length) {
-      overlay.hidden = true;
-      overlay.innerHTML = "";
-      return;
-    }
-    // The overlay is sized to the generated image itself. Labels are
-    // clamped inside this rectangle so they never leave the photo.
-    const frame = els.originalImg?.closest?.(".photo-frame-wrap") || els.originalImg?.parentElement;
-    const frameRect = frame?.getBoundingClientRect();
-    const image = els.generatedImg?.naturalWidth ? els.generatedImg : els.originalImg;
-    const imageRect = image?.getBoundingClientRect();
-    if (!frameRect || !imageRect || !imageRect.width || !imageRect.height) {
-      overlay.hidden = true;
-      return;
-    }
-    overlay.style.left = `${imageRect.left - frameRect.left}px`;
-    overlay.style.top = `${imageRect.top - frameRect.top}px`;
-    overlay.style.width = `${imageRect.width}px`;
-    overlay.style.height = `${imageRect.height}px`;
-    // Unhide before measuring panels; a hidden parent reports zero-sized
-    // children and would make collision checks meaningless.
-    overlay.hidden = false;
-    overlay.innerHTML = "";
-    const width = imageRect.width;
-    const height = imageRect.height;
-    // Scale from the displayed photo, independent of its file resolution.
-    const scale = Math.min(1, Math.max(.6, Math.min(width, height) / 640));
-    overlay.style.setProperty("--portrait-scale", String(scale));
-    const prepared = entries.map((entry) => ({
-      ...entry,
-      box: mapPortraitBoxToResult(entry.box, boxesAnalysis),
-    })).filter((entry) => entry.box
-      && [entry.box.x, entry.box.y, entry.box.w, entry.box.h].every(Number.isFinite));
-    const ownFaces = prepared.map(({ box }) => ({
-      left: Number(box.x) * width,
-      top: Number(box.y) * height,
-      right: (Number(box.x) + Number(box.w)) * width,
-      bottom: (Number(box.y) + Number(box.h)) * height,
-    }));
-    // Use every detected person as an obstacle, including people without an
-    // executed correction label. A popup for one person must never cover a
-    // different person's face just because that person has no popup of their
-    // own.
-    const faceObstacles = portraitInspectionSources(boxesAnalysis)
-      .map(({ box }) => mapPortraitBoxToResult(box, boxesAnalysis))
-      .filter((box) => box && [box.x, box.y, box.w, box.h].every(Number.isFinite))
-      .map((box) => ({
-        left: Number(box.x) * width,
-        top: Number(box.y) * height,
-        right: (Number(box.x) + Number(box.w)) * width,
-        bottom: (Number(box.y) + Number(box.h)) * height,
-      }));
-    // Include raw detections even when Analyze did not match them to a
-    // subject: unlabeled faces must not be covered by another person's box.
-    const detectedFaceObstacles = localFaceEntries(boxesAnalysis)
-      .map((face) => face?.face_box)
-      .map((box) => box && mapPortraitBoxToResult(box, boxesAnalysis))
-      .filter((box) => box && [box.x, box.y, box.w, box.h].every(Number.isFinite))
-      .map((box) => ({
-        left: Number(box.x) * width,
-        top: Number(box.y) * height,
-        right: (Number(box.x) + Number(box.w)) * width,
-        bottom: (Number(box.y) + Number(box.h)) * height,
-      }));
-    const faces = [...(faceObstacles.length ? faceObstacles : ownFaces),
-      ...detectedFaceObstacles].map(portraitHeadObstacle);
-    // The popup must stay inside the generated image, and it must not cover
-    // any control that sits on top of that image (header actions, run arrows,
-    // recipe labels, or the 人像檢查 button itself). Convert those controls'
-    // rendered rectangles into the overlay's image-local coordinates.
-    const toImageRect = (element) => {
-      if (!element || element.hidden) return null;
-      const style = window.getComputedStyle ? window.getComputedStyle(element) : null;
-      if (style && (style.display === "none" || style.visibility === "hidden")) return null;
-      const bounds = element.getBoundingClientRect();
-      const box = {
-        left: bounds.left - imageRect.left,
-        top: bounds.top - imageRect.top,
-        right: bounds.right - imageRect.left,
-        bottom: bounds.bottom - imageRect.top,
-      };
-      if (box.right <= 0 || box.bottom <= 0 || box.left >= width || box.top >= height) return null;
-      return {
-        left: Math.max(0, box.left),
-        top: Math.max(0, box.top),
-        right: Math.min(width, box.right),
-        bottom: Math.min(height, box.bottom),
-      };
-    };
-    const buttonObstacles = [...frame.querySelectorAll(
-      ".canvas-header-row .compare-hint, "
-      + ".canvas-header-row .run-count-label, "
-      + ".canvas-header-row .canvas-btn, "
-      + ".canvas-header-row .download-menu:not([hidden]), "
-      + ".photo-switch-arrow:not([hidden]), "
-      + "#recipe-tags > *, "
-      + "#analysis-boxes-legend:not([hidden])"
-    )].map(toImageRect).filter(Boolean);
-    const placed = [];
-
-    prepared.forEach((entry, index) => {
-      let panelScale = scale;
-      const panel = document.createElement("div");
-      panel.className = "portrait-check-person";
-      panel.style.transform = "none";
-      panel.style.left = "0px";
-      panel.style.top = "0px";
-      const items = document.createElement("div");
-      items.className = "portrait-check-person-items";
-      entry.tags.forEach((tag) => {
-        const item = document.createElement("span");
-        item.className = "portrait-check-person-item";
-        item.setAttribute("aria-label", `${tag}，已完成`);
-        const check = document.createElement("span");
-        check.className = "portrait-check-complete";
-        check.setAttribute("aria-hidden", "true");
-        check.textContent = "✓";
-        item.append(check, document.createTextNode(tag));
-        items.appendChild(item);
-      });
-      panel.appendChild(items);
-      overlay.appendChild(panel);
-
-      const findPosition = () => choosePortraitPanelPosition({
-        face: ownFaces[index], faces, buttons: buttonObstacles, placed,
-        width, height, panelWidth: panel.getBoundingClientRect().width,
-        panelHeight: panel.getBoundingClientRect().height,
-      });
-      let chosen = findPosition();
-      if (!chosen) {
-        // Fit a dense photo before dropping a label. Never overlap another
-        // person's face, an image control, or an already placed label.
-        panelScale *= .88;
-        panel.style.setProperty("--portrait-scale", String(panelScale));
-        chosen = findPosition();
-      }
-      if (!chosen) {
-        panel.remove();
-        return;
-      }
-      panel.classList.add(chosen.side);
-      const panelWidth = chosen.box.right - chosen.box.left;
-      const panelHeight = chosen.box.bottom - chosen.box.top;
-      const style = window.getComputedStyle(panel);
-      const radius = parseFloat(style.borderTopLeftRadius) || 13 * panelScale;
-      const tailWidth = (parseFloat(style.getPropertyValue("--callout-tail-width")) || 16) * panelScale;
-      const safeInset = Math.max(
-        (parseFloat(style.getPropertyValue("--callout-tail-safe-inset")) || 23) * panelScale,
-        radius + tailWidth / 2 + 2 * panelScale);
-      const pointer = portraitBubblePointer(ownFaces[index], chosen.box, panelScale, safeInset);
-      panel.classList.add(`points-${pointer.direction}`);
-      panel.style.setProperty("--portrait-pointer-x", `${pointer.x}px`);
-      panel.style.setProperty("--portrait-pointer-y", `${pointer.y}px`);
-      // Extend the curved tail where there is room, but keep its tip inside
-      // the actual image when the panel is close to an image edge.
-      const edgeRoom = pointer.direction === "up" ? chosen.box.top
-        : pointer.direction === "down" ? height - chosen.box.bottom
-        : pointer.direction === "left" ? chosen.box.left : width - chosen.box.right;
-      const preferredReach = (parseFloat(style.getPropertyValue("--callout-tail-depth")) || 9) * panelScale;
-      const tailReach = Math.min(preferredReach, Math.max(1, edgeRoom - 1));
-      const shape = portraitBubbleTailMask(pointer.direction, pointer, panelWidth, panelHeight,
-        tailReach, radius, panelScale, tailWidth, style.getPropertyValue("--callout-border").trim());
-      panel.style.setProperty("--portrait-tail-reach", `${tailReach}px`);
-      panel.style.setProperty("--portrait-tail-shape", shape.mask);
-      panel.style.setProperty("--portrait-outline", shape.outline);
-      panel.style.left = `${chosen.left}px`;
-      panel.style.top = `${chosen.top}px`;
-      placed.push(chosen.box);
-    });
-    overlay.hidden = false;
-  }
-
-  function mapPortraitBoxToResult(box, analysis) {
-    const sourceWidth = Number(els.originalImg?.naturalWidth);
-    const sourceHeight = Number(els.originalImg?.naturalHeight);
-    if (!box || !sourceWidth || !sourceHeight) return box;
-    const crop = resolveCropBoxForDisplay(analysis?.crop_box, analysis, sourceWidth, sourceHeight);
-    if (!crop || !Number(crop.w) || !Number(crop.h)) return box;
-    return {
-      x: (Number(box.x) - Number(crop.x)) / Number(crop.w),
-      y: (Number(box.y) - Number(crop.y)) / Number(crop.h),
-      w: Number(box.w) / Number(crop.w),
-      h: Number(box.h) / Number(crop.h),
-    };
-  }
-
-  function setPortraitExecutionTagVisibility(hidden) {
-    const container = els.recipeTags;
-    if (!container) return;
-    container.querySelectorAll(".portrait-execution-tag").forEach((tag) => {
-      tag.hidden = !!hidden;
-    });
-    fitRecipeTagsRow(container);
-  }
-
-  function setPortraitCheckOverlayVisible(visible) {
-    portraitCheckOverlayVisible = !!visible;
-    if (portraitCheckOverlayVisible) closePersonalizePopover();
-    document.removeEventListener("mousedown", handlePortraitCheckOutsideClick);
-    if (portraitCheckOverlayVisible) {
-      document.addEventListener("mousedown", handlePortraitCheckOutsideClick);
-    }
-    // Per-person execution labels are intentionally never rendered in the
-    // lower pill row; the 人像檢查 overlay is their only display surface.
-    // Keep ratio/style pills and the 人像檢查 toggle itself available.
-    setPortraitExecutionTagVisibility(true);
-    drawPortraitCheckOverlay();
-    const button = els.recipeTags?.querySelector('.portrait-check-toggle[aria-controls="portrait-check-overlay"]');
-    if (button) {
-      button.setAttribute("aria-pressed", portraitCheckOverlayVisible ? "true" : "false");
-      button.setAttribute("title", "人像調整");
-      button.setAttribute("aria-label", portraitCheckOverlayVisible
-        ? "收合人像調整" : "顯示每位人物實際執行的人像修正");
-      fitRecipeTagsRow(els.recipeTags);
-    }
-  }
-
-  window.addEventListener("resize", drawPortraitCheckOverlay);
-  // A live edit assigns generatedImg.src immediately after renderResult. If a
-  // user opens 人像檢查 before that image finishes loading, redraw once its
-  // rendered dimensions become available instead of leaving the overlay blank.
-  if (els.generatedImg) els.generatedImg.addEventListener("load", drawPortraitCheckOverlay);
-  // Fullscreen changes the card/frame dimensions through CSS without
-  // necessarily dispatching a window resize event. Observe the rendered
-  // image/frame themselves so the normalized face coordinates and popup
-  // collision layout are recomputed whenever that CSS layout settles.
-  if (typeof ResizeObserver !== "undefined" && !portraitOverlayResizeObserver) {
-    const observed = [
-      els.compareCard,
-      els.originalImg?.closest?.(".photo-frame-wrap"),
-      els.originalImg,
-      els.generatedImg,
-    ].filter(Boolean);
-    const uniqueObserved = [...new Set(observed)];
-    if (uniqueObserved.length) {
-      portraitOverlayResizeObserver = new ResizeObserver(() => {
-        drawPortraitCheckOverlay();
-      });
-      uniqueObserved.forEach((element) => portraitOverlayResizeObserver.observe(element));
-    }
-  }
-
   function drawAnalysisBoxes() {
     const overlay = els.analysisBoxes;
     const legend = els.analysisBoxesLegend;
@@ -3424,7 +3065,6 @@ window.PhotoAgentResults = (() => {
     if (els.compareToggleBtn) els.compareToggleBtn.setAttribute("aria-label", label);
     if (els.compareHint) els.compareHint.textContent = showGenerated ? "After" : "Before";
     drawAnalysisBoxes();
-    drawPortraitCheckOverlay();
   }
 
   // Remembered so previewAspectRatio can re-render this same result under a
@@ -3481,29 +3121,26 @@ window.PhotoAgentResults = (() => {
       drawAnalysisBoxes();
     }
     els.modelName.textContent = pending ? "" : (data.model || imageModel);
-    portraitCheckOverlayVisible = false;
-    document.removeEventListener("mousedown", handlePortraitCheckOutsideClick);
     if (els.recipeTags) {
       // A fresh render means a different run/record -- whatever request the
       // panel was quoting is no longer the one on screen.
       closePersonalizePopover();
       const personalization = getPersonalizationText(analysis);
-      const portraitEntries = buildPortraitInspectionEntries(analysis, pending);
+      const portraitEntries = buildPortraitInspectionEntries(analysis, pending)
+        .filter((entry) => entry.thumbnailBox);
       const recipeItems = buildExecutedRecipeItems(analysis, pending);
       const styleItems = buildExecutedStyleOptionTagLabels(analysis.style_options, analysis, pending);
       renderTags(els.recipeTags, [
         debugUiActive ? `${buildAspectRatioTagLabel(analysis)}${ratioIsPreview ? "（預覽）" : ""}` : ""
       ]);
-      const addControl = (label, tabId, content, portrait = false) => {
+      const addControl = (label, tabId, content) => {
         const button = document.createElement("button");
         button.type = "button";
-        button.className = portrait
-          ? "portrait-check-toggle result-detail-toggle"
-          : "portrait-check-toggle result-detail-toggle recipe-tag-personalize";
+        button.className = "portrait-check-toggle result-detail-toggle recipe-tag-personalize";
         button.title = label;
         button.setAttribute("aria-label", label);
-        button.setAttribute(portrait ? "aria-pressed" : "aria-expanded", "false");
-        button.setAttribute("aria-controls", portrait ? "portrait-check-overlay" : "personalize-popover");
+        button.setAttribute("aria-expanded", "false");
+        button.setAttribute("aria-controls", "personalize-popover");
         const icon = document.querySelector(`#${tabId} svg`);
         if (icon) {
           const copy = icon.cloneNode(true);
@@ -3516,19 +3153,19 @@ window.PhotoAgentResults = (() => {
         button.appendChild(caption);
         button.addEventListener("click", (event) => {
           event.preventDefault();
-          if (portrait) setPortraitCheckOverlayVisible(!portraitCheckOverlayVisible);
-          else if (personalizeAnchor === button && !els.personalizePopover.hidden) closePersonalizePopover();
-          else openPersonalizePopover(content, button, tabId === "ap-review-tab-prompt" ? "個人化需求" : label);
+          if (personalizeAnchor === button && !els.personalizePopover.hidden) closePersonalizePopover();
+          else openPersonalizePopover(
+            tabId === "ap-review-tab-face" ? buildPortraitAdjustmentList(content) : content,
+            button, tabId === "ap-review-tab-prompt" ? "個人化需求" : label);
         });
         els.recipeTags.appendChild(button);
       };
-      if (!pending && portraitEntries.length) addControl("人像調整", "ap-review-tab-face", null, true);
+      if (!pending && portraitEntries.length) addControl("人像調整", "ap-review-tab-face", portraitEntries);
       if (recipeItems.length) addControl("美化項目", "ap-review-tab-recipe", recipeItems);
       if (styleItems.length) addControl("美化風格", "ap-review-tab-style", styleItems);
       if (!pending && personalization) addControl("個人化", "ap-review-tab-prompt", personalization);
       fitRecipeTagsRow(els.recipeTags);
     }
-    drawPortraitCheckOverlay();
     els.resultSummary.textContent = analysis.photo_summary || "已完成影像分析與輸出。";
     els.qaScore.textContent = Number.isFinite(Number(qa?.score)) ? `${qa.score}/10` : "-";
     if (els.recipeVerdictScore) {
@@ -3825,7 +3462,6 @@ window.PhotoAgentResults = (() => {
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,
     renderFaceReviewCards,
-    syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion,
-    refreshPortraitCheckOverlay: drawPortraitCheckOverlay
+    syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion
   };
 })();
