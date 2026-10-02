@@ -67,6 +67,16 @@ def match_by_iou_matrix(iou_matrix, min_iou=0.0, max_matches_a=1):
     low-IoU overlap with several unrelated neighboring nails can't absorb all
     of them.
 
+    Matching runs in two passes so a second match for one `a` can never starve
+    a different, unmatched `a` of its only candidate: pass 1 does strict
+    one-to-one assignment (every `a` capped at 1, same greedy highest-IoU-first
+    order), then pass 2 lets `a`s already matched in pass 1 claim additional
+    `b`s (up to `max_matches_a`) from whatever's left over. Without this split,
+    a single global greedy pass lets a split-nail `a` grab both of its
+    high-IoU pieces before a lower-IoU (but otherwise unmatched) neighboring
+    `a` ever gets considered, leaving that neighbor with no match at all even
+    though it had a valid candidate.
+
     Returns a list of (i, j, iou) for matched pairs.
     """
     n_a, n_b = iou_matrix.shape
@@ -81,12 +91,25 @@ def match_by_iou_matrix(iou_matrix, min_iou=0.0, max_matches_a=1):
     count_a = {}
     used_b = set()
     matches = []
+
+    # Pass 1: strict one-to-one, so every `a` gets first dibs on its best
+    # candidate before any `a` is allowed a second match.
     for iou, i, j in candidates:
-        if j in used_b or count_a.get(i, 0) >= max_matches_a:
+        if j in used_b or count_a.get(i, 0) >= 1:
             continue
-        count_a[i] = count_a.get(i, 0) + 1
+        count_a[i] = 1
         used_b.add(j)
         matches.append((i, j, iou))
+
+    # Pass 2: hand out any remaining matches (up to max_matches_a) from what's left.
+    if max_matches_a > 1:
+        for iou, i, j in candidates:
+            if j in used_b or count_a.get(i, 0) >= max_matches_a:
+                continue
+            count_a[i] = count_a.get(i, 0) + 1
+            used_b.add(j)
+            matches.append((i, j, iou))
+
     return matches
 
 
