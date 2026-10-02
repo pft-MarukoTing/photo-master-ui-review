@@ -1,0 +1,363 @@
+{
+  "1": {
+    "inputs": {
+      "image": "example.jpg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Input Image 1 (Target)"
+    }
+  },
+  "2": {
+    "inputs": {
+      "unet_name": "qwen_image_edit_2509_fp8_e4m3fn_scaled.safetensors",
+      "weight_dtype": "fp8_e4m3fn"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet Loader"
+    }
+  },
+  "3": {
+    "inputs": {
+      "vae_name": "qwen_image_vae.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "VAE Loader"
+    }
+  },
+  "4": {
+    "inputs": {
+      "clip_name": "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "CLIP Loader"
+    }
+  },
+  "5": {
+    "inputs": {
+      "shift": 3,
+      "model": [
+        "17",
+        0
+      ]
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {
+      "title": "ModelSampling AuraFlow"
+    }
+  },
+  "6": {
+    "inputs": {
+      "strength": 1,
+      "model": [
+        "5",
+        0
+      ]
+    },
+    "class_type": "CFGNorm",
+    "_meta": {
+      "title": "CFGNorm"
+    }
+  },
+  "9": {
+    "inputs": {
+      "text": "Carry over the nails from Image 2 to Image 1. Match each nail's shape, color and art style from Image 2 to the corresponding nail in Image 1."
+    },
+    "class_type": "JWStringMultiline",
+    "_meta": {
+      "title": "Input Prompt"
+    }
+  },
+  "10": {
+    "inputs": {
+      "prompt": [
+        "9",
+        0
+      ],
+      "clip": [
+        "4",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "38",
+        0
+      ],
+      "image2": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Qwen (Positive)"
+    }
+  },
+  "11": {
+    "inputs": {
+      "prompt": "",
+      "clip": [
+        "4",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ],
+      "image1": [
+        "38",
+        0
+      ],
+      "image2": [
+        "21",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {
+      "title": "TextEncode Qwen (Negative)"
+    }
+  },
+  "12": {
+    "inputs": {
+      "pixels": [
+        "38",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {
+      "title": "VAE Encode"
+    }
+  },
+  "13": {
+    "inputs": {
+      "seed": 42,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "34",
+        0
+      ],
+      "positive": [
+        "10",
+        0
+      ],
+      "negative": [
+        "11",
+        0
+      ],
+      "latent_image": [
+        "12",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "KSampler"
+    }
+  },
+  "14": {
+    "inputs": {
+      "samples": [
+        "13",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
+    }
+  },
+  "16": {
+    "inputs": {
+      "images": [
+        "39",
+        0
+      ]
+    },
+    "class_type": "SaveImageWebsocket",
+    "_meta": {
+      "title": "Output"
+    }
+  },
+  "17": {
+    "inputs": {
+      "lora_name": "aiNail/nail_salon_lora_20260826.safetensors",
+      "strength_model": 1,
+      "model": [
+        "23",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Nail LoRA Loader"
+    }
+  },
+  "20": {
+    "inputs": {
+      "image": "example.jpg",
+      "upload": "image"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "Input Image 2 (Reference)"
+    }
+  },
+  "21": {
+    "inputs": {
+      "image": [
+        "20",
+        0
+      ],
+      "canvas_size": 1024
+    },
+    "class_type": "AINailResizeToSquareCanvas",
+    "_meta": {
+      "title": "Resize Reference to Square Canvas"
+    }
+  },
+  "23": {
+    "inputs": {
+      "lora_name": "Qwen-Image-Lightning-4steps-V2.0.safetensors",
+      "strength_model": 1,
+      "model": [
+        "24",
+        0
+      ]
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Lightning LoRA Loader"
+    }
+  },
+  "24": {
+    "inputs": {
+      "sage_attention": "auto",
+      "allow_compile": true,
+      "model": [
+        "2",
+        0
+      ]
+    },
+    "class_type": "PathchSageAttentionKJ",
+    "_meta": {
+      "title": "Patch Sage Attention KJ"
+    }
+  },
+  "34": {
+    "inputs": {
+      "backend": "inductor",
+      "fullgraph": false,
+      "mode": "default",
+      "dynamic": false,
+      "compile_transformer_blocks_only": true,
+      "dynamo_cache_size_limit": 64,
+      "model": [
+        "6",
+        0
+      ]
+    },
+    "class_type": "TorchCompileModelQwenImage",
+    "_meta": {
+      "title": "Torch Compile Model"
+    }
+  },
+  "35": {
+    "class_type": "LoadSAM3Model",
+    "inputs": {
+      "precision": "bf16",
+      "compile": false
+    }
+  },
+  "36": {
+    "class_type": "SAM3Grounding",
+    "inputs": {
+      "sam3_model_config": [
+        "35",
+        0
+      ],
+      "image": [
+        "1",
+        0
+      ],
+      "confidence_threshold": 0.2,
+      "text_prompt": "hand",
+      "max_detections": 2,
+      "compute_visualization": true
+    }
+  },
+  "37": {
+    "class_type": "AINailCropSquareByBoxes",
+    "inputs": {
+      "image": [
+        "1",
+        0
+      ],
+      "boxes": [
+        "36",
+        2
+      ],
+      "scale": 1.2,
+      "min_area_ratio": 0.005,
+      "avoid_bbox_overlap": false,
+      "merge_overlapping_squares": true,
+      "shift_to_avoid_padding": true
+    }
+  },
+  "38": {
+    "class_type": "AINailResizeImage",
+    "inputs": {
+      "images": [
+        "37",
+        0
+      ],
+      "width": 1024,
+      "height": 1024,
+      "method": "lanczos"
+    }
+  },
+  "39": {
+    "class_type": "AINailDirectPasteBack",
+    "inputs": {
+      "original_image": [
+        "1",
+        0
+      ],
+      "generated_images": [
+        "14",
+        0
+      ],
+      "crop_info": [
+        "37",
+        1
+      ],
+      "resize_info": [
+        "38",
+        1
+      ],
+      "feather_px": 3
+    }
+  }
+}
