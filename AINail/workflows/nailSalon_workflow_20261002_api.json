@@ -304,8 +304,7 @@
       ],
       "confidence_threshold": 0.2,
       "text_prompt": "hand",
-      "max_detections": 2,
-      "compute_visualization": true
+      "max_detections": 2
     }
   },
   "37": {
