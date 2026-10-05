@@ -16,6 +16,7 @@ from config import STYLE_OPTION_VALUE_LABELS
 # here: both builders must agree on which people a feature is in scope for,
 # including the per-person opt-out (_disabled_issue_subject_indices).
 from prompts import (
+    AXIS_ALIASES,
     OCCLUDED_PERSON_REMOVAL_RULE,
     _disabled_issue_subject_indices,
     _has_person,
@@ -56,13 +57,10 @@ _HAIR_ACTION_TEXT = {
 _SKIN_TERMS = (
     "膚色", "皮膚", "臉色", "臉部", "面部", "face tone", "skin", "complexion",
 )
-_SKIN_COLOR_TERMS = (
-    "色", "暖", "冷", "黃", "紅", "綠", "灰", "洋紅", "偏色", "色溫",
-    "tone", "warm", "cool", "yellow", "orange", "red", "green", "gray",
-    "grey", "magenta", "cast", "hue", "chroma", "saturation",
-)
+_SKIN_FALLBACK_AXES = {"white_balance", "hue", "saturation", "tint"}
 _FACE_TONAL_AXES = {"exposure", "shadow", "highlight", "contrast"}
-_HAIR_PLAN_TERMS = (
+_DEDICATED_ROUTE_TERMS = (
+    "眼神", "虹膜", "瞳孔", "direct_camera", "gaze", "閉眼", "眼皮", "blink", "笑", "smile", "laugh",
     "髮", "头发", "hair", "bang", "fringe", "flyaway", "frizz",
 )
 
@@ -71,10 +69,10 @@ def _axis_set(value):
     """Flatten the analysis's per-correction axis lists into canonical tags."""
     flattened = set()
     for item in value or []:
-        if isinstance(item, (list, tuple, set)):
-            flattened.update(str(axis) for axis in item)
-        elif item:
-            flattened.add(str(item))
+        for axis in item if isinstance(item, (list, tuple, set)) else [item]:
+            name = str(axis or "").strip().lower()
+            if name:
+                flattened.add(AXIS_ALIASES.get(name, name))
     return flattened
 
 
@@ -91,14 +89,16 @@ def _skin_identity_lines(analysis):
 
 
 def _is_skin_correction(text, axes):
+    if "skin" in axes:
+        return True
+    # Text only rescues a color-only item the analyzer under-tagged; any other axis means it is not skin work.
+    if not axes or not axes <= _SKIN_FALLBACK_AXES:
+        return False
     lowered = re.sub(
         r"非皮膚|非膚色|non[ -]skin|non[ -]complexion",
         "", text.lower(),
     )
-    return "skin" in axes or (
-        any(term in lowered for term in _SKIN_TERMS)
-        and any(term in lowered for term in _SKIN_COLOR_TERMS)
-    )
+    return any(term in lowered for term in _SKIN_TERMS)
 
 
 def _is_face_tonal_correction(text, axes):
@@ -107,11 +107,13 @@ def _is_face_tonal_correction(text, axes):
     )
 
 
-def _is_hair_correction(text, axes):
+def _has_dedicated_route(text, axes):
+    """Eye, expression and hair items are executed from each person's own issue, not the general plan."""
+    if axes:
+        return "expression" in axes or any("hair" in axis for axis in axes)
+    # Analyses saved before correction_axes existed can only be judged by their text.
     lowered = str(text or "").lower()
-    return any("hair" in str(axis).lower() for axis in axes) or any(
-        term in lowered for term in _HAIR_PLAN_TERMS
-    )
+    return any(term in lowered for term in _DEDICATED_ROUTE_TERMS)
 
 
 def _repair_strength(value, default="moderate"):
@@ -1625,31 +1627,29 @@ def build_compact_editor_prompt(
             + f"\n- Preserve: {preserve}."
         )
 
-    feature_terms = ("眼神", "虹膜", "瞳孔", "direct_camera", "gaze", "閉眼", "眼皮", "blink", "笑", "smile", "laugh")
     other_corrections = []
+    # Skin and face-tonal lines render only inside the person block; without a person they stay general corrections.
+    has_person = _has_person(analysis)
     skin_corrections = []
     face_tonal_corrections = []
     for index, raw_item in enumerate(analysis.get("correction_plan") or []):
         item = str(raw_item)
         axes = _axis_set([correction_axes[index]]) if index < len(correction_axes) else set()
-        if any(term.lower() in item.lower() for term in feature_terms):
+        if _has_dedicated_route(item, axes):
+            # Call A occasionally violates its schema and repeats a gaze, blink
+            # or hair repair here; never let that unscoped copy become an Other
+            # approved correction.
             continue
         # Required framing already carries the authoritative compacted raw crop
         # decision. Repeating an analysis crop item here can turn a same-shape,
         # near-full-frame instruction into a second generative reframe request.
         if "crop" in axes:
             continue
-        if _is_hair_correction(item, axes):
-            # Hair has one authoritative route: the matching person's
-            # hair_issue. Call A occasionally violates its schema and emits a
-            # free-text hair item with tags such as hair_edge; never let that
-            # unscoped copy become an Other approved correction.
-            continue
-        elif _is_face_tonal_correction(item, axes) and not (
+        if has_person and _is_face_tonal_correction(item, axes) and not (
             {"skin", "white_balance", "hue", "saturation", "tint"} & axes
         ):
             face_tonal_corrections.append(item)
-        elif _is_skin_correction(item, axes):
+        elif has_person and _is_skin_correction(item, axes):
             skin_corrections.append(item)
         else:
             other_corrections.append(item)

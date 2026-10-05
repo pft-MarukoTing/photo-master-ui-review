@@ -1673,6 +1673,63 @@ Framing-size override requirement: This is a true wider-framing transformation. 
         _, audit = build_compact_editor_prompt(analysis, "", "", {})
         self.assertEqual(audit["color_contract"]["skin_corrections"], analysis["correction_plan"])
 
+    def test_removal_naming_a_colored_face_is_not_skin_work(self):
+        removal = "移除畫面中央的黑色路牌桿，依照被遮住的雕塑輪廓補足，確保前方雕塑臉部自然連續。"
+        for subjects in ([], interaction_analysis()["subjects"]):
+            analysis = {"subjects": subjects, "correction_plan": [removal], "correction_axes": [["distraction"]]}
+            prompt, audit = build_compact_editor_prompt(analysis, "", "", {})
+            other = prompt.split("Other approved corrections:", 1)[1].split("Light and color execution:", 1)[0]
+            self.assertIn(removal, other)
+            self.assertEqual(audit["color_contract"]["skin_corrections"], [])
+
+    def test_skin_tagged_item_without_a_person_stays_in_the_prompt(self):
+        item = "將膚色偏綠修正為自然膚色。"
+        analysis = {"subjects": [], "correction_plan": [item], "correction_axes": [["skin"]]}
+        prompt, audit = build_compact_editor_prompt(analysis, "", "", {})
+        self.assertIn(f"- {item}", prompt)
+        self.assertEqual(audit["color_contract"]["skin_corrections"], [])
+
+    def _other_corrections(self, items, axes):
+        analysis = interaction_analysis()
+        analysis["correction_plan"] = items
+        analysis["correction_axes"] = axes
+        prompt, _ = build_compact_editor_prompt(analysis, "", "", {})
+        return prompt.split("Other approved corrections:", 1)[1].split("Light and color execution:", 1)[0]
+
+    def test_items_merely_mentioning_hair_eyes_or_smiles_are_kept(self):
+        items = [
+            "移除畫面右側的金髮路人，以背景建築補足。",
+            "Remove the white plastic chair on the left edge.",
+            "移除桌上的髮夾與雜物。",
+            "Darken the bright sign so the viewer's gaze returns to the couple.",
+            "略提亮眼神光，讓人物更有精神。",
+            "降低背景中嬉笑人群的存在感。",
+            "輕微提升中央偏右女性長髮的暗部細節。",
+        ]
+        axes = [["distraction"]] * 6 + [["shadow"]]
+        axes[3] = ["distraction", "contrast"]
+        axes[4] = ["highlight"]
+        other = self._other_corrections(items, axes)
+        for item in items:
+            self.assertIn(item, other)
+
+    def test_dedicated_route_items_are_dropped_by_axis_not_wording(self):
+        blink = "修正女性主體左眼閉合表情，將眼睛自然睜開並保持身份特徵。"
+        strands = "Tuck the loose strands at the crown back into the part."
+        aliased = "Redirect the subject's eyes toward the lens."
+        other = self._other_corrections(
+            [blink, strands, aliased], [["expression"], ["hair_edge"], ["eye_contact"]],
+        )
+        for item in (blink, strands, aliased):
+            self.assertNotIn(item, other)
+
+    def test_untagged_legacy_items_still_fall_back_to_wording(self):
+        hair = "將頭頂飛翹髮絲順回原位。"
+        gaze = "Redirect the woman's gaze to the camera."
+        other = self._other_corrections([hair, gaze], [])
+        self.assertNotIn(hair, other)
+        self.assertNotIn(gaze, other)
+
 
 class UserDirectionPriority(unittest.TestCase):
     """The reviewed user direction outranks the rest of the prompt."""
