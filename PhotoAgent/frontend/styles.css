@@ -2584,7 +2584,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.proc-text { flex: 1; }
+.proc-text { flex: 1; min-width: 0; }
 
 .proc-eyebrow {
   font-size: 15px;
@@ -2606,13 +2606,98 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   color: var(--text-2);
   line-height: 1.6;
   max-width: 440px;
-  /* startProcSubRotation (app.js) rewrites this text every 5s, cycling
-     through phrasings of very different lengths -- without a reserved
-     height, each swap reflows .proc-top's height and the whole card
-     visibly grows/shrinks as .proc-wrap re-centers it. 3 lines covers the
-     longest rotating message (model name + RUN-count progress) at mobile
-     widths. */
+  /* Reserve space for plain statuses; the local feed below reserves its
+     own larger reading area and wraps longer sentences in full. */
   min-height: 4.8em;
+}
+
+/* Local sentence feed: complete text, five entries, no enclosing card. */
+.has-progress-feed {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  font-weight: 400;
+}
+.progress-feed-badge {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.progress-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 250px;
+}
+.progress-feed-row {
+  display: block;
+  flex: 0 0 auto;
+  min-width: 0;
+  color: var(--text);
+  font-size: clamp(14px, 1.4vw, 16px);
+  line-height: 1.6;
+  opacity: .85;
+}
+.progress-feed-row:nth-last-child(n+4) { opacity: .58; }
+.progress-feed-row.is-latest { opacity: 1; animation: progressFeedEnter .35s ease-out both; }
+.progress-feed-text { display: block; white-space: normal; overflow-wrap: anywhere; }
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .progress-feed-row.is-latest .progress-feed-text {
+    background-image: linear-gradient(110deg, var(--text) 40%, var(--accent) 48%, #fff 50%, var(--accent) 52%, var(--text) 60%);
+    background-size: 250% 100%;
+    background-position: 100% 0;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    animation: progressFeedShine 1.5s ease-in-out 1s both;
+  }
+}
+@keyframes progressFeedEnter {
+  from { opacity: .3; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes progressFeedShine {
+  from { background-position: 100% 0; }
+  to { background-position: 0% 0; }
+}
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .progress-feed-row.is-latest { animation: none; }
+  .progress-feed-row.is-latest .progress-feed-text {
+    animation: none;
+    background: none;
+    color: var(--text);
+    -webkit-text-fill-color: currentColor;
+  }
+}
+/* Match the analysis layout when re-editing on the results page. */
+.canvas-loading:has(.has-progress-feed) {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-rows: auto auto 1fr;
+  gap: 10px 40px;
+  align-items: start;
+  height: auto;
+  min-height: 480px;
+  padding: 32px 28px;
+}
+.canvas-loading:has(.has-progress-feed) .proc-visual { grid-row: 1 / 4; align-self: center; }
+.canvas-loading:has(.has-progress-feed) .canvas-loading-eyebrow,
+.canvas-loading:has(.has-progress-feed) .canvas-loading-title,
+.canvas-loading:has(.has-progress-feed) .canvas-loading-status { grid-column: 2; text-align: left; }
+.canvas-loading:has(.has-progress-feed) .canvas-loading-title { font-size: clamp(30px, 3.75vw, 45px); }
+.canvas-loading:has(.has-progress-feed) .canvas-loading-status { max-width: none; padding: 0; }
+@media (max-width: 600px) {
+  .canvas-loading:has(.has-progress-feed) { grid-template-columns: minmax(0, 1fr); }
+  .canvas-loading:has(.has-progress-feed) .proc-visual { grid-row: auto; justify-self: center; }
+  .canvas-loading:has(.has-progress-feed) .canvas-loading-eyebrow,
+  .canvas-loading:has(.has-progress-feed) .canvas-loading-title,
+  .canvas-loading:has(.has-progress-feed) .canvas-loading-status { grid-column: 1; }
 }
 
 /* ════════════════════════════════════════

@@ -1590,6 +1590,10 @@ window.PhotoAgentResults = (() => {
   // below -- so they don't appear in that second list.
   const MANUAL_OVERRIDE_CATEGORIES = ["blink_issue", "gaze_issue", "hair_issue", "smile_issue"];
   const LEVEL_SELECT_CATEGORIES = ["hair_issue", "smile_issue"];
+  const FACE_ISSUE_LEVEL_CHOICES = {
+    hair_issue: [["dynamic", "保留髮絲動態"], ["tidy", "梳整俐落"]],
+    smile_issue: [["auto", "自動"], ["neutral", "不笑"], ["gentle", "微笑"], ["broad", "開朗笑"], ["laughing", "大笑"]]
+  };
 
   // Intersection over the SMALLER of the two boxes' own area (the
   // Szymkiewicz-Simpson overlap coefficient), not plain IoU -- faceBox and
@@ -1871,6 +1875,56 @@ window.PhotoAgentResults = (() => {
         tags: [...new Set(tags)]
       };
     }).filter((entry) => entry.tags.length);
+  }
+
+  // Loading text describes the submitted UI choices, not past execution or
+  // worker diagnostics. Reuse the same verdicts/labels as the review cards.
+  function buildPlannedEditMessages({ analysis, selections = {}, userPrompt = "", overwritePrompt = false, aiPhotoEditing = true } = {}) {
+    const sentence = (text) => {
+      const value = typeof text === "string" ? text.trim() : "";
+      return value ? (/[。！？.!?…]$/.test(value) ? value : value + "。") : "";
+    };
+    const direction = typeof userPrompt === "string" ? userPrompt.trim() : "";
+    if (!aiPhotoEditing) return []; // These controls describe AI editing, not local processing.
+    if (overwritePrompt && direction) return [sentence("將依照您的個人化需求修圖：" + direction)];
+    const advanced = selections.advanced_options || analysis?._advanced_options || {};
+    const overrides = selections.face_issue_overrides || {};
+    const optionFor = { blink_issue: "eye_closed_detection", gaze_issue: "gaze_contact_detection",
+      hair_issue: "hair_mess_detection", smile_issue: "smile_adjustment" };
+    const disabledBodies = new Set(analysis?._disabled_body_reshape_subjects || []);
+    const people = (Array.isArray(analysis?.subjects) ? analysis.subjects : []).map((subject, index) => {
+      if (!subject || subject.is_person !== true) return [];
+      return faceIssueEntries(subject, index, disabledBodies.has(index)).flatMap((issue) => {
+        const override = overrides[`${index}:${issue.category}`];
+        const allowed = override === false ? false
+          : override && typeof override === "object" ? override.allowed !== false : issue.allowed;
+        const level = override?.level || issue.level;
+        if (!allowed || level === "none" || advanced[optionFor[issue.category]] === false) return [];
+        if (issue.category === "body_reshape" && (!bodyReshapeEnabled
+          || selections.body_reshape_enabled === false || (selections.body_reshape_enabled == null && analysis?._body_reshape_enabled === false)
+          || !issue.controllable)) return [];
+        const levelLabel = FACE_ISSUE_LEVEL_CHOICES[issue.category]?.find(([value]) => value === level)?.[1];
+        return [sentence(`將為${subject.label || `人物 ${index + 1}`}進行${issue.label}${levelLabel ? `（${levelLabel}）` : ""}`)];
+      });
+    });
+    const messages = [];
+    for (let i = 0; i < Math.max(0, ...people.map((items) => items.length)); i += 1) {
+      people.forEach((items) => { if (items[i]) messages.push(items[i]); });
+    }
+    const checked = selections.recipe_checked;
+    const recipes = (Array.isArray(analysis?.retouch_recipe) ? analysis.retouch_recipe : [])
+      .filter((_, index) => !Array.isArray(checked) || checked[index] === true)
+      .filter((item) => typeof item === "string" && item.trim());
+    recipes.sort((a, b) => Number(/^重新構圖\s*[:：]/.test(b)) - Number(/^重新構圖\s*[:：]/.test(a)));
+    messages.push(...recipes.map(sentence));
+    const options = selections.options || {};
+    Object.entries(options).forEach(([key, value]) => {
+      const group = STYLE_OPTION_GROUPS[key];
+      const option = group?.options.find((item) => item.value === value && value !== "default");
+      if (option) messages.push(sentence(`將${group.label}設定為「${option.label}」`));
+    });
+    if (direction) messages.push(sentence("也將依照您的個人化需求修圖：" + direction));
+    return messages;
   }
 
   // Flattened { "subjectIndex:category": false } for every flagged issue the
@@ -2727,9 +2781,7 @@ window.PhotoAgentResults = (() => {
         levelRow.className = "ap-face-issue-level-row";
         const select = document.createElement("select");
         select.className = "quality-select ap-face-issue-level-select";
-        const choices = issue.category === "hair_issue"
-          ? [["dynamic", "保留髮絲動態"], ["tidy", "梳整俐落"]]
-          : [["auto", "自動"], ["neutral", "不笑"], ["gentle", "微笑"], ["broad", "開朗笑"], ["laughing", "大笑"]];
+        const choices = FACE_ISSUE_LEVEL_CHOICES[issue.category];
         choices.forEach(([value, label]) => {
           const option = document.createElement("option");
           option.value = value;
@@ -3460,6 +3512,7 @@ window.PhotoAgentResults = (() => {
     renderBoxTypeMenu, drawAnalysisBoxes, setDebugUi, previewAspectRatio, syncReframingRatioLock,
     restoreCompositionState, applyCompositionToRender,
     getFaceIssueOverrides, applyFaceIssueOverrides, setFaceIssueCategoryLock, resetFaceReviewState,
+    buildPlannedEditMessages,
     setBodyReshapeEnabled, getBodyReshapeReviewEnabled, setBodyReshapeReviewEnabled,
     renderFaceReviewCards,
     syncFaceReviewAdvancedOptions, syncFaceReviewPoseSuggestion

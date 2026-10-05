@@ -474,6 +474,13 @@
   // three targets is ever actually visible at a time (single-image and
   // batch mode never render simultaneously).
   function setProcSub(text) {
+    if (progressFeedState) {
+      progressFeedState.rows.push({ text, id: ++progressFeedState.sequence });
+      if (progressFeedState.rows.length > 5) progressFeedState.rows.shift();
+      progressFeedState.revision += 1;
+      renderProgressFeed();
+      return;
+    }
     if (procSub) procSub.textContent = text;
     if (els.canvasLoadingStatus) els.canvasLoadingStatus.textContent = text;
     if (els.batchMainLoadingText) els.batchMainLoadingText.textContent = text;
@@ -488,23 +495,43 @@
     if (els.canvasLoadingTitle) els.canvasLoadingTitle.textContent = text;
   }
 
-  // Cycles procSub through a list of phrasings for the current stage
-  // (analyze/edit) so a long-running RUN doesn't sit on the exact same
-  // sentence for minutes and read as frozen. getMessages() is re-invoked on
-  // every tick (not captured once) so live info baked into a message --
-  // e.g. "已完成 X/N RUN" -- never goes stale mid-rotation. Once the full
-  // list has played through once, rotation settles into alternating just
-  // the last two entries (the "almost there" phrasings) instead of looping
-  // back to message 0 -- a stall lasting long enough to exhaust the whole
-  // list should keep sounding like it's near the end, not restart at
-  // "AI 正在分析照片" again.
-  const PROC_SUB_ROTATE_MS = 5000;
-  // How fast the catch-up plays once a stage genuinely finishes before its
-  // message list has cycled through once -- see finishProcSubRotation.
-  const PROC_SUB_FINISH_MS = 500;
+  // All playback text is local: analysis tips or a snapshot of the UI's
+  // submitted review choices. Status polling only watches job lifecycle.
+  const PROGRESS_FEED_TIPS = {
+    analysis: [
+      "正在分析背景的光線與明暗分布。", "正在檢視照片的構圖與取景細節。",
+      "正在分析畫面主體與背景的視覺關係。", "正在檢視照片整體的色彩與色調。",
+      "正在分析亮部與暗部的細節層次。", "正在檢視畫面中的視覺焦點。",
+      "正在分析照片邊緣的留白與干擾元素。", "正在檢視背景細節對主體的影響。",
+      "正在分析光線方向與畫面的整體氛圍。", "正在檢視構圖中的空間與視覺平衡。",
+      "正在整理照片中值得保留的特色。", "正在整理光線、色彩與構圖的改善建議。",
+      "正在檢視前景、中景與遠景的層次關係。", "正在分析畫面中冷色與暖色的搭配。",
+      "正在檢視陰影區域的細節與可見度。", "正在分析高光與反光對畫面的影響。",
+      "正在檢視主體輪廓與周圍環境的區隔。", "正在分析畫面中線條的延伸與視線引導。",
+      "正在檢視不同區域的色彩飽和度。", "正在分析照片中材質與紋理的呈現。",
+      "正在檢視取景角度與透視的視覺效果。", "正在分析畫面中光色變化的協調程度。",
+      "正在檢視重要細節是否受到邊緣裁切影響。", "正在分析背景元素的排列與疏密關係。"
+    ],
+    edit: [
+      "查看結果時，可以切換原圖比較整體差異。", "喜歡的表情、衣物或背景細節，可以寫進個人化需求。",
+      "每個人物可以選擇不同的人像調整項目。", "美化風格可以從姿勢、角度、光線與取景範圍設定。",
+      "比較照片時，可以同時留意整體氛圍與局部細節。", "需要再次調整時，可以修改設定後再進行美化。",
+      "比較前後照片時，可以留意膚色、表情與背景是否協調。", "局部細節與整體構圖，可以分開檢視再決定是否調整。",
+      "想保留的現場光色與氛圍，也可以寫在個人化需求中。", "再次美化之前，可以先確認各個人物的調整設定。",
+      "選擇美化風格時，可以以照片原本的情境作為參考。", "原圖中的重要細節，可以作為檢視美化結果的依據。",
+      "選擇取景比例時，可以留意重要物件是否完整保留。", "柔和的亮部與清楚的暗部，有助於呈現自然的畫面層次。",
+      "背景不一定需要完全模糊，適度保留細節也能傳達場景特色。", "檢視色彩時，可以留意不同區域的冷暖是否一致。",
+      "個人化需求越明確，越容易表達您希望調整的方向。", "描述想調整的物件時，可以附上它在畫面中的位置。",
+      "不想改變的物件或文字，也可以在個人化需求中註明。", "美化項目可以依喜好勾選，不一定要套用全部建議。",
+      "光線與色調的選擇，可以呼應照片想傳達的情緒。", "查看構圖時，可以留意主體周圍是否保有舒適的空間。",
+      "比較不同美化版本，可以幫助您選出更喜歡的效果。", "再次調整時，可以先聚焦最想改善的一個重點。"
+    ]
+  };
+  let progressFeedState = null;
+  const progressFeedRecords = new WeakMap();
+  const progressFeedViews = new WeakMap();
   let procSubRotateTimer = null;
   let procSubRotateIndex = 0;
-  let procSubGetMessages = null;
   // Which batch record (see showBatchMainLoading) the rotation currently
   // running, if any, actually belongs to -- null whenever it's either idle
   // or driving the single-image flow instead. There's only one shared
@@ -517,123 +544,135 @@
   // out alongside their own state, the same instant the rotation itself
   // genuinely stops), so it never points at a rotation that isn't running.
   let activeBatchRotationRecord = null;
-  function procSubIndexFor(messages, rotateIndex) {
-    const lastTwoStart = Math.max(0, messages.length - 2);
-    return rotateIndex < messages.length
-      ? rotateIndex
-      : lastTwoStart + ((rotateIndex - messages.length) % 2);
+  function progressFeedDelay(text) {
+    return Math.max(3500, 1500 + Array.from(text.replace(/\s/g, "")).length * 150);
+  }
+  function progressFeedVisible() {
+    return !document.hidden && [procSub, els.canvasLoadingStatus, els.batchMainLoadingText]
+      .some((node) => node?.getClientRects().length);
+  }
+  function renderProgressFeed() {
+    const state = progressFeedState;
+    if (!state) return;
+    [procSub, els.canvasLoadingStatus, els.batchMainLoadingText].forEach((element) => {
+      if (!element) return;
+      element.classList.add("has-progress-feed");
+      let view = progressFeedViews.get(element);
+      if (!view || view.state !== state) {
+        const head = document.createElement("span");
+        head.className = "progress-feed-badge";
+        const list = document.createElement("span");
+        list.className = "progress-feed-list";
+        list.setAttribute("role", "log");
+        list.setAttribute("aria-live", "off");
+        element.replaceChildren(head, list);
+        view = { state, head, list, nodes: new Map(), revision: -1 };
+        progressFeedViews.set(element, view);
+      }
+      view.head.textContent = state.mode === "analysis" ? "◇ 分析觀察" : "◇ 修圖規劃";
+      if (view.revision === state.revision) return;
+      const tops = new Map([...view.nodes].map(([id, node]) => [id, node.getBoundingClientRect().top]));
+      const nodes = state.rows.map((entry, index) => {
+        let node = view.nodes.get(entry.id);
+        if (!node) {
+          node = document.createElement("span");
+          node.className = "progress-feed-row";
+          const text = document.createElement("span");
+          text.className = "progress-feed-text";
+          text.textContent = entry.text;
+          node.replaceChildren(text);
+        }
+        node.classList.toggle("is-latest", index === state.rows.length - 1);
+        return node;
+      });
+      view.list.replaceChildren(...nodes);
+      view.nodes = new Map(state.rows.map((entry, index) => [entry.id, nodes[index]]));
+      if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) view.nodes.forEach((node, id) => {
+        const before = tops.get(id), after = node.getBoundingClientRect().top;
+        if (Number.isFinite(before) && before !== after) node.animate?.(
+          [{ transform: `translateY(${before - after}px)` }, { transform: "translateY(0)" }],
+          { duration: 350, easing: "cubic-bezier(.2,.7,.2,1)" });
+      });
+      view.revision = state.revision;
+    });
+  }
+  function scheduleProgressFeed() {
+    const state = progressFeedState;
+    if (!state || procSubRotateTimer || !progressFeedVisible()) return;
+    procSubRotateTimer = setTimeout(() => {
+      procSubRotateTimer = null;
+      if (state !== progressFeedState || !progressFeedVisible()) return;
+      const tips = PROGRESS_FEED_TIPS[state.mode];
+      setProcSub(state.queue.shift() || tips[state.tipIndex++ % tips.length]);
+      procSubRotateIndex = ++state.index;
+      scheduleProgressFeed();
+    }, progressFeedDelay(state.rows.at(-1).text));
   }
   // startIndex resumes a paused batch record's rotation exactly where it
   // left off (see showBatchMainLoading) -- every single-image call site
   // omits it and starts fresh at 0, same as before.
-  function startProcSubRotation(getMessages, startIndex = 0) {
+  function startProcSubRotation(getMessages, startIndex = 0, owner = null) {
+    const previous = progressFeedState;
     stopProcSubRotation();
-    procSubGetMessages = getMessages;
-    procSubRotateIndex = startIndex;
-    const show = () => {
-      const messages = getMessages();
-      if (!messages || !messages.length) return;
-      setProcSub(messages[procSubIndexFor(messages, procSubRotateIndex)]);
-      procSubRotateIndex += 1;
-    };
-    show();
-    procSubRotateTimer = setInterval(show, PROC_SUB_ROTATE_MS);
+    const mode = getMessages === analyzeSubMessages ? "analysis" : "edit";
+    const generation = owner?.modifiedAt || owner?.analyzeJobId || null;
+    let state = owner && progressFeedRecords.get(owner);
+    if (!state || state.generation !== generation) state = null;
+    if (!owner && previous?.owner === null && previous.mode === "analysis" && mode === "edit") state = previous;
+    if (!state) state = { owner, generation, mode: null, queue: [], rows: [], tipIndex: 0, index: startIndex, sequence: 0, revision: 0 };
+    if (state.mode !== mode) {
+      state.mode = mode;
+      state.queue = mode === "edit" ? [...getMessages()] : [];
+      state.tipIndex = 0;
+    }
+    progressFeedState = state;
+    if (owner) progressFeedRecords.set(owner, state);
+    activeBatchRotationRecord = owner;
+    procSubRotateIndex = state.index;
+    if (!state.rows.length) {
+      setProcSub(state.queue.shift() || PROGRESS_FEED_TIPS[mode][state.tipIndex++]);
+      procSubRotateIndex = ++state.index;
+    } else renderProgressFeed();
+    scheduleProgressFeed();
+    window.requestAnimationFrame?.(scheduleProgressFeed); // Caller may reveal the section after starting.
   }
   function stopProcSubRotation() {
-    clearInterval(procSubRotateTimer);
+    clearTimeout(procSubRotateTimer);
     procSubRotateTimer = null;
     procSubRotateIndex = 0;
-    procSubGetMessages = null;
     activeBatchRotationRecord = null;
+    progressFeedState = null;
   }
-  // Re-renders whatever message is currently on screen with fresh data
-  // (e.g. an updated "已完成 X/N RUN" count) without advancing or resetting
-  // the rotation -- lets a real progress event (a RUN finishing) show up
-  // immediately in place, instead of restarting the whole phrase sequence
-  // back at message 1 the way calling startProcSubRotation again would.
+  // Re-renders without advancing, rebuilding the submission snapshot, or
+  // restarting the current sentence's reading allowance.
   function refreshProcSubRotation() {
-    if (!procSubGetMessages) return;
-    const messages = procSubGetMessages();
-    if (!messages || !messages.length) return;
-    const shownIdx = Math.max(0, procSubRotateIndex - 1);
-    setProcSub(messages[procSubIndexFor(messages, shownIdx)]);
+    renderProgressFeed();
+    scheduleProgressFeed();
   }
-  // Called at a stage's genuine completion (not a mid-stall rotation swap):
-  // if the message list hasn't played through once yet, plays a quick
-  // catch-up before resolving so the screen doesn't switch away mid-list.
-  // Capped at the list's last two ("almost done") entries no matter how far
-  // behind the rotation actually was -- a job that finishes right after
-  // message 1 of 10 shouldn't have to fast-play through 8 more messages
-  // just to reach the end; it should land on the same closing phrasing(s) a
-  // slow job would have settled into. Resolves immediately if the list
-  // already finished its first pass (or nothing was rotating at all).
+  // Genuine completion ends playback immediately; it never delays results.
   function finishProcSubRotation() {
-    return new Promise((resolve) => {
-      clearInterval(procSubRotateTimer);
-      procSubRotateTimer = null;
-      const messages = procSubGetMessages ? procSubGetMessages() : null;
-      const startIdx = procSubRotateIndex;
-      procSubRotateIndex = 0;
-      procSubGetMessages = null;
-      activeBatchRotationRecord = null;
-      if (!messages || !messages.length || startIdx >= messages.length) {
-        resolve();
-        return;
-      }
-      const lastTwoStart = Math.max(0, messages.length - 2);
-      const remaining = messages.slice(Math.max(startIdx, lastTwoStart));
-      let i = 0;
-      const step = () => {
-        if (i >= remaining.length) { resolve(); return; }
-        setProcSub(remaining[i]);
-        i += 1;
-        setTimeout(step, PROC_SUB_FINISH_MS);
-      };
-      step();
-    });
+    stopProcSubRotation();
+    return Promise.resolve(); // Results must not wait for decorative text to drain.
   }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { clearTimeout(procSubRotateTimer); procSubRotateTimer = null; }
+    else scheduleProgressFeed();
+  });
   function analyzeSubMessages() {
-    return [
-      "AI 正在分析照片，請稍候…",
-      "正在辨識照片中的人物、光線與構圖…",
-      "正在讀取照片的曝光與色彩資訊…",
-      "正在比對適合的美化建議…",
-      "正在偵測照片中的細節與紋理…",
-      "正在計算最佳的裁切與構圖建議…",
-      "分析仍在進行中，可能需要多一點時間…",
-      "正在整理分析結果…",
-      "快好了，請再稍候一下…",
-      "即將完成，請稍候…"
-    ];
+    return PROGRESS_FEED_TIPS.analysis;
   }
-  function editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }) {
-    const modelLabel = window.PhotoAgentConfig.imageModels[imageModel] || imageModel;
+  function editSubMessages({ aiPhotoEditing, doneCount = 0, runCount = 1, analysis, selections, userPrompt, overwritePrompt, tipsOnly = false }) {
+    // One-click editing uses only the scheduler's local edit tips, even on
+    // paths where an analysis or personal direction is already available.
+    if (tipsOnly) return [];
     const progress = runCount > 1 ? `（已完成 ${doneCount}/${runCount} 張）` : "";
-    return aiPhotoEditing
-      ? [
-          `AI 正在使用 ${modelLabel} 美化${progress}，請稍候…`,
-          `AI 正在調整光影與細節${progress}，請稍候…`,
-          `AI 正在細修色調${progress}，請稍候…`,
-          `AI 正在校正白平衡與色彩${progress}，請稍候…`,
-          `AI 正在優化背景與構圖${progress}，請稍候…`,
-          `AI 正在強化畫面細節${progress}，請稍候…`,
-          `美化仍在進行中${progress}，感謝您的耐心等候…`,
-          `AI 正在進行最後的品質檢查${progress}…`,
-          `快完成了，請再稍候一下${progress}…`,
-          `即將完成，請再稍候一下${progress}…`
-        ]
-      : [
-          `正在進行本機影像處理${progress}，請稍候…`,
-          `影像處理仍在進行中${progress}，請稍候…`,
-          `正在套用影像調整${progress}，請稍候…`,
-          `正在進行色彩與亮度校正${progress}，請稍候…`,
-          `正在處理照片細節${progress}，請稍候…`,
-          `本機處理仍在進行中${progress}，請稍候…`,
-          `正在完成最後的影像調整${progress}…`,
-          `處理即將完成${progress}，請稍候…`,
-          `快完成了，請再稍候一下${progress}…`,
-          `即將完成，請再稍候一下${progress}…`
-        ];
+    const shownAnalysis = stripDisabledTopicItems(analysis, selections?.advanced_options);
+    const messages = window.PhotoAgentResults.buildPlannedEditMessages({
+      analysis: shownAnalysis, selections: selections || {}, userPrompt, overwritePrompt, aiPhotoEditing });
+    // Play the submitted choices first, without a generic preamble. The
+    // scheduler only cycles edit tips once this entire snapshot is consumed.
+    if (messages.length) return messages;
+    return [aiPhotoEditing ? `AI 正在產生美化結果${progress}。` : `正在進行本機影像處理${progress}。`];
   }
 
   const timingDetails = document.querySelector("#timing-details");
@@ -4649,6 +4688,7 @@
       previewPending: true,
       // pending -> analyzing -> analyzed -> processing -> done / error
       status: "pending",
+      progressTipsOnly: false, // One-click display policy; never sent to the backend.
       uploadedAt: null,
       modifiedAt: null,
       analysis: null,       // step-1 result (shown in the step-2 review panel)
@@ -5024,7 +5064,7 @@
         // "已完成 X/N RUN" progress text updateRunProgress had just set below.
         if (onStage && data.stage && data.stage !== lastStageSeen) {
           lastStageSeen = data.stage;
-          onStage(data.stage);
+          await onStage(data.stage);
         }
         if (typeof data.runs_done === "number" && data.runs_done > lastRunsDoneSeen) {
           lastRunsDoneSeen = data.runs_done;
@@ -5151,7 +5191,7 @@
         }
       }
 
-      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob };
+      singleFlowState = { analysis, analyzeJobId, presetKey, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, advancedOptions, processingPath, analyzeTimings, useCombinedJob, progressTipsOnly: skipReview };
       // A fresh analyze always runs the current analyze_stage, so there's
       // nothing to flag as incompatible here -- just the version number, for
       // debug mode. useCombinedJob has no `analysis` yet at this point
@@ -5286,6 +5326,10 @@
     const editAnalysis = useCombinedJob ? null : analysis;
     const editSelections = useCombinedJob ? null : buildEditSelections(
       { ...selections, advancedOptions, faceIssueOverrides, bodyReshapeEnabled: bodyReshapeReviewEnabled });
+    const editTipsOnly = useCombinedJob || singleFlowState.progressTipsOnly === true;
+    // Consume the initial one-click policy; later user-reviewed edits show
+    // their own submitted choices, including after an AIPoC one-click run.
+    singleFlowState.progressTipsOnly = false;
     const runCount = Math.max(1, parseInt(els.apRunCountSelect?.value, 10) || 1);
     // Declared here (not inside either branch below) so every edit-stage
     // rotation closure -- the initial one right below, onCombinedStage, and
@@ -5306,7 +5350,8 @@
     if (useCombinedJob) {
       startProcSubRotation(analyzeSubMessages);
     } else {
-      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
+      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, doneCount, runCount,
+        analysis: editAnalysis, selections: editSelections, userPrompt, overwritePrompt, tipsOnly: editTipsOnly }));
     }
     // Live progress messaging for a combined job, driven by the backend's
     // reported stage (job_processor.py's set_job_info(..., results={"stage": ...})
@@ -5327,7 +5372,7 @@
       // the top of this function's useCombinedJob branch) would claim 修圖
       // while the job is demonstrably still analyzing.
       setFlowStage("editing");
-      startProcSubRotation(() => editSubMessages({ aiPhotoEditing, imageModel, doneCount, runCount }));
+      startProcSubRotation(() => editSubMessages({ tipsOnly: true }));
     };
 
     // Switches from the processing screen to the results screen the first
@@ -5962,6 +6007,7 @@
     batchRecords.forEach((r) => {
       if (!r.uploadedAt) r.uploadedAt = uploadedAt;
       r.status = "analyzing";
+      r.progressTipsOnly = skipReview;
       // 分析模型 is settled here and only here: the analyze submission below
       // sends batchSettings.analysisModel for the whole batch, and the
       // results page's own #ap-analysis-model is read-only (changing it there
@@ -6084,7 +6130,7 @@
         // recipe/style options (no per-image review ever happened to set
         // overrides). Records that failed to analyze are simply excluded --
         // continueBatchRecords already filters to status === "analyzed".
-        await continueBatchRecords(analyzedBatchRecords());
+        await continueBatchRecords(analyzedBatchRecords(), { tipsOnly: true });
       } else {
         updateBatchHeaderControls();
       }
@@ -6134,6 +6180,7 @@
   // uses the normal continueJob path, reusing record.analysis/record.analyzeJobId
   // populated below once the first RUN lands.
   async function analyzeAndEditBatchRecord(record, runCount) {
+    record.progressTipsOnly = true;
     const userPrompt = (record.userPrompt || "").trim();
     const overwritePrompt = userPrompt ? !!record.overwritePrompt : false;
     const stepStart = Date.now();
@@ -6285,7 +6332,7 @@
 
   // Run step 2 (edit) for the given analyzed records via the same single-image
   // endpoints, so each image carries its own prompt -- flow identical to single.
-  async function continueBatchRecords(records) {
+  async function continueBatchRecords(records, { tipsOnly = false } = {}) {
     const targets = records.filter((r) => r.status === "analyzed");
     if (!targets.length) return;
 
@@ -6304,6 +6351,7 @@
     });
 
     targets.forEach((r) => {
+      r.progressTipsOnly = tipsOnly;
       r.status = "processing";
       updateBatchSidebarItem(r);
       refreshIfSelected(r); // no canvas yet for a first-time edit -- shows the loading placeholder
@@ -8800,13 +8848,16 @@
     // rotating status text would otherwise fall back to) is only populated
     // during an actual multi-photo batch run, never for a single history
     // record resumed here -- see showBatchMainLoading's own comment.
-    showBatchMainLoading({
+    const loadingRecord = {
       previewUrl,
       thumbUrl,
       status: "processing",
       aiPhotoEditing: job.ai_photo_editing,
-      imageModel: job.image_model
-    });
+      imageModel: job.image_model,
+      userPrompt: job.user_prompt,
+      overwritePrompt: job.overwrite_prompt
+    };
+    showBatchMainLoading(loadingRecord);
     // Navigation to the loading view above is already visible now, so close
     // the drawer immediately instead of waiting for an actual result to land
     // further down (inside renderIfPossible/viewHistoryRecord): that deferred
@@ -8840,6 +8891,11 @@
       try {
         const status = await getJobStatusOnce(jobIds[0], { path: job.path });
         isCombined = typeof status.stage === "string" || typeof status.run_count === "number";
+        if (isCombined && historyViewToken === myToken) {
+          loadingRecord.progressTipsOnly = true;
+          loadingRecord.status = status.stage === "analyze" ? "analyzing" : "processing";
+          showBatchMainLoading(loadingRecord);
+        }
       } catch {
         // Falls through to the generic single-job path below, which already
         // handles a genuine status-check failure on its own.
@@ -8933,6 +8989,11 @@
 
       try {
         await watchCombinedJobRuns(combinedJobId, runCount, {
+          onStage: (stage) => {
+            if (historyViewToken !== myToken || revealed) return;
+            loadingRecord.status = stage === "analyze" ? "analyzing" : "processing";
+            showBatchMainLoading(loadingRecord);
+          },
           onRunDone: (runData) => {
             const run = myRuns[runData.run - 1];
             if (!run) return;
@@ -10505,8 +10566,15 @@
             aiPhotoEditing: record.aiPhotoEditing != null ? record.aiPhotoEditing : batchSettings?.aiPhotoEditing,
             imageModel: record.imageModel || batchSettings?.imageModel,
             doneCount: 0,
-            runCount: 1
-          }), startIndex);
+            runCount: 1,
+            analysis: record.analysis,
+            selections: buildEditSelections({ options: effectiveOptions(record), recipeChecked: record.recipeChecked,
+              advancedOptions: record.advancedOptions || batchSettings?.advancedOptions,
+              faceIssueOverrides: record.faceIssueOverrides, bodyReshapeEnabled: record.bodyReshapeEnabled }),
+            userPrompt: record.userPrompt,
+            overwritePrompt: record.overwritePrompt,
+            tipsOnly: record.progressTipsOnly === true || !record.analysis
+          }), startIndex, record);
       activeBatchRotationRecord = record;
     }
   }
@@ -11337,6 +11405,7 @@
     }));
     record.runs = newRuns;
     record.mirrorIndex = newRuns.length - 1;
+    record.progressTipsOnly = false;
     record.status = "processing";
     updateBatchSidebarItem(record);
     // Unlike continueBatchRecords, this path runs a single record outside any
