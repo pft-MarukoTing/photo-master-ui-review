@@ -566,8 +566,7 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
 
     content_a = [
         {"type": "input_text", "text": build_overall_analysis_instruction(
-            aspect_ratio, advanced_options,
-            source_size=get_image_dimensions(image_bytes))},
+            aspect_ratio, source_size=get_image_dimensions(image_bytes))},
         {"type": "input_image", "image_url": data_url},
         *face_crop_items,
     ]

@@ -386,21 +386,6 @@ def get_body_reshape_edit_prompt(analysis):
     return "；".join(entry["edit_prompt"] for entry in entries if entry.get("active"))
 
 
-def _without_body_reshape_prompt_lines(instruction):
-    """Remove dedicated body-reshape references from an analysis prompt.
-
-    The general analysis schema no longer contains a body-reshape field, but
-    a few shared legacy bullets still mention that field as an ``is_person``
-    placeholder.  When the feature is disabled those lines must not be sent
-    to the analysis model either.  Removing complete lines keeps all other
-    analysis instructions byte-for-byte unchanged.
-    """
-    return "\n".join(
-        line for line in str(instruction).splitlines()
-        if "body_reshape" not in line.lower()
-    )
-
-
 # ── Correction axes ───────────────────────────────────────────────────────────
 #
 # The vocabulary for correction_axes: which property of the photograph a
@@ -1094,15 +1079,13 @@ def _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size=None):
     )
 
 
-def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_options=None,
-                                      source_size=None):
+def build_overall_analysis_instruction(aspect_ratio_pref="auto", source_size=None):
     """Call A of the analysis split (see the module comment above
     _FACE_CROP_EVIDENCE_SECTION): overall photo direction and subject
     identification. Blink/hair/gaze/smile are judged afterward by the
     portrait-QC pass (build_portrait_qc_instruction) from this call's own
     finalized subjects[] list.
     """
-    advanced_options = advanced_options or {}
     instruction = (
         _OVERALL_ANALYSIS_PERSONA
         + _RETURN_SHAPE_OVERALL
@@ -1116,8 +1099,6 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_option
         + _COMPOSITION_DECISION_FRAMEWORK
         + "\n"
     )
-    if not body_reshape_enabled():
-        instruction = _without_body_reshape_prompt_lines(instruction)
     return instruction + _aspect_ratio_policy_suffix(aspect_ratio_pref, source_size)
 
 

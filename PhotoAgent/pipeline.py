@@ -257,7 +257,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     repair_targets = eye_repair_targets(analysis)
     analysis["prompts"] = {
         "photo_analysis": build_overall_analysis_instruction(
-            aspect_ratio, advanced_options, source_size=get_image_dimensions(image_bytes)),
+            aspect_ratio, source_size=get_image_dimensions(image_bytes)),
         "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
         "photo_analysis_eye_repair_planning": (
             build_eye_repair_planning_instruction(repair_targets)

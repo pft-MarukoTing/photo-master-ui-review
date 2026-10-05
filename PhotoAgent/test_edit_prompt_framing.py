@@ -38,7 +38,7 @@ ANALYSIS = {
 
 class OverallAnalysisPrompt(unittest.TestCase):
     def test_light_color_target_flows_into_one_execution_contract(self):
-        prompt = build_overall_analysis_instruction("original", {})
+        prompt = build_overall_analysis_instruction("original")
         self.assertIn("Treat edit_intent as the single finished light-and-color target", prompt)
         self.assertIn("Make lighting_strategy and memory_color_strategy implementation plans for that same target", prompt)
         self.assertIn("correction_plan, correction_axes, correction_inverse, and retouch_recipe describe the same adjustments", prompt)
@@ -47,7 +47,7 @@ class OverallAnalysisPrompt(unittest.TestCase):
 
     def test_every_ratio_mode_requires_an_active_crop_comparison(self):
         for ratio in ("auto", "original"):
-            prompt = build_overall_analysis_instruction(ratio, {})
+            prompt = build_overall_analysis_instruction(ratio)
             self.assertIn(
                 "Choose the strongest framing independently of the output aspect-ratio preference",
                 prompt,
@@ -57,13 +57,13 @@ class OverallAnalysisPrompt(unittest.TestCase):
             self.assertIn("keep every protected region inside crop_box with breathing room", prompt)
             self.assertIn("intentionally trimmed subject/body edges outside these boxes", prompt)
 
-        overall_prompt = build_overall_analysis_instruction("original", {})
+        overall_prompt = build_overall_analysis_instruction("original")
         self.assertIn("normally remove at least 8% of the original span on one axis", overall_prompt)
         self.assertIn("change subject scale, placement, or edge content", overall_prompt)
         self.assertIn("intended-to-remove edge content outside these protection boxes", overall_prompt)
 
     def test_original_ratio_is_not_a_request_to_disable_crop(self):
-        prompt = build_overall_analysis_instruction("original", {})
+        prompt = build_overall_analysis_instruction("original")
         self.assertIn('Set recommended_aspect_ratio to "original"', prompt)
         self.assertIn("Every crop candidate must preserve the source aspect ratio", prompt)
 
