@@ -4823,6 +4823,21 @@ def approved_blink_items(analysis):
     ]
 
 
+def approved_gaze_items(analysis):
+    """Gaze items the edit is approved to repair, after the user's toggle and per-person overrides.
+
+    Keeps _subject_index, which Step 5b uses to attach each person's final smile.
+    """
+    if not (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
+        return []
+    disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
+    return [
+        resolve_user_gaze_request(item) for item in subject_issue_items(analysis, "gaze_issue")
+        if (item.get("should_fix") or item.get("_user_forced"))
+        and item.get("_subject_index") not in disabled_indices
+    ]
+
+
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False, return_sections=False):
     analysis = strip_disabled_topic_items(analysis)
     if not body_reshape_enabled():

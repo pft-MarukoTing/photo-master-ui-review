@@ -42,11 +42,9 @@ from prompts import (
     eye_repair_targets,
     final_smile_by_subject,
     portrait_qc_persons,
-    resolve_user_gaze_request,
     apply_rejected_reframing,
-    subject_issue_items,
-    _disabled_issue_subject_indices,
     approved_blink_items,
+    approved_gaze_items,
     composition_state,
     merge_reframe_result,
     restore_composition_state,
@@ -144,14 +142,7 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
     when there was no approved eye repair to run, matching every other
     stage's "no GPT call made" convention (see finish_stage's prompts dict).
     """
-    gaze_items = []
-    if (analysis.get("_advanced_options") or {}).get("gaze_contact_detection", True):
-        gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
-        gaze_items = [
-            resolve_user_gaze_request(item) for item in subject_issue_items(analysis, "gaze_issue")
-            if (item.get("should_fix") or item.get("_user_forced"))
-            and item.get("_subject_index") not in gaze_disabled_indices
-        ]
+    gaze_items = approved_gaze_items(analysis)
     blink_targets, blink_rules = build_blink_pass_targets(analysis)
     if not gaze_items and not blink_targets:
         return image_b64, None, None
@@ -417,13 +408,10 @@ def finish_stage(
     Step 5 is instead told to leave gaze and eyelid state untouched and Step 5b
     performs 100% of any approved gaze/blink repair as an isolated second pass -- so
     single_pass_edit (the default) trades that dedicated pass's reliability
-    for a single edit-model round trip. That bundled call is only trusted to
-    apply an approved gaze fix reliably on gpt-image-2 at medium+, so when
-    single_pass_edit is on, image_model is gpt-image-2, quality is "low",
-    and this photo has an approved gaze_issue, Step 5 below bumps its own
-    edit call up to "medium" -- reported back as extra-info.image_quality --
-    rather than silently keeping a combination known not to apply the fix
-    reliably in one call. Requests with no approved gaze issue stay on "low".
+    for a single edit-model round trip. When single_pass_edit is on, the photo
+    has an approved blink repair and the request is BLINK_REPAIR_IMAGE_MODEL at
+    "medium", Step 5 bumps its own edit call to BLINK_REPAIR_QUALITY --
+    reported back as extra-info.image_quality.
 
     Returns: {
         result_image: str,          # base64 PNG (no data-URL prefix)
@@ -498,21 +486,10 @@ def finish_stage(
     if ai_photo_editing:
         # Step 5 — AI edit
         t0 = time.time()
-        # single_pass_edit's bundled call only reliably applies an approved
-        # gaze fix on gpt-image-2 at medium+ (see _run_eye_repair_pass's
-        # docstring) -- bump up from the requested "low" here, but only when
-        # this photo actually has one, since with no gaze fix to bundle
-        # there's nothing that combination would fail to apply.
-        if single_pass_edit and image_model == "gpt-image-2" and quality == "low":
-            gaze_fix_approved = any(
-                item.get("should_fix") or item.get("_user_forced")
-                for item in subject_issue_items(analysis, "gaze_issue")
-            )
-            if gaze_fix_approved:
-                edit_quality = "medium"
-        # An approved blink repair only comes out reliably on Sunburst at its top tier; two-stage defers it to Step 5b.
-        if single_pass_edit and approved_blink_items(analysis):
-            image_model, edit_quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY
+        # An approved blink repair only comes out reliably at Sunburst's top tier; two-stage defers it to Step 5b.
+        if (single_pass_edit and image_model == BLINK_REPAIR_IMAGE_MODEL and quality == "medium"
+                and approved_blink_items(analysis)):
+            edit_quality = BLINK_REPAIR_QUALITY
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = EDIT_PHOTO_BY_MODEL.get(image_model, edit_photo)
         edit_result, edit_prompt = _run_edit_photo_compat(

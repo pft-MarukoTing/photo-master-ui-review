@@ -240,15 +240,9 @@ def _validate_params(params: dict) -> dict:
     # Skips pipeline.finish_stage's Step 5b (the isolated gaze-repair re-pass)
     # and relies on Step 5's own bundled edit call instead -- one edit-model
     # round trip instead of two, at the cost of Step 5b's insurance against a
-    # bundled call under-applying the gaze fix. Only trustworthy on its own at
-    # gpt-image-2 medium+ (see pipeline.finish_stage's docstring). Whether
-    # THIS photo actually has an approved gaze fix to bundle isn't knowable
-    # here -- that's Step 2's analysis, which hasn't run yet at analyze-time
-    # validation and isn't in scope here even at finish-time -- so the
-    # image_quality low->medium bump for that combination happens later, in
-    # pipeline.finish_stage itself, gated on the analysis's own gaze_issue
-    # findings instead of firing unconditionally for every single_pass_edit
-    # request.
+    # bundled call under-applying the gaze fix. Any quality bump this needs
+    # depends on the analysis's findings, so it happens later, in
+    # pipeline.finish_stage.
     single_pass_edit = normalized.get("single_pass_edit", True)
     if not isinstance(single_pass_edit, bool):
         raise RuntimeError(
