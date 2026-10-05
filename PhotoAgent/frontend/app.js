@@ -753,11 +753,6 @@
     }
   }
 
-  // Editor prompt 架構 is a debug-only picker, so outside debug mode every run
-  // uses this one strategy -- kept in sync with the backend's own default
-  // (photo_agent/param_validation.py DEFAULT_EDITOR_PROMPT_STRATEGY).
-  const DEFAULT_EDITOR_PROMPT_STRATEGY =
-    window.PhotoAgentConfig.defaultEditorPromptStrategy || "resolved_compact";
 
   // GPT 5.6 Sol is a testbed-only analysis-model variant, not yet vetted for
   // general use, and GPT 4.1 Mini was pulled from the release picker -- keep
@@ -839,12 +834,6 @@
     if (!isDebug) {
       if (els.imageRunCountSelect) els.imageRunCountSelect.value = "1";
       if (els.apRunCountSelect) els.apRunCountSelect.value = "1";
-    }
-    if (els.editorPromptSettings) els.editorPromptSettings.style.display = isDebug ? "" : "none";
-    if (els.apEditorPromptSettings) els.apEditorPromptSettings.style.display = isDebug ? "" : "none";
-    if (!isDebug) {
-      if (els.editorPromptStrategySelect) els.editorPromptStrategySelect.value = DEFAULT_EDITOR_PROMPT_STRATEGY;
-      if (els.apEditorPromptStrategySelect) els.apEditorPromptStrategySelect.value = DEFAULT_EDITOR_PROMPT_STRATEGY;
     }
     // 分析引擎 is read-only on the results page in the release build -- Step 2
     // has already run by the time that page exists, so the picker is there to
@@ -2078,14 +2067,12 @@
         gaze: els.apEyeGazeFocusToggle,
         hair: els.apHairMessDetectionToggle,
         smile: els.apSmileAdjustmentToggle,
-        strategy: els.apEditorPromptStrategySelect,
       }
       : {
         eyeClosed: els.eyeClosedDetectionToggle,
         gaze: els.eyeGazeFocusToggle,
         hair: els.hairMessDetectionToggle,
         smile: els.smileAdjustmentToggle,
-        strategy: els.editorPromptStrategySelect,
       };
   }
 
@@ -2099,14 +2086,8 @@
       gaze_contact_detection: controls.gaze ? controls.gaze.checked : true,
       hair_mess_detection: controls.hair ? controls.hair.checked : true,
       smile_adjustment: controls.smile ? controls.smile.checked : true,
-      editor_prompt_strategy: controls.strategy?.value || DEFAULT_EDITOR_PROMPT_STRATEGY,
     };
   }
-
-  // Only the results page's copy pushes onto a live case. The upload page's
-  // Editor prompt 架構 is simply read at submit time (readAdvancedOptionsFromDom
-  // ("upload")), so it needs no listener of its own.
-  els.apEditorPromptStrategySelect?.addEventListener("change", () => applyAdvancedOptionsChange());
 
   // Pose choices suggest compatible settings for every person in this photo.
   // They deliberately do not touch the shared 人像修正設定 modal; "-" is simply
@@ -2305,7 +2286,6 @@
     // key, and showing the switch off there would misreport what a revise of
     // it would actually do.
     if (controls.smile) controls.smile.checked = advancedOptions.smile_adjustment !== false;
-    if (controls.strategy) controls.strategy.value = advancedOptions.editor_prompt_strategy || DEFAULT_EDITOR_PROMPT_STRATEGY;
     // The per-person review these lock rows in only exists on the results
     // page, so only that copy drives it.
     if (scope === "ap") {
@@ -2340,10 +2320,7 @@
   }
 
   function defaultAdvancedOptions() {
-    return {
-      ...((window.PhotoAgentConfig || {}).defaultAdvancedOptions || {}),
-      editor_prompt_strategy: DEFAULT_EDITOR_PROMPT_STRATEGY
-    };
+    return { ...((window.PhotoAgentConfig || {}).defaultAdvancedOptions || {}) };
   }
 
   // One case's own 人像設定, in the order they become known: what its job was
@@ -4021,7 +3998,7 @@
     "photo_analysis", "photo_analysis_portrait_qc", "photo_analysis_eye_repair_planning",
     "photo_analysis_body_reshape",
     "user_instruction_review", "crop_validation",
-    "image_edit_raw", "image_edit",
+    "image_edit",
     "image_edit_resolution", "image_edit_strategy",
     "gaze_repair_pass", "quality_check"
   ];
@@ -11651,7 +11628,6 @@
     { label: "照片分析", el: () => els.promptAnalysis },
     { label: "使用者補充指令", el: () => els.promptReview },
     { label: "裁切驗證", el: () => els.promptCrop },
-    { label: "修圖（Legacy raw）", el: () => els.promptEditRaw, omitWhenEmpty: true },
     { label: "修圖（送給 Editor）", el: () => els.promptEdit },
     { label: "Feature Resolver 結果", el: () => els.promptEditResolution, omitWhenEmpty: true },
     { label: "眼部修正（第二段）", el: () => els.promptGazeRepair },

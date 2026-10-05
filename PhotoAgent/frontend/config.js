@@ -26,10 +26,6 @@ window.PhotoAgentConfig = {
     { value: "gpt-5.6-sol", label: "GPT 5.6 Sol" }
   ],
   defaultAnalysisModel: "gpt-5.6-luna",
-  // Mirrors photo_agent/param_validation.py's DEFAULT_EDITOR_PROMPT_STRATEGY --
-  // the Editor prompt 架構 picker is debug-only, so this is what every normal
-  // run sends and what debug mode starts on.
-  defaultEditorPromptStrategy: "resolved_compact",
   // Mirrors photo_agent/param_validation.py's ADVANCED_OPTION_DEFAULTS, for the
   // subset 人像設定 actually shows as toggles (calm_hair/smile_level are picked
   // per person in the review panel, not here). What a fresh upload starts from,
