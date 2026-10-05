@@ -46,8 +46,8 @@ from prompts import (
     expand_subject_boxes_to_contain_faces,
     merge_portrait_qc_issues,
     derive_hair_decisions,
-    derive_luna_blink_decisions,
-    derive_luna_gaze_decisions,
+    derive_blink_decisions,
+    derive_gaze_decisions,
     eye_repair_targets,
     merge_eye_repair_strategies,
     strip_body_reshape,
@@ -516,12 +516,10 @@ def _run_body_reshape_pass_or_fallback(analysis, data_url, persons, analysis_mod
 
 def _sum_usage(*usage_items: dict) -> dict:
     """Combine raw OpenAI Responses API usage objects into one, so the
-    Luna multi-call split still returns a single usage dict at the same
-    {"model", "usage"} shape every other analyze_photo caller gets --
-    downstream cost math (test_eye_analysis_accuracy.py) reads
-    input_tokens/output_tokens/*_tokens_details off exactly one usage object
-    per analyze_photo() call, and this keeps that true for the luna path
-    too, now backed by two real API calls instead of one."""
+    multi-call analysis split still returns a single usage dict at the
+    {"model", "usage"} shape -- downstream cost math
+    (test_eye_analysis_accuracy.py) reads input_tokens/output_tokens/
+    *_tokens_details off exactly one usage object per analyze_photo() call."""
     usage_items = [usage or {} for usage in usage_items if usage]
     combined = {
         "input_tokens": sum((usage.get("input_tokens") or 0) for usage in usage_items),
@@ -602,12 +600,12 @@ def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", adva
             portrait_qc = _parse_json_from_text(_extract_output_text(data_b))
             analysis = merge_portrait_qc_issues(overall_analysis, portrait_qc)
             analysis = derive_hair_decisions(analysis)
-            analysis = derive_luna_blink_decisions(analysis)
-            analysis = derive_luna_gaze_decisions(analysis)
+            analysis = derive_blink_decisions(analysis)
+            analysis = derive_gaze_decisions(analysis)
             usage_b = data_b.get("usage")
         except Exception as exc:
             logger.warning(
-                "Portrait-QC pass (gpt-5.6-luna two-pass split) failed, falling back to "
+                "Portrait-QC pass (two-pass split) failed, falling back to "
                 "\"no portrait defects detected\" for this analysis: %s", exc,
             )
 

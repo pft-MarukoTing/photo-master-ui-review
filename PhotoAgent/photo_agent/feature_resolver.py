@@ -873,10 +873,10 @@ def _blink_contracts(analysis):
             continue
         # eye_state stays the machine-level endpoint the resolver reasons about;
         # the analysis strategy's own wording rides alongside it under keys gaze
-        # never uses, so a subject carrying both features cannot collide. Only
-        # luna authors a per-person blink strategy, so these stay absent (and
-        # the rendered line generic) for every other analysis model -- except
-        # a forced row, which always carries one (resolve_user_blink_request).
+        # never uses, so a subject carrying both features cannot collide. Old
+        # single-call analyses carry no per-person blink strategy, so these stay
+        # absent (and the rendered line generic) for them -- except a forced
+        # row, which always carries one (resolve_user_blink_request).
         strategy = item.get("blink_repair_strategy") or {}
         endpoint = {
             "eye_state": "naturally_open_and_matched_to_expression",
@@ -984,7 +984,7 @@ def _hair_contracts(analysis):
     if not options.get("hair_mess_detection", True):
         return []
     # Compatibility for analyses produced before hair approval moved to the
-    # per-person face-review toggle. New Luna output never puts hair on these
+    # per-person face-review toggle. New analyses never put hair on these
     # top-level axes, but an imported old run may still express rejection here.
     if (
         "hair" in _axis_set(analysis.get("rejected_axes"))

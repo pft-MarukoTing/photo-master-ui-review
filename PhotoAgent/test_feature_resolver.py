@@ -10,13 +10,13 @@ from photo_agent.feature_resolver import (
     resolve_feature_contracts,
 )
 from prompts import (
-    _BLINK_DETECTION_LUNA_SECTION,
+    _BLINK_DETECTION_SECTION,
     _fallback_blink_repair_strategy,
     build_body_reshape_edit_block,
     build_edit_prompt,
     build_eye_repair_planning_instruction,
     build_quality_check_prompt,
-    derive_luna_blink_decisions,
+    derive_blink_decisions,
 )
 
 
@@ -58,7 +58,7 @@ def blink_analysis():
     }
 
 
-def luna_blink_analysis(*, observability="both_eyes", right_state="narrowed_open"):
+def blink_detection_analysis(*, observability="both_eyes", right_state="narrowed_open"):
     return {
         "subjects": [{
             "label": "central woman",
@@ -84,9 +84,9 @@ def luna_blink_analysis(*, observability="both_eyes", right_state="narrowed_open
     }
 
 
-class LunaBlinkDecisionGate(unittest.TestCase):
+class BlinkDecisionGate(unittest.TestCase):
     def test_one_eye_summary_is_reconciled_when_both_eyelids_have_strong_concrete_evidence(self):
-        result = derive_luna_blink_decisions(luna_blink_analysis(observability="one_eye"))
+        result = derive_blink_decisions(blink_detection_analysis(observability="one_eye"))
         issue = result["subjects"][0]["blink_issue"]
 
         self.assertEqual(issue["blink_observability"], "both_eyes")
@@ -95,13 +95,13 @@ class LunaBlinkDecisionGate(unittest.TestCase):
         self.assertTrue(issue["should_fix"])
         self.assertEqual(issue["closure_intent"], "accidental_capture")
 
-        rerun = derive_luna_blink_decisions(result)["subjects"][0]["blink_issue"]
+        rerun = derive_blink_decisions(result)["subjects"][0]["blink_issue"]
         self.assertEqual(rerun["reason"].count("Python gate："), 1)
         self.assertNotIn("只有單眼幾何可讀", rerun["reason"])
 
     def test_actual_single_eye_evidence_stays_non_actionable(self):
-        analysis = luna_blink_analysis(observability="one_eye", right_state="not_visible")
-        result = derive_luna_blink_decisions(analysis)
+        analysis = blink_detection_analysis(observability="one_eye", right_state="not_visible")
+        result = derive_blink_decisions(analysis)
         issue = result["subjects"][0]["blink_issue"]
 
         self.assertEqual(issue["blink_observability"], "one_eye")
@@ -474,10 +474,10 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertIn("visible iris width", prompt)
 
     def test_analyzer_treats_closed_half_closed_difference_as_capture_state(self):
-        self.assertIn("mismatched transitional eyelid states", _BLINK_DETECTION_LUNA_SECTION)
-        self.assertIn("not to this captured difference in eyelid openness", _BLINK_DETECTION_LUNA_SECTION)
-        self.assertIn("A fully_closed eye is still observable as an eyelid", _BLINK_DETECTION_LUNA_SECTION)
-        self.assertIn("blink_observability must be both_eyes", _BLINK_DETECTION_LUNA_SECTION)
+        self.assertIn("mismatched transitional eyelid states", _BLINK_DETECTION_SECTION)
+        self.assertIn("not to this captured difference in eyelid openness", _BLINK_DETECTION_SECTION)
+        self.assertIn("A fully_closed eye is still observable as an eyelid", _BLINK_DETECTION_SECTION)
+        self.assertIn("blink_observability must be both_eyes", _BLINK_DETECTION_SECTION)
 
     def test_blink_planner_targets_balanced_openness_without_geometric_cloning(self):
         instruction = build_eye_repair_planning_instruction([{

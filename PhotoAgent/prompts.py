@@ -604,7 +604,7 @@ Intent: Use the supplied full photo for photographic context and each zoomed fac
 - Return exactly one result for every listed subject_index. Never output an issue result for a person not listed here.
 """
 
-_BLINK_DETECTION_LUNA_SECTION = """## Blink / eyelid physical-observation pass
+_BLINK_DETECTION_SECTION = """## Blink / eyelid physical-observation pass
 Intent: maximize recall of readable half-closed, fully closed, and one-eye-closed states. Report physical evidence first. Deterministic Python, not you, decides blink_candidate, intent labels, confidence, and should_fix.
 
 Use the matched face crop as primary eyelid evidence and the full photo only for expression and activity context. Inspect every listed person independently, including secondary people.
@@ -633,7 +633,7 @@ Strict laughter evidence requires all three observations simultaneously: active_
 Output compatibility fields in this observation pass as placeholders only: blink_candidate=false, eye_state="observation_only", severity="none", closure_intent="ambiguous", expression_coherence="unclear", blink_failure_confidence=0.0, and should_fix=false. Python overwrites them after validating the physical evidence. The Traditional-Chinese reason should concisely describe left/right eyelid morphology, readability, laughter muscle evidence, and any explicit closure context. Do not make a repair decision in reason.
 """
 
-_GAZE_DETECTION_LUNA_SECTION = """## Exact lens-contact detection
+_GAZE_DETECTION_SECTION = """## Exact lens-contact detection
 Intent: For every listed person, decide only whether the visible eyes point at the exact lens that captured this image. Do not decide whether the gaze is attractive, intentional, narratively appropriate, or worth editing. Do not produce a repair strategy; Python derives should_fix after this visual classification.
 
 ### Observation order
@@ -1122,7 +1122,7 @@ def build_overall_analysis_instruction(aspect_ratio_pref="auto", advanced_option
 
 
 def build_portrait_qc_instruction(persons):
-    """Call B of the gpt-5.6-luna two-pass split: given Call A's already-
+    """Call B of the analysis split: given Call A's already-
     finalized, ordered list of is_person=true subjects (label + box), judge
     each one's blink/hair/gaze/smile independently. Build persons with
     portrait_qc_persons(analysis), so every item carries its immutable
@@ -1136,11 +1136,11 @@ def build_portrait_qc_instruction(persons):
         + "\n\n"
         + _PORTRAIT_QC_FACE_CROP_EVIDENCE_SECTION
         + "\n"
-        + _BLINK_DETECTION_LUNA_SECTION
+        + _BLINK_DETECTION_SECTION
         + _HAIR_ANALYSIS_SECTION
         + _HAIR_CORRECTION_HANDOFF_SECTION
         + "\n"
-        + _GAZE_DETECTION_LUNA_SECTION
+        + _GAZE_DETECTION_SECTION
         + "\n"
         + _SMILE_ANALYSIS_SECTION
         + "\n## Portrait-QC responsibilities\n"
@@ -1149,7 +1149,7 @@ def build_portrait_qc_instruction(persons):
 
 
 def build_eye_repair_planning_instruction(targets):
-    """Optional Luna Call C. Only people who passed the deterministic blink
+    """Optional Call C. Only people who passed the deterministic blink
     and/or gaze gate are included, so this prompt plans execution without
     re-deciding whether either fix is approved.
     """
@@ -1310,11 +1310,11 @@ _BLINK_REPAIR_STRATEGY_SCHEMA = _schema_object({
     "failure_to_avoid": _schema_string_array(),
 })
 
-# Luna Call B reports recall-first physical evidence only.  The legacy fields
+# Call B reports recall-first physical evidence only.  The legacy fields
 # remain in the shape for downstream compatibility, but their final values are
-# overwritten by derive_luna_blink_decisions; the model is not authoritative
+# overwritten by derive_blink_decisions; the model is not authoritative
 # for blink_candidate or should_fix.
-_BLINK_DETECTION_LUNA_SCHEMA = _schema_object({
+_BLINK_DETECTION_SCHEMA = _schema_object({
     "blink_observability": _schema_enum(("both_eyes", "one_eye", "unreadable")),
     "eyelid_detail_quality": _schema_enum(("readable", "borderline", "unreadable")),
     "left_eye_state": _schema_enum((
@@ -1399,10 +1399,10 @@ _GAZE_REPAIR_STRATEGY_SCHEMA = _schema_object({
     "failure_to_avoid": _schema_string_array(),
 })
 
-# Luna Call B deliberately stops at physical observation and exact-lens
+# Call B deliberately stops at physical observation and exact-lens
 # classification.  should_fix and the full repair strategy are added by
 # deterministic Python and an optional repair-planning Call C respectively.
-_GAZE_DETECTION_LUNA_SCHEMA = _schema_object({
+_GAZE_DETECTION_SCHEMA = _schema_object({
     "gaze_observability": _schema_enum(("both_eyes", "one_eye", "unreadable")),
     "eye_detail_quality": _schema_enum(("readable", "borderline", "unreadable")),
     "head_pose": _schema_enum(("frontal", "slight_yaw", "strong_yaw", "profile", "rear_or_hidden", "unclear")),
@@ -1826,9 +1826,9 @@ def merge_reframe_result(analysis, reframe, aspect_ratio_pref):
 _PERSON_ISSUES_SCHEMA = _schema_object({
     "subject_index": _schema_integer(),
     "local_detection_index": _schema_integer(),
-    "blink_issue": _BLINK_DETECTION_LUNA_SCHEMA,
+    "blink_issue": _BLINK_DETECTION_SCHEMA,
     "hair_issue": _HAIR_ISSUE_SCHEMA,
-    "gaze_issue": _GAZE_DETECTION_LUNA_SCHEMA,
+    "gaze_issue": _GAZE_DETECTION_SCHEMA,
     "smile_issue": _SMILE_STATE_SCHEMA,
 })
 
@@ -2174,7 +2174,7 @@ def resolve_user_blink_request(issue):
     automatic verdict, and this only supplies a repair target for a
     manually-enabled should_fix=false row, via the same blink_repair_strategy
     key the rich "Accidental blink repair priority" block (build_edit_prompt)
-    already reads for a Luna-derived repair. The fixed strategy always wins
+    already reads for a Call-C-derived repair. The fixed strategy always wins
     over whatever partial dict the analyzer wrote for a should_fix=false row,
     since the point is a deterministic, user-authored instruction rather than
     a refinement of the analyzer's own (here, negative) judgement.
@@ -2256,8 +2256,8 @@ def derive_hair_decisions(analysis):
     return cleaned
 
 
-def derive_luna_blink_decisions(analysis):
-    """Turn Luna Call B's recall-first eyelid observations into the legacy
+def derive_blink_decisions(analysis):
+    """Turn Call B's recall-first eyelid observations into the legacy
     blink_issue decision shape.
 
     Physical closure detection is intentionally broader than automatic edit
@@ -2812,8 +2812,8 @@ def _fallback_gaze_repair_strategy(issue, label):
     }
 
 
-def derive_luna_gaze_decisions(analysis):
-    """Convert Luna Call B's observation-only gaze result into the legacy
+def derive_gaze_decisions(analysis):
+    """Convert Call B's observation-only gaze result into the legacy
     downstream gaze_issue shape.  The strict positive gate and should_fix
     threshold live here so prompt wording cannot silently change them.
     """
@@ -2845,7 +2845,7 @@ def derive_luna_gaze_decisions(analysis):
         except (TypeError, ValueError):
             miss_confidence = 0.0
 
-        # Cross-check against derive_luna_blink_decisions, which runs first
+        # Cross-check against derive_blink_decisions, which runs first
         # (see openai_client.py's two-pass call order) and already wrote the
         # deterministically-derived eyelid state onto this same subject's
         # blink_issue. The hard gaze rule requires
@@ -2995,7 +2995,7 @@ def derive_luna_gaze_decisions(analysis):
 
 def eye_repair_targets(analysis):
     """Union of every person whose blink and/or gaze gate approved a fix --
-    the shared gate for Luna Call C, which now plans both topics per person
+    the shared gate for Call C, which now plans both topics per person
     instead of gaze alone.
     """
     targets = []
@@ -5059,13 +5059,13 @@ Approved-repair override:
     has_person = _has_person(analysis)
     blink_block = ""
     blink_items_to_fix = approved_blink_items(analysis)
-    # blink_repair_strategy otherwise only exists on luna's
-    # _BLINK_DETECTION_LUNA_SCHEMA (derive_luna_blink_decisions always sets it
-    # once Call B has run) -- a non-luna model's blink_issue never carries
-    # this key on its own, so absent a forced row this stays False there and
-    # the generic template below is byte-for-byte unchanged. A user-forced
-    # row (resolve_user_blink_request, above) always carries the key, on any
-    # model, since it is the one place asking for it regardless of analysis.
+    # blink_repair_strategy otherwise only exists on Call B's
+    # _BLINK_DETECTION_SCHEMA (derive_blink_decisions always sets it once
+    # Call B has run) -- an old single-call analysis's blink_issue never
+    # carries this key on its own, so absent a forced row this stays False
+    # there and the generic template below applies. A user-forced row
+    # (resolve_user_blink_request, above) always carries the key, since it is
+    # the one place asking for it regardless of analysis.
     blink_has_repair_strategy = any(
         isinstance(item.get("blink_repair_strategy"), dict) for item in blink_items_to_fix
     )
