@@ -51,7 +51,6 @@ from prompts import (
     with_reframing_proposal,
 )
 from photo_agent.feature_resolver import build_blink_pass_targets
-from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
 
 BLINK_REPAIR_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 BLINK_REPAIR_QUALITY = "high"
@@ -118,8 +117,7 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
 
     Under the two-call path (single_pass_edit=False), Step 5 is told to leave
     gaze and eyelid state untouched even when a fix is approved (the
-    include_gaze/include_blink gates in feature_resolver and the deferred
-    blocks in build_edit_prompt), so this pass is the ONLY place those
+    include_gaze/include_blink gates in feature_resolver), so this pass is the ONLY place those
     repairs happen. A single call bundling them with exposure/crop/skin/style
     reliably applies the coarse, whole-frame changes but often no-ops or
     under-applies the fine, localized eye work; a call whose prompt contains
@@ -131,7 +129,7 @@ def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
 
     Each toggle (gaze_contact_detection / eye_closed_detection) and each
     per-person opt-out (_disabled_issue_subject_indices) is honoured here as
-    well as in build_edit_prompt, since this pass rebuilds its own item lists
+    well as in the edit prompt, since this pass rebuilds its own item lists
     from the analysis. resolve_user_gaze_request / build_blink_pass_targets
     turn a manually-forced row into a real repair target.
 
@@ -204,7 +202,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     advanced_options: the Advanced Settings toggles dict (e.g.
     {"eye_closed_detection": False}). These do not change the one-time
     analysis; they are stored on the result and enforced when repairs are
-    reviewed and applied (see _run_eye_repair_pass and build_edit_prompt).
+    reviewed and applied (see _run_eye_repair_pass and photo_agent.edit_prompt).
     calm_hair and smile_adjustment/smile_level are likewise edit-only, but
     represent transformations the user elects rather than detected-defect
     filters.
@@ -230,7 +228,7 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # original" here but switches to "Auto" on the analyze-preview screen
     # before regenerating) knows recommended_aspect_ratio="original" was
     # forced by that earlier choice, not a genuine model judgment -- see
-    # build_edit_prompt's use of this field.
+    # build_framing_sections' use of this field.
     analysis["_aspect_ratio_pref_at_analysis"] = aspect_ratio
     # Geometry, not model-authored prose, owns the executable output ratio.
     # Resolve every preference here so the review screen already shows the
@@ -278,8 +276,8 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # debug-UI /rerun both hand them back automatically, with the stored
     # analysis recording which corrections that run allowed.
     # Recorded, not applied here: eye_closed_detection/hair_mess_detection/
-    # gaze_contact_detection now only gate the EDIT stage (build_edit_prompt's
-    # own strip_disabled_topic_items call) -- analysis always runs full
+    # gaze_contact_detection now only gate the EDIT stage (selections'
+    # strip_for_toggles and the compact contracts) -- analysis always runs full
     # detection regardless of these three, so the review screen shows every
     # genuine finding and a later revise can turn a toggle back on without
     # re-analyzing the photo.
@@ -403,8 +401,8 @@ def finish_stage(
 
     single_pass_edit: skip Step 5b (see _run_eye_repair_pass) and fall back
     to having Step 5's own edit call bundle any approved gaze/blink fix in with
-    everything else (build_edit_prompt's single_pass_edit-gated gaze_block/
-    blink_block, prompts.py). Under the two-call path (single_pass_edit=False),
+    everything else (the compact prompt's include_gaze/include_blink gates,
+    feature_resolver.py). Under the two-call path (single_pass_edit=False),
     Step 5 is instead told to leave gaze and eyelid state untouched and Step 5b
     performs 100% of any approved gaze/blink repair as an isolated second pass -- so
     single_pass_edit (the default) trades that dedicated pass's reliability
@@ -429,6 +427,8 @@ def finish_stage(
         # result metadata is built so no downstream path can execute it.
         analysis = strip_body_reshape(analysis)
     prompts = dict(analysis.get("prompts") or {})
+    # Written by the removed legacy edit prompt; a re-run must not carry it forward.
+    prompts.pop("image_edit_raw", None)
     timings = dict(analysis.get("timings") or {})
     usage = dict(analysis.get("usage") or {})
 
@@ -501,10 +501,9 @@ def finish_stage(
             aspect_ratio=aspect_ratio,
             single_pass_edit=single_pass_edit,
         )
-        prompts["image_edit_raw"] = edit_result.get("raw_prompt") or edit_prompt
         prompts["image_edit"] = edit_prompt
         prompts["image_edit_resolution"] = edit_result.get("prompt_resolution")
-        prompts["image_edit_strategy"] = edit_result.get("prompt_strategy") or DEFAULT_EDITOR_PROMPT_STRATEGY
+        prompts["image_edit_strategy"] = edit_result.get("prompt_strategy") or "resolved_compact"
         usage["Step 5 - image_edit"] = edit_result.get("usage")
         timings["Step 5 - image_edit"] = time.time() - t0
         image_b64 = edit_result["image_b64"]
@@ -591,6 +590,8 @@ def finish_stage(
         timings["Step 5 - image_edit"] = time.time() - t0
         logger.info("Step 5 done in %.2fs: local enhancement applied", timings["Step 5 - image_edit"])
         prompts["image_edit"] = None
+        prompts["image_edit_resolution"] = None
+        prompts["image_edit_strategy"] = None
         prompts["gaze_repair_pass"] = None
         usage["Step 5 - image_edit"] = None
         usage["Step 5b - gaze_repair_pass"] = None

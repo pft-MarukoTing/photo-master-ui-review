@@ -12,7 +12,8 @@ from pathlib import Path
 import unittest
 from unittest.mock import Mock
 
-from prompts import build_edit_prompt, get_body_reshape_edit_prompt
+from photo_agent.feature_resolver import build_compact_editor_prompt
+from prompts import get_body_reshape_edit_prompt
 
 
 BODY_PROMPT = "自然修飾整體身形比例並保持真實協調"
@@ -25,9 +26,7 @@ def analyze_then_edit(image, analyze_fn, edit_fn, *, editor_prompt_fn=None):
     if not body_prompt:
         raise ValueError("analysis did not contain an enabled Body Reshape edit prompt")
     if editor_prompt_fn is None:
-        editor_prompt_fn = lambda value: build_edit_prompt(
-            value, {"intent": "自然"}, "自然", "", None
-        )
+        editor_prompt_fn = lambda value: build_compact_editor_prompt(value, "自然", "", None)[0]
     actual_editor_prompt = editor_prompt_fn(analysis)
     result = edit_fn(image, actual_editor_prompt)
     return {
@@ -65,7 +64,7 @@ def _load_record(path):
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
     analysis = payload.get("analysis", payload) if isinstance(payload, dict) else {}
     body_prompt = get_body_reshape_edit_prompt(analysis)
-    actual_prompt = build_edit_prompt(analysis, {"intent": "自然"}, "自然", "", None)
+    actual_prompt = build_compact_editor_prompt(analysis, "自然", "", None)[0]
     return {
         "analysis": analysis,
         "body_edit_prompt": body_prompt,

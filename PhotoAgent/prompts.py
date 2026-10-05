@@ -390,10 +390,9 @@ def get_body_reshape_edit_prompt(analysis):
 #
 # The vocabulary for correction_axes: which property of the photograph a
 # correction_plan item moves. Defined here, above the analysis instructions, because
-# it has to be the single source for three things that must not drift apart --
-# the vocabulary the analysis model is given, the axes the edit prompt gates on
-# (CORRECTION_AXES). An
-# axis the analysis model invents but the edit prompt does not know is dropped
+# it has to be the single source for two things that must not drift apart --
+# the vocabulary the analysis model is given and the axes the edit side gates
+# on. An axis the analysis model invents but the edit prompt does not know is dropped
 # silently, which is exactly the failure a hand-maintained second copy invites.
 #
 # The description doubles as the model's definition of the axis, so it has to be
@@ -415,17 +414,13 @@ AXIS_DEFINITIONS = {
     "other": "anything the list above does not cover",
 }
 
-CORRECTION_AXES = tuple(AXIS_DEFINITIONS)
-
 _AXIS_VOCABULARY = ", ".join(f'"{axis}" ({desc})' for axis, desc in AXIS_DEFINITIONS.items())
 
 # Near-misses the analysis model actually produces despite being handed the
 # vocabulary -- "noise" showed up on 3 of 6 photos in the first batch, tagging
-# denoise items that belong to "sharpen". Left unmapped it silently breaks the
-# kept-axis subtraction in resolve_rejected_axes (an approved denoise item fails
-# to protect `sharpen`, so a rejected sharpen item locks it anyway and the prompt
-# contradicts itself). Cheaper and more robust to absorb the synonyms than to
-# keep tightening the instruction.
+# denoise items that belong to "sharpen". Left unmapped, an item tagged with a
+# near-miss is invisible to the axis gates (_axis_set). Cheaper and more robust
+# to absorb the synonyms than to keep tightening the instruction.
 AXIS_ALIASES = {
     "noise": "sharpen", "denoise": "sharpen", "clarity": "sharpen", "sharpness": "sharpen",
     "brightness": "exposure", "exposures": "exposure",
@@ -2154,7 +2149,7 @@ def resolve_user_blink_request(issue):
     Mirrors resolve_user_hair_request: should_fix keeps recording the
     automatic verdict, and this only supplies a repair target for a
     manually-enabled should_fix=false row, via the same blink_repair_strategy
-    key the rich "Accidental blink repair priority" block (build_edit_prompt)
+    key the compact blink contract (feature_resolver._blink_contracts)
     already reads for a Call-C-derived repair. The fixed strategy always wins
     over whatever partial dict the analyzer wrote for a should_fix=false row,
     since the point is a deterministic, user-authored instruction rather than
@@ -2172,12 +2167,11 @@ def resolve_user_gaze_request(issue):
 
     Mirrors resolve_user_blink_request: a fixed "look at the camera" repair
     target via gaze_repair_strategy, applied only when the user manually
-    enables a should_fix=false row. Used both by build_edit_prompt's own
-    gaze_block and by pipeline._run_eye_repair_pass's independent second
-    pass, which re-derives its own item list from analysis rather than
-    reusing build_edit_prompt's -- both call sites need this applied, or a
-    forced gaze fix silently never executes under the two-stage
-    (single_pass_edit=False) flow.
+    enables a should_fix=false row. Used both by the compact gaze contract
+    (feature_resolver._gaze_contracts) and by approved_gaze_items for the
+    Step 5b second pass, which re-derives its own item list from analysis --
+    both call sites need this applied, or a forced gaze fix silently never
+    executes under the two-stage (single_pass_edit=False) flow.
     """
     resolved = dict(issue or {})
     if not resolved.get("_user_forced") or resolved.get("should_fix"):
@@ -2620,8 +2614,7 @@ FOLD_MATCH_RULE = (
 def _fallback_blink_repair_strategy(issue, label):
     """Deterministic pre-Call-C strategy, and Call C's own failure fallback.
 
-    Ports the wording build_edit_prompt's blink_block used to hardcode
-    (reopen/relax naturally, avoid doll-like/oversized/symmetrical eyes,
+    Carries the generic blink-repair wording (reopen/relax naturally, avoid doll-like/oversized/symmetrical eyes,
     match lighting, never convert an intentional wink/laugh/sleep/etc. into
     open eyes) into the structured shape gaze repairs already use, so
     behavior is unchanged the moment this ships, before Call C ever
@@ -3488,21 +3481,6 @@ Targets:
 """ + "\n".join(target_lines)
 
 
-# The photo-specific target and approved plan already name the operations. This
-# block tells the image model how to execute them without adding a second grade.
-COLOR_CRAFT_DIRECTION = (
-    "Realize the Finished light and color target through the approved correction plan and any selected style as one coherent photographic grade. "
-    "Make every named light and color adjustment clearly visible, with natural tonal transitions and believable material rendering. "
-    "Let the approved scene palette change independently from complexion; skin follows the dedicated skin instructions in this prompt."
-)
-
-# A short end-state check is more useful than repeating the adjustment recipe.
-COLOR_GRADE_CHECK = (
-    "Before finishing, verify that the result matches the Finished light and color target, every approved light/color adjustment is visible, "
-    "and scene structures and materials remain recognizable."
-)
-
-
 # ── Rejected-axis gating ──────────────────────────────────────────────────────
 #
 # Dropping an unchecked item from correction_plan is not enough to stop the edit
@@ -3528,51 +3506,6 @@ COLOR_GRADE_CHECK = (
 # at the top of this file (AXIS_DEFINITIONS), since the analysis instruction has
 # to hand the same list to the analysis model.
 
-def build_color_craft_direction(rejected_axes=()):
-    # This authorizes only changes already named by the approved plan or style,
-    # so it cannot recreate an unchecked correction through generic craft prose.
-    return COLOR_CRAFT_DIRECTION
-
-
-def build_color_grade_check(rejected_axes=()):
-    return COLOR_GRADE_CHECK
-
-
-def resolve_rejected_axes(analysis):
-    """Axes the user switched off, as tagged on the unchecked correction_plan items.
-
-    An axis only counts as rejected when NO kept item still needs it: a kept
-    "darken the busy background" and a rejected "brighten the whole frame" can
-    both carry `contrast`, and locking contrast to the original there would break
-    the correction the user did approve. Falls back to an empty list whenever the
-    tags are missing or untrustworthy, which leaves the previous behavior --
-    rejected item text only -- intact.
-    """
-    forced_original_composition = bool(analysis.get("_preserve_original_composition"))
-    rejected = _axis_set(analysis.get("rejected_axes"))
-    if not rejected or not _axes_aligned(analysis):
-        return ["crop"] if forced_original_composition else []
-    kept = _axis_set(analysis.get("correction_axes"))
-    # An unrecognized tag on a KEPT item is not symmetric with one on a rejected
-    # item: unknown rejected axes simply fall out of the CORRECTION_AXES loop
-    # below, but an unknown kept axis means an approved correction has silently
-    # lost its ability to protect itself, and we cannot tell whether it overlaps
-    # something being rejected. Give up on clause removal for this edit rather
-    # than emit a prompt that forbids what it also asks for -- the per-item
-    # correction_inverse text still holds the line, it just isn't reinforced.
-    unknown_kept = kept - set(CORRECTION_AXES)
-    if unknown_kept:
-        logger.warning(
-            "approved corrections carry unrecognized axes %s; skipping axis gating for this edit "
-            "(add them to AXIS_DEFINITIONS or AXIS_ALIASES)", sorted(unknown_kept),
-        )
-        return ["crop"] if forced_original_composition else []
-    return [
-        axis for axis in CORRECTION_AXES
-        if (axis in rejected and axis not in kept) or (axis == "crop" and forced_original_composition)
-    ]
-
-
 _ORIGINAL_COMPOSITION_PRESERVE = (
     "維持原圖的長寬比、完整畫面邊界、主體大小與位置及留白平衡；"
     "不做構圖裁切、不擴圖，也不重新構圖。水平與透視由獨立的校正項目決定。"
@@ -3588,8 +3521,7 @@ def apply_rejected_reframing(analysis, aspect_ratio):
     finish-stage boundary so every editor, QA, and local-only execution sees
     the same no-reframe decision.
     """
-    # This decision is narrower than the general resolve_rejected_axes gate:
-    # an unrelated kept item carrying an unknown model-invented axis must not
+    # This decision is deliberately narrow: an unrelated kept item carrying an unknown model-invented axis must not
     # allow a clearly aligned, explicitly rejected crop to survive.  Only a
     # still-approved crop item can keep reframing active.
     rejected_crop = "crop" in _axis_set(analysis.get("rejected_axes"))
@@ -4198,59 +4130,6 @@ def _build_crop_instruction_block(
     return "\n".join(lines)
 
 
-def _box_note(box):
-    """The `reason` an analysis box carries -- the part of it that describes
-    what matters. The x/y/w/h alongside it are the part that keeps landing
-    somewhere else, so the edit prompt takes the words and leaves the numbers."""
-    if isinstance(box, dict):
-        return (box.get("reason") or "").strip()
-    return ""
-
-
-def _build_framing_intent_block(analysis):
-    """What the analysis wanted protected, stated semantically.
-
-    This used to be three lines of raw JSON boxes (ROI, subject extent,
-    protected regions). Handing the edit model coordinates it cannot verify
-    against a photograph it can see produced the contradiction this block now
-    avoids: a box over empty background presented as "the subject", next to a
-    scene description naming someone standing elsewhere.
-    """
-    lines = []
-    anchor = (analysis.get("roi_anchor") or "").strip()
-    if anchor:
-        lines.append(f"- Where the eye should land: {anchor}")
-
-    roi_note = _box_note(analysis.get("roi_box"))
-    if roi_note:
-        lines.append(f"- Most important thing to keep in frame: {roi_note}")
-
-    extent_note = _box_note(analysis.get("subject_extent_box"))
-    if extent_note:
-        lines.append(f"- How much of the subject the framing needs: {extent_note}")
-
-    protected = []
-    for region in analysis.get("protected_regions") or []:
-        if not isinstance(region, dict):
-            continue
-        label = (region.get("label") or "").strip()
-        reason = (region.get("reason") or "").strip()
-        if label and reason:
-            protected.append(f"{label}（{reason}）")
-        elif label or reason:
-            protected.append(label or reason)
-    if protected:
-        lines.append(f"- Also worth keeping: {'; '.join(protected)}")
-
-    if not lines:
-        return ""
-
-    return (
-        "What matters in this photograph, described rather than located -- find each one in the image itself:\n"
-        + "\n".join(lines)
-    )
-
-
 # "鏡頭"/camera-lens language is a reliable gaze-repair signal on its own --
 # blink-repair items ask to reopen/relax eyes and never reference the camera
 # lens or gaze direction, so this does not need to be more clever than that.
@@ -4271,12 +4150,8 @@ _SMILE_LEAK_KEYWORDS = ("笑", "嘴角", "smile", "grin")
 def _is_disabled_topic_text(text, gaze_enabled, blink_enabled, hair_enabled, smile_enabled=True):
     """True if `text` names a topic whose Advanced Settings toggle is off.
 
-    Factored out of strip_disabled_topic_items so build_edit_prompt can apply
-    the same keyword match to detected_issues -- free-text analysis notes
-    that, unlike correction_plan, strip_disabled_topic_items never touches,
-    but that still argue for the disabled repair just as loudly (see the
-    "aesthetic_diagnosis, detected_issues, ..." comment above
-    build_color_craft_direction).
+    Shared by strip_disabled_topic_items' correction_plan, inverse and recipe
+    filters.
     """
     lowered = str(text or "").lower()
     if not gaze_enabled and any(kw.lower() in lowered for kw in _GAZE_LEAK_KEYWORDS):
@@ -4483,21 +4358,6 @@ def expand_subject_boxes_to_contain_faces(analysis, face_boxes):
     return {**analysis, "subjects": new_subjects}
 
 
-def _build_skin_identity_lines(analysis):
-    """Whose skin each face is, one line per person, from subjects[].skin."""
-    lines = []
-    for subject in analysis.get("subjects") or []:
-        if not isinstance(subject, dict) or not subject.get("is_person"):
-            continue
-        skin = (subject.get("skin") or "").strip()
-        label = (subject.get("label") or "").strip()
-        if skin and label and skin not in {"不適用", "N/A"}:
-            lines.append(f"- {label}: {skin}")
-    if not lines:
-        return "- Whose skin each face is, you read from the photograph itself: the depth and undertone a face already has are what it keeps."
-    return "\n".join(lines)
-
-
 # Trigger on is_person too, not just subject_category: a 旅行 /
 # 街拍 photo still has faces, and both the skin rules and the smile block are
 # about faces rather than about what the photo is nominally of.
@@ -4531,7 +4391,6 @@ SMILE_TARGET_DESCRIPTIONS = {
 }
 
 _SMILE_INTENSITIES = ("neutral", "gentle", "broad", "laughing")
-_SMILE_INTENSITY_RANK = {level: rank for rank, level in enumerate(_SMILE_INTENSITIES)}
 _SMILING_INTENSITIES = ("gentle", "broad", "laughing")
 _SMILE_INTENSITY_ALIASES = {
     "none": "neutral", "no_smile": "neutral", "no smile": "neutral",
@@ -4629,46 +4488,6 @@ def final_smile_by_subject(analysis):
     return final
 
 
-def _smile_craft_rules(target_levels=()):
-    """Short execution rules, adding level-specific craft only when relevant."""
-    rules = [
-        "- Render each named target as a natural, coordinated expression.",
-        "- Preserve identity, facial anatomy and proportions, gaze direction, head pose, skin texture, lighting, "
-        "and all unrelated image content.",
-    ]
-    if "gentle" in target_levels:
-        rules.append(
-            "- For gentle, use the minimum anatomically plausible change for a small but clearly readable smile. "
-            "Preserve mouth anatomy, proportions, and natural asymmetry—not the captured neutral or transitional "
-            "expression. Allow enough movement to reach gentle; keep curvature smooth, corner movement modest, and "
-            "the surrounding expression coordinated. When the source is caught in speech or has incidentally parted "
-            "lips, resolve that transitional state into a stable smile rather than retaining the separation and merely "
-            "reshaping its edges. Settle the lips as appropriate for this face and let the surrounding expression "
-            "respond subtly, so the result reads as an intentional gentle smile rather than speech, surprise, or a "
-            "vacant pose. Modify the existing mouth, not a generic smile shape."
-        )
-    if "laughing" in target_levels:
-        rules.append(
-            "- For laughing, make joy coherent across the whole face. Relax brow tension only when it conflicts with "
-            "laughter; preserve brow anatomy, natural asymmetry, and compatible movement. Do not leave a worried, "
-            "stern, or angry brow."
-        )
-    rules.extend([
-        "- Keep facial texture continuous and expression folds soft and proportional to the person's anatomy and "
-        "target intensity; do not add or deepen lines to signal the smile.",
-    ])
-    rules.append(
-        "- Reach the exact target. This block overrides generic instructions to preserve the original expression or "
-        "mouth for named subjects; preserve everyone and everything else."
-    )
-    return "\n".join(rules)
-
-
-SMILE_PRESERVATION_BLOCK = """Smile preservation instruction (highest priority):
-- No smile change is approved for this image. Preserve every person's smile intensity and expression as captured.
-- Approved blink or gaze repair may still change only the eye properties authorized elsewhere in this prompt."""
-
-
 def _read_smile_states(analysis):
     """Readable faces as {label, box, current, adjust_safe}.
 
@@ -4696,9 +4515,9 @@ def _read_smile_states(analysis):
 
 def smile_qa_expectation(analysis):
     """What this edit's smile setting was asked to produce, in one line, or ""
-    when it asked for no change -- the same three branches build_smile_block
-    emits, so QA is never sent looking for a change the edit prompt did not
-    request."""
+    when it asked for no change -- built from the same resolve_smile_targets
+    the edit prompt uses, so QA is never sent looking for a change the edit
+    prompt did not request."""
     if not _has_person(analysis):
         return ""
     level = smile_level(analysis)
@@ -4712,83 +4531,6 @@ def smile_qa_expectation(analysis):
     if level == "auto":
         return "every person at neutral -> gentle; anyone already smiling is unchanged"
     return f"every person whose expression is readable -> {level}"
-
-
-def _smile_target_line(target):
-    """One person's current and target intensity for the edit model."""
-    where = json.dumps(target["box"], ensure_ascii=False)
-    current = target["current"]
-    target_level = target["target"]
-    if current == "neutral" and target_level == "gentle":
-        direction = (
-            "Make the minimum natural change that clearly reads as gentle rather than neutral at normal viewing "
-            "size; an ambiguous pleasant or neutral result is a failed no-op."
-        )
-    elif current == "laughing" and target_level == "broad":
-        direction = (
-            "Settle active laughter into a strong, composed cheerful smile. Reduce laughter-specific intensity "
-            "across the whole expression while preserving clear joy; the result must read as broad, not laughing."
-        )
-    elif _SMILE_INTENSITY_RANK[target_level] < _SMILE_INTENSITY_RANK[current]:
-        direction = (
-            f'Reduce the smile until it clearly reads as {target_level}, not {current}; do not preserve the higher '
-            f'intensity.'
-        )
-    else:
-        direction = (
-            f'Increase the smile until it clearly reads as {target_level}, not {current}.'
-        )
-    return (
-        f'- {target["label"]} (approximately at {where}): '
-        f'current_smile: {current}; target_smile: {target_level} '
-        f'({SMILE_TARGET_DESCRIPTIONS[target_level]}). Direction: {direction}'
-    )
-
-
-def build_smile_block(analysis):
-    """The 笑容調整 instruction for one edit, or "" for a photo with no people.
-
-    Three shapes: the named-person execution block when the chosen level moves
-    someone's mouth; the level stated for the photograph as a whole when the
-    analysis reported on no mouth at all, so a missing reading cannot silently
-    drop a setting the user chose; and the preservation block when the switch
-    is off or no face the analysis did read has anywhere left to move.
-    """
-    if not _has_person(analysis):
-        return ""
-    level = smile_level(analysis)
-    if level is None:
-        return SMILE_PRESERVATION_BLOCK
-
-    targets = resolve_smile_targets(analysis)
-    if targets:
-        lines = "\n".join(_smile_target_line(t) for t in targets)
-        target_levels = {t["target"] for t in targets}
-        requested_label = (
-            SMILE_LEVEL_LABELS[next(iter(target_levels))]
-            if len(target_levels) == 1 else "個別人物設定（見下列目標）"
-        )
-        return f"""Smile adjustment (user-selected, mandatory). Requested level: {requested_label}
-- Apply the requested smile intensity to each person named below.
-{lines}
-{_smile_craft_rules(target_levels)}"""
-
-    if _read_smile_states(analysis):
-        return SMILE_PRESERVATION_BLOCK
-
-    if level == "auto":
-        goal = (
-            f'- Infer each readable person\'s current overall smile intensity. Change neutral to gentle '
-            f'({SMILE_TARGET_DESCRIPTIONS["gentle"]}); preserve anyone already smiling.'
-        )
-    else:
-        goal = (
-            f'- For every person whose expression is readable: target_smile: {level} '
-            f'({SMILE_TARGET_DESCRIPTIONS[level]}).'
-        )
-    return f"""Smile adjustment (user-selected, mandatory). Requested level: {SMILE_LEVEL_LABELS[level]}
-{goal}
-{_smile_craft_rules({'gentle' if level == 'auto' else level})}"""
 
 
 def approved_blink_items(analysis):
@@ -4967,803 +4709,6 @@ def build_framing_sections(analysis, crop_plan, aspect_ratio_pref="auto", source
             expand_plan=expand_plan, target_ratio_label=rec_aspect,
         )
     return {"crop_instruction": crop_instruction_block, "style_instruction": style_block}
-
-
-def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False, return_sections=False):
-    analysis = strip_disabled_topic_items(analysis)
-    if not body_reshape_enabled():
-        analysis = strip_body_reshape(analysis)
-    rejected_axes = resolve_rejected_axes(analysis)
-    color_craft_direction = build_color_craft_direction(rejected_axes)
-    color_grade_check = build_color_grade_check(rejected_axes)
-
-    # Computed once, here, rather than separately next to each of the
-    # blink/hair/gaze/smile blocks below: detected_issues (just below) needs
-    # them just as much as those blocks do, since a toggle being off does
-    # not stop the analysis model from still describing that problem in its
-    # free-text notes -- should_fix=false and the "don't add a correction_plan
-    # item" instruction only ever governed the structured issue arrays.
-    advanced_options = analysis.get("_advanced_options") or {}
-    gaze_contact_detection_enabled = advanced_options.get("gaze_contact_detection", True)
-    eye_closed_detection_enabled = advanced_options.get("eye_closed_detection", True)
-    hair_mess_detection_enabled = advanced_options.get("hair_mess_detection", True)
-    smile_adjustment_enabled = advanced_options.get("smile_adjustment", True)
-
-    user_instruction = analysis.get("user_instruction") or {}
-    effective_user_direction = (
-        user_instruction.get("normalized_user_direction") or user_direction or ""
-    )
-
-    # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令):
-    # send the user's raw text verbatim as the WHOLE edit-model prompt,
-    # bypassing every analysis-derived block built below (style/crop/color-
-    # grade/retouch-priority/...).
-    if user_instruction.get("overwrite_prompt") and effective_user_direction.strip():
-        prompt = effective_user_direction.strip()
-        return (prompt, {"crop_instruction": "", "style_instruction": ""}) if return_sections else prompt
-
-    # Same leak strip_disabled_topic_items guards against in correction_plan,
-    # applied here too: detected_issues is free text the analysis model writes
-    # regardless of any toggle, so "右側男性雙眼閉合未鏡頭對焦" or "眼神皆未對鏡頭"
-    # can and does show up here even when the matching toggle is off. Filtered
-    # only for this edit-prompt string -- the analysis dict itself (and
-    # whatever review screen reads it) keeps the full list, since the
-    # disabled-toggle overrides explicitly ask for these fields to still be
-    # filled in "for reference only".
-    detected_issues = "; ".join(
-        item for item in (analysis.get("detected_issues") or [])
-        if not _is_disabled_topic_text(item, gaze_contact_detection_enabled, eye_closed_detection_enabled, hair_mess_detection_enabled, smile_adjustment_enabled)
-    )
-    correction_plan = "; ".join(analysis.get("correction_plan") or [])
-    preserve_rules = "; ".join(analysis.get("preserve_rules") or [])
-    eye_blink_issues = subject_issue_items(analysis, "blink_issue")
-    hair_issues = subject_issue_items(analysis, "hair_issue")
-    gaze_contact_issues = subject_issue_items(analysis, "gaze_issue")
-    body_reshape_block = build_body_reshape_edit_block(analysis)
-    has_body_reshape = bool(body_reshape_block)
-    approved_edit_sources = (
-        "the user-approved correction plan, the analysis-approved body reshape instructions, and user's extra direction"
-        if has_body_reshape else
-        "the user-approved correction plan and user's extra direction"
-    )
-    repair_allowance = (
-        "If the analysis approved a gaze, blink, and/or body repair for a named subject, follow the analysis-defined method and allowances for that subject."
-        if has_body_reshape else
-        "If the analysis approved a gaze and/or blink repair for a named subject, follow the analysis-defined method and allowances for that subject."
-    )
-    faithful_repair_allowance = (
-        "If an approved gaze, blink, and/or body repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."
-        if has_body_reshape else
-        "If an approved gaze and/or blink repair exists for a named subject, follow the analysis-defined repair method and allowances for that subject; this is not permission for unrelated pose or viewpoint changes."
-    )
-    faithful_edit_sources = (
-        "the approved correction plan, analysis-approved body reshape instructions, preset finish, and user's extra direction"
-        if has_body_reshape else
-        "the approved correction plan, preset finish, and user's extra direction"
-    )
-    definitive_edit_sources = (
-        "The user-approved correction plan, analysis-approved body reshape instructions, and any user-selected style overrides above"
-        if has_body_reshape else
-        "The user-approved correction plan and any user-selected style overrides above"
-    )
-    definitive_edit_sources_faithful = (
-        "The user-approved correction plan and analysis-approved body reshape instructions"
-        if has_body_reshape else
-        "The user-approved correction plan"
-    )
-    framing_intent_block = _build_framing_intent_block(analysis)
-    crop_intent = json.dumps(analysis.get("crop_intent") or {}, ensure_ascii=False)
-    if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
-        # The analysis was run while the user had "keep original" selected, so
-        # its recommended_aspect_ratio/crop_box.aspect_ratio are forced to
-        # "original" by the analysis instruction -- not a genuine model
-        # judgment. The user has since switched to "Auto" for this edit, so
-        # that forced value must not leak in as if it were a real
-        # recommendation (it would otherwise silently keep pinning the output
-        # to the original ratio even though "Auto" was chosen).
-        rec_aspect = "no strong preference -- choose whichever aspect ratio best suits the subject and composition"
-        aspect_ratio_reason = "使用者於本次修圖選擇「Auto」；先前分析階段的原圖比例建議是使用者當時選擇「維持原圖比例」所致，非模型本身的判斷，故本次不採用。"
-    else:
-        rec_aspect = (
-            analysis.get("recommended_aspect_ratio") or
-            (analysis.get("crop_box") or {}).get("aspect_ratio") or
-            "original"
-        )
-        aspect_ratio_reason = analysis.get("aspect_ratio_reason") or ""
-
-    user_block = ""
-    if user_instruction.get("has_user_direction"):
-        explicit_priorities = "; ".join(user_instruction.get("explicit_priorities") or [])
-        explicit_prohibitions = "; ".join(user_instruction.get("explicit_prohibitions") or [])
-        agent_freedom = "; ".join(user_instruction.get("unspecified_agent_freedom") or [])
-        conflicts = "; ".join(user_instruction.get("conflicts") or [])
-        warning = user_instruction.get("warning") or ""
-        user_block = f"""User instruction priority:
-- User intent summary: {user_instruction.get("user_intent_summary") or ""}
-- Explicit priorities: {explicit_priorities}
-- Explicit prohibitions: {explicit_prohibitions}
-- Agent may also improve unspecified aspects conservatively: {agent_freedom}
-- Warning/conflicts: {conflicts} {warning}
-
-The user's explicit instruction is the top editing goal. Agent aesthetic improvements are allowed only when they support or do not conflict with the user's request."""
-
-    style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
-
-    has_style_overrides = bool(style_lines)
-    style_options = analysis.get("style_options") or {}
-    size_override_value = style_options.get("size")
-    has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
-    angle_override_value = style_options.get("angle")
-    has_vertical_angle_override = angle_override_value in {"high", "low", "eye"}
-    has_size_override = bool(size_override_value and size_override_value != "default")
-    has_wider_size_override = size_override_value in {"wide", "wider"}
-    has_closer_size_override = size_override_value in {"close", "closer"}
-
-    selected_lighting_style = style_options.get("lighting")
-    light_color_target_block = build_reviewed_light_color_target(
-        analysis,
-        fallback_intent=preset.get("intent", ""),
-        lighting_style=(
-            selected_lighting_style
-            if selected_lighting_style and selected_lighting_style != "default"
-            else None
-        ),
-    )
-
-    size_ratio_block = ""
-    if size_override_value == "wide":
-        size_ratio_block = (
-            "Quantified wide-framing target: make the main subject's visible frame ratio about 20% smaller than in the original image. "
-            "Aim for the subject's bounding-box height or dominant dimension to be roughly 80% of its original frame-relative size; "
-            "its area share may become roughly 65% of the original. "
-        )
-    elif size_override_value == "wider":
-        size_ratio_block = (
-            "Quantified wider-framing target: make the main subject's visible frame ratio about 40% smaller than in the original image. "
-            "Aim for the subject's bounding-box height or dominant dimension to be roughly 60% of its original frame-relative size; "
-            "its area share may become roughly 35% to 40% of the original. "
-        )
-
-    # The "original subject extent estimate: width=.., height=.., area=.." that
-    # used to be appended here was read straight off subject_extent_box/roi_box --
-    # the same estimated geometry that misses the subject. Nothing replaces it:
-    # the targets above are already stated relative to the original image, which
-    # the model can see, and size_ratio_block is interpolated three times, so any
-    # sentence added here costs triple.
-
-    style_block = build_framing_sections(analysis, crop_plan, aspect_ratio_pref, source_size)["style_instruction"]
-
-    correction_plan_block = ""
-    if analysis.get("correction_plan"):
-        correction_plan_block = f"""User-approved correction plan (highest priority -- this list has already been reviewed and confirmed by the user; apply every item below and do not add corrective or stylistic changes beyond this list, the style overrides above, and the user's extra direction, even if other analysis notes above suggest more):
-{correction_plan}
-
-Approved-repair override:
-- Items in this correction plan are commands, not optional suggestions.
-- The Finished light and color target above and this reviewed correction plan form one effective target. User-preserved choices override the original analyzer target for their named regions and properties.
-- Generic preservation, faithful-retouch, and minimal-change instructions must not cancel any item in this correction plan.
-- For an approved gaze repair, the editing method is defined by the analysis output itself: the matching correction_plan item, correction_inverse item, retouch_recipe item, and any per-subject gaze_repair_strategy.
-- Do not substitute a different generic gaze-repair method here. If the analysis explicitly allows local eye-direction change and/or local head/face alignment for a named subject, that allowance wins for that subject only."""
-
-    rejected_corrections = analysis.get("rejected_corrections") or []
-    negative_block = build_user_preserved_choices(analysis)
-
-    # Skin is the one color in a photo that viewers have an absolute reference
-    # for, so a global grade that reads fine on the background can still fail on
-    # skin.
-    has_person = _has_person(analysis)
-    blink_block = ""
-    blink_items_to_fix = approved_blink_items(analysis)
-    # blink_repair_strategy otherwise only exists on Call B's
-    # _BLINK_DETECTION_SCHEMA (derive_blink_decisions always sets it once
-    # Call B has run) -- an old single-call analysis's blink_issue never
-    # carries this key on its own, so absent a forced row this stays False
-    # there and the generic template below applies. A user-forced row
-    # (resolve_user_blink_request, above) always carries the key, since it is
-    # the one place asking for it regardless of analysis.
-    blink_has_repair_strategy = any(
-        isinstance(item.get("blink_repair_strategy"), dict) for item in blink_items_to_fix
-    )
-    if blink_items_to_fix and not single_pass_edit:
-        blink_block = """Eye-state preservation instruction (highest priority):
-- Do not perform any accidental-blink or closed-eye repair in this pass, even though the analysis approved one for a named subject -- that repair is deliberately deferred to a separate, later edit pass and is completely out of scope for this pass.
-- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, the edit intent, and correction_plan were all written to describe the approved fix, not to authorize performing it in this pass.
-- Preserve every visible person's eyelid state exactly as captured."""
-    elif blink_items_to_fix and blink_has_repair_strategy:
-        blink_targets = []
-        for item in blink_items_to_fix:
-            label = item.get("subject_label", "unnamed subject")
-            box = item.get("box") or {}
-            eye_state = item.get("eye_state", "unknown")
-            strategy = item.get("blink_repair_strategy") or {}
-            edit_instruction = strategy.get("edit_instruction") if isinstance(strategy, dict) else ""
-            target_eye_state = strategy.get("target_eye_state", "") if isinstance(strategy, dict) else ""
-            eyelid_adjustment = strategy.get("eyelid_adjustment", "") if isinstance(strategy, dict) else ""
-            repair_strength = strategy.get("repair_strength", "") if isinstance(strategy, dict) else ""
-            success_condition = strategy.get("success_condition", "") if isinstance(strategy, dict) else ""
-            preserve = strategy.get("preserve_during_repair") if isinstance(strategy, dict) else None
-            avoid = strategy.get("failure_to_avoid") if isinstance(strategy, dict) else None
-            photograph_states = {
-                "photograph-left": item.get("left_eye_state"),
-                "photograph-right": item.get("right_eye_state"),
-            }
-            source_state_text = "; ".join(
-                f"{side}={state or 'unclear'}" for side, state in photograph_states.items()
-            )
-            fully_closed_sides = [
-                side for side, state in photograph_states.items() if state == "fully_closed"
-            ]
-            match_requirement = (
-                "Follow the analysis-authored Target eye state and Eyelid adjustment below as the final-state authority."
-            )
-            paired_requirement = (
-                "Both eyes are blink-affected, including one that is only narrowed or half closed: open them together "
-                "to the single naturally open final eyelid state named by the analysis. Both upper lids gain "
-                "aperture from the photograph-side source states above -- an eye left at its captured narrowed or "
-                "half-closed opening fails this repair. Their final eye-opening height, iris exposure, lid "
-                "contours, double-eyelid fold shape, and visible crease-to-lash band width must match. "
-                + FOLD_MATCH_RULE
-            )
-            if len(fully_closed_sides) == 1:
-                closed_side = fully_closed_sides[0]
-                reference_side = "photograph-right" if closed_side == "photograph-left" else "photograph-left"
-                reference_state = photograph_states[reference_side]
-                if reference_state == "open":
-                    match_requirement = (
-                        f"Use the {reference_side} (open) eye as the reference. The repaired {closed_side} "
-                        "eye must match that reference eye's final eye-opening height, iris exposure, lid contours, "
-                        "and visible double-eyelid crease-to-lash band width. If another approved edit changes the "
-                        "reference eye, match its finished result rather than its captured closure amount."
-                    )
-                    repair_strength = "strong"
-                elif reference_state in {"half_closed", "narrowed_open"}:
-                    match_requirement = paired_requirement
-                    # Older saved Call-C plans often call this blink-affected
-                    # eye a "source reference".  Do not forward that stale
-                    # method beside the deterministic rule that explicitly
-                    # says neither captured aperture is the endpoint.
-                    eyelid_adjustment = "Use the coordinated paired-eye method in the mandatory match below."
-                    repair_strength = "strong"
-            elif (
-                all(state in {"fully_closed", "half_closed", "narrowed_open"} for state in photograph_states.values())
-                and any(state in {"fully_closed", "half_closed"} for state in photograph_states.values())
-            ):
-                match_requirement = paired_requirement
-                eyelid_adjustment = "Use the coordinated paired-eye method in the mandatory match below."
-                repair_strength = "strong"
-            blink_targets.append(
-                f'- Subject: {label}\n'
-                f'  Subject box: {json.dumps(box, ensure_ascii=False)}\n'
-                f'  Current eye state: {eye_state}\n'
-                f'  Photograph-side source states: {source_state_text}\n'
-                f'  Analysis edit instruction: {edit_instruction or "Naturally reopen or relax the closed/half-closed eyes to match the existing expression."}\n'
-                f'  Target eye state: {target_eye_state or "open, matching the existing expression"}\n'
-                f'  Eyelid adjustment: {eyelid_adjustment or "reopen or relax the eyelids naturally"}\n'
-                f'  Mandatory photograph-side match: {match_requirement}\n'
-                f'  Repair strength: {repair_strength or "moderate"}\n'
-                f'  Success condition: {success_condition or "eyes read naturally open at normal photo-viewing size"}\n'
-                f'  Preserve during repair: {json.dumps(preserve or [], ensure_ascii=False)}\n'
-                f'  Avoid during repair: {json.dumps(avoid or [], ensure_ascii=False)}'
-            )
-        blink_targets_block = "\n".join(blink_targets)
-        blink_block = """Accidental blink repair priority:
-- The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
-- Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
-- Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
-- Execute the approved repair using only the execution instructions below. Do not read confidence scores or reasons to decide whether to be more conservative.
-- The analysis-authored Target eye state and Eyelid adjustment below are the final-state authority and must reach the result. When exactly one photograph-side eye is fully closed and the opposite eye is open, repair the fully-closed eye to match the opposite eye's final eye-opening height, iris exposure, lid contours, and visible double-eyelid crease-to-lash band width; if another approved edit changes that reference eye, match its finished result rather than its captured closure amount. When the opposite eye is itself half-closed or narrowed, it is blink-affected too: open both eyes together to one naturally open final state, and match them to each other on those same properties instead of reproducing either captured aperture. Treat eye-opening height and double-eyelid band width as separate mandatory matches. Compare final size and shape in face-relative geometry, not by duplicating pixels: preserve fixed canthi and horizontal span, match aperture-height-to-eye-width ratio and the upper/lower-lid profile at the inner, central, and outer thirds, and allow only head-perspective differences. Both eyes must also finish with the same double-eyelid fold shape, not only the same band width: the same fold type, the crease visible along the same portion of the lid, the same crease path from inner to outer corner, and the same fold arc and peak height. Before finishing, inspect both completed eyes together and refine both as one pair if aperture, three-point contour, iris exposure, or fold path still differs. Open by moving the upper-lid margin over the existing globe and resolving closed-lid tissue into a smooth contour; do not retain a closed-lid mound or add puffiness, swelling, or bulging skin.
-- When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
-- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
-
-Execution instructions:
-""" + blink_targets_block
-    elif blink_items_to_fix:
-        blink_block = """Accidental blink repair priority:
-- The analysis found one or more people whose eyes appear accidentally closed or half-closed at the capture moment under an expression-intent failure-detection rule.
-- Scope: this block governs eyelid state only -- whether an eye reads open, closed, or half-closed. Where an open eye's pupil/iris points is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt when present; they may still approve redirecting a person's pupils/iris even though that person is not named below.
-- Work only on the eyelid state of the person(s) named below. Every other visible person's eyelid state, and everything else about the named person(s) besides that eyelid state, come through exactly as captured.
-- For each named person, obey the photograph-left and photograph-right source states carried in the item. When exactly one side is fully closed and the opposite side is open, make the fully-closed side match the opposite side's final eye-opening height, iris exposure, lid contours, and visible double-eyelid crease-to-lash band width. Otherwise, including when the opposite side is itself half-closed or narrowed, finish both blink-affected eyes naturally open at one coherent eyelid endpoint matched on those same properties. Treat eye-opening height and double-eyelid band width as separate mandatory matches. Compare final size and shape in face-relative geometry, not by duplicating pixels: preserve fixed canthi and horizontal span, match aperture-height-to-eye-width ratio and the upper/lower-lid profile at the inner, central, and outer thirds, and allow only head-perspective differences. Both eyes must also finish with the same double-eyelid fold shape, not only the same band width: the same fold type, the crease visible along the same portion of the lid, the same crease path from inner to outer corner, and the same fold arc and peak height. Before finishing, inspect both completed eyes together and refine both as one pair if aperture, three-point contour, iris exposure, or fold path still differs. Open by moving the upper-lid margin over the existing globe and resolving closed-lid tissue into a smooth contour without puffiness or added eyelid volume.
-- Render realistic eyelids, iris, pupil, catchlights, and eyelashes, with gaze direction matching the person's head angle and the photo's lighting -- unless a separately approved gaze repair for this same person specifies a different target direction, in which case follow that instead. Do not reshape the face, smooth the skin, or otherwise beautify the person while doing this.
-- When the same named person also has an approved gaze repair in this edit call, execute the eyelid opening and final gaze/head-face alignment as one coherent local eye reconstruction. Do not first invent one reopened-eye gaze and then replace it with another; render the final approved eyelid openness, pupil/iris direction, sclera balance, catchlights, and head/face relationship together.
-- Never convert an intentional wink, laugh-squint, crying/pained/dramatic closed-eye reaction, expressive closed-eye reaction, sleeping/napping person's closed eyes, or deliberate closed-eye expression into neutral open eyes -- including for people not named below, who are not part of this edit at all.
-- Eyes to work on: """ + json.dumps(blink_items_to_fix, ensure_ascii=False)
-    else:
-        # Mirrors gaze_block's own empty-case fallback below: the notes above
-        # (aesthetic_diagnosis, detected_issues, edit_philosophy, edit_intent)
-        # can still say a subject's eyes are closed or half-closed -- and can
-        # phrase it as an instruction already decided ("修復閉眼問題" / "repair
-        # the closed-eye issue"), not just a diagnosis -- even when there is
-        # no approved repair, whether because eye_closed_detection is off or
-        # because nothing here needed fixing. "highest priority" and the named
-        # fields match negative_block's own phrasing below on purpose: this is
-        # the same kind of override, so it needs the same declared weight to
-        # outargue directive-sounding prose instead of merely descriptive prose.
-        blink_block = """Eye-state preservation instruction (highest priority):
-- No accidental-blink or closed-eye repair is approved for this image.
-- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復閉眼問題" / "repair the closed eyes") rather than a diagnosis.
-- Scope: this instruction governs eyelid state only -- whether an eye reads open, closed, or half-closed. It does not govern where an open eye's pupil/iris points; that is a different property, governed separately by the gaze-repair instructions elsewhere in this prompt, which may still approve moving a person's pupils/iris even though no blink repair is approved for anyone.
-- Do not reopen, relax, or enlarge any person's closed or half-closed eyelids on the strength of any of that text alone.
-- Preserve every visible person's eyelid state exactly as captured, unless a person is explicitly named above under "Eyes to work on"."""
-
-    # Gated on the user's recipe choice as well as on the analysis. hair_issues
-    # still says should_fix=true after the user unchecks the hair item -- it is
-    # analysis output and the review screen never rewrites it -- so without this
-    # the block would hand the edit model hair to tidy while the rejected-
-    # corrections block above tells it to leave that same hair alone.
-    #
-    # Reads the raw axis tags rather than resolve_rejected_axes on purpose: that
-    # function returns an empty list whenever the tags look untrustworthy, which
-    # for a color clause only costs some reinforcement, but here would emit the
-    # contradiction. Being wrong in this direction instead leaves hair untouched,
-    # which is what the unchecked item asked for.
-    hair_rejected = (
-        "hair" in _axis_set(analysis.get("rejected_axes"))
-        and "hair" not in _axis_set(analysis.get("correction_axes"))
-    )
-    # The selected level is resolved per approved detected issue below. It is
-    # never an independent licence to groom an unflagged person's hair.
-    # Only automatically approved or explicitly user-enabled items are handed
-    # over. Manual items are converted to the same small action vocabulary and
-    # preservation contract as detected repairs.
-    hair_block = ""
-    hair_disabled_indices = _disabled_issue_subject_indices(analysis, "hair_issue")
-    resolved_hair_issues = [resolve_user_hair_request(item) for item in hair_issues]
-    hair_items_to_fix = [
-        {k: v for k, v in item.items() if k != "_subject_index"}
-        for item in resolved_hair_issues
-        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
-        and item.get("_subject_index") not in hair_disabled_indices
-    ] if hair_mess_detection_enabled else []
-    calm_hair_items = [
-        {k: v for k, v in item.items() if k != "_subject_index"}
-        for item in resolved_hair_issues
-        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
-        and item.get("_subject_index") not in hair_disabled_indices
-        and (item.get("_user_level") == "tidy" or (
-            item.get("_user_level") not in {"dynamic", "tidy"}
-            and advanced_options.get("calm_hair")
-        ))
-    ] if hair_mess_detection_enabled and not hair_rejected else []
-    calm_hair_active = bool(calm_hair_items)
-    if hair_items_to_fix and not hair_rejected:
-        hair_block = """Hair tidying priority:
-- Work only on the hair named below, on the person named below. Every other part of that person's hair, and everyone else's hair, comes through exactly as captured.
-- Each item names its action, and only four exist. Each is a picture of how that hair ends up, and the picture is what you render towards. lay_back: the named strands lie along the flow of the hair beside them, moved rather than drawn. remove: they are gone, and the skin, feature, or background behind them continues unbroken through its own texture, tone and grain. settle: the hair hangs in the hairstyle's own shape, its outline continuous. redistribute: the fringe reads as one even band. Everything below bounds how you reach that picture; none of it is the goal, and a result that breaks none of these limits while leaving the hair as it was has not done this edit.
-- For lay_back and remove, a strand is a thin line, so the work is a thin line: continue what the photograph already shows on either side of it, straight across, and change nothing outside its own footprint. Where a strand crosses an eye, brow, lash line, nostril, or lip, that feature is almost entirely visible around the strand -- every visible part of it stays pixel-faithful and is what defines the sliver underneath. Do not re-render the eye, nose, or mouth region, do not re-place or re-shape the feature, and do not improve it: the same eye shape, the same lash line, the same iris and catchlight position, the same lip edge and volume as the original. A re-rendered feature is a different person, which is far worse than the strand you were asked to move.
-- settle works across a whole disturbed area rather than one strand, and this is the only place that wider scope is licensed. Its target comes from the same head: the part the wind did not disturb shows the length, parting, volume, direction, and silhouette that the lifted, opened, or sideways-blown area is combed back into, so the outline reads continuous again. Lower the raised hair back onto the head and cover the gaps the wind opened with the hair that is already there. Give the area no more length, volume, or coverage than the rest of the head has, and leave the person's hairline where it is. Everything outside the disturbed area, face included, still comes through as captured.
-- redistribute is a clumped fringe combed out, and it is two operations, both required, across the whole fringe rather than on one strand. First, de-grease it: the oily specular streak goes matte, down to the sheen the rest of that person's hair has, with per-strand detail visible again inside where the shine was -- and never by darkening, flattening, or blurring the fringe. Second, comb it out: the thick clumps separate into a curtain of even width, and the strands that formed those clumps now span the bare gaps, so no bald patch of forehead is left between them.
-- Combing hair across a gap is the operation, not a violation of "add no hair". Fringe hair ends up where forehead skin used to show -- that is what closing a gap means, and it is required. What is forbidden is a fringe with MORE hair in it than the original had: no extra density, no greater length, no lowered hairline, no widened fringe, and no second layer invented behind the first. The same hair, spread evenly, covers more area than the same hair bunched into cords; that redistribution is the whole edit.
-- A fringe comes out as one even band, whichever action was named for it. What disappears is the uneven thick-cord-beside-bald-gap pattern, never the fringe's own transparency -- a real fringe shows some forehead through it -- and its length, outer edge, parting, and direction are unchanged. Taking strands out of a fringe builds that same pattern from the other direction and fails the same way.
-- Settled is not sculpted, and neither is an evened-out fringe. Combed-down real hair still shows strand direction, slight separation, its own unevenness, and how it catches light. A settled area that reads as one glossy sheet, a painted block, a wig, or a helmet fails this edit even where every trace of the wind is gone -- that failure is likelier here than anywhere else in this instruction, because a smooth mass is the easiest way to look tidy.
-- remove takes away hair that has left the hairstyle, never hair the hairstyle puts where it is. However an item is worded, taking hair off must not uncover forehead or scalp that this person's hair covers in the original: the hairline stays exactly where it is, a fringe keeps its coverage and its outer edge, and no more forehead is visible at the end than at the start. If carrying out a remove item would expose more forehead, it is the wrong operation on that hair -- lay it back or even it out instead, and if neither is possible leave it. An instruction to clear hair off a forehead is never an instruction to remove the fringe.
-- No action has a partial version. Do not fade, blur, soften, desaturate, or half-erase hair: a ghosted, greyed, or smeared remnant reads as damage, where the same strand cleanly gone reads as a better photograph. What replaces a removed strand leaves no dark trace, no blur patch, and no smoothed plastic area.
-- Identical to the original afterwards: hairstyle shape and silhouette, parting, length, volume, density, hairline position, curl pattern, color, roots, and how the hair meets the scalp and ears -- with individual strands still resolvable and the hair's own irregular texture intact. The amount of hair never increases anywhere. For settle and redistribute, "unchanged" means the hairstyle the settled or un-clumped hair shows, not the wind-blown or corded arrangement it is being brought back from -- both of them move existing hair into places it was not covering, which is their purpose and not an addition.
-- Do not tidy the face/skin/expression along with the hair, tuck a fallen lock back into an updo, ponytail, braid, or clip, or close a parted fringe. Where the named hair cannot be laid back, cleanly taken off, or settled within these limits, leave it exactly as captured -- that is the correct outcome here, not a missed instruction.
-- Hair to work on: """ + json.dumps(hair_items_to_fix, ensure_ascii=False)
-    elif not calm_hair_active:
-        # Mirrors gaze_block's own empty-case fallback below: the notes above
-        # (aesthetic_diagnosis, detected_issues, edit_philosophy, edit_intent)
-        # can still call a subject's hair messy, windblown, or clumped -- and
-        # can phrase it as an instruction already decided ("修復髮絲" / "fix the
-        # hair"), not just a diagnosis -- even when there is no approved
-        # repair, whether because hair_mess_detection is off, the user
-        # rejected the item on review, or nothing here needed fixing.
-        # "highest priority" and the named fields match negative_block's own
-        # phrasing below on purpose: same kind of override, same declared weight.
-        hair_block = """Hair preservation instruction (highest priority):
-- No hair tidying is approved for this image.
-- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復髮絲" / "fix the hair") rather than a diagnosis.
-- Do not lay back, remove, settle, or redistribute any strand of hair on the strength of any of that text alone.
-- Preserve every visible person's hair exactly as captured: style, strands, flyaways, and all, unless hair is explicitly named above under "Hair to work on"."""
-
-    # A user-elected transformation, so it is written with the same force as a
-    # style override rather than as a defect repair: unconditional, and stated as
-    # the outcome to reach instead of as a permission to tidy. The detection
-    # blocks above hedge on purpose -- an unrequested hair edit is a risk -- but
-    # hedging is wrong here, since the user asked for exactly this.
-    calm_hair_block = ""
-    if calm_hair_active:
-        calm_hair_block = """Still-air hair (user-selected, mandatory):
-- Fully groom the entire visible hairstyle of each person named below, not merely the originally detected defect footprint. Other people and unapproved hair remain exactly as captured.
-- For each named person, this full-hairstyle scope overrides the earlier local-only hair boundary: the detected item identifies whom to groom, not the maximum edit footprint.
-- Mandatory visible change: the result must look clearly tidier at normal viewing size. An unchanged result or a barely perceptible cleanup fails this user request.
-- Comb loose, lifted, crossed, uneven, and directionless strands into clean coherent sections following the existing haircut. Neaten the fringe, part, surface flow, and outer silhouette so the finished hair looks deliberately combed and portrait-ready.
-- Bring lifted, fanned, streaming, and sideways-blown hair back down onto the head and shoulders. Close the gaps the wind opened, using the hair that is already in the photograph. No wind-driven or body-motion disorder remains in the finished hairstyle.
-- Same person, same haircut: length, volume, density, parting, hairline, curl pattern, and color are unchanged, no hair is added, and the face is untouched. Hair falls, but its owner does not change.
-- Settled is not sculpted. Hair hanging still keeps strand separation, its own unevenness, and the way it catches light. A smooth glossy sheet, a painted block, or a wig fails this even though the wind is gone.
-- Everything else in the photograph stays exactly as captured -- the same clothing, the same flags, leaves, water, and other people, still showing whatever the weather was doing to them. This settles hair only; it does not calm the scene.
-- Detected hair to tidy: """ + json.dumps(calm_hair_items, ensure_ascii=False)
-
-    gaze_disabled_indices = _disabled_issue_subject_indices(analysis, "gaze_issue")
-    resolved_gaze_issues = [resolve_user_gaze_request(item) for item in gaze_contact_issues]
-    gaze_items_to_fix = [
-        item for item in resolved_gaze_issues
-        if isinstance(item, dict) and (item.get("should_fix") or item.get("_user_forced"))
-        and item.get("_subject_index") not in gaze_disabled_indices
-    ] if gaze_contact_detection_enabled else []
-    gaze_block = ""
-    # Two-stage flow (single_pass_edit=False): any approved gaze
-    # repair is 100% Step 5b's job (pipeline._run_eye_repair_pass calls
-    # build_eye_repair_pass_prompt as an isolated second pass on this call's own
-    # output), so this call must leave gaze untouched even when a fix is
-    # approved -- attempting it here too would let this pass's own no-op or
-    # partial attempt slip through as the final result if Step 5b is ever
-    # skipped/best-effort-fails, and gives no benefit since Step 5b always
-    # re-examines and re-edits the whole image regardless of what this pass
-    # did. single_pass_edit=True has no Step 5b to defer to, so it keeps the
-    # original bundled-attempt behavior below.
-    if gaze_items_to_fix and not single_pass_edit:
-        gaze_block = """Gaze preservation instruction (highest priority):
-- Do not perform any gaze/eye-direction correction in this pass, even though the analysis approved one for a named subject below -- that repair is deliberately deferred to a separate, later edit pass and is completely out of scope for this pass.
-- This overrides every place above that still argues for a gaze change now -- the aesthetic diagnosis, the detected issues, the edit philosophy, the edit intent, and correction_plan were all written to describe the approved fix, not to authorize performing it in this pass.
-- Scope: this instruction governs where an open eye's pupil/iris points -- eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights. It does not govern whether an eye is open or closed; that is a different property, governed separately by the blink-repair instructions elsewhere in this prompt, which may still approve reopening a person's closed or half-closed eyelids even though gaze redirection is out of scope for this pass.
-- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, catchlights, and expression exactly as captured, for every subject, including the one(s) named below.
-- Do not redirect anyone's gaze toward or away from the camera in this pass.
-"""
-    elif gaze_items_to_fix:
-        gaze_targets = []
-        for item in gaze_items_to_fix:
-            label = item.get("subject_label", "unnamed subject")
-            box = item.get("box") or {}
-            gaze_state = item.get("gaze_state", "unknown")
-            lens_decision = item.get("lens_contact_decision", "not_looking_at_lens")
-            strategy = item.get("gaze_repair_strategy") or {}
-            edit_instruction = strategy.get("edit_instruction") if isinstance(strategy, dict) else ""
-            strategy_type = strategy.get("strategy_type", "") if isinstance(strategy, dict) else ""
-            repair_strength = strategy.get("repair_strength", "") if isinstance(strategy, dict) else ""
-            preserve = strategy.get("preserve_during_repair") if isinstance(strategy, dict) else None
-            avoid = strategy.get("failure_to_avoid") if isinstance(strategy, dict) else None
-            head_face = strategy.get("head_face_adjustment", "") if isinstance(strategy, dict) else ""
-            eye_adjustment = strategy.get("eye_adjustment", "") if isinstance(strategy, dict) else ""
-            sclera_catchlight = strategy.get("sclera_catchlight_adjustment", "") if isinstance(strategy, dict) else ""
-            target_read = strategy.get("target_gaze_read", "") if isinstance(strategy, dict) else ""
-            gaze_targets.append(
-                f'- Subject: {label}\n'
-                f'  Subject box: {json.dumps(box, ensure_ascii=False)}\n'
-                f'  Required endpoint: redirect gaze from {gaze_state} to direct_camera.\n'
-                f'  Analysis edit instruction: {edit_instruction or "Use the matching correction_plan item as the authoritative gaze repair instruction."}\n'
-                f'  Strategy type: {strategy_type or "specified in correction_plan"}\n'
-                f'  Repair strength: {repair_strength or "specified in correction_plan"}\n'
-                f'  Eye adjustment: {eye_adjustment or "specified in correction_plan"}\n'
-                f'  Head/face adjustment: {head_face or "specified in correction_plan"}\n'
-                f'  Sclera/catchlight adjustment: {sclera_catchlight or "preserve naturally unless correction_plan says otherwise"}\n'
-                f'  Target viewer read: {target_read or "direct camera-lens contact"}\n'
-                f'  Preserve during repair: {json.dumps(preserve or [], ensure_ascii=False)}\n'
-                f'  Avoid during repair: {json.dumps(avoid or [], ensure_ascii=False)}'
-            )
-        gaze_targets_block = "\n".join(gaze_targets)
-
-        gaze_block = """Approved gaze repair execution instructions:
-- Approved gaze repair exists for the subjects listed below.
-- Do not diagnose gaze again in the edit stage.
-- Do not read confidence scores, reasons, or analysis records to decide whether to be more conservative.
-- Execute the approved repair using only the execution instructions below plus the matching correction_plan and correction_inverse.
-- Generic preservation, faithful-retouch, and minimal-change instructions must not block any local eye-direction, eye-focus, sclera-balance, catchlight, or head/face-alignment changes that the execution instructions explicitly approve for the named subject.
-- Do not broaden the edit beyond what is approved below. Apply only the subject-local changes explicitly described there, while preserving all unrelated identity, expression, body pose, clothing, object interaction, scene, and background details. Any person in the frame who is not named in the execution instructions below is completely out of scope: do not touch their eyes, gaze, expression, pose, or anything else about them.
-- If a named subject has an approved gaze repair, that repair is required; do not leave the original gaze unchanged.
-
-Execution instructions:
-""" + gaze_targets_block + """
-
-Execution rule:
-- Follow the Analysis edit instruction for each subject literally.
-- If Strategy type is eyes_only, keep the head/face angle unchanged. This method is valid only for an extremely small miss when the head and face are already naturally aligned to the current lens.
-- If Strategy type is eyes_plus_head_face_alignment, the described head/face adjustment is mandatory, not optional. Visibly but naturally turn and/or tilt the head/face toward the exact current lens while keeping the torso, shoulders, body pose, and framing unchanged. A pupil-only change with the original incompatible head direction is a failed execution.
-- Use the listed Repair strength for the named subject.
-- Preserve everything listed in Preserve during repair and in the matching correction_inverse item.
-- Avoid every failure mode listed in Avoid during repair.
-- Do not weaken a moderate or strong instruction into a subtle eye nudge.
-- The completed gaze correction must be immediately readable at normal photo-viewing size; a change visible only in a highly enlarged face crop is insufficient.
-"""
-    else:
-        # Same "highest priority" + named-fields treatment as blink_block's
-        # and hair_block's own empty-case fallbacks above, for the same
-        # reason: aesthetic_diagnosis/detected_issues/edit_philosophy/
-        # edit_intent can phrase an unapproved gaze fix as a decision already
-        # made ("修復眼神" / "fix the gaze"), which needs to be named and
-        # outranked here rather than left for a bare "not approved" to out-
-        # argue.
-        gaze_block = """Gaze preservation instruction (highest priority):
-- No gaze correction is approved for this image.
-- This overrides every place above that still argues for one -- the aesthetic diagnosis, the detected issues, the edit philosophy, and the edit intent were all written before this decision and were not updated by it, even where they phrase it as an instruction already decided ("修復眼神" / "fix the gaze") rather than a diagnosis.
-- Scope: this instruction governs where an open eye's pupil/iris points -- eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights. It does not govern whether an eye is open or closed; that is a different property, governed separately by the blink-repair instructions elsewhere in this prompt, which may still approve reopening a person's closed or half-closed eyelids even though no gaze correction is approved for anyone.
-- Do not redirect anyone's gaze toward the camera.
-- Preserve the original eye direction, eye focus, pupil/iris placement, sclera balance, and catchlights.
-- If a subject is looking off-camera, near-camera, upward, downward, unfocused, or away from the lens, keep that original gaze unchanged unless a future approved gaze repair item explicitly requests a change.
-- Do not invent any gaze-repair method unless the analysis explicitly approved one.
-"""
-
-    smile_block = build_smile_block(analysis)
-
-    # The skin block's opening rule points at these; without them it names an
-    # identity the edit model was never told, so the generic line stands in.
-    skin_block = ""
-    if has_person:
-        # As with hair, use the raw axis tags: when the user rejects the only
-        # skin correction, the generic skin guidance must not recreate it.
-        skin_rejected = (
-            "skin" in _axis_set(analysis.get("rejected_axes"))
-            and "skin" not in _axis_set(analysis.get("correction_axes"))
-        )
-        skin_adjustment_rule = (
-            "- Keep skin color as captured, allowing only its natural response to approved whole-scene exposure and illumination changes."
-            if skin_rejected else
-            "- Apply a local skin-color change only when the approved correction plan names an unwanted cast; stop at that person's recorded native complexion."
-        )
-        skin_block = f"""Skin in the finished photograph (this photo contains people):
-{_build_skin_identity_lines(analysis)}
-- Keep each person's native complexion depth, undertone, and chroma while skin follows the final shared exposure and actual illumination.
-{skin_adjustment_rule}
-- Apply scene white balance, hue, and saturation to the non-skin palette independently from complexion.
-- Keep tone continuous across face, neck, ears, and visible hands, with natural texture and modelling."""
-
-    revision_block = ""
-    if revision_feedback:
-        revision_block = f"""Revision feedback from the previous QA:
-{revision_feedback}
-
-This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit behavior. Preserve the subject, required framing, scene context, and protected details more conservatively than the previous output."""
-
-    # Whether the Crop instruction below may offer extending the scene as an
-    # alternative to cropping. Read here as well as inside the block so the
-    # retouch priorities stop forbidding the very thing it offers.
-    # Decided during analysis and carried on the analysis object; the flag
-    # below is the older threshold-only permission, kept for an analysis that
-    # predates the decision.
-    expand_plan = (
-        None if has_wider_size_override or has_closer_size_override
-        else analysis.get("reframe_extension")
-    )
-    # Once the analysis has answered, the edit model is not asked again: an
-    # analysis that chose "crop" must not also be handed the conditional
-    # permission, which would reopen a decision already made -- and offering
-    # that choice to this model was measured to change nothing anyway.
-    mode_decided = bool(str(analysis.get("reframe_mode") or "").strip())
-    allow_expand = not mode_decided and not has_wider_size_override and not has_closer_size_override and expand_permitted(
-        aspect_ratio_pref,
-        (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio"),
-        source_size,
-    )
-
-    framing_focus = analysis.get("_framing_focus") or {}
-    focus_block = ""
-    if framing_focus.get("size") == "closer":
-        focus_label = framing_focus.get("label") or "the single most prominent subject"
-        focus_block = f"""Single-subject close-up override (highest framing priority):
-Feature one subject: {focus_label}. Identify that subject in the photograph and frame the close-up around what you see there. The photo summary and scene description above may mention several people or elements -- for this close-up, every other person, object, or element left outside the frame is intentionally and correctly cropped out. Do NOT reintroduce them. Fill the frame with the chosen subject; preserve that subject's identity, expression, and key details."""
-
-    crop_instruction_block = build_framing_sections(analysis, crop_plan, aspect_ratio_pref, source_size)["crop_instruction"]
-    crop_priority_line_style = (
-        "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
-        + size_ratio_block +
-        "Wide should be a moderate pull-back; wider should be a much stronger pull-back with a clearly smaller subject and more environmental context. "
-        "Never add blank borders, transparent/checkerboard padding, artificial empty side bands, stretched edges, or unrelated scenery."
-        if has_wider_size_override else
-        (
-            "Reframe as described in the Crop instruction above, judging the frame's edges from the photograph's "
-            "own content and subject rather than from stated coordinates. Beyond the frame you settle on, do not "
-            "add blank borders, transparent/checkerboard padding, or artificial empty side bands"
-            + (
-                "; where that instruction allows the scene to be carried past the photograph's edge, what you add "
-                "is continued scene, never padding."
-                if allow_expand or expand_plan else
-                ", unless a selected closer framing-size override explicitly asks for closer framing within it."
-            )
-            if crop_plan or expand_plan else
-            "Treat the supplied image boundaries as final unless a selected closer framing-size override explicitly asks for closer framing. "
-            "Never add blank borders, transparent/checkerboard padding, or artificial empty side bands."
-        )
-    )
-    crop_priority_line_faithful = (
-        "Reframe as described in the Crop instruction above, judging the frame's edges from the photograph's own "
-        "content and subject rather than from stated coordinates. Beyond the frame you settle on, do not "
-        + (
-            "add borders, create transparent/checkerboard padding, or invent empty side bands; canvas beyond the "
-            "photograph's edge is added only as the continued scene that instruction describes, and only as far as "
-            "the output shape needs."
-            if allow_expand or expand_plan else
-            "additionally expand canvas, add borders, create transparent/checkerboard padding, or invent empty side bands."
-        )
-        if crop_plan or expand_plan else
-        "Treat the supplied image boundaries as final. Do not re-crop, expand canvas, add borders, create "
-        "transparent/checkerboard padding, or invent empty side bands."
-    )
-
-    # Two numbered priorities ask for exactly what a rejected `distraction` or
-    # `crop` item asked for -- found in a real run whose negative block said
-    # "leave every element as it is" three paragraphs above a priority saying
-    # "reduce distractions ... subtle blur, or small cleanup". Drop the offending
-    # clause rather than replace it with a prohibition: the scoped
-    # correction_inverse line does the pinning, and a blanket "never reduce any
-    # distraction" would over-suppress a rejection that was only about one corner
-    # of the frame.
-    distraction_priority = (
-        "Carry out each approved distraction action: remove a confirmed harmful element completely when the plan "
-        "calls for removal, continuing the occluded subject/background from surrounding visible cues within its footprint without a "
-        "faded or blurred remnant; use local de-emphasis only when the plan calls for it. Preserve contextual and "
-        "neutral scene elements and everything outside the approved edit area."
-        if "distraction" not in rejected_axes else
-        "Do not remove, replace, rebuild, simplify, blur, or clean up scene elements. Distraction cleanup was "
-        "removed from this edit's plan by the user; the scene's elements stay as the original presents them, "
-        "except where an approved correction above asks otherwise."
-    )
-    if "distraction" not in rejected_axes and has_approved_distraction_removal(analysis):
-        distraction_priority += " " + OCCLUDED_PERSON_REMOVAL_RULE
-    alignment_approved = has_approved_alignment_correction(analysis)
-    if alignment_approved:
-        alignment_priority = (
-            "Apply the separately approved whole-frame alignment correction subtly and completely. Change only "
-            "the requested tilt, horizon/vertical alignment, or perspective; use only the minimal edge trim needed "
-            "to remove exposed wedges, while retaining the selected aspect ratio and composition as closely as possible."
-        )
-    elif "alignment" in rejected_axes:
-        alignment_priority = (
-            "Preserve the original whole-frame alignment exactly. Do not level horizons, straighten verticals, "
-            "correct tilt, or adjust perspective -- the user removed the independent alignment item from this edit's plan."
-        )
-    else:
-        alignment_priority = (
-            "No whole-frame alignment correction is approved. Preserve the original tilt, horizon/vertical alignment, "
-            "and perspective; do not infer one from a crop/reframing item. A user-selected camera-angle style may still "
-            "change viewpoint within its own explicit scope."
-        )
-
-    if has_style_overrides:
-        opening_preservation_rule = (
-            "Preserve the subject identity, recognizable person/object, clothing, location, environment, props, "
-            "and photographic realism. This is a same-scene reshoot: selected pose, angle, lighting, or framing-size "
-            "overrides are allowed and expected to visibly change those selected aspects."
-        )
-        edit_mode_block = f"""Edit mode:
-STYLE OVERRIDE MODE. The user selected one or more pose/angle/lighting/framing options, so treat this as a controlled same-scene reshoot rather than a conservative retouch only.
-
-Priority order:
-1. Preserve safety, identity, same subject, same location, same environment, same clothing, same props, and photographic realism.
-2. Apply user-selected style overrides visibly and deliberately for the selected aspects.
-3. Apply {approved_edit_sources}. {repair_allowance} Generic preservation rules must yield only where the analysis explicitly permits the local change.
-4. Use the preset style as a supporting finish.
-5. Apply default preservation rules only to aspects not selected by the user."""
-        retouch_priorities = f"""Retouch priorities:
-1. {crop_priority_line_style}
-2. Preserve the original subject identity, semantic subject extent, protected regions, role cues, product/object identity, scene structure, and believable spatial continuity. For selected style overrides, allow the corresponding pose, camera viewpoint, lighting direction, or framing size to change visibly while keeping the scene physically plausible.
-3. Apply every user-selected style override in full. Angle overrides should clearly move the camera to the selected viewpoint by following that angle's own instruction above; pose overrides must replace the original pose with clearly different body language, changing posture, gesture, hand placement, body direction, weight shift, or head direction; lighting overrides should visibly change illumination mood; framing-size overrides should visibly change subject scale and environmental context. For wide/wider, follow the quantified subject-size target: wide should reduce the subject's visible frame ratio by about 20%, while wider should reduce it by about 40%. The scene must expand with plausible same-location context, not just a tiny crop or minor zoom change.
-4. {color_craft_direction} Apply this only where it supports the selected overrides and the approved correction plan.
-5. {distraction_priority}
-6. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
-7. Keep unselected aspects faithful to the original. If angle is not selected, preserve the original camera viewpoint; if pose is not selected, preserve the original pose; if size is not selected, preserve the original framing size.
-8. Keep the final result faithful to the same subject, identity, location, environment, clothing, props, and photographic realism. When an angle override is selected, change the camera viewpoint clearly as described in that angle's own instruction above, while keeping a believable same-scene result.
-9. {definitive_edit_sources} are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
-    else:
-        opening_preservation_rule = (
-            "Preserve the original subject, identity, pose, camera angle, scene, product shape, clothing, "
-            + (
-                "facial structure, every unrelated body area, and important details. Apply only the single holistic body-reshape instruction above."
-                if has_body_reshape else
-                "facial structure, body shape, and important details."
-            )
-        )
-        edit_mode_block = f"""Edit mode:
-FAITHFUL RETOUCH MODE. The user did not select any style override, so keep the original pose, camera viewpoint, lighting logic, framing size, scene, and moment. Improve only {faithful_edit_sources}. {faithful_repair_allowance}"""
-        retouch_priorities = f"""Retouch priorities:
-1. {crop_priority_line_faithful}
-2. Preserve the original subject, semantic subject extent, protected regions, role cues, interaction points, product/object geometry, scene structure outside approved edit areas, perspective, and spatial relationships.
-3. {color_craft_direction}
-4. {distraction_priority}
-5. Preserve natural texture in skin, hair, fabric, food, products, architecture, shadows, and background materials. Avoid plastic smoothing, synthetic sharpening, or heavy filters.
-6. Respect the selected composition. Preserve meaningful breathing room and empty space when it supports direction, story, scale, calmness, graphic balance, rhythm, environment, or subject dignity.
-7. {alignment_priority}
-8. Keep the final result faithful: the same moment, same camera viewpoint, same environment, and same subject, finished like a skilled retoucher handled it.
-9. {definitive_edit_sources_faithful} are the definitive specification of what to change -- apply them in full and do not perform additional corrections beyond them, the user's extra direction, and the preset finish. For the user-rejected corrections above, reproduce the original's version of those properties -- that is the required output, not merely a change you may skip."""
-
-    # Analyzer prose can restate a correction outside correction_plan or ask
-    # for a lighting mood that predates the user's style selection. In either
-    # case, keep only descriptive context; the reviewed plan and selected style
-    # carry the edit commands.
-    if rejected_corrections or (
-        selected_lighting_style and selected_lighting_style != "default"
-    ):
-        analysis_block = f"""Photo context after user review:
-- Summary: {analysis.get("photo_summary") or ""}
-- Main subject: {analysis.get("main_subject") or ""}
-- Scene type: {analysis.get("scene_type") or ""}
-- Must preserve where compatible with the user instruction: {preserve_rules}"""
-    else:
-        analysis_block = f"""Photo analysis:
-- Summary: {analysis.get("photo_summary") or ""}
-- Main subject: {analysis.get("main_subject") or ""}
-- Scene type: {analysis.get("scene_type") or ""}
-- Aesthetic diagnosis: {analysis.get("aesthetic_diagnosis") or ""}
-- Detected issues: {detected_issues}
-- Edit philosophy: {analysis.get("edit_philosophy") or ""}
-- Desired mood: {analysis.get("composition_mood") or preset.get("label", "")}
-- Layout method: {analysis.get("layout_method") or ""}
-- Composition strategy: {analysis.get("composition_strategy") or ""}
-- Visual balance strategy: {analysis.get("visual_balance_strategy") or ""}
-- Empty space strategy: {analysis.get("empty_space_strategy") or ""}
-- Alignment strategy: {analysis.get("alignment_strategy") or ""}
-- Distraction strategy: {analysis.get("distraction_strategy") or ""}
-- Scene preservation strategy: {analysis.get("scene_preservation_strategy") or ""}
-- Recommended aspect ratio: {rec_aspect}
-- Aspect ratio reason: {aspect_ratio_reason}
-- Crop/reframe recommendation (advisory): {analysis.get("crop_recommendation") or ""}
-- Crop intent (advisory): {crop_intent}
-- Must preserve where compatible with the user instruction: {preserve_rules}"""
-
-    task_intro = (
-        "You are performing an image-to-image same-scene reshoot transformation, not a conservative retouch. "
-        "Keep the same subject identity, scene, clothing, props, and photographic realism, but visibly change the subject's pose according to the selected pose override."
-        if has_pose_override else
-        "You are editing the supplied image, not creating a new image.\n"
-        "Act like a high-end human retoucher: restrained, photographic, detail-aware, and realistic."
-    )
-
-    shape_preservation_rule = (
-        "The photographed content keeps its true shape except for the one holistic body-reshape instruction below. "
-        "Apply that instruction as a continuous, anatomically natural whole-person adjustment; preserve face, object, background structure, camera/tilt, relative spatial relationships, and unrelated people/regions. "
-        if has_body_reshape else
-        "The photographed content keeps its true shape throughout: every person, face, object, and background structure comes through with the proportions, the tilt, and the relative sizes and distances it has in the input photograph. "
-    )
-
-    prompt = f"""{task_intro}
-
-{opening_preservation_rule}
-{shape_preservation_rule}The output canvas may be a different shape than the input; that new shape comes from cropping and uniform scaling alone, never from resizing one axis on its own.
-Apply explicitly requested additions. Otherwise, preserve the original content without adding text, logos, watermarks, people, props, fantasy elements, or a different background.
-Do not make the result look synthetic, plastic, or heavily filtered.
-
-{edit_mode_block}
-
-Crop instruction:
-{crop_instruction_block}
-
-{focus_block}
-
-{light_color_target_block}
-
-{analysis_block}
-
-{framing_intent_block}
-
-Style direction:
-{preset_prompt}
-
-User extra direction:
-{effective_user_direction or "沒有額外指令。"}
-
-{user_block}
-
-{style_block}
-
-{correction_plan_block}
-
-{body_reshape_block}
-
-{blink_block}
-
-{hair_block}
-
-{calm_hair_block}
-
-{negative_block}
-
-{gaze_block}
-
-{smile_block}
-
-{skin_block}
-
-{revision_block}
-
-{retouch_priorities}
-
-{color_grade_check}
-"""
-    if return_sections:
-        return prompt, {
-            "crop_instruction": crop_instruction_block,
-            "style_instruction": style_block,
-        }
-    return prompt
 
 
 def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):

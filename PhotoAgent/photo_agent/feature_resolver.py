@@ -744,9 +744,8 @@ def _same_subject(left, right):
 def _smile_contracts(analysis):
     targets = resolve_smile_targets(analysis)
 
-    # The legacy/raw prompt has always retained an explicit user-selected
-    # level when analysis produced no usable reading.  Keep the compact path
-    # equivalent: a missing or malformed analyzer value must not silently
+    # An explicit user-selected level is kept when analysis produced no usable
+    # reading: a missing or malformed analyzer value must not silently
     # turn a mandatory UI choice into "preserve expression".  Explicitly
     # unreadable faces remain excluded because there are no pixels on which
     # to execute a reliable expression edit.

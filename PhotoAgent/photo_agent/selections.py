@@ -191,7 +191,7 @@ def _apply_face_issue_overrides(effective, overrides):
     Turning an item off flips should_fix to False (smile's adjust_safe is
     left alone -- resolve_smile_targets drops a disabled subject before it
     reads it) AND lists the pair in _disabled_face_issues, which
-    build_edit_prompt hard-excludes. If the analyzer had flagged it, the
+    the edit prompt hard-excludes. If the analyzer had flagged it, the
     issue is also stamped _user_disabled, so the next version still renders
     it as 已設定不修正 rather than 無需修正 / 可以調整. Turning an item on
     clears that stamp and, over a negative verdict, sets _user_forced (and
@@ -248,7 +248,7 @@ def _apply_face_issue_overrides(effective, overrides):
 
 def _apply_recipe_checked(effective, base, recipe_checked):
     """Unchecked 修圖建議 items are dropped from correction_plan (what the editor
-    reads) AND recorded as rejected_*, which build_edit_prompt turns into
+    reads) AND recorded as rejected_*, which the edit prompt turns into
     explicit "do not do this" / "preserve this instead" rules -- omitting them
     alone isn't enough, since other analysis fields could still lead the model
     to make the same change."""
@@ -299,7 +299,7 @@ def apply_selections(analysis, selections, *, body_reshape_feature_enabled=None)
     if overrides and isinstance(base.get("subjects"), list):
         _apply_face_issue_overrides(effective, overrides)
 
-    # Read off the analysis at finish time by build_edit_prompt and the
+    # Read off the analysis at finish time by the edit prompt and the
     # gaze-repair pass, so a toggle changed on the results page must land here.
     if advanced_options is not None:
         effective["_advanced_options"] = copy.deepcopy(advanced_options)

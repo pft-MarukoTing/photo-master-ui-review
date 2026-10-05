@@ -7,7 +7,6 @@ import os
 import backoff
 import requests
 
-from config import PRESETS, PRESET_PROMPTS
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import (
     apply_aspect_ratio_preference,
@@ -17,9 +16,7 @@ from image_tools import (
     output_geometry_warnings,
     resolve_crop_box_with_report,
 )
-from photo_agent.feature_resolver import build_compact_editor_prompt
-from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
-from prompts import build_edit_prompt
+from photo_agent.edit_prompt import assemble_edit_prompt
 
 
 MAI_IMAGE_26_MODEL = "MAI-Image-2.6"
@@ -145,11 +142,6 @@ def edit_photo(
     is accepted only to preserve PhotoAgent's shared editor-call signature.
     """
     del quality
-    preset = PRESETS.get(preset_key) or PRESETS["natural"]
-    preset_prompt = PRESET_PROMPTS.get(preset_key) or PRESET_PROMPTS["natural"]
-
-    user_instruction = analysis.get("user_instruction") or {}
-    user_direction = user_instruction.get("normalized_user_direction") or ""
     image_width, image_height = get_image_dimensions(image_bytes)
 
     size = (analysis.get("style_options") or {}).get("size")
@@ -170,40 +162,11 @@ def edit_photo(
         image_height,
     )["cropBox"]
 
-    raw_prompt, raw_prompt_sections = build_edit_prompt(
-        framed_analysis,
-        preset,
-        preset_prompt,
-        user_direction,
-        crop_plan,
-        revision_feedback,
-        aspect_ratio_pref=aspect_ratio,
-        source_size=(image_width, image_height),
-        single_pass_edit=single_pass_edit,
-        return_sections=True,
+    prompt_text, resolution_metadata, prompt_strategy = assemble_edit_prompt(
+        framed_analysis, crop_plan, preset_key=preset_key, aspect_ratio=aspect_ratio,
+        source_size=(image_width, image_height), single_pass_edit=single_pass_edit,
+        revision_feedback=revision_feedback,
     )
-    advanced_options = framed_analysis.get("_advanced_options") or {}
-    prompt_strategy = (
-        advanced_options.get("editor_prompt_strategy")
-        or DEFAULT_EDITOR_PROMPT_STRATEGY
-    )
-    if user_instruction.get("overwrite_prompt"):
-        prompt_strategy = "legacy"
-    prompt_text = raw_prompt
-    resolution_metadata = None
-    if prompt_strategy == "resolved_compact":
-        prompt_text, resolution_metadata = build_compact_editor_prompt(
-            framed_analysis,
-            preset_prompt,
-            user_direction,
-            crop_plan,
-            preset_key=preset_key,
-            include_gaze=single_pass_edit,
-            include_blink=single_pass_edit,
-            revision_feedback=revision_feedback,
-            raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
-            raw_style_instruction=raw_prompt_sections.get("style_instruction"),
-        )
 
     png_bytes = ensure_png_bytes(image_bytes)
     deployment = _deployment_name(model)
@@ -231,7 +194,6 @@ def edit_photo(
             image_width,
             image_height,
         ),
-        "raw_prompt": raw_prompt,
         "prompt_resolution": resolution_metadata,
         "prompt_strategy": prompt_strategy,
     }, prompt_text

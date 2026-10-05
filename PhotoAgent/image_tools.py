@@ -1274,7 +1274,7 @@ def apply_framing_size(context: dict, size: str) -> dict:
         f"單一主體特寫,以{focus_label}為主角並填滿畫面。原始場景可能包含多個人物或元素,"
         f"但此特寫刻意只聚焦於此主體。"
     )
-    # Marker consumed by build_edit_prompt / QA so the scene description's other
+    # Marker consumed by QA so the scene description's other
     # people/elements don't get reasserted as content to preserve.
     ctx["_framing_focus"] = {"size": "closer", "label": label}
     return ctx

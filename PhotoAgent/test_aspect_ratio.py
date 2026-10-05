@@ -16,12 +16,11 @@ from image_tools import (
     plan_reframe_extension,
 )
 from prompts import (
-    build_edit_prompt,
+    build_framing_sections,
     build_overall_analysis_instruction,
     expand_permitted,
 )
-from config import PRESETS, PRESET_PROMPTS
-from photo_agent.feature_resolver import _compact_raw_crop_instruction
+from photo_agent.feature_resolver import _compact_raw_crop_instruction, build_compact_editor_prompt
 from aspect_ratio_rules import AUTO_ASPECT_RATIO_LABELS, allowed_auto_ratio_labels
 from image_tools import (
     apply_derived_aspect_ratio,
@@ -863,20 +862,15 @@ class ExpandPermissionTests(unittest.TestCase):
         self.assertIn("延伸場景", resolved["crop_box"]["reason"])
 
         resolved["recommended_aspect_ratio"] = "1200:1600"
-        prompt, sections = build_edit_prompt(
-            resolved, PRESETS["natural"], PRESET_PROMPTS["natural"], "", None,
-            aspect_ratio_pref="3:4", source_size=self.SQUARE, return_sections=True,
-        )
-        block = sections["crop_instruction"]
+        block = build_framing_sections(resolved, None, "3:4", self.SQUARE)["crop_instruction"]
         self.assertIn("continuing the scene past the photograph's top and bottom", block)
         self.assertNotIn("No crop.", block)
         compact = _compact_raw_crop_instruction(
             block, crop_plan=None, approved_crop_correction=False)
         self.assertIn("continuing the same real scene past", compact)
-        # ...and nothing left in the prompt still forbids it.
-        priority = next(l for l in prompt.splitlines() if l.startswith("1. "))
-        self.assertNotIn("expand canvas", priority)
-        self.assertNotIn("boundaries as final", priority)
+        # ...and nothing left in the editor prompt still forbids it.
+        prompt, _ = build_compact_editor_prompt(resolved, "", "", None, raw_crop_instruction=block)
+        self.assertNotIn("Keep the supplied image boundaries as the final frame", prompt)
 
     @staticmethod
     def _expand_review_analysis():
@@ -947,26 +941,9 @@ class ExpandPermissionTests(unittest.TestCase):
             "reframe_mode": "crop", "recommended_aspect_ratio": "944:1680",
             "crop_box": dict(self.PLAN),
         }
-        prompt = build_edit_prompt(
-            decided, PRESETS["natural"], PRESET_PROMPTS["natural"], "", self.PLAN,
-            aspect_ratio_pref="9:16", source_size=self.SQUARE,
-        )
+        prompt = build_framing_sections(decided, self.PLAN, "9:16", self.SQUARE)["crop_instruction"]
         self.assertNotIn("past the photograph", prompt)
         self.assertIn("cannot both be inside it", prompt)
-
-    def _faithful_priority(self, aspect_ratio_pref):
-        analysis = {"recommended_aspect_ratio": "9:16", "crop_box": dict(self.PLAN)}
-        prompt = build_edit_prompt(
-            analysis, PRESETS["natural"], PRESET_PROMPTS["natural"], "", self.PLAN,
-            aspect_ratio_pref=aspect_ratio_pref, source_size=self.SQUARE,
-        )
-        return next(l for l in prompt.splitlines() if l.startswith("1. Reframe as described"))
-
-    def test_retouch_priority_stops_forbidding_what_the_crop_block_offers(self):
-        """Two opposed instructions is the failure mode this branch exists to
-        avoid: the edit model cannot weigh one prompt source against another."""
-        self.assertNotIn("expand canvas", self._faithful_priority("9:16"))
-        self.assertIn("expand canvas", self._faithful_priority("original"))
 
 
 if __name__ == "__main__":

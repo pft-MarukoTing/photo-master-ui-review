@@ -74,18 +74,9 @@ ADVANCED_OPTION_CHOICES = {
     # already-smiling one alone; the other levels are the level every readable
     # face is taken to.
     "smile_level": SMILE_LEVELS,
-    # Which builder assembles the prompt sent to the image editor. Kept in
-    # advanced_options so it follows the analysis into both finish/rerun paths
-    # without changing the public pipeline's stage boundary.
-    "editor_prompt_strategy": ("legacy", "resolved_compact"),
 }
-# Every caller that has to pick a strategy on its own reads this -- the edit
-# clients' fallback when an analysis carries no _advanced_options, and the
-# frontend's own default (frontend/config.js defaultEditorPromptStrategy).
-DEFAULT_EDITOR_PROMPT_STRATEGY = "resolved_compact"
 ADVANCED_OPTION_CHOICE_DEFAULTS = {
     "smile_level": "auto",
-    "editor_prompt_strategy": DEFAULT_EDITOR_PROMPT_STRATEGY,
 }
 
 

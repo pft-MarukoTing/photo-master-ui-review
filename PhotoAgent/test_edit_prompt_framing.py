@@ -13,9 +13,10 @@ from prompts import (
     _build_crop_instruction_block,
     _canvas_shape_difference,
     _parse_ratio_label,
-    build_edit_prompt,
+    build_framing_sections,
     build_overall_analysis_instruction,
 )
+from photo_agent.feature_resolver import build_compact_editor_prompt
 
 # The run that motivated this: a 1122x1402 (4:5) photo, a 1088x1456 (3:4) canvas,
 # and a crop plan whose own ratio matched the canvas. The model kept the whole
@@ -158,7 +159,9 @@ class CropInstructionBlock(unittest.TestCase):
         self.assertNotIn("a small trim is a fine answer", block)
 
 
-class FullPrompt(unittest.TestCase):
+class FramingSections(unittest.TestCase):
+    """The crop and style sections the compact editor prompt is built from."""
+
     def setUp(self):
         """This file asserts the crop-only framing text, so it must not read
         whatever the expand knobs happen to be turned to (see prompts.py)."""
@@ -166,31 +169,83 @@ class FullPrompt(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_raw_editor_receives_one_finished_light_color_target(self):
-        analysis = {
+    def _sections(self, style_options=None, source_size=SOURCE):
+        analysis = {**ANALYSIS, "style_options": style_options or {}}
+        return build_framing_sections(analysis, CROP_PLAN, "auto", source_size)
+
+    def test_consequence_reaches_the_crop_section(self):
+        self.assertIn("left and right edges cannot both be inside it", self._sections()["crop_instruction"])
+
+    def test_outpaint_mode_adds_scene_instead_of_giving_it_up(self):
+        crop = self._sections({"size": "wider"})["crop_instruction"]
+        self.assertIn("take in more scene above and below than at the sides", crop)
+        # The give-something-up phrasing is wrong when outpainting is allowed.
+        self.assertNotIn("cannot both be inside it", crop)
+
+    def test_closer_mode_still_gets_the_consequence(self):
+        crop = self._sections({"size": "closer"})["crop_instruction"]
+        self.assertIn("left and right edges cannot both be inside it", crop)
+        self.assertIn("Closer framing was requested", crop)
+
+    def test_sections_build_without_source_size(self):
+        crop = self._sections(source_size=None)["crop_instruction"]
+        self.assertIn("Resizing a single axis is not available", crop)
+        self.assertNotIn("cannot both be inside it", crop)
+
+    def test_style_section_lists_the_selected_options(self):
+        style = self._sections({"pose": "playful", "lighting": "soft"})["style_instruction"]
+        self.assertIn("Pose: Playful", style)
+        self.assertIn("Lighting: Soft Glow", style)
+
+    def test_no_style_options_means_no_style_section(self):
+        self.assertEqual(self._sections()["style_instruction"], "")
+
+    def test_blue_toned_light_reaches_the_style_section(self):
+        style = self._sections({"lighting": "cool"})["style_instruction"]
+        self.assertIn("Lighting: Blue Hour: Transform the photo with a clearly visible cool blue-hour atmosphere", style)
+        self.assertIn("shape subjects and background together", style)
+        self.assertIn("Keep faces in that ambient light, with exposure and shadow direction consistent with nearby surfaces", style)
+        self.assertIn("existing lamps keep their own color", style)
+
+    def test_night_reaches_the_style_section(self):
+        style = self._sections({"lighting": "night"})["style_instruction"]
+        self.assertIn("Lighting: Night: Transform the whole photo into a clearly recognizable night scene", style)
+        self.assertIn("existing light sources create gentle highlights on the subject and surroundings", style)
+
+
+class CompactEditorPrompt(unittest.TestCase):
+    """What reaches the editor once the sections are folded into the compact prompt."""
+
+    def setUp(self):
+        patcher = patch.object(prompts, "EXPAND_PERMISSION_RETAINED_THRESHOLD", 0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _prompt(self, analysis):
+        sections = build_framing_sections(analysis, CROP_PLAN, "auto", SOURCE)
+        prompt, _ = build_compact_editor_prompt(
+            analysis, "自然風格", "", CROP_PLAN,
+            raw_crop_instruction=sections["crop_instruction"],
+            raw_style_instruction=sections["style_instruction"],
+        )
+        return prompt
+
+    def test_editor_receives_one_finished_light_color_target(self):
+        prompt = self._prompt({
             **ANALYSIS,
             "edit_intent": "明亮、通透並具有清楚的主體層次。",
             "lighting_strategy": "提亮主體與中暗部，保留高光層次。",
             "memory_color_strategy": "建立乾淨而有吸引力的場景配色，獨立保護膚色。",
-        }
-        prompt = build_edit_prompt(
-            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
-        )
-        target_start = prompt.index("Finished light and color target:")
-        analysis_start = prompt.index("Photo analysis:")
-        self.assertLess(target_start, analysis_start)
+        })
         self.assertIn("- Finished visual result: 明亮、通透並具有清楚的主體層次。", prompt)
         self.assertIn("- Lighting plan: 提亮主體與中暗部，保留高光層次。", prompt)
         self.assertIn("- Color plan: 建立乾淨而有吸引力的場景配色，獨立保護膚色。", prompt)
         self.assertEqual(prompt.count("提亮主體與中暗部，保留高光層次。"), 1)
         self.assertEqual(prompt.count("建立乾淨而有吸引力的場景配色，獨立保護膚色。"), 1)
         self.assertEqual(prompt.count("提升整體曝光"), 1)
-        self.assertIn("Realize the Finished light and color target through the approved correction plan", prompt)
-        self.assertNotIn("open shadows selectively", prompt)
-        self.assertNotIn("A face is one surface", prompt)
 
-    def test_raw_editor_rebuilds_target_after_light_item_is_unchecked(self):
-        analysis = {
+    def test_editor_rebuilds_target_after_light_item_is_unchecked(self):
+        prompt = self._prompt({
             **ANALYSIS,
             "edit_intent": "提亮人物並建立明亮背景。",
             "lighting_strategy": "人物與背景共同提升半級。",
@@ -202,120 +257,41 @@ class FullPrompt(unittest.TestCase):
             "rejected_corrections": ["提升人物與背景曝光半級。"],
             "rejected_axes": [["exposure"]],
             "rejected_preserve": ["維持原圖人物與背景的曝光。"],
-        }
-        prompt = build_edit_prompt(
-            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
-        )
-        self.assertNotIn("提亮人物並建立明亮背景", prompt)
-        self.assertNotIn("人物與背景共同提升半級", prompt)
-        self.assertNotIn("人物太暗，必須提升人物與背景曝光半級", prompt)
-        self.assertNotIn("人物與背景曝光不足", prompt)
-        self.assertNotIn("Aesthetic diagnosis:", prompt)
-        self.assertIn("Photo context after user review:", prompt)
+        })
+        for stale in ("提亮人物並建立明亮背景", "人物與背景共同提升半級", "人物太暗，必須提升人物與背景曝光半級", "人物與背景曝光不足"):
+            self.assertNotIn(stale, prompt)
         self.assertIn("Color plan: 建立乾淨的藍色場景", prompt)
         self.assertIn("Reviewed finished result", prompt)
         self.assertIn("User-preserved choices", prompt)
         self.assertIn("維持原圖人物與背景的曝光", prompt)
         self.assertNotIn("提升人物與背景曝光半級", prompt)
 
-    def _prompt(self, style_options=None, **kwargs):
-        analysis = {**ANALYSIS, "style_options": style_options or {}}
-        return build_edit_prompt(
-            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE, **kwargs
-        )
-
     def test_no_box_coordinates_anywhere_in_the_prompt(self):
-        analysis = {
+        prompt = self._prompt({
             **ANALYSIS,
             "style_options": {},
             "subject_extent_box": {"x": 0.2, "y": 0.1, "w": 0.6, "h": 0.8, "reason": "含手部"},
             "protected_regions": [{"label": "雙手", "x": 0.3, "y": 0.4, "w": 0.4, "h": 0.3, "reason": "手勢"}],
-        }
-        prompt = build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE)
+        })
         self.assertNotIn('"x":', prompt)
         self.assertNotIn("x=0.", prompt)
-        # The semantic content of those boxes still has to arrive.
-        self.assertIn("含手部", prompt)
-        self.assertIn("雙手", prompt)
-        self.assertIn("臉與雙手", prompt)
-
-    def test_consequence_reaches_the_prompt_in_faithful_mode(self):
-        self.assertIn("left and right edges cannot both be inside it", self._prompt())
-
-    def test_outpaint_mode_adds_scene_instead_of_giving_it_up(self):
-        prompt = self._prompt({"size": "wider"})
-        self.assertIn("take in more scene above and below than at the sides", prompt)
-        # The give-something-up phrasing is wrong when outpainting is allowed.
-        self.assertNotIn("cannot both be inside it", prompt)
-
-    def test_closer_mode_still_gets_the_consequence(self):
-        prompt = self._prompt({"size": "closer"})
-        self.assertIn("left and right edges cannot both be inside it", prompt)
-        self.assertIn("Closer framing was requested", prompt)
-
-    def test_prompt_builds_without_source_size(self):
-        analysis = {**ANALYSIS, "style_options": {}}
-        prompt = build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
-        self.assertIn("Resizing a single axis is not available", prompt)
-        self.assertNotIn("cannot both be inside it", prompt)
-
-    def test_raw_builder_exposes_the_exact_crop_section_for_compact_renderer(self):
-        prompt, sections = build_edit_prompt(
-            {**ANALYSIS, "style_options": {}}, PRESET, "自然風格", "",
-            CROP_PLAN, source_size=SOURCE, return_sections=True,
-        )
-        self.assertTrue(sections["crop_instruction"])
-        self.assertIn(f'Crop instruction:\n{sections["crop_instruction"]}', prompt)
-
-    def test_raw_builder_exposes_the_exact_style_section_for_compact_renderer(self):
-        prompt, sections = build_edit_prompt(
-            {**ANALYSIS, "style_options": {"pose": "playful", "lighting": "soft"}},
-            PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
-            return_sections=True,
-        )
-        self.assertTrue(sections["style_instruction"])
-        self.assertIn(sections["style_instruction"], prompt)
-        self.assertIn("Pose: Playful", sections["style_instruction"])
-        self.assertIn("Lighting: Soft Glow", sections["style_instruction"])
-
-    def test_blue_toned_light_reaches_style_and_light_color_plan(self):
-        prompt, sections = build_edit_prompt(
-            {**ANALYSIS, "style_options": {"lighting": "cool"}},
-            PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
-            return_sections=True,
-        )
-        self.assertIn("Lighting: Blue Hour: Transform the photo with a clearly visible cool blue-hour atmosphere", sections["style_instruction"])
-        self.assertIn("shape subjects and background together", sections["style_instruction"])
-        self.assertIn("Keep faces in that ambient light, with exposure and shadow direction consistent with nearby surfaces", sections["style_instruction"])
-        self.assertIn("existing lamps keep their own color", sections["style_instruction"])
-        self.assertIn("Use the selected Blue Hour style as the final atmosphere", prompt)
 
     def test_selected_lighting_replaces_stale_analysis_color_goal(self):
-        analysis = {
+        prompt = self._prompt({
             **ANALYSIS,
             "style_options": {"lighting": "cool"},
             "edit_intent": "營造溫暖的金色夕陽。",
             "lighting_strategy": "保留暖色日光。",
             "memory_color_strategy": "加強橘黃色調。",
             "aesthetic_diagnosis": "畫面需要更暖。",
-        }
-        prompt = build_edit_prompt(
-            analysis, PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
-        )
+        })
         self.assertIn("Use the selected Blue Hour style as the final atmosphere", prompt)
         for stale_goal in ("營造溫暖的金色夕陽", "保留暖色日光", "加強橘黃色調", "畫面需要更暖"):
             self.assertNotIn(stale_goal, prompt)
 
-    def test_night_reaches_style_and_light_color_plan(self):
-        prompt, sections = build_edit_prompt(
-            {**ANALYSIS, "style_options": {"lighting": "night"}},
-            PRESET, "自然風格", "", CROP_PLAN, source_size=SOURCE,
-            return_sections=True,
-        )
-        self.assertIn("Lighting: Night: Transform the whole photo into a clearly recognizable night scene", sections["style_instruction"])
-        self.assertIn("existing light sources create gentle highlights on the subject and surroundings", sections["style_instruction"])
+    def test_selected_night_lighting_sets_the_final_atmosphere(self):
+        prompt = self._prompt({**ANALYSIS, "style_options": {"lighting": "night"}})
         self.assertIn("Use the selected Night style as the final atmosphere", prompt)
-
 
 if __name__ == "__main__":
     unittest.main()

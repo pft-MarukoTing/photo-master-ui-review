@@ -11,7 +11,7 @@ from typing import Tuple
 import backoff
 import requests
 
-from config import MODELS, ANALYSIS_MODEL_REASONING_EFFORT, PRESETS, PRESET_PROMPTS
+from config import MODELS, ANALYSIS_MODEL_REASONING_EFFORT
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import (
     create_preview_bytes,
@@ -41,7 +41,6 @@ from prompts import (
     build_body_reshape_planning_response_schema,
     merge_body_reshape_edit_prompt,
     merge_body_reshape_plans_partial,
-    build_edit_prompt,
     build_quality_check_prompt,
     expand_subject_boxes_to_contain_faces,
     merge_portrait_qc_issues,
@@ -56,8 +55,7 @@ from prompts import (
     style_option_entries,
     _apply_default_person_issues,
 )
-from photo_agent.feature_resolver import build_compact_editor_prompt
-from photo_agent.param_validation import DEFAULT_EDITOR_PROMPT_STRATEGY
+from photo_agent.edit_prompt import assemble_edit_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -727,11 +725,6 @@ def edit_photo(
     single_pass_edit: bool = False,
 ):
     """Returns (result, prompt)."""
-    preset = PRESETS.get(preset_key) or PRESETS["natural"]
-    preset_prompt = PRESET_PROMPTS.get(preset_key) or PRESET_PROMPTS["natural"]
-
-    user_instruction = analysis.get("user_instruction") or {}
-    user_direction = user_instruction.get("normalized_user_direction") or ""
     img_w, img_h = get_image_dimensions(image_bytes)
 
     # Let the selected framing size (close/closer) drive the crop geometry, not
@@ -773,26 +766,11 @@ def edit_photo(
     crop_plan = resolve_crop_box_with_report(
         crop_geometry_ctx.get("crop_box"), crop_geometry_ctx, img_w, img_h,
     )["cropBox"]
-    raw_prompt, raw_prompt_sections = build_edit_prompt(
-        framed_analysis, preset, preset_prompt, user_direction, crop_plan,
-        revision_feedback, aspect_ratio_pref=aspect_ratio,
+    prompt_text, resolution_metadata, prompt_strategy = assemble_edit_prompt(
+        framed_analysis, crop_plan, preset_key=preset_key, aspect_ratio=aspect_ratio,
         source_size=(img_w, img_h), single_pass_edit=single_pass_edit,
-        return_sections=True,
+        revision_feedback=revision_feedback,
     )
-    advanced_options = framed_analysis.get("_advanced_options") or {}
-    prompt_strategy = advanced_options.get("editor_prompt_strategy") or DEFAULT_EDITOR_PROMPT_STRATEGY
-    if user_instruction.get("overwrite_prompt"):
-        prompt_strategy = "legacy"
-    prompt_text = raw_prompt
-    resolution_metadata = None
-    if prompt_strategy == "resolved_compact":
-        prompt_text, resolution_metadata = build_compact_editor_prompt(
-            framed_analysis, preset_prompt, user_direction, crop_plan,
-            preset_key=preset_key, include_gaze=single_pass_edit, include_blink=single_pass_edit,
-            revision_feedback=revision_feedback,
-            raw_crop_instruction=raw_prompt_sections.get("crop_instruction"),
-            raw_style_instruction=raw_prompt_sections.get("style_instruction"),
-        )
 
     # Converted once, outside the retry-wrapped call, so a retry doesn't
     # needlessly re-encode the same bytes.
@@ -810,7 +788,6 @@ def edit_photo(
             b64, effective_ratio_label, crop_plan, img_w, img_h,
             expanding=bool(framed_analysis.get("reframe_extension")),
         ),
-        "raw_prompt": raw_prompt,
         "prompt_resolution": resolution_metadata,
         "prompt_strategy": prompt_strategy,
     }, prompt_text

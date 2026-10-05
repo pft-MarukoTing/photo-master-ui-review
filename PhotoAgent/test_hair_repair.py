@@ -1,23 +1,23 @@
 """Tests for the hair-tidying half of the edit prompt and the `hair` axis.
 
-Imports only prompts.py, so it runs without PIL/numpy/cv2:
+Imports only prompts.py and feature_resolver, so it runs without PIL/numpy/cv2:
 
     python3 -m unittest test_hair_repair -v
 """
 
 import unittest
 
+from photo_agent.feature_resolver import build_compact_editor_prompt
 from photo_agent.param_validation import normalize_advanced_options
 from prompts import (
     AXIS_DEFINITIONS,
-    build_edit_prompt,
     build_portrait_qc_instruction,
     derive_hair_decisions,
     resolve_user_hair_request,
-    resolve_rejected_axes,
 )
 
-PRESET = {"intent": "intent", "label": "label"}
+HAIR_BLOCK = "Hair execution boundary:"
+FULLY_GROOMED = "Hair level — fully groomed"
 CROP_PLAN = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0, "aspectRatio": "3:4"}
 ANALYSIS = {
     "photo_summary": "海邊的一位女性",
@@ -72,9 +72,13 @@ def _subjects_from_hair_issues(hair_issues):
     ]
 
 
+def _compact(analysis):
+    return build_compact_editor_prompt(analysis, "自然風格", "", CROP_PLAN)[0]
+
+
 def _prompt(hair_issues):
     analysis = {**ANALYSIS, "subjects": _subjects_from_hair_issues(hair_issues)}
-    return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
+    return _compact(analysis)
 
 
 
@@ -125,26 +129,26 @@ class HairBlockGating(unittest.TestCase):
         self.assertIn("do not add hair, create a new lock", issue["correction_plan"])
         self.assertIn("head pose, face, eyelids, expression, or skin", issue["correction_plan"])
 
-    def test_manual_cleanup_reaches_the_legacy_edit_prompt(self):
+    def test_manual_cleanup_reaches_the_edit_prompt(self):
         manual = {
             **LEAVE_ME, "_user_forced": True, "_user_level": "dynamic",
         }
         prompt = _prompt([manual])
-        self.assertIn("Hair tidying priority", prompt)
+        self.assertIn(HAIR_BLOCK, prompt)
         self.assertIn("preserving its lifted volume and motion", prompt)
 
     def test_no_hair_issues_means_no_hair_block(self):
-        self.assertNotIn("Hair tidying priority", _prompt([]))
+        self.assertNotIn(HAIR_BLOCK, _prompt([]))
 
     def test_should_fix_false_alone_means_no_hair_block(self):
         # An analysis that recorded "this mess is intentional, leaving it" must
         # not itself turn into a licence to touch hair.
-        self.assertNotIn("Hair tidying priority", _prompt([LEAVE_ME]))
+        self.assertNotIn(HAIR_BLOCK, _prompt([LEAVE_ME]))
 
     def test_should_fix_true_adds_the_block(self):
         prompt = _prompt([LEAVE_ME, FIX_ME])
-        self.assertIn("Hair tidying priority", prompt)
-        self.assertIn("中間女性", prompt)
+        self.assertIn(HAIR_BLOCK, prompt)
+        self.assertIn("Subject: 中間女性", prompt)
 
     def test_leave_alone_people_are_not_named_to_the_edit_model(self):
         # Only the should_fix items travel: naming the moving-hair person at all
@@ -155,9 +159,7 @@ class HairBlockGating(unittest.TestCase):
 
     def test_the_bounds_reach_the_prompt(self):
         prompt = _prompt([FIX_ME])
-        for bound in ("parting", "hairline position", "curl pattern",
-                      "The amount of hair never increases anywhere"):
-            self.assertIn(bound, prompt)
+        self.assertIn("Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color", prompt)
 
     def test_the_work_is_bounded_to_the_strands_own_footprint(self):
         # The identity anchor: a strand is a thin line, and the feature it crosses
@@ -165,46 +167,9 @@ class HairBlockGating(unittest.TestCase):
         # Losing this is what let "rebuild what was behind them" become a repainted
         # eye, and a repainted eye is a different face.
         prompt = _prompt([FIX_ME])
-        self.assertIn("change nothing outside its own footprint", prompt)
-        self.assertIn("stays pixel-faithful", prompt)
-        self.assertIn("Do not re-render the eye, nose, or mouth region", prompt)
-
-    def test_settle_is_the_only_action_allowed_past_a_strands_footprint(self):
-        prompt = _prompt([SETTLE_ME])
-        self.assertIn("this is the only place that wider scope is licensed", prompt)
-        # The footprint rule must survive as the rule for the other two actions,
-        # or widening the scope for wind quietly widens it for everything.
-        self.assertIn("For lay_back and remove, a strand is a thin line", prompt)
-
-    def test_settle_is_guarded_against_the_helmet(self):
-        # Region-scale smoothing makes a glossy mass the cheapest way to look
-        # tidy, so this is the failure mode most worth naming.
-        prompt = _prompt([SETTLE_ME])
-        self.assertIn("Settled is not sculpted", prompt)
-        self.assertIn("no more length, volume, or coverage than the rest of the head has", prompt)
-
-    def test_the_editor_refuses_to_uncover_a_forehead(self):
-        # Second line of defence: even handed a remove item aimed at fringe hair,
-        # the edit must not end with more forehead showing than it started with.
-        prompt = _prompt([FIX_ME])
-        self.assertIn("the hairline stays exactly where it is", prompt)
-        self.assertIn("no more forehead is visible at the end than at the start", prompt)
-        self.assertIn("never an instruction to remove the fringe", prompt)
-
-    def test_closing_a_gap_is_not_read_as_adding_hair(self):
-        # try7/image 10 left the fringe's bald gaps untouched. The block said both
-        # "close the gaps with the hair that is there" and "add no hair to fill a
-        # gap" -- and covering forehead skin necessarily renders hair where skin
-        # was, so the prohibition swallowed the instruction.
-        prompt = _prompt([CLUMPED])
-        self.assertIn('Combing hair across a gap is the operation, not a violation of "add no hair"', prompt)
-        self.assertIn("The same hair, spread evenly, covers more area than the same hair bunched into cords", prompt)
-        self.assertNotIn("Add no hair to fill a gap", prompt)
-
-    def test_redistribute_names_both_halves_of_the_job(self):
-        prompt = _prompt([CLUMPED])
-        self.assertIn("First, de-grease it", prompt)
-        self.assertIn("Second, comb it out", prompt)
+        self.assertIn("Remove only the named isolated strands along their thin footprints", prompt)
+        self.assertIn("retain that feature's visible source shape and position and repair only the strand-width footprint", prompt)
+        self.assertIn("not a head or face regeneration", prompt)
 
     def test_analysis_uses_recall_first_clumped_fringe_geometry(self):
         instruction = _portrait_qc_instruction()
@@ -215,18 +180,6 @@ class HairBlockGating(unittest.TestCase):
         self.assertIn('front_hair="clumped" plus hair_state="bangs_clumped"', instruction)
         self.assertIn("Do not require visible oil, multiple defective zones, or whole-fringe disorder", instruction)
 
-    def test_redistribute_keeps_the_fringe_see_through(self):
-        # Closing the gaps is the job; closing the fringe is the failure. Real
-        # bangs show skin through them, and an opaque one reads as a wig.
-        prompt = _prompt([CLUMPED])
-        self.assertIn("A fringe comes out as one even band, whichever action was named for it", prompt)
-        # try9 produced the defect the other way round: a remove item thinned the
-        # fringe into cords with bare skin between them. The guarantee was worded
-        # for redistribute only, so a remove item never picked it up.
-        self.assertIn("builds that same pattern from the other direction", prompt)
-        self.assertIn("never the fringe's own transparency", prompt)
-        self.assertIn("never by darkening, flattening, or blurring the fringe", prompt)
-
     def test_each_action_is_defined_as_the_state_the_hair_ends_in(self):
         # A controlled pair -- same photo, crop, output size, analysis and hair
         # item, differing only by a user_prompt -- came back unfixed, then fixed.
@@ -234,19 +187,7 @@ class HairBlockGating(unittest.TestCase):
         # named hair to take away, inside a block that is otherwise all limits, so
         # nothing in the prompt said what to render.
         prompt = _prompt([CLUMPED])
-        self.assertIn("Each is a picture of how that hair ends up", prompt)
-        self.assertIn("none of it is the goal", prompt)
-
-    def test_removal_is_all_or_nothing(self):
-        # 淡化 is what the analysis model reaches for on its own, and a faded
-        # strand leaves a grey trace on skin that reads worse than the strand.
-        prompt = _prompt([FIX_ME])
-        self.assertIn("Do not fade, blur, soften, desaturate, or half-erase hair", prompt)
-        self.assertIn("continues unbroken", prompt)
-
-    def test_the_exit_door_is_stated_as_correct_not_as_failure(self):
-        prompt = _prompt([FIX_ME])
-        self.assertIn("leave it exactly as captured -- that is the correct outcome here", prompt)
+        self.assertIn("This preservation boundary does not permit leaving the named defect unchanged", prompt)
 
 
 class BlockOrder(unittest.TestCase):
@@ -257,26 +198,11 @@ class BlockOrder(unittest.TestCase):
         # was 11th of 15, while the one instruction that ever worked arrived in
         # user_block at 6th.
         prompt = _prompt([CLUMPED])
-        plan = prompt.index("User-approved correction plan")
-        hair = prompt.index("Hair tidying priority")
-        rejected_or_skin = prompt.index("Skin in the finished photograph")
+        plan = prompt.index("Other approved corrections")
+        hair = prompt.index(HAIR_BLOCK)
+        skin = prompt.index("Skin boundary")
         self.assertLess(plan, hair)
-        self.assertLess(hair, rejected_or_skin)
-
-    def test_rejected_corrections_still_override_everything_above_them(self):
-        # The reviewed source-state choices have priority over analyzer-derived
-        # blocks, so they stay below the blocks that may still argue for changes.
-        analysis = {
-            **ANALYSIS, "subjects": _subjects_from_hair_issues([CLUMPED]),
-            "correction_plan": ["提升整體曝光"], "correction_axes": [["exposure"]],
-            "rejected_corrections": ["淡化背景"], "rejected_axes": [["distraction"]],
-            "rejected_preserve": ["維持背景原樣"],
-        }
-        prompt = build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
-        self.assertLess(
-            prompt.index("Hair tidying priority"),
-            prompt.index("User-preserved choices (highest priority for these scopes)"),
-        )
+        self.assertLess(hair, skin)
 
 
 class UncheckedHairItem(unittest.TestCase):
@@ -295,19 +221,16 @@ class UncheckedHairItem(unittest.TestCase):
             "subjects": _subjects_from_hair_issues([FIX_ME]),
             **overrides,
         }
-        return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
+        return _compact(analysis)
 
     def test_unchecking_it_drops_the_block(self):
         prompt = self._rejected()
-        self.assertNotIn("Hair tidying priority", prompt)
+        self.assertNotIn(HAIR_BLOCK, prompt)
         self.assertNotIn("strands_across_face", prompt)
 
     def test_the_preservation_instruction_still_arrives(self):
         # Dropping the block must not also drop the reason the hair is off-limits.
         self.assertIn("維持左臉頰上原本的碎髮", self._rejected())
-
-    def test_a_synonym_tag_on_the_rejected_item_still_suppresses(self):
-        self.assertNotIn("Hair tidying priority", self._rejected(rejected_axes=[["flyaways"]]))
 
     def test_a_kept_hair_item_keeps_the_block(self):
         # Two hair corrections, one unchecked and one kept: the kept one still
@@ -316,7 +239,7 @@ class UncheckedHairItem(unittest.TestCase):
             correction_plan=["提升整體曝光 0.3 EV", "把右側瀏海一撮順回髮流"],
             correction_axes=[["exposure"], ["hair"]],
         )
-        self.assertIn("Hair tidying priority", prompt)
+        self.assertIn(HAIR_BLOCK, prompt)
 
 
 class AnalysisInstruction(unittest.TestCase):
@@ -438,52 +361,28 @@ class HairAxis(unittest.TestCase):
     def test_axis_exists(self):
         self.assertIn("hair", AXIS_DEFINITIONS)
 
-    def test_unchecking_the_hair_item_rejects_the_axis(self):
-        rejected = resolve_rejected_axes({
-            "correction_plan": [],
-            "correction_axes": [],
-            "rejected_corrections": ANALYSIS["correction_plan"],
-            "rejected_axes": [["hair"]],
-        })
-        self.assertEqual(rejected, ["hair"])
-
-    def test_hair_synonyms_do_not_disable_axis_gating(self):
-        # An unrecognized axis on a KEPT item makes resolve_rejected_axes give up
-        # on gating for the whole edit, so the synonyms the model actually writes
-        # have to fold into "hair" instead of being seen as unknown.
-        for synonym in ("hairs", "flyaways", "bangs", "frizz", "hairstyle"):
-            with self.subTest(synonym=synonym):
-                rejected = resolve_rejected_axes({
-                    "correction_plan": ["提升整體曝光"],
-                    "correction_axes": [[synonym]],
-                    "rejected_corrections": ["把碎髮順好"],
-                    "rejected_axes": [["hair"]],
-                })
-                self.assertEqual(rejected, [])
-
 
 class CalmHair(unittest.TestCase):
-    """Legacy prompt coverage for the upload-page hair preference."""
+    """Edit-prompt coverage for the upload-page hair preference."""
 
     def _prompt(self, calm, **overrides):
         analysis = {**ANALYSIS, "_advanced_options": {"calm_hair": calm}, **overrides}
-        return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
+        return _compact(analysis)
 
     def test_off_by_default(self):
         self.assertEqual(normalize_advanced_options(None)["calm_hair"], False)
-        self.assertNotIn("Still-air hair", self._prompt(False))
-        self.assertNotIn("Still-air hair", build_edit_prompt(ANALYSIS, PRESET, "自然風格", "", CROP_PLAN))
+        self.assertNotIn(FULLY_GROOMED, self._prompt(False))
+        self.assertNotIn(FULLY_GROOMED, _compact(ANALYSIS))
 
     def test_on_reaches_the_edit_prompt(self):
         prompt = self._prompt(True, subjects=_subjects_from_hair_issues([FIX_ME]))
-        self.assertIn("Still-air hair (user-selected, mandatory)", prompt)
-        self.assertIn("Mandatory visible change", prompt)
+        self.assertIn(FULLY_GROOMED + " (mandatory visible change)", prompt)
         self.assertIn("entire visible hairstyle", prompt)
 
     def test_it_still_requires_the_analysis_to_find_a_defect(self):
         prompt = self._prompt(True, subjects=[])
-        self.assertNotIn("Still-air hair", prompt)
-        self.assertNotIn("Hair tidying priority", prompt)
+        self.assertNotIn(FULLY_GROOMED, prompt)
+        self.assertNotIn(HAIR_BLOCK, prompt)
 
     def test_unchecking_the_hair_item_still_switches_it_off(self):
         # Otherwise the rejected-corrections block and this one contradict.
@@ -492,15 +391,7 @@ class CalmHair(unittest.TestCase):
             correction_plan=[], correction_axes=[],
             rejected_corrections=["把被風吹起的頭髮自然放下"], rejected_axes=[["hair"]],
         )
-        self.assertNotIn("Still-air hair", prompt)
-
-    def test_the_scene_keeps_its_weather(self):
-        # "No wind" applied to the whole frame would rebuild the scene; only hair
-        # settles, and the flags and foliage still blow.
-        self.assertIn(
-            "This settles hair only; it does not calm the scene",
-            self._prompt(True, subjects=_subjects_from_hair_issues([FIX_ME])),
-        )
+        self.assertNotIn(FULLY_GROOMED, prompt)
 
     def test_a_moving_body_keeps_its_moving_hair(self):
         # Detection records body-driven motion without making the edit verdict.
@@ -525,7 +416,7 @@ class AdvancedSettingsToggle(unittest.TestCase):
 
     No longer reaches the analysis instruction at all -- eye_closed_detection/
     hair_mess_detection/gaze_contact_detection now only gate the edit stage
-    (build_edit_prompt's strip_disabled_topic_items), so analysis always runs
+    (selections.strip_for_toggles and the compact contracts), so analysis always runs
     full detection regardless of these three. These tests just cover that the
     toggle itself still normalizes correctly.
     """
@@ -540,7 +431,6 @@ class AdvancedSettingsToggle(unittest.TestCase):
                 "calm_hair": False,
                 "smile_adjustment": True,
                 "smile_level": "auto",
-                "editor_prompt_strategy": "resolved_compact",
             },
         )
 

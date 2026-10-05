@@ -13,7 +13,6 @@ from prompts import (
     _BLINK_DETECTION_SECTION,
     _fallback_blink_repair_strategy,
     build_body_reshape_edit_block,
-    build_edit_prompt,
     build_eye_repair_planning_instruction,
     build_quality_check_prompt,
     derive_blink_decisions,
@@ -347,7 +346,6 @@ class BlinkRepairStrategy(unittest.TestCase):
             "blink_repair_strategy": blink_strategy(),
         })
         prompt, audit = build_compact_editor_prompt(analysis, "", "", {})
-        legacy_prompt = build_edit_prompt(analysis, {}, "", "", {}, single_pass_edit=True)
         qa_prompt = build_quality_check_prompt(analysis)
 
         self.assertTrue(audit["resolved_features"][0]["final_state"]["paired_blink_repair"])
@@ -358,27 +356,17 @@ class BlinkRepairStrategy(unittest.TestCase):
         self.assertNotIn("Eyelid method: Lift the upper lids", prompt)
         self.assertNotIn("Keep the captured iris/pupil direction, sclera balance, and catchlights", prompt)
         self.assertIn("Set both irises, pupils, sclera balances, and catchlights coherently as one binocular pair", prompt)
-        self.assertIn("Photograph-side source states: photograph-left=fully_closed; photograph-right=narrowed_open", legacy_prompt)
-        self.assertIn("Both eyes are blink-affected, including one that is only narrowed or half closed", legacy_prompt)
-        self.assertIn("visible iris width", legacy_prompt)
-        self.assertNotIn("Eyelid adjustment: Lift the upper lids", legacy_prompt)
         self.assertIn("two independent mandatory outcomes", qa_prompt)
 
-    def test_legacy_editor_and_qa_reject_blink_induced_crease_width_mismatch(self):
+    def test_qa_rejects_blink_induced_crease_width_mismatch(self):
         analysis = blink_analysis()
         analysis["subjects"][0]["blink_issue"].update({
             "left_eye_state": "fully_closed",
             "right_eye_state": "half_closed",
             "blink_repair_strategy": blink_strategy(),
         })
-        prompt = build_edit_prompt(analysis, {}, "", "", {}, single_pass_edit=True)
         qa_prompt = build_quality_check_prompt(analysis)
 
-        self.assertIn("Target eye state: open, matching the left man's existing expression", prompt)
-        self.assertNotIn("Eyelid adjustment: Lift the upper lids to the captured lash line", prompt)
-        self.assertIn("Eyelid adjustment: Use the coordinated paired-eye method", prompt)
-        self.assertIn("Both eyes are blink-affected, including one that is only narrowed or half closed", prompt)
-        self.assertNotIn("Preserve genuine stable left/right crease differences", prompt)
         self.assertIn("same double-eyelid fold shape as that reference eye", qa_prompt)
         self.assertIn("same visible crease-to-lash band width", qa_prompt)
         self.assertIn("score must be 4 or lower and pass must be false", qa_prompt)
