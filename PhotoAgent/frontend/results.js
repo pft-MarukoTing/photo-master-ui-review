@@ -3487,7 +3487,9 @@ window.PhotoAgentResults = (() => {
     fillStyleOptionList(els.apLightingList, LIGHTING_OPTIONS, "ap-lighting", "default", "lighting");
     fillStyleOptionList(els.apSizeList, SIZE_OPTIONS, "ap-size", "default", "size");
     syncStylePicks();
-    const isPerson = analysis.subject_category === "人物";
+    // Mirrors prompts._has_person, so these show whenever the edit applies portrait work.
+    const isPerson = analysis.subject_category === "人物"
+      || (analysis.subjects || []).some((subject) => Boolean(subject?.is_person));
     if (els.apStyleCardPose) els.apStyleCardPose.hidden = !isPerson;
     if (els.apAdvancedSettingsFold) {
       els.apAdvancedSettingsFold.hidden = !isPerson;
