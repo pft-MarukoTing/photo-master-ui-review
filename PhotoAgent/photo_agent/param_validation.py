@@ -36,16 +36,15 @@ MAX_RUN_COUNT = 20
 # "advanced_options" dict/field instead of each becoming its own named
 # parameter, so a new setting only needs a new entry here plus a matching
 # check in prompts.py, instead of threading a new argument through every
-# function between the frontend and build_analysis_instruction. Unknown keys
+# function between the frontend and the edit-prompt builders. Unknown keys
 # are dropped rather than rejected (see normalize_advanced_options), the same
 # tolerant-of-drift stance aipoc_client.py already takes for cross-service
 # param mismatches.
 ADVANCED_OPTION_DEFAULTS = {
     "eye_closed_detection": True,
-    # "眼神對焦" on the upload page. Read by build_analysis_instruction (gates
-    # the analysis's own gaze_issue judgment) and, a second time and
-    # independently, by pipeline._run_eye_repair_pass (gates Step 5b) -- the
-    # latter does not just trust should_fix coming back false from the former.
+    # "眼神對焦" on the upload page. Read at edit time only: by the edit-prompt
+    # builders and, independently, by pipeline._run_eye_repair_pass (gates
+    # Step 5b). The analysis always judges gaze_issue regardless.
     "gaze_contact_detection": True,
     "hair_mess_detection": True,
     # Off by default, unlike the two above: those gate a repair the analysis

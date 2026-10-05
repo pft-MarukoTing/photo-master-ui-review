@@ -10,7 +10,6 @@ import unittest
 from photo_agent.param_validation import normalize_advanced_options
 from prompts import (
     AXIS_DEFINITIONS,
-    build_analysis_instruction,
     build_edit_prompt,
     build_portrait_qc_instruction,
     derive_hair_decisions,
@@ -77,6 +76,14 @@ def _prompt(hair_issues):
     analysis = {**ANALYSIS, "subjects": _subjects_from_hair_issues(hair_issues)}
     return build_edit_prompt(analysis, PRESET, "自然風格", "", CROP_PLAN)
 
+
+
+def _portrait_qc_instruction():
+    """Call B's prompt for one person; it carries the hair analysis section."""
+    return build_portrait_qc_instruction([{
+        "subject_index": 0, "local_detection_index": 0,
+        "label": "中間女性", "box": {"x": .2, "y": .1, "w": .3, "h": .6},
+    }])
 
 class HairBlockGating(unittest.TestCase):
     def test_manual_motion_cleanup_keeps_the_motion_endpoint(self):
@@ -200,7 +207,7 @@ class HairBlockGating(unittest.TestCase):
         self.assertIn("Second, comb it out", prompt)
 
     def test_analysis_uses_recall_first_clumped_fringe_geometry(self):
-        instruction = build_analysis_instruction()
+        instruction = _portrait_qc_instruction()
         self.assertIn("inspect its left, center, and right zones", instruction)
         self.assertIn("One such local contradiction is sufficient", instruction)
         self.assertIn("primarily a distribution-geometry decision, not an oil-detection decision", instruction)
@@ -316,7 +323,7 @@ class AnalysisInstruction(unittest.TestCase):
     """The model observes hair; Python owns the edit verdict."""
 
     def setUp(self):
-        self.instruction = build_analysis_instruction("auto")
+        self.instruction = _portrait_qc_instruction()
 
     def test_analysis_is_ordered_and_observation_only(self):
         for heading in (
@@ -340,7 +347,7 @@ class AnalysisInstruction(unittest.TestCase):
 
     def test_candidate_plan_can_exist_while_placeholder_is_false(self):
         self.assertIn("Writing a plan does not set should_fix", self.instruction)
-        self.assertIn("may coexist with the should_fix=false placeholder", self.instruction)
+        self.assertIn("provide the routed candidate fix_action/correction_plan. Always leave hair_issue.should_fix=false", self.instruction)
 
     def test_hair_is_kept_out_of_general_corrections(self):
         self.assertIn("Never add hair work to top-level correction_plan", self.instruction)
@@ -498,17 +505,17 @@ class CalmHair(unittest.TestCase):
     def test_a_moving_body_keeps_its_moving_hair(self):
         # Detection records body-driven motion without making the edit verdict.
         # The user-selected fully-groomed transformation is applied at edit time.
-        instruction = build_analysis_instruction("auto", {"calm_hair": True})
+        instruction = _portrait_qc_instruction()
         self.assertIn("use motion when the person's jump, spin, flip, throw, or turn drives the hair", instruction)
         self.assertIn("does not prevent the user's later fully-groomed transformation", instruction)
 
     def test_items_are_written_as_a_finished_state(self):
-        i = build_analysis_instruction("auto")
+        i = _portrait_qc_instruction()
         self.assertIn("name the exact visible target, the operation, and the visible final state", i)
         self.assertIn("The instruction must stand on its own for the editor", i)
 
     def test_analysis_never_routes_hair_through_the_global_recipe(self):
-        instruction = build_analysis_instruction("auto", {"calm_hair": True})
+        instruction = _portrait_qc_instruction()
         self.assertIn("hair_issue.correction_plan", instruction)
         self.assertIn("Never add hair work to top-level correction_plan", instruction)
 

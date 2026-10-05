@@ -13,7 +13,6 @@ from prompts import (
     _build_crop_instruction_block,
     _canvas_shape_difference,
     _parse_ratio_label,
-    build_analysis_instruction,
     build_edit_prompt,
     build_overall_analysis_instruction,
 )
@@ -47,17 +46,16 @@ class OverallAnalysisPrompt(unittest.TestCase):
         self.assertIn("Do not use preserve_rules to retain scene exposure", prompt)
 
     def test_every_ratio_mode_requires_an_active_crop_comparison(self):
-        for builder in (build_overall_analysis_instruction, build_analysis_instruction):
-            for ratio in ("auto", "original"):
-                prompt = builder(ratio, {})
-                self.assertIn(
-                    "Choose the strongest framing independently of the output aspect-ratio preference",
-                    prompt,
-                )
-                self.assertIn("crop that conforms to the selected ratio, treating both as equally eligible", prompt)
-                self.assertIn("protected_regions contain only indispensable subject details", prompt)
-                self.assertIn("keep every protected region inside crop_box with breathing room", prompt)
-                self.assertIn("intentionally trimmed subject/body edges outside these boxes", prompt)
+        for ratio in ("auto", "original"):
+            prompt = build_overall_analysis_instruction(ratio, {})
+            self.assertIn(
+                "Choose the strongest framing independently of the output aspect-ratio preference",
+                prompt,
+            )
+            self.assertIn("crop that conforms to the selected ratio, treating both as equally eligible", prompt)
+            self.assertIn("protected_regions contain only indispensable subject details", prompt)
+            self.assertIn("keep every protected region inside crop_box with breathing room", prompt)
+            self.assertIn("intentionally trimmed subject/body edges outside these boxes", prompt)
 
         overall_prompt = build_overall_analysis_instruction("original", {})
         self.assertIn("normally remove at least 8% of the original span on one axis", overall_prompt)
@@ -65,10 +63,9 @@ class OverallAnalysisPrompt(unittest.TestCase):
         self.assertIn("intended-to-remove edge content outside these protection boxes", overall_prompt)
 
     def test_original_ratio_is_not_a_request_to_disable_crop(self):
-        for builder in (build_overall_analysis_instruction, build_analysis_instruction):
-            prompt = builder("original", {})
-            self.assertIn('Set recommended_aspect_ratio to "original"', prompt)
-            self.assertIn("Every crop candidate must preserve the source aspect ratio", prompt)
+        prompt = build_overall_analysis_instruction("original", {})
+        self.assertIn('Set recommended_aspect_ratio to "original"', prompt)
+        self.assertIn("Every crop candidate must preserve the source aspect ratio", prompt)
 
 
 class ParseRatioLabel(unittest.TestCase):

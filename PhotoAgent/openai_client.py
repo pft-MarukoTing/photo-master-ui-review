@@ -29,12 +29,9 @@ from image_tools import (
     ensure_png_bytes,
 )
 from prompts import (
-    ANALYSIS_INSTRUCTION,
-    ANALYSIS_RESPONSE_SCHEMA,
     ANALYSIS_RESPONSE_SCHEMA_OVERALL,
     REFRAME_RESPONSE_SCHEMA,
     build_reframe_instruction,
-    build_analysis_instruction,
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
     build_portrait_qc_response_schema,
@@ -254,9 +251,9 @@ def _responses_payload(model: str, content: list, text_format: dict = None, reas
 
 def _face_crop_content_items(face_crops):
     """Builds the "Face crop N" / "Local face detector reference N" content
-    entries appended after the main photo -- shared by the single-pass flow
-    and both calls of the gpt-5.6-luna two-pass split below, since all three
-    show the model the exact same locally-detected faces.
+    entries appended after the main photo -- shared by Calls A, B and C of the
+    analysis split below, since all three show the model the exact same
+    locally-detected faces.
 
     Analysis is position-only now (no eye/gaze/hair/smile judging left), but
     the local, on-device face detector is still a more reliable way to find
@@ -266,8 +263,8 @@ def _face_crop_content_items(face_crops):
     for subject detection: the model is told to anchor its subjects[] list
     on these detections (one subjects[] entry per detection, expanded to
     that person's full extent) rather than only self-discovering faces and
-    cross-checking them against this afterward. See ANALYSIS_INSTRUCTION's
-    "Local face detector reference" rule for the matching instruction text.
+    cross-checking them against this afterward. See _FACE_CROP_EVIDENCE_SECTION
+    in prompts.py for the matching instruction text.
 
     Only entries with an actual cropped image (the first _FACE_CROP_MAX_COUNT,
     largest first -- see detect_face_crops' docstring) get sent to the model
@@ -309,14 +306,14 @@ def _face_crop_content_items(face_crops):
 
 
 def _stamp_local_face_debug_fields(result, face_crops):
-    """Deterministic backstop for the face-detector containment rule in
-    ANALYSIS_INSTRUCTION -- see expand_subject_boxes_to_contain_faces's own
+    """Deterministic backstop for the face-detector containment rule in the
+    overall analysis instruction -- see expand_subject_boxes_to_contain_faces's own
     docstring for why the prompt rule alone isn't enough to guarantee this.
     Uses every locally-detected face_box, including ones beyond the crop cap
     that were never sent to the model as an image -- this backstop only
     needs the box, not the crop. Also stamps the debug-UI-only face-box
-    fields (frontend's #boxes-toggle-btn and face-thumbnail row). Shared by
-    the single-pass flow and the two-pass split's Call A."""
+    fields (frontend's #boxes-toggle-btn and face-thumbnail row). Applied to
+    Call A's result."""
     if not face_crops:
         return result
     result = expand_subject_boxes_to_contain_faces(result, [c["face_box"] for c in face_crops])
@@ -328,55 +325,6 @@ def _stamp_local_face_debug_fields(result, face_crops):
         for c in face_crops
     ]
     return result
-
-
-def _analyze_photo_single_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
-    preview = create_preview_bytes(image_bytes)
-    data_url = image_to_data_url(preview, "image/jpeg")
-
-    face_crops = detect_face_crops(image_bytes)
-    content = [
-        {"type": "input_text", "text": build_analysis_instruction(
-            aspect_ratio, advanced_options, analysis_model,
-            source_size=get_image_dimensions(image_bytes))},
-        {"type": "input_image", "image_url": data_url},
-        *_face_crop_content_items(face_crops),
-    ]
-
-    # Constrains decoding to ANALYSIS_RESPONSE_SCHEMA's shape (Responses API
-    # strict structured output) rather than relying on the prompt's "return
-    # exactly this JSON shape" wording alone -- added after a production
-    # gpt-5-mini call returned a long response with one object closed by `]`
-    # instead of `}`, which _parse_json_from_text correctly rejected as
-    # invalid JSON. The schema only constrains structure (types, required
-    # keys, no extra keys), not the enum-like fields' documented value sets,
-    # so a judgement call outside those sets still comes through instead of
-    # the API hard-rejecting the request.
-    payload = _responses_payload(
-        analysis_model, content, text_format=ANALYSIS_RESPONSE_SCHEMA,
-        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-    )
-    data = _post_json(OPENAI_RESPONSES_URL, payload, "Photo analysis failed")
-    result = _parse_json_from_text(_extract_output_text(data))
-    result = _stamp_local_face_debug_fields(result, face_crops)
-    result = derive_hair_decisions(result)
-    usage_body = None
-    if body_reshape_enabled():
-        persons = portrait_qc_persons(result)
-        if persons:
-            result, usage_body = _run_body_reshape_pass_or_fallback(
-                result, data_url, persons, analysis_model
-            )
-    else:
-        # Keep direct analyze_photo callers safe as well as the pipeline stage:
-        # a disabled feature must never leak a stale body field from a custom
-        # analyzer or a saved/retried response.
-        result = strip_body_reshape(result)
-    return result, {
-        "model": analysis_model,
-        "usage": _sum_usage(data.get("usage"), usage_body),
-        "reasoning_effort": ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-    }
 
 
 def _analyze_body_reshape_pass(data_url: str, persons: list, analysis_model: str):
@@ -590,9 +538,9 @@ def _sum_usage(*usage_items: dict) -> dict:
 
 
 def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
-    """gpt-5.6-luna only (see analyze_photo below). Call A does overall photo
-    direction and subject identification, same as the single-pass flow minus
-    blink/hair/gaze/smile; Call B is a dedicated portrait-QC pass that observes
+    """The analysis flow for every analysis model. Call A does overall photo
+    direction and subject identification, without blink/hair/gaze/smile;
+    Call B is a dedicated portrait-QC pass that observes
     those four fields and writes each candidate per-person hair correction,
     only for the people Call A already identified, merged
     back by prompts.merge_portrait_qc_issues's stable subject_index (never by
@@ -746,9 +694,7 @@ def reframe_composition(image_bytes: bytes, analysis: dict, aspect_ratio: str = 
 
 
 def analyze_photo(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
-    if analysis_model == "gpt-5.6-luna":
-        return _analyze_photo_two_pass(image_bytes, aspect_ratio, advanced_options, analysis_model)
-    return _analyze_photo_single_pass(image_bytes, aspect_ratio, advanced_options, analysis_model)
+    return _analyze_photo_two_pass(image_bytes, aspect_ratio, advanced_options, analysis_model)
 
 
 # ── Step 3: user instruction pass-through ─────────────────────────────────────

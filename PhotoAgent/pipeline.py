@@ -29,7 +29,6 @@ from openai_client import (
     reframe_composition,
 )
 from prompts import (
-    build_analysis_instruction,
     build_overall_analysis_instruction,
     build_portrait_qc_instruction,
     build_eye_repair_planning_instruction,
@@ -212,15 +211,12 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     at this point.
 
     advanced_options: the Advanced Settings toggles dict (e.g.
-    {"eye_closed_detection": False}). Only build_analysis_instruction reads it
-    here, and only for calm_hair (an opt-in style request) -- the detection/
-    repair toggles (eye_closed_detection, hair_mess_detection,
-    gaze_contact_detection) no longer affect analysis at all; they're only
-    enforced later, at edit time (see _run_eye_repair_pass and
-    build_edit_prompt's strip_disabled_topic_items). Still stamped onto
-    analysis["_advanced_options"] below regardless, since those edit-time
-    consumers read it off the analysis object rather than as their own
-    argument.
+    {"eye_closed_detection": False}). These do not change the one-time
+    analysis; they are stored on the result and enforced when repairs are
+    reviewed and applied (see _run_eye_repair_pass and build_edit_prompt).
+    calm_hair and smile_adjustment/smile_level are likewise edit-only, but
+    represent transformations the user elects rather than detected-defect
+    filters.
     """
 
     # Step 1 — read
@@ -260,39 +256,27 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         analysis.get("aspect_ratio_source"),
     )
 
-    if analysis_model == "gpt-5.6-luna":
-        # Two-pass split (see openai_client._analyze_photo_two_pass): analysis
-        # already ran by this point, so subjects[] here is Call A's own
-        # finalized result -- portrait_qc_persons re-derives the exact same
-        # subject_index-tagged list Call B was actually given (the merge
-        # never reorders or filters subjects[], so this reconstruction
-        # matches what was actually sent).
-        persons = portrait_qc_persons(analysis)
-        repair_targets = eye_repair_targets(analysis)
-        analysis["prompts"] = {
-            "photo_analysis": build_overall_analysis_instruction(
-                aspect_ratio, advanced_options, source_size=get_image_dimensions(image_bytes)),
-            "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
-            "photo_analysis_eye_repair_planning": (
-                build_eye_repair_planning_instruction(repair_targets)
-                if repair_targets else None
-            ),
-            "photo_analysis_body_reshape": (
-                build_body_reshape_planning_instruction(persons)
-                if persons and body_reshape_enabled() else None
-            ),
-        }
-    else:
-        persons = portrait_qc_persons(analysis)
-        analysis["prompts"] = {
-            "photo_analysis": build_analysis_instruction(
-                aspect_ratio, advanced_options, analysis_model,
-                source_size=get_image_dimensions(image_bytes)),
-            "photo_analysis_body_reshape": (
-                build_body_reshape_planning_instruction(persons)
-                if persons and body_reshape_enabled() else None
-            ),
-        }
+    # Two-pass split (see openai_client._analyze_photo_two_pass): analysis
+    # already ran by this point, so subjects[] here is Call A's own
+    # finalized result -- portrait_qc_persons re-derives the exact same
+    # subject_index-tagged list Call B was actually given (the merge
+    # never reorders or filters subjects[], so this reconstruction
+    # matches what was actually sent).
+    persons = portrait_qc_persons(analysis)
+    repair_targets = eye_repair_targets(analysis)
+    analysis["prompts"] = {
+        "photo_analysis": build_overall_analysis_instruction(
+            aspect_ratio, advanced_options, source_size=get_image_dimensions(image_bytes)),
+        "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
+        "photo_analysis_eye_repair_planning": (
+            build_eye_repair_planning_instruction(repair_targets)
+            if repair_targets else None
+        ),
+        "photo_analysis_body_reshape": (
+            build_body_reshape_planning_instruction(persons)
+            if persons and body_reshape_enabled() else None
+        ),
+    }
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
     }

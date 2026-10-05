@@ -16,7 +16,6 @@ from image_tools import (
     plan_reframe_extension,
 )
 from prompts import (
-    build_analysis_instruction,
     build_edit_prompt,
     build_overall_analysis_instruction,
     expand_permitted,
@@ -597,9 +596,9 @@ def _policy_block(instruction):
 
 
 class AnalysisAspectRatioPolicyTests(unittest.TestCase):
-    """The analysis prompt's three branches, on both analyzer paths."""
+    """The analysis prompt's three branches."""
 
-    BUILDERS = (build_analysis_instruction, build_overall_analysis_instruction)
+    BUILDERS = (build_overall_analysis_instruction,)
 
     def test_a_fixed_ratio_is_planned_for_not_merely_labelled(self):
         for build in self.BUILDERS:
@@ -612,7 +611,7 @@ class AnalysisAspectRatioPolicyTests(unittest.TestCase):
                 self.assertNotIn("Select recommended_aspect_ratio only from", policy)
 
     def test_a_fixed_ratio_closes_the_fall_back_to_original_escape_hatch(self):
-        # Both instruction bodies tell the model to answer "original" when no
+        # The instruction body tells the model to answer "original" when no
         # reframing looks beneficial, which would discard the user's choice.
         for build in self.BUILDERS:
             with self.subTest(build=build.__name__):
@@ -632,14 +631,6 @@ class AnalysisAspectRatioPolicyTests(unittest.TestCase):
             with self.subTest(build=build.__name__):
                 policy = _policy_block(build("auto", source_size=(1000, 1500)))
                 self.assertIn("supported output set: original, 1:1, 2:3, 3:4, 4:5.", policy)
-
-    def test_both_analyzer_paths_share_one_policy_block(self):
-        for pref in ("auto", "original", "3:2"):
-            with self.subTest(pref=pref):
-                self.assertEqual(
-                    _policy_block(build_analysis_instruction(pref)),
-                    _policy_block(build_overall_analysis_instruction(pref)),
-                )
 
 
 class AspectRatioReasonTests(unittest.TestCase):
@@ -757,12 +748,12 @@ class ExpandPermissionTests(unittest.TestCase):
         self.assertIn("as a straight cut from the photograph", crop_only)
 
     def test_analysis_policy_asks_the_analyzer_to_decide(self):
-        wide = build_analysis_instruction("9:16", source_size=self.SQUARE)
+        wide = build_overall_analysis_instruction("9:16", source_size=self.SQUARE)
         self.assertIn("Decide reframe_mode before sacrificing subjects to fit the ratio.", wide)
         self.assertIn("removes 44% of the photograph's width", wide)
         self.assertIn("beyond the top and bottom edges, adds at most 35% to the height", wide)
         # A modest gap is asked too: the decision is about the picture.
-        modest = build_analysis_instruction("3:4", source_size=self.SQUARE)
+        modest = build_overall_analysis_instruction("3:4", source_size=self.SQUARE)
         self.assertIn("Decide reframe_mode before sacrificing subjects to fit the ratio.", modest)
         self.assertIn("removes 25% of the photograph's width", modest)
         # Not a shape the user named, and a shape with nothing to extend: the
@@ -770,35 +761,29 @@ class ExpandPermissionTests(unittest.TestCase):
         for pref in ("auto", "1:1"):
             self.assertNotIn(
                 "Decide reframe_mode before sacrificing subjects to fit the ratio.",
-                build_analysis_instruction(pref, source_size=self.SQUARE),
+                build_overall_analysis_instruction(pref, source_size=self.SQUARE),
             )
-        # Both analyzer paths share the one policy.
-        self.assertIn("Decide reframe_mode before sacrificing subjects to fit the ratio.",
-                      build_overall_analysis_instruction("9:16", source_size=self.SQUARE))
 
     def test_reframe_mode_is_a_two_value_enum_with_a_stated_default(self):
         """Free text here produced "original", "preserve_original" and "裁切"
         across 45 analyses: strict mode requires the field on every call, so a
         run whose policy never mentions it was filling it blind."""
-        for schema in (prompts.ANALYSIS_RESPONSE_SCHEMA,
-                       prompts.ANALYSIS_RESPONSE_SCHEMA_OVERALL):
-            self.assertEqual(
-                schema["schema"]["properties"]["reframe_mode"]["enum"],
-                ["crop", "expand"],
-            )
-        # Named in both skeletons, so the default is stated even on the calls
+        self.assertEqual(
+            prompts.ANALYSIS_RESPONSE_SCHEMA_OVERALL["schema"]["properties"]["reframe_mode"]["enum"],
+            ["crop", "expand"],
+        )
+        # Named in the skeleton, so the default is stated even on the calls
         # the expand policy is not injected into.
         for pref in ("auto", "original", "9:16"):
-            for build in (build_analysis_instruction, build_overall_analysis_instruction):
-                instruction = build(pref, source_size=self.SQUARE)
-                self.assertIn('"reframe_mode"', instruction)
-                self.assertIn('一律填', instruction)
+            instruction = build_overall_analysis_instruction(pref, source_size=self.SQUARE)
+            self.assertIn('"reframe_mode"', instruction)
+            self.assertIn('一律填', instruction)
 
     def test_unknown_source_size_keeps_the_analysis_crop_only(self):
         """The choice depends on how far this shape is from the source's, so
         an analysis that cannot be told the source shape must not be asked."""
         self.assertNotIn(
-            "Decide reframe_mode before sacrificing subjects to fit the ratio.", build_analysis_instruction("9:16"))
+            "Decide reframe_mode before sacrificing subjects to fit the ratio.", build_overall_analysis_instruction("9:16"))
 
     def test_extension_plan_splits_the_gap_at_the_cap(self):
         box = {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0}
