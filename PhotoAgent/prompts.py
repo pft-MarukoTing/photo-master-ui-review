@@ -4819,6 +4819,156 @@ def approved_gaze_items(analysis):
     ]
 
 
+def build_framing_sections(analysis, crop_plan, aspect_ratio_pref="auto", source_size=None):
+    """The edit prompt's crop and style sections: {"crop_instruction", "style_instruction"}.
+
+    build_compact_editor_prompt parses these sentences (feature_resolver's
+    _compact_raw_crop_instruction / _compact_raw_style_instruction), so their
+    wording is a contract with that parser.
+    """
+    if not body_reshape_enabled():
+        analysis = strip_body_reshape(analysis)
+    has_body_reshape = bool(build_body_reshape_edit_block(analysis))
+    if aspect_ratio_pref == "auto" and analysis.get("_aspect_ratio_pref_at_analysis") == "original":
+        # The analysis was run while the user had "keep original" selected, so
+        # its recommended_aspect_ratio/crop_box.aspect_ratio are forced to
+        # "original" by the analysis instruction -- not a genuine model
+        # judgment. The user has since switched to "Auto" for this edit, so
+        # that forced value must not leak in as if it were a real
+        # recommendation (it would otherwise silently keep pinning the output
+        # to the original ratio even though "Auto" was chosen).
+        rec_aspect = "no strong preference -- choose whichever aspect ratio best suits the subject and composition"
+    else:
+        rec_aspect = (
+            analysis.get("recommended_aspect_ratio") or
+            (analysis.get("crop_box") or {}).get("aspect_ratio") or
+            "original"
+        )
+
+    style_lines = [f"- {short_label}: {description}" for short_label, description in style_option_entries(analysis)]
+    has_style_overrides = bool(style_lines)
+    style_options = analysis.get("style_options") or {}
+    size_override_value = style_options.get("size")
+    has_pose_override = bool(style_options.get("pose") and style_options.get("pose") != "default")
+    has_vertical_angle_override = style_options.get("angle") in {"high", "low", "eye"}
+    has_wider_size_override = size_override_value in {"wide", "wider"}
+    has_closer_size_override = size_override_value in {"close", "closer"}
+
+    size_ratio_block = ""
+    if size_override_value == "wide":
+        size_ratio_block = (
+            "Quantified wide-framing target: make the main subject's visible frame ratio about 20% smaller than in the original image. "
+            "Aim for the subject's bounding-box height or dominant dimension to be roughly 80% of its original frame-relative size; "
+            "its area share may become roughly 65% of the original. "
+        )
+    elif size_override_value == "wider":
+        size_ratio_block = (
+            "Quantified wider-framing target: make the main subject's visible frame ratio about 40% smaller than in the original image. "
+            "Aim for the subject's bounding-box height or dominant dimension to be roughly 60% of its original frame-relative size; "
+            "its area share may become roughly 35% to 40% of the original. "
+        )
+
+
+    style_block = ""
+    if has_style_overrides:
+        angle_reshoot_line = (
+            "For a selected high, low, or eye-level angle, keep this same photograph and its composition and change only "
+            "the height it is seen from, so it reads as the very same shot viewed from higher or lower, not a minor perspective tweak. "
+            if has_vertical_angle_override else
+            "For a selected angle override, the output should look like a new photograph taken from the selected camera angle, "
+            "not like a minor perspective correction. "
+        )
+        style_block = (
+            "User-selected style overrides are mandatory same-scene reshoot requirements, not optional retouch suggestions.\n"
+            "Apply every selected item visibly and deliberately. When an override conflicts with default preservation of pose, "
+            "camera angle, lighting, or framing size, the override wins for that selected aspect.\n"
+            + angle_reshoot_line
+            + "For selected pose, lighting, or framing-size overrides, make the change "
+            "clearly visible while keeping it photographically believable.\n"
+            + "\n".join(style_lines)
+            + (
+                "\n\nKeep the result faithful as a reshoot of the same original scene: same subject identity, same location, "
+                "same environment, same clothing, and same props. Do not change unselected aspects, add new people, invent new props, "
+                "or replace the scene."
+            )
+        )
+        if has_pose_override:
+            style_block += (
+                "\n\nPose override requirement: Do not preserve the original pose. "
+                "Replace the original body language with a visibly different pose matching the selected pose style. "
+                "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
+                "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
+            )
+        if has_vertical_angle_override:
+            style_block += (
+                "\n\nAngle override requirement (vertical only): Change only the height the shot is seen from, keeping the same horizontal camera direction. "
+                "Every background and scene element stays in its original place, on the same side of the frame as before, just seen from higher or lower, "
+                "and the subject stays in roughly the same part of the frame (any selected pose change still applies to the subject's own body language). "
+                "The result should stay recognizable as the very same framing, only tilted up or down. "
+                "A result where background elements move to the opposite side, or that looks taken from a different horizontal direction, fails this requirement."
+            )
+        if has_wider_size_override:
+            style_block += (
+                "\n\nFraming-size override requirement: This is a true wider-framing transformation. "
+                + size_ratio_block +
+                "Do not preserve the original image boundaries. Make the subject visibly smaller in the frame and show more surrounding same-scene environment. "
+                "If the original image lacks enough context, extend/outpaint the canvas with plausible continuation of the same location, lighting, perspective, depth, and materials. "
+                "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery. "
+                "Wide and wider must be visibly different: wide is a moderate pull-back, wider is a much stronger environmental pull-back."
+            )
+        elif has_closer_size_override:
+            style_block += (
+                "\n\nFraming-size override requirement: This is a true closer-framing transformation. "
+                "Make the subject visibly larger in the frame while preserving essential identity, object form, role cues, and clean breathing room."
+            )
+
+    expand_plan = (
+        None if has_wider_size_override or has_closer_size_override
+        else analysis.get("reframe_extension")
+    )
+    # Once the analysis has answered, the edit model is not asked again: an
+    # analysis that chose "crop" must not also be handed the conditional
+    # permission, which would reopen a decision already made -- and offering
+    # that choice to this model was measured to change nothing anyway.
+    mode_decided = bool(str(analysis.get("reframe_mode") or "").strip())
+    allow_expand = not mode_decided and not has_wider_size_override and not has_closer_size_override and expand_permitted(
+        aspect_ratio_pref,
+        (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio"),
+        source_size,
+    )
+
+    if has_wider_size_override:
+        # The consequence sentence used for a plain crop ("the sides cannot both
+        # be inside this frame") is false here: this mode is allowed to outpaint,
+        # so a differently-shaped canvas is reached by adding scene unevenly
+        # rather than by giving anything up.
+        outpaint_shape_line = {
+            "narrower": "This frame is narrower than the photograph you were given, so take in more scene above and "
+                        "below than at the sides to reach its shape. ",
+            "wider": "This frame is wider than the photograph you were given, so take in more scene at the sides "
+                     "than above and below to reach its shape. ",
+        }.get(_canvas_shape_difference(
+            (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio"), source_size
+        ), "")
+        crop_instruction_block = (
+            "Wider framing requested. Do not treat the original image boundaries as final. "
+            + size_ratio_block +
+            "Create a wider same-scene composition where the subject appears smaller and more surrounding environment is visible. "
+            "Decide the new frame from the photograph's own content and subject. "
+            + outpaint_shape_line +
+            "Canvas expansion/outpainting is allowed only to continue the same real scene with matching perspective, lighting, depth, materials, and background logic. "
+            "Do not add blank borders, transparent/checkerboard padding, artificial empty bands, stretched edges, or unrelated scenery. "
+            + UNIFORM_SCALE_ONLY + " " + _content_shape_rule(has_body_reshape)
+        )
+    else:
+        crop_instruction_block = _build_crop_instruction_block(
+            crop_plan, require_tighter=has_closer_size_override, source_size=source_size,
+            has_body_reshape=has_body_reshape, allow_expand=allow_expand,
+            expand_plan=expand_plan, target_ratio_label=rec_aspect,
+        )
+    return {"crop_instruction": crop_instruction_block, "style_instruction": style_block}
+
+
 def build_edit_prompt(analysis, preset, preset_prompt, user_direction, crop_plan, revision_feedback=None, aspect_ratio_pref="auto", source_size=None, single_pass_edit=False, return_sections=False):
     analysis = strip_disabled_topic_items(analysis)
     if not body_reshape_enabled():
@@ -4981,58 +5131,7 @@ The user's explicit instruction is the top editing goal. Agent aesthetic improve
     # the model can see, and size_ratio_block is interpolated three times, so any
     # sentence added here costs triple.
 
-    style_block = ""
-    if has_style_overrides:
-        angle_reshoot_line = (
-            "For a selected high, low, or eye-level angle, keep this same photograph and its composition and change only "
-            "the height it is seen from, so it reads as the very same shot viewed from higher or lower, not a minor perspective tweak. "
-            if has_vertical_angle_override else
-            "For a selected angle override, the output should look like a new photograph taken from the selected camera angle, "
-            "not like a minor perspective correction. "
-        )
-        style_block = (
-            "User-selected style overrides are mandatory same-scene reshoot requirements, not optional retouch suggestions.\n"
-            "Apply every selected item visibly and deliberately. When an override conflicts with default preservation of pose, "
-            "camera angle, lighting, or framing size, the override wins for that selected aspect.\n"
-            + angle_reshoot_line
-            + "For selected pose, lighting, or framing-size overrides, make the change "
-            "clearly visible while keeping it photographically believable.\n"
-            + "\n".join(style_lines)
-            + (
-                "\n\nKeep the result faithful as a reshoot of the same original scene: same subject identity, same location, "
-                "same environment, same clothing, and same props. Do not change unselected aspects, add new people, invent new props, "
-                "or replace the scene."
-            )
-        )
-        if has_pose_override:
-            style_block += (
-                "\n\nPose override requirement: Do not preserve the original pose. "
-                "Replace the original body language with a visibly different pose matching the selected pose style. "
-                "The change must affect posture, gesture, hand placement, body direction, weight shift, or head direction. "
-                "A result with only lighting, color, skin, or minor expression changes and no clear pose change is a failure."
-            )
-        if has_vertical_angle_override:
-            style_block += (
-                "\n\nAngle override requirement (vertical only): Change only the height the shot is seen from, keeping the same horizontal camera direction. "
-                "Every background and scene element stays in its original place, on the same side of the frame as before, just seen from higher or lower, "
-                "and the subject stays in roughly the same part of the frame (any selected pose change still applies to the subject's own body language). "
-                "The result should stay recognizable as the very same framing, only tilted up or down. "
-                "A result where background elements move to the opposite side, or that looks taken from a different horizontal direction, fails this requirement."
-            )
-        if has_wider_size_override:
-            style_block += (
-                "\n\nFraming-size override requirement: This is a true wider-framing transformation. "
-                + size_ratio_block +
-                "Do not preserve the original image boundaries. Make the subject visibly smaller in the frame and show more surrounding same-scene environment. "
-                "If the original image lacks enough context, extend/outpaint the canvas with plausible continuation of the same location, lighting, perspective, depth, and materials. "
-                "Expanded areas must be photographic scene content, not blank borders, stretched edges, duplicated patterns, or unrelated invented scenery. "
-                "Wide and wider must be visibly different: wide is a moderate pull-back, wider is a much stronger environmental pull-back."
-            )
-        elif has_closer_size_override:
-            style_block += (
-                "\n\nFraming-size override requirement: This is a true closer-framing transformation. "
-                "Make the subject visibly larger in the frame while preserving essential identity, object form, role cues, and clean breathing room."
-            )
+    style_block = build_framing_sections(analysis, crop_plan, aspect_ratio_pref, source_size)["style_instruction"]
 
     correction_plan_block = ""
     if analysis.get("correction_plan"):
@@ -5433,35 +5532,7 @@ This is a retry. Directly fix the QA failure. Do not repeat the failed crop/edit
         focus_block = f"""Single-subject close-up override (highest framing priority):
 Feature one subject: {focus_label}. Identify that subject in the photograph and frame the close-up around what you see there. The photo summary and scene description above may mention several people or elements -- for this close-up, every other person, object, or element left outside the frame is intentionally and correctly cropped out. Do NOT reintroduce them. Fill the frame with the chosen subject; preserve that subject's identity, expression, and key details."""
 
-    if has_wider_size_override:
-        # The consequence sentence used for a plain crop ("the sides cannot both
-        # be inside this frame") is false here: this mode is allowed to outpaint,
-        # so a differently-shaped canvas is reached by adding scene unevenly
-        # rather than by giving anything up.
-        outpaint_shape_line = {
-            "narrower": "This frame is narrower than the photograph you were given, so take in more scene above and "
-                        "below than at the sides to reach its shape. ",
-            "wider": "This frame is wider than the photograph you were given, so take in more scene at the sides "
-                     "than above and below to reach its shape. ",
-        }.get(_canvas_shape_difference(
-            (crop_plan or {}).get("aspectRatio") or (crop_plan or {}).get("aspect_ratio"), source_size
-        ), "")
-        crop_instruction_block = (
-            "Wider framing requested. Do not treat the original image boundaries as final. "
-            + size_ratio_block +
-            "Create a wider same-scene composition where the subject appears smaller and more surrounding environment is visible. "
-            "Decide the new frame from the photograph's own content and subject. "
-            + outpaint_shape_line +
-            "Canvas expansion/outpainting is allowed only to continue the same real scene with matching perspective, lighting, depth, materials, and background logic. "
-            "Do not add blank borders, transparent/checkerboard padding, artificial empty bands, stretched edges, or unrelated scenery. "
-            + UNIFORM_SCALE_ONLY + " " + _content_shape_rule(has_body_reshape)
-        )
-    else:
-        crop_instruction_block = _build_crop_instruction_block(
-            crop_plan, require_tighter=has_closer_size_override, source_size=source_size,
-            has_body_reshape=has_body_reshape, allow_expand=allow_expand,
-            expand_plan=expand_plan, target_ratio_label=rec_aspect,
-        )
+    crop_instruction_block = build_framing_sections(analysis, crop_plan, aspect_ratio_pref, source_size)["crop_instruction"]
     crop_priority_line_style = (
         "Create the requested wider same-scene framing. The original image boundaries are not final for wide/wider size overrides; expand/outpaint plausible same-scene context if needed. "
         + size_ratio_block +
