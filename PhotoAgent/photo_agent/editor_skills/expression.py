@@ -5,9 +5,10 @@ from prompts import (
     _read_smile_states,
     resolve_smile_targets,
     smile_level,
+    smile_qa_expectation,
 )
 
-from .base import RULE_EXPRESSION, RULE_LAUGHTER, EditorSkill
+from .base import QA_SMILE, RULE_EXPRESSION, RULE_LAUGHTER, EditorSkill
 from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
 
 
@@ -111,3 +112,20 @@ class ExpressionSkill(EditorSkill):
                 "- For laughter, show spontaneous joy coherently through the mouth, cheek lift, periocular response, and a compatible relaxed brow; do not leave a neutral, worried, stern, or angry upper face. Reach the requested intensity through coordinated expression—not an oversized mouth or reshaped facial features."
             ))
         return rules
+
+    def qa_checks(self, analysis):
+        # 笑容調整 has no recipe item to score against (the level is a 人像設定
+        # choice applied at edit time, not a correction the analysis proposed), so
+        # QA is told the expected endpoint here or it reads the new expression as
+        # an unrequested change to the moment and caps the score for it.
+        smile_expectations = smile_qa_expectation(analysis)
+        smile_qa_line = ""
+        if smile_expectations:
+            smile_qa_line = (
+                "- User-selected smile adjustment: the user asked for these people's smiles to be changed, so the new "
+                f"expression is requested, not a lost moment -- {smile_expectations}. Check that each named person "
+                "reached that overall intensity through a natural, coordinated facial expression. Identity, facial "
+                "anatomy, skin texture, gaze direction, head pose, and all unrelated image content remain faithful "
+                "to the original. A changed expression on anyone not named fails this check.\n"
+            )
+        return [(QA_SMILE, smile_qa_line)]

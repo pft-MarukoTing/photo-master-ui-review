@@ -13,6 +13,17 @@ RULE_LAUGHTER = 40
 RULE_SMILE_GAZE = 50
 RULE_GAZE = 60
 
+# Sort order of QA check lines (EditorSkill.qa_checks); the QA prompt keeps a blank line before QA_SMILE.
+QA_BLINK = 10
+QA_HAIR = 20
+QA_BODY = 30
+QA_SMILE = 40
+QA_GAZE = 50
+
+# Sort order of QA score caps (EditorSkill.qa_score_caps); the QA prompt keeps a blank line before CAP_BLINK.
+CAP_BODY = 10
+CAP_BLINK = 20
+
 # Prompt modes a skill can switch on; the editor prompt's own wording depends on them.
 MODE_HEAD_ALIGNED_GAZE = "head_aligned_gaze"
 MODE_HOLISTIC_BODY = "holistic_body"
@@ -80,6 +91,14 @@ class EditorSkill:
     def followup_edit(self, analysis):
         """The FollowupEdit this skill needs after Step 5, or None."""
         return None
+
+    def qa_checks(self, analysis):
+        """(order, text) QA check entries; order is one of the QA_* values and text ends with a newline."""
+        return []
+
+    def qa_score_caps(self, analysis):
+        """(order, text) QA score caps; order is one of the CAP_* values and text ends with a newline."""
+        return []
 
     def claims_correction(self, text, axes, analysis):
         """Whether this skill renders an approved correction_plan item itself instead of the general list."""

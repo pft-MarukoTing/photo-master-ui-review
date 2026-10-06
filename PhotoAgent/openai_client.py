@@ -27,7 +27,6 @@ from prompts import (
     REFRAME_RESPONSE_SCHEMA,
     build_reframe_instruction,
     build_overall_analysis_instruction,
-    build_quality_check_prompt,
     expand_subject_boxes_to_contain_faces,
     style_option_entries,
 )
@@ -35,6 +34,7 @@ from photo_agent.capabilities import ANALYSIS_MODEL_REASONING_EFFORT
 from photo_agent.providers.http import api_error, checked_json, error_message, retry_transient, safe_json
 from photo_agent.providers.image_edit import EditGeometry, run_image_edit
 from photo_agent.analysis_skills import ANALYSIS_SKILLS, AnalysisContext, select_analysis_skills
+from photo_agent.quality_check_prompt import build_quality_check_prompt
 from photo_agent.utils import bounded_debug_value
 
 logger = logging.getLogger(__name__)

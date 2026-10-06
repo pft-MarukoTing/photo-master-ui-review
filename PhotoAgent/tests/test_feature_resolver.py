@@ -17,7 +17,8 @@ from photo_agent.feature_resolver import (
     build_feature_contracts,
     resolve_feature_contracts,
 )
-from prompts import USER_SCENE_CONSISTENCY_RULE, build_body_reshape_edit_block, build_quality_check_prompt
+from photo_agent.quality_check_prompt import build_quality_check_prompt
+from prompts import USER_SCENE_CONSISTENCY_RULE, build_body_reshape_edit_block
 
 
 def interaction_analysis():
