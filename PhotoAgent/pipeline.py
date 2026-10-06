@@ -29,18 +29,13 @@ from openai_client import (
 )
 from prompts import (
     build_overall_analysis_instruction,
-    build_portrait_qc_instruction,
-    build_eye_repair_planning_instruction,
     build_eye_repair_pass_prompt,
-    build_body_reshape_planning_instruction,
     body_reshape_enabled,
     strip_body_reshape,
     sanitize_body_reshape_analysis,
     get_body_reshape_edit_prompt,
     body_reshape_items,
-    eye_repair_targets,
     final_smile_by_subject,
-    portrait_qc_persons,
     apply_rejected_reframing,
     approved_blink_items,
     approved_gaze_items,
@@ -49,6 +44,7 @@ from prompts import (
     restore_composition_state,
     with_reframing_proposal,
 )
+from photo_agent.analysis_skills import ANALYSIS_SKILLS
 from photo_agent.feature_resolver import build_blink_pass_targets
 from photo_agent import capabilities
 
@@ -252,27 +248,13 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
         analysis.get("aspect_ratio_source"),
     )
 
-    # Two-pass split (see openai_client._analyze_photo_two_pass): analysis
-    # already ran by this point, so subjects[] here is Call A's own
-    # finalized result -- portrait_qc_persons re-derives the exact same
-    # subject_index-tagged list Call B was actually given (the merge
-    # never reorders or filters subjects[], so this reconstruction
-    # matches what was actually sent).
-    persons = portrait_qc_persons(analysis)
-    repair_targets = eye_repair_targets(analysis)
-    analysis["prompts"] = {
+    analysis_prompts = {
         "photo_analysis": build_overall_analysis_instruction(
             aspect_ratio, source_size=get_image_dimensions(image_bytes)),
-        "photo_analysis_portrait_qc": build_portrait_qc_instruction(persons) if persons else None,
-        "photo_analysis_eye_repair_planning": (
-            build_eye_repair_planning_instruction(repair_targets)
-            if repair_targets else None
-        ),
-        "photo_analysis_body_reshape": (
-            build_body_reshape_planning_instruction(persons)
-            if persons and body_reshape_enabled() else None
-        ),
     }
+    for skill in ANALYSIS_SKILLS:
+        analysis_prompts.update(skill.prompt_records(analysis))
+    analysis["prompts"] = analysis_prompts
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
     }

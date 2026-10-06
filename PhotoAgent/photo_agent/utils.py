@@ -7,6 +7,30 @@ import os
 
 from engine_result_code import RESULT_INVALID_PARAMETER
 
+# Keep enough request context in an error artifact to diagnose API/JSON/merge
+# failures without retaining the image data URL from the request payload.
+DEBUG_VALUE_MAX_CHARS = 50000
+
+
+def bounded_debug_value(value, max_chars=DEBUG_VALUE_MAX_CHARS):
+    """Return a JSON-safe, bounded value for an error artifact."""
+    if value is None:
+        return None
+    try:
+        text = json.dumps(value, ensure_ascii=False, default=str)
+    except Exception:
+        text = repr(value)
+    if len(text) <= max_chars:
+        try:
+            return json.loads(text)
+        except Exception:
+            return text
+    return {
+        "truncated": True,
+        "original_chars": len(text),
+        "text": text[:max_chars],
+    }
+
 
 def log(logger, task_id: str, message: str) -> None:
     if logger:

@@ -546,7 +546,7 @@ _HAIR_CORRECTION_HANDOFF_SECTION = """## Per-person candidate hair correction pl
 # ---------------------------------------------------------------------------
 # Analysis split: Call A (overall photo direction + subject identification)
 # and Call B (dedicated portrait-QC pass judging blink/hair/gaze/smile only for
-# the people Call A already identified). See openai_client._analyze_photo_two_pass.
+# the people Call A already identified). See photo_agent.analysis_skills.portrait.
 #
 # Call A is told to leave correction_plan free of eye/gaze/hair items: keeping
 # every should_fix issue in sync with hand-authored correction_plan/axes/
@@ -1857,7 +1857,7 @@ def build_eye_repair_planning_response_schema(person_count):
 
 def _default_person_issues():
     """The "不適用" shape for subjects with no portrait-QC reading -- the
-    two-pass split's pre-merge baseline in openai_client._analyze_photo_two_pass, so
+    pre-merge baseline in photo_agent.analysis_skills.portrait, so
     every subjects[] entry is well-formed even before Call B runs or if it
     fails outright.
     """

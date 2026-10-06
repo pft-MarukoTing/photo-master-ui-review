@@ -3,8 +3,7 @@ import json
 import logging
 import os
 import re
-import traceback
-from datetime import datetime, timezone
+from functools import partial
 from typing import Tuple
 
 import requests
@@ -28,58 +27,17 @@ from prompts import (
     REFRAME_RESPONSE_SCHEMA,
     build_reframe_instruction,
     build_overall_analysis_instruction,
-    build_portrait_qc_instruction,
-    build_portrait_qc_response_schema,
-    build_eye_repair_planning_instruction,
-    build_eye_repair_planning_response_schema,
-    build_body_reshape_planning_instruction,
-    build_body_reshape_planning_response_schema,
-    merge_body_reshape_edit_prompt,
-    merge_body_reshape_plans_partial,
     build_quality_check_prompt,
     expand_subject_boxes_to_contain_faces,
-    merge_portrait_qc_issues,
-    derive_hair_decisions,
-    derive_blink_decisions,
-    derive_gaze_decisions,
-    eye_repair_targets,
-    merge_eye_repair_strategies,
-    strip_body_reshape,
-    body_reshape_enabled,
-    portrait_qc_persons,
     style_option_entries,
-    _apply_default_person_issues,
 )
 from photo_agent.capabilities import ANALYSIS_MODEL_REASONING_EFFORT
 from photo_agent.providers.http import api_error, checked_json, error_message, retry_transient, safe_json
 from photo_agent.providers.image_edit import EditGeometry, run_image_edit
+from photo_agent.analysis_skills import ANALYSIS_SKILLS, AnalysisContext, select_analysis_skills
+from photo_agent.utils import bounded_debug_value
 
 logger = logging.getLogger(__name__)
-
-# Body Reshape is an optional second analysis call. Keep enough request
-# context in the returned analysis to diagnose API/JSON/merge failures without
-# retaining the image data URL from the request payload.
-_BODY_RESHAPE_DEBUG_MAX_CHARS = 50000
-
-
-def _bounded_debug_value(value, max_chars=_BODY_RESHAPE_DEBUG_MAX_CHARS):
-    """Return a JSON-safe, bounded value for an error artifact."""
-    if value is None:
-        return None
-    try:
-        text = json.dumps(value, ensure_ascii=False, default=str)
-    except Exception:
-        text = repr(value)
-    if len(text) <= max_chars:
-        try:
-            return json.loads(text)
-        except Exception:
-            return text
-    return {
-        "truncated": True,
-        "original_chars": len(text),
-        "text": text[:max_chars],
-    }
 
 
 def _attach_api_error_context(exc, *, url, body, label=None, raw_response=None, status=None):
@@ -95,21 +53,12 @@ def _attach_api_error_context(exc, *, url, body, label=None, raw_response=None, 
         exc.body_reshape_model = body.get("model") if isinstance(body, dict) else None
         exc.body_reshape_http_status = status
         if raw_response is not None:
-            exc.body_reshape_raw_response = _bounded_debug_value(raw_response)
+            exc.body_reshape_raw_response = bounded_debug_value(raw_response)
         exc.body_reshape_error_kind = "api_call"
     except Exception:
         # Diagnostics must never mask the original API error.
         pass
 
-
-class _BodyReshapeResponse(dict):
-    """Parsed planner response carrying the raw Responses API envelope."""
-
-    def __init__(self, value, *, raw_response=None, usage=None, prompt=""):
-        super().__init__(value or {})
-        self.raw_response = _bounded_debug_value(raw_response)
-        self.usage = usage
-        self.prompt = prompt
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 OPENAI_IMAGES_EDITS_URL = "https://api.openai.com/v1/images/edits"
@@ -301,193 +250,6 @@ def _stamp_local_face_debug_fields(result, face_crops):
     return result
 
 
-def _analyze_body_reshape_pass(data_url: str, persons: list, analysis_model: str):
-    """Run the dedicated per-person Body Reshape analyzer.
-
-    Keep the planner prompt and raw Responses envelope attached to the parsed
-    value. If JSON parsing fails, the exception itself receives the same
-    context so the caller can persist a useful diagnostic artifact.
-    """
-    body_prompt = ""
-    data = None
-    try:
-        body_prompt = build_body_reshape_planning_instruction(persons)
-        payload = _responses_payload(
-            analysis_model,
-            [
-                {"type": "input_text", "text": body_prompt},
-                {"type": "input_image", "image_url": data_url},
-            ],
-            # Strictly require one returned plan for every supplied person.
-            # The subject/local-detection indices inside each plan are then
-            # validated by merge_body_reshape_plans.
-            text_format=build_body_reshape_planning_response_schema(len(persons)),
-            reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-        )
-        data = _post_json(
-            OPENAI_RESPONSES_URL, payload, "Photo analysis failed (body reshape pass)"
-        )
-        response = _parse_json_from_text(_extract_output_text(data))
-        return _BodyReshapeResponse(
-            response,
-            raw_response=data,
-            usage=data.get("usage") if isinstance(data, dict) else None,
-            prompt=body_prompt,
-        ), data.get("usage") if isinstance(data, dict) else None
-    except Exception as exc:
-        # Do not overwrite API context attached by _post_json. A parse/build
-        # failure gets its own explicit kind for downstream diagnosis.
-        if not getattr(exc, "body_reshape_error_kind", None):
-            exc.body_reshape_error_kind = "response_parse"
-        exc.body_reshape_prompt = body_prompt
-        if data is not None and not getattr(exc, "body_reshape_raw_response", None):
-            exc.body_reshape_raw_response = _bounded_debug_value(data)
-            if isinstance(data, dict):
-                exc.body_reshape_usage = data.get("usage")
-        raise
-
-
-def _body_reshape_error_record(exc, persons, *, prompt="", raw_response=None, usage=None):
-    """Build the persisted diagnostic for a failed planner/merge call."""
-    people = []
-    for position, person in enumerate(persons or []):
-        if not isinstance(person, dict):
-            continue
-        people.append({
-            "position": position,
-            "subject_index": person.get("subject_index", person.get("_subject_index", position)),
-            "local_detection_index": person.get("local_detection_index", -1),
-            "label": person.get("label") or "person",
-        })
-    if raw_response is None:
-        raw_response = getattr(exc, "body_reshape_raw_response", None)
-    if usage is None:
-        usage = getattr(exc, "body_reshape_usage", None)
-    record = {
-        "record_type": "body_reshape_api_error",
-        "recorded_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "stage": "analysis.body_reshape",
-        "error_kind": getattr(exc, "body_reshape_error_kind", None) or "response_validation",
-        "exception": {
-            "type": type(exc).__name__,
-            "message": str(exc),
-            "traceback": traceback.format_exc(),
-        },
-        "context": {
-            "person_count": len(people),
-            "persons": people,
-            "fallback_applied": True,
-        },
-    }
-    for key, attr in (
-        ("api_label", "body_reshape_api_label"),
-        ("endpoint", "body_reshape_endpoint"),
-        ("model", "body_reshape_model"),
-        ("http_status", "body_reshape_http_status"),
-    ):
-        value = getattr(exc, attr, None)
-        if value is not None:
-            record["context"][key] = value
-    if prompt:
-        record["planner_prompt"] = _bounded_debug_value(prompt)
-    if raw_response is not None:
-        record["raw_response"] = _bounded_debug_value(raw_response)
-    if usage:
-        record["usage"] = _bounded_debug_value(usage)
-    return record
-
-
-def _body_reshape_failure_fallback(analysis, persons, error_record):
-    """Keep one visible, non-executable error plan for every person."""
-    fallback = dict(analysis or {})
-    subjects = [
-        dict(subject) if isinstance(subject, dict) else subject
-        for subject in (fallback.get("subjects") or [])
-    ]
-    fallback["subjects"] = subjects
-    for position, person in enumerate(persons or []):
-        if not isinstance(person, dict):
-            continue
-        subject_index = person.get("subject_index", person.get("_subject_index", position))
-        if not isinstance(subject_index, int) or not (0 <= subject_index < len(subjects)):
-            continue
-        subject = subjects[subject_index]
-        if not isinstance(subject, dict) or subject.get("is_person") is not True:
-            continue
-        label = " ".join(str(subject.get("label") or person.get("label") or "此人物").split())
-        subject["body_reshape"] = {
-            "subject_index": subject_index,
-            "local_detection_index": person.get(
-                "local_detection_index", subject.get("local_detection_index", -1)
-            ),
-            "should_edit": False,
-            "analysis_status": "error",
-            "report": (
-                f"{label}本次未取得足夠可靠的身形判讀，為保留畫面比例，"
-                "先維持目前輪廓；請重新分析後再試。"
-            ),
-        }
-    fallback["_body_reshape_status"] = "error"
-    fallback["_body_reshape_error"] = error_record
-    return fallback
-
-
-def _run_body_reshape_pass_or_fallback(analysis, data_url, persons, analysis_model):
-    """Run Body Reshape without hiding a failed batch behind empty subjects."""
-    body_response = None
-    usage_body = None
-    try:
-        body_response, usage_body = _analyze_body_reshape_pass(
-            data_url, persons, analysis_model
-        )
-        return merge_body_reshape_edit_prompt(analysis, body_response), usage_body
-    except Exception as exc:
-        if body_response is not None:
-            prompt = getattr(body_response, "prompt", "") or ""
-            raw_response = getattr(body_response, "raw_response", None)
-            usage_body = usage_body or getattr(body_response, "usage", None)
-        else:
-            prompt = getattr(exc, "body_reshape_prompt", "") or ""
-            raw_response = getattr(exc, "body_reshape_raw_response", None)
-        if not prompt:
-            try:
-                prompt = build_body_reshape_planning_instruction(persons)
-            except Exception:
-                prompt = ""
-        if not getattr(exc, "body_reshape_error_kind", None):
-            exc.body_reshape_error_kind = "response_validation"
-        record = _body_reshape_error_record(
-            exc, persons, prompt=prompt, raw_response=raw_response, usage=usage_body
-        )
-        if isinstance(body_response, dict) and "body_reshape_plans" in body_response:
-            try:
-                partial, failures = merge_body_reshape_plans_partial(
-                    analysis, body_response
-                )
-            except Exception as recovery_exc:
-                record["context"]["partial_recovery_error"] = {
-                    "type": type(recovery_exc).__name__,
-                    "message": str(recovery_exc),
-                }
-            else:
-                if failures:
-                    record["context"]["partial_merge"] = True
-                    record["context"]["partial_failures"] = failures
-                    partial["_body_reshape_status"] = "partial_error"
-                    partial["_body_reshape_error"] = record
-                    logger.exception(
-                        "Body reshape validation failed; partial recovery applied "
-                        "(valid plans retained, failures=%d): %s",
-                        len(failures), exc,
-                    )
-                    return partial, usage_body
-        logger.exception(
-            "Body reshape analysis pass failed; fallback applied (kind=%s): %s",
-            record["error_kind"], exc,
-        )
-        return _body_reshape_failure_fallback(analysis, persons, record), usage_body
-
-
 def _sum_usage(*usage_items: dict) -> dict:
     """Combine raw OpenAI Responses API usage objects into one, so the
     multi-call analysis split still returns a single usage dict at the
@@ -509,128 +271,63 @@ def _sum_usage(*usage_items: dict) -> dict:
     return combined
 
 
+def _analysis_request(analysis_model, data_url, face_crop_items, instruction, text_format, label,
+                      *, with_face_crops=True):
+    """Send one analysis instruction with the photo and return the raw Responses envelope."""
+    content = [
+        {"type": "input_text", "text": instruction},
+        {"type": "input_image", "image_url": data_url},
+    ]
+    if with_face_crops:
+        content.extend(face_crop_items)
+    payload = _responses_payload(
+        analysis_model, content, text_format=text_format,
+        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    )
+    return _post_json(OPENAI_RESPONSES_URL, payload, label)
+
+
+def _parse_response_json(data: dict) -> dict:
+    return _parse_json_from_text(_extract_output_text(data))
+
+
 def _analyze_photo_two_pass(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = ANALYSIS_MODEL):
     """The analysis flow for every analysis model. Call A does overall photo
-    direction and subject identification, without blink/hair/gaze/smile;
-    Call B is a dedicated portrait-QC pass that observes
-    those four fields and writes each candidate per-person hair correction,
-    only for the people Call A already identified, merged
-    back by prompts.merge_portrait_qc_issues's stable subject_index (never by
-    response-array position).  Python then applies the exact-lens gate and an
-    optional Call C creates repair strategies only for people that passed it.
-    When ENABLE_BODY_RESHAPE is enabled, one optional body-analysis pass reviews
-    the visible people independently and stores one detailed ``edit_prompt``
-    under each matching ``subjects[]`` entry.  Those per-person commands are
-    handed to the single image-editor prompt with their labels and boxes; no
-    person is allowed to inherit another person's body instruction.
-    When the internal flag is disabled, that call is skipped and stale body
-    data is removed.
-
-    Call B (including a validation failure raised by merge_portrait_qc_issues
-    itself -- a missing/duplicate/mismatched subject_index) is best-effort:
-    on failure, every person keeps prompts._default_person_issues' "no
-    portrait defects detected" reading and Call A's own result (crop/color/
-    composition/subjects) is still returned, rather than failing the whole
-    analysis over a pass that only ever adds detail on top of it.
+    direction and subject identification; each analysis skill the router
+    selects from that result then runs its own passes (see
+    photo_agent.analysis_skills), and every other skill fills its fields with
+    the not-applicable shape.
     """
     preview = create_preview_bytes(image_bytes)
     data_url = image_to_data_url(preview, "image/jpeg")
     face_crops = detect_face_crops(image_bytes)
     face_crop_items = _face_crop_content_items(face_crops)
-
-    content_a = [
-        {"type": "input_text", "text": build_overall_analysis_instruction(
-            aspect_ratio, source_size=get_image_dimensions(image_bytes))},
-        {"type": "input_image", "image_url": data_url},
-        *face_crop_items,
-    ]
-    payload_a = _responses_payload(
-        analysis_model, content_a, text_format=ANALYSIS_RESPONSE_SCHEMA_OVERALL,
-        reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
+    ctx = AnalysisContext(
+        request=partial(_analysis_request, analysis_model, data_url, face_crop_items),
+        parse=_parse_response_json,
     )
-    data_a = _post_json(OPENAI_RESPONSES_URL, payload_a, "Photo analysis failed (overall pass)")
-    overall_analysis = _parse_json_from_text(_extract_output_text(data_a))
-    overall_analysis = _stamp_local_face_debug_fields(overall_analysis, face_crops)
 
-    persons = portrait_qc_persons(overall_analysis)
+    data_a = ctx.request(
+        build_overall_analysis_instruction(aspect_ratio, source_size=get_image_dimensions(image_bytes)),
+        ANALYSIS_RESPONSE_SCHEMA_OVERALL,
+        "Photo analysis failed (overall pass)",
+    )
+    analysis = _stamp_local_face_debug_fields(ctx.parse(data_a), face_crops)
 
-    analysis = None
-    usage_b = None
-    usage_c = None
-    usage_body = None
-    if persons:
-        try:
-            content_b = [
-                {"type": "input_text", "text": build_portrait_qc_instruction(persons)},
-                {"type": "input_image", "image_url": data_url},
-                *face_crop_items,
-            ]
-            payload_b = _responses_payload(
-                analysis_model, content_b, text_format=build_portrait_qc_response_schema(len(persons)),
-                reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-            )
-            data_b = _post_json(OPENAI_RESPONSES_URL, payload_b, "Photo analysis failed (portrait-QC pass)")
-            portrait_qc = _parse_json_from_text(_extract_output_text(data_b))
-            analysis = merge_portrait_qc_issues(overall_analysis, portrait_qc)
-            analysis = derive_hair_decisions(analysis)
-            analysis = derive_blink_decisions(analysis)
-            analysis = derive_gaze_decisions(analysis)
-            usage_b = data_b.get("usage")
-        except Exception as exc:
-            logger.warning(
-                "Portrait-QC pass (two-pass split) failed, falling back to "
-                "\"no portrait defects detected\" for this analysis: %s", exc,
-            )
+    usages = [data_a.get("usage")]
+    selected = select_analysis_skills(analysis)
+    for skill in ANALYSIS_SKILLS:
+        if skill in selected:
+            analysis, skill_usages = skill.run(analysis, ctx)
+            usages.extend(skill_usages)
+        else:
+            analysis = skill.skip(analysis)
 
-    if analysis is None:
-        # No persons to review, or Call B failed/produced an invalid merge --
-        # either way, every subject (person or not) still needs the four
-        # issue fields filled in, same "不適用" shape merge_portrait_qc_issues
-        # would have applied on success.
-        _apply_default_person_issues(overall_analysis.get("subjects"))
-        analysis = overall_analysis
-
-    if persons and body_reshape_enabled():
-        analysis, usage_body = _run_body_reshape_pass_or_fallback(
-            analysis, data_url, persons, analysis_model
-        )
-    elif not body_reshape_enabled():
-        # A finish/retry can be fed an analysis produced before the feature was
-        # disabled.  Remove any stale body plan before it leaves the analysis
-        # stage so no downstream caller can accidentally re-enable it.
-        analysis = strip_body_reshape(analysis)
-
-    repair_targets = eye_repair_targets(analysis)
-    if repair_targets:
-        try:
-            content_c = [
-                {"type": "input_text", "text": build_eye_repair_planning_instruction(repair_targets)},
-                {"type": "input_image", "image_url": data_url},
-                *face_crop_items,
-            ]
-            payload_c = _responses_payload(
-                analysis_model, content_c,
-                text_format=build_eye_repair_planning_response_schema(len(repair_targets)),
-                reasoning_effort=ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
-            )
-            data_c = _post_json(
-                OPENAI_RESPONSES_URL, payload_c, "Photo analysis failed (eye repair-planning pass)"
-            )
-            repair_response = _parse_json_from_text(_extract_output_text(data_c))
-            analysis = merge_eye_repair_strategies(analysis, repair_response)
-            usage_c = data_c.get("usage")
-        except Exception as exc:
-            logger.warning(
-                "Eye repair-planning pass failed; keeping deterministic fallback strategies: %s", exc,
-            )
-
-    usage = _sum_usage(data_a.get("usage"), usage_b, usage_c, usage_body)
     return analysis, {
         "model": analysis_model,
-        "usage": usage,
-        # All three calls (A/B/C) share the same analysis_model, hence one
-        # effort value for the combined usage -- see _sum_usage's docstring
-        # for why this path still returns a single {"model", "usage"} shape.
+        "usage": _sum_usage(*usages),
+        # Every call shares the same analysis_model, hence one effort value
+        # for the combined usage -- see _sum_usage's docstring.
         "reasoning_effort": ANALYSIS_MODEL_REASONING_EFFORT.get(analysis_model),
     }
 
