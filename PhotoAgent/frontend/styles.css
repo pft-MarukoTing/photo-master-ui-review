@@ -2668,6 +2668,10 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     -webkit-text-fill-color: transparent;
     animation: progressFeedShine 1.5s ease-in-out 1s both;
   }
+  /* The wait sentence stays on top, so it repeats the shine every 4s. */
+  .progress-feed-row.is-latest.is-waiting .progress-feed-text {
+    animation: progressFeedShineLoop 4s ease-in-out 1s infinite;
+  }
 }
 @keyframes progressFeedEnter {
   from { opacity: .3; transform: translateY(-8px); }
@@ -2677,9 +2681,14 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   from { background-position: 100% 0; }
   to { background-position: 0% 0; }
 }
+@keyframes progressFeedShineLoop {
+  0% { background-position: 100% 0; }
+  37.5%, 100% { background-position: 0% 0; }
+}
 @media (prefers-reduced-motion: reduce), (forced-colors: active) {
   .progress-feed-row.is-latest { animation: none; }
-  .progress-feed-row.is-latest .progress-feed-text {
+  .progress-feed-row.is-latest .progress-feed-text,
+  .progress-feed-row.is-latest.is-waiting .progress-feed-text {
     animation: none;
     background: none;
     color: var(--text);

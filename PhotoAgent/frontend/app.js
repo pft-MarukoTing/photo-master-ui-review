@@ -517,20 +517,17 @@
       "檢視重要細節是否受到邊緣裁切影響", "分析背景元素的排列與疏密關係"
     ],
     edit: [
-      "查看結果時，可以切換原圖比較整體差異。", "喜歡的表情、衣物或背景細節，可以寫進個人化需求。",
-      "每個人物可以選擇不同的人像調整項目。", "美化風格可以從姿勢、角度、光線與取景範圍設定。",
-      "比較照片時，可以同時留意整體氛圍與局部細節。", "需要再次調整時，可以修改設定後再進行美化。",
-      "比較前後照片時，可以留意膚色、表情與背景是否協調。", "局部細節與整體構圖，可以分開檢視再決定是否調整。",
-      "想保留的現場光色與氛圍，也可以寫在個人化需求中。", "再次美化之前，可以先確認各個人物的調整設定。",
-      "選擇美化風格時，可以以照片原本的情境作為參考。", "原圖中的重要細節，可以作為檢視美化結果的依據。",
-      "選擇取景比例時，可以留意重要物件是否完整保留。", "柔和的亮部與清楚的暗部，有助於呈現自然的畫面層次。",
-      "背景不一定需要完全模糊，適度保留細節也能傳達場景特色。", "檢視色彩時，可以留意不同區域的冷暖是否一致。",
-      "個人化需求越明確，越容易表達您希望調整的方向。", "描述想調整的物件時，可以附上它在畫面中的位置。",
-      "不想改變的物件或文字，也可以在個人化需求中註明。", "美化項目可以依喜好勾選，不一定要套用全部建議。",
-      "光線與色調的選擇，可以呼應照片想傳達的情緒。", "查看構圖時，可以留意主體周圍是否保有舒適的空間。",
-      "比較不同美化版本，可以幫助您選出更喜歡的效果。", "再次調整時，可以先聚焦最想改善的一個重點。"
+      "調整整體光線與明暗層次", "平衡亮部與暗部的細節",
+      "校正白平衡與整體色溫", "細修畫面的色調與飽和度",
+      "優化光線，讓畫面更自然", "處理陰影區域的細節表現",
+      "讓色彩過渡更加平順", "提升主體的清晰度與立體感",
+      "強化畫面中的細節與質感", "修飾主體的質感與邊緣",
+      "調整背景與主體的層次關係", "保留原圖中的重要細節",
+      "檢查整體畫面的協調與完整"
     ]
   };
+  // Edit tips play once; then this one sentence stays on top until the edit ends.
+  const PROGRESS_FEED_EDIT_WAIT = "美化仍在進行中，請稍候";
   let progressFeedState = null;
   const progressFeedRecords = new WeakMap();
   const progressFeedViews = new WeakMap();
@@ -628,6 +625,7 @@
         if (!node) {
           node = document.createElement("span");
           node.className = "progress-feed-row";
+          node.classList.toggle("is-waiting", entry.text === PROGRESS_FEED_EDIT_WAIT);
           const text = document.createElement("span");
           text.className = "progress-feed-text";
           text.textContent = progressFeedDisplayText(entry.text);
@@ -648,14 +646,24 @@
       view.rowLimit = rowLimit;
     });
   }
+  function nextProgressFeedTip(state) {
+    const tips = PROGRESS_FEED_TIPS[state.mode];
+    if (state.mode !== "edit") return tips[state.tipIndex++ % tips.length];
+    if (state.tipIndex < tips.length) return tips[state.tipIndex++];
+    if (state.waitShown) return null;
+    state.waitShown = true;
+    return PROGRESS_FEED_EDIT_WAIT;
+  }
   function scheduleProgressFeed() {
     const state = progressFeedState;
     if (!state || procSubRotateTimer || !progressFeedVisible()) return;
+    if (state.waitShown && !state.queue.length) return;
     procSubRotateTimer = setTimeout(() => {
       procSubRotateTimer = null;
       if (state !== progressFeedState || !progressFeedVisible()) return;
-      const tips = PROGRESS_FEED_TIPS[state.mode];
-      setProcSub(state.queue.shift() || tips[state.tipIndex++ % tips.length]);
+      const next = state.queue.shift() || nextProgressFeedTip(state);
+      if (!next) return;
+      setProcSub(next);
       procSubRotateIndex = ++state.index;
       scheduleProgressFeed();
     }, progressFeedDelay(state.rows.at(-1).text));
@@ -676,15 +684,16 @@
       state.mode = mode;
       state.queue = mode === "edit" ? [...getMessages()] : [];
       state.tipIndex = 0;
+      state.waitShown = false;
       // Everything this playback can show, for the stacked layout's width.
-      state.pool = [...state.queue, ...PROGRESS_FEED_TIPS[mode]];
+      state.pool = [...state.queue, ...PROGRESS_FEED_TIPS[mode], ...(mode === "edit" ? [PROGRESS_FEED_EDIT_WAIT] : [])];
     }
     progressFeedState = state;
     if (owner) progressFeedRecords.set(owner, state);
     activeBatchRotationRecord = owner;
     procSubRotateIndex = state.index;
     if (!state.rows.length) {
-      setProcSub(state.queue.shift() || PROGRESS_FEED_TIPS[mode][state.tipIndex++]);
+      setProcSub(state.queue.shift() || nextProgressFeedTip(state));
       procSubRotateIndex = ++state.index;
     } else renderProgressFeed();
     scheduleProgressFeed();

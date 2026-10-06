@@ -1886,7 +1886,7 @@ window.PhotoAgentResults = (() => {
     };
     const direction = typeof userPrompt === "string" ? userPrompt.trim() : "";
     if (!aiPhotoEditing) return []; // These controls describe AI editing, not local processing.
-    if (overwritePrompt && direction) return [sentence("將依照您的個人化需求修圖：" + direction)];
+    if (overwritePrompt && direction) return [sentence("依照您的個人化需求修圖：" + direction)];
     const advanced = selections.advanced_options || analysis?._advanced_options || {};
     const overrides = selections.face_issue_overrides || {};
     const optionFor = { blink_issue: "eye_closed_detection", gaze_issue: "gaze_contact_detection",
@@ -1904,7 +1904,7 @@ window.PhotoAgentResults = (() => {
           || selections.body_reshape_enabled === false || (selections.body_reshape_enabled == null && analysis?._body_reshape_enabled === false)
           || !issue.controllable)) return [];
         const levelLabel = FACE_ISSUE_LEVEL_CHOICES[issue.category]?.find(([value]) => value === level)?.[1];
-        return [sentence(`將為${subject.label || `人物 ${index + 1}`}進行${issue.label}${levelLabel ? `（${levelLabel}）` : ""}`)];
+        return [sentence(`為${subject.label || `人物 ${index + 1}`}進行${issue.label}${levelLabel ? `（${levelLabel}）` : ""}`)];
       });
     });
     const messages = [];
@@ -1921,9 +1921,9 @@ window.PhotoAgentResults = (() => {
     Object.entries(options).forEach(([key, value]) => {
       const group = STYLE_OPTION_GROUPS[key];
       const option = group?.options.find((item) => item.value === value && value !== "default");
-      if (option) messages.push(sentence(`將${group.label}設定為「${option.label}」`));
+      if (option) messages.push(sentence(`設定${group.label}為「${option.label}」`));
     });
-    if (direction) messages.push(sentence("也將依照您的個人化需求修圖：" + direction));
+    if (direction) messages.push(sentence("也依照您的個人化需求修圖：" + direction));
     return messages;
   }
 
