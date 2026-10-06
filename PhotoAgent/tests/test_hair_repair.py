@@ -1,20 +1,17 @@
 """Tests for the hair-tidying half of the edit prompt and the `hair` axis.
 
-Imports only prompts.py and feature_resolver, so it runs without PIL/numpy/cv2:
+Imports only prompts.py, feature_resolver and the portrait skill's prompt modules, so it runs without PIL/numpy/cv2:
 
     python3 -m unittest test_hair_repair -v
 """
 
 import unittest
 
+from photo_agent.analysis_skills.portrait.decisions import derive_hair_decisions
+from photo_agent.analysis_skills.portrait.instructions import build_portrait_qc_instruction
 from photo_agent.feature_resolver import build_compact_editor_prompt
 from photo_agent.param_validation import normalize_advanced_options
-from prompts import (
-    AXIS_DEFINITIONS,
-    build_portrait_qc_instruction,
-    derive_hair_decisions,
-    resolve_user_hair_request,
-)
+from prompts import AXIS_DEFINITIONS, resolve_user_hair_request
 
 HAIR_BLOCK = "Hair execution boundary:"
 FULLY_GROOMED = "Hair level — fully groomed"

@@ -1,6 +1,14 @@
 import unittest
 
 from config import STYLE_OPTION_INSTRUCTIONS
+from photo_agent.analysis_skills.portrait.decisions import (
+    _fallback_blink_repair_strategy,
+    derive_blink_decisions,
+)
+from photo_agent.analysis_skills.portrait.instructions import (
+    _BLINK_DETECTION_SECTION,
+    build_eye_repair_planning_instruction,
+)
 from photo_agent.feature_resolver import (
     _compact_crop_goal_text,
     _compact_raw_crop_instruction,
@@ -9,15 +17,7 @@ from photo_agent.feature_resolver import (
     build_feature_contracts,
     resolve_feature_contracts,
 )
-from prompts import (
-    USER_SCENE_CONSISTENCY_RULE,
-    _BLINK_DETECTION_SECTION,
-    _fallback_blink_repair_strategy,
-    build_body_reshape_edit_block,
-    build_eye_repair_planning_instruction,
-    build_quality_check_prompt,
-    derive_blink_decisions,
-)
+from prompts import USER_SCENE_CONSISTENCY_RULE, build_body_reshape_edit_block, build_quality_check_prompt
 
 
 def interaction_analysis():
