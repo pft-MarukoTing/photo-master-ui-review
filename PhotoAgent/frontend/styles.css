@@ -2611,7 +2611,7 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   min-height: 4.8em;
 }
 
-/* Local sentence feed: complete text, five entries, no enclosing card. */
+/* Local sentence feed: complete text, five entries (two in portrait), no card. */
 .has-progress-feed {
   width: 100%;
   max-width: none;
@@ -2633,6 +2633,9 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   flex-direction: column;
   gap: 12px;
   min-height: 250px;
+}
+@media (orientation: portrait) {
+  .progress-feed-list { min-height: 100px; }
 }
 .progress-feed-row {
   display: block;

@@ -530,6 +530,12 @@
   let progressFeedState = null;
   const progressFeedRecords = new WeakMap();
   const progressFeedViews = new WeakMap();
+  const progressFeedPortraitMedia = window.matchMedia?.("(orientation: portrait)");
+  // Keep five history entries, but show only the newest two in portrait.
+  // Rotation changes presentation only; never advance/reset the reading timer.
+  if (progressFeedPortraitMedia?.addEventListener) {
+    progressFeedPortraitMedia.addEventListener("change", renderProgressFeed);
+  } else progressFeedPortraitMedia?.addListener?.(renderProgressFeed);
   let procSubRotateTimer = null;
   let procSubRotateIndex = 0;
   // Which batch record (see showBatchMainLoading) the rotation currently
@@ -554,6 +560,8 @@
   function renderProgressFeed() {
     const state = progressFeedState;
     if (!state) return;
+    const rowLimit = progressFeedPortraitMedia?.matches ? 2 : 5;
+    const visibleRows = state.rows.slice(-rowLimit);
     [procSub, els.canvasLoadingStatus, els.batchMainLoadingText].forEach((element) => {
       if (!element) return;
       element.classList.add("has-progress-feed");
@@ -570,9 +578,9 @@
         progressFeedViews.set(element, view);
       }
       view.head.textContent = state.mode === "analysis" ? "◇ 分析觀察" : "◇ 修圖規劃";
-      if (view.revision === state.revision) return;
+      if (view.revision === state.revision && view.rowLimit === rowLimit) return;
       const tops = new Map([...view.nodes].map(([id, node]) => [id, node.getBoundingClientRect().top]));
-      const nodes = state.rows.map((entry, index) => {
+      const nodes = visibleRows.map((entry, index) => {
         let node = view.nodes.get(entry.id);
         if (!node) {
           node = document.createElement("span");
@@ -582,11 +590,11 @@
           text.textContent = entry.text;
           node.replaceChildren(text);
         }
-        node.classList.toggle("is-latest", index === state.rows.length - 1);
+        node.classList.toggle("is-latest", index === visibleRows.length - 1);
         return node;
       });
       view.list.replaceChildren(...nodes);
-      view.nodes = new Map(state.rows.map((entry, index) => [entry.id, nodes[index]]));
+      view.nodes = new Map(visibleRows.map((entry, index) => [entry.id, nodes[index]]));
       if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) view.nodes.forEach((node, id) => {
         const before = tops.get(id), after = node.getBoundingClientRect().top;
         if (Number.isFinite(before) && before !== after) node.animate?.(
@@ -594,6 +602,7 @@
           { duration: 350, easing: "cubic-bezier(.2,.7,.2,1)" });
       });
       view.revision = state.revision;
+      view.rowLimit = rowLimit;
     });
   }
   function scheduleProgressFeed() {
