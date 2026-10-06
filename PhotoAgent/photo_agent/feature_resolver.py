@@ -22,21 +22,13 @@ from prompts import (
     has_approved_distraction_removal,
 )
 from photo_agent.editor_skills import EDITOR_SKILLS, EditContext
-from photo_agent.editor_skills.base import MODE_HEAD_ALIGNED_GAZE, MODE_HOLISTIC_BODY, _axis_set
-from photo_agent.editor_skills.expression import _smile_contracts
-from photo_agent.editor_skills.eyes import (
-    _BLINK_IDENTITY_SCOPE,
-    _BLINK_PAIR_RULES,
-    _blink_contracts,
-    _eye_state_lines,
-    _gaze_contracts,
+from photo_agent.editor_skills.base import (
+    MODE_HEAD_ALIGNED_GAZE,
+    MODE_HOLISTIC_BODY,
+    _axis_set,
+    _style_change_footprint,
 )
-from photo_agent.editor_skills.face import (
-    _EYE_MAKEUP_CARRY_RULE,
-    _IDENTITY_GEOMETRY_RULE,
-    render_shared_face_rules,
-    resolve_feature_contracts,
-)
+from photo_agent.editor_skills.face import render_shared_face_rules, resolve_feature_contracts
 
 _HIDDEN_PRESERVE = frozenset().union(*(skill.hidden_preserve for skill in EDITOR_SKILLS))
 
@@ -500,27 +492,6 @@ def _compact_raw_style_instruction(raw_instruction, style_options=None):
     return "\n".join(selected + [f"- {item}" for item in requirements])
 
 
-def _style_change_footprint(style_options):
-    """Properties that selected styles are authorized to replace."""
-    options = {
-        key: value for key, value in (style_options or {}).items()
-        if value and value != "default"
-    }
-    footprint = set()
-    if "pose" in options:
-        footprint.update({
-            "body pose", "head pose", "gesture", "body language", "limb placement",
-            "subject silhouette", "within-subject spacing", "within-subject overlap",
-        })
-    if "angle" in options:
-        footprint.update({"camera viewpoint", "scene perspective", "projected overlap"})
-    if "lighting" in options:
-        footprint.update({"lighting logic", "light/color atmosphere", "highlight and shadow rendering"})
-    if "size" in options:
-        footprint.update({"framing", "subject scale", "visible extent", "image boundaries"})
-    return options, footprint
-
-
 def build_feature_contracts(analysis, *, include_gaze=True, include_blink=True):
     """Return active, editor-stage feature contracts from analysis/options.
 
@@ -533,36 +504,6 @@ def build_feature_contracts(analysis, *, include_gaze=True, include_blink=True):
     for skill in EDITOR_SKILLS:
         contracts.extend(skill.contracts(analysis, ctx))
     return contracts
-
-
-def build_blink_pass_targets(analysis):
-    """Blink repairs for the two-stage eye pass (Step 5b), worded exactly as a single-pass Step 5 would word them.
-
-    Returns (targets, shared_rules); each target is {subject_index, label, box, lines}.
-    """
-    blink = _blink_contracts(analysis)
-    if not blink:
-        return [], []
-    resolved = resolve_feature_contracts(
-        _smile_contracts(analysis) + _gaze_contracts(analysis, True) + blink,
-        subject_count=len(analysis.get("subjects") or []),
-    )
-    style_options, _ = _style_change_footprint(analysis.get("style_options"))
-    targets = []
-    for item in resolved:
-        if "blink" not in item["features"]:
-            continue
-        targets.append({
-            "subject_index": item.get("subject_index"),
-            "label": item["subject"],
-            "box": item["box"],
-            "lines": _eye_state_lines(
-                item["final_state"], subject_has_blink=True, style_options=style_options,
-                include_gaze_method=False,
-            ),
-        })
-    rules = [_IDENTITY_GEOMETRY_RULE + _BLINK_IDENTITY_SCOPE, *_BLINK_PAIR_RULES, _EYE_MAKEUP_CARRY_RULE]
-    return targets, rules
 
 
 def build_compact_editor_prompt(

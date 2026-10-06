@@ -2912,7 +2912,7 @@ def build_eye_repair_pass_prompt(gaze_items, blink_targets=(), blink_rules=()):
     call whose prompt contains nothing but the eye repairs gives the model its
     full attention for just those changes, for every approved subject at once.
 
-    blink_targets/blink_rules come from feature_resolver.build_blink_pass_targets,
+    blink_targets/blink_rules come from editor_skills.eyes.build_blink_pass_targets,
     so an eyelid repair is worded exactly as a single-pass Step 5 would word it.
 
     An earlier version of this pass cropped to each face and pasted the

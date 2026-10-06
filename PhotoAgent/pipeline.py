@@ -29,24 +29,20 @@ from openai_client import (
 )
 from prompts import (
     build_overall_analysis_instruction,
-    build_eye_repair_pass_prompt,
     body_reshape_enabled,
     strip_body_reshape,
     sanitize_body_reshape_analysis,
     get_body_reshape_edit_prompt,
     body_reshape_items,
-    final_smile_by_subject,
     apply_rejected_reframing,
-    approved_blink_items,
-    approved_gaze_items,
     composition_state,
     merge_reframe_result,
     restore_composition_state,
     with_reframing_proposal,
 )
 from photo_agent.analysis_skills import ANALYSIS_SKILLS
-from photo_agent.feature_resolver import build_blink_pass_targets
 from photo_agent import capabilities
+from photo_agent.editor_skills import EDITOR_SKILLS
 
 BLINK_REPAIR_IMAGE_MODEL = "gpt-image-2.5-sunburst"
 BLINK_REPAIR_QUALITY = "high"
@@ -115,53 +111,29 @@ def _run_edit_photo_compat(editor, image_bytes, analysis, quality, preset_key, *
 
 
 def _run_eye_repair_pass(image_b64: str, analysis: dict, quality: str):
-    """Step 5b: perform the approved gaze and/or blink repair(s) as a second,
-    isolated whole-image edit on top of Step 5's own output.
+    """Step 5b: run the follow-up edit an editor skill asks for on Step 5's output.
 
-    Under the two-call path (single_pass_edit=False), Step 5 is told to leave
-    gaze and eyelid state untouched even when a fix is approved (the
-    include_gaze/include_blink gates in feature_resolver), so this pass is the ONLY place those
-    repairs happen. A single call bundling them with exposure/crop/skin/style
-    reliably applies the coarse, whole-frame changes but often no-ops or
-    under-applies the fine, localized eye work; a call whose prompt contains
-    nothing but the eye repairs gives them the model's full attention.
-
-    Model: a blink repair runs on BLINK_REPAIR_IMAGE_MODEL at
-    BLINK_REPAIR_QUALITY, the tier blink repair is reliable on; a gaze-only
-    pass runs on config.MODELS["gaze_repair"] at the requested quality.
-
-    Each toggle (gaze_contact_detection / eye_closed_detection) and each
-    per-person opt-out (_disabled_issue_subject_indices) is honoured here as
-    well as in the edit prompt, since this pass rebuilds its own item lists
-    from the analysis. resolve_user_gaze_request / build_blink_pass_targets
-    turn a manually-forced row into a real repair target.
+    Today that is the eyes skill's isolated gaze/blink repair (EyesSkill.followup_edit).
+    A top-tier follow-up runs on BLINK_REPAIR_IMAGE_MODEL at BLINK_REPAIR_QUALITY;
+    any other runs on config.MODELS["gaze_repair"] at the requested quality.
 
     Best-effort: the caller's try/except keeps the Step 5 image untouched if
     this fails, so it can only help, never regress a job.
 
     Returns (image_b64, prompt_text, usage) -- prompt_text and usage are None
-    when there was no approved eye repair to run, matching every other
-    stage's "no GPT call made" convention (see finish_stage's prompts dict).
+    when no skill asked for a follow-up, matching every other stage's "no GPT
+    call made" convention (see finish_stage's prompts dict).
     """
-    gaze_items = approved_gaze_items(analysis)
-    blink_targets, blink_rules = build_blink_pass_targets(analysis)
-    if not gaze_items and not blink_targets:
+    followup = next((edit for edit in (skill.followup_edit(analysis) for skill in EDITOR_SKILLS) if edit), None)
+    if followup is None:
         return image_b64, None, None
-    # Step 5 has already applied the smile setting; the gaze has to be redirected inside that expression.
-    final_smile = final_smile_by_subject(analysis)
-    gaze_items = [
-        {**item, "_final_smile": final_smile.get(item.get("_subject_index"), final_smile.get(None))}
-        for item in gaze_items
-    ]
-
-    if blink_targets:
+    if followup.top_tier:
         model, quality = BLINK_REPAIR_IMAGE_MODEL, BLINK_REPAIR_QUALITY
     else:
         model = MODELS["gaze_repair"]
     run_eye_repair_pass = EYE_REPAIR_PASS_BY_MODEL[model]
-    prompt = build_eye_repair_pass_prompt(gaze_items, blink_targets, blink_rules)
     result_bytes = base64.b64decode(image_b64)
-    edited_bytes, prompt_text, usage = run_eye_repair_pass(result_bytes, prompt, quality=quality)
+    edited_bytes, prompt_text, usage = run_eye_repair_pass(result_bytes, followup.prompt, quality=quality)
     return base64.b64encode(edited_bytes).decode(), prompt_text, usage
 
 
@@ -475,9 +447,8 @@ def finish_stage(
     if ai_photo_editing:
         # Step 5 — AI edit
         t0 = time.time()
-        # An approved blink repair only comes out reliably at Sunburst's top tier; two-stage defers it to Step 5b.
-        if (single_pass_edit and image_model == BLINK_REPAIR_IMAGE_MODEL and quality == "medium"
-                and approved_blink_items(analysis)):
+        if (image_model == BLINK_REPAIR_IMAGE_MODEL and quality == "medium"
+                and any(skill.needs_top_tier_edit(analysis, single_pass_edit) for skill in EDITOR_SKILLS)):
             edit_quality = BLINK_REPAIR_QUALITY
         logger.info("Step 5: editing photo (preset=%s quality=%s model=%s)", preset_key, edit_quality, image_model)
         run_edit_photo = _editor_for(image_model)

@@ -27,6 +27,15 @@ class EditContext:
     include_blink: bool = True
 
 
+@dataclass(frozen=True)
+class FollowupEdit:
+    """A second, isolated whole-image edit on Step 5's output (Step 5b)."""
+
+    prompt: str
+    # Run on the pipeline's top image tier instead of its follow-up model.
+    top_tier: bool = False
+
+
 class EditorSkill:
     """One kind of edit (expression, eyes, hair, ...), active only when an approved item asks for it."""
 
@@ -64,6 +73,14 @@ class EditorSkill:
         """Entries this skill adds to the editor prompt's metadata."""
         return {}
 
+    def needs_top_tier_edit(self, analysis, single_pass_edit):
+        """Whether Step 5 itself must run on the top image tier for this skill's edit to come out."""
+        return False
+
+    def followup_edit(self, analysis):
+        """The FollowupEdit this skill needs after Step 5, or None."""
+        return None
+
     def claims_correction(self, text, axes, analysis):
         """Whether this skill renders an approved correction_plan item itself instead of the general list."""
         return False
@@ -86,3 +103,24 @@ def _axis_set(value):
             if name:
                 flattened.add(AXIS_ALIASES.get(name, name))
     return flattened
+
+
+def _style_change_footprint(style_options):
+    """Properties that selected styles are authorized to replace."""
+    options = {
+        key: value for key, value in (style_options or {}).items()
+        if value and value != "default"
+    }
+    footprint = set()
+    if "pose" in options:
+        footprint.update({
+            "body pose", "head pose", "gesture", "body language", "limb placement",
+            "subject silhouette", "within-subject spacing", "within-subject overlap",
+        })
+    if "angle" in options:
+        footprint.update({"camera viewpoint", "scene perspective", "projected overlap"})
+    if "lighting" in options:
+        footprint.update({"lighting logic", "light/color atmosphere", "highlight and shadow rendering"})
+    if "size" in options:
+        footprint.update({"framing", "subject scale", "visible extent", "image boundaries"})
+    return options, footprint

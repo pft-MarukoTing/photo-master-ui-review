@@ -4,13 +4,34 @@ import re
 
 from prompts import (
     _disabled_issue_subject_indices,
+    approved_blink_items,
+    approved_gaze_items,
+    build_eye_repair_pass_prompt,
+    final_smile_by_subject,
     resolve_user_blink_request,
     resolve_user_gaze_request,
     subject_issue_items,
 )
 
-from .base import MODE_HEAD_ALIGNED_GAZE, RULE_EYELIDS, RULE_GAZE, RULE_SMILE_GAZE, EditorSkill
-from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
+from .base import (
+    MODE_HEAD_ALIGNED_GAZE,
+    RULE_EYELIDS,
+    RULE_GAZE,
+    RULE_SMILE_GAZE,
+    EditorSkill,
+    FollowupEdit,
+    _style_change_footprint,
+)
+from .expression import _smile_contracts
+from .face import (
+    _BASE_PRESERVE,
+    _EYE_IDENTITY_PRESERVE,
+    _EYE_MAKEUP_CARRY_RULE,
+    _IDENTITY_GEOMETRY_RULE,
+    _box,
+    _resolved_features,
+    resolve_feature_contracts,
+)
 
 
 def _repair_strength(value, default="moderate"):
@@ -426,6 +447,36 @@ def _eye_state_lines(state, *, subject_has_blink, style_options, include_gaze_me
     return state_lines
 
 
+def build_blink_pass_targets(analysis):
+    """Blink repairs for the two-stage eye pass (Step 5b), worded exactly as a single-pass Step 5 would word them.
+
+    Returns (targets, shared_rules); each target is {subject_index, label, box, lines}.
+    """
+    blink = _blink_contracts(analysis)
+    if not blink:
+        return [], []
+    resolved = resolve_feature_contracts(
+        _smile_contracts(analysis) + _gaze_contracts(analysis, True) + blink,
+        subject_count=len(analysis.get("subjects") or []),
+    )
+    style_options, _ = _style_change_footprint(analysis.get("style_options"))
+    targets = []
+    for item in resolved:
+        if "blink" not in item["features"]:
+            continue
+        targets.append({
+            "subject_index": item.get("subject_index"),
+            "label": item["subject"],
+            "box": item["box"],
+            "lines": _eye_state_lines(
+                item["final_state"], subject_has_blink=True, style_options=style_options,
+                include_gaze_method=False,
+            ),
+        })
+    rules = [_IDENTITY_GEOMETRY_RULE + _BLINK_IDENTITY_SCOPE, *_BLINK_PAIR_RULES, _EYE_MAKEUP_CARRY_RULE]
+    return targets, rules
+
+
 class EyesSkill(EditorSkill):
     name = "eyes"
     # Eye-identity properties are rendered in concrete visual terms by the eye lines.
@@ -470,6 +521,41 @@ class EyesSkill(EditorSkill):
                 "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
             ))
         return rules
+
+
+    def needs_top_tier_edit(self, analysis, single_pass_edit):
+        # An approved blink repair only comes out reliably at the top tier; two-stage defers it to Step 5b.
+        return single_pass_edit and bool(approved_blink_items(analysis))
+
+    def followup_edit(self, analysis):
+        """Step 5b: the approved gaze and/or blink repair(s) as an isolated edit on Step 5's output.
+
+        Under the two-call path (single_pass_edit=False), Step 5 is told to leave
+        gaze and eyelid state untouched even when a fix is approved (the
+        include_gaze/include_blink gates), so this pass is the ONLY place those
+        repairs happen. A single call bundling them with exposure/crop/skin/style
+        reliably applies the coarse, whole-frame changes but often no-ops or
+        under-applies the fine, localized eye work; a call whose prompt contains
+        nothing but the eye repairs gives them the model's full attention.
+
+        A blink repair runs on the top tier, the one blink repair is reliable on.
+        Each toggle and per-person opt-out is honoured here as well as in the
+        edit prompt, since this pass rebuilds its own item lists from the analysis.
+        """
+        gaze_items = approved_gaze_items(analysis)
+        blink_targets, blink_rules = build_blink_pass_targets(analysis)
+        if not gaze_items and not blink_targets:
+            return None
+        # Step 5 has already applied the smile setting; the gaze has to be redirected inside that expression.
+        final_smile = final_smile_by_subject(analysis)
+        gaze_items = [
+            {**item, "_final_smile": final_smile.get(item.get("_subject_index"), final_smile.get(None))}
+            for item in gaze_items
+        ]
+        return FollowupEdit(
+            prompt=build_eye_repair_pass_prompt(gaze_items, blink_targets, blink_rules),
+            top_tier=bool(blink_targets),
+        )
 
 
 def _has_head_aligned_gaze(resolved):
