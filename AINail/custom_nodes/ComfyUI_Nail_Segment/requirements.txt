@@ -1,0 +1,5 @@
+# Models are ONNX, converted from the Keras models DeepTrainer_Ring/Models/Nails/230324/{point,patch}_model_weight_1input_modified.h5.
+# Bundled in this package's models/ (no external model folder needed). Use onnxruntime (CPU only) instead of -gpu if no CUDA.
+onnxruntime-gpu
+opencv-python
+numpy
