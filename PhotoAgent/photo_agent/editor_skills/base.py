@@ -52,6 +52,18 @@ class EditorSkill:
         """A block placed after the shared facial rules, with its own leading newline."""
         return ""
 
+    def claims_correction(self, text, axes, analysis):
+        """Whether this skill renders an approved correction_plan item itself instead of the general list."""
+        return False
+
+    def color_lines(self, analysis, claimed, ctx):
+        """Lines appended to the light-and-color execution block; claimed holds this skill's (text, axes) items."""
+        return []
+
+    def color_metadata(self, claimed):
+        """Entries this skill adds to the prompt metadata's color_contract."""
+        return {}
+
 
 def _axis_set(value):
     """Flatten the analysis's per-correction axis lists into canonical tags."""

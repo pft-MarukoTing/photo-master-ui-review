@@ -16,7 +16,6 @@ from config import STYLE_OPTION_VALUE_LABELS
 from prompts import (
     OCCLUDED_PERSON_REMOVAL_RULE,
     USER_SCENE_CONSISTENCY_RULE,
-    _has_person,
     build_reviewed_light_color_target,
     build_user_preserved_choices,
     has_approved_alignment_correction,
@@ -44,46 +43,10 @@ from photo_agent.editor_skills.face import (
 
 _HIDDEN_PRESERVE = frozenset().union(*(skill.hidden_preserve for skill in EDITOR_SKILLS))
 
-_SKIN_TERMS = (
-    "膚色", "皮膚", "臉色", "臉部", "面部", "face tone", "skin", "complexion",
-)
-_SKIN_FALLBACK_AXES = {"white_balance", "hue", "saturation", "tint"}
-_FACE_TONAL_AXES = {"exposure", "shadow", "highlight", "contrast"}
 _DEDICATED_ROUTE_TERMS = (
     "眼神", "虹膜", "瞳孔", "direct_camera", "gaze", "閉眼", "眼皮", "blink", "笑", "smile", "laugh",
     "髮", "头发", "hair", "bang", "fringe", "flyaway", "frizz",
 )
-
-
-def _skin_identity_lines(analysis):
-    lines = []
-    for subject in analysis.get("subjects") or []:
-        if not isinstance(subject, dict) or not subject.get("is_person"):
-            continue
-        label = str(subject.get("label") or "").strip()
-        skin = str(subject.get("skin") or "").strip()
-        if label and skin and skin not in {"不適用", "N/A"}:
-            lines.append(f"- {label}: {skin}")
-    return lines
-
-
-def _is_skin_correction(text, axes):
-    if "skin" in axes:
-        return True
-    # Text only rescues a color-only item the analyzer under-tagged; any other axis means it is not skin work.
-    if not axes or not axes <= _SKIN_FALLBACK_AXES:
-        return False
-    lowered = re.sub(
-        r"非皮膚|非膚色|non[ -]skin|non[ -]complexion",
-        "", text.lower(),
-    )
-    return any(term in lowered for term in _SKIN_TERMS)
-
-
-def _is_face_tonal_correction(text, axes):
-    return bool(_FACE_TONAL_AXES & set(axes)) and bool(
-        re.search(r"(?:臉部|面部|臉頰|人臉|\bface\b|\bfacial\b)", text, re.IGNORECASE)
-    )
 
 
 def _has_dedicated_route(text, axes):
@@ -95,9 +58,8 @@ def _has_dedicated_route(text, axes):
     return any(term in lowered for term in _DEDICATED_ROUTE_TERMS)
 
 
-def _build_color_blocks(analysis, skin_corrections, face_tonal_corrections=(), lighting_style=None):
+def _build_color_blocks(analysis, claimed, ctx, lighting_style=None):
     """Render one concise execution contract beneath the photo-specific target."""
-    has_person = _has_person(analysis)
     if lighting_style:
         lighting_label = STYLE_OPTION_VALUE_LABELS["lighting"].get(lighting_style, lighting_style)
         scene_line = f"- Apply the selected {lighting_label} atmosphere coherently across the scene."
@@ -108,33 +70,8 @@ def _build_color_blocks(analysis, skin_corrections, face_tonal_corrections=(), l
         "- Realize the finished target through the approved corrections as one coherent photographic grade. Make every named adjustment clearly visible with natural tonal transitions and believable materials.",
         scene_line,
     ]
-
-    if not has_person:
-        return "\n".join(execution_lines), ""
-
-    identities = _skin_identity_lines(analysis)
-    identity_text = "\n".join(identities) if identities else "- Read each person's existing depth and undertone from the supplied photograph."
-    correction_text = "\n".join(
-        f"- Approved skin correction: {item} Apply it as the named cast correction and stop at the recorded native complexion."
-        for item in skin_corrections
-    )
-    face_tonal_text = "\n".join(
-        f"- Approved local face tonal correction: {item} Apply it across the full named region, including clothing when specified; brighten skin through exposure while retaining facial geometry and complexion."
-        for item in face_tonal_corrections
-    )
-    execution_lines.extend([
-        "Skin boundary:",
-        identity_text,
-    ])
-    if correction_text:
-        execution_lines.append(correction_text)
-    if face_tonal_text:
-        execution_lines.append(face_tonal_text)
-    execution_lines.extend([
-        "- Keep each person's native complexion depth, undertone, and chroma while skin follows the final shared exposure and actual illumination.",
-        "- Apply scene white balance, hue, and saturation to the non-skin palette independently from complexion.",
-        "- Keep tone continuous across face, neck, ears, and visible hands, with natural texture and modelling.",
-    ])
+    for skill in EDITOR_SKILLS:
+        execution_lines.extend(skill.color_lines(analysis, claimed[skill.name], ctx))
     return "\n".join(execution_lines), ""
 
 
@@ -728,10 +665,7 @@ def build_compact_editor_prompt(
         )
 
     other_corrections = []
-    # Skin and face-tonal lines render only inside the person block; without a person they stay general corrections.
-    has_person = _has_person(analysis)
-    skin_corrections = []
-    face_tonal_corrections = []
+    claimed = {skill.name: [] for skill in EDITOR_SKILLS}
     for index, raw_item in enumerate(analysis.get("correction_plan") or []):
         item = str(raw_item)
         axes = _axis_set([correction_axes[index]]) if index < len(correction_axes) else set()
@@ -745,22 +679,18 @@ def build_compact_editor_prompt(
         # near-full-frame instruction into a second generative reframe request.
         if "crop" in axes:
             continue
-        if has_person and _is_face_tonal_correction(item, axes) and not (
-            {"skin", "white_balance", "hue", "saturation", "tint"} & axes
-        ):
-            face_tonal_corrections.append(item)
-        elif has_person and _is_skin_correction(item, axes):
-            skin_corrections.append(item)
-        else:
+        owner = next((skill for skill in EDITOR_SKILLS if skill.claims_correction(item, axes, analysis)), None)
+        if owner is None:
             other_corrections.append(item)
+        else:
+            claimed[owner.name].append((item, axes))
     correction_block = "\n".join(f"- {item}" for item in other_corrections) or "- No additional approved local corrections."
     removal_face_block = (
         "\n\nRequired people cleanup during approved removal:\n- " + OCCLUDED_PERSON_REMOVAL_RULE
         if has_approved_distraction_removal(analysis) else ""
     )
     color_block, skin_block = _build_color_blocks(
-        analysis, skin_corrections, face_tonal_corrections,
-        lighting_style=style_options.get("lighting"),
+        analysis, claimed, skill_ctx, lighting_style=style_options.get("lighting"),
     )
     visual_target_block = build_reviewed_light_color_target(
         analysis, lighting_style=style_options.get("lighting")
@@ -1011,8 +941,11 @@ Global preservation:
             for item in resolved if item["conflicts"]
         ],
         "color_contract": {
-            "skin_corrections": skin_corrections,
-            "face_tonal_corrections": face_tonal_corrections,
+            **{
+                key: value
+                for skill in EDITOR_SKILLS
+                for key, value in skill.color_metadata(claimed[skill.name]).items()
+            },
             "memory_color_strategy": analysis.get("memory_color_strategy") or "",
         },
         "visual_target": {
