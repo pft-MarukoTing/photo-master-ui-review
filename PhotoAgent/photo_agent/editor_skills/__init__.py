@@ -1,12 +1,13 @@
 """Editor skills: each kind of edit renders its own part of the Step 5 prompt."""
 
 from .base import EditContext, EditorSkill
+from .body import BodySkill
 from .expression import ExpressionSkill
 from .eyes import EyesSkill
 from .hair import HairSkill
 from .skin import SkinSkill
 
 # Order is the order each person's final-state lines are rendered in.
-EDITOR_SKILLS = (ExpressionSkill(), EyesSkill(), HairSkill(), SkinSkill())
+EDITOR_SKILLS = (ExpressionSkill(), EyesSkill(), HairSkill(), SkinSkill(), BodySkill())
 
-__all__ = ["EDITOR_SKILLS", "EditContext", "EditorSkill", "ExpressionSkill", "EyesSkill", "HairSkill", "SkinSkill"]
+__all__ = ["EDITOR_SKILLS", "BodySkill", "EditContext", "EditorSkill", "ExpressionSkill", "EyesSkill", "HairSkill", "SkinSkill"]

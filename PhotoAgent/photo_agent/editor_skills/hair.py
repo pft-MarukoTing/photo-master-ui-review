@@ -171,7 +171,7 @@ class HairSkill(EditorSkill):
                 )
         return state_lines
 
-    def execution_block(self, resolved, ctx):
+    def execution_block(self, analysis, resolved, ctx):
         if "hair" not in _resolved_features(resolved):
             return ""
         return (

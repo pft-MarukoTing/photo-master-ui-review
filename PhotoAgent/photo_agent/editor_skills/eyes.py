@@ -9,7 +9,7 @@ from prompts import (
     subject_issue_items,
 )
 
-from .base import RULE_EYELIDS, RULE_GAZE, RULE_SMILE_GAZE, EditorSkill
+from .base import MODE_HEAD_ALIGNED_GAZE, RULE_EYELIDS, RULE_GAZE, RULE_SMILE_GAZE, EditorSkill
 from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
 
 
@@ -443,6 +443,9 @@ class EyesSkill(EditorSkill):
             item["final_state"], subject_has_blink="blink" in item.get("features", []),
             style_options=ctx.style_options,
         )
+
+    def prompt_modes(self, analysis, resolved, ctx):
+        return {MODE_HEAD_ALIGNED_GAZE} if _has_head_aligned_gaze(resolved) else set()
 
     def identity_scope(self, resolved, ctx):
         scope = _BLINK_IDENTITY_SCOPE if "blink" in _resolved_features(resolved) else ""

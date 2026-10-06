@@ -19,12 +19,10 @@ from prompts import (
     build_reviewed_light_color_target,
     build_user_preserved_choices,
     has_approved_alignment_correction,
-    build_body_reshape_edit_block,
-    get_body_reshape_edit_prompt,
     has_approved_distraction_removal,
 )
 from photo_agent.editor_skills import EDITOR_SKILLS, EditContext
-from photo_agent.editor_skills.base import _axis_set
+from photo_agent.editor_skills.base import MODE_HEAD_ALIGNED_GAZE, MODE_HOLISTIC_BODY, _axis_set
 from photo_agent.editor_skills.expression import _smile_contracts
 from photo_agent.editor_skills.eyes import (
     _BLINK_IDENTITY_SCOPE,
@@ -32,7 +30,6 @@ from photo_agent.editor_skills.eyes import (
     _blink_contracts,
     _eye_state_lines,
     _gaze_contracts,
-    _has_head_aligned_gaze,
 )
 from photo_agent.editor_skills.face import (
     _EYE_MAKEUP_CARRY_RULE,
@@ -577,13 +574,15 @@ def build_compact_editor_prompt(
     resolved = resolve_feature_contracts(
         contracts, subject_count=len(analysis.get("subjects") or [])
     )
-    body_prompt = get_body_reshape_edit_prompt(analysis)
-    body_reshape_active = bool(body_prompt)
     for item in resolved:
         if "lighting" in item["preserve"]:
             item["preserve"].remove("lighting")
             item["removed_preservations"] = sorted(set(item["removed_preservations"]) | {"lighting"})
     style_options, style_footprint = _style_change_footprint(analysis.get("style_options"))
+    skill_ctx = EditContext(style_options=style_options, include_gaze=include_gaze, include_blink=include_blink)
+    modes = set().union(*(skill.prompt_modes(analysis, resolved, skill_ctx) for skill in EDITOR_SKILLS))
+    body_reshape_active = MODE_HOLISTIC_BODY in modes
+    has_head_aligned_gaze = MODE_HEAD_ALIGNED_GAZE in modes
     subject_style_footprint = set()
     if "pose" in style_options:
         subject_style_footprint.update({"body_pose", "head_pose"})
@@ -646,9 +645,7 @@ def build_compact_editor_prompt(
             compact_crop_block += "\n" + compact_crop_guidance
 
     subject_blocks = []
-    has_head_aligned_gaze = _has_head_aligned_gaze(resolved)
     correction_axes = analysis.get("correction_axes") or []
-    skill_ctx = EditContext(style_options=style_options, include_gaze=include_gaze, include_blink=include_blink)
     for item in resolved:
         state_lines = []
         for skill in EDITOR_SKILLS:
@@ -698,18 +695,7 @@ def build_compact_editor_prompt(
     user_preserved_block = build_user_preserved_choices(analysis)
     subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
     shared_face_block = render_shared_face_rules(EDITOR_SKILLS, resolved, skill_ctx)
-    skill_execution_block = "".join(skill.execution_block(resolved, skill_ctx) for skill in EDITOR_SKILLS)
-    # The analyzer sentence is the complete Body Reshape contract.  Add it
-    # once, verbatim, beside the other feature instructions; no per-subject
-    # resolver state is created for it.
-    body_execution_block = (
-        build_body_reshape_edit_block(analysis)
-        if body_reshape_active else ""
-    )
-    body_boundary_block = (
-        "\n" + body_execution_block
-        if body_execution_block else ""
-    )
+    skill_execution_block = "".join(skill.execution_block(analysis, resolved, skill_ctx) for skill in EDITOR_SKILLS)
     user_text = user_direction.strip() or "No additional direction."
     # A supplied user direction outranks every other block of this prompt.
     user_priority_text = (
@@ -909,7 +895,7 @@ Other approved corrections:
 Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
-{shared_face_block}{skill_execution_block}{body_boundary_block}
+{shared_face_block}{skill_execution_block}
 
 {color_block}
 
@@ -965,6 +951,6 @@ Global preservation:
         "compact_style_instruction": compact_style_block,
         "style_change_footprint": sorted(style_footprint),
     }
-    if body_reshape_active:
-        metadata["body_reshape_edit_prompt"] = body_prompt
+    for skill in EDITOR_SKILLS:
+        metadata.update(skill.prompt_metadata(analysis))
     return prompt.strip(), metadata

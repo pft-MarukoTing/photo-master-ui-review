@@ -13,6 +13,10 @@ RULE_LAUGHTER = 40
 RULE_SMILE_GAZE = 50
 RULE_GAZE = 60
 
+# Prompt modes a skill can switch on; the editor prompt's own wording depends on them.
+MODE_HEAD_ALIGNED_GAZE = "head_aligned_gaze"
+MODE_HOLISTIC_BODY = "holistic_body"
+
 
 @dataclass(frozen=True)
 class EditContext:
@@ -48,9 +52,17 @@ class EditorSkill:
         """(order, line) pairs for the shared facial rules; order is one of the RULE_* values."""
         return []
 
-    def execution_block(self, resolved, ctx):
+    def execution_block(self, analysis, resolved, ctx):
         """A block placed after the shared facial rules, with its own leading newline."""
         return ""
+
+    def prompt_modes(self, analysis, resolved, ctx):
+        """The MODE_* values this skill switches on for this edit."""
+        return set()
+
+    def prompt_metadata(self, analysis):
+        """Entries this skill adds to the editor prompt's metadata."""
+        return {}
 
     def claims_correction(self, text, axes, analysis):
         """Whether this skill renders an approved correction_plan item itself instead of the general list."""
