@@ -476,8 +476,9 @@ class OpenAIAspectRatioTests(unittest.TestCase):
         self.assertNotEqual(size_param, "auto")
         width, height = (int(value) for value in size_param.split("x"))
         self.assertAlmostEqual(width / height, 4 / 5, delta=0.02)
-        self.assertIn("Crop and scale uniformly.", prompt)
-        self.assertIn("Preserve internal proportions, tilt, relative sizes, spacing, and overlap.", prompt)
+        self.assertIn("as a straight cut from the photograph", prompt)
+        self.assertIn("everything kept keeps its source proportions", prompt)
+        self.assertNotIn("frame-relative subject scale", prompt)
         self.assertEqual(analysis, original_analysis)
 
     @patch.object(
@@ -518,11 +519,10 @@ class GeminiAspectRatioTests(unittest.TestCase):
 
         payload = post_generate.call_args.args[1]
         self.assertEqual(payload["generationConfig"]["imageConfig"]["aspectRatio"], "4:5")
-        # Gemini's actual 1K raster for 4:5 is 928x1152, so prompt/crop
-        # geometry follows that physical ratio rather than the approximate
-        # API label.
-        self.assertIn("Reframe to 928:1152", prompt)
-        self.assertIn("Preserve internal proportions, tilt, relative sizes, spacing, and overlap.", prompt)
+        # Gemini's actual 1K raster for 4:5 is 928x1152; crop geometry follows
+        # that physical ratio, and the prompt names it by the common label.
+        self.assertIn("The finished picture is a 4:5 portrait frame", prompt)
+        self.assertIn("everything kept keeps its source proportions", prompt)
         self.assertEqual(analysis, original_analysis)
 
     @patch.object(
@@ -754,7 +754,7 @@ class ExpandPermissionTests(unittest.TestCase):
             approved_crop_correction=True,
         )
         self.assertNotIn("past the photograph", crop_only)
-        self.assertIn("Crop and scale uniformly", crop_only)
+        self.assertIn("as a straight cut from the photograph", crop_only)
 
     def test_analysis_policy_asks_the_analyzer_to_decide(self):
         wide = build_analysis_instruction("9:16", source_size=self.SQUARE)

@@ -723,12 +723,12 @@ This frame is narrower than the photograph you were given: the photograph's left
 Frame the photograph on what it is actually of. Closer framing was requested, so come in closer than the original frame.
 Everything keeps the proportions, the tilt, and the relative sizes and spacing it has in the input photograph."""
         compact = _compact_raw_crop_instruction(raw)
-        self.assertIn("Reframe to 4:3", compact)
+        self.assertIn("The finished picture is a 4:3 landscape frame, narrower than the photograph", compact)
         self.assertIn("moderate tightening", compact)
-        self.assertIn("Trim side content", compact)
+        self.assertIn("as a straight cut from the photograph", compact)
         self.assertIn("Come in visibly closer", compact)
-        self.assertIn("Preserve internal proportions, tilt, relative sizes, spacing, and overlap", compact)
-        self.assertLess(len(compact), len(raw))
+        self.assertIn("shrink the whole photograph evenly", compact)
+        self.assertIn("never narrow anything", compact)
 
     def test_same_shape_near_full_frame_does_not_become_an_active_reframe(self):
         raw = """Reframing:

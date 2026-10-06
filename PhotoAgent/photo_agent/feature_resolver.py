@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 
+from aspect_ratio_rules import AUTO_ASPECT_RATIO_LABELS
 from config import STYLE_OPTION_VALUE_LABELS
 
 # The legacy prompt's own readers, deliberately shared rather than reimplemented
@@ -215,9 +216,68 @@ def _crop_plan_has_visible_trim(crop_plan, axis_threshold=0.08, area_threshold=0
     )
 
 
+def _common_ratio_label(aspect):
+    """Name a pixel-size ratio such as 944:1680 by the common label within 2% of it, e.g. "9:16"."""
+    match = re.fullmatch(r"\s*(\d+)\s*:\s*(\d+)\s*", str(aspect or ""))
+    if not match or not int(match.group(2)):
+        return aspect
+    ratio = int(match.group(1)) / int(match.group(2))
+    for common in AUTO_ASPECT_RATIO_LABELS:
+        w, h = (int(part) for part in common.split(":"))
+        if abs(ratio / (w / h) - 1) <= 0.02:
+            return common
+    return f"{match.group(1)}:{match.group(2)}"
+
+
+def _readable_aspect(aspect):
+    """Common ratio label plus orientation, e.g. "9:16 portrait"."""
+    label = _common_ratio_label(aspect)
+    match = re.fullmatch(r"(\d+):(\d+)", str(label or ""))
+    if not match or not int(match.group(2)):
+        return aspect
+    ratio = int(match.group(1)) / int(match.group(2))
+    orientation = "square" if abs(ratio - 1) <= 0.02 else "portrait" if ratio < 1 else "landscape"
+    return f"{label} {orientation}"
+
+
+def _end_state_crop_instruction(
+    aspect, tightness, closer, side_trim, crop_plan, has_body_reshape, local_shape_exception, framing_goal="",
+):
+    """Describe a one-axis crop as the finished frame, so the editor cuts instead of squeezing."""
+    kept_axis = "h" if side_trim else "w"
+    try:
+        full_axis = float((crop_plan or {}).get(kept_axis, 0)) >= 0.98
+    except (TypeError, ValueError):
+        full_axis = False
+    narrower, edges, grow_edges, distortion = (
+        ("narrower", "left and right", "top and bottom", "narrow")
+        if side_trim else
+        ("shorter", "top and bottom", "left and right", "flatten")
+    )
+    span = f" at the photograph's full {'height' if side_trim else 'width'}" if full_axis else ""
+    tightness_text = "" if full_axis else f" Overall it is {tightness}."
+    exception = (
+        "; the holistic body instruction remains the only deliberate figure-geometry exception"
+        if has_body_reshape else ""
+    )
+    result = (
+        f"The finished picture is a {_readable_aspect(aspect)} frame{span}, {narrower} than the photograph, so its {edges} edges "
+        + (
+            f"fall where the framing goal places them: {framing_goal.rstrip('。.')}."
+            if framing_goal else "fall inside the photograph, guided by the subject."
+        )
+        + f"{tightness_text}{closer} Everything that remains in "
+        "the frame, the subject and its surroundings alike, appears at exactly its original size and proportions, "
+        f"as a straight cut from the photograph; only the frame is {narrower}. If you keep more of the "
+        f"{'width' if side_trim else 'height'} than that, shrink the whole photograph evenly and continue the scene "
+        f"past its {grow_edges} edges; never {distortion} anything{exception}."
+    )
+    return result + local_shape_exception if has_body_reshape else result
+
+
 def _compact_raw_crop_instruction(
     raw_instruction, *, has_body_reshape=False, crop_plan=None,
-    approved_crop_correction=False,
+    approved_crop_correction=False, framing_goal="",
 ):
     """Keep the raw builder's crop decision while removing explanatory prose."""
     raw = str(raw_instruction or "").strip()
@@ -349,6 +409,12 @@ def _compact_raw_crop_instruction(
                 "Never blank borders, padding, empty bands, stretched edges, or scenery from somewhere else."
             )
         closer = " Come in visibly closer than the original." if "Closer framing was requested" in raw else ""
+        side_trim = "left and right edges cannot both be inside" in raw
+        if not expanding and (side_trim or "top and bottom edges cannot both be inside" in raw):
+            return _end_state_crop_instruction(
+                aspect, tightness, closer, side_trim, crop_plan, has_body_reshape, local_shape_exception,
+                framing_goal,
+            )
         operations = "Crop or extend the scene, and scale uniformly." if expanding else "Crop and scale uniformly."
         result = (
             f"Reframe to {aspect}; {tightness}.{consequence}{closer} Frame the visible main subject and meaningful "
@@ -381,7 +447,7 @@ def _compact_crop_goal_text(raw_goal, resolved_ratio):
         text,
     )
 
-    ratio = str(resolved_ratio or "").strip()
+    ratio = str(_common_ratio_label(resolved_ratio) or "").strip()
     if ratio and ratio != "original":
         spoken_ratios = (
             "一比一", "三比二", "二比三", "三比四", "四比三", "四比五", "五比四",
@@ -404,8 +470,8 @@ def _compact_crop_goal_text(raw_goal, resolved_ratio):
     return "".join(semantic_clauses).strip(" ，；;")
 
 
-def _compact_analysis_crop_guidance(analysis):
-    """Render the approved semantic crop intent without stale geometry."""
+def _analysis_crop_goal(analysis):
+    """Return the approved crop goal text and whether it came from a reviewed correction item."""
     resolved_ratio = analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio")
     crop_items = []
     axes = analysis.get("correction_axes") or []
@@ -421,7 +487,14 @@ def _compact_analysis_crop_guidance(analysis):
         goal = _compact_crop_goal_text(
             crop_box.get("reason") or analysis.get("crop_recommendation"), resolved_ratio,
         )
+    return goal, has_approved_goal
 
+
+def _compact_analysis_crop_guidance(analysis, *, goal_in_framing=False):
+    """Render the approved semantic crop intent without stale geometry."""
+    goal, has_approved_goal = _analysis_crop_goal(analysis)
+    # An end-state framing sentence already carries the goal, which names what leaves the frame.
+    goal_in_framing = goal_in_framing and bool(goal)
     intent = analysis.get("crop_intent") or {}
     trimmed_edges = [
         edge for edge in ("left", "right", "top", "bottom")
@@ -444,7 +517,7 @@ def _compact_analysis_crop_guidance(analysis):
         keep.append(extent_reason)
 
     lines = []
-    if goal:
+    if goal and not goal_in_framing:
         lines.append(f"- Framing goal: {goal}")
     # The reviewed correction is authoritative. Structured fields fill only
     # details it did not already state, keeping one crop plan in the prompt.
@@ -454,7 +527,7 @@ def _compact_analysis_crop_guidance(analysis):
         lines.append(f"- Place outside the final frame: {'; '.join(distractions)}.")
     if anchor:
         lines.append(f"- Main visual anchor: {anchor}.")
-    if keep:
+    if keep and not goal_in_framing:
         lines.append(f"- Keep comfortably inside the final frame: {'; '.join(keep)}.")
     return "\n".join(lines)
 
@@ -1480,11 +1553,13 @@ def build_compact_editor_prompt(
     ratio = analysis.get("recommended_aspect_ratio") or (analysis.get("crop_box") or {}).get("aspect_ratio") or "original"
     raw_crop_block = str(raw_crop_instruction or "").strip()
     approved_crop_correction = "crop" in _axis_set(analysis.get("correction_axes"))
+    size_reframe_active = style_options.get("size") in {"close", "closer", "wide", "wider"}
     compact_crop_block = _compact_raw_crop_instruction(
         raw_crop_block,
         has_body_reshape=body_reshape_active,
         crop_plan=crop_plan,
         approved_crop_correction=approved_crop_correction,
+        framing_goal="" if size_reframe_active else _analysis_crop_goal(analysis)[0],
     )
     crop_instruction_source = "raw_edit_prompt" if compact_crop_block else "compact_fallback"
     if not compact_crop_block:
@@ -1501,8 +1576,6 @@ def build_compact_editor_prompt(
     if compact_crop_block.startswith("Keep the supplied framing and subject scale"):
         framing_change_active = False
 
-    size_override = style_options.get("size")
-    size_reframe_active = size_override in {"close", "closer", "wide", "wider"}
     alignment_change_active = _analysis_has_alignment_correction(analysis)
     alignment_only_active = (
         alignment_change_active
@@ -1521,9 +1594,10 @@ def build_compact_editor_prompt(
             "Preserve internal proportions, relative sizes",
         ).replace("Preserve tilt, relative placement", "Preserve relative placement")
     framing_change_active = framing_change_active or size_reframe_active or alignment_change_active
+    end_state_crop_active = compact_crop_block.startswith("The finished picture is") and not size_reframe_active
     compact_crop_guidance = ""
     if framing_change_active and not size_reframe_active:
-        compact_crop_guidance = _compact_analysis_crop_guidance(analysis)
+        compact_crop_guidance = _compact_analysis_crop_guidance(analysis, goal_in_framing=end_state_crop_active)
         if compact_crop_guidance:
             compact_crop_block += "\n" + compact_crop_guidance
 
@@ -1784,6 +1858,10 @@ def build_compact_editor_prompt(
     spatial_preserve_text = ", ".join(spatial_preserve)
     if style_footprint:
         style_scope_text = "- Selected style options may change only: " + ", ".join(sorted(style_footprint)) + "."
+    elif end_state_crop_active:
+        style_scope_text = "- Required framing owns the final frame edges and visible extent" + (
+            "; approved alignment owns tilt and perspective" if alignment_change_active else ""
+        ) + "; everything kept keeps its source proportions, pose and viewpoint."
     elif alignment_change_active and composition_reframe_active:
         style_scope_text = "- Required framing owns the final frame edges, frame-relative subject scale, and visible extent; approved alignment owns tilt and perspective. Preserve the source pose and viewpoint."
     elif alignment_only_active:
