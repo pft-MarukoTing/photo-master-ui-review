@@ -2,6 +2,7 @@ import unittest
 
 from config import STYLE_OPTION_INSTRUCTIONS
 from photo_agent.feature_resolver import (
+    _compact_crop_goal_text,
     _compact_raw_crop_instruction,
     _compact_raw_style_instruction,
     build_compact_editor_prompt,
@@ -896,6 +897,21 @@ Frame the photograph on what it is actually of."""
         self.assertNotIn("16:9", framing)
         self.assertNotIn("x=", framing)
         self.assertNotIn("Preserve internal proportions, tilt", framing)
+
+    def test_numeric_frame_positions_are_dropped_whole_not_left_as_broken_clauses(self):
+        goals = {
+            "以9:16輸出比例重新構圖；左右取景範圍設定在原圖約22%至78.25%之間；接受尾羽右側外緣出框。":
+                "以9:16輸出比例重新構圖；接受尾羽右側外緣出框。",
+            "以9:16輸出比例重新構圖；將原始正方形畫面裁為左起0.18、上起0.00、寬0.5625、高1.00的直幅；裁去右側大段尾羽。":
+                "以9:16輸出比例重新構圖；裁去右側大段尾羽。",
+            "將原始方形畫面裁切為從左側百分之二十四起、完整保留高度的直式畫框；保留鳥頭與喙。":
+                "保留鳥頭與喙。",
+            "右側裁去約14.5%的原始畫面與椅子，讓河景成為清楚主體。":
+                "右側裁去原始畫面與椅子，讓河景成為清楚主體。",
+        }
+        for raw, expected in goals.items():
+            with self.subTest(raw=raw):
+                self.assertEqual(_compact_crop_goal_text(raw, "944:1680"), expected)
 
     def test_crop_intent_supplies_direction_when_reviewed_plan_has_no_crop_item(self):
         analysis = interaction_analysis()

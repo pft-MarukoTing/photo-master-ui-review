@@ -432,17 +432,39 @@ def _compact_raw_crop_instruction(
     return raw
 
 
+# A frame position or size written as a number: 22%, 0.18, 百分之二十四.
+_GEOMETRY_NUMBER = r"(?:\d+(?:\.\d+)?\s*%|百分之[零〇一二兩三四五六七八九十百點]+|(?<![\d.])\d*\.\d+)"
+
+
+def _is_geometry_clause(clause):
+    """Whether a clause places the frame by numbers (a range, a start point, or box coordinates)."""
+    coordinate_count = sum(
+        bool(re.search(rf"(?i)(?<![a-z]){name}\s*=", clause))
+        for name in ("x", "y", "w", "h")
+    )
+    return (
+        coordinate_count >= 2
+        or len(re.findall(_GEOMETRY_NUMBER, clause)) >= 2
+        or bool(re.search(_GEOMETRY_NUMBER + r"\s*(?:起|處|至|之間|的位置)", clause))
+    )
+
+
 def _compact_crop_goal_text(raw_goal, resolved_ratio):
     """Keep crop semantics while normalizing stale ratios and dropping box coordinates."""
     text = str(raw_goal or "").strip()
     if not text:
         return ""
 
-    # Geometry validation may move or grow the proposed box. Keep the named
-    # edge/content intent, but do not forward obsolete numeric trim amounts.
+    # Geometry validation may move or grow the proposed box, so numeric
+    # positions are dropped whole; deleting only their numbers leaves broken
+    # clauses. A lone trim amount keeps its named content without the number.
+    text = "".join(
+        clause for clause in re.split(r"(?<=[，；。;])", text)
+        if not _is_geometry_clause(clause)
+    )
     text = re.sub(
         r"(?i)(?:by\s+)?(?:approximately|about|roughly|around|約|大約)?\s*"
-        r"\d+(?:\.\d+)?\s*%\s*(?:of\s+the\s+|的)?",
+        r"(?:\d+(?:\.\d+)?\s*%|百分之[零〇一二兩三四五六七八九十百點]+)\s*(?:of\s+the\s+|的)?",
         "",
         text,
     )
@@ -456,18 +478,7 @@ def _compact_crop_goal_text(raw_goal, resolved_ratio):
         text = re.sub(r"(?<!\d)\d+\s*:\s*\d+(?!\d)", ratio, text)
         for spoken_ratio in spoken_ratios:
             text = text.replace(spoken_ratio, ratio)
-
-    clauses = re.split(r"(?<=[，；。;])", text)
-    semantic_clauses = []
-    for clause in clauses:
-        coordinate_count = sum(
-            bool(re.search(rf"(?i)(?<![a-z]){name}\s*=", clause))
-            for name in ("x", "y", "w", "h")
-        )
-        if coordinate_count >= 2:
-            continue
-        semantic_clauses.append(clause)
-    return "".join(semantic_clauses).strip(" ，；;")
+    return text.strip(" ，；;")
 
 
 def _analysis_crop_goal(analysis):
