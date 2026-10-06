@@ -497,20 +497,24 @@
 
   // All playback text is local: analysis tips or a snapshot of the UI's
   // submitted review choices. Status polling only watches job lifecycle.
+  // Every sentence the feed shows -- analysis tips, edit tips, and the edit
+  // plan built from the submitted choices -- goes through
+  // progressFeedDisplayText: no leading "正在" (the title above already says
+  // it), and the closing "。" becomes "…".
   const PROGRESS_FEED_TIPS = {
     analysis: [
-      "正在分析背景的光線與明暗分布。", "正在檢視照片的構圖與取景細節。",
-      "正在分析畫面主體與背景的視覺關係。", "正在檢視照片整體的色彩與色調。",
-      "正在分析亮部與暗部的細節層次。", "正在檢視畫面中的視覺焦點。",
-      "正在分析照片邊緣的留白與干擾元素。", "正在檢視背景細節對主體的影響。",
-      "正在分析光線方向與畫面的整體氛圍。", "正在檢視構圖中的空間與視覺平衡。",
-      "正在整理照片中值得保留的特色。", "正在整理光線、色彩與構圖的改善建議。",
-      "正在檢視前景、中景與遠景的層次關係。", "正在分析畫面中冷色與暖色的搭配。",
-      "正在檢視陰影區域的細節與可見度。", "正在分析高光與反光對畫面的影響。",
-      "正在檢視主體輪廓與周圍環境的區隔。", "正在分析畫面中線條的延伸與視線引導。",
-      "正在檢視不同區域的色彩飽和度。", "正在分析照片中材質與紋理的呈現。",
-      "正在檢視取景角度與透視的視覺效果。", "正在分析畫面中光色變化的協調程度。",
-      "正在檢視重要細節是否受到邊緣裁切影響。", "正在分析背景元素的排列與疏密關係。"
+      "分析背景的光線與明暗分布", "檢視照片的構圖與取景細節",
+      "分析畫面主體與背景的視覺關係", "檢視照片整體的色彩與色調",
+      "分析亮部與暗部的細節層次", "檢視畫面中的視覺焦點",
+      "分析照片邊緣的留白與干擾元素", "檢視背景細節對主體的影響",
+      "分析光線方向與畫面的整體氛圍", "檢視構圖中的空間與視覺平衡",
+      "整理照片中值得保留的特色", "整理光線、色彩與構圖的改善建議",
+      "檢視前景、中景與遠景的層次關係", "分析畫面中冷色與暖色的搭配",
+      "檢視陰影區域的細節與可見度", "分析高光與反光對畫面的影響",
+      "檢視主體輪廓與周圍環境的區隔", "分析畫面中線條的延伸與視線引導",
+      "檢視不同區域的色彩飽和度", "分析照片中材質與紋理的呈現",
+      "檢視取景角度與透視的視覺效果", "分析畫面中光色變化的協調程度",
+      "檢視重要細節是否受到邊緣裁切影響", "分析背景元素的排列與疏密關係"
     ],
     edit: [
       "查看結果時，可以切換原圖比較整體差異。", "喜歡的表情、衣物或背景細節，可以寫進個人化需求。",
@@ -530,12 +534,8 @@
   let progressFeedState = null;
   const progressFeedRecords = new WeakMap();
   const progressFeedViews = new WeakMap();
-  const progressFeedPortraitMedia = window.matchMedia?.("(orientation: portrait)");
-  // Keep five history entries, but show only the newest two in portrait.
-  // Rotation changes presentation only; never advance/reset the reading timer.
-  if (progressFeedPortraitMedia?.addEventListener) {
-    progressFeedPortraitMedia.addEventListener("change", renderProgressFeed);
-  } else progressFeedPortraitMedia?.addListener?.(renderProgressFeed);
+  // Keep five history entries; show the newest three in either orientation,
+  // newest on top so each new sentence pushes the older ones down.
   let procSubRotateTimer = null;
   let procSubRotateIndex = 0;
   // Which batch record (see showBatchMainLoading) the rotation currently
@@ -557,11 +557,49 @@
     return !document.hidden && [procSub, els.canvasLoadingStatus, els.batchMainLoadingText]
       .some((node) => node?.getClientRects().length);
   }
+  function progressFeedDisplayText(text) {
+    const body = String(text || "").trim().replace(/^正在/, "").replace(/[。.]+$/, "");
+    // A sentence that already ends in its own ！？… (say, quoted from the
+    // personal direction) keeps it rather than getting a second mark.
+    return /[！？!?…]$/.test(body) ? body : body + "…";
+  }
+  // Stacked (one-column) screens center the feed as a block of left-aligned
+  // sentences. The block is as wide as the longest sentence this playback can
+  // show -- measured once from the whole pool, not from the three on screen,
+  // so its left edge stays put as sentences come and go. CSS uses the width
+  // only in the stacked layout. The probe sits on <body> so it measures even
+  // while the feed's own section is still hidden; a row's font size depends
+  // only on its class and the viewport, the same everywhere it is shown.
+  function measureProgressFeedWidth(texts) {
+    const probe = document.createElement("span");
+    probe.className = "progress-feed-row progress-feed-probe";
+    probe.setAttribute("aria-hidden", "true");
+    document.body.append(probe);
+    let widest = 0;
+    for (const text of texts) {
+      probe.textContent = text;
+      widest = Math.max(widest, probe.getBoundingClientRect().width);
+    }
+    probe.remove();
+    return Math.ceil(widest);
+  }
+  function progressFeedWidth(state) {
+    const texts = [...new Set([...(state.pool || []), ...state.rows.map((row) => row.text)])]
+      .map(progressFeedDisplayText);
+    const key = `${state.mode}|${texts.length}|${window.innerWidth}`;
+    if (state.widthKey !== key) {
+      state.width = measureProgressFeedWidth(texts);
+      state.widthKey = key;
+    }
+    return state.width;
+  }
+  window.addEventListener("resize", () => renderProgressFeed());
   function renderProgressFeed() {
     const state = progressFeedState;
     if (!state) return;
-    const rowLimit = progressFeedPortraitMedia?.matches ? 2 : 5;
-    const visibleRows = state.rows.slice(-rowLimit);
+    const rowLimit = 3;
+    const visibleRows = state.rows.slice(-rowLimit).reverse();
+    const feedWidth = progressFeedWidth(state);
     [procSub, els.canvasLoadingStatus, els.batchMainLoadingText].forEach((element) => {
       if (!element) return;
       element.classList.add("has-progress-feed");
@@ -577,7 +615,10 @@
         view = { state, head, list, nodes: new Map(), revision: -1 };
         progressFeedViews.set(element, view);
       }
-      view.head.textContent = state.mode === "analysis" ? "◇ 分析觀察" : "◇ 修圖規劃";
+      if (feedWidth) element.style.setProperty("--progress-feed-width", `${feedWidth}px`);
+      // No badge on either feed, so the sentences start at the top.
+      view.head.hidden = true;
+      view.head.textContent = "";
       if (view.revision === state.revision && view.rowLimit === rowLimit) return;
       const tops = new Map([...view.nodes].map(([id, node]) => [id, node.getBoundingClientRect().top]));
       const nodes = visibleRows.map((entry, index) => {
@@ -587,10 +628,10 @@
           node.className = "progress-feed-row";
           const text = document.createElement("span");
           text.className = "progress-feed-text";
-          text.textContent = entry.text;
+          text.textContent = progressFeedDisplayText(entry.text);
           node.replaceChildren(text);
         }
-        node.classList.toggle("is-latest", index === visibleRows.length - 1);
+        node.classList.toggle("is-latest", index === 0);
         return node;
       });
       view.list.replaceChildren(...nodes);
@@ -633,6 +674,8 @@
       state.mode = mode;
       state.queue = mode === "edit" ? [...getMessages()] : [];
       state.tipIndex = 0;
+      // Everything this playback can show, for the stacked layout's width.
+      state.pool = [...state.queue, ...PROGRESS_FEED_TIPS[mode]];
     }
     progressFeedState = state;
     if (owner) progressFeedRecords.set(owner, state);
