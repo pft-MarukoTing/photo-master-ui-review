@@ -3,7 +3,7 @@
 from prompts import _disabled_issue_subject_indices, resolve_user_hair_request
 
 from .base import EditorSkill, _axis_set
-from .face import _BASE_PRESERVE, _box
+from .face import _BASE_PRESERVE, _box, _resolved_features
 
 
 _HAIR_IDENTITY_PRESERVE = {
@@ -170,3 +170,11 @@ class HairSkill(EditorSkill):
                     "- Preserve the source fringe type, main part and sweep, length, outer edge, hairline, and total hair mass. Keep subtype-defining openings, but not the defective clump layout or accidental gaps; do not add hair or form an opaque sheet."
                 )
         return state_lines
+
+    def execution_block(self, resolved, ctx):
+        if "hair" not in _resolved_features(resolved):
+            return ""
+        return (
+            "\nHair execution boundary:\n"
+            "- Treat hair work as an arrangement/local-sheen edit, not a head or face regeneration. Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color. Where hair crosses a facial feature, retain that feature's visible source shape and position and repair only the strand-width footprint; any authorized eye or expression changes follow only their own resolved final states above."
+        )

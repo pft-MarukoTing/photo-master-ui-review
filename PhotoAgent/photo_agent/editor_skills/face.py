@@ -322,3 +322,37 @@ def resolve_feature_contracts(contracts, subject_count=None):
             "overridden_endpoints": overridden_endpoints,
         })
     return resolved
+
+
+_IDENTITY_GEOMETRY_RULE = (
+    "- Fixed identity geometry: retain head/face proportions, jaw and cheekbone structure, the baseline "
+    "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
+    "length, and ear shape."
+)
+
+
+_EYE_MAKEUP_CARRY_RULE = (
+    "- Carry the original lash line/lashes, brow design, eyeliner, eyeshadow, mascara, false lashes, glasses, "
+    "and reflections through authorized movement without redesigning, enhancing, removing, or replacing them."
+)
+
+
+def _resolved_features(resolved):
+    return {feature for item in resolved for feature in item["features"]}
+
+
+def render_shared_face_rules(skills, resolved, ctx):
+    """The "Shared facial execution rules" block covering every resolved person."""
+    facial = _resolved_features(resolved) & set().union(*(skill.facial_features for skill in skills))
+    rules = []
+    if facial:
+        rules.append((0, _IDENTITY_GEOMETRY_RULE + "".join(skill.identity_scope(resolved, ctx) for skill in skills)))
+    for skill in skills:
+        rules.extend(skill.face_rules(resolved, ctx))
+    if facial:
+        rules.append((100, _EYE_MAKEUP_CARRY_RULE))
+    rules.sort(key=lambda rule: rule[0])
+    return (
+        "\nShared facial execution rules:\n" + "\n".join(text for _, text in rules)
+        if rules else ""
+    )

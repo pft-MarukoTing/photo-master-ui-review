@@ -9,8 +9,8 @@ from prompts import (
     subject_issue_items,
 )
 
-from .base import EditorSkill
-from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box
+from .base import RULE_EYELIDS, RULE_GAZE, RULE_SMILE_GAZE, EditorSkill
+from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
 
 
 def _repair_strength(value, default="moderate"):
@@ -289,13 +289,6 @@ def _safe_gaze_head_face_adjustment(value, *, allow_pose_change=False):
     return " ".join(kept).strip()
 
 
-_IDENTITY_GEOMETRY_RULE = (
-    "- Fixed identity geometry: retain head/face proportions, jaw and cheekbone structure, the baseline "
-    "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
-    "length, and ear shape."
-)
-
-
 _BLINK_IDENTITY_SCOPE = (
     " For each named blink repair, adjust only the eyelid margins, crease, and minimally necessary lid "
     "endpoints; preserve brows, eye centers, globes, lashes, makeup, and surrounding anatomy."
@@ -309,12 +302,6 @@ _BLINK_PAIR_RULES = (
     "- Retract each upper-lid margin as needed and fold blink-compressed lid tissue into a smooth crease over "
     "the existing globe. Keep both final openings and creases equally clear under the original lighting, "
     "lashes, makeup, and lid shadows.",
-)
-
-
-_EYE_MAKEUP_CARRY_RULE = (
-    "- Carry the original lash line/lashes, brow design, eyeliner, eyeshadow, mascara, false lashes, glasses, "
-    "and reflections through authorized movement without redesigning, enhancing, removing, or replacing them."
 )
 
 
@@ -443,6 +430,7 @@ class EyesSkill(EditorSkill):
     name = "eyes"
     # Eye-identity properties are rendered in concrete visual terms by the eye lines.
     hidden_preserve = frozenset(_EYE_IDENTITY_PRESERVE)
+    facial_features = frozenset({"gaze", "blink"})
 
     def contracts(self, analysis, ctx):
         return (
@@ -455,3 +443,34 @@ class EyesSkill(EditorSkill):
             item["final_state"], subject_has_blink="blink" in item.get("features", []),
             style_options=ctx.style_options,
         )
+
+    def identity_scope(self, resolved, ctx):
+        scope = _BLINK_IDENTITY_SCOPE if "blink" in _resolved_features(resolved) else ""
+        if _has_head_aligned_gaze(resolved):
+            scope += (
+                " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed."
+            )
+        return scope
+
+    def face_rules(self, resolved, ctx):
+        features = _resolved_features(resolved)
+        rules = []
+        if "blink" in features:
+            rules.extend((RULE_EYELIDS, rule) for rule in _BLINK_PAIR_RULES)
+        if any({"smile", "gaze"}.issubset(set(item["features"])) for item in resolved):
+            rules.append((RULE_SMILE_GAZE,
+                "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter "
+                "narrow both eyelids together through natural cheek lift while retaining clear iris visibility."
+            ))
+        if "gaze" in features:
+            rules.append((RULE_GAZE,
+                "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
+            ))
+        return rules
+
+
+def _has_head_aligned_gaze(resolved):
+    return any(
+        item["final_state"].get("method") == "eyes_plus_head_face_alignment"
+        for item in resolved
+    )

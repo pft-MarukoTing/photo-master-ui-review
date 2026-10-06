@@ -30,13 +30,17 @@ from photo_agent.editor_skills.expression import _smile_contracts
 from photo_agent.editor_skills.eyes import (
     _BLINK_IDENTITY_SCOPE,
     _BLINK_PAIR_RULES,
-    _EYE_MAKEUP_CARRY_RULE,
-    _IDENTITY_GEOMETRY_RULE,
     _blink_contracts,
     _eye_state_lines,
     _gaze_contracts,
+    _has_head_aligned_gaze,
 )
-from photo_agent.editor_skills.face import resolve_feature_contracts
+from photo_agent.editor_skills.face import (
+    _EYE_MAKEUP_CARRY_RULE,
+    _IDENTITY_GEOMETRY_RULE,
+    render_shared_face_rules,
+    resolve_feature_contracts,
+)
 
 _HIDDEN_PRESERVE = frozenset().union(*(skill.hidden_preserve for skill in EDITOR_SKILLS))
 
@@ -705,19 +709,7 @@ def build_compact_editor_prompt(
             compact_crop_block += "\n" + compact_crop_guidance
 
     subject_blocks = []
-    resolved_features = {feature for item in resolved for feature in item["features"]}
-    has_smile = "smile" in resolved_features
-    has_laugh = any(item["final_state"].get("smile_level") == "laughing" for item in resolved)
-    has_gaze = "gaze" in resolved_features
-    has_blink = "blink" in resolved_features
-    has_facial_edit = bool(resolved_features & {"smile", "gaze", "blink"})
-    has_joint_smile_gaze = any(
-        {"smile", "gaze"}.issubset(set(item["features"])) for item in resolved
-    )
-    has_head_aligned_gaze = any(
-        item["final_state"].get("method") == "eyes_plus_head_face_alignment"
-        for item in resolved
-    )
+    has_head_aligned_gaze = _has_head_aligned_gaze(resolved)
     correction_axes = analysis.get("correction_axes") or []
     skill_ctx = EditContext(style_options=style_options, include_gaze=include_gaze, include_blink=include_blink)
     for item in resolved:
@@ -775,49 +767,8 @@ def build_compact_editor_prompt(
     )
     user_preserved_block = build_user_preserved_choices(analysis)
     subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
-    shared_face_rules = []
-    if has_facial_edit:
-        projection_exception = (
-            " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed."
-            if has_head_aligned_gaze else ""
-        )
-        identity_rule = _IDENTITY_GEOMETRY_RULE
-        if has_blink:
-            identity_rule += _BLINK_IDENTITY_SCOPE
-        shared_face_rules.append(identity_rule + projection_exception)
-    if has_blink:
-        shared_face_rules.extend(_BLINK_PAIR_RULES)
-    if has_smile:
-        shared_face_rules.append(
-            "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, and visible dental characteristics rather than regenerating or beautifying the whole face."
-        )
-        shared_face_rules.append(
-            "- Retain the original skin age and fold pattern. Existing crow's-feet, under-eye creases, and nasolabial folds may compress minimally but must not become deeper, darker, sharper, longer, or more numerous."
-        )
-    if has_laugh:
-        shared_face_rules.append(
-            "- For laughter, show spontaneous joy coherently through the mouth, cheek lift, periocular response, and a compatible relaxed brow; do not leave a neutral, worried, stern, or angry upper face. Reach the requested intensity through coordinated expression—not an oversized mouth or reshaped facial features."
-        )
-    if has_joint_smile_gaze:
-        shared_face_rules.append(
-            "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter "
-            "narrow both eyelids together through natural cheek lift while retaining clear iris visibility."
-        )
-    if has_gaze:
-        shared_face_rules.append(
-            "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
-        )
-    if has_facial_edit:
-        shared_face_rules.append(_EYE_MAKEUP_CARRY_RULE)
-    shared_face_block = (
-        "\nShared facial execution rules:\n" + "\n".join(shared_face_rules)
-        if shared_face_rules else ""
-    )
-    hair_boundary_block = (
-        "\nHair execution boundary:\n"
-        "- Treat hair work as an arrangement/local-sheen edit, not a head or face regeneration. Keep the source haircut, parting, length, volume, density, hairline, curl pattern, and color. Where hair crosses a facial feature, retain that feature's visible source shape and position and repair only the strand-width footprint; any authorized eye or expression changes follow only their own resolved final states above."
-        if "hair" in resolved_features else ""
-    )
+    shared_face_block = render_shared_face_rules(EDITOR_SKILLS, resolved, skill_ctx)
+    skill_execution_block = "".join(skill.execution_block(resolved, skill_ctx) for skill in EDITOR_SKILLS)
     # The analyzer sentence is the complete Body Reshape contract.  Add it
     # once, verbatim, beside the other feature instructions; no per-subject
     # resolver state is created for it.
@@ -1028,7 +979,7 @@ Other approved corrections:
 Resolved subject final states:
 Locations identify subjects only; they are not target positions.
 {subjects_block}
-{shared_face_block}{hair_boundary_block}{body_boundary_block}
+{shared_face_block}{skill_execution_block}{body_boundary_block}
 
 {color_block}
 
