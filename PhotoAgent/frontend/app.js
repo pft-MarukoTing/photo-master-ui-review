@@ -588,7 +588,9 @@
       .map(progressFeedDisplayText);
     const key = `${state.mode}|${texts.length}|${window.innerWidth}`;
     if (state.widthKey !== key) {
-      state.width = measureProgressFeedWidth(texts);
+      // At most 17 full-width characters: longer sentences wrap onto a full
+      // first line, so the block stays centered with room on both sides.
+      state.width = Math.min(measureProgressFeedWidth(texts), measureProgressFeedWidth(["國".repeat(17)]));
       state.widthKey = key;
     }
     return state.width;

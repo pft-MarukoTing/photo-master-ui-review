@@ -2727,7 +2727,8 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
     max-width: 560px;
     text-align: left;
   }
-  .proc-top .proc-text { align-self: stretch; }
+  .proc-top .proc-text,
+  .batch-main-loading .proc-text { align-self: stretch; }
   .proc-text .has-progress-feed {
     width: min(var(--progress-feed-width, 100%), 100%);
     max-width: 560px;
