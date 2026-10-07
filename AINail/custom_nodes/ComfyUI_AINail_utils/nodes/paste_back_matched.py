@@ -376,9 +376,14 @@ class PasteBackMatched:
             # Do this at a small resolution (dilate_pixels/feather_pixels scaled down
             # to match) instead of at full mask resolution — dilation's cost grows
             # with resolution squared, so this is the dominant cost otherwise.
+            # With both at 0 there is nothing to compute, so skip the downscale too:
+            # it would only blur the mask edge through a 256px round trip.
             h_mask, w_mask = composite_mask.shape
             compute_scale = _MASK_COMPUTE_MAX_SIDE / max(h_mask, w_mask)
-            if compute_scale < 1.0:
+            if dilate_px == 0 and feather_px == 0:
+                dilate_px_scaled = 0
+                feather_px_scaled = 0
+            elif compute_scale < 1.0:
                 compute_h = max(1, round(h_mask * compute_scale))
                 compute_w = max(1, round(w_mask * compute_scale))
                 composite_mask = _resize_mask_to(composite_mask, compute_h, compute_w)
