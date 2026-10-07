@@ -1,3 +1,5 @@
+import json
+
 import cv2
 import numpy as np
 import torch
@@ -43,6 +45,15 @@ def _to_size(masks, h, w):
     return np.stack([cv2.resize(m, (w, h), interpolation=cv2.INTER_LINEAR) > 0.5 for m in masks]).astype(np.float32)
 
 
+def _boxes_of(masks):
+    """[K, H, W] binary -> JSON "[[x1,y1,x2,y2], ...]" (xyxy, x2/y2 exclusive), index-aligned with masks."""
+    boxes = []
+    for m in masks:
+        ys, xs = np.where(m > 0.5)
+        boxes.append([int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1])
+    return json.dumps(boxes)
+
+
 class NailDiffMask:
     """Find where generated_images differ from crop_images and split the difference into per-nail masks.
 
@@ -67,6 +78,9 @@ class NailDiffMask:
       nail_masks  : [K, H, W]  one mask per nail, left to right. When K == 0 this is a
                                single all-zero [1, H, W] placeholder (check nail_count).
       nail_count  : INT        K
+      nail_boxes  : STRING     JSON "[[x1,y1,x2,y2], ...]" in input-image pixels (x2/y2 exclusive),
+                               index-aligned with nail_masks; "[]" when K == 0. Same format as the
+                               SAM3 nail_boxes that PasteBackMatched takes.
     """
 
     INPUT_IS_LIST = True
@@ -84,9 +98,9 @@ class NailDiffMask:
             }
         }
 
-    RETURN_TYPES = ("MASK", "MASK", "INT")
-    RETURN_NAMES = ("diff_mask", "nail_masks", "nail_count")
-    OUTPUT_IS_LIST = (True, True, True)
+    RETURN_TYPES = ("MASK", "MASK", "INT", "STRING")
+    RETURN_NAMES = ("diff_mask", "nail_masks", "nail_count", "nail_boxes")
+    OUTPUT_IS_LIST = (True, True, True, True)
     FUNCTION = "compute"
     CATEGORY = "AINail/image"
 
@@ -94,7 +108,7 @@ class NailDiffMask:
                 open_kernel, close_kernel, min_area):
         thr, ok, ck, ma = delta_e_threshold[0], open_kernel[0], close_kernel[0], min_area[0]
 
-        diff_masks, nail_masks, counts = [], [], []
+        diff_masks, nail_masks, counts, boxes = [], [], [], []
         for crop, gen in zip(crop_images, generated_images):
             crop_np = crop[..., :3].clamp(0, 1).cpu().numpy().astype(np.float32)
             gen_np = gen[..., :3].clamp(0, 1).cpu().numpy().astype(np.float32)
@@ -106,6 +120,7 @@ class NailDiffMask:
 
                 nails = _to_size(_diff_mask(c, g, thr, ok, ck, ma), h, w)
                 counts.append(int(nails.shape[0]))
+                boxes.append(_boxes_of(nails))
                 if nails.shape[0] == 0:
                     combined = np.zeros((1, h, w), dtype=np.float32)
                     nails = combined
@@ -114,7 +129,7 @@ class NailDiffMask:
                 diff_masks.append(torch.from_numpy(combined))
                 nail_masks.append(torch.from_numpy(nails))
 
-        return (diff_masks, nail_masks, counts)
+        return (diff_masks, nail_masks, counts, boxes)
 
 
 NODE_CLASS_MAPPINGS = {
