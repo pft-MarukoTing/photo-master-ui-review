@@ -11,7 +11,7 @@ def _resize(img, size, interp):
     return cv2.resize(img, (size, size), interpolation=interp)
 
 
-def _diff_mask(crop, gen, rgb_diff_threshold, open_kernel, close_kernel, min_area):
+def _diff_mask(crop, gen, rgb_diff_threshold, open_kernel, close_kernel):
     """crop/gen: [H, W, 3] float32 in [0, 1]. Returns nails [K, 256, 256] float32 {0, 1}, ordered left to right (K may be 0)."""
     crop_s = _resize(crop, _WORK_SIZE, cv2.INTER_AREA)
     gen_s = _resize(gen, _WORK_SIZE, cv2.INTER_AREA)
@@ -27,12 +27,8 @@ def _diff_mask(crop, gen, rgb_diff_threshold, open_kernel, close_kernel, min_are
         k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_kernel, close_kernel))
         mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, k)
 
-    n, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    comps = [
-        (i, centroids[i, 0])
-        for i in range(1, n)
-        if stats[i, cv2.CC_STAT_AREA] >= min_area
-    ]
+    n, labels, _, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    comps = [(i, centroids[i, 0]) for i in range(1, n)]
     comps.sort(key=lambda c: c[1])
     return np.stack([(labels == i) for i, _ in comps]).astype(np.float32) if comps \
         else np.zeros((0, _WORK_SIZE, _WORK_SIZE), dtype=np.float32)
@@ -60,17 +56,15 @@ class NailDiffMask:
     Pipeline per image: downscale both to 256x256 (INTER_AREA) -> per-pixel
     max over R/G/B of |crop - generated| (0-255 scale) -> threshold ->
     morphological open (drop speckle / faint background brightness drift)
-    then close (fill holes inside a nail) -> connected components -> drop
-    components below min_area. There is no cap on the number of nails;
-    ordering is left to right by centroid x.
+    then close (fill holes inside a nail) -> connected components. Ordering
+    is left to right by centroid x.
 
     Max RGB diff was chosen over CIEDE2000, linear-RGB max and RGB L2 by
     benchmarking against SAM3 nail masks on three real source/target sets
     (~240 pairs): the metrics reached the same IoU within noise, so the
     simplest and cheapest (~10x faster than CIEDE2000) wins. The defaults
-    (threshold 12, open 3, close 5, min_area 20) were inside the near-optimal
-    threshold range on all three sets; raising min_area to 50 cost roughly
-    15 points of nail recall on the two larger sets.
+    (threshold 12, open 3, close 5) were inside the near-optimal threshold
+    range on all three sets.
 
     Inputs are lists (INPUT_IS_LIST) of [B, H, W, C] tensors, like ResizeImage;
     every frame is processed independently and yields one entry in each
@@ -97,7 +91,6 @@ class NailDiffMask:
                 "rgb_diff_threshold": ("FLOAT", {"default": 12.0, "min": 0.0, "max": 255.0, "step": 0.5}),
                 "open_kernel": ("INT", {"default": 3, "min": 0, "max": 51, "step": 1}),
                 "close_kernel": ("INT", {"default": 5, "min": 0, "max": 51, "step": 1}),
-                "min_area": ("INT", {"default": 20, "min": 0, "max": 65536, "step": 10}),
             }
         }
 
@@ -108,8 +101,8 @@ class NailDiffMask:
     CATEGORY = "AINail/image"
 
     def compute(self, crop_images, generated_images, rgb_diff_threshold,
-                open_kernel, close_kernel, min_area):
-        thr, ok, ck, ma = rgb_diff_threshold[0], open_kernel[0], close_kernel[0], min_area[0]
+                open_kernel, close_kernel):
+        thr, ok, ck = rgb_diff_threshold[0], open_kernel[0], close_kernel[0]
 
         diff_masks, nail_masks, counts, boxes = [], [], [], []
         for crop, gen in zip(crop_images, generated_images):
@@ -121,7 +114,7 @@ class NailDiffMask:
                 if g.shape[:2] != (h, w):
                     g = cv2.resize(g, (w, h), interpolation=cv2.INTER_AREA)
 
-                nails = _to_size(_diff_mask(c, g, thr, ok, ck, ma), h, w)
+                nails = _to_size(_diff_mask(c, g, thr, ok, ck), h, w)
                 counts.append(int(nails.shape[0]))
                 boxes.append(_boxes_of(nails))
                 if nails.shape[0] == 0:
