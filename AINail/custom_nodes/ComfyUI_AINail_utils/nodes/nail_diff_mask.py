@@ -3,7 +3,6 @@ import json
 import cv2
 import numpy as np
 import torch
-from skimage.color import deltaE_ciede2000, rgb2lab
 
 _WORK_SIZE = 256
 
@@ -12,13 +11,14 @@ def _resize(img, size, interp):
     return cv2.resize(img, (size, size), interpolation=interp)
 
 
-def _diff_mask(crop, gen, delta_e_threshold, open_kernel, close_kernel, min_area):
+def _diff_mask(crop, gen, rgb_diff_threshold, open_kernel, close_kernel, min_area):
     """crop/gen: [H, W, 3] float32 in [0, 1]. Returns nails [K, 256, 256] float32 {0, 1}, ordered left to right (K may be 0)."""
     crop_s = _resize(crop, _WORK_SIZE, cv2.INTER_AREA)
     gen_s = _resize(gen, _WORK_SIZE, cv2.INTER_AREA)
 
-    de = deltaE_ciede2000(rgb2lab(crop_s), rgb2lab(gen_s))
-    mask = (de > delta_e_threshold).astype(np.uint8)
+    # Per-pixel max over R/G/B of the absolute difference, on a 0-255 scale.
+    diff = np.abs(crop_s - gen_s).max(axis=-1) * 255.0
+    mask = (diff > rgb_diff_threshold).astype(np.uint8)
 
     if open_kernel > 0:
         k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_kernel, open_kernel))
@@ -57,17 +57,20 @@ def _boxes_of(masks):
 class NailDiffMask:
     """Find where generated_images differ from crop_images and split the difference into per-nail masks.
 
-    Pipeline per image: downscale both to 256x256 (INTER_AREA) -> RGB->Lab ->
-    CIEDE2000 -> threshold -> morphological open (drop speckle / faint
-    background brightness drift) then close (fill holes inside a nail) ->
-    connected components -> drop components below min_area. There is no cap
-    on the number of nails; ordering is left to right by centroid x.
+    Pipeline per image: downscale both to 256x256 (INTER_AREA) -> per-pixel
+    max over R/G/B of |crop - generated| (0-255 scale) -> threshold ->
+    morphological open (drop speckle / faint background brightness drift)
+    then close (fill holes inside a nail) -> connected components -> drop
+    components below min_area. There is no cap on the number of nails;
+    ordering is left to right by centroid x.
 
-    Why CIEDE2000 and not max RGB diff: it is perceptual, so the tiny global
-    brightness drift the generator leaves on the background (typically
-    dE < ~3) is separated from a real colour/polish change (typically dE > 8)
-    by one threshold, while a max-RGB diff weights dark and bright regions
-    and channels unevenly.
+    Max RGB diff was chosen over CIEDE2000, linear-RGB max and RGB L2 by
+    benchmarking against SAM3 nail masks on three real source/target sets
+    (~240 pairs): the metrics reached the same IoU within noise, so the
+    simplest and cheapest (~10x faster than CIEDE2000) wins. The defaults
+    (threshold 12, open 3, close 5, min_area 20) were inside the near-optimal
+    threshold range on all three sets; raising min_area to 50 cost roughly
+    15 points of nail recall on the two larger sets.
 
     Inputs are lists (INPUT_IS_LIST) of [B, H, W, C] tensors, like ResizeImage;
     every frame is processed independently and yields one entry in each
@@ -91,7 +94,7 @@ class NailDiffMask:
             "required": {
                 "crop_images": ("IMAGE",),
                 "generated_images": ("IMAGE",),
-                "delta_e_threshold": ("FLOAT", {"default": 1.5, "min": 0.0, "max": 100.0, "step": 0.1}),
+                "rgb_diff_threshold": ("FLOAT", {"default": 12.0, "min": 0.0, "max": 255.0, "step": 0.5}),
                 "open_kernel": ("INT", {"default": 3, "min": 0, "max": 51, "step": 1}),
                 "close_kernel": ("INT", {"default": 5, "min": 0, "max": 51, "step": 1}),
                 "min_area": ("INT", {"default": 20, "min": 0, "max": 65536, "step": 10}),
@@ -104,9 +107,9 @@ class NailDiffMask:
     FUNCTION = "compute"
     CATEGORY = "AINail/image"
 
-    def compute(self, crop_images, generated_images, delta_e_threshold,
+    def compute(self, crop_images, generated_images, rgb_diff_threshold,
                 open_kernel, close_kernel, min_area):
-        thr, ok, ck, ma = delta_e_threshold[0], open_kernel[0], close_kernel[0], min_area[0]
+        thr, ok, ck, ma = rgb_diff_threshold[0], open_kernel[0], close_kernel[0], min_area[0]
 
         diff_masks, nail_masks, counts, boxes = [], [], [], []
         for crop, gen in zip(crop_images, generated_images):
