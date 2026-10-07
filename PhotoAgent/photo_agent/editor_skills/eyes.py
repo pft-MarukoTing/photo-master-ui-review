@@ -21,6 +21,7 @@ from .base import (
     CAP_BLINK,
     QA_BLINK,
     QA_GAZE,
+    EditorFeature,
     EditorSkill,
     FollowupEdit,
     _style_change_footprint,
@@ -480,11 +481,39 @@ def build_blink_pass_targets(analysis):
     return targets, rules
 
 
+BLINK_FEATURE = EditorFeature(
+    id="blink",
+    label="閉眼偵測",
+    description=(
+        "Reopen a person's accidentally closed or half-closed eyes so both eyes match in opening and "
+        "eyelid fold, keeping the person's identity and expression."
+    ),
+    issue_field="blink_issue",
+    verdict_field="should_fix",
+    toggle="eye_closed_detection",
+)
+
+GAZE_FEATURE = EditorFeature(
+    id="gaze",
+    label="眼神對焦",
+    description=(
+        "Redirect a person's gaze to make direct eye contact with the camera lens, turning the head "
+        "slightly only where the analysis planned it."
+    ),
+    issue_field="gaze_issue",
+    verdict_field="should_fix",
+    toggle="gaze_contact_detection",
+)
+
+
 class EyesSkill(EditorSkill):
     name = "eyes"
     # Eye-identity properties are rendered in concrete visual terms by the eye lines.
     hidden_preserve = frozenset(_EYE_IDENTITY_PRESERVE)
     facial_features = frozenset({"gaze", "blink"})
+
+    def features(self):
+        return (BLINK_FEATURE, GAZE_FEATURE)
 
     def contracts(self, analysis, ctx):
         return (

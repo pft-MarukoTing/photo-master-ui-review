@@ -1,6 +1,7 @@
 """Expression skill: the user-selected smile level."""
 
 from prompts import (
+    SMILE_LEVEL_LABELS,
     _disabled_issue_subject_indices,
     _read_smile_states,
     resolve_smile_targets,
@@ -8,7 +9,7 @@ from prompts import (
     smile_qa_expectation,
 )
 
-from .base import QA_SMILE, RULE_EXPRESSION, RULE_LAUGHTER, EditorSkill
+from .base import QA_SMILE, RULE_EXPRESSION, RULE_LAUGHTER, EditorFeature, EditorSkill
 from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
 
 
@@ -66,9 +67,27 @@ def _smile_contracts(analysis):
     return contracts
 
 
+SMILE_FEATURE = EditorFeature(
+    id="smile",
+    label="笑容調整",
+    description=(
+        "Set how strongly a person smiles. 'auto' gives a natural smile to people who are not smiling "
+        "and leaves smiling people as they are; the other levels set the overall intensity directly."
+    ),
+    issue_field="smile_issue",
+    verdict_field="adjust_safe",
+    toggle="smile_adjustment",
+    levels=(("auto", "自動"), ("neutral", "不笑"), ("gentle", "微笑"), ("broad", "開朗笑"), ("laughing", "大笑")),
+    photo_options=(("smile_level", {"type": "string", "enum": list(SMILE_LEVEL_LABELS)}),),
+)
+
+
 class ExpressionSkill(EditorSkill):
     name = "expression"
     facial_features = frozenset({"smile"})
+
+    def features(self):
+        return (SMILE_FEATURE,)
 
     def contracts(self, analysis, ctx):
         return _smile_contracts(analysis)

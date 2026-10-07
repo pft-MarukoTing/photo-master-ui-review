@@ -44,6 +44,11 @@ class PortraitAnalysisSkill(AnalysisSkill):
     """
 
     name = "portrait"
+    description = (
+        "Judges each person's closed eyes, gaze contact, messy hair and smile, plans the eye repairs, "
+        "and plans Body Reshape when that feature is on."
+    )
+    produces = frozenset({"blink_issue", "gaze_issue", "hair_issue", "smile_issue", "body_reshape"})
 
     def applies_to(self, analysis):
         return bool(portrait_qc_persons(analysis))

@@ -21,6 +21,10 @@ class AnalysisSkill:
     """Extra analysis passes for one photo category, run after Call A."""
 
     name = ""
+    # One line on what the skill judges, for whoever chooses or explains analyses.
+    description = ""
+    # Per-subject fields the skill writes; editor features read them through their issue_field.
+    produces = frozenset()
 
     def applies_to(self, analysis):
         """Whether Call A's result calls for this skill."""

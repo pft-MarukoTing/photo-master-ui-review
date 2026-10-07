@@ -47,6 +47,59 @@ class FollowupEdit:
     top_tier: bool = False
 
 
+@dataclass(frozen=True)
+class EditorFeature:
+    """An edit a skill offers the user or an agent: a photo-wide switch plus a decision per person."""
+
+    id: str
+    label: str
+    # Tells an agent what the edit does and when to choose it.
+    description: str
+    # Per-person analysis field holding the analyzer's reading.
+    issue_field: str
+    # Field of issue_field whose True value means the analyzer recommends the edit.
+    verdict_field: str
+    # advanced_options key that switches the feature off photo-wide; empty when it has none there.
+    toggle: str = ""
+    # (value, label) choices for one person's level; empty when the edit has no levels.
+    levels: tuple = ()
+    # (advanced_options key, JSON schema) for further photo-wide choices.
+    photo_options: tuple = ()
+
+    def params_schema(self):
+        """JSON schema of the choices this feature takes for one edit."""
+        subject = {
+            "subject_index": {"type": "integer", "minimum": 0},
+            "allowed": {"type": "boolean"},
+        }
+        if self.levels:
+            subject["level"] = {"type": "string", "enum": [value for value, _ in self.levels]}
+        properties = {"enabled": {"type": "boolean"}}
+        properties.update({key: schema for key, schema in self.photo_options})
+        properties["subjects"] = {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": subject,
+                "required": ["subject_index", "allowed"],
+                "additionalProperties": False,
+            },
+        }
+        return {"type": "object", "properties": properties, "additionalProperties": False}
+
+    def describe(self):
+        return {
+            "id": self.id,
+            "label": self.label,
+            "description": self.description,
+            "issue_field": self.issue_field,
+            "verdict_field": self.verdict_field,
+            "toggle": self.toggle,
+            "levels": [{"value": value, "label": label} for value, label in self.levels],
+            "params_schema": self.params_schema(),
+        }
+
+
 class EditorSkill:
     """One kind of edit (expression, eyes, hair, ...), active only when an approved item asks for it."""
 
@@ -55,6 +108,10 @@ class EditorSkill:
     hidden_preserve = frozenset()
     # Resolver features that count as facial edits and so bring in the shared facial rules.
     facial_features = frozenset()
+
+    def features(self):
+        """The EditorFeature controls this skill offers; empty when it is driven only by approved corrections."""
+        return ()
 
     def contracts(self, analysis, ctx):
         """Per-person feature contracts for the shared resolver (editor_skills.face)."""

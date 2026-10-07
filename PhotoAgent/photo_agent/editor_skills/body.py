@@ -1,12 +1,27 @@
 """Body skill: the approved per-person Body Reshape instructions."""
 
-from prompts import build_body_reshape_edit_block, get_body_reshape_edit_prompt
+from prompts import body_reshape_enabled, build_body_reshape_edit_block, get_body_reshape_edit_prompt
 
-from .base import CAP_BODY, MODE_HOLISTIC_BODY, QA_BODY, EditorSkill
+from .base import CAP_BODY, MODE_HOLISTIC_BODY, QA_BODY, EditorFeature, EditorSkill
+
+
+BODY_RESHAPE_FEATURE = EditorFeature(
+    id="body_reshape",
+    label="身形調整",
+    description=(
+        "Apply the analysis's planned natural contour and proportion refinement to a person's figure, "
+        "keeping clothing, anatomy and the surrounding scene continuous."
+    ),
+    issue_field="body_reshape",
+    verdict_field="should_edit",
+)
 
 
 class BodySkill(EditorSkill):
     name = "body"
+
+    def features(self):
+        return (BODY_RESHAPE_FEATURE,) if body_reshape_enabled() else ()
 
     def prompt_modes(self, analysis, resolved, ctx):
         return {MODE_HOLISTIC_BODY} if get_body_reshape_edit_prompt(analysis) else set()

@@ -2,7 +2,7 @@
 
 from prompts import _disabled_issue_subject_indices, resolve_user_hair_request
 
-from .base import QA_HAIR, EditorSkill, _axis_set
+from .base import QA_HAIR, EditorFeature, EditorSkill, _axis_set
 from .face import _BASE_PRESERVE, _box, _resolved_features
 
 
@@ -113,9 +113,27 @@ def _hair_action_instruction(state):
     )
 
 
+HAIR_FEATURE = EditorFeature(
+    id="hair",
+    label="亂髮偵測",
+    description=(
+        "Tidy a person's stray, windblown or clumped hair without changing the hairstyle. 'dynamic' "
+        "keeps the hair's natural movement; 'tidy' combs it into a neat, still-air fall."
+    ),
+    issue_field="hair_issue",
+    verdict_field="should_fix",
+    toggle="hair_mess_detection",
+    levels=(("dynamic", "保留髮絲動態"), ("tidy", "梳整俐落")),
+    photo_options=(("calm_hair", {"type": "boolean"}),),
+)
+
+
 class HairSkill(EditorSkill):
     name = "hair"
     hidden_preserve = frozenset(_HAIR_IDENTITY_PRESERVE)
+
+    def features(self):
+        return (HAIR_FEATURE,)
 
     def contracts(self, analysis, ctx):
         return _hair_contracts(analysis)
