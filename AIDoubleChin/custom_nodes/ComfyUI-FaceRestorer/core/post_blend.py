@@ -1,0 +1,2231 @@
+import cv2
+import numpy as np
+import os
+import torch
+import torch.nn.functional as F
+import math
+import time
+from .face_model_pipe import OnnxFacePipeline
+
+DEBUG = False
+
+class FaceDetailRestorer:
+    def __init__(self, pipeline, sigma=7, detail_strength=0.7, forehead_strength=0.7, mask_shrink_size=12, is_pre_aligned=False):
+        """
+        Initialize the restorer
+        """
+        self.sigma = sigma
+        self.detail_strength = detail_strength
+        self.forehead_strength = forehead_strength # eyereplacement mode support
+        self.mask_shrink_size = mask_shrink_size
+        self.is_pre_aligned = is_pre_aligned
+        self.pipeline = pipeline
+        if DEBUG:
+            print('[Init] FaceDetailRestorer initialized with pipeline.')
+
+    class LevelAnchorTransform:
+        """Helper class to handle coordinate system transformation (Eye-Level)."""
+        def __init__(self, left_eye_center, right_eye_center):
+            # Create base vector
+            diff = right_eye_center - left_eye_center
+            dist = np.linalg.norm(diff)
+            
+            if dist > 0:
+                self.cos_v = diff[0] / dist
+                self.sin_v = diff[1] / dist
+            else:
+                self.cos_v = 1.0
+                self.sin_v = 0.0
+            
+            self.origin = left_eye_center
+            self.scale = 1.0 # Assuming scale 1 for simplicity
+
+        def transform(self, point):
+            """Global to Local"""
+            dx = point[0] - self.origin[0]
+            dy = point[1] - self.origin[1]
+            tx = dx * self.cos_v + dy * self.sin_v
+            ty = -dx * self.sin_v + dy * self.cos_v
+            return np.array([tx, ty], dtype=np.float32)
+
+        def inverse_transform(self, point):
+            """Local to Global"""
+            tx = point[0]
+            ty = point[1]
+            x = self.origin[0] + tx * self.cos_v - ty * self.sin_v
+            y = self.origin[1] + tx * self.sin_v + ty * self.cos_v
+            return np.array([x, y], dtype=np.float32)
+    
+    def _estimate_head_pose(self, points):
+        """
+        Estimates Roll, Yaw, Tilt from 68 landmarks for the algorithm.
+        Returns: (roll, yaw, tilt) in radians.
+        """
+        # 1. Roll: Angle of the line connecting both eyes
+        left_eye_center = np.mean(points[36:42], axis=0)
+        right_eye_center = np.mean(points[42:48], axis=0)
+        dY = right_eye_center[1] - left_eye_center[1]
+        dX = right_eye_center[0] - left_eye_center[0]
+        roll = np.arctan2(dY, dX)
+
+        # 2. Yaw: Relative position of nose tip (30) within the eye width
+        nose_top = points[27] # nose bridge top
+        nose_tip = points[30] # nose tip
+        
+        eye_dist = np.linalg.norm(right_eye_center - left_eye_center)
+        if eye_dist == 0: eye_dist = 1.0
+        
+        # Vector: nose tip - nose bridge top
+        vec_nose = nose_tip - nose_top
+        # Rotation correction Roll
+        vec_nose_rot = np.array([
+            vec_nose[0] * np.cos(-roll) - vec_nose[1] * np.sin(-roll),
+            vec_nose[0] * np.sin(-roll) + vec_nose[1] * np.cos(-roll)
+        ])
+        
+        # X displacement represents Yaw
+        yaw = np.arctan2(vec_nose_rot[0], eye_dist * 0.5) * 1.5 # coefficient adjustment
+
+        # 3. Tilt: nose length vs face length
+        chin = points[8]
+        nose_len = np.linalg.norm(points[30] - points[27])
+        face_len = np.linalg.norm(points[8] - points[27])
+        
+        ratio = nose_len / (face_len + 1e-6)
+        tilt = (ratio - 0.25) * 2.0 
+
+        return roll, yaw, tilt
+
+    def _get_forehead_points_ymk(self, points, face_rect_y):
+        """
+        Finding forehead points.
+        """
+        pts = np.array(points)
+        
+        # 0. pose estimation
+        head_roll, head_yaw, head_tilt = self._estimate_head_pose(pts)
+
+        def get_pt(idx): return pts[idx].astype(np.float32)
+
+        # 1. Pose Ratio Logic
+        clamp_yaw = np.clip(head_yaw, -0.5, 0.5)
+        clamp_roll = np.clip(head_roll, -0.5, 0.5)
+        ratio_left = 0.0
+        ratio_right = 0.0
+        
+        if clamp_yaw > 0:
+            ratio_left = clamp_yaw / 0.5
+        elif clamp_yaw < 0:
+            ratio_right = clamp_yaw / -0.5
+
+        # 2. Level Anchor Transform
+        left_mid_eye = self.left_eye_center.astype(np.float32)
+        right_mid_eye = self.right_eye_center.astype(np.float32)
+        transformer = self.LevelAnchorTransform(left_mid_eye, right_mid_eye)
+
+        # 3. Calculate Mid Forehead
+        pt_nose_bridge_top = get_pt(27)
+        pt_nose_bottom = get_pt(33)
+        pt_nose_tip = get_pt(30)
+        
+        mid_eye = pt_nose_bridge_top * (2.0/3.0) + pt_nose_tip * (1.0/3.0)
+        
+        # Vector from nose bottom to bridge top
+        mid_eye_forehead_offset = pt_nose_bridge_top - pt_nose_bottom
+        offset_norm = np.linalg.norm(mid_eye_forehead_offset)
+        
+        if offset_norm > 0:
+            mid_eye_forehead_offset /= offset_norm
+            
+            # Predict Logic (Cross product check)
+            offset1 = pt_nose_bridge_top - pt_nose_bottom
+            offset2 = left_mid_eye - right_mid_eye
+            delta = offset1[0]*offset2[1] - offset1[1]*offset2[0]
+
+            pt_chin = get_pt(8)
+            nose_bridge_length = np.linalg.norm(pt_nose_bridge_top - pt_nose_bottom)
+            nose_bottom_chin_length = np.linalg.norm(pt_nose_bottom - pt_chin)
+            
+            # Estimation logic (Algorithm index != 2 path)
+            estimate_tilt_theta = head_tilt
+            transit_up = 0.1
+            transit_down = -0.25
+            ratio_up = 0.85
+            ratio_down = 1.0
+            
+            # FitInRange logic
+            val = (head_tilt - transit_down) / (transit_up - transit_down)
+            weight_up = np.clip(val, 0.0, 1.0)
+            ratio = ratio_up * weight_up + ratio_down * (1.0 - weight_up)
+
+            tan_tilt = np.tan(estimate_tilt_theta)
+            adjust_ratio = (1.0 - tan_tilt / 4.0) / (1.0 + tan_tilt / 4.0)
+            
+            mid_eye_forehead_length = (adjust_ratio * nose_bottom_chin_length + 
+                                       (1.0/6.0 + 0.5 * adjust_ratio) * nose_bridge_length) * ratio
+            
+            factor = 0.6 + 0.4 * max((1.0 - max(ratio_left, ratio_right) * 0.5 * (abs(clamp_roll) * 1.25)), 0.0)
+            mid_eye_forehead_length *= factor
+
+            # Transform Vector
+            transform_vec = transformer.transform(mid_eye + mid_eye_forehead_offset) - transformer.transform(mid_eye) # Vector transform hack
+            
+            adjust_offset = head_tilt * 2.0 if head_tilt > 0 else head_tilt * 1.5
+            adjust_offset = adjust_offset * ratio_left if ratio_left > ratio_right else adjust_offset * ratio_right
+            
+            transform_vec[0] *= (1.0 + np.clip(adjust_offset, -1.0, 1.0))
+            
+            # Inverse Transform Vector
+            vec_global_end = transformer.inverse_transform(transformer.transform(mid_eye) + transform_vec)
+            mid_eye_forehead_offset = vec_global_end - mid_eye
+            mid_eye_forehead_offset /= (np.linalg.norm(mid_eye_forehead_offset) + 1e-6)
+
+            mid_forehead = mid_eye + mid_eye_forehead_offset * mid_eye_forehead_length
+            
+            # Clamp Y
+            # In our case, face_rect.y is usually 0 if pre_aligned, or bounding box top.
+            # We want forehead to be ABOVE eyes.
+            mid_forehead[1] = min(mid_forehead[1], face_rect_y if face_rect_y > 0 else mid_eye[1])
+
+        else:
+            mid_forehead = mid_eye # Fallback
+
+        # 4. Calculate Left/Right Forehead
+        # heavily modifies the position based on "Ear Top"
+        
+        # Transform everything to Local
+        trans_mid_forehead = transformer.transform(mid_forehead)
+        trans_left_ear = transformer.transform(get_pt(0))   # Left Temple/Ear
+        trans_right_ear = transformer.transform(get_pt(16)) # Right Temple/Ear
+        
+        # Mid-face interpolation
+        trans_face_mid = trans_left_ear * 0.5 + trans_right_ear * 0.5
+        trans_l_outer = trans_face_mid * 0.2 + trans_left_ear * 0.8
+        trans_r_outer = trans_face_mid * 0.2 + trans_right_ear * 0.8
+        
+        # Adjust Ratios
+        down_ratio = (1.0 - head_tilt) / 2.0
+        l_adj_ratio = min(down_ratio * 0.25 + ratio_right * 0.6, 1.0)
+        r_adj_ratio = min(down_ratio * 0.25 + ratio_left * 0.6, 1.0)
+        
+        # Calculate X
+        final_l_x = trans_left_ear[0] * l_adj_ratio + trans_l_outer[0] * (1.0 - l_adj_ratio)
+        final_r_x = trans_right_ear[0] * r_adj_ratio + trans_r_outer[0] * (1.0 - r_adj_ratio)
+        
+        # Brow Constraints (Inner anchors)
+        trans_l_inner = trans_face_mid * 0.25 + trans_left_ear * 0.75
+        trans_r_inner = trans_face_mid * 0.25 + trans_right_ear * 0.75
+        
+        trans_l_brow_top = transformer.transform(get_pt(19)) # Brow Peak
+        trans_r_brow_top = transformer.transform(get_pt(24))
+        
+        final_l_x = final_l_x * (1.0 - ratio_left) + min(trans_l_brow_top[0], trans_l_inner[0]) * ratio_left
+        final_r_x = final_r_x * (1.0 - ratio_right) + max(trans_r_brow_top[0], trans_r_inner[0]) * ratio_right
+        
+        # Calculate Y, Interpolate between "Ellipse Sample" (which we approximate as MidForehead Y) and Brow Y
+        
+        trans_l_brow_left = transformer.transform(get_pt(17))
+        trans_r_brow_right = transformer.transform(get_pt(26))
+        
+        l_y_adj = ratio_left * 0.25 + max(head_tilt, 0.0) * 0.25
+        r_y_adj = ratio_right * 0.25 + max(head_tilt, 0.0) * 0.25
+        
+        # Initial Y guess (from ellipse logic approximation)
+        start_y = trans_mid_forehead[1] 
+        
+        final_l_y = start_y * (1.0 - l_y_adj) + trans_l_brow_left[1] * l_y_adj
+        final_r_y = start_y * (1.0 - r_y_adj) + trans_r_brow_right[1] * r_y_adj
+        
+        # Shift Y logic
+        trans_nose_top = transformer.transform(pt_nose_tip)
+        trans_nose_bridge = transformer.transform(pt_nose_bridge_top)
+        y_shift_dist = (trans_nose_top[1] - trans_nose_bridge[1]) * 0.1
+        
+        final_l_y *= 1.01
+        final_r_y *= 1.01
+        final_l_y -= y_shift_dist * (0.15 + 0.85 * l_adj_ratio)
+        final_r_y -= y_shift_dist * (0.15 + 0.85 * r_adj_ratio)
+        
+        # Adjust Tilt Global
+        adjust_tilt = max((1.0 + -np.tan(head_tilt) * 3.0), 0.0)
+        final_l_y -= y_shift_dist * adjust_tilt
+        final_r_y -= y_shift_dist * adjust_tilt
+        trans_mid_forehead[1] -= y_shift_dist * adjust_tilt
+        
+        # Inverse Transform
+        ret_mid = transformer.inverse_transform(trans_mid_forehead)
+        ret_left = transformer.inverse_transform(np.array([final_l_x, final_l_y]))
+        ret_right = transformer.inverse_transform(np.array([final_r_x, final_r_y]))
+        
+        # Return as list of tuples (Left, Mid, Right)
+        return [
+            tuple(ret_left.astype(int)),
+            tuple(ret_mid.astype(int)),
+            tuple(ret_right.astype(int))
+        ]
+    
+    def _map_84_to_68(self, points_84):
+        """
+        Maps 84-point landmarks (Custom) to 68-point landmarks (Dlib Standard).
+        """
+        if len(points_84) != 84:
+            return points_84
+
+        points_68 = [(0, 0)] * 68
+
+        # --- 1. Jaw (Dlib 0-16) ---
+        # Image: 65(L Ear) -> 73(Chin) -> 81(R Ear)
+        for i in range(17):
+            points_68[i] = points_84[65 + i]
+
+        # --- 2. Eyebrows (Dlib 17-26) ---
+        # Left Brow (Dlib 17-21) <- Image 0-4
+        for i in range(5):
+            points_68[17 + i] = points_84[0 + i]
+        
+        # Right Brow (Dlib 22-26) <- Image 15-19
+        for i in range(5):
+            points_68[22 + i] = points_84[15 + i]
+
+        # --- 3. Nose (Dlib 27-35) ---
+        # Bridge (27-30) <- Image 30-33
+        for i in range(4):
+            points_68[27 + i] = points_84[30 + i]
+        
+        # Base (31-35) <- Image 34-38
+        # Dlib: 31(L), 32, 33(Tip), 34, 35(R)
+        # Image: 34(L), 35, 36(Tip), 37, 38(R)
+        points_68[31] = points_84[37] # L Corner
+        points_68[32] = points_84[34]
+        points_68[33] = points_84[35] # Tip
+        points_68[34] = points_84[36]
+        points_68[35] = points_84[38] # R Corner
+
+        # --- 4. Eyes (Dlib 36-47) ---
+        # Left Eye (Dlib 36-41): Corner, Top1, Top2, Corner, Bot1, Bot2
+        points_68[36] = points_84[5]  # L Corner
+        points_68[37] = points_84[11]  # Top 1
+        points_68[38] = points_84[12]  # Top 2
+        points_68[39] = points_84[7]  # R Corner
+        points_68[40] = points_84[13] # Bot 1
+        points_68[41] = points_84[14] # Bot 2
+
+        # Right Eye (Dlib 42-47)
+        points_68[42] = points_84[20] # L Corner
+        points_68[43] = points_84[26] # Top 1
+        points_68[44] = points_84[27] # Top 2
+        points_68[45] = points_84[22] # R Corner
+        points_68[46] = points_84[28] # Bot 1
+        points_68[47] = points_84[29] # Bot 2
+
+        # --- 5. Mouth (Dlib 48-67) ---
+        # Dlib 48-59 (Outer Lip, 12 points)
+        points_68[48] = points_84[39] # L Corner
+        points_68[49] = points_84[44]
+        points_68[50] = points_84[40]
+        points_68[51] = points_84[41] # Top Middle
+        points_68[52] = points_84[48] 
+        points_68[53] = points_84[40] 
+        points_68[54] = points_84[43] # R Corner
+        points_68[55] = points_84[56]
+        points_68[56] = points_84[55]
+        points_68[57] = points_84[50] # Bot Middle
+        points_68[58] = points_84[54]
+        points_68[59] = points_84[53]
+
+        # Inner Lip (60-67)
+        # Image Inner: 46(L), 58(R). Upper(46-50), Lower(58-64)
+        points_68[60] = points_84[57] # L Inner
+        points_68[61] = points_84[60]
+        points_68[62] = points_84[58]
+        points_68[63] = points_84[61]
+        points_68[64] = points_84[59] # R Inner
+        points_68[65] = points_84[64] 
+        points_68[66] = points_84[62]
+        points_68[67] = points_84[63]
+
+        self.left_eye_center = np.array(points_84[10])
+        self.right_eye_center = np.array(points_84[25])
+
+        return points_68
+    
+    def get_landmarks(self, img, debug_save_path=None, detect_debug_path=None):
+        h, w = img.shape[:2]
+        # Detection
+        rect_list, _ = self.pipeline.detect(img, bypass=True) # return [x, y, w, h]
+        if rect_list is None:
+            raise ValueError("No face detected.")
+        
+        if DEBUG and detect_debug_path:
+            vis = img.copy()
+            x, y, rect_w, rect_h = rect_list
+            
+            # rect_list [x, y, w, h]
+            pt1 = (int(x), int(y))
+            pt2 = (int(x + rect_w), int(y + rect_h))
+            
+            cv2.rectangle(vis, pt1, pt2, (0, 0, 255), 3)
+            
+            info_text = f"Rect: {int(x)},{int(y)} {int(rect_w)}x{int(rect_h)}"
+            cv2.putText(vis, info_text, (int(x), int(y)-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+            
+            print(f"[Debug] Saving detection rect to {detect_debug_path}")
+            cv2.imwrite(detect_debug_path, vis)
+        
+        # Alignment (84 points)
+        points_84 = self.pipeline.align(img, rect_list)[:84]
+        
+        # Debug Save Raw 84 points
+        if DEBUG and debug_save_path:
+            self.draw_debug_landmarks(img, points_84, debug_save_path)
+        
+        points_68 = self._map_84_to_68(points_84)
+        
+        # Clamp
+        safe_points = []
+        for (x, y) in points_68:
+            safe_points.append((max(0, min(x, w - 1)), max(0, min(y, h - 1))))
+            
+        return safe_points, points_84
+
+    def draw_debug_landmarks(self, img, points, filename):
+        """Draws landmarks WITH INDICES on the image and saves it."""
+        canvas = img.copy()
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        font_scale = 0.3
+        
+        for i, p in enumerate(points):
+            p = (int(p[0]), int(p[1]))
+            cv2.circle(canvas, p, 2, (0, 255, 0), -1)
+            
+            cv2.putText(canvas, str(i), (p[0]+3, p[1]-2), font, font_scale, (0, 0, 255), 1, cv2.LINE_AA)
+            
+        cv2.imwrite(filename, canvas)
+
+    def extract_texture(self, img):
+        """
+        Extracts texture from the LAB L-channel.
+        """
+        img_lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB).astype(np.float32)
+        l_channel, _, _ = cv2.split(img_lab)
+        
+        l_blurred = cv2.GaussianBlur(l_channel, (0, 0), self.sigma)
+        texture_l = l_channel - l_blurred
+        
+        texture_monochrome = cv2.merge([texture_l, texture_l, texture_l])
+        
+        return texture_monochrome
+
+    def _apply_affine_transform(self, src, src_tri, dst_tri, size):
+        """Internal helper: Applies affine transform to a rectangular patch."""
+        warp_mat = cv2.getAffineTransform(np.float32(src_tri), np.float32(dst_tri))
+        dst = cv2.warpAffine(src, warp_mat, (size[0], size[1]), 
+                             None, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        return dst
+
+    def _warp_triangle(self, img_src, img_dst, t_src, t_dst):
+        """Internal helper: Warps a specific triangular region."""
+        # Find bounding box for each triangle
+        r1 = cv2.boundingRect(np.float32([t_src]))
+        r2 = cv2.boundingRect(np.float32([t_dst]))
+
+        # Offset points by left top corner of the respective rectangles
+        t1_rect = []
+        t2_rect = []
+        t2_rect_int = []
+
+        for i in range(0, 3):
+            t1_rect.append(((t_src[i][0] - r1[0]), (t_src[i][1] - r1[1])))
+            t2_rect.append(((t_dst[i][0] - r2[0]), (t_dst[i][1] - r2[1])))
+            t2_rect_int.append(((t_dst[i][0] - r2[0]), (t_dst[i][1] - r2[1])))
+
+        # Get mask by filling triangle
+        mask = np.zeros((r2[3], r2[2], 3), dtype=np.float32)
+        cv2.fillConvexPoly(mask, np.int32(t2_rect_int), (1.0, 1.0, 1.0), 16, 0)
+
+        # Apply warp to small rectangular patches
+        img1_rect = img_src[r1[1]:r1[1] + r1[3], r1[0]:r1[0] + r1[2]]
+        size = (r2[2], r2[3])
+        
+        img2_rect = self._apply_affine_transform(img1_rect, t1_rect, t2_rect, size)
+        img2_rect = img2_rect * mask
+        
+        # Blend into destination
+        img_dst[r2[1]:r2[1]+r2[3], r2[0]:r2[0]+r2[2]] = \
+            img_dst[r2[1]:r2[1]+r2[3], r2[0]:r2[0]+r2[2]] * ((1.0, 1.0, 1.0) - mask)
+        
+        img_dst[r2[1]:r2[1]+r2[3], r2[0]:r2[0]+r2[2]] = \
+            img_dst[r2[1]:r2[1]+r2[3], r2[0]:r2[0]+r2[2]] + img2_rect
+
+    def generate_warped_texture(self, texture_src, points_src, points_dst, target_shape):
+        """
+        Performs Delaunay Triangulation and warps texture (Core function without debug).
+        Returns:
+            warped_texture: The result image.
+            tri_indices: List of tuples [(idx1, idx2, idx3), ...] used for the mesh.
+        """
+        warped_texture = np.zeros(target_shape, dtype=np.float32)
+        
+        rect = (0, 0, target_shape[1] + 10, target_shape[0] + 10)
+        subdiv = cv2.Subdiv2D(rect)
+        
+        for p in points_dst:
+            p_safe = (float(p[0]), float(p[1]))
+            subdiv.insert(p_safe)
+            
+        triangle_list = subdiv.getTriangleList()
+        
+        used_tri_indices = []
+
+        for t in triangle_list:
+            pts_tri_dst = []
+            pts_tri_src = []
+            pts_indices = []
+            
+            valid_triangle = True
+            for i in range(3):
+                pt = (t[2*i], t[2*i+1])
+                
+                min_dist = 1000
+                index = -1
+                for k in range(len(points_dst)):
+                    dist = np.linalg.norm(np.array(pt) - np.array(points_dst[k]))
+                    if dist < min_dist:
+                        min_dist = dist
+                        index = k
+                
+                if min_dist < 1.0:
+                    pts_tri_dst.append(points_dst[index])
+                    pts_tri_src.append(points_src[index])
+                    pts_indices.append(index)
+                else:
+                    valid_triangle = False
+                    break
+            
+            if valid_triangle:
+                # Warp
+                self._warp_triangle(texture_src, warped_texture, pts_tri_src, pts_tri_dst)
+                used_tri_indices.append(tuple(pts_indices))
+        
+        return warped_texture, used_tri_indices
+    
+    def _suppress_mouth_corner_shadows(self, texture, points, shape):
+        """
+        Suppresses deep wrinkles (Nasolabial folds & Marionette lines) using 
+        anatomical polygons instead of simple circles.
+        """
+        h, w = shape[:2]
+        
+        mask_wrinkles = np.zeros((h, w), dtype=np.float32)
+
+        def p(idx): return (int(points[idx][0]), int(points[idx][1]))
+
+        poly_left = np.array([
+            p(31), # Nose wing
+            p(48), # Mouth corner
+            p(6),  # Jaw angle (end of marionette lines)
+            p(4)   # Outer cheek (widens the area)
+        ], dtype=np.int32)
+        
+        poly_right = np.array([
+            p(35), 
+            p(54), 
+            p(10), 
+            p(12)
+        ], dtype=np.int32)
+
+        cv2.fillPoly(mask_wrinkles, [poly_left, poly_right], 1.0)
+        mask_wrinkles = cv2.GaussianBlur(mask_wrinkles, (61, 61), 30)
+        mask_wrinkles_3c = cv2.merge([mask_wrinkles, mask_wrinkles, mask_wrinkles])
+        
+        tex_neg = np.minimum(texture, 0)
+        tex_pos = np.maximum(texture, 0)
+        suppression_factor = 1.0 - (mask_wrinkles_3c * 0.95)
+        tex_neg_suppressed = tex_neg * suppression_factor
+        
+        min_allowed_map = -100.0 + (mask_wrinkles_3c * 95.0) # -100 ~ -5
+        
+        tex_neg_suppressed = np.maximum(tex_neg_suppressed, min_allowed_map)
+        texture_fixed = tex_pos + tex_neg_suppressed
+        
+        return texture_fixed
+    
+    def _get_forehead_points(self, points, shape):
+        """
+        Calculates 3 auxiliary points for the forehead with ROTATION ROBUSTNESS.
+        """
+        h, w = shape[:2]
+        
+        try:
+            forehead_points_ymk = self._get_forehead_points_ymk(points, 0)
+            
+            # Clamp
+            clamped_pts = []
+            for p in forehead_points_ymk:
+                x = max(0, min(int(p[0]), w - 1))
+                y = max(0, min(int(p[1]), h - 1))
+                clamped_pts.append((x, y))
+            
+            return clamped_pts
+            
+        except Exception as e:
+            if DEBUG:
+                print(f"Error in YMK forehead logic: {e}. Falling back to simple logic.")
+        
+            # 1. Face vertical direction
+            brow_center = (points[21] + points[22]) / 2.0
+            nose_bridge = points[27]
+            up_vec = brow_center - nose_bridge
+            
+            # 2. Calculate forehead center point (Top Mid), roughly 3.0 ~ 3.5
+            scale = 3.0
+            top_mid = brow_center + up_vec * scale
+            
+            # 3. Calculate forehead left and right points (Top Left / Top Right)
+            # 19 (left brow peak), 24 (right brow peak)
+            anchor_left = points[19]
+            anchor_right = points[24]
+            
+            raw_top_left = anchor_left + up_vec * scale * 0.9
+            raw_top_right = anchor_right + up_vec * scale * 0.9
+            
+            convergence = 0.2
+            
+            final_top_left = raw_top_left * (1 - convergence) + top_mid * convergence
+            final_top_right = raw_top_right * (1 - convergence) + top_mid * convergence
+            
+            # 4. Clamp
+            raw_pts = [final_top_left, top_mid, final_top_right]
+            clamped_pts = []
+            
+            for p in raw_pts:
+                x = max(0, min(int(p[0]), w - 1))
+                y = max(0, min(int(p[1]), h - 1))
+                clamped_pts.append((x, y))
+                
+            return clamped_pts
+    
+    def _get_cheek_points(self, points):
+        """
+        Calculates 2 auxiliary points for the center of the cheeks (Steiner Points).
+        This breaks the large triangles on cheeks to prevent ghosting artifacts.
+        """
+        # Left cheek center
+        # Depends on: Left eye outer corner (36), Left nose wing (31), Left mouth corner (48), Left jaw angle (4)
+        left_cheek_x = (points[36][0] + points[31][0] + points[48][0] + points[4][0]) / 4.0
+        left_cheek_y = (points[36][1] + points[31][1] + points[48][1] + points[4][1]) / 4.0
+        
+        # Right cheek center (Right Cheek)
+        # Depends on: Right eye outer corner (45), Right nose wing (35), Right mouth corner (54), Right jaw angle (12)
+        right_cheek_x = (points[45][0] + points[35][0] + points[54][0] + points[12][0]) / 4.0
+        right_cheek_y = (points[45][1] + points[35][1] + points[54][1] + points[12][1]) / 4.0
+        
+        return [
+            (int(left_cheek_x), int(left_cheek_y)), 
+            (int(right_cheek_x), int(right_cheek_y))
+        ]
+    
+    def create_blending_mask(self, points, shape, seg_mask=None, shrink_override=None, blur_override=None, \
+                             roi_dilate_size=41, fade_power=2.0, exclude_features=True, seg_erosion=0):
+        """
+        Creates a soft mask based on Landmarks + Optional Segmentation Mask.
+        Logic: (Dilated ROI * SegMask) - (Mouth + NoseTip + Eyes)
+        """
+        mask_u8 = np.zeros((shape[0], shape[1]), dtype=np.uint8)
+
+        shrink_size = shrink_override if shrink_override is not None else self.mask_shrink_size
+        blur_size = blur_override if blur_override is not None else 30
+        
+        # ==========================================
+        # Step A: Draw Base Geometry (Positive Area)
+        # ==========================================
+        roi_points = []
+        
+        # jawline
+        for i in range(0, 17): 
+            roi_points.append(points[i])
+        
+        # Right Eye / Nose / Left Eye Logic
+        roi_points.extend([points[45], points[46], points[47], points[42]]) 
+        roi_points.extend([points[35], points[34], points[33], points[32], points[31]]) 
+        roi_points.extend([points[39], points[40], points[41], points[36]]) 
+        
+        roi_points = np.array(roi_points, dtype=np.int32)
+        cv2.fillPoly(mask_u8, [roi_points], 255)
+
+        # Adding Forehead
+        pts_np = np.array(points)
+        forehead_pts = self._get_forehead_points(pts_np, shape)
+        forehead_poly = [
+            points[0], points[36] ,points[17], points[19], points[21], points[22], points[24], points[26], points[45], points[16],
+            forehead_pts[2], forehead_pts[1], forehead_pts[0]
+        ]
+        cv2.fillPoly(mask_u8, [np.array(forehead_poly, dtype=np.int32)], 255)
+
+        # Left eye socket (Left Socket): Connects left eyebrow (17-21) and left upper eye (36-39)
+        left_eyelid_poly = [
+            points[36], # Left eye outer corner
+            points[17], # Left eyebrow tail
+            points[18],
+            points[19],
+            points[20],
+            points[21], # Left eyebrow head
+            points[39], # Left eye inner corner
+            points[38], # Left eye upper edge
+            points[37]  # Left eye upper edge
+        ]
+        cv2.fillPoly(mask_u8, [np.array(left_eyelid_poly, dtype=np.int32)], 255)
+
+        # Right eye socket (Right Socket): Connects right eyebrow (22-26) and right upper eye (42-45)
+        right_eyelid_poly = [
+            points[45], # Right eye outer corner
+            points[26], # Right eyebrow tail
+            points[25],
+            points[24],
+            points[23],
+            points[22], # Right eyebrow head
+            points[42], # Right eye inner corner
+            points[43], # Right eye upper edge
+            points[44]  # Right eye upper edge
+        ]
+        cv2.fillPoly(mask_u8, [np.array(right_eyelid_poly, dtype=np.int32)], 255)
+
+        # Adding Nose Bridge
+        nose_poly = [
+            points[31], points[35],
+            points[42], points[22], points[21], points[39]
+        ]
+        cv2.fillPoly(mask_u8, [np.array(nose_poly, dtype=np.int32)], 255)
+
+        # ==========================================
+        # Step B: Integrate Segmentation Mask
+        # ==========================================
+        if seg_mask is not None:
+            # 1. Dilate
+            kernel_dilate = np.ones((roi_dilate_size, roi_dilate_size), np.uint8)
+            mask_expanded = cv2.dilate(mask_u8, kernel_dilate, iterations=1)
+            
+            # 2. Multiply
+            mask_float = mask_expanded.astype(np.float32) / 255.0
+            if len(seg_mask.shape) == 3 and seg_mask.shape[2] == 3:
+                seg_mask_single = seg_mask[:,:,0]
+            else:
+                seg_mask_single = seg_mask
+                
+            if seg_erosion > 0:
+                kernel_seg = np.ones((seg_erosion, seg_erosion), np.uint8)
+                seg_u8 = (seg_mask_single * 255).astype(np.uint8)
+                seg_eroded_u8 = cv2.erode(seg_u8, kernel_seg, iterations=1)
+                seg_eroded_f = seg_eroded_u8.astype(np.float32) / 255.0
+                
+                erosion_weight = np.zeros(shape[:2], dtype=np.float32)
+                
+                p0 = np.array(points[0])   # Left temple
+                p16 = np.array(points[16]) # Right temple
+                
+                vec_x = p16[0] - p0[0]
+                vec_y = p16[1] - p0[1]
+                face_width = np.hypot(vec_x, vec_y)
+                
+                if face_width == 0: face_width = 1.0
+                
+                dir_right_x = vec_x / face_width
+                dir_right_y = vec_y / face_width
+                dir_up_x = dir_right_y
+                dir_up_y = -dir_right_x
+                
+                ext_w = face_width * 1.0 
+                ext_h = face_width * 2.0
+                
+                p16_far = p16 + np.array([dir_right_x, dir_right_y]) * ext_w
+                p0_far = p0 - np.array([dir_right_x, dir_right_y]) * ext_w
+                p16_sky = p16_far + np.array([dir_up_x, dir_up_y]) * ext_h
+                p0_sky = p0_far + np.array([dir_up_x, dir_up_y]) * ext_h
+                
+                brows_right = [points[i] for i in range(26, 21, -1)]
+                brows_left = [points[i] for i in range(21, 16, -1)]
+                
+                upper_zone_poly = np.array([
+                    p16_sky,         # Upper right
+                    p16_far,         # Right side
+                    p16,             # Right temple (junction)
+                    *brows_right,    # Right eyebrow upper edge
+                    *brows_left,     # Left eyebrow upper edge
+                    p0,              # Left temple (junction)
+                    p0_far,          # Left side
+                    p0_sky           # Upper left
+                ], dtype=np.int32)
+                
+                cv2.fillPoly(erosion_weight, [upper_zone_poly], 1.0)
+                
+                erosion_weight = cv2.GaussianBlur(erosion_weight, (101, 101), 50)
+                
+                seg_mask_final = seg_eroded_f * erosion_weight + seg_mask_single * (1.0 - erosion_weight)
+            else:
+                seg_mask_final = seg_mask_single
+            
+            mask_combined = mask_float * seg_mask_final
+            #mask_combined = mask_float * seg_mask_single
+            mask_u8 = (mask_combined * 255).astype(np.uint8)
+
+        # ==========================================
+        # Step C: Strict Exclusions (Negative Area)
+        # ==========================================
+        
+        def get_extended_point(p_base, p_target, ratio=0.25):
+            p_base = np.array(p_base)
+            p_target = np.array(p_target)
+            res = p_base + (p_target - p_base) * ratio
+            return res.astype(np.int32)
+        
+        # 0. Mouth (Inner)
+        mouth_points = np.array(points[60:68], dtype=np.int32)
+        cv2.fillPoly(mask_u8, [mouth_points], 0)
+
+        if exclude_features:
+            # 1. Mouth
+            mouth_points = np.array(points[48:60], dtype=np.int32)
+            cv2.fillPoly(mask_u8, [mouth_points], 0)
+            
+            # 2. Nose Tip
+            nose_exclusion = np.array([
+                points[30], points[31], points[32], points[33], points[34], points[35]
+            ], dtype=np.int32)
+            cv2.fillPoly(mask_u8, [nose_exclusion], 0)
+
+            # 3. Eyes
+            left_eye = np.array(points[36:42], dtype=np.int32)
+            right_eye = np.array(points[42:48], dtype=np.int32)
+            cv2.fillPoly(mask_u8, [left_eye], 0)
+            cv2.fillPoly(mask_u8, [right_eye], 0)
+
+            left_eyebrow = np.array(points[17:21], dtype=np.int32)
+            right_eyebrow = np.array(points[22:26], dtype=np.int32)
+            cv2.fillPoly(mask_u8, [left_eyebrow], 0)
+            cv2.fillPoly(mask_u8, [right_eyebrow], 0)
+
+        # ==========================================
+        # Step D: Final Post-Processing
+        # ==========================================
+        if shrink_size > 0:
+            kernel = np.ones((shrink_size, shrink_size), np.uint8)
+            mask_u8 = cv2.erode(mask_u8, kernel, iterations=1)
+
+        dist_map = cv2.distanceTransform(mask_u8, cv2.DIST_L2, 5)
+        fade_width = float(blur_size if blur_size is not None else 30)
+        mask_geom_f = np.clip(dist_map / fade_width, 0.0, 1.0)
+        mask_geom_f = mask_geom_f * mask_geom_f * (3.0 - 2.0 * mask_geom_f) # Smoothstep
+        
+        if seg_mask is not None:
+            seg_blur_size = int(fade_width) | 1
+            seg_mask_soft = cv2.GaussianBlur(seg_mask_final, (seg_blur_size, seg_blur_size), 0)
+            mask_final_f = np.minimum(mask_geom_f, seg_mask_soft)
+        else:
+            mask_final_f = mask_geom_f
+        
+        if fade_power != 1.0:
+            mask_final_f = np.power(mask_final_f, fade_power)
+        
+        mask_final_f = cv2.GaussianBlur(mask_final_f, (5, 5), 0)
+        
+        return cv2.merge([mask_final_f, mask_final_f, mask_final_f])
+
+    def _create_structure_mask(self, img, threshold=15, dilation_size=9):
+        """
+        Creates a mask identifying strong structural edges.
+        dilation_size: Controls how much to expand the protection area. 
+        """
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # 1. Detect Edges
+        blurred = cv2.GaussianBlur(gray, (0, 0), 3)
+        high_freq = cv2.absdiff(gray, blurred)
+        
+        # 2. Thresholding
+        _, mask_u8 = cv2.threshold(high_freq, threshold, 255, cv2.THRESH_BINARY)
+        
+        # 3. Dilate
+        k_size = dilation_size
+        if k_size % 2 == 0: k_size += 1
+            
+        kernel = np.ones((k_size, k_size), np.uint8)
+        mask_u8 = cv2.dilate(mask_u8, kernel, iterations=1)
+        
+        # 4. Blur
+        blur_sigma = k_size // 2
+        blur_k = blur_sigma * 2 + 1
+        mask_f = mask_u8.astype(np.float32) / 255.0
+        mask_f = cv2.GaussianBlur(mask_f, (blur_k, blur_k), blur_sigma)
+        
+        return cv2.merge([mask_f, mask_f, mask_f])
+    
+    def _create_target_smoothness_map(self, l_channel, sensitivity=0.5, min_strength=0.2, max_strength=1.0):
+        """
+        Analyzes the Target Image (L-channel) to find smooth areas vs. structured areas.
+        Returns a weight map indicating desired texture strength.
+        
+        Args:
+            l_channel: The L channel of the target image (float32).
+            sensitivity: Controls gradient detection threshold. Lower = more sensitive to edges.
+            min_strength: Texture strength on edges (keep low to avoid dirty look).
+            max_strength: Texture strength on smooth skin (boost to remove plastic look).
+        """
+        l_blur = cv2.GaussianBlur(l_channel, (0, 0), 2.0)
+        
+        grad_x = cv2.Sobel(l_blur, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(l_blur, cv2.CV_32F, 0, 1, ksize=3)
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        
+        mag_norm = magnitude / 50.0
+        
+        base_weight = 1.0 / (1.0 + np.power(mag_norm / sensitivity, 4.0))
+        
+        smoothness_map = min_strength + (base_weight * (max_strength - min_strength))
+        
+        kernel = np.ones((5, 5), np.uint8)
+        smoothness_map = cv2.erode(smoothness_map, kernel, iterations=1)
+        smoothness_map = cv2.GaussianBlur(smoothness_map, (9, 9), 0)
+        
+        return smoothness_map
+    
+    def _calculate_luminance_protection(self, l_channel, threshold_low=30, threshold_high=225):
+        """
+        Calculates a weight map to protect highlights and shadows from clipping.
+        - Near 255 or 0: Weight -> 0.0 (Stop adding texture)
+        - Mid-tones: Weight -> 1.0 (Safe to add)
+        """
+        l_norm = l_channel.astype(np.float32) / 255.0
+        
+        high_limit = threshold_high / 255.0
+        protect_high = np.clip((1.0 - l_norm) / (1.0 - high_limit), 0.0, 1.0)
+        protect_high = protect_high * protect_high * (3.0 - 2.0 * protect_high)
+        
+        low_limit = threshold_low / 255.0
+        protect_low = np.clip(l_norm / low_limit, 0.0, 1.0)
+        protect_low = protect_low * protect_low * (3.0 - 2.0 * protect_low)
+        
+        protection_map = protect_high * protect_low
+        
+        return protection_map
+
+    def _calculate_texture_energy_control(self, texture_a, detail_b, window_size=21, 
+                                          fidelity=1.0, min_limit=5.0, max_limit=30.0):
+        """
+        Adaptive Energy Budgeting.
+        Target: Result Energy <= Energy(A) * Fidelity
+        
+        Args:
+            fidelity (float): 1.0 means we target the exact roughness of Image A.
+                              0.8 makes it slightly smoother than A.
+                              1.2 makes it sharper/rougher than A.
+            min_limit (float): Minimum allowed budget (prevents over-smoothing on naturally smooth A areas).
+            max_limit (float): Maximum safety ceiling (prevents noise explosion).
+        """
+        # 1. calc RMS Energy
+        if len(texture_a.shape) == 3:
+            texture_a = texture_a[:,:,0]
+        
+        sq_a = texture_a * texture_a
+        sq_b = detail_b * detail_b
+        
+        sigma = (window_size - 1) / 6.0
+        mean_sq_a = cv2.GaussianBlur(sq_a, (window_size, window_size), sigma)
+        mean_sq_b = cv2.GaussianBlur(sq_b, (window_size, window_size), sigma)
+        
+        energy_a = np.sqrt(mean_sq_a)
+        energy_b = np.sqrt(mean_sq_b)
+        
+        adaptive_limit = energy_a * fidelity
+        target_limit_map = np.clip(adaptive_limit, min_limit, max_limit)
+        
+        # 2. Calculate remaining budget (Headroom)
+        # Headroom = Target - Current_B
+        headroom = target_limit_map - energy_b
+        
+        # 3. Calculate weight map
+        safe_energy_a = np.maximum(energy_a, 1e-5)
+        allowed_weight = headroom / safe_energy_a
+        
+        control_map = np.clip(allowed_weight, 0.0, 1.0)
+        control_map = cv2.GaussianBlur(control_map, (9, 9), 0)
+        
+        return control_map
+    
+    def _get_crop_matrix(self, rect, src_w, src_h, target_size=1024, padding=2.0):
+        """
+        Calculates the Affine Matrix to crop and resize the face to target_size.
+        
+        Args:
+            rect: [x, y, w, h] from detection.
+            padding: Padding coefficient.
+                 1.0 = Fits only the face (too tight, might cut off forehead/chin)
+                 2.0 = Frames the face and includes surrounding background 
+                   (recommended value to ensure forehead and hairline are included)
+        """
+        if rect is None:
+            scale = target_size / max(src_w, src_h)
+            M = np.array([
+                [scale, 0, (target_size - src_w * scale) * 0.5],
+                [0, scale, (target_size - src_h * scale) * 0.5]
+            ])
+            return M
+
+        x, y, w, h = rect
+        
+        center_x = x + w * 0.5
+        center_y = y + h * 0.5
+        
+        box_size = max(w, h) * padding
+        
+        scale = target_size / box_size
+        
+        M = np.array([
+            [scale, 0, target_size * 0.5 - center_x * scale],
+            [0, scale, target_size * 0.5 - center_y * scale]
+        ])
+        
+        return M
+
+    def _paste_back(self, full_img, crop_processed, crop_mask, M):
+        """
+        Pastes the processed crop back into the full image using Inverse Warp.
+        """
+        h_full, w_full = full_img.shape[:2]
+        h_crop, w_crop = crop_processed.shape[:2]
+        
+        warped_result = cv2.warpAffine(
+            crop_processed, M, (w_full, h_full), 
+            flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0)
+        )
+        
+        warped_mask = cv2.warpAffine(
+            crop_mask, M, (w_full, h_full), 
+            flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0)
+        )
+        
+        # 3. Alpha Blending
+        # Final = Original * (1 - Mask) + Processed * Mask
+        full_img_float = full_img.astype(np.float32)
+        warped_result_float = warped_result.astype(np.float32)
+        
+        if len(warped_mask.shape) == 2:
+            warped_mask = cv2.merge([warped_mask, warped_mask, warped_mask])
+            
+        final_img = full_img_float * (1.0 - warped_mask) + warped_result_float * warped_mask
+        
+        return np.clip(final_img, 0, 255).astype(np.uint8)
+    
+    def _get_crow_feet_poly(self, points, side='left'):
+        """
+        Calculates a dynamic polygon covering the Crow's Feet area.
+        Adapts to head rotation (yaw) by using face contour landmarks.
+        """
+        if side == 'left':
+            idx_eye_corner = [39, 40, 41, 36]
+            idx_brow_tail = 17
+            idx_jaw = [0, 1, 2]
+        else: # right
+            idx_eye_corner = [42, 47, 46, 45]
+            idx_brow_tail = 26
+            idx_jaw = [16, 15, 14]
+        
+        p_eye = np.array([points[i] for i in idx_eye_corner])
+        p_brow = np.array(points[idx_brow_tail])
+        p_jaw = np.array([points[i] for i in idx_jaw])
+        
+        poly = np.vstack([
+            p_eye,
+            p_brow,
+            p_jaw
+        ]).astype(np.int32)
+        
+        return poly
+
+    def _create_eye_surround_mask(self, points, shape, clip_mask=None):
+        """
+        Creates a mask covering the area AROUND the eyes
+        Used to force 'Replacement Mode' in these areas to remove wrinkles.
+        """
+        h, w = shape[:2]
+        
+        mask_L = np.zeros((h, w), dtype=np.float32)
+        mask_R = np.zeros((h, w), dtype=np.float32)
+
+        poly_left = self._get_crow_feet_poly(points, side='left')
+        poly_right = self._get_crow_feet_poly(points, side='right')
+
+        def get_dynamic_sigma(pt_eye, pt_edge, min_sigma=2.0, max_sigma=12.0, ratio=0.25):
+            dist = np.linalg.norm(np.array(pt_eye) - np.array(pt_edge))
+            
+            sigma = dist * ratio
+
+            return max(min_sigma, min(sigma, max_sigma))
+
+        # === Left Side ===
+        if poly_left is not None:
+            cv2.fillPoly(mask_L, [poly_left], 1.0)
+            
+            if clip_mask is not None:
+                clipper = clip_mask[:,:,0] if len(clip_mask.shape) == 3 else clip_mask
+                mask_L = mask_L * clipper
+            
+            sigma_L = get_dynamic_sigma(points[36], points[0])
+            
+            if sigma_L > 0:
+                k_size = int(sigma_L * 3) | 1
+                mask_L = cv2.GaussianBlur(mask_L, (k_size, k_size), sigma_L)
+
+        # === Right Side ===
+        if poly_right is not None:
+            cv2.fillPoly(mask_R, [poly_right], 1.0)
+            
+            if clip_mask is not None:
+                clipper = clip_mask[:,:,0] if len(clip_mask.shape) == 3 else clip_mask
+                mask_R = mask_R * clipper
+            
+            sigma_R = get_dynamic_sigma(points[45], points[16])
+            
+            if sigma_R > 0:
+                k_size = int(sigma_R * 3) | 1
+                mask_R = cv2.GaussianBlur(mask_R, (k_size, k_size), sigma_R)
+        
+        mask = np.maximum(mask_L, mask_R)
+        return mask
+    
+    def _create_forehead_intensity_mask(self, points, shape):
+        """
+        Creates a soft mask specifically for the forehead area to adjust texture intensity.
+        Returns: 1.0 on forehead, 0.0 on lower face.
+        """
+        h, w = shape[:2]
+        mask = np.zeros((h, w), dtype=np.float32)
+        
+        p0 = np.array(points[0])
+        p16 = np.array(points[16])
+        
+        vec_x = p16[0] - p0[0]
+        vec_y = p16[1] - p0[1]
+        face_width = np.hypot(vec_x, vec_y)
+        if face_width == 0: face_width = 1.0
+        
+        dir_up_x = vec_y / face_width
+        dir_up_y = -vec_x / face_width
+        
+        dir_right_x = vec_x / face_width
+        dir_right_y = vec_y / face_width
+        
+        ext_h = face_width * 2.0
+        ext_w = face_width * 1.0
+        
+        p16_far = p16 + np.array([dir_right_x, dir_right_y]) * ext_w
+        p0_far = p0 - np.array([dir_right_x, dir_right_y]) * ext_w
+        p16_sky = p16_far + np.array([dir_up_x, dir_up_y]) * ext_h
+        p0_sky = p0_far + np.array([dir_up_x, dir_up_y]) * ext_h
+        
+        brows_right = [points[i] for i in range(26, 21, -1)]
+        brows_left = [points[i] for i in range(21, 16, -1)]
+        
+        poly = np.array([
+            p16_sky, p16_far, p16,
+            *brows_right, *brows_left,
+            p0, p0_far, p0_sky
+        ], dtype=np.int32)
+        cv2.fillPoly(mask, [poly], 1.0)
+        
+        mask = cv2.GaussianBlur(mask, (101, 101), 50)
+        
+        return mask
+
+    def _suppress_halos_by_gradient(self, texture, src_img, sensitivity=0.5, gain=5.0):
+        """
+        Suppresses texture in areas with high structural gradients (like shadow edges)
+        using a soft, continuous curve instead of a hard binary mask.
+        
+        Args:
+            texture: The extracted texture (3-channel).
+            src_img: The original crop image (used to detect edges).
+            sensitivity: Controls how much gradient triggers suppression (Lower = more sensitive).
+            gain: Controls how hard the suppression is (Higher = stronger reduction).
+        """
+        gray = cv2.cvtColor(src_img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        blurred_src = cv2.GaussianBlur(gray, (0, 0), 2.0)
+        
+        grad_x = cv2.Sobel(blurred_src, cv2.CV_32F, 1, 0, ksize=3)
+        grad_y = cv2.Sobel(blurred_src, cv2.CV_32F, 0, 1, ksize=3)
+        
+        magnitude = cv2.magnitude(grad_x, grad_y)
+        magnitude_norm = magnitude / 100.0
+        
+        weight_map = 1.0 / (1.0 + np.power(magnitude_norm / sensitivity, gain))
+        
+        kernel_size = 9 
+        kernel = np.ones((kernel_size, kernel_size), np.uint8)
+        weight_map = cv2.erode(weight_map, kernel, iterations=1)
+        
+        weight_map = cv2.GaussianBlur(weight_map, (5, 5), 0)
+        weight_map_3c = cv2.merge([weight_map, weight_map, weight_map])
+        texture_suppressed = texture * weight_map_3c
+        
+        return texture_suppressed
+
+    def _select_best_pair(self, candidates_a, candidates_b, img_w, img_h):
+        """
+        Selects the best pair of faces (rect_a, rect_b) based on:
+        1. Overlap (IoU) - Primary factor (Must be the same face position)
+        2. Size (Area) - Secondary factor (Prefer larger faces)
+        3. Centricity - Tertiary factor (Prefer centered faces)
+        """
+        if not candidates_a or not candidates_b:
+            return None, None
+
+        best_pair = (None, None)
+        best_score = -1.0
+        
+        img_cx, img_cy = img_w / 2.0, img_h / 2.0
+        img_diag = math.sqrt(img_w**2 + img_h**2)
+
+        # Helper: Calculate Intersection over Union (IoU)
+        def get_iou(r1, r2):
+            # r = [x, y, w, h]
+            x1 = max(r1[0], r2[0])
+            y1 = max(r1[1], r2[1])
+            x2 = min(r1[0]+r1[2], r2[0]+r2[2])
+            y2 = min(r1[1]+r1[3], r2[1]+r2[3])
+            
+            inter_w = max(0, x2 - x1)
+            inter_h = max(0, y2 - y1)
+            inter_area = inter_w * inter_h
+            
+            area1 = r1[2] * r1[3]
+            area2 = r2[2] * r2[3]
+            union_area = area1 + area2 - inter_area
+            
+            if union_area <= 0: return 0
+            return inter_area / union_area
+        
+        for rect_a in candidates_a[:3]:
+            for rect_b in candidates_b[:3]:
+                
+                iou_val = get_iou(rect_a, rect_b)
+                
+                if iou_val < 0.3: 
+                    continue
+                
+                avg_area = (rect_a[2] * rect_a[3] + rect_b[2] * rect_b[3]) / 2.0
+                size_score = math.sqrt(avg_area) / math.sqrt(img_w * img_h)
+                
+                cx_a = rect_a[0] + rect_a[2] / 2
+                cy_a = rect_a[1] + rect_a[3] / 2
+                cx_b = rect_b[0] + rect_b[2] / 2
+                cy_b = rect_b[1] + rect_b[3] / 2
+                
+                avg_cx = (cx_a + cx_b) / 2
+                avg_cy = (cy_a + cy_b) / 2
+                
+                dist_to_center = math.sqrt((avg_cx - img_cx)**2 + (avg_cy - img_cy)**2)
+                center_score = 1.0 - (dist_to_center / (img_diag / 2))
+                
+                # === Combined Score ===
+                # Weights:
+                # IoU is most important (ensure same person)
+                # Size is next (ensure main subject)
+                # Center is the tiebreaker when sizes are similar
+                total_score = (iou_val * 2.0) + (size_score * 1.5) + (center_score * 0.5)
+                
+                if total_score > best_score:
+                    best_score = total_score
+                    best_pair = (rect_a, rect_b)
+        
+        if best_pair[0] is None:
+            print("[Best Match] No matching pair found (IoU too low). Falling back to largest faces.")
+            return candidates_a[0], candidates_b[0]
+            
+        return best_pair
+    
+    def get_paired_face_rects(self, img_a, img_b):
+        """
+        Stage 1: Comparison & Selection.
+        Detects faces in both images and selects the best corresponding pair based on heuristics.
+        Returns: (rect_a, rect_b)
+        """
+        if self.is_pre_aligned:
+            h_a, w_a = img_a.shape[:2]
+            h_b, w_b = img_b.shape[:2]
+            return [0, 0, w_a, h_a], [0, 0, w_b, h_b]
+        
+        rect_a_large, full_detect_a = self.pipeline.detect(img_a, bypass=False)
+        rect_b_large, full_detect_b = self.pipeline.detect(img_b, bypass=False)
+
+        rect_a, rect_b = self._select_best_pair(
+            full_detect_a, full_detect_b, img_a.shape[1], img_a.shape[0]
+        )
+
+        if rect_a is None or rect_b is None:
+            rect_a, rect_b = rect_a_large, rect_b_large # fallback to largest faces
+        
+        return rect_a, rect_b
+    
+    def get_face_rect(self, img):
+        """
+        Detects faces in single image
+        """
+        if self.is_pre_aligned:
+            h, w = img.shape[:2]
+            return [0, 0, w, h]
+        
+        rect_large, _ = self.pipeline.detect(img, bypass=False)
+
+        return rect_large
+    
+    def get_all_face_rects(self, img):
+        """
+        Detects faces in single image and returns all detected rectangles
+        """
+        if self.is_pre_aligned:
+            h, w = img.shape[:2]
+            return [[0, 0, w, h]]
+        
+        _, full_detect = self.pipeline.detect(img, bypass=False)
+        
+        return full_detect
+    
+    def analyze_face(self, img, rect, target_size=1024, padding=1.4):
+        """
+        Pre-process stage.
+        Detects, Crops, Aligns, Segment, and calculates landmarks.
+        Returns a dictionary containing all necessary data for restoration.
+        """
+        # 2. Crop Matrix
+        M = self._get_crop_matrix(rect, img.shape[1], img.shape[0], target_size, padding)
+        
+        # 3. Crop Image (Align)
+        crop_img = cv2.warpAffine(img, M, (target_size, target_size))
+        
+        try:
+            # 4. Landmarks
+            pts, pts_84 = self.get_landmarks(crop_img)
+            
+            # 5. Aux Points (Forehead & Cheek)
+            aux_forehead = self._get_forehead_points(np.array(pts), crop_img.shape)
+            aux_cheek = self._get_cheek_points(pts)
+            
+            # 6. Segmentation
+            seg_mask = self.pipeline.segment(crop_img, pts_84) # Can be None
+            
+            return {
+                "success": True,
+                "rect": rect,
+                "original_img": img,
+                "crop_img": crop_img, # OpenCV BGR
+                "M": M,
+                "pts": pts,
+                "pts_84": pts_84,
+                "seg_mask": seg_mask, # (H,W,3) 0-1 float or similar
+                "aux_forehead": aux_forehead,
+                "aux_cheek": aux_cheek
+            }
+        except Exception as e:
+            if DEBUG: print(f"Analysis failed: {e}")
+            return {"success": False}
+
+    def restore_face_from_data(self, 
+                               img_a_crop, mask_a, data_a, 
+                               img_b_crop, mask_b, data_b, 
+                               full_img_b, mode="add"):
+        """
+        Post-process stage.
+        Takes explicitly provided images/masks and metadata.
+        """
+        if not data_a.get("success") or not data_b.get("success"):
+            return full_img_b
+
+        # Unpack Data B (Target)
+        pts_b = data_b["pts"]
+        M_b = data_b["M"]
+        pts_b_extended = pts_b + data_b["aux_forehead"] + data_b["aux_cheek"]
+        seg_mask_b = mask_b if mask_b is not None else data_b.get("seg_mask")
+
+        # Unpack Data A (Reference)
+        pts_a = data_a["pts"]
+        pts_a_extended = pts_a + data_a["aux_forehead"] + data_a["aux_cheek"]
+        seg_mask_a = mask_a if mask_a is not None else data_a.get("seg_mask")
+
+        # Ensure masks are valid for calculations (numpy array)
+        if seg_mask_a is None:
+             seg_mask_a = np.zeros(img_a_crop.shape, dtype=np.float32)
+        if seg_mask_b is None:
+             seg_mask_b = np.zeros(img_b_crop.shape, dtype=np.float32)
+
+        # === Step 2: Texture Extraction ===
+        texture_a = self.extract_texture(img_a_crop)
+        
+        texture_a = self._suppress_halos_by_gradient(
+            texture_a, 
+            img_a_crop, 
+            sensitivity=0.4, 
+            gain=4.0
+        )
+        
+        # === Step 3: Mask Creation & Cleaning ===
+        if mode == "replace":
+            final_mask_a = self.create_blending_mask(
+                pts_a, 
+                img_a_crop.shape,
+                seg_mask=seg_mask_a, 
+                shrink_override=10, 
+                blur_override=10, 
+                fade_power=1.0 
+            )
+        else: # "add" mode & "eyes_replacement" mode
+            mask_a_strict = self.create_blending_mask(
+                pts_a, 
+                img_a_crop.shape,
+                seg_mask=seg_mask_a, 
+                shrink_override=10, 
+                blur_override=10, 
+                fade_power=1.0,
+                exclude_features=True,
+                seg_erosion=45, 
+            )
+            
+            mask_a_broad = self.create_blending_mask(
+                pts_a, img_a_crop.shape, seg_mask=seg_mask_a, 
+                shrink_override=5, blur_override=10, fade_power=1.0,
+                exclude_features=False, 
+                seg_erosion=45, 
+            )
+
+            raw_mask_a = (mask_a_broad * 0.4) + (mask_a_strict * 0.6)
+            final_mask_a = np.clip(raw_mask_a, 0, 1.0)
+
+        texture_a = texture_a * final_mask_a
+        #texture_a = self._suppress_mouth_corner_shadows(texture_a, pts_a, img_a_crop.shape)
+
+        # === Step 4: Texture Warping & Mesh Generation ===
+        warped_texture, tri_indices = self.generate_warped_texture(
+            texture_a, pts_a_extended, pts_b_extended, img_b_crop.shape
+        )
+
+        # === Step 5: Blending Mask Generation ===
+        mask_b_strict = self.create_blending_mask(
+            pts_b, 
+            img_b_crop.shape,
+            seg_mask=seg_mask_b,
+            shrink_override=self.mask_shrink_size,
+            blur_override=40,
+            fade_power=1.5,
+            exclude_features=True
+        )
+
+        if mode == "replace":
+            mask_b = mask_b_strict
+        else: 
+            mask_b_broad = self.create_blending_mask(
+                pts_b, img_b_crop.shape, seg_mask=seg_mask_b,
+                shrink_override=0, blur_override=40, fade_power=1.5,
+                exclude_features=False
+            )
+            
+            mask_b = (mask_b_broad * 0.4) + (mask_b_strict * 0.6)
+            mask_b = np.clip(mask_b, 0, 1.0)
+
+        # === LAB Blending ===
+        img_b_lab = cv2.cvtColor(img_b_crop, cv2.COLOR_BGR2LAB).astype(np.float32)
+        l, a, b = cv2.split(img_b_lab)
+        
+        # 1. Base from B
+        l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
+        
+        # 2. Texture from A
+        texture_a_warped = warped_texture[:, :, 0]
+        
+        # 3. Blend
+        mask_single = mask_b[:, :, 0]
+        
+        if mode == "replace":
+            texture_boost = 1.0
+            l_replaced = l_blurred + (texture_a_warped * self.detail_strength * texture_boost)
+            l_final = l * (1.0 - mask_single) + l_replaced * mask_single
+        elif mode == "eyes_replacement" or mode == "eyes_replacement_v2":
+            l_blurred = cv2.GaussianBlur(l, (0, 0), self.sigma)
+            texture_b = l - l_blurred
+
+            mask_eye_zone = self._create_eye_surround_mask(pts_b, img_b_crop.shape)
+
+            luminance_safe_map = self._calculate_luminance_protection(l, threshold_low=20, threshold_high=230)
+
+            # (CRURRENT) adaptive smoothness map
+            if mode == "eyes_replacement":
+                target_smoothness_map = self._create_target_smoothness_map(
+                    l, 
+                    sensitivity=0.3, 
+                    min_strength=0.2, 
+                    max_strength=1.0
+                )
+                global_constraints = target_smoothness_map * luminance_safe_map
+
+            else: # eyes_replacement_v2
+                energy_control_map = self._calculate_texture_energy_control(
+                    texture_a, 
+                    texture_b, 
+                    window_size=21,
+                    fidelity=1.0,
+                    min_limit=5.0,
+                    max_limit=30.0
+                )
+                global_constraints = energy_control_map * luminance_safe_map
+
+            final_adaptive_map = global_constraints * (1.0 - mask_eye_zone) + 1.0 * mask_eye_zone
+
+            # add extra forehead intensity mask
+            mask_forehead_zone = self._create_forehead_intensity_mask(pts_b, img_b_crop.shape)
+            strength_map = self.detail_strength * (1.0 - mask_forehead_zone) + \
+                       self.forehead_strength * mask_forehead_zone
+            
+            KEEP_B_CHEEK = 1.0
+            KEEP_B_EYE   = 0.0
+            target_keep_b_map = KEEP_B_CHEEK * (1.0 - mask_eye_zone) + KEEP_B_EYE * mask_eye_zone
+            ratio_keep_b = 1.0 - (mask_single * (1.0 - target_keep_b_map))
+
+            if mode == "eyes_replacement_v2":
+                ADD_A_CHEEK = 0.7
+            else:
+                ADD_A_CHEEK = 1.0
+            ADD_A_EYE   = 1.0
+            target_add_a_map = ADD_A_CHEEK * (1.0 - mask_eye_zone) + ADD_A_EYE * mask_eye_zone
+            ratio_add_a = mask_single * target_add_a_map * strength_map * final_adaptive_map
+            
+            l_final = l_blurred + \
+                    (texture_b * ratio_keep_b) + \
+                    (texture_a_warped * ratio_add_a)
+        else:
+            texture_b = l - l_blurred
+            RATIO_A = 1.0 
+            RATIO_B = 0.0 
+            
+            ratio_keep_b = 1.0 - (mask_single * RATIO_B) 
+            ratio_add_a = mask_single * RATIO_A
+            
+            l_final = l_blurred + \
+                      (texture_b * ratio_keep_b) + \
+                      (texture_a_warped * self.detail_strength * ratio_add_a)
+        
+        l_final = np.clip(l_final, 0, 255)
+        a_final = np.clip(a, 0, 255)
+        b_final = np.clip(b, 0, 255)
+        
+        img_b_lab_new = cv2.merge([l_final, a_final, b_final])
+        final_crop = cv2.cvtColor(img_b_lab_new.astype(np.uint8), cv2.COLOR_LAB2BGR)
+        
+        final_img = self._paste_back(full_img_b, final_crop, mask_b, M_b)
+
+        return final_img
+
+    def restore_core(self, img_a, img_b, mode="add", output_folder=None):
+        if img_a is None or img_b is None:
+            if DEBUG: print("Error: Could not read images.")
+            return
+
+        rect_a, rect_b = self.get_paired_face_rects(img_a, img_b)
+
+        # 1. Analyze A
+        data_a = self.analyze_face(img_a, rect=rect_a)
+        if not data_a["success"]:
+            print("Face A not found")
+            return img_b
+        
+        # 2. Analyze B
+        data_b = self.analyze_face(img_b, rect=rect_b)
+        if not data_b["success"]:
+            print("Face B not found")
+            return img_b
+        
+        # 3. Restore
+        # Legacy support: use the data in the dict directly
+        return self.restore_face_from_data(
+            data_a["crop_img"], data_a["seg_mask"], data_a,
+            data_b["crop_img"], data_b["seg_mask"], data_b,
+            img_b, mode=mode
+        )
+    
+    def restore_core_addon(self, img_a, img_b, output_folder=None):
+        return self.restore_core(img_a, img_b, mode="add", output_folder=output_folder)
+
+    def restore_core_replacement(self, img_a, img_b, output_folder=None):
+        return self.restore_core(img_a, img_b, mode="replace", output_folder=output_folder)
+    
+    def restore_with_metadata(self, img_b, metadata_a, mode="add"):
+        if not metadata_a.get("success"):
+            print("Metadata A contains no valid face data.")
+            return img_b
+        
+        rect_a = metadata_a.get("rect")
+
+        data_b = self.analyze_face(img_b, rect=rect_a)
+        
+        if not data_b["success"]:
+            print("Face B analysis failed.")
+            return img_b
+        
+        return self.restore_face_from_data(
+            metadata_a["crop_img"], metadata_a["seg_mask"], metadata_a,
+            data_b["crop_img"], data_b["seg_mask"], data_b,
+            img_b, mode=mode
+        )
+
+
+    def pre_detect(self, img):
+        rect = self.get_face_rect(img)
+
+        metadata = self.analyze_face(img, rect=rect)
+        # if analysis failed or no face found return all black mask
+        if not metadata.get("success", False):
+            h, w = img.shape[:2]
+            black_mask = np.zeros((h, w), dtype=np.float32)
+            return black_mask, metadata
+        
+        seg_mask = metadata.get("seg_mask", None)
+        if seg_mask is None:
+            h, w = img.shape[:2]
+            black_mask = np.zeros((h, w), dtype=np.float32)
+            return black_mask, metadata
+
+        # preprocessing mask: only under Eyebrow to Chin
+        points = metadata.get("pts", None)
+        if points is not None:
+            h, w = seg_mask.shape[:2]
+            mask_u8 = np.zeros((h, w), dtype=np.uint8)
+
+            face_contour = np.array(points[0:17], dtype=np.int32)
+            brow_left = np.array(points[17:22], dtype=np.int32)
+            brow_right = np.array(points[22:27], dtype=np.int32)
+            head_line = np.vstack([face_contour[::-1], brow_left, brow_right])
+            cv2.fillPoly(mask_u8, [head_line], 255)
+
+            blur_radius = 21 
+            mask_blurred = cv2.GaussianBlur(mask_u8, (blur_radius, blur_radius), 0)
+            mask_soft = mask_blurred.astype(np.float32) / 255.0
+
+            if len(seg_mask.shape) == 3 and seg_mask.shape[2] > 1:
+                mask_soft = mask_soft[:, :, np.newaxis]
+            
+            seg_mask = seg_mask * mask_soft
+        
+        # if there is a segmentation mask, Dilation + Blur to make it smoother (kernel size based on image size)
+        h, w = seg_mask.shape[:2]
+        range_scale = 0.15 
+        blur_scale = 3.0
+        gain = 1.5 
+        # ------------------
+        dilation_size = max(3, int(min(h, w) * range_scale) | 1)
+        kernel = np.ones((dilation_size, dilation_size), np.uint8)
+
+        seg_mask_u8 = (seg_mask[:,:,0] * 255).astype(np.uint8)
+        seg_mask_dilated = cv2.dilate(seg_mask_u8, kernel, iterations=1)
+
+        blur_ksize = int(dilation_size * blur_scale) | 1
+        sigma = blur_ksize * 0.3
+
+        seg_mask_blurred = cv2.GaussianBlur(
+            seg_mask_dilated,
+            (blur_ksize, blur_ksize),
+            sigmaX=sigma,
+            sigmaY=sigma
+        )
+
+        seg_mask_float = seg_mask_blurred.astype(np.float32) / 255.0
+        seg_mask_boosted = seg_mask_float * gain
+        seg_mask_final = np.clip(seg_mask_boosted, 0.0, 1.0)
+
+        # paste-back mask
+        M = metadata.get("M", None)
+        if M is not None:
+            h_full, w_full = img.shape[:2]
+            seg_mask_final = cv2.warpAffine(
+                seg_mask_final, M, (w_full, h_full), 
+                flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT, borderValue=0
+            )
+        
+        
+        return seg_mask_final, metadata
+
+    def enhanced_face_detection(self, img, detector_func):
+        """
+        detect face with multiple strategies:
+        1. Direct Detection
+        2. Padding (Zoom Out simulation)
+        """
+        h, w = img.shape[:2]
+        
+        # strategy 1: Direct Detection
+        #rects = detector_func(img)
+        #if rects and len(rects) > 0:
+        #    return rects
+
+        # strategy 2: Padding (Zoom Out simulation)
+        pad_h = int(h * 0.1)
+        pad_w = int(w * 0.1)
+        
+        padded_img = cv2.copyMakeBorder(img, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=(0,0,0))
+        
+        padded_rects = detector_func(padded_img)
+        
+        if padded_rects and len(padded_rects) > 0:
+            final_rects = []
+            for (x, y, rw, rh) in padded_rects:
+                real_x = x - pad_w
+                real_y = y - pad_h
+                
+                final_rects.append([real_x, real_y, rw, rh])
+                
+            return final_rects
+
+        return []
+
+    def pre_detect_all_faces(self, img, provided_rects=None, range_scale=0.15, blur_scale=3.0, gain=1.5, mask_type='seg', face_rect_metadata=None, provided_local_rects=None):
+        """
+        Generate a mask for the faces.
+        
+        Args:
+            mask_type: 'seg' (AI mask), 'rect' (Square), 'circle' (Circle)
+            face_rect_metadata: dict (Optional)
+                {
+                    "face_rect_flag": bool,  # True: Use provided rect; False: Force Full Image Mask
+                    "face_rect": [x, y, w, h]
+                }
+        """
+        h_img, w_img = img.shape[:2]
+        combined_final_mask = np.zeros((h_img, w_img), dtype=np.float32)
+        first_metadata = None
+        
+        # --- 1. Determine Logic Flow based on Metadata ---
+        rects = []
+        is_force_full_image = False
+        
+        if face_rect_metadata is not None:
+            if face_rect_metadata.get("face_rect_flag", False):
+                # Mode: Use Provided Rect
+                if provided_local_rects is not None:
+                    rects = [provided_local_rects]
+                else:
+                    rects = [[0, 0, w_img, h_img]]
+            else:
+                # Mode: Force Full Image
+                is_force_full_image = True
+        else:
+            # Mode: Auto Detect
+            if provided_rects is not None:
+                rects = provided_rects
+            else:
+                print("Detecting all faces for mask...")
+                rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+
+        # --- 2. Handle Force Full Image Mode ---
+        if is_force_full_image:
+            full_white_mask = np.ones((h_img, w_img), dtype=np.float32)
+            dummy_meta = {"success": True, "force_full": True}
+            return full_white_mask, dummy_meta
+
+        # --- 3. Handle Face Masking (Loop through rects) ---
+        if rects is None or len(rects) == 0:
+            return combined_final_mask, {"success": False}
+
+        for rect in rects:
+            metadata = self.analyze_face(img, rect=rect)
+            
+            if not metadata.get("success", False):
+                continue
+            
+            if first_metadata is None:
+                first_metadata = metadata
+            
+            # --- Prepare Base Mask in Aligned Space ---
+            seg_mask_ref = metadata.get("seg_mask", None)
+            
+            mask_size = 512
+            if seg_mask_ref is not None:
+                mask_size = seg_mask_ref.shape[0]
+            
+            base_mask = None
+
+            if mask_type == 'seg':
+                if seg_mask_ref is not None:
+                    if len(seg_mask_ref.shape) == 3:
+                        base_mask = seg_mask_ref[:, :, 0]
+                    else:
+                        base_mask = seg_mask_ref
+                else:
+                    continue
+
+            elif mask_type == 'rect':
+                base_mask = np.ones((mask_size, mask_size), dtype=np.float32)
+
+            elif mask_type == 'circle':
+                base_mask = np.zeros((mask_size, mask_size), dtype=np.float32)
+                center = (mask_size // 2, mask_size // 2)
+                radius = mask_size // 2
+                cv2.circle(base_mask, center, radius, (1.0), -1)
+
+            if base_mask is None:
+                continue
+            
+            # --- Post-Processing (Blur & Warp) ---
+            h_m, w_m = base_mask.shape[:2]
+            
+            if base_mask.max() > 1.0:
+                base_mask = base_mask / 255.0
+            
+            dilation_size = max(3, int(min(h_m, w_m) * range_scale) | 1)
+            blur_ksize = int(dilation_size * blur_scale) | 1
+            sigma = blur_ksize * 0.3
+            
+            pad_size = blur_ksize 
+            
+            seg_mask_u8 = (base_mask * 255).astype(np.uint8)
+            
+            seg_mask_padded = cv2.copyMakeBorder(
+                seg_mask_u8, 
+                pad_size, pad_size, pad_size, pad_size, 
+                cv2.BORDER_CONSTANT, 
+                value=0
+            )
+
+            kernel = np.ones((dilation_size, dilation_size), np.uint8)
+            seg_mask_dilated = cv2.dilate(seg_mask_padded, kernel, iterations=1)
+
+            seg_mask_blurred = cv2.GaussianBlur(
+                seg_mask_dilated,
+                (blur_ksize, blur_ksize),
+                sigmaX=sigma,
+                sigmaY=sigma
+            )
+
+            seg_mask_float = seg_mask_blurred.astype(np.float32) / 255.0
+            seg_mask_boosted = seg_mask_float * gain
+            seg_mask_final = np.clip(seg_mask_boosted, 0.0, 1.0)
+            
+            # --- Warp Back to Original Image ---
+            M = metadata.get("M", None)
+            if M is not None:
+                M_padded = M.copy()
+                M_padded[0, 2] += pad_size
+                M_padded[1, 2] += pad_size
+                
+                seg_mask_final_warped = cv2.warpAffine(
+                    seg_mask_final, M_padded, (w_img, h_img), 
+                    flags=cv2.WARP_INVERSE_MAP | cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT, borderValue=0
+                )
+                
+                combined_final_mask = np.maximum(combined_final_mask, seg_mask_final_warped)
+
+        if first_metadata is None:
+            first_metadata = {"success": False}
+        return combined_final_mask, first_metadata
+    
+    def get_all_faces_crop_region(self, img, padding_factor=0.25, target_pixel_count=1024*1024, align_factor=8, \
+                                  bbox_padding_mode='shift', alignment_reinfine=False, face_rect_metadata=None, all_bboxs=None):
+        """
+        bbox_padding_mode: 
+            'shift' - Shift to fit. If image is too small, crop might be rectangular.
+            'pad'   - Shift to fit first. If resulting crop is rectangular, pad to square.
+        
+        face_rect_metadata: dict (Optional)
+            {
+                "face_rect_flag": bool,  # True: Use provided rect; False: Use Full Image but detect faces for metadata
+                "face_rect": [x, y, w, h] # Used if flag is True
+            }
+        """
+        h_img, w_img = img.shape[:2]
+        
+        # --- 1. Determine Logic Flow based on Metadata ---
+        force_full_image_crop = False
+        use_provided_rect = False
+        rects = []
+
+        if face_rect_metadata is not None:
+            if face_rect_metadata.get("face_rect_flag", False):
+                # with provided rect
+                use_provided_rect = True
+                rects = [face_rect_metadata.get("face_rect")]
+            else:
+                # full frame
+                force_full_image_crop = True
+                rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+        else:
+            # fallback to normal detection (no metadata)
+            rects = self.enhanced_face_detection(img, self.get_all_face_rects)
+        
+        if (rects is None or len(rects) == 0) and not force_full_image_crop:
+            scale = math.sqrt(target_pixel_count / (w_img * h_img))
+            target_w = int(round(w_img * scale / align_factor) * align_factor)
+            target_h = int(round(h_img * scale / align_factor) * align_factor)
+            target_w = max(align_factor, target_w)
+            target_h = max(align_factor, target_h)
+            
+            resized_fallback = cv2.resize(img, (target_w, target_h), interpolation=cv2.INTER_AREA)
+            return resized_fallback, (0, 0, w_img, h_img), {"success": False}
+        
+        if rects is None:
+            rects = []
+
+        # --- 1.5. Replace provided rect with best-matching bbox from all_bboxs ---
+        # all_bboxs entries are typically larger/more accurate; use them when available.
+        if use_provided_rect and all_bboxs and len(rects) > 0:
+            rx, ry, rw, rh = rects[0]
+            r_area = max(1, rw * rh)
+            best_iou, best_bbox = 0, None
+            for bbox in all_bboxs:
+                ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
+                ix1 = max(ox, rx); iy1 = max(oy, ry)
+                ix2 = min(ox + ow, rx + rw); iy2 = min(oy + oh, ry + rh)
+                inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+                union = ow * oh + r_area - inter
+                iou = inter / union if union > 0 else 0
+                if iou > best_iou:
+                    best_iou, best_bbox = iou, bbox
+            if best_iou >= 0.3 and best_bbox is not None:
+                rects[0] = [best_bbox["x"], best_bbox["y"],
+                            best_bbox["w"], best_bbox["h"]]
+
+        # --- 2. Generate Metadata (Analyze the first face found/provided) ---
+        first_metadata = {"success": False}
+        if len(rects) > 0:
+            rx, ry, rw, rh = rects[0]
+            first_metadata = self.analyze_face(img, rect=[rx, ry, rw, rh])
+        
+        # calculate first_matadata pts_84 back to original image space and use it to refine the rects if possible
+        if alignment_reinfine:
+            def scale_pts_back(pts, M):
+                if pts is None or M is None:
+                    return None
+                
+                M_inv = cv2.invertAffineTransform(M)
+                pts_scaled = []
+                for (x, y) in pts:
+                    x_s = M_inv[0, 0] * x + M_inv[0, 1] * y + M_inv[0, 2]
+                    y_s = M_inv[1, 0] * x + M_inv[1, 1] * y + M_inv[1, 2]
+                    pts_scaled.append((x_s, y_s))
+                return pts_scaled
+            
+            # if with valid metadata, use alignment pts to refine rects
+            if first_metadata.get("success", False):
+                # use pts_84 and forehead aux pts
+                pts = first_metadata.get("pts_84", None)
+                aux_forehead = first_metadata.get("aux_forehead", None)
+                pts = np.vstack([pts, aux_forehead]) if aux_forehead is not None else pts
+                if pts is not None and len(pts) > 0:
+                    xy_coords = scale_pts_back(pts, first_metadata.get("M", None))
+                    if xy_coords is not None:
+                        x_coords = [p[0] for p in xy_coords]
+                        y_coords = [p[1] for p in xy_coords]
+                    x_min, x_max = min(x_coords), max(x_coords)
+                    y_min, y_max = min(y_coords), max(y_coords)
+                    rects = [[x_min, y_min, x_max - x_min, y_max - y_min]]
+
+        # --- 3. Calculate Crop Bounding Box ---
+        if force_full_image_crop:
+            c_x1, c_y1 = 0, 0
+            c_x2, c_y2 = w_img, h_img
+        else:
+            # Union Bounding Box
+            x1_min, y1_min = w_img, h_img
+            x2_max, y2_max = 0, 0
+            
+            for (rx, ry, rw, rh) in rects:
+                x1_min = min(x1_min, rx)
+                y1_min = min(y1_min, ry)
+                x2_max = max(x2_max, rx + rw)
+                y2_max = max(y2_max, ry + rh)
+            
+            # Apply Padding
+            bbox_w = x2_max - x1_min
+            bbox_h = y2_max - y1_min
+            
+            pad_x = int(bbox_w * padding_factor)
+            pad_y = int(bbox_h * padding_factor)
+            
+            c_x1 = x1_min - pad_x
+            c_y1 = y1_min - pad_y
+            c_x2 = x2_max + pad_x
+            c_y2 = y2_max + pad_y
+
+        # Rect-union bbox (pre-padding) — Step 5 uses this as the must-cover region.
+        # padding_factor area is best-effort and may be sacrificed to dodge a neighbor face.
+        if not force_full_image_crop and len(rects) > 0:
+            must_x1 = min(rx for rx, ry, rw, rh in rects)
+            must_y1 = min(ry for rx, ry, rw, rh in rects)
+            must_x2 = max(rx + rw for rx, ry, rw, rh in rects)
+            must_y2 = max(ry + rh for rx, ry, rw, rh in rects)
+        else:
+            must_x1, must_y1, must_x2, must_y2 = c_x1, c_y1, c_x2, c_y2
+
+        # --- 4. Auto-Square Logic ---
+        cur_w = c_x2 - c_x1
+        cur_h = c_y2 - c_y1
+        final_dim = int(max(cur_w, cur_h))
+        half = final_dim / 2
+
+        center_x = (c_x1 + c_x2) / 2
+        center_y = (c_y1 + c_y2) / 2
+
+        # --- 3.5 + 5. Collision-Aware Placement (direct solver) ---
+        # Pick the crop CENTER by directly minimising how much the fixed-size
+        # square overlaps neighbouring faces, while always covering the target
+        # (must-cover). Overlap area is piecewise-linear in the centre, so its
+        # minimum lies where a crop edge aligns with a neighbour edge (or an image
+        # / must-cover bound); enumerating those candidates finds the global
+        # optimum in a single pass — no iteration, and diagonal neighbours are
+        # handled naturally because we score real 2-D overlap rather than per-axis
+        # projections.
+        run_collision = bool(all_bboxs) and not force_full_image_crop and len(rects) > 0
+
+        # Feasible centre range that keeps the target fully covered (hard floor).
+        mx_lo, mx_hi = must_x2 - half, must_x1 + half
+        my_lo, my_hi = must_y2 - half, must_y1 + half
+        feas_x = lambda v: max(mx_lo, min(mx_hi, v))
+        feas_y = lambda v: max(my_lo, min(my_hi, v))
+
+        # Reference placement ignoring neighbours: image-boundary then must-cover.
+        # Where a lone face would land; used for the no-neighbour result and to
+        # decide whether a neighbour actually shifted the crop (has_neighbor).
+        ref_cx = feas_x(max(half, min(w_img - half, center_x)))
+        ref_cy = feas_y(max(half, min(h_img - half, center_y)))
+
+        neigh = []
+        if run_collision:
+            t_x1 = min(rx for rx, ry, rw, rh in rects)
+            t_y1 = min(ry for rx, ry, rw, rh in rects)
+            t_x2 = max(rx + rw for rx, ry, rw, rh in rects)
+            t_y2 = max(ry + rh for rx, ry, rw, rh in rects)
+            t_area = max(1, (t_x2 - t_x1) * (t_y2 - t_y1))
+            for bbox in all_bboxs:
+                ox, oy, ow, oh = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
+                ix = max(0, min(ox + ow, t_x2) - max(ox, t_x1))
+                iy = max(0, min(oy + oh, t_y2) - max(oy, t_y1))
+                inter = ix * iy
+                union = ow * oh + t_area - inter
+                if union > 0 and inter / union >= 0.3:
+                    continue  # target face — skip
+                neigh.append((ox, oy, ox + ow, oy + oh))  # (left, top, right, bottom)
+
+        if not neigh:
+            new_cx, new_cy = ref_cx, ref_cy
+            has_neighbor = False
+        else:
+            def _overlap(cx, cy, n):
+                l, t, r, b = cx - half, cy - half, cx + half, cy + half
+                iw = max(0.0, min(r, n[2]) - max(l, n[0]))
+                ih = max(0.0, min(b, n[3]) - max(t, n[1]))
+                return iw * ih
+
+            def _img_exit(cx, cy):
+                l, t, r, b = cx - half, cy - half, cx + half, cy + half
+                inside = (max(0.0, min(r, w_img) - max(l, 0.0)) *
+                          max(0.0, min(b, h_img) - max(t, 0.0)))
+                return final_dim * final_dim - inside
+
+            # Candidate centres: ideal / reference / image edges / must-cover bounds,
+            # plus per neighbour the positions that make a crop edge just touch it.
+            xs = {center_x, ref_cx, half, w_img - half, mx_lo, mx_hi}
+            ys = {center_y, ref_cy, half, h_img - half, my_lo, my_hi}
+            for (l, t, r, b) in neigh:
+                xs.add(r + half); xs.add(l - half)
+                ys.add(b + half); ys.add(t - half)
+            xs = {feas_x(v) for v in xs}
+            ys = {feas_y(v) for v in ys}
+
+            # Lexicographic objective: least neighbour overlap, then least off-image
+            # area, then closest to the ideal (target) centre.
+            best, best_key = None, None
+            for cx in xs:
+                for cy in ys:
+                    ov = 0.0
+                    for n in neigh:
+                        ov += _overlap(cx, cy, n)
+                    key = (round(ov, 3), round(_img_exit(cx, cy), 3),
+                           (cx - center_x) ** 2 + (cy - center_y) ** 2)
+                    if best_key is None or key < best_key:
+                        best_key, best = key, (cx, cy)
+            new_cx, new_cy = best
+            # A neighbour "matters" (-> asymmetric padding in Step 7) iff it pushed
+            # the crop off the lone-face reference placement.
+            has_neighbor = abs(new_cx - ref_cx) >= 0.5 or abs(new_cy - ref_cy) >= 0.5
+
+        c_x1 = int(new_cx - half)
+        c_x2 = int(c_x1 + final_dim)
+        c_y1 = int(new_cy - half)
+        c_y2 = int(c_y1 + final_dim)
+
+        # --- 6. Clamp & Crop (Get Raw Image) ---
+        safe_x1 = max(0, c_x1)
+        safe_y1 = max(0, c_y1)
+        safe_x2 = min(w_img, c_x2)
+        safe_y2 = min(h_img, c_y2)
+        
+        raw_crop_img = img[safe_y1:safe_y2, safe_x1:safe_x2].copy()
+        
+        # --- 7. Post-Processing Padding & Coordinate Adjustment ---
+        final_crop_x1 = safe_x1
+        final_crop_y1 = safe_y1
+        final_crop_x2 = safe_x2
+        final_crop_y2 = safe_y2
+        
+        offset_x = 0
+        offset_y = 0
+
+        # 'pad' mode or full frame crop 
+        should_pad = (bbox_padding_mode == 'pad') or force_full_image_crop 
+        
+        if should_pad:
+            h_crop, w_crop = raw_crop_img.shape[:2]
+
+            if h_crop > 0 and w_crop > 0:
+                if has_neighbor:
+                    # Asymmetric: pad only the sides that went outside the image,
+                    # so no black appears on the neighboring-face side.
+                    left   = max(0, -c_x1)
+                    right  = max(0, c_x2 - w_img)
+                    top    = max(0, -c_y1)
+                    bottom = max(0, c_y2 - h_img)
+                else:
+                    # Original symmetric padding
+                    pad_w  = final_dim - w_crop
+                    pad_h  = final_dim - h_crop
+                    top    = pad_h // 2
+                    bottom = pad_h - top
+                    left   = pad_w // 2
+                    right  = pad_w - left
+
+                if left > 0 or right > 0 or top > 0 or bottom > 0:
+                    offset_x = left
+                    offset_y = top
+
+                    raw_crop_img = cv2.copyMakeBorder(
+                        raw_crop_img,
+                        top, bottom, left, right,
+                        cv2.BORDER_CONSTANT,
+                        value=(0, 0, 0)
+                    )
+
+                    final_crop_x1 = safe_x1 - left
+                    final_crop_y1 = safe_y1 - top
+                    final_crop_x2 = safe_x2 + right
+                    final_crop_y2 = safe_y2 + bottom
+
+        crop_info = (final_crop_x1, final_crop_y1, final_crop_x2, final_crop_y2)
+
+        # --- 8. Resize to Target Pixels AND Align ---
+        h_raw, w_raw = raw_crop_img.shape[:2]
+        
+        if h_raw > 0 and w_raw > 0:
+            scale = math.sqrt(target_pixel_count / (w_raw * h_raw))
+            
+            target_w_raw = w_raw * scale
+            target_h_raw = h_raw * scale
+            
+            new_w = int(round(target_w_raw / align_factor) * align_factor)
+            new_h = int(round(target_h_raw / align_factor) * align_factor)
+            
+            new_w = max(align_factor, new_w)
+            new_h = max(align_factor, new_h)
+            
+            interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_LINEAR
+            resized_crop_img = cv2.resize(raw_crop_img, (new_w, new_h), interpolation=interp)
+        else:
+            resized_crop_img = raw_crop_img
+
+        # --- 9. Calculate Aligned Rects ---
+        aligned_rects = []
+        h_new, w_new = resized_crop_img.shape[:2]
+        
+        if h_raw > 0 and w_raw > 0:
+            s_x = w_new / w_raw
+            s_y = h_new / h_raw
+            
+            for (rx, ry, rw, rh) in rects:
+                rel_x = rx - safe_x1
+                rel_y = ry - safe_y1
+                
+                padded_x = rel_x + offset_x
+                padded_y = rel_y + offset_y
+                
+                nx = int(padded_x * s_x)
+                ny = int(padded_y * s_y)
+                nw = int(rw * s_x)
+                nh = int(rh * s_y)
+                aligned_rects.append([nx, ny, nw, nh])
+        
+        if isinstance(first_metadata, dict):
+            first_metadata["aligned_rects"] = aligned_rects
+
+        if face_rect_metadata is not None and face_rect_metadata.get("face_rect_flag", False):
+            if len(aligned_rects) > 0:
+                first_metadata["face_rect_local"] = aligned_rects[0]
+                first_metadata["face_rect_flag"] = True
+
+        return resized_crop_img, crop_info, first_metadata
+
+    def paste_back_crop_region(self, full_img, crop_img, crop_info):
+        """
+        Pastes the processed crop image back into the full image at the specified location.
+        """
+        x1, y1, x2, y2 = crop_info
+        h_img, w_img = full_img.shape[:2]
+        
+        target_w = x2 - x1
+        target_h = y2 - y1
+        
+        if target_w <= 0 or target_h <= 0:
+            return full_img
+        
+        if crop_img.shape[1] != target_w or crop_img.shape[0] != target_h:
+            crop_img_resized = cv2.resize(crop_img, (target_w, target_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            crop_img_resized = crop_img
+        
+        # add feathering mask
+        min_dim = min(target_w, target_h)
+        feather_size = int(min_dim * 0.1)
+        if feather_size % 2 == 0: feather_size += 1
+
+        mask = np.ones((target_h, target_w), dtype=np.float32)
+
+        fade_margin = int(feather_size * 0.8) 
+        if fade_margin < 1: fade_margin = 1
+
+        mask[:fade_margin, :] = 0
+        mask[-fade_margin:, :] = 0
+        mask[:, :fade_margin] = 0
+        mask[:, -fade_margin:] = 0
+        
+        mask = cv2.GaussianBlur(mask, (feather_size, feather_size), 0)
+        
+        mask = np.stack([mask, mask, mask], axis=2)
+        
+        dy1 = max(0, y1)
+        dx1 = max(0, x1)
+        dy2 = min(h_img, y2)
+        dx2 = min(w_img, x2)
+        
+        if dx2 <= dx1 or dy2 <= dy1:
+            return full_img
+        
+        sx1 = dx1 - x1
+        sy1 = dy1 - y1
+        sx2 = sx1 + (dx2 - dx1)
+        sy2 = sy1 + (dy2 - dy1)
+
+        # alpha blending
+        bg_region = full_img[dy1:dy2, dx1:dx2].astype(np.float32)
+        fg_region = crop_img_resized[sy1:sy2, sx1:sx2].astype(np.float32)
+        mask_region = mask[sy1:sy2, sx1:sx2]
+        
+        blended_region = (fg_region * mask_region) + (bg_region * (1.0 - mask_region))
+        full_img[dy1:dy2, dx1:dx2] = blended_region.astype(np.uint8)
+        
+        return full_img

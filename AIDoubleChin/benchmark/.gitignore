@@ -1,0 +1,4 @@
+output*/
+*.jpg
+*.png
+face_crop_check/
