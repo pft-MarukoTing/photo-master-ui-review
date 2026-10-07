@@ -63,8 +63,9 @@ class NailDiffMask:
     benchmarking against SAM3 nail masks on three real source/target sets
     (~240 pairs): the metrics reached the same IoU within noise, so the
     simplest and cheapest (~10x faster than CIEDE2000) wins. The defaults
-    (threshold 12, open 3, close 5) were inside the near-optimal threshold
-    range on all three sets.
+    (threshold 5.5, open 3, close 5) favour recall: the low threshold lets the
+    diff masks touch nearly every nail present in the source, at the cost of
+    looser masks and more spurious components than a threshold around 12.
 
     Inputs are lists (INPUT_IS_LIST) of [B, H, W, C] tensors, like ResizeImage;
     every frame is processed independently and yields one entry in each
@@ -88,7 +89,7 @@ class NailDiffMask:
             "required": {
                 "crop_images": ("IMAGE",),
                 "generated_images": ("IMAGE",),
-                "rgb_diff_threshold": ("FLOAT", {"default": 12.0, "min": 0.0, "max": 255.0, "step": 0.5}),
+                "rgb_diff_threshold": ("FLOAT", {"default": 5.5, "min": 0.0, "max": 255.0, "step": 0.5}),
                 "open_kernel": ("INT", {"default": 3, "min": 0, "max": 51, "step": 1}),
                 "close_kernel": ("INT", {"default": 5, "min": 0, "max": 51, "step": 1}),
             }
