@@ -3619,11 +3619,11 @@ def _axis_set(value):
 
 
 OCCLUDED_PERSON_REMOVAL_RULE = (
-    "During approved obstruction removal, preserve the main subjects. If an incidental background person is "
-    "visible only as a narrow face or body fragment beside the obstruction, remove that entire person and fill "
-    "their space with matching background; this local cleanup overrides generic instructions to preserve "
-    "people's outlines. Otherwise reconstruct exposed people coherently from visible cues and natural overlap. "
-    "Never leave a partial, floating, duplicated, or merged face."
+    "During approved obstruction removal, preserve the main subjects and reconstruct exposed people coherently "
+    "from visible cues and natural overlap. Clear away, together with the obstruction, any person beside it of "
+    "whom only a small part shows and who cannot be filled in, and fill their space with matching background; "
+    "this overrides generic instructions to preserve people's outlines. Never leave a partial, floating, "
+    "duplicated, or merged face."
 )
 
 
