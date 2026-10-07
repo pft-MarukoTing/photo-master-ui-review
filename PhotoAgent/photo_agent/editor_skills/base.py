@@ -5,24 +5,9 @@ from dataclasses import dataclass, field
 from prompts import AXIS_ALIASES
 
 
-# Sort order of shared facial rules (EditorSkill.face_rules). The shared identity
-# rule always comes first and the eye-makeup carry rule last.
-RULE_EYELIDS = 20
-RULE_EXPRESSION = 30
-RULE_LAUGHTER = 40
-RULE_SMILE_GAZE = 50
-RULE_GAZE = 60
-
-# Sort order of QA check lines (EditorSkill.qa_checks); the QA prompt keeps a blank line before QA_SMILE.
-QA_BLINK = 10
-QA_HAIR = 20
-QA_BODY = 30
-QA_SMILE = 40
-QA_GAZE = 50
-
-# Sort order of QA score caps (EditorSkill.qa_score_caps); the QA prompt keeps a blank line before CAP_BLINK.
-CAP_BODY = 10
-CAP_BLINK = 20
+# Facial rules, QA checks and QA score caps from every skill are merged by an
+# order number each skill gives its own entries, lowest first. Shared facial
+# rules run from 0 (the identity rule) to 100 (the eye-makeup carry rule).
 
 # Prompt modes a skill can switch on; the editor prompt's own wording depends on them.
 MODE_HEAD_ALIGNED_GAZE = "head_aligned_gaze"
@@ -126,7 +111,7 @@ class EditorSkill:
         return ""
 
     def face_rules(self, resolved, ctx):
-        """(order, line) pairs for the shared facial rules; order is one of the RULE_* values."""
+        """(order, line) pairs for the shared facial rules, order between 0 and 100."""
         return []
 
     def execution_block(self, analysis, resolved, ctx):
@@ -150,12 +135,16 @@ class EditorSkill:
         return None
 
     def qa_checks(self, analysis):
-        """(order, text) QA check entries; order is one of the QA_* values and text ends with a newline."""
+        """(order, text) QA check entries; text ends with a newline."""
         return []
 
     def qa_score_caps(self, analysis):
-        """(order, text) QA score caps; order is one of the CAP_* values and text ends with a newline."""
+        """(order, text) QA score caps; text ends with a newline."""
         return []
+
+    def final_state_terms(self, analysis):
+        """Names of the per-person final states this skill renders, for the style-priority rule."""
+        return ()
 
     def claims_correction(self, text, axes, analysis):
         """Whether this skill renders an approved correction_plan item itself instead of the general list."""

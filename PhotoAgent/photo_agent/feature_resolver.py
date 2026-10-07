@@ -745,13 +745,8 @@ def build_compact_editor_prompt(
             "- Apply facial edits locally while keeping the head, body, and surrounding content source-matched."
         )
     if style_footprint and resolved:
-        # Keep the enabled wording compatible with the existing compact
-        # prompt; only omit the body instruction when the feature is inactive.
-        final_state_labels = (
-            "smile, eye state, gaze, hair, or holistic body reshape"
-            if body_reshape_active else
-            "smile, eye state, gaze, or hair"
-        )
+        terms = [term for skill in EDITOR_SKILLS for term in skill.final_state_terms(analysis)]
+        final_state_labels = ", ".join(terms[:-1]) + ", or " + terms[-1]
         if "pose" in style_options:
             portrait_style_priority = (
                 "- Resolved subject final states remain mandatory local endpoints inside the style transformation, but they "

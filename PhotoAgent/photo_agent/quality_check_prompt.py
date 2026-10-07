@@ -3,29 +3,18 @@
 import json
 
 from photo_agent.editor_skills import EDITOR_SKILLS
-from photo_agent.editor_skills.base import CAP_BLINK, QA_SMILE
 from prompts import style_option_entries
 
 
 def _render_skill_qa(analysis):
-    """(checks, caps) text from every skill, with the blank lines the QA prompt keeps before QA_SMILE and CAP_BLINK."""
+    """(checks, caps) text from every skill, each in the skills' order."""
     checks = sorted(
         (entry for skill in EDITOR_SKILLS for entry in skill.qa_checks(analysis)), key=lambda entry: entry[0]
     )
     caps = sorted(
         (entry for skill in EDITOR_SKILLS for entry in skill.qa_score_caps(analysis)), key=lambda entry: entry[0]
     )
-    checks_text = (
-        "".join(text for order, text in checks if order < QA_SMILE)
-        + "\n"
-        + "".join(text for order, text in checks if order >= QA_SMILE)
-    )
-    caps_text = (
-        "".join(text for order, text in caps if order < CAP_BLINK)
-        + "\n"
-        + "".join(text for order, text in caps if order >= CAP_BLINK)
-    )
-    return checks_text, caps_text
+    return "".join(text for _, text in checks), "".join(text for _, text in caps)
 
 
 def build_quality_check_prompt(analysis):

@@ -15,12 +15,6 @@ from prompts import (
 
 from .base import (
     MODE_HEAD_ALIGNED_GAZE,
-    RULE_EYELIDS,
-    RULE_GAZE,
-    RULE_SMILE_GAZE,
-    CAP_BLINK,
-    QA_BLINK,
-    QA_GAZE,
     EditorFeature,
     EditorSkill,
     FollowupEdit,
@@ -481,6 +475,14 @@ def build_blink_pass_targets(analysis):
     return targets, rules
 
 
+_RULE_EYELIDS = 20
+_RULE_SMILE_GAZE = 50
+_RULE_GAZE = 60
+_QA_BLINK = 10
+_QA_GAZE = 50
+_CAP_BLINK = 20
+
+
 BLINK_FEATURE = EditorFeature(
     id="blink",
     label="閉眼偵測",
@@ -515,6 +517,9 @@ class EyesSkill(EditorSkill):
     def features(self):
         return (BLINK_FEATURE, GAZE_FEATURE)
 
+    def final_state_terms(self, analysis):
+        return ("eye state", "gaze")
+
     def contracts(self, analysis, ctx):
         return (
             _gaze_contracts(analysis, ctx.include_gaze)
@@ -542,14 +547,14 @@ class EyesSkill(EditorSkill):
         features = _resolved_features(resolved)
         rules = []
         if "blink" in features:
-            rules.extend((RULE_EYELIDS, rule) for rule in _BLINK_PAIR_RULES)
+            rules.extend((_RULE_EYELIDS, rule) for rule in _BLINK_PAIR_RULES)
         if any({"smile", "gaze"}.issubset(set(item["features"])) for item in resolved):
-            rules.append((RULE_SMILE_GAZE,
+            rules.append((_RULE_SMILE_GAZE,
                 "- Where smile and gaze affect the same person, gaze changes iris/pupil direction only. Let laughter "
                 "narrow both eyelids together through natural cheek lift while retaining clear iris visibility."
             ))
         if "gaze" in features:
-            rules.append((RULE_GAZE,
+            rules.append((_RULE_GAZE,
                 "- For gaze edits, retain iris size/color/texture and pupil proportions; change only necessary sclera balance and catchlight placement, preserving catchlight count, shape, brightness, and light-source logic."
             ))
         return rules
@@ -591,12 +596,13 @@ class EyesSkill(EditorSkill):
 
     def qa_checks(self, analysis):
         return [
-            (QA_BLINK, "- Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyelids are naturally corrected while identity, face shape, glasses, makeup, and expression style remain believable. Check two independent mandatory outcomes at normal viewing size: (1) the repaired eye has the same final eye-opening height and iris exposure as its photograph-side reference eye; (2) it has the same double-eyelid fold shape as that reference eye -- the same fold type, crease visible along the same portion of the lid, the same crease path from inner to outer corner, the same fold arc and peak height, and the same visible crease-to-lash band width. Compare size in face-relative geometry: fixed canthi and horizontal span, matching aperture-height-to-eye-width ratio, and matching upper/lower-lid profiles at the inner, central, and outer thirds, allowing only head-perspective differences rather than demanding duplicated pixels. When exactly one photograph-side source eye was fully closed and the opposite source eye was open, the opposite eye is the reference; compare against its finished state if another approved edit also changed it. When the opposite source eye was itself half-closed or narrowed, both eyes were to be opened, so check the two requirements between the two finished eyes and reject a result that leaves either eye still narrowed or half closed, or that finishes the two eyes at visibly different eye-opening heights. Do not accept a result that improves only one requirement or compensates unequal eye opening with unequal crease width. A formerly closed eye whose crease disappears against the lash line while the reference eye retains a visible double lid fails this check. The result must not be a no-op, merely sharpened eyelids, oversized/doll-like eyes, copied-looking eyes, puffy lids, or an unrelated expression change. If that same person also had an approved gaze repair, verify one coherent final result: the required eyelid match plus exact-lens pupil/iris alignment with natural sclera and catchlights, not two conflicting eye states. If no gaze repair was approved, preserve a natural gaze consistent with the original head direction instead of forcing camera contact.\n"),
-            (QA_GAZE, "- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a clearly visible gaze-direction change actually occurred for the named subject and that the final gaze immediately and unmistakably reads as direct contact with the exact current lens at normal photo-viewing size. The iris/pupil positions and visual axes must aim naturally at the lens, with believable sclera balance and gaze-consistent catchlights. If the approved strategy is eyes_plus_head_face_alignment, verify that the head/face also visibly turned and/or tilted toward the lens by the planned bounded amount; unchanged head direction with pupil-only movement is a failure. If the approved strategy is eyes_only, verify that the original head was already frontal and lens-aligned and that the miss was genuinely tiny. In all cases preserve eyelid openness, identity, expression structure, facial anatomy, neck anatomy, body pose, shoulder direction, torso direction, glasses/reflections, and every unlisted person. Fail the check for a no-op, sharpen/brighten-only eyes, a change visible only in a highly enlarged crop, residual off-camera/near-camera/past-camera/slightly-beside-lens gaze, crossed or strained visual axes, excessive sclera, incompatible head/eye geometry, rotated shoulders/torso, or an unplanned identity/expression change.\n"),
+            (_QA_BLINK, "- Approved accidental blink repair: if the retouch recipe or style/correction plan asked to fix a named person's accidental closed or half-closed eyes, verify that the eyelids are naturally corrected while identity, face shape, glasses, makeup, and expression style remain believable. Check two independent mandatory outcomes at normal viewing size: (1) the repaired eye has the same final eye-opening height and iris exposure as its photograph-side reference eye; (2) it has the same double-eyelid fold shape as that reference eye -- the same fold type, crease visible along the same portion of the lid, the same crease path from inner to outer corner, the same fold arc and peak height, and the same visible crease-to-lash band width. Compare size in face-relative geometry: fixed canthi and horizontal span, matching aperture-height-to-eye-width ratio, and matching upper/lower-lid profiles at the inner, central, and outer thirds, allowing only head-perspective differences rather than demanding duplicated pixels. When exactly one photograph-side source eye was fully closed and the opposite source eye was open, the opposite eye is the reference; compare against its finished state if another approved edit also changed it. When the opposite source eye was itself half-closed or narrowed, both eyes were to be opened, so check the two requirements between the two finished eyes and reject a result that leaves either eye still narrowed or half closed, or that finishes the two eyes at visibly different eye-opening heights. Do not accept a result that improves only one requirement or compensates unequal eye opening with unequal crease width. A formerly closed eye whose crease disappears against the lash line while the reference eye retains a visible double lid fails this check. The result must not be a no-op, merely sharpened eyelids, oversized/doll-like eyes, copied-looking eyes, puffy lids, or an unrelated expression change. If that same person also had an approved gaze repair, verify one coherent final result: the required eyelid match plus exact-lens pupil/iris alignment with natural sclera and catchlights, not two conflicting eye states. If no gaze repair was approved, preserve a natural gaze consistent with the original head direction instead of forcing camera contact.\n"),
+            (_QA_GAZE, "- Approved gaze-contact repair: if a subject's gaze_issue.should_fix=true, or if the retouch recipe or correction plan asked to make a named person's gaze look toward the camera, verify that a clearly visible gaze-direction change actually occurred for the named subject and that the final gaze immediately and unmistakably reads as direct contact with the exact current lens at normal photo-viewing size. The iris/pupil positions and visual axes must aim naturally at the lens, with believable sclera balance and gaze-consistent catchlights. If the approved strategy is eyes_plus_head_face_alignment, verify that the head/face also visibly turned and/or tilted toward the lens by the planned bounded amount; unchanged head direction with pupil-only movement is a failure. If the approved strategy is eyes_only, verify that the original head was already frontal and lens-aligned and that the miss was genuinely tiny. In all cases preserve eyelid openness, identity, expression structure, facial anatomy, neck anatomy, body pose, shoulder direction, torso direction, glasses/reflections, and every unlisted person. Fail the check for a no-op, sharpen/brighten-only eyes, a change visible only in a highly enlarged crop, residual off-camera/near-camera/past-camera/slightly-beside-lens gaze, crossed or strained visual axes, excessive sclera, incompatible head/eye geometry, rotated shoulders/torso, or an unplanned identity/expression change.\n"),
         ]
 
     def qa_score_caps(self, analysis):
-        return [(CAP_BLINK, '- If an approved blink repair leaves either eye closed/narrowed, or leaves visibly unequal normalized aperture, three-point lid contour, iris exposure, or double-eyelid fold path/width, score must be 4 or lower and pass must be false.\n')]
+        # The leading blank line separates the blink cap from the caps above it.
+        return [(_CAP_BLINK, '\n- If an approved blink repair leaves either eye closed/narrowed, or leaves visibly unequal normalized aperture, three-point lid contour, iris exposure, or double-eyelid fold path/width, score must be 4 or lower and pass must be false.\n')]
 
 
 def _has_head_aligned_gaze(resolved):

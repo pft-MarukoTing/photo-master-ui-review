@@ -9,7 +9,7 @@ from prompts import (
     smile_qa_expectation,
 )
 
-from .base import QA_SMILE, RULE_EXPRESSION, RULE_LAUGHTER, EditorFeature, EditorSkill
+from .base import EditorFeature, EditorSkill
 from .face import _BASE_PRESERVE, _EYE_IDENTITY_PRESERVE, _box, _resolved_features
 
 
@@ -67,6 +67,11 @@ def _smile_contracts(analysis):
     return contracts
 
 
+_RULE_EXPRESSION = 30
+_RULE_LAUGHTER = 40
+_QA_SMILE = 40
+
+
 SMILE_FEATURE = EditorFeature(
     id="smile",
     label="笑容調整",
@@ -88,6 +93,9 @@ class ExpressionSkill(EditorSkill):
 
     def features(self):
         return (SMILE_FEATURE,)
+
+    def final_state_terms(self, analysis):
+        return ("smile",)
 
     def contracts(self, analysis, ctx):
         return _smile_contracts(analysis)
@@ -120,14 +128,14 @@ class ExpressionSkill(EditorSkill):
     def face_rules(self, resolved, ctx):
         rules = []
         if "smile" in _resolved_features(resolved):
-            rules.append((RULE_EXPRESSION,
+            rules.append((_RULE_EXPRESSION,
                 "- For every smile target, limit expression movement to mouth-corner position and opening, cheek soft-tissue lift, brow/periocular tension, and eyelid aperture over the fixed landmarks above. Coordinate them as one expression, using the captured mouth center, lip contour/volume, and visible dental characteristics rather than regenerating or beautifying the whole face."
             ))
-            rules.append((RULE_EXPRESSION,
+            rules.append((_RULE_EXPRESSION,
                 "- Retain the original skin age and fold pattern. Existing crow's-feet, under-eye creases, and nasolabial folds may compress minimally but must not become deeper, darker, sharper, longer, or more numerous."
             ))
         if any(item["final_state"].get("smile_level") == "laughing" for item in resolved):
-            rules.append((RULE_LAUGHTER,
+            rules.append((_RULE_LAUGHTER,
                 "- For laughter, show spontaneous joy coherently through the mouth, cheek lift, periocular response, and a compatible relaxed brow; do not leave a neutral, worried, stern, or angry upper face. Reach the requested intensity through coordinated expression—not an oversized mouth or reshaped facial features."
             ))
         return rules
@@ -147,4 +155,5 @@ class ExpressionSkill(EditorSkill):
                 "anatomy, skin texture, gaze direction, head pose, and all unrelated image content remain faithful "
                 "to the original. A changed expression on anyone not named fails this check.\n"
             )
-        return [(QA_SMILE, smile_qa_line)]
+        # The leading blank line separates the expression and gaze checks from those above them.
+        return [(_QA_SMILE, "\n" + smile_qa_line)]

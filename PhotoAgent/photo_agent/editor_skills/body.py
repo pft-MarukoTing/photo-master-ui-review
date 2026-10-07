@@ -2,7 +2,11 @@
 
 from prompts import body_reshape_enabled, build_body_reshape_edit_block, get_body_reshape_edit_prompt
 
-from .base import CAP_BODY, MODE_HOLISTIC_BODY, QA_BODY, EditorFeature, EditorSkill
+from .base import MODE_HOLISTIC_BODY, EditorFeature, EditorSkill
+
+
+_QA_BODY = 30
+_CAP_BODY = 10
 
 
 BODY_RESHAPE_FEATURE = EditorFeature(
@@ -22,6 +26,9 @@ class BodySkill(EditorSkill):
 
     def features(self):
         return (BODY_RESHAPE_FEATURE,) if body_reshape_enabled() else ()
+
+    def final_state_terms(self, analysis):
+        return ("holistic body reshape",) if get_body_reshape_edit_prompt(analysis) else ()
 
     def prompt_modes(self, analysis, resolved, ctx):
         return {MODE_HOLISTIC_BODY} if get_body_reshape_edit_prompt(analysis) else set()
@@ -49,7 +56,7 @@ class BodySkill(EditorSkill):
             "semantic coverage, and nearby scene geometry. Do not require key points, regions, or numeric measurements; "
             "uncertainty should be reported rather than converted into a fabricated percentage.\n"
         )
-        return [(QA_BODY, body_qa_block)]
+        return [(_QA_BODY, body_qa_block)]
 
     def qa_score_caps(self, analysis):
         body_prompt = get_body_reshape_edit_prompt(analysis)
@@ -57,4 +64,4 @@ class BodySkill(EditorSkill):
             "- For Body Reshape, redesigning clothing, changing semantic coverage, damaging anatomy continuity, or "
             "warping nearby content is a major preservation failure: pass must be false and score must be 3 or lower.\n"
         )
-        return [(CAP_BODY, body_qa_score_cap)]
+        return [(_CAP_BODY, body_qa_score_cap)]
