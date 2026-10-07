@@ -39,6 +39,10 @@ class SSIMScore:
       crop_images      : [N] one crop (post crop+resize) per hand
       generated_images : [N] one generated image per hand
       ssim_threshold    : minimum acceptable SSIM per pair
+      raise_on_fail     : if True, raise ValueError("Generated result did not pass ssim
+                          threshold.") when any pair is below ssim_threshold, instead of
+                          returning crop_images. Lets an API caller catch the failure and
+                          match on the message. Default False leaves the behaviour above.
 
     If a pair's spatial size differs, generated_images[i] is resized to
     crop_images[i]'s size before comparison. Both frames are then downsized
@@ -67,6 +71,7 @@ class SSIMScore:
                 "crop_images": ("IMAGE",),
                 "generated_images": ("IMAGE",),
                 "ssim_threshold": ("FLOAT", {"default": 0.76, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "raise_on_fail": ("BOOLEAN", {"default": False}),
             }
         }
 
@@ -76,7 +81,7 @@ class SSIMScore:
     FUNCTION = "compute"
     CATEGORY = "AINail/image"
 
-    def compute(self, crop_images, generated_images, ssim_threshold):
+    def compute(self, crop_images, generated_images, ssim_threshold, raise_on_fail):
         threshold = ssim_threshold[0]
 
         scores = []
@@ -113,6 +118,8 @@ class SSIMScore:
             status = "Success"
             images = generated_images
         else:
+            if raise_on_fail[0]:
+                raise ValueError("Generated result did not pass ssim threshold.")
             status = "Internal Error"
             images = crop_images
 
