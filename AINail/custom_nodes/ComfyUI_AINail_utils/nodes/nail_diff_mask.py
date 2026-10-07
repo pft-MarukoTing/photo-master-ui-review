@@ -91,7 +91,7 @@ class NailDiffMask:
             "required": {
                 "crop_images": ("IMAGE",),
                 "generated_images": ("IMAGE",),
-                "delta_e_threshold": ("FLOAT", {"default": 4.0, "min": 0.0, "max": 100.0, "step": 0.5}),
+                "delta_e_threshold": ("FLOAT", {"default": 1.5, "min": 0.0, "max": 100.0, "step": 0.1}),
                 "open_kernel": ("INT", {"default": 3, "min": 0, "max": 51, "step": 1}),
                 "close_kernel": ("INT", {"default": 5, "min": 0, "max": 51, "step": 1}),
                 "min_area": ("INT", {"default": 20, "min": 0, "max": 65536, "step": 10}),
