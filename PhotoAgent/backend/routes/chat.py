@@ -30,13 +30,13 @@ from flask import Blueprint, current_app, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
-from backend.services import chat_session as store
+from backend.services import chat_queue, chat_session as store
 from backend.services.account import get_history_entry, normalize_username
 from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
-from photo_agent import capabilities, chat_assistant
+from photo_agent import capabilities, chat_assistant, chat_jobs
 from photo_agent.chat_brief import build_brief, resolve_prompt_faces
 from photo_agent.chat_plan import (
     USER_PROMPT_MAX_LEN,
@@ -781,7 +781,9 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
             analysis = None
     tag = {"answers": answers} if answers else {}
     try:
-        answer = chat_assistant.ask(analysis, photo["plan"], photo["status"], history, debug=_debug(), screen=screen)
+        answer = chat_queue.run({
+            "stage": chat_jobs.STAGE_ASK, "analysis": analysis, "plan": photo["plan"],
+            "status": photo["status"], "history": history, "debug": _debug(), "screen": screen})
     except Exception:
         current_app.logger.exception("chat ask failed for %s", photo_id)
         messages = messages + [store.make_message("assistant", card={"type": "llm_error", "photo_id": photo_id, **tag})]
@@ -831,7 +833,7 @@ def prompt_review():
     and changes nothing. The upload page collects the same lines with no
     session, no photo and no analysis to put them against, so they come here
     instead -- the same model, asked the one question this page has
-    (chat_assistant.review_line).
+    (chat_assistant.review_line, run by the worker as a chat job).
 
     The line itself is never rewritten here. It is the user's own words next
     to the face they pointed at, and _name_prompt_faces and the panel's own
@@ -858,7 +860,9 @@ def prompt_review():
             f"people must be a list of at most {PROMPT_REVIEW_PEOPLE_MAX} non-empty strings "
             f"of at most {PROMPT_REVIEW_LABEL_MAX_LEN} characters")
     try:
-        answer = chat_assistant.review_line(text.strip(), prompt, history, [p.strip() for p in people])
+        answer = chat_queue.run({
+            "stage": chat_jobs.STAGE_REVIEW, "line": text.strip(), "prompt": prompt,
+            "history": history, "people": [p.strip() for p in people]})
     except Exception:
         current_app.logger.exception("chat prompt review failed")
         # The model is not a gate the user can be left standing behind: the

@@ -12,14 +12,14 @@ from PIL import Image as PILImage
 
 from server_logger import ServerLogger
 
-from aiserver_utils.queue import fetch_job, set_job_info, set_job_error, set_job_progress
+from aiserver_utils.queue import fetch_job, get_job_info, set_job_info, set_job_error, set_job_progress
 from aiserver_utils.pf_redis import pf_redis_client
 from aiserver_utils.s3 import S3AccessV2
 from aiserver_utils.logger import logger as aiutils_logger
 import aiserver_utils.health_checker as health_checker
 from aiserver_utils.health_checker import HeartBeatV2
 
-from photo_agent import EFFECT_NAME
+from photo_agent import EFFECT_NAME, chat_jobs
 from artifact_store import S3ArtifactStore
 from compatibility_version import CURRENT_COMPATIBILITY_VERSION, MIN_COMPATIBLE_VERSION
 from engine_result_code import RESULT_UNKNOWN_INTERNAL_ERROR, RESULT_AI_SERVICE_TIMEOUT, RESULT_EXCEED_MAX_RESOLUTION
@@ -28,6 +28,9 @@ from job_processor import PhotoAgentJobProcessor
 
 ENGINE_VERSION = 'photoAgent-backbone-peggy-001'
 ENGINE_WORKER_NUM = max(int(os.getenv('ENGINE_WORKER_NUM', '1')), 1)
+# Chat replies (photo_agent/chat_jobs.py) are model calls the page waits on,
+# so they get their own queue and threads instead of queueing behind renders.
+CHAT_WORKER_NUM = max(int(os.getenv('CHAT_WORKER_NUM', '2')), 1)
 # Continuous CPU/GPU/mem sampling, independent of job boundaries -- the
 # per-job usage log in check_queue() only captures usage while a job is
 # in flight, so it misses idle-time baseline between jobs.
@@ -268,6 +271,50 @@ def launch_checking_queue_thread():
     return threads
 
 
+def check_chat_queue():
+    """Answer chat jobs off chat_jobs.CHAT_QUEUE until the process stops.
+
+    No heartbeat busy/idle and no S3: a chat job is a model call or two, its
+    params come in on the info hash and its answer goes back on it, where
+    backend/services/chat_queue.py waits for it.
+    """
+    logger.info('', f'[ChatQueue] start: {chat_jobs.CHAT_QUEUE}')
+    while True:
+        try:
+            res = pf_redis_client.bzpopmin([chat_jobs.CHAT_QUEUE], timeout=10)
+        except Exception as e:
+            logger.error('', f'[ChatQueue] fetch failed: {e}')
+            time.sleep(1)
+            continue
+        if not res:
+            continue
+        job_id = res[1].decode() if isinstance(res[1], bytes) else res[1]
+        tsk_id = None
+        try:
+            info = get_job_info(job_id, keyToGet=['acts', 'tskId']) or {}
+            tsk_id = info.get('tskId')
+            params = info['acts'][0]['params']
+            logger.info(job_id, f"[ChatQueue] {params.get('stage')}")
+            answer = chat_jobs.run(params)
+            set_job_info(job_id=job_id, status="success", endTs=int(time.time() * 1000),
+                         task_id=tsk_id, results={"0_res0": {"answer": answer}})
+        except Exception as e:
+            error_code = e.args[1] if len(e.args) > 1 else RESULT_UNKNOWN_INTERNAL_ERROR
+            logger.error(job_id, f'[ChatQueue] process with error: {e}')
+            set_job_error(job_id, error=error_code, error_code=error_code, task_id=tsk_id, error_message=str(e))
+
+
+def launch_chat_queue_threads():
+    threads = []
+    for i in range(CHAT_WORKER_NUM):
+        thread = threading.Thread(target=check_chat_queue, name=f'chat-worker-{i}')
+        thread.daemon = True
+        thread.start()
+        threads.append(thread)
+    logger.info('', f'Launched {CHAT_WORKER_NUM} chat worker thread(s)')
+    return threads
+
+
 def sample_usage_periodically():
     while True:
         time.sleep(USAGE_SAMPLE_INTERVAL_SEC)
@@ -287,6 +334,7 @@ if __name__ == "__main__":
         init()
 
         threads = launch_checking_queue_thread()
+        launch_chat_queue_threads()
         launch_usage_sampler_thread()
         health_checker.set_engine_ready()
         for t in threads:

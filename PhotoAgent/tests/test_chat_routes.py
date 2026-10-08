@@ -130,6 +130,9 @@ class ChatRoutesTest(unittest.TestCase):
             patch.object(chat, "get_session_id", lambda: next(self.next_job)),
             patch.object(chat, "download_bytes", lambda key, job_id: (json.dumps(self.analysis).encode(), None)),
             patch.object(chat, "get_min_compatible_version", lambda: 3),
+            # The worker's side of a chat job, run in place: only what survives
+            # the trip through the job's info hash gets there.
+            patch.object(chat.chat_queue, "run", lambda params: chat.chat_jobs.run(json.loads(json.dumps(params)))),
             patch.object(api, "record_history", record_history),
             patch.object(api, "get_current_compatibility_version", lambda: 5),
         ]

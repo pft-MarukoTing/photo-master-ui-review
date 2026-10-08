@@ -122,8 +122,10 @@ def _upload_source_thumbnail(image_bytes, src_key, task_id):
         pass
 
 
-def enqueue(engine_param_dict, src_content=None, job_id=None):
-    """Upload src_content (list of bytes, one per srcKey) if given, then enqueue.
+def enqueue(engine_param_dict, src_content=None, job_id=None, queue=MSG_ID_QUEUE):
+    """Upload src_content (list of bytes, one per srcKey) if given, then enqueue
+    on `queue` -- the worker's job queue unless told otherwise (chat jobs have
+    their own, see chat_queue.py).
 
     MTVideoAI's put_job.enqueue() takes a src_content param but never uses it,
     because its frontend uploads directly to S3 via a presigned PUT URL
@@ -154,7 +156,7 @@ def enqueue(engine_param_dict, src_content=None, job_id=None):
     upload_dict["acts"] = json.dumps(engine_param_dict["acts"])
     msg_info_key = MSG_DETAIL_QUEUE.replace("{msg_id}", f"{job_id}")
     redis_conn.hset(msg_info_key, mapping=upload_dict)
-    redis_conn.zadd(MSG_ID_QUEUE, {job_id: timestamp})
+    redis_conn.zadd(queue, {job_id: timestamp})
 
     return job_id
 
