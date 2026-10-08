@@ -8,7 +8,9 @@ lists are read through the existing /result, /source and /history routes.
 
 Every photo is independent: its own status, its own plan. Status moves
 analyzing -> ready (or failed), then ready -> rendering -> ready on each
-render. A photo asked to render while still analyzing is queued and starts,
+render. A 長寬比 the analysis was not planned for re-plans the composition
+right away (pipeline.reframe_stage): ready -> reframing -> ready, after
+which the photo reads its analysis from that reframe job. A photo asked to render while still analyzing is queued and starts,
 with its plan as it is by then, once its analysis is done. The move out of
 analyzing/rendering happens in the status route, when a poll first sees the
 jobs finished; `claim` makes sure only one poll does it, so its messages are
@@ -55,6 +57,10 @@ TERMINAL_STATUSES = ("success", "error")
 # Render bases. Only the original photo for now; rendering on top of an
 # earlier version is meant to be added here without changing the route.
 RENDER_BASES = ("original",)
+# 「重新構圖：…」, the retouch_recipe item a reframe replaces (util.ts REFRAME_RE).
+REFRAME_ITEM_RE = re.compile(r"^重新構圖\s*[:：]")
+# A fixed W:H 長寬比 can only be had by reframing, so its 重新構圖 item stays on.
+FIXED_RATIO_RE = re.compile(r"^\d+(?:\.\d+)?:\d+(?:\.\d+)?$")
 
 
 class _RequestError(Exception):
@@ -116,6 +122,25 @@ def _load_analysis(job_id):
     if download_error or analysis_bytes is None:
         return None, f"failed to download analysis: {download_error}"
     return json.loads(analysis_bytes), None
+
+
+def _analysis_job_id(photo):
+    """The job holding the analysis a photo's plan is read against: its
+    analyze job, or the last reframe that re-planned its composition. The
+    source image and the history row stay on analyze_job_id."""
+    return photo.get("analysis_job_id") or photo["analyze_job_id"]
+
+
+def _planned_for(analysis):
+    """The 長寬比 an analysis's composition was planned for."""
+    return str(analysis.get("_aspect_ratio_pref_at_analysis") or "auto").strip().lower()
+
+
+def _recipe_items(analysis):
+    """retouch_recipe as the chat page lists it (util.ts recipeItems): what
+    the plan's recipe_checked indexes."""
+    items = analysis.get("retouch_recipe")
+    return [x for x in items if isinstance(x, str) and x.strip()] if isinstance(items, list) else []
 
 
 # --- sessions --------------------------------------------------------------
@@ -249,7 +274,7 @@ def add_photos(session_id):
 def photo_analysis(session_id, photo_id):
     user = _user(request.args.get("user"))
     photo = _photo(_session(user, session_id), photo_id)
-    analysis, error = _load_analysis(photo["analyze_job_id"])
+    analysis, error = _load_analysis(_analysis_job_id(photo))
     if error:
         return jsonify({"status": "error" if photo["status"] == "failed" else photo["status"], "error": error})
     return jsonify({"status": "success", "result": {
@@ -279,7 +304,7 @@ def set_active_version(session_id, photo_id):
 def _not_ready(session):
     """Photos still changing: what a batch edit or render "all" waits for."""
     return [{"photo_id": p["photo_id"], "reason": p["status"]}
-            for p in session["photos"] if p["status"] in ("analyzing", "rendering")]
+            for p in session["photos"] if p["status"] in ("analyzing", "reframing", "rendering")]
 
 
 @chat_bp.patch("/sessions/<session_id>/plan")
@@ -305,13 +330,18 @@ def patch_all_plans(session_id):
             raise _RequestError(f"photo {photo['photo_id']}: {error}")
         plans[photo["photo_id"]] = plan
     store.save_batch_plans(user, session_id, defaults, plans)
+    for photo in session["photos"]:
+        if photo["photo_id"] in plans:
+            photo["plan"] = plans[photo["photo_id"]]
+            _reframe_if_needed(user, session_id, photo)
     return jsonify({"defaults": defaults, "photos": [{"photo_id": pid, "plan": plan} for pid, plan in plans.items()]})
 
 
 @chat_bp.patch("/sessions/<session_id>/photos/<photo_id>/plan")
 def patch_photo_plan(session_id, photo_id):
     """One photo's plan, any time. While the photo is rendering this only
-    affects its next render; while it is queued, the queued render uses it."""
+    affects its next render; while it is queued, the queued render uses it.
+    A new 長寬比 on a ready photo starts re-planning its composition."""
     body = _body()
     user = _user(body.get("user"))
     photo = _photo(_session(user, session_id), photo_id)
@@ -319,7 +349,128 @@ def patch_photo_plan(session_id, photo_id):
     if error:
         raise _RequestError(error)
     store.save_photo_plan(user, session_id, photo_id, plan)
-    return jsonify({"photo_id": photo_id, "plan": plan})
+    photo["plan"] = plan
+    _reframe_if_needed(user, session_id, photo)
+    return jsonify({"photo_id": photo_id, "plan": plan, "status": photo["status"]})
+
+
+# --- reframe ---------------------------------------------------------------
+
+def _reframe_if_needed(user, session_id, photo, analysis=None):
+    """Re-plan a ready photo's composition when its plan's 長寬比 is not the
+    one its analysis was planned for -- the results page's 長寬比 change
+    (pipeline.reframe_stage), run as soon as the ratio is picked. A render
+    asked for meanwhile waits in queued_render. Returns True if one started.
+
+    planned_ratio caches the analysis's ratio on the photo, so the common
+    case -- nothing to re-plan -- reads no analysis."""
+    if photo["status"] != "ready":
+        return False
+    ratio = photo["plan"].get("aspect_ratio") or "auto"
+    if photo.get("planned_ratio") == ratio:
+        return False
+    if analysis is None:
+        analysis, error = _load_analysis(_analysis_job_id(photo))
+        if error:
+            current_app.logger.warning("reframe check skipped for %s: %s", photo["photo_id"], error)
+            return False
+    if analysis.get("_skipped_analysis"):
+        return False
+    planned = _planned_for(analysis)
+    if photo.get("planned_ratio") != planned:
+        photo["planned_ratio"] = planned
+        store.save_photo_state(user, session_id, photo)
+    if planned == ratio:
+        return False
+    params, error = _parse_and_validate_params(build_render_form(photo["plan"], "analyze"))
+    if error:
+        current_app.logger.warning("reframe not started for %s: %s", photo["photo_id"], error)
+        return False
+    params["stage"] = "reframe"
+    params["analysis"] = analysis
+    engine_params = get_engine_params_template()
+    engine_params["srcKeys"] = list(photo["src_keys"])
+    engine_params["acts"][0]["params"] = params
+    job_id = enqueue(engine_params, src_content=None)
+    photo["status"] = "reframing"
+    photo["error"] = None
+    photo["pending_reframe"] = {"job_id": job_id, "aspect_ratio": ratio, "previous": planned}
+    store.save_photo_state(user, session_id, photo)
+    return True
+
+
+def _remap_recipe_checked(checked, before, after):
+    """recipe_checked for the reframed analysis. Reframing swaps or moves the
+    重新構圖 item, so positions shift: every other item keeps the state the
+    user gave it, matched by its text; the new 重新構圖 item, and anything
+    else new, starts checked (as frontend/app.js adoptReframedAnalysis)."""
+    if not checked:
+        return []
+    was = {text: not (i < len(checked) and checked[i] is False) for i, text in enumerate(_recipe_items(before))}
+    return [True if REFRAME_ITEM_RE.match(text) else was.get(text, True) for text in _recipe_items(after)]
+
+
+def _advance_reframing(user, session_id, photo, statuses):
+    pending = photo["pending_reframe"]
+    job = _job_status(pending["job_id"], statuses)
+    if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, pending["job_id"]):
+        return []
+    photo_id = photo["photo_id"]
+    photo["status"] = "ready"
+    photo["pending_reframe"] = None
+    queued = photo["queued_render"]
+    after, error = (None, job["error"] or "reframe failed") if job["status"] != "success" \
+        else _load_analysis(pending["job_id"])
+    if error:
+        photo["error"] = error
+        photo["queued_render"] = None
+        messages = [store.make_message("assistant", card={
+            "type": "reframe_failed", "photo_id": photo_id, "aspect_ratio": pending["aspect_ratio"],
+            "previous": pending["previous"], "error": error, "queued_render_cancelled": bool(queued)})]
+        # The 長寬比 goes back to the one the composition is still planned
+        # for -- unless it was changed again meanwhile, which re-plans anew.
+        if photo["plan"].get("aspect_ratio") == pending["aspect_ratio"]:
+            photo["plan"] = {**photo["plan"], "aspect_ratio": pending["previous"]}
+            store.save_photo_plan(user, session_id, photo_id, photo["plan"])
+            store.save_photo_state(user, session_id, photo)
+        elif not _reframe_if_needed(user, session_id, photo):
+            store.save_photo_state(user, session_id, photo)
+        return messages
+
+    before, _ = _load_analysis(_analysis_job_id(photo))
+    if before is not None:
+        checked = _remap_recipe_checked(photo["plan"].get("recipe_checked") or [], before, after)
+        if checked != (photo["plan"].get("recipe_checked") or []):
+            photo["plan"] = {**photo["plan"], "recipe_checked": checked}
+            store.save_photo_plan(user, session_id, photo_id, photo["plan"])
+    photo["analysis_job_id"] = pending["job_id"]
+    photo["planned_ratio"] = _planned_for(after)
+    photo["error"] = None
+    messages = [store.make_message("assistant", card={
+        "type": "reframe_done", "photo_id": photo_id, "aspect_ratio": pending["aspect_ratio"]})]
+    # Changed again while this one ran: re-plan for that one, the queued
+    # render still waiting.
+    if _reframe_if_needed(user, session_id, photo, after):
+        return messages
+    if not queued:
+        store.save_photo_state(user, session_id, photo)
+        return messages
+    photo["queued_render"] = None
+    messages += _start_queued_render(user, session_id, photo, queued)
+    return messages
+
+
+def _start_queued_render(user, session_id, photo, queued):
+    """A render asked for while the photo was busy starts now, with its plan
+    as it is now."""
+    prepared, problem = _prepare_render(photo)
+    if problem:
+        photo["error"] = problem[1]
+        store.save_photo_state(user, session_id, photo)
+        return [store.make_message("assistant", card={
+            "type": "render_failed", "photo_id": photo["photo_id"], "reason": problem[0], "error": problem[1]})]
+    render = _start_render(user, session_id, photo, prepared, queued["base"])
+    return [store.make_message("assistant", card={"type": "render_started", "queued": True, **render})]
 
 
 # --- render ----------------------------------------------------------------
@@ -333,12 +484,19 @@ def _prepare_render(photo):
     if error:
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
     params["stage"] = "finish"
-    analysis, error = _load_analysis(photo["analyze_job_id"])
+    analysis, error = _load_analysis(_analysis_job_id(photo))
     if error:
         return None, ("analysis_unavailable", f"photo {photo['photo_id']}: {error}", 409)
     if not is_compatible(analysis, min_version=get_min_compatible_version()):
         return None, ("analysis_compatibility_version_outdated", "analysis_compatibility_version_outdated", 409)
     selections = build_selections(plan)
+    if FIXED_RATIO_RE.match(plan["aspect_ratio"]) and selections.get("recipe_checked"):
+        # The page keeps this item on for a fixed ratio; so does the render.
+        checked = list(selections["recipe_checked"])
+        for i, text in enumerate(_recipe_items(analysis)):
+            if REFRAME_ITEM_RE.match(text) and i < len(checked):
+                checked[i] = True
+        selections = {**selections, "recipe_checked": checked}
     analysis, error = _apply_review_selections(analysis, selections)
     if error:
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
@@ -401,7 +559,7 @@ def render(session_id):
 
     to_render, to_queue = [], []
     for photo in photos:
-        if photo["status"] == "analyzing" and not photo["queued_render"]:
+        if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
             to_queue.append(photo)
             continue
         if photo["status"] != "ready":
@@ -427,7 +585,7 @@ def render(session_id):
 def _ask_render(user, session_id, photo):
     """A typed 一鍵美化: render now, or queue it while the photo is analyzing,
     as the render route would. Returns the messages that follow the reply."""
-    if photo["status"] == "analyzing" and not photo["queued_render"]:
+    if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
         photo["queued_render"] = {"base": "original"}
         store.save_photo_state(user, session_id, photo)
         renders, queued = [], [photo["photo_id"]]
@@ -471,6 +629,8 @@ def _end_round(user, session_id, photo, history):
         return
     if plan != photo["plan"]:
         store.save_photo_plan(user, session_id, photo["photo_id"], plan)
+        photo["plan"] = plan
+        _reframe_if_needed(user, session_id, photo)
 
 
 def _screen(raw):
@@ -585,6 +745,8 @@ def _apply_directly(user, session_id, photo, reply):
             "type": "adjust_opened", "photo_id": photo_id, "via": "proposal", "auto": True,
             "plan": {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}}))
     store.save_photo_plan(user, session_id, photo_id, plan)
+    photo["plan"] = plan
+    _reframe_if_needed(user, session_id, photo)
     return messages
 
 
@@ -613,7 +775,7 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
     photo_id = photo["photo_id"]
     analysis = None
     if photo["status"] != "analyzing":
-        analysis, error = _load_analysis(photo["analyze_job_id"])
+        analysis, error = _load_analysis(_analysis_job_id(photo))
         if error:
             current_app.logger.warning("chat ask without analysis for %s: %s", photo_id, error)
             analysis = None
@@ -824,20 +986,16 @@ def _advance_analyzing(user, session_id, photo, statuses):
         if brief:
             messages.append(store.make_message("assistant", card={
                 "type": "analysis_brief", "photo_id": photo["photo_id"], **brief}))
+    # A 長寬比 changed while analyzing is re-planned first; a queued render
+    # waits for it.
+    photo["queued_render"] = queued
+    if analysis is not None and _reframe_if_needed(user, session_id, photo, analysis):
+        return messages
+    photo["queued_render"] = None
     if not queued:
         store.save_photo_state(user, session_id, photo)
         return messages
-    # The queued render starts now, with the photo's plan as it is now.
-    prepared, problem = _prepare_render(photo)
-    if problem:
-        photo["error"] = problem[1]
-        store.save_photo_state(user, session_id, photo)
-        messages.append(store.make_message("assistant", card={
-            "type": "render_failed", "photo_id": photo["photo_id"], "reason": problem[0], "error": problem[1]}))
-        return messages
-    render = _start_render(user, session_id, photo, prepared, queued["base"])
-    messages.append(store.make_message("assistant", card={"type": "render_started", "queued": True, **render}))
-    return messages
+    return messages + _start_queued_render(user, session_id, photo, queued)
 
 
 def _advance_rendering(user, session_id, photo, statuses):
@@ -859,6 +1017,8 @@ def _advance_rendering(user, session_id, photo, statuses):
         card = {"type": "render_failed", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
                 "error": photo["error"]}
     store.save_photo_state(user, session_id, photo)
+    # A 長寬比 changed while rendering is re-planned now.
+    _reframe_if_needed(user, session_id, photo)
     return [store.make_message("assistant", card=card)]
 
 
@@ -870,6 +1030,8 @@ def session_status(session_id):
     for photo in session["photos"]:
         if photo["status"] == "analyzing":
             messages += _advance_analyzing(user, session_id, photo, statuses)
+        elif photo["status"] == "reframing" and photo.get("pending_reframe"):
+            messages += _advance_reframing(user, session_id, photo, statuses)
         elif photo["status"] == "rendering" and photo["pending_render"]:
             messages += _advance_rendering(user, session_id, photo, statuses)
     store.append_messages(user, session_id, messages)

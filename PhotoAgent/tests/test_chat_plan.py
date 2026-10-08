@@ -29,10 +29,15 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(current, default_plan())
 
     def test_debug_only_choices_need_debug(self):
-        for patch in ({"render_option": "nano-banana-2"}, {"analysis_model": "gpt-4.1-mini"}, {"aspect_ratio": "1:1"}):
+        for patch in ({"render_option": "nano-banana-2"}, {"analysis_model": "gpt-4.1-mini"}):
             with self.subTest(patch=patch):
                 self.assertIsNone(apply_plan_patch(default_plan(), patch)[0])
                 self.assertIsNotNone(apply_plan_patch(default_plan(), patch, debug=True)[0])
+
+    def test_fixed_aspect_ratios_are_open_to_everyone(self):
+        plan, error = apply_plan_patch(default_plan(), {"aspect_ratio": "4:5"})
+        self.assertIsNone(error)
+        self.assertEqual(plan["aspect_ratio"], "4:5")
 
     def test_run_count_limit_follows_debug(self):
         over = capabilities.GENERAL_MAX_RUN_COUNT + 1

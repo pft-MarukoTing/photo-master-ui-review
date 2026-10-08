@@ -61,10 +61,13 @@ import type {
   Version,
 } from "./types";
 import {
+  aspectLabel,
   clockLabel,
   rememberRenderLabel,
   renderLabelFor,
+  reframeBy,
   renderMeta,
+  reframeLoadingMessage,
   renderSubMessages,
   timeLabel,
   versionsFromMessages,
@@ -313,7 +316,9 @@ function activePhoto(s: Session | null): Photo | null {
   return s.photos.find((p) => p.photo_id === s.active_photo_id) || s.photos[0];
 }
 
-const isBusy = (p: Photo) => p.status === "analyzing" || p.status === "rendering";
+const isBusy = (p: Photo) => p.status === "analyzing" || p.status === "reframing" || p.status === "rendering";
+// 分析放在哪支 job：分析那支，或後來改比例時重新構圖的那支。
+const analysisJob = (p: Photo) => p.analysis_job_id || p.analyze_job_id;
 
 export function App() {
   const [caps, setCaps] = useState<Capabilities | null>(null);
@@ -356,7 +361,9 @@ export function App() {
 
   // Session
   const [session, setSession] = useState<Session | null>(null);
-  const [analyses, setAnalyses] = useState<Record<string, Analysis>>({});
+  // 照片的分析，連同它是哪支 job 的：重新構圖後換一支，就再抓一次；抓到之前
+  // 先沿用舊的，面板才不會收起來又打開。
+  const [analyses, setAnalyses] = useState<Record<string, { job: string; analysis: Analysis }>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [pendingAsk, setPendingAsk] = useState<{ text: string; subjectIndices: number[] } | null>(null);
 
@@ -501,18 +508,21 @@ export function App() {
   const analysisReady =
     !!photo &&
     (photo.status === "ready" ||
+      photo.status === "reframing" ||
       photo.status === "rendering" ||
       messages.some((m) => m.card?.type === "analysis_ready" && m.card.photo_id === photo.photo_id));
   useEffect(() => {
-    if (!session || !photo || !analysisReady || analyses[photo.photo_id]) return;
+    if (!session || !photo || !analysisReady || analyses[photo.photo_id]?.job === analysisJob(photo)) return;
     const pid = photo.photo_id;
+    const job = analysisJob(photo);
     api
       .analysis(session.session_id, pid)
       .then((r) => {
-        if (r.status === "success" && r.result?.analysis) setAnalyses((a) => ({ ...a, [pid]: r.result.analysis }));
+        if (r.status === "success" && r.result?.analysis)
+          setAnalyses((a) => ({ ...a, [pid]: { job, analysis: r.result.analysis } }));
       })
       .catch(() => {});
-  }, [session?.session_id, photo?.photo_id, analysisReady]);
+  }, [session?.session_id, photo?.photo_id, analysisReady, photo && analysisJob(photo)]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   function resetPre() {
@@ -970,7 +980,7 @@ export function App() {
             debugUi={debugUi}
             session={session}
             photo={photo}
-            analysis={analyses[photo.photo_id] || null}
+            analysis={analyses[photo.photo_id]?.analysis || null}
             selected={selected}
             pendingAsk={pendingAsk}
             busy={busy}
@@ -1573,8 +1583,11 @@ function SessionView(props: {
   const roundPlan: Dict | undefined = lastAdjust >= 0 ? messages[lastAdjust].card?.plan : undefined;
   const lastOutcome = [...messages].reverse().find((m) => m.card?.type === "render_done" || m.card?.type === "render_failed");
   const ready = photo.status === "ready" && !!analysis;
-  const fresh = ready && readyIdx >= 0 && lastRender < 0;
-  const roundOpen = ready && lastAdjust > lastRender && lastAdjust > lastCancel;
+  // 改比例後重新構圖時還在同一輪裡：面板留著，只是美化要等它做完。
+  const reframing = photo.status === "reframing";
+  const settled = (ready || reframing) && !!analysis;
+  const fresh = settled && readyIdx >= 0 && lastRender < 0;
+  const roundOpen = settled && lastAdjust > lastRender && lastAdjust > lastCancel;
   const unchanged =
     roundOpen && !!roundPlan && JSON.stringify(canonical(roundPlan)) === JSON.stringify(snapshotOf(photo.plan));
   // 使用者說「不用了」時 AI 會把回覆標成 close：這一輪什麼都沒改，就收起調整，
@@ -2203,6 +2216,31 @@ function SessionView(props: {
             <p class="chat-text chat-error">這次美化沒有成功：{c.error}</p>
           </AssistantMsg>
         );
+      case "reframe_done":
+        return (
+          <AssistantMsg>
+            <p class="chat-text">
+              已{reframeBy(c.aspect_ratio)}重新構圖，美化建議裡的構圖也換成新的了。
+              {idx === messages.length - 1 && !isBusy(photo)
+                ? editing
+                  ? "還想調整什麼就點上面的項目，改好按下方的「美化」我就開始。"
+                  : "按下方的按鈕就會用新構圖美化。"
+                : ""}
+            </p>
+          </AssistantMsg>
+        );
+      case "reframe_failed":
+        return (
+          <AssistantMsg>
+            <p class="chat-text chat-error">
+              {reframeBy(c.aspect_ratio)}重新構圖沒有成功：{c.error}。比例先改回「{aspectLabel(caps, c.previous)}」
+              {c.queued_render_cancelled ? "，排定的美化也一併取消了" : ""}。
+            </p>
+            {idx === messages.length - 1 && !isBusy(photo) && (
+              <p class="chat-text">可以再選一次比例試試，或照現在的構圖按下方的按鈕美化。</p>
+            )}
+          </AssistantMsg>
+        );
       case "ask":
         return (
           <AskBubble
@@ -2267,7 +2305,7 @@ function SessionView(props: {
   );
 
   // 一鍵美化 queues the render before analysis finishes.
-  const renderQueued = photo.status === "analyzing" && messages.some((m) => m.card?.type === "render_requested");
+  const renderQueued = !!photo.queued_render && (photo.status === "analyzing" || reframing);
 
   // 處理中這一份文案兩邊分工：title 壓在左邊畫布的轉環底下講「在做什麼」，
   // text 進聊天那張卡講細節。算在同一個地方，兩邊才不會各講各的。
@@ -2283,9 +2321,16 @@ function SessionView(props: {
               ? "正在辨識照片中的人物、光線與構圖，分析完就回答你的問題…"
               : "正在辨識照片中的人物、光線與構圖…",
         }
-      : photo.status === "rendering"
-        ? { title: "正在美化照片", text: renderSub }
-        : null;
+      : reframing
+        ? {
+            title: "正在重新構圖",
+            text: renderQueued
+              ? "重新構圖完成後會自動開始美化…"
+              : reframeLoadingMessage(photo.pending_reframe?.aspect_ratio),
+          }
+        : photo.status === "rendering"
+          ? { title: "正在美化照片", text: renderSub }
+          : null;
 
   let working = busyCopy ? (
     <AssistantMsg>
@@ -2324,7 +2369,7 @@ function SessionView(props: {
       </QuickBar>
     );
     bar = ["先調整", "照原設定再美化"];
-  } else if (photo.status === "analyzing" && !renderQueued) {
+  } else if ((photo.status === "analyzing" || reframing) && !renderQueued) {
     // 只有一顆還按不下去的「美化」，說的是分析完接下來做什麼。這裡曾經還有一顆
     // 「取消分析」，但後端沒有取消 job 的 API，它做的其實是清掉整個 session 重來 --
     // 一顆說自己會停下分析、實際上是丟掉這張照片的按鈕，不如不要。

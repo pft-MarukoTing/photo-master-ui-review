@@ -372,6 +372,102 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(plan["user_prompt"], "人物 2（照片中從左邊數來第 2 位）：把眼鏡拿掉")
         self.assertEqual(plan["prompt_faces"], [])
 
+    # --- reframe ---------------------------------------------------------
+
+    def per_job_analysis(self, analyses):
+        """download_bytes serving a different analysis per job (default: self.analysis)."""
+        def download(key, job_id):
+            return json.dumps(analyses.get(job_id, self.analysis)).encode(), None
+        p = patch.object(chat, "download_bytes", download)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def patch_plan(self, sid, photo, plan):
+        res = self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"), json={"user": USER, "plan": plan})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        return res.get_json()
+
+    def photo_row(self, sid, photo):
+        return next(p for p in self.status(sid)["session"]["photos"] if p["photo_id"] == photo["photo_id"])
+
+    def cards(self, sid, kind):
+        body = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        return [m["card"] for m in body["messages"] if (m.get("card") or {}).get("type") == kind]
+
+    def test_picking_a_ratio_reframes_right_away(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        before = len(self.enqueued)
+        self.assertEqual(self.patch_plan(sid, photo, {"aspect_ratio": "4:5"})["status"], "reframing")
+        job_id, engine_params = self.enqueued[before]
+        params = engine_params["acts"][0]["params"]
+        self.assertEqual((params["stage"], params["aspect_ratio"]), ("reframe", "4:5"))
+        self.assertEqual(params["analysis"]["subject_category"], "portrait")
+        self.assertEqual(engine_params["srcKeys"], self.enqueued[0][1]["srcKeys"])
+        # Back to the ratio the analysis was planned for: nothing to re-plan.
+        self.jobs[job_id]["status"] = "error"
+        self.status(sid)
+        self.patch_plan(sid, photo, {"aspect_ratio": "auto"})
+        self.assertEqual(len(self.enqueued), before + 1)
+
+    def test_reframe_adopts_the_new_analysis_and_keeps_recipe_picks(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.patch_plan(sid, photo, {"recipe_checked": [False, True, True]})
+        self.patch_plan(sid, photo, {"aspect_ratio": "4:5"})
+        job_id = self.enqueued[-1][0]
+        self.per_job_analysis({job_id: {**self.analysis, "_aspect_ratio_pref_at_analysis": "4:5",
+                                        "retouch_recipe": ["重新構圖：裁成 4:5 人像", "提亮主體", "看向鏡頭"]}})
+        self.jobs[job_id]["status"] = "success"
+        row = self.photo_row(sid, photo)
+        self.assertEqual((row["status"], row["analysis_job_id"], row["planned_ratio"]), ("ready", job_id, "4:5"))
+        self.assertEqual(row["plan"]["recipe_checked"], [True, False, True])
+        self.assertEqual(self.cards(sid, "reframe_done")[0]["aspect_ratio"], "4:5")
+        body = self.client.get(self.url(sid, f"/photos/{photo['photo_id']}/analysis"),
+                               query_string={"user": USER}).get_json()
+        self.assertEqual(body["result"]["analysis"]["retouch_recipe"][0], "重新構圖：裁成 4:5 人像")
+        # Asked for the same ratio again: already planned.
+        before = len(self.enqueued)
+        self.patch_plan(sid, photo, {"aspect_ratio": "4:5"})
+        self.assertEqual(len(self.enqueued), before)
+
+    def test_failed_reframe_puts_the_ratio_back(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.patch_plan(sid, photo, {"aspect_ratio": "1:1"})
+        job_id = self.enqueued[-1][0]
+        self.jobs[job_id].update(status="error", error="boom")
+        row = self.photo_row(sid, photo)
+        self.assertEqual((row["status"], row["plan"]["aspect_ratio"]), ("ready", "auto"))
+        card = self.cards(sid, "reframe_failed")[0]
+        self.assertEqual((card["aspect_ratio"], card["previous"], card["error"]), ("1:1", "auto", "boom"))
+
+    def test_render_while_reframing_waits_for_it(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.patch_plan(sid, photo, {"aspect_ratio": "4:5"})
+        job_id = self.enqueued[-1][0]
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        before = len(self.enqueued)
+        self.status(sid)
+        self.assertEqual(len(self.enqueued), before)
+        self.per_job_analysis({job_id: {**self.analysis, "_aspect_ratio_pref_at_analysis": "4:5"}})
+        self.jobs[job_id]["status"] = "success"
+        self.assertEqual(self.photo_row(sid, photo)["status"], "rendering")
+        params = self.enqueued[-1][1]["acts"][0]["params"]
+        self.assertEqual((params["stage"], params["aspect_ratio"]), ("finish", "4:5"))
+        self.assertEqual(params["analysis"]["_aspect_ratio_pref_at_analysis"], "4:5")
+
+    def test_ratio_picked_while_analyzing_reframes_once_ready(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self.patch_plan(sid, photo, {"aspect_ratio": "16:9"})
+        self.assertEqual(len(self.enqueued), 1)
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.assertEqual(self.photo_row(sid, photo)["status"], "reframing")
+        self.assertEqual(self.enqueued[-1][1]["acts"][0]["params"]["stage"], "reframe")
+
     def test_analysis_route(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)

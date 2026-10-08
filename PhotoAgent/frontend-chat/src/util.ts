@@ -79,6 +79,15 @@ export function recipeItems(a: Analysis): string[] {
 }
 
 export const REFRAME_RE = /^(重新構圖\s*[:：])\s*(.+)$/;
+// 固定的 W:H 比例只能靠重新構圖做到，所以選了它，「重新構圖」那一項就一定要勾。
+export const FIXED_RATIO_RE = /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/;
+
+// 重新構圖中的那一句，和舊版 app.js 的 reframeLoadingMessage 同一份文案。
+export function reframeLoadingMessage(ratio?: string): string {
+  if (!ratio || ratio === "auto") return "由 AI 選擇比例並重新構圖中…";
+  if (ratio === "original") return "依原圖比例重新構圖中…";
+  return `依 ${ratio} 重新構圖中…`;
+}
 
 // ── Settings labels ─────────────────────────────────────────────────────────
 export function renderOptionLabel(caps: Capabilities, id?: string): string {
@@ -96,6 +105,13 @@ export function imageModelLabel(caps: Capabilities, renderOption?: string): stri
 
 export function aspectLabel(caps: Capabilities, value?: string): string {
   return caps.render.aspect_ratios.find((a) => a.value === value)?.label || value || "";
+}
+
+// 「＿重新構圖」前面那一段：依 4:5、依原圖比例、由 AI 選比例。
+export function reframeBy(ratio?: string): string {
+  if (!ratio || ratio === "auto") return "由 AI 選比例";
+  if (ratio === "original") return "依原圖比例";
+  return `依 ${ratio} `;
 }
 
 export function analysisModelLabel(caps: Capabilities, id?: string): string {

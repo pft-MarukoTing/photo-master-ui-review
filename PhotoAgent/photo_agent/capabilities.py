@@ -111,19 +111,20 @@ class Choice:
 
 
 # "auto" follows the analysis's proposed crop, "original" keeps the source
-# frame, the rest force one W:H frame.
+# frame, the rest force one W:H frame. Order and wording mirror
+# frontend/config.js aspectRatioOptions.
 ASPECT_RATIOS: Tuple[Choice, ...] = (
-    Choice("auto", "Auto"),
-    Choice("original", "維持原圖比例"),
-    Choice("1:1", "1:1（方形）", True),
-    Choice("5:4", "5:4（橫）", True),
-    Choice("4:3", "4:3（橫）", True),
-    Choice("3:2", "3:2（橫）", True),
-    Choice("16:9", "16:9（橫）", True),
-    Choice("4:5", "4:5（直）", True),
-    Choice("3:4", "3:4（直）", True),
-    Choice("2:3", "2:3（直）", True),
-    Choice("9:16", "9:16（直）", True),
+    Choice("auto", "AI 建議"),
+    Choice("original", "原圖比例"),
+    Choice("9:16", "9:16（限動）"),
+    Choice("2:3", "2:3（人像）"),
+    Choice("3:4", "3:4（手機）"),
+    Choice("4:5", "4:5（IG 貼文）"),
+    Choice("1:1", "1:1（方形）"),
+    Choice("5:4", "5:4（橫幅）"),
+    Choice("4:3", "4:3（平板）"),
+    Choice("3:2", "3:2（相機）"),
+    Choice("16:9", "16:9（桌布）"),
 )
 
 PRESET_IDS = ("natural", "editorial", "product", "portrait", "custom")

@@ -9,7 +9,7 @@ import { type FaceRef } from "./chat";
 import { faceEntries, LEVEL_OPTIONS, type FaceEntry, type FaceIssue } from "./face";
 import { Icon } from "./icons";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
-import { recipeItems, REFRAME_RE, renderOptionLabel } from "./util";
+import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel } from "./util";
 
 export type Category = "face" | "recipe" | "style" | "prompt" | "settings";
 
@@ -453,23 +453,27 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
   );
 }
 
-function RecipeOptions({ analysis, plan, busy, hot, onPatch }: Body) {
+function RecipeOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   const recipe = recipeItems(analysis);
-  const checked = recipe.map((_, i) => (plan.recipe_checked || [])[i] !== false);
+  // 固定比例只能靠重新構圖做到：那一項一定勾著，要取消得從比例改。
+  const locked = FIXED_RATIO_RE.test(plan.aspect_ratio || "");
+  const checked = recipe.map((_, i) => (locked && REFRAME_RE.test(recipe[i])) || (plan.recipe_checked || [])[i] !== false);
   const order = recipe
     .map((text, i) => ({ text, i, reframe: REFRAME_RE.test(text) }))
     .sort((a, b) => Number(b.reframe) - Number(a.reframe));
   return (
     <ul class="chat-opt-list">
-      {order.map(({ text, i }) => {
+      {order.map(({ text, i, reframe }) => {
         const m = text.match(REFRAME_RE);
+        const fixed = locked && reframe;
         return (
           <li>
             <button
               type="button"
               class={`chat-opt-row${checked[i] ? " is-on" : ""}${hot.has(`recipe_checked.${i}`) ? " is-ai-hot" : ""}`}
               disabled={busy}
-              onClick={() => onPatch({ recipe_checked: checked.map((x, j) => (j === i ? !x : x)) })}
+              aria-disabled={fixed || undefined}
+              onClick={() => !fixed && onPatch({ recipe_checked: checked.map((x, j) => (j === i ? !x : x)) })}
             >
               <span class="chat-opt-box">{checked[i] && <Icon name="check" size={12} />}</span>
               <span>
@@ -483,6 +487,11 @@ function RecipeOptions({ analysis, plan, busy, hot, onPatch }: Body) {
                 )}
               </span>
             </button>
+            {fixed && (
+              <p class="chat-note">
+                選了 {plan.aspect_ratio} 就一定要重新構圖，想取消的話把比例改成「{aspectLabel(caps, "original")}」。
+              </p>
+            )}
           </li>
         );
       })}
@@ -638,6 +647,7 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           </select>
         </label>
       </div>
+      <p class="chat-note">換比例會馬上依新比例重新構圖，美化建議裡的構圖也會跟著換。</p>
       {caps.advanced_options.length > 0 && (
         <div class="chat-settings-portrait">
           <span class="chat-meta">人像修正</span>

@@ -42,8 +42,12 @@ export interface Photo {
   filename?: string;
   case_id?: string;
   analyze_job_id: string;
-  status: "analyzing" | "ready" | "rendering" | "failed";
+  status: "analyzing" | "ready" | "reframing" | "rendering" | "failed";
   error?: string | null;
+  // 改了長寬比後重新構圖的那支 job；完成後分析改從它讀（analysis_job_id）。
+  pending_reframe?: { job_id: string; aspect_ratio: string; previous: string } | null;
+  analysis_job_id?: string | null;
+  planned_ratio?: string | null;
   pending_render?: { action_id: string; job_ids: string[]; base?: string } | null;
   queued_render?: Dict | null;
   active_version?: ActiveVersion | null;

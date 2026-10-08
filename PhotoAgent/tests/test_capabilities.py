@@ -101,7 +101,8 @@ class DescribeTest(unittest.TestCase):
             [o["id"] for o in caps["render"]["options"]],
             ["gpt-image-2.5-sunburst:low", "gpt-image-2.5-sunburst:medium", "gpt-image-2.5-sunburst:high"],
         )
-        self.assertEqual([a["value"] for a in caps["render"]["aspect_ratios"]], ["auto", "original"])
+        self.assertEqual([a["value"] for a in caps["render"]["aspect_ratios"]],
+                         ["auto", "original", "9:16", "2:3", "3:4", "4:5", "1:1", "5:4", "4:3", "3:2", "16:9"])
         self.assertEqual([m["id"] for m in caps["render"]["analysis_models"]], ["gpt-5.6-luna"])
         self.assertEqual(caps["render"]["max_run_count"], capabilities.GENERAL_MAX_RUN_COUNT)
         self.assertEqual(caps["render"]["defaults"]["render_option"], "gpt-image-2.5-sunburst:medium")
