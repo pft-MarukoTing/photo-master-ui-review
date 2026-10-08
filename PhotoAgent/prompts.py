@@ -3627,6 +3627,18 @@ OCCLUDED_PERSON_REMOVAL_RULE = (
 )
 
 
+# Follows the user's direction in the editor prompt. A typed change to the
+# scene (「改成白天」) is taken literally: the sky and the light change, but
+# the people keep the old light and cast no shadow, and look pasted in. The
+# consequences are asked for once, here, rather than by every user.
+USER_SCENE_CONSISTENCY_RULE = (
+    "Whatever this direction changes in the scene -- time of day, season, weather, light or background -- "
+    "carry its physical consequences through the whole frame: every person and object casts a shadow and keeps "
+    "a contact shadow that match the new light's direction and softness, their own lighting and colour match the "
+    "new surroundings, and reflections follow, so nothing looks pasted in."
+)
+
+
 def has_approved_distraction_removal(analysis):
     if "distraction" in _axis_set(analysis.get("rejected_axes")):
         return False

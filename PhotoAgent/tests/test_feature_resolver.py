@@ -10,6 +10,7 @@ from photo_agent.feature_resolver import (
     resolve_feature_contracts,
 )
 from prompts import (
+    USER_SCENE_CONSISTENCY_RULE,
     _BLINK_DETECTION_SECTION,
     _fallback_blink_repair_strategy,
     build_body_reshape_edit_block,
@@ -1751,9 +1752,14 @@ class UserDirectionPriority(unittest.TestCase):
         self.assertIn(self.REVIEWED, block)
         self.assertIn("highest priority", block)
 
+    def test_a_direction_carries_its_scene_through(self):
+        # 「改成白天」 must also bring shadows and matching light on the people.
+        self.assertIn(USER_SCENE_CONSISTENCY_RULE, self._block("將夜間街景改成白天"))
+
     def test_no_direction_claims_no_priority(self):
         block = self._block("")
         self.assertEqual(block, "No additional direction.")
+        self.assertNotIn(USER_SCENE_CONSISTENCY_RULE, block)
 
 
 if __name__ == "__main__":

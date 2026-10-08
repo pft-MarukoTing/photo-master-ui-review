@@ -19,6 +19,7 @@ from config import STYLE_OPTION_VALUE_LABELS
 from prompts import (
     AXIS_ALIASES,
     OCCLUDED_PERSON_REMOVAL_RULE,
+    USER_SCENE_CONSISTENCY_RULE,
     _disabled_issue_subject_indices,
     _has_person,
     _read_smile_states,
@@ -1808,7 +1809,7 @@ def build_compact_editor_prompt(
     user_text = user_direction.strip() or "No additional direction."
     # A supplied user direction outranks every other block of this prompt.
     user_priority_text = (
-        "\nThis user direction has the highest priority."
+        "\nThis user direction has the highest priority.\n" + USER_SCENE_CONSISTENCY_RULE
         if user_text != "No additional direction." else ""
     )
     revision_text = f"\n\nRevision feedback:\n{revision_feedback}" if revision_feedback else ""
