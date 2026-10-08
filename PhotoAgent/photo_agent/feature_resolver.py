@@ -16,6 +16,7 @@ from config import STYLE_OPTION_VALUE_LABELS
 from prompts import (
     OCCLUDED_PERSON_REMOVAL_RULE,
     USER_SCENE_CONSISTENCY_RULE,
+    _has_person,
     build_reviewed_light_color_target,
     build_user_preserved_choices,
     has_approved_alignment_correction,
@@ -634,9 +635,19 @@ def build_compact_editor_prompt(
         analysis, lighting_style=style_options.get("lighting")
     )
     user_preserved_block = build_user_preserved_choices(analysis)
-    subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
-    shared_face_block = render_shared_face_rules(EDITOR_SKILLS, resolved, skill_ctx)
-    skill_execution_block = "".join(skill.execution_block(analysis, resolved, skill_ctx) for skill in EDITOR_SKILLS)
+    has_person = _has_person(analysis)
+    subject_section = ""
+    if has_person:
+        subjects_block = "\n\n".join(subject_blocks) or "No resolved facial or full-groom transformation is active."
+        shared_face_block = render_shared_face_rules(EDITOR_SKILLS, resolved, skill_ctx)
+        skill_execution_block = "".join(
+            skill.execution_block(analysis, resolved, skill_ctx) for skill in EDITOR_SKILLS
+        )
+        subject_section = (
+            "\nResolved subject final states:\n"
+            "Locations identify subjects only; they are not target positions.\n"
+            f"{subjects_block}\n{shared_face_block}{skill_execution_block}"
+        )
     user_text = user_direction.strip() or "No additional direction."
     # A supplied user direction outranks every other block of this prompt.
     user_priority_text = (
@@ -794,6 +805,13 @@ def build_compact_editor_prompt(
         if body_reshape_active else
         "- Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform or add people/objects, or erase them outside an approved local removal; authorized framing may place existing content outside the output frame."
     )
+    # Rules about faces and people are left out of a photo without people.
+    facial_identity_line = (
+        "\n- Preserve each person's anatomical facial proportions and profile identity. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint or selected style explicitly changes viewpoint; then change only the specified orientation and its natural projection, never the underlying anatomy."
+        if has_person else ""
+    )
+    locality_lines = f"\n{facial_locality}\n{portrait_style_priority}" if has_person else ""
+    texture_text = "natural skin and material texture" if has_person else "natural material texture"
     pose_completion_guard = (
         "\n- The result is incomplete if the selected subject keeps essentially the original body pose and only the "
         "expression, gaze, lighting, or color changes, or if the new pose carries a joint bent outside natural range, "
@@ -827,11 +845,7 @@ Required framing:
 
 Other approved corrections:
 {correction_block}
-{style_before_states_block}
-Resolved subject final states:
-Locations identify subjects only; they are not target positions.
-{subjects_block}
-{shared_face_block}{skill_execution_block}
+{style_before_states_block}{subject_section}
 
 {color_block}
 
@@ -841,13 +855,10 @@ Finish:
 {finish_text}{style_after_finish_block}
 
 Global preservation:
-{global_preservation}
-- Preserve each person's anatomical facial proportions and profile identity. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint or selected style explicitly changes viewpoint; then change only the specified orientation and its natural projection, never the underlying anatomy.
+{global_preservation}{facial_identity_line}
 - Preserve these unselected properties from the original: {spatial_preserve_text}.
-{style_scope_text}
-{facial_locality}
-{portrait_style_priority}
-- Preserve natural skin and material texture. Do not add text, logos, watermarks, people, props, or a different background.
+{style_scope_text}{locality_lines}
+- Preserve {texture_text}. Do not add text, logos, watermarks, people, props, or a different background.
 - Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.{pose_completion_guard}{revision_text}
 """
     metadata = {

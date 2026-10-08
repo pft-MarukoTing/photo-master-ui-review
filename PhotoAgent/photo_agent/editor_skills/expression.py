@@ -146,14 +146,13 @@ class ExpressionSkill(EditorSkill):
         # QA is told the expected endpoint here or it reads the new expression as
         # an unrequested change to the moment and caps the score for it.
         smile_expectations = smile_qa_expectation(analysis)
-        smile_qa_line = ""
-        if smile_expectations:
-            smile_qa_line = (
-                "- User-selected smile adjustment: the user asked for these people's smiles to be changed, so the new "
-                f"expression is requested, not a lost moment -- {smile_expectations}. Check that each named person "
-                "reached that overall intensity through a natural, coordinated facial expression. Identity, facial "
-                "anatomy, skin texture, gaze direction, head pose, and all unrelated image content remain faithful "
-                "to the original. A changed expression on anyone not named fails this check.\n"
-            )
-        # The leading blank line separates the expression and gaze checks from those above them.
-        return [(_QA_SMILE, "\n" + smile_qa_line)]
+        if not smile_expectations:
+            return []
+        return [(
+            _QA_SMILE,
+            "- User-selected smile adjustment: the user asked for these people's smiles to be changed, so the new "
+            f"expression is requested, not a lost moment -- {smile_expectations}. Check that each named person "
+            "reached that overall intensity through a natural, coordinated facial expression. Identity, facial "
+            "anatomy, skin texture, gaze direction, head pose, and all unrelated image content remain faithful "
+            "to the original. A changed expression on anyone not named fails this check.\n",
+        )]

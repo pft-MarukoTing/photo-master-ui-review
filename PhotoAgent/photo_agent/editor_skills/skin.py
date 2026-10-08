@@ -12,6 +12,9 @@ _SKIN_TERMS = (
 _SKIN_FALLBACK_AXES = {"white_balance", "hue", "saturation", "tint"}
 _FACE_TONAL_AXES = {"exposure", "shadow", "highlight", "contrast"}
 
+_QA_SKIN = 0
+_CAP_SKIN = 30
+
 
 def _skin_identity_lines(analysis):
     lines = []
@@ -96,6 +99,16 @@ class SkinSkill(EditorSkill):
             "- Keep tone continuous across face, neck, ears, and visible hands, with natural texture and modelling.",
         ])
         return lines
+
+    def qa_checks(self, analysis):
+        if not _has_person(analysis):
+            return []
+        return [(_QA_SKIN, "- Skin: judge each person's skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.\n")]
+
+    def qa_score_caps(self, analysis):
+        if not _has_person(analysis):
+            return []
+        return [(_CAP_SKIN, "- If a person's complexion identity is lost -- lightened toward a paler complexion, flattened, made more saturated, pushed toward yellow, orange, or red without scene-light justification, or broken by a patch or band -- score must be 3 or lower. Coherent warm, cool, or colored light from the scene is not a failure.\n")]
 
     def color_metadata(self, claimed):
         skin_corrections, face_tonal_corrections = _split_claimed(claimed)

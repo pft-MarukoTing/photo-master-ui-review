@@ -108,7 +108,7 @@ Check dimensions:
 - Composition: aspect ratio, layout method, subject placement, empty space, breathing room, context, and visual balance feel intentional for the subject type and scene intent.
 - Alignment and edges: credible horizontals/verticals feel stable unless slant has a clear purpose; output edges are fully photographic with no blank, transparent, checkerboard, or artificial canvas areas.
 - Distraction and scene truth: carry out the approved removal or de-emphasis for each harmful distraction. A planned removal leaves no visible remnant and continues the subject/background plausibly within its footprint. Preserve contextual/neutral elements and the scene outside approved edit areas; do not rebuild, over-simplify, or change its style.
-- Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered. Where there are people, judge skin separately from the overall grade: each person keeps their own depth, undertone, and chroma while retaining plausible scene illumination; face, neck, ears, and hands remain continuous with no patch, band, unexplained hue mismatch, or saturation increase.
+- Retouch quality: light, color, contrast, texture, and finish improve the original without looking synthetic, plastic, or heavily filtered.
 {skill_checks}
 Strict scoring rubric:
 - 9-10: excellent, faithful, polished, intentional framing, no meaningful preservation/crop issues.
@@ -127,7 +127,6 @@ Score caps:
 - If the original scene is visibly rebuilt outside an approved distraction-removal footprint, replaced, over-simplified, or converted into a different environment/style, score must be 3 or lower.
 - If contextual or neutral elements are removed/rebuilt just for cleanliness and this changes scene truth, score must be 3 or lower; if scene truth remains but context is weakened, score must be 5 or lower.
 - If composition method, aspect ratio, empty space, alignment, or context choice visibly weakens the image, score must be 6 or lower; if it also harms required subject completeness or scene intent, score must be 3 or lower.
-- If a person's complexion identity is lost -- lightened toward a paler complexion, flattened, made more saturated, pushed toward yellow, orange, or red without scene-light justification, or broken by a patch or band -- score must be 3 or lower. Coherent warm, cool, or colored light from the scene is not a failure.
 - If output is not safe to show as a demo result, pass must be false and overall_status must be "需人工複查" or "失敗".
 - Preservation failures dominate the score. Do not give a generous middle score just because color or background improved.
 - The numeric score, pass value, overall_status, summary, warnings, and recommendation must be internally consistent.
