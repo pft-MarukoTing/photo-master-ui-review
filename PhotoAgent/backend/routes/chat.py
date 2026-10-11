@@ -36,6 +36,7 @@ from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
+from image_tools import create_preview_bytes, image_to_data_url
 from photo_agent import capabilities, chat_assistant, chat_jobs
 from photo_agent.chat_brief import build_brief, resolve_prompt_faces
 from photo_agent.chat_plan import (
@@ -526,7 +527,10 @@ def _start_render(user, session_id, photo, prepared, base):
     photo["status"] = "rendering"
     photo["error"] = None
     photo["queued_render"] = None
-    photo["pending_render"] = {"action_id": action_id, "job_ids": job_ids, "based_on": based_on, "base": base}
+    # The plan rides along so the finished version's card can keep it: the
+    # next version's note reads what changed from it.
+    photo["pending_render"] = {"action_id": action_id, "job_ids": job_ids, "based_on": based_on, "base": base,
+                               "plan": copy.deepcopy(photo["plan"])}
     store.save_photo_state(user, session_id, photo)
     return {"photo_id": photo["photo_id"], "action_id": action_id, "job_ids": job_ids}
 
@@ -966,6 +970,81 @@ def _name_prompt_faces(user, session_id, photo, analysis):
     store.save_photo_plan(user, session_id, photo["photo_id"], photo["plan"])
 
 
+def _opening_brief(analysis, wishes=""):
+    """With 詳細解說 on: the first note in a retoucher's voice, written
+    by the worker, or None -- the caller then shows the analysis's own summary
+    and issues."""
+    try:
+        brief = chat_queue.run({"stage": chat_jobs.STAGE_OPENING, "analysis": analysis, "wishes": wishes})
+    except Exception:
+        current_app.logger.exception("chat opening failed")
+        return None
+    ok = (isinstance(brief, dict) and isinstance(brief.get("summary"), str)
+          and isinstance(brief.get("issues"), list) and all(isinstance(i, str) for i in brief["issues"]))
+    return brief if ok else None
+
+
+def _note_images(photo, job_id):
+    """(original, result) as small data URLs for the note under a finished
+    version, or (None, None) when either cannot be had -- the note then only
+    says what the version set out to do. The first run stands for a
+    multi-run version."""
+    try:
+        res0 = (get_job_info(job_id, keyToGet=["0_res0"]) or {}).get("0_res0") or {}
+        runs = res0.get("runs")
+        keys = (runs[0].get("cusKeys") if runs else res0.get("cusKeys")) or []
+        src = (photo.get("src_keys") or [None])[0]
+        if not keys or not src:
+            return None, None
+        before, before_error = download_bytes(src, job_id)
+        after, after_error = download_bytes(keys[0], job_id)
+        if before_error or after_error or not before or not after:
+            return None, None
+        return (image_to_data_url(create_preview_bytes(before), "image/jpeg"),
+                image_to_data_url(create_preview_bytes(after), "image/jpeg"))
+    except Exception:
+        current_app.logger.exception("chat render note images failed")
+        return None, None
+
+
+# The last notes a new one is told not to repeat.
+EARLIER_NOTES_MAX = 2
+
+
+def _earlier_versions(user, session_id, photo_id, based_on):
+    """(the plan of the version this one was made from, the notes already
+    shown under this photo's earlier versions). The plan is None for a first
+    version, or for one whose card predates keeping the plan on it."""
+    try:
+        done = [m["card"] for m in store.get_messages(user, session_id, limit=500)
+                if (m.get("card") or {}).get("type") == "render_done" and m["card"].get("photo_id") == photo_id]
+    except Exception:
+        current_app.logger.exception("chat render note history failed")
+        return None, []
+    source = next((c for c in reversed(done) if based_on and c.get("version_id") == based_on), None)
+    notes = [c["note"] for c in done if isinstance(c.get("note"), str)][-EARLIER_NOTES_MAX:]
+    return (source or {}).get("plan"), notes
+
+
+def _render_note(user, session_id, photo, plan, job_id, based_on):
+    """With 詳細解說 on: a retoucher's note on a finished version,
+    written by the worker from the original and the result side by side, or
+    None -- the result card then speaks for itself."""
+    analysis, error = _load_analysis(_analysis_job_id(photo))
+    if error:
+        return None
+    previous_plan, earlier_notes = _earlier_versions(user, session_id, photo["photo_id"], based_on)
+    before, after = _note_images(photo, job_id)
+    try:
+        note = chat_queue.run({"stage": chat_jobs.STAGE_NOTE, "analysis": analysis, "plan": plan,
+                               "previous_plan": previous_plan, "earlier_notes": earlier_notes,
+                               "before": before, "after": after})
+    except Exception:
+        current_app.logger.exception("chat render note failed")
+        return None
+    return note.strip() if isinstance(note, str) and note.strip() else None
+
+
 def _advance_analyzing(user, session_id, photo, statuses):
     job = _job_status(photo["analyze_job_id"], statuses)
     if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, photo["analyze_job_id"]):
@@ -986,7 +1065,9 @@ def _advance_analyzing(user, session_id, photo, statuses):
     if analysis is not None:
         # Before the queued render below reads the plan.
         _name_prompt_faces(user, session_id, photo, analysis)
-        brief = build_brief(analysis)
+        detailed = photo["plan"].get("detailed_explanation")
+        brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
+                 or build_brief(analysis))
         if brief:
             messages.append(store.make_message("assistant", card={
                 "type": "analysis_brief", "photo_id": photo["photo_id"], **brief}))
@@ -1014,8 +1095,15 @@ def _advance_rendering(user, session_id, photo, statuses):
     photo["pending_render"] = None
     if succeeded:
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
+        plan = pending.get("plan") or photo["plan"]
         card = {"type": "render_done", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
-                "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded]}
+                "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded],
+                # Kept so the next version's note can tell what changed.
+                "plan": plan}
+        if plan.get("detailed_explanation"):
+            note = _render_note(user, session_id, photo, plan, succeeded[0], pending.get("based_on"))
+            if note:
+                card["note"] = note
     else:
         photo["error"] = next((j["error"] for j in jobs.values() if j["error"]), None) or "render failed"
         card = {"type": "render_failed", "photo_id": photo["photo_id"], "version_id": pending["action_id"],

@@ -1,7 +1,7 @@
 import type { Capabilities, Plan } from "./types";
 import { renderOptionLabel } from "./util";
 
-export type Settings = Pick<Plan, "analysis_model" | "render_option" | "aspect_ratio" | "advanced_options">;
+export type Settings = Pick<Plan, "analysis_model" | "render_option" | "aspect_ratio" | "advanced_options" | "detailed_explanation">;
 
 export function defaultSettings(caps: Capabilities): Settings {
   const d = caps.render.defaults;
@@ -10,12 +10,16 @@ export function defaultSettings(caps: Capabilities): Settings {
     render_option: d.render_option,
     aspect_ratio: d.aspect_ratio,
     advanced_options: Object.fromEntries(caps.advanced_options.map((o) => [o.key, o.default])),
+    detailed_explanation: false,
   };
 }
 
 export function settingsOf(plan: Plan): Settings {
   const { analysis_model, render_option, aspect_ratio, advanced_options } = plan;
-  return { analysis_model, render_option, aspect_ratio, advanced_options: { ...(advanced_options || {}) } };
+  return {
+    analysis_model, render_option, aspect_ratio, advanced_options: { ...(advanced_options || {}) },
+    detailed_explanation: !!plan.detailed_explanation,
+  };
 }
 
 export function sameSettings(a: Settings, b: Settings) {
@@ -99,6 +103,23 @@ export function SettingsEditor({
             </label>
           );
         })}
+      </div>
+      <div class="chat-settings-portrait">
+        <span class="chat-meta">對話風格</span>
+        <p class="chat-note">打開後，助理會更詳細地說明分析、建議與每一版的成果。</p>
+        <label class="chat-switch-row">
+          <span class="ios-switch">
+            <input
+              type="checkbox"
+              checked={!!settings.detailed_explanation}
+              onChange={(e) => set({ detailed_explanation: (e.currentTarget as HTMLInputElement).checked })}
+            />
+            <span class="ios-track">
+              <span class="ios-thumb" />
+            </span>
+          </span>
+          <span>詳細解說</span>
+        </label>
       </div>
     </div>
   );

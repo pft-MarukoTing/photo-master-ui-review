@@ -252,7 +252,14 @@ const qaCache = new Map<string, { verdict: string; score: string; pass: boolean 
 
 // next：這是最新的一版、下方正擺著「調整」時才講下一步。舊的結果卡不講，不然
 // 往上捲會看到每一版都在叫人去按一顆已經不在的按鈕。
-export function ResultCard({ job, ordinal, failed, next }: { job: string; ordinal: number; failed: number; next?: boolean }) {
+// note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。
+export function ResultCard({ job, ordinal, failed, next, note }: {
+  job: string;
+  ordinal: number;
+  failed: number;
+  next?: boolean;
+  note?: string;
+}) {
   const [qa, setQa] = useState(qaCache.get(job) || null);
   useEffect(() => {
     if (qa) return;
@@ -284,6 +291,7 @@ export function ResultCard({ job, ordinal, failed, next }: { job: string; ordina
       <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />
       <figcaption class="chat-result-cap">
         <h4>第 {ordinal} 版完成</h4>
+        {note && <p class="chat-text">{note}</p>}
         {qa && (
           <div class="chat-verdict">
             輸出評語 <b class={qa.pass ? "" : "is-warn"}>{qa.verdict}</b>

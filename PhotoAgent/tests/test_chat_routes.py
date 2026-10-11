@@ -343,6 +343,33 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual((brief["photo_id"], brief["summary"], brief["issues"]), (photo["photo_id"], "海邊合照", ["偏暗"]))
         self.assertNotIn("questions", brief)
 
+    def test_with_detailed_explanation_the_brief_is_the_opening(self):
+        self.analysis.update({"photo_summary": "海邊合照", "detected_issues": ["偏暗"]})
+        opening = {"lead": "海邊的光很好，我會先處理這幾件事：", "points": ["把主體提亮，臉會更清楚。"]}
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": True}})
+        photo = self.add_photos(sid)[0]
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        seen = []
+        with patch.object(chat.chat_assistant, "call_opening", lambda context: seen.append(context) or opening):
+            brief = self.status(sid)["new_messages"][1]["card"]
+        self.assertEqual((brief["summary"], brief["issues"]), (opening["lead"], opening["points"]))
+        self.assertIn("WISHES: ", seen[0])
+
+    def test_a_failed_opening_keeps_the_plain_brief(self):
+        self.analysis.update({"photo_summary": "海邊合照", "detected_issues": ["偏暗"]})
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": True}})
+        photo = self.add_photos(sid)[0]
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+
+        def fail(context):
+            raise RuntimeError("model down")
+
+        with patch.object(chat.chat_assistant, "call_opening", fail):
+            brief = self.status(sid)["new_messages"][1]["card"]
+        self.assertEqual((brief["summary"], brief["issues"]), ("海邊合照", ["偏暗"]))
+
     def test_upload_page_face_picks_are_named_from_the_analysis(self):
         """The 個人化需求 written before the analysis says 人物 1; by the time
         the analysis lands that face is called left, and the box is what says
@@ -526,6 +553,81 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(self.client.get(self.url(sid), query_string={"user": USER}).get_json()["defaults"]["run_count"], 2)
 
     # --- render ------------------------------------------------------------
+
+    def test_with_detailed_explanation_a_finished_version_carries_a_note(self):
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": True}})
+        photo = self.ready_photo(sid)
+        self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
+                          json={"user": USER, "plan": {"user_prompt": "warmer"}})
+        render = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()["renders"][0]
+        seen = []
+
+        def model(context, images=()):
+            seen.append((context, images))
+            return {"note": "色調暖了一點。"}
+
+        self.jobs[render["job_ids"][0]]["status"] = "success"
+        with patch.object(chat.chat_assistant, "call_render_note", model), \
+                patch.object(chat, "_note_images", lambda photo, job_id: ("data:before", "data:after")):
+            card = self.status(sid)["new_messages"][0]["card"]
+        self.assertEqual((card["type"], card["note"]), ("render_done", "色調暖了一點。"))
+        context, images = seen[0]
+        self.assertIn('"user_prompt":"warmer"', context)
+        # The original and this version, side by side.
+        self.assertEqual(images, [("BEFORE (the original photo):", "data:before"), ("AFTER (this version):", "data:after")])
+
+    def test_the_next_note_knows_what_changed_and_what_was_said(self):
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": True}})
+        photo = self.ready_photo(sid)
+        seen = []
+
+        def model(context, images=()):
+            seen.append(context)
+            return {"note": f"note {len(seen)}"}
+
+        with patch.object(chat.chat_assistant, "call_render_note", model):
+            first = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()
+            self.jobs[first["renders"][0]["job_ids"][0]]["status"] = "success"
+            self.assertEqual(self.status(sid)["new_messages"][0]["card"]["plan"]["user_prompt"], "")
+            self.client.patch(self.url(sid, f"/photos/{photo['photo_id']}/plan"),
+                              json={"user": USER, "plan": {"user_prompt": "warmer"}})
+            second = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()
+            self.jobs[second["renders"][0]["job_ids"][0]]["status"] = "success"
+            self.status(sid)
+        self.assertIn("THIS ROUND: (first version)", seen[0])
+        self.assertIn('THIS ROUND: [{"label":"個人化需求","added":["warmer"]}]', seen[1])
+        self.assertIn("EARLIER NOTES:\n- note 1", seen[1])
+
+    def test_without_detailed_explanation_there_is_no_note(self):
+        sid = self.new_session()
+        self.ready_photo(sid)
+        render = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()["renders"][0]
+        self.jobs[render["job_ids"][0]]["status"] = "success"
+
+        def never(context, images=()):
+            raise AssertionError("no note without detailed explanation")
+
+        with patch.object(chat.chat_assistant, "call_render_note", never):
+            card = self.status(sid)["new_messages"][0]["card"]
+        self.assertEqual(card["type"], "render_done")
+        self.assertNotIn("note", card)
+
+    def test_a_failed_note_leaves_the_card_without_one(self):
+        sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": True}})
+        self.ready_photo(sid)
+        render = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()["renders"][0]
+        self.jobs[render["job_ids"][0]]["status"] = "success"
+
+        def fail(context, images=()):
+            raise RuntimeError("model down")
+
+        with patch.object(chat.chat_assistant, "call_render_note", fail):
+            card = self.status(sid)["new_messages"][0]["card"]
+        self.assertEqual(card["type"], "render_done")
+        self.assertNotIn("note", card)
 
     def test_render_fans_out_and_records_a_version(self):
         sid = self.new_session()

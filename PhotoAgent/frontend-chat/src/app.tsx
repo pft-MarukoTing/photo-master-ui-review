@@ -2205,6 +2205,7 @@ function SessionView(props: {
               ordinal={v.ordinal}
               failed={(c.failed_job_ids || []).length}
               next={idx === lastRender && !adjusting}
+              note={typeof c.note === "string" ? c.note : undefined}
             />
             {answerIn(idx)}
           </AssistantMsg>

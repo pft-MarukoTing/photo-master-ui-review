@@ -20,6 +20,8 @@ export interface Plan {
   run_count?: number;
   user_prompt?: string;
   overwrite_prompt?: boolean;
+  // 設定 → 詳細解說: how the assistant's replies sound.
+  detailed_explanation?: boolean;
   style_options?: Record<string, string>;
   advanced_options?: Record<string, boolean>;
   recipe_checked?: boolean[];

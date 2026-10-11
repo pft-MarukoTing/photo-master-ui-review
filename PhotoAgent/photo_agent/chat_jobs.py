@@ -26,7 +26,14 @@ CHAT_QUEUE = os.getenv("REDIS_CHAT_QUEUE") or (
 STAGE_ASK = "chat_ask"
 # One line typed on the upload page: chat_assistant.review_line.
 STAGE_REVIEW = "chat_review"
-STAGES = (STAGE_ASK, STAGE_REVIEW)
+# The first note on a freshly analyzed photo, with 詳細解說 on:
+# chat_assistant.write_opening.
+STAGE_OPENING = "chat_opening"
+# The note under a finished version, with 詳細解說 on:
+# chat_assistant.write_render_note. The backend sends the two images as
+# small data URLs, so this job needs no S3 either.
+STAGE_NOTE = "chat_note"
+STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE)
 
 
 def run(params):
@@ -39,4 +46,10 @@ def run(params):
     if stage == STAGE_REVIEW:
         return chat_assistant.review_line(
             params["line"], params.get("prompt", ""), params.get("history", []), params.get("people", []))
+    if stage == STAGE_OPENING:
+        return chat_assistant.write_opening(params.get("analysis"), params.get("wishes") or "")
+    if stage == STAGE_NOTE:
+        return chat_assistant.write_render_note(
+            params.get("analysis"), params["plan"], before=params.get("before"), after=params.get("after"),
+            previous_plan=params.get("previous_plan"), earlier_notes=params.get("earlier_notes") or ())
     raise RuntimeError(f"unknown chat stage: {stage}", RESULT_INVALID_PARAMETER)

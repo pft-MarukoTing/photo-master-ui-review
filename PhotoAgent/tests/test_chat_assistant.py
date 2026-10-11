@@ -22,13 +22,13 @@ def analysis():
     }
 
 
-def model_says(reply="好", action="none", patch=None, options=None, lines=False):
+def model_says(reply="好", action="none", patch=None, options=None, lines=False, your_pick=False):
     seen = []
 
     def model(context):
         seen.append(context)
         return {"reply": reply, "action": action, "patch_json": json.dumps(patch, ensure_ascii=False) if patch else "",
-                "options": options or [], "lines": lines}
+                "options": options or [], "lines": lines, "your_pick": your_pick}
 
     model.seen = seen
     return model
@@ -40,6 +40,15 @@ def ask(model, plan=None, history=None):
 
 
 class AskTest(unittest.TestCase):
+    def test_the_version_note_reaches_the_model(self):
+        model = model_says()
+        history = [
+            {"role": "assistant", "text": "", "card": {"type": "render_done", "photo_id": "p1", "note": "臉有點平，要不要補一點陰影？"}},
+            {"role": "user", "text": "好", "card": {"type": "ask", "photo_id": "p1"}},
+        ]
+        ask(model, history=history)
+        self.assertIn("assistant: [version done] 臉有點平，要不要補一點陰影？", model.seen[0])
+
     def test_plain_reply(self):
         result = ask(model_says("這是一張海邊合照。"))
         self.assertEqual(result, {"reply": "這是一張海邊合照。", "render": False, "proposal": None, "options": [], "close": False, "lines": False})
@@ -161,7 +170,20 @@ class AskTest(unittest.TestCase):
         self.assertEqual(result["proposal"]["patch"]["user_prompt"], "左邊女性的外套改成藍色、把眼鏡拿掉")
         self.assertTrue(result["proposal"]["direct"])
         self.assertEqual(result["proposal"]["undo"], {"user_prompt": "左邊女性的外套改成藍色"})
+        self.assertEqual(result["reply"], "好，記下了：左邊女性把眼鏡拿掉。")
+
+    def test_a_long_wish_is_not_read_back(self):
+        result = ask(model_says(patch={"user_prompt": "把背景換成傍晚的海邊，天空要有粉紫色的晚霞，海面反射夕陽的金光"}))
         self.assertEqual(result["reply"], "好，已加進個人化需求。")
+
+    def test_the_ais_own_pick_waits_for_the_card(self):
+        plan = default_plan()
+        plan["user_prompt"] = "在照片上加上文字「盛夏」"
+        reply = "白字配淡淡的深藍陰影最好，在藍色水面前也看得清楚，確認後套用。"
+        result = ask(model_says(reply, patch={"user_prompt": "在照片上加上文字「盛夏」；文字用白色加淡深藍陰影"},
+                                your_pick=True), plan=plan)
+        self.assertNotIn("direct", result["proposal"])
+        self.assertEqual(result["reply"], reply)
 
     def test_a_wish_for_someone_else_asks(self):
         two = analysis()
@@ -245,7 +267,8 @@ class AskTest(unittest.TestCase):
     def test_context_leaves_out_prompts_and_carries_the_conversation(self):
         model = model_says()
         history = [
-            {"role": "assistant", "text": "", "card": {"type": "analysis_brief", "photo_id": "p1"}},
+            {"role": "assistant", "text": "", "card": {"type": "analysis_brief", "photo_id": "p1",
+                                                       "summary": "海邊合照。", "issues": ["偏暗", "裁成 4:5"]}},
             {"role": "assistant", "text": "", "card": {"type": "llm_reply", "text": "可以改柔光", "proposal": {
                 "changes": [{"label": "光線"}]}}},
             {"role": "user", "text": "", "card": {"type": "proposal_resolved", "choice": "apply"}},
@@ -261,7 +284,8 @@ class AskTest(unittest.TestCase):
         self.assertNotIn("1:gaze_issue", context)
         self.assertTrue(context.rstrip().endswith("user: 再亮一點"))
         self.assertIn("assistant: 可以改柔光 [proposed: 光線]", context)
-        self.assertIn("user: [proposal apply]", context)
+        self.assertIn("user: [applied the proposal above]", context)
+        self.assertIn("assistant: [analysis summary shown] 海邊合照。 偏暗；裁成 4:5", context)
 
     # The upload page's conversation comes along into the session; a line
     # pointed there has a position, not a name.
@@ -328,6 +352,104 @@ class ReviewLineTest(unittest.TestCase):
         def model(context):
             return {"verdict": "keep", "reply": "好，記下來了。還有別的嗎？", "line": "", "options": [], "later": False}
         self.assertEqual(chat_assistant.review_line("外套換成藍色", "", model=model)["reply"], "好，記下來了。還有別的嗎？")
+
+
+class DetailedExplanationTest(unittest.TestCase):
+    def test_the_voice_is_only_there_when_turned_on(self):
+        off, on = model_says(), model_says()
+        ask(off)
+        plan = default_plan()
+        plan["detailed_explanation"] = True
+        ask(on, plan=plan)
+        self.assertNotIn(chat_assistant.VOICE, off.seen[0])
+        self.assertIn(chat_assistant.VOICE, on.seen[0])
+
+
+class RenderNoteTest(unittest.TestCase):
+    def test_the_note_reads_what_the_plan_applied(self):
+        seen = []
+
+        def model(context, images):
+            seen.append(context)
+            self.assertEqual(images, [])
+            return {"note": " 這一版重點放在提亮主體。 "}
+
+        plan = default_plan()
+        plan["recipe_checked"] = [True, False, True]
+        self.assertEqual(chat_assistant.write_render_note(analysis(), plan, model=model), "這一版重點放在提亮主體。")
+        self.assertTrue(seen[0].startswith(chat_assistant.RENDER_NOTE_INSTRUCTION))
+        self.assertIn('{"text":"看向鏡頭","kept":false}', seen[0])
+        self.assertNotIn("SECRET PROMPT", seen[0])
+
+    def test_a_later_version_is_told_what_this_round_changed(self):
+        seen = []
+        before, after = default_plan(), default_plan()
+        before["user_prompt"] = "改成白天"
+        after["user_prompt"] = "改成白天；加上標題「台北」"
+        chat_assistant.write_render_note(analysis(), after, previous_plan=before, earlier_notes=["裁成 4:5 了。", " "],
+                                         model=lambda c, i: seen.append(c) or {"note": "x"})
+        # Only the wish this round added, not the whole 個人化需求 again.
+        self.assertIn('THIS ROUND: [{"label":"個人化需求","added":["加上標題「台北」"]}]', seen[0])
+        self.assertIn("EARLIER NOTES:\n- 裁成 4:5 了。", seen[0])
+
+    def test_a_first_version_says_so(self):
+        seen = []
+        chat_assistant.write_render_note(analysis(), default_plan(), model=lambda c, i: seen.append(c) or {"note": "x"})
+        self.assertIn("THIS ROUND: (first version)", seen[0])
+        self.assertIn("EARLIER NOTES:\n（無）", seen[0])
+
+    def test_an_empty_note_is_none(self):
+        self.assertIsNone(chat_assistant.write_render_note(analysis(), default_plan(), model=lambda c, i: {"note": " "}))
+
+    def test_with_both_images_the_model_compares_them(self):
+        seen = []
+
+        def model(context, images):
+            seen.append((context, images))
+            return {"note": "天空的偏黃收掉了。"}
+
+        note = chat_assistant.write_render_note(analysis(), default_plan(), before="data:a", after="data:b", model=model)
+        self.assertEqual(note, "天空的偏黃收掉了。")
+        context, images = seen[0]
+        self.assertTrue(context.startswith(chat_assistant.RENDER_REVIEW_INSTRUCTION))
+        self.assertIn("三分法（井字構圖）", context)
+        self.assertEqual(images, [("BEFORE (the original photo):", "data:a"), ("AFTER (this version):", "data:b")])
+
+    def test_one_image_is_not_a_comparison(self):
+        seen = []
+        chat_assistant.write_render_note(analysis(), default_plan(), before="data:a",
+                                         model=lambda c, i: seen.append((c, i)) or {"note": "x"})
+        self.assertEqual(seen[0][1], [])
+        self.assertTrue(seen[0][0].startswith(chat_assistant.RENDER_NOTE_INSTRUCTION))
+
+
+class OpeningTest(unittest.TestCase):
+    def test_the_opening_speaks_from_the_recipe(self):
+        seen = []
+
+        def model(context):
+            seen.append(context)
+            return {"lead": " 海邊的光很好。 ", "points": ["把主體提亮。", "", "看向鏡頭。", "裁成 4:5。", "多一句。"]}
+
+        brief = chat_assistant.write_opening(analysis(), model=model)
+        self.assertEqual(brief, {"summary": "海邊的光很好。", "issues": ["把主體提亮。", "看向鏡頭。", "裁成 4:5。"]})
+        self.assertIn("RECIPE:\n- 提亮主體\n- 看向鏡頭\n- 裁成 4:5", seen[0])
+        self.assertNotIn("SECRET PROMPT", seen[0])
+        self.assertIn("WISHES: （無）", seen[0])
+
+    def test_the_opening_hears_the_users_wishes(self):
+        seen = []
+        chat_assistant.write_opening(analysis(), " 天空改成夕陽 ",
+                                     model=lambda c: seen.append(c) or {"lead": "x", "points": ["y"]})
+        self.assertIn("WISHES: 天空改成夕陽", seen[0])
+
+    def test_no_recipe_no_model(self):
+        def model(context):
+            raise AssertionError("the model was asked")
+        self.assertIsNone(chat_assistant.write_opening({"photo_summary": "海邊"}, model=model))
+
+    def test_an_empty_answer_keeps_the_plain_brief(self):
+        self.assertIsNone(chat_assistant.write_opening(analysis(), model=lambda c: {"lead": "", "points": ["x"]}))
 
 
 if __name__ == "__main__":

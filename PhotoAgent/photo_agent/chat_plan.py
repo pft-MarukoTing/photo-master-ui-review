@@ -41,6 +41,9 @@ def default_settings():
         "overwrite_prompt": False,
         "style_options": {},
         "advanced_options": normalize_advanced_options(None),
+        # The assistant speaks as a senior retoucher (chat_assistant.VOICE).
+        # A setting, not a style: it changes how replies read, not the render.
+        "detailed_explanation": False,
     }
 
 
@@ -127,9 +130,9 @@ def _apply_setting(plan, key, value, debug):
     elif key == "user_prompt":
         if not isinstance(value, str) or len(value) > USER_PROMPT_MAX_LEN:
             raise ValueError(f"plan.user_prompt must be a string of at most {USER_PROMPT_MAX_LEN} characters")
-    elif key == "overwrite_prompt":
+    elif key in ("overwrite_prompt", "detailed_explanation"):
         if not isinstance(value, bool):
-            raise ValueError("plan.overwrite_prompt must be a boolean")
+            raise ValueError(f"plan.{key} must be a boolean")
     elif key == "style_options":
         if not isinstance(value, dict):
             raise ValueError("plan.style_options must be a JSON object")

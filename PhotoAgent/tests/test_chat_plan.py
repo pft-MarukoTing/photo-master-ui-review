@@ -97,6 +97,18 @@ class PhotoOnlyTest(unittest.TestCase):
         self.assertEqual(plan["recipe_checked"], [False])
 
 
+class DetailedExplanationTest(unittest.TestCase):
+    def test_off_by_default_and_a_boolean(self):
+        self.assertIs(default_plan()["detailed_explanation"], False)
+        plan, error = apply_plan_patch(default_plan(), {"detailed_explanation": True}, settings_only=True)
+        self.assertIsNone(error)
+        self.assertIs(plan["detailed_explanation"], True)
+        self.assertNotIn("detailed_explanation", build_render_form(plan, "finish"))
+        plan, error = apply_plan_patch(default_plan(), {"detailed_explanation": "yes"})
+        self.assertIsNone(plan)
+        self.assertIn("detailed_explanation", error)
+
+
 class BuildTest(unittest.TestCase):
     def test_selections_come_from_the_plan(self):
         plan, _ = apply_plan_patch(default_plan(), {"style_options": {"pose": "cheer"}, "recipe_checked": [False]})
