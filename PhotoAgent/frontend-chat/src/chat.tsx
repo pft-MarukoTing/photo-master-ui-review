@@ -239,20 +239,18 @@ function stepMarks(count: number): number[] {
 }
 
 // 講到第幾句照這一段開始了多久算，不靠計數器：輪詢每 2 秒就重畫一次，算時間的話
-// 重畫幾次都不會多跳一句。換段在 render 裡當下收起來，不等 effect -- 不然分析接
-// 美化的那一格畫面，前面講過的會先消失一下。
+// 重畫幾次都不會多跳一句。
+// 每一段各是一張卡：分析做完，它那張卡就收掉、換成分析結果，美化從新的一張卡重新
+// 講、秒數也從頭算 -- 接著疊在同一張卡裡的話，分析結果會被一路往上擠。
 export function useWorkLog(
   stage: string | null,
   lines: string[],
 ): { done: string[]; now: string; since: number } {
   const log = useRef({
     stage: null as string | null,
-    // since：這一整輪從什麼時候開始忙（秒數從這裡算，換段不歸零）；start：這一段。
-    since: 0,
     start: 0,
     marks: [] as number[],
     lines: [] as string[],
-    past: [] as string[],
   });
   const [, tick] = useState(0);
   const said = (l: typeof log.current) => {
@@ -261,8 +259,6 @@ export function useWorkLog(
   };
   const l = log.current;
   if (stage !== l.stage) {
-    l.past = stage && l.stage ? [...l.past, ...l.lines.slice(0, said(l))] : [];
-    if (stage && !l.stage) l.since = Date.now();
     l.stage = stage;
     l.start = Date.now();
     l.marks = stepMarks(lines.length);
@@ -286,7 +282,7 @@ export function useWorkLog(
   }, [stage]);
   const n = said(l);
   if (!stage || !n) return { done: [], now: "", since: 0 };
-  return { done: [...l.past, ...lines.slice(0, n - 1)], now: lines[n - 1], since: l.since };
+  return { done: lines.slice(0, n - 1), now: lines[n - 1], since: l.start };
 }
 
 // 處理中的那張卡。左邊畫布上壓著一層轉環，上面已經寫了「正在分析／美化照片」，
