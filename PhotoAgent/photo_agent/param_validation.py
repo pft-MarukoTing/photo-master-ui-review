@@ -188,6 +188,17 @@ def _validate_params(params: dict) -> dict:
         )
     normalized["run_qa"] = run_qa
 
+    # analyze stage only: store a stub analysis instead of calling the
+    # analyzer (pipeline.skipped_analysis_stage) -- the user asked for their
+    # own 個人化需求 alone, so the edit need not wait on an analysis.
+    skip_analysis = normalized.get("skip_analysis", False)
+    if not isinstance(skip_analysis, bool):
+        raise RuntimeError(
+            f"{EFFECT_NAME}: skip_analysis must be a boolean",
+            RESULT_INVALID_PARAMETER,
+        )
+    normalized["skip_analysis"] = skip_analysis
+
     # Skips pipeline.finish_stage's Step 5b (the isolated gaze-repair re-pass)
     # and relies on Step 5's own bundled edit call instead -- one edit-model
     # round trip instead of two, at the cost of Step 5b's insurance against a
