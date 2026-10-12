@@ -645,15 +645,17 @@ window.PhotoAgentApi = (() => {
   // Every flagged job across every user -- backend 403s unless `user` is a
   // recognized admin account (backend/services/report.py's is_admin), which
   // checkAdminAccess (app.js) also relies on as its "am I admin" check.
-  async function getReports(user) {
-    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}`);
+  // Paged newest-first, same limit/offset/has_more shape as getHistory.
+  async function getReports(user, { limit = 50, offset = 0 } = {}) {
+    const params = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/reports/${encodeURIComponent(user)}?${params}`);
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const err = new Error(data.error || `取得回報清單失敗：HTTP ${response.status}`);
       err.status = response.status;
       throw err;
     }
-    return data; // { reports: [{ report_id, job_id, user, path, ts, status, note?, user_prompt?, has_screenshot }] }
+    return data; // { reports: [{ report_id, job_id, user, path, ts, status, note?, user_prompt?, has_screenshot }], has_more }
   }
 
   // Admin-only, same is_admin gate the backend applies to getReports above

@@ -8093,6 +8093,10 @@
     return getCurrentUser();
   }
 
+  // Page size for the admin reports drawer (loadReportsPage) -- also what
+  // checkAdminAccess/pollForNewReports fetch as their own first page.
+  const REPORTS_PAGE_SIZE = 50;
+
   // Shows #admin-reports-btn only for an account the backend recognizes as
   // an admin -- there's no separate "am I admin" endpoint, GET /reports/user
   // itself 403s a non-admin account (backend/services/report.py's is_admin),
@@ -8109,7 +8113,7 @@
       return;
     }
     try {
-      const { reports } = await getReports(user);
+      const { reports } = await getReports(user, { limit: REPORTS_PAGE_SIZE });
       if (els.adminReportsBtn) els.adminReportsBtn.hidden = false;
       // This call is also the baseline for pollForNewReports below -- a
       // report that already existed before this session started shouldn't
@@ -8137,6 +8141,53 @@
     knownReportIds = new Set((reports || []).map((r) => r.report_id));
   }
 
+  // Same page-on-scroll shape as loadHistoryDrawerPage -- the drawer used
+  // to fetch (and render a row + thumbnail for) every report ever filed in
+  // one go.
+  let reportsOffset = 0;
+  let reportsRequestToken = 0;
+  let reportsLoading = false;
+  let reportsHasMore = false;
+
+  // reset: true (drawer open/refresh) replaces the list and resets the
+  // poll's baseline; otherwise appends the next page. Returns false only
+  // when a reset load fails, for refreshReportsList's notice.
+  async function loadReportsPage({ reset = false } = {}) {
+    const user = resolveAdminUser();
+    if (!user || !els.reportsList) return true;
+    if (reportsLoading && !reset) return true;
+    const token = ++reportsRequestToken;
+    if (reset) {
+      reportsOffset = 0;
+      reportsHasMore = false;
+    }
+    reportsLoading = true;
+    try {
+      const page = await getReports(user, { limit: REPORTS_PAGE_SIZE, offset: reportsOffset });
+      if (token !== reportsRequestToken) return true;
+      const reports = Array.isArray(page.reports) ? page.reports : [];
+      renderReportsList(reports, { append: !reset });
+      reportsOffset += reports.length;
+      reportsHasMore = page.has_more === true;
+      if (reset) {
+        // Fresh data just loaded -- resets pollForNewReports' baseline and
+        // clears whatever alert brought the admin in here in the first place.
+        seedKnownReports(reports);
+        setNewReportsAlert(false);
+      } else if (knownReportIds) {
+        reports.forEach((r) => knownReportIds.add(r.report_id));
+      }
+      return true;
+    } catch {
+      if (token !== reportsRequestToken) return true;
+      reportsHasMore = false;
+      if (reset) renderReportsList([]);
+      return !reset;
+    } finally {
+      if (token === reportsRequestToken) reportsLoading = false;
+    }
+  }
+
   // Puts the "unseen report" dot on whichever entry point is actually
   // reachable right now -- #admin-reports-btn while the drawer is closed
   // (that's the only way back in), #reports-refresh-btn while it's open
@@ -8159,7 +8210,9 @@
     const user = resolveAdminUser();
     if (!user || !knownReportIds) return;
     try {
-      const { reports } = await getReports(user);
+      // First page only -- a new report is always the newest (ts), so it
+      // always lands there.
+      const { reports } = await getReports(user, { limit: REPORTS_PAGE_SIZE });
       if ((reports || []).some((r) => !knownReportIds.has(r.report_id))) setNewReportsAlert(true);
     } catch {
       // ignore -- see comment above
@@ -8289,6 +8342,9 @@
     try {
       await deleteReport(user, r.report_id);
       li.remove();
+      // Everything after it shifted up one -- keeps the next page's offset
+      // from skipping a report.
+      if (reportsOffset > 0) reportsOffset -= 1;
       if (els.reportsList && els.reportsEmpty) {
         els.reportsEmpty.hidden = els.reportsList.children.length > 0;
       }
@@ -8303,10 +8359,9 @@
   // records job_id/path, not the rest of a real history entry's fields
   // (preset/image_quality/...) -- viewHistoryRecord already falls back to
   // sensible defaults for those when absent.
-  function renderReportsList(reports) {
+  function renderReportsList(reports, { append = false } = {}) {
     if (!els.reportsList) return;
-    els.reportsList.innerHTML = "";
-    if (els.reportsEmpty) els.reportsEmpty.hidden = reports.length > 0;
+    if (!append) els.reportsList.innerHTML = "";
     reports.forEach((r) => {
       const li = document.createElement("li");
       li.className = "report-item";
@@ -8406,12 +8461,11 @@
       // for one of these), so it stays a plain non-interactive row instead
       // of a dead click target.
       if (r.job_id) {
-        li.addEventListener("click", () => {
+        li.addEventListener("click", async () => {
           // Fire-and-forget -- opening a still-unread report marks it read,
           // same as any inbox; never awaited since it must not delay
           // opening the actual result the admin clicked through for.
           if ((r.status || "unread") === "unread") setReportStatus(r, statusBtn, "read");
-          closeReportsDrawer();
           // revealDetailExtra: true -- an admin checking a flagged case
           // should see the full QA verdict/recipe-adherence/prompts panel,
           // normally debug-only, for this specific record. user_prompt:
@@ -8420,35 +8474,32 @@
           // minimal report-derived stand-in has nowhere else to get it
           // from; without this, #prompt would come back empty even though
           // the report captured the original 補充指令.
-          viewHistoryRecord({
+          //
+          // The drawer only closes once the record is actually on screen --
+          // a report whose results expired leaves the admin in the list
+          // (with viewHistoryRecord's notice) instead of on a stale page.
+          const opened = await viewHistoryRecord({
             path: r.path,
             runs: [r.job_id],
             user_prompt: r.user_prompt,
             uploaded_at: r.uploaded_at,
             modified_at: r.modified_at
           }, { revealDetailExtra: true, report: r });
+          if (opened) closeReportsDrawer();
         });
       } else {
         li.classList.add("is-static");
       }
       els.reportsList.appendChild(li);
     });
+    if (els.reportsEmpty) els.reportsEmpty.hidden = els.reportsList.children.length > 0;
   }
 
   async function openReportsPage() {
     const user = resolveAdminUser();
     if (!user) return;
     openReportsDrawer();
-    try {
-      const { reports } = await getReports(user);
-      renderReportsList(reports || []);
-      // Fresh data just loaded -- resets pollForNewReports' baseline and
-      // clears whatever alert brought the admin in here in the first place.
-      seedKnownReports(reports);
-      setNewReportsAlert(false);
-    } catch {
-      renderReportsList([]);
-    }
+    await loadReportsPage({ reset: true });
   }
 
   // Reloads the list in place without closing/reopening the drawer -- the
@@ -8458,12 +8509,7 @@
   async function refreshReportsList() {
     const user = resolveAdminUser();
     if (!user) return;
-    try {
-      const { reports } = await getReports(user);
-      renderReportsList(reports || []);
-      seedKnownReports(reports);
-      setNewReportsAlert(false);
-    } catch {
+    if (!(await loadReportsPage({ reset: true }))) {
       showNoticeModal("重新載入回報清單失敗，請稍後再試。");
     }
   }
@@ -9305,7 +9351,6 @@
   async function viewHistoryRecord(job, { revealDetailExtra = false, report = null } = {}) {
     historyViewToken += 1;
     const myToken = historyViewToken;
-    setCurrentCaseTimes(job, revealDetailExtra);
     // Version browsing is local-path only for now: the AIPoC branch further
     // down renders through showBatchDoneMain/renderRunSwitcher, which has no
     // equivalent of applyHistoryVersionContext and would show older versions
@@ -9313,11 +9358,17 @@
     const runs = await fetchAllHistoryRuns(job, { allVersions: job.path === "local" });
     // Superseded while the runs were loading -- don't hide (or render into)
     // a screen that now belongs to something else.
-    if (historyViewToken !== myToken) return;
+    if (historyViewToken !== myToken) return false;
+    // Nothing on screen has changed yet -- a record that can't be fetched
+    // (e.g. a reported job whose Redis job info expired with no report-time
+    // copy to fall back on, see
+    // backend/services/report.py) leaves the current screen as it was,
+    // rather than stamping this record's times over someone else's photo.
     if (!runs.length) {
-      showNoticeModal("無法取得這筆處理紀錄，請稍後再試。");
-      return;
+      showNoticeModal(report ? "這筆回報的結果已經過期，無法開啟。" : "無法取得這筆處理紀錄，請稍後再試。");
+      return false;
     }
+    setCurrentCaseTimes(job, revealDetailExtra);
     // Drawer stays open (not closed here) until the result page it's opening
     // has actually finished rendering below -- closing it immediately after
     // this fetch left a visible gap where neither the drawer nor the result
@@ -9413,7 +9464,7 @@
       // Superseded while the photo loaded -- hand the row back (if no newer
       // history load holds it) instead of rendering this record over the
       // screen that has since taken over.
-      if (historyViewToken !== myToken) { releaseHistoryCanvasRow(myToken); return; }
+      if (historyViewToken !== myToken) { releaseHistoryCanvasRow(myToken); return false; }
       els.origDim.textContent = `${els.originalImg.naturalWidth} x ${els.originalImg.naturalHeight}`;
       showSection("results");
       // forceReopen: true -- this may be a genuinely different record than
@@ -9427,7 +9478,7 @@
       // -- a superseded call would otherwise show this now-stale render on
       // top of what that newer call is still preparing behind it.
       releaseHistoryCanvasRow(myToken);
-      return;
+      return true;
     }
 
     const first = runs[0];
@@ -9476,6 +9527,7 @@
     applyAdvancedOptionsOption(recordAdvancedOptions(null, record.result.analysis), "ap");
     if (historyViewToken === myToken) closeHistoryDrawer();
     releaseHistoryCanvasRow(myToken); // see the local-path branch above
+    return true;
   }
 
   // Example-photo gallery (.upload-gallery-col, always visible) -- fetched
@@ -12958,6 +13010,16 @@
       const nearBottom = els.demoImagesGrid.scrollTop + els.demoImagesGrid.clientHeight
         >= els.demoImagesGrid.scrollHeight - 24;
       if (nearBottom) loadUploadHistoryPage();
+    });
+  }
+  // The whole drawer scrolls here (.history-drawer's own overflow-y), not
+  // #reports-list itself like #history-list does.
+  if (els.reportsDrawer) {
+    els.reportsDrawer.addEventListener("scroll", () => {
+      if (reportsLoading || !reportsHasMore) return;
+      const nearBottom = els.reportsDrawer.scrollTop + els.reportsDrawer.clientHeight
+        >= els.reportsDrawer.scrollHeight - 24;
+      if (nearBottom) loadReportsPage();
     });
   }
   if (els.historyList) {

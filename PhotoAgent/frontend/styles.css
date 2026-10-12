@@ -3563,6 +3563,21 @@ button.version-origin-tile:focus-visible {
     min-height: 0;
     align-items: stretch;
   }
+  /* #results-detail-extra (QA verdict/recipe/workflow -- debug UI, or an
+     admin opening a report via viewHistoryRecord's revealDetailExtra) is a
+     child of #results-detail too, so under the fixed viewport height above
+     it competed with this row for the same box and squeezed the photo and
+     panel down to a sliver. With it showing, the container grows with its
+     content instead, and this row alone keeps that same viewport budget
+     (minus .results-container's own 20px top/bottom padding) -- the extra
+     panels then just continue below it on the page's own scroll. */
+  body.side-panel-layout #results-detail:has(.results-canvas-row.showing-analysis):has(#results-detail-extra:not([hidden])) {
+    height: auto;
+  }
+  body.side-panel-layout #results-detail:has(#results-detail-extra:not([hidden])) .results-canvas-row.showing-analysis {
+    flex: 0 0 auto;
+    height: calc(100vh - var(--header-h) - var(--step-indicator-h, 54px) - 40px);
+  }
   /* .results-canvas-col/.compare-card/.photo-frame-wrap: plain stretch
      chain (none of these are <details> elements, so -- unlike
      #ap-analysis-shell/#ap-review-panel in an earlier version of this, see

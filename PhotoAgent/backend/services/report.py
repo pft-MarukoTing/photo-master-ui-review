@@ -13,10 +13,18 @@ import time
 import uuid
 
 from aiserver_utils.pf_redis import pf_redis_client
+from aiserver_utils.queue import get_job_info
 from backend.services.account import get_history_entry, get_history_entry_for_job, normalize_username
 
 REPORTS_KEY = "yce_ai:photoAgent:reports"
 REPORT_STATUSES = ("unread", "read", "solved")
+# A reported job's own Redis job info, copied at report time. The job info
+# expires out of Redis after a few weeks while its S3 artifacts stay, and an
+# admin may well open a report later than that -- api.py's read-only result
+# routes fall back to this copy (get_reported_job_info) once the live one is
+# gone. Keyed by job_id alone: the job is the same whoever reported it.
+REPORT_JOBS_KEY = "yce_ai:photoAgent:report_jobs"
+REPORT_JOB_FIELDS = ("status", "error", "error_message", "stage", "run_count", "runs_done", "0_res0", "srcKeys")
 
 _ADMIN_USERS = {
     name.strip().lower()
@@ -89,7 +97,36 @@ def record_report(username, job_id, path, note=None, user_prompt=None, screensho
             entry["modified_at"] = case.get("modified_at")
             entry["history_image_key"] = case.get("image_key")
     pf_redis_client.hset(REPORTS_KEY, field, json.dumps(entry))
+    if job_id:
+        _snapshot_reported_job(job_id)
     return field
+
+
+def _snapshot_reported_job(job_id):
+    """Best-effort, like _case_for_report: a failed copy only means this
+    report stops opening once the job expires, which must never fail the
+    report itself. A re-report refreshes the copy (e.g. a job reported while
+    still processing, then again once finished)."""
+    try:
+        info = get_job_info(job_id, keyToGet=list(REPORT_JOB_FIELDS))
+        if info:
+            pf_redis_client.hset(REPORT_JOBS_KEY, job_id, json.dumps(info))
+    except Exception:
+        pass
+
+
+def get_reported_job_info(job_id, keys):
+    """The report-time copy of job_id's job info, narrowed to `keys` in the
+    same shape get_job_info returns -- or None if no report holds one."""
+    try:
+        raw = pf_redis_client.hget(REPORT_JOBS_KEY, job_id)
+        info = json.loads(raw) if raw else None
+    except Exception:
+        return None
+    if not info:
+        return None
+    picked = {key: info[key] for key in keys if key in info}
+    return picked or None
 
 
 def get_report_by_id(report_id):
@@ -131,11 +168,33 @@ def delete_report(report_id):
     any) is a separate lifecycle (see account.py's own history-vs-job
     split) and is never touched here. Any S3 screenshot the report carried
     is left in place; it's just no longer reachable via report_screenshot
-    once its entry is gone."""
+    once its entry is gone. The job-info copy (_snapshot_reported_job) is
+    dropped once no report points at that job any more."""
+    entry = get_report_by_id(report_id)
     pf_redis_client.hdel(REPORTS_KEY, report_id)
+    # The job copy goes with the last report pointing at that job.
+    job_id = (entry or {}).get("job_id")
+    if job_id and not _job_still_reported(job_id):
+        pf_redis_client.hdel(REPORT_JOBS_KEY, job_id)
 
 
-def get_reports(limit=200):
+def _job_still_reported(job_id):
+    for raw in pf_redis_client.hvals(REPORTS_KEY):
+        try:
+            if json.loads(raw).get("job_id") == job_id:
+                return True
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return False
+
+
+def get_reports(limit=50, offset=0):
+    """One page of reports, newest first -- (entries, has_more), same
+    offset/limit/has_more shape as GET /history/<user> so the admin drawer
+    can load it on scroll the same way #history-list does. The hash itself
+    is unordered, so every entry is still read and sorted to find the page;
+    only the per-entry history lookup (_case_for_report, one Redis read per
+    report) is limited to the page actually returned."""
     raw_entries = pf_redis_client.hgetall(REPORTS_KEY)
     entries = []
     for field, raw in raw_entries.items():
@@ -143,6 +202,15 @@ def get_reports(limit=200):
             entry = json.loads(raw)
         except (TypeError, ValueError):
             continue
+        # The hash field IS the report_id (record_report writes entry["report_id"] == field),
+        # but entries recorded before that field existed have no report_id in their JSON --
+        # always deriving it from the hash key itself (rather than trusting the JSON copy)
+        # keeps those old entries addressable by update_report_status/delete_report too.
+        entry["report_id"] = field.decode() if isinstance(field, bytes) else field
+        entries.append(entry)
+    entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
+    page = entries[offset:offset + limit]
+    for entry in page:
         entry["has_screenshot"] = bool(entry.pop("screenshot_key", None))
         entry.setdefault("status", "unread")  # entries recorded before this field existed
         # Backfill reports created before case lifecycle timestamps were
@@ -154,11 +222,4 @@ def get_reports(limit=200):
             if case:
                 entry.setdefault("uploaded_at", case.get("uploaded_at"))
                 entry["modified_at"] = case.get("modified_at")
-        # The hash field IS the report_id (record_report writes entry["report_id"] == field),
-        # but entries recorded before that field existed have no report_id in their JSON --
-        # always deriving it from the hash key itself (rather than trusting the JSON copy)
-        # keeps those old entries addressable by update_report_status/delete_report too.
-        entry["report_id"] = field.decode() if isinstance(field, bytes) else field
-        entries.append(entry)
-    entries.sort(key=lambda e: e.get("ts", 0), reverse=True)
-    return entries[:limit]
+    return page, offset + len(page) < len(entries)

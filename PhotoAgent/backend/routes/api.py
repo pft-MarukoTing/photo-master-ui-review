@@ -20,7 +20,7 @@ from backend.services.account import create_account, clear_history, delete_histo
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
 from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
-from backend.services.report import delete_report, get_report_by_id, get_reports, is_admin, record_report, update_report_status
+from backend.services.report import delete_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
 from backend.services.template_params import get_engine_params_template
 
 api_bp = Blueprint("api", __name__, url_prefix="/api/photo-agent")
@@ -413,6 +413,9 @@ def report_job():
     return jsonify({"reported": True, "report_id": report_id})
 
 
+REPORTS_MAX_PAGE = 200
+
+
 @api_bp.get("/reports/<user>")
 def reports(user):
     # Doubles as the frontend's "is this account an admin?" check (see
@@ -424,7 +427,13 @@ def reports(user):
         return jsonify({"error": str(exc)}), 400
     if not is_admin(name):
         return jsonify({"error": "not authorized"}), 403
-    return jsonify({"reports": get_reports()})
+    try:
+        limit = min(max(int(request.args.get("limit", 50)), 0), REPORTS_MAX_PAGE)
+        offset = max(int(request.args.get("offset", 0)), 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "limit and offset must be integers"}), 400
+    reports, has_more = get_reports(limit=limit, offset=offset)
+    return jsonify({"reports": reports, "has_more": has_more})
 
 
 @api_bp.patch("/reports/<user>/<report_id>")
@@ -530,6 +539,20 @@ def submit():
     return jsonify({"job_id": job_id}), 202
 
 
+def _readable_job_info(job_id, keyToGet):
+    """get_job_info for the routes that only READ a job back out (status,
+    result, images, analysis). The job's Redis info expires after a few
+    weeks while its S3 artifacts stay; a job someone reported keeps a copy
+    of that info (backend/services/report.py), so an admin can still open
+    the report afterwards. Routes that start new work from a job (continue,
+    reframe, rerun) keep the live lookup only."""
+    keys = list(keyToGet)
+    info = get_job_info(job_id, keyToGet=keys)
+    if info is None:
+        info = get_reported_job_info(job_id, keyToGet)
+    return info
+
+
 @api_bp.get("/status/<job_id>")
 def status(job_id):
     # "stage"/"run_count"/"runs_done" are only ever present for a combined
@@ -538,7 +561,7 @@ def status(job_id):
     # until the worker has actually started the combined job. runs_done lets
     # the frontend notice a new RUN has landed (and go fetch it via /result)
     # without having to re-download every RUN's data on every poll tick.
-    info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "stage", "run_count", "runs_done"])
+    info = _readable_job_info(job_id, ["status", "error", "error_message", "stage", "run_count", "runs_done"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     return jsonify(info)
@@ -568,7 +591,7 @@ def _runs_from_meta(runs_meta, job_id):
 
 @api_bp.get("/result/<job_id>")
 def result(job_id):
-    info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "0_res0", "run_count"])
+    info = _readable_job_info(job_id, ["status", "error", "error_message", "0_res0", "run_count"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
 
@@ -652,7 +675,7 @@ def result_image(job_id):
     to serve -- defaults to 1 so a caller that doesn't know about multi-run
     jobs still gets a sensible result.
     """
-    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    info = _readable_job_info(job_id, ["status", "error", "0_res0"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     if info.get("status") != "success":
@@ -688,7 +711,7 @@ def result_pre_edit_image(job_id):
     layout (job_processor.py), not in AIPoC's separate deployment of this
     pipeline.
     """
-    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    info = _readable_job_info(job_id, ["status", "error", "0_res0"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     if info.get("status") != "success":
@@ -755,7 +778,7 @@ def result_thumbnail(job_id):
     way exactly one thumbnail is ever made: whichever result the history
     list actually asked to see.
     """
-    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    info = _readable_job_info(job_id, ["status", "error", "0_res0"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     if info.get("status") != "success":
@@ -794,7 +817,7 @@ def source_image(job_id):
     so there's nothing this endpoint can serve for a task_id -- callers
     should only use this for path="local" jobs.
     """
-    info = get_job_info(job_id, keyToGet=["srcKeys"])
+    info = _readable_job_info(job_id, ["srcKeys"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     src_keys = info.get("srcKeys") or []
@@ -828,7 +851,7 @@ def source_thumbnail(job_id):
     full-res source if that thumbnail is missing (a job submitted before
     thumbnails existed, or a thumbnail upload that failed silently).
     """
-    info = get_job_info(job_id, keyToGet=["srcKeys"])
+    info = _readable_job_info(job_id, ["srcKeys"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
     src_keys = info.get("srcKeys") or []
@@ -924,7 +947,7 @@ def analyze_batch():
 
 @api_bp.get("/analyze/result/<job_id>")
 def analyze_result(job_id):
-    info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
+    info = _readable_job_info(job_id, ["status", "error", "0_res0"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
 
