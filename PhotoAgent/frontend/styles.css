@@ -3003,9 +3003,11 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
 /* The source every version was produced from, not a version itself -- so it
    reads as a source: a quiet solid frame instead of the dashed one it used to
    have (dashes drew more attention than the versions they sit next to), a
-   muted label, a slightly dimmed image, and no hover or current state, since
-   it is the one tile in the row that cannot be selected. Keeps the 2px border
-   width of .version-tile so both columns line up at the same outer size. */
+   muted label and a slightly dimmed image. It is a button like the version
+   tiles (picking it pins the photo to the original), so it shares their
+   hover lift and accent current frame, and drops the dimming once picked.
+   Keeps the 2px border width of .version-tile so both columns line up at
+   the same outer size. */
 .version-origin {
   display: flex;
   flex-direction: column;
@@ -3029,6 +3031,22 @@ body[data-theme="peach"] .think-ring:nth-child(3) { border-top-color: rgba(162,1
   opacity: .85;
 }
 .version-origin .version-group-label { color: rgba(var(--on-surface-rgb),.5); }
+button.version-origin-tile {
+  padding: 0;
+  cursor: pointer;
+  transition: border-color .15s ease, transform .15s ease;
+}
+button.version-origin-tile:hover { transform: translateY(-2px); }
+button.version-origin-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.version-origin-tile.is-current {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb),.25);
+}
+.version-origin-tile.is-current img { opacity: 1; }
+.version-origin:has(.is-current) .version-group-label { color: var(--text-2); }
 /* Sized to the tile row rather than stretched: only the origin column carries
    a label now, so a stretched line would hang past the version tiles and make
    the fence look crooked. */

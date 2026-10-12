@@ -130,6 +130,11 @@ interface CanvasProps {
 
 export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
+  // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
+  // 比較鈕就先停用；再點任何一版才回到那一版的 After。
+  const [originPicked, setOriginPicked] = useState(false);
+  // 紀錄縮圖 hover 時浮出的大一點的預覽，沿用自訂模式的 .version-tile-preview。
+  const previewRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // What each finished job was made with, keyed by job id -- see the fetch
   // below for why this is read back per version rather than taken from the plan.
@@ -153,10 +158,13 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   }, [ready, job, photo.photo_id]);
   const shownJob = ready ? job : held && held.photo === photo.photo_id ? held.job : null;
   // 處理中一律看原圖：美化中擺上一版的成果，會讓人以為那就是正在等的這一張。
-  const generated = !!shownJob && showGenerated && !busy;
+  const generated = !!shownJob && showGenerated && !busy && !originPicked;
 
   // A new version always opens on the After side.
-  useEffect(() => setShowGenerated(true), [current?.version_id]);
+  useEffect(() => {
+    setShowGenerated(true);
+    setOriginPicked(false);
+  }, [current?.version_id, photo.photo_id]);
 
   // 新版本的結果圖在背景先載好、解碼完，畫面上那張 <img> 換 src 時才不會空一拍。
   useEffect(() => {
@@ -208,7 +216,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
 
   // Whatever the bubble was quoting belongs to the version (and the side) that
   // was on screen when it opened.
-  useEffect(() => setOpen(null), [current?.version_id, showGenerated]);
+  useEffect(() => setOpen(null), [current?.version_id, showGenerated, originPicked]);
 
   useEffect(() => {
     if (!fullscreen && !open) return;
@@ -304,6 +312,33 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
 
   const idx = current ? versions.findIndex((v) => v.version_id === current.version_id) : -1;
 
+  // 和自訂模式的 showVersionTilePreview 同一套算法：預設浮在縮圖正上方，
+  // 上面沒位置就翻到下方，左右夾在視窗內。直接用縮圖本身的 src，不多打一次請求。
+  function showPreview(tile: HTMLElement, src: string) {
+    const popup = previewRef.current;
+    const img = popup?.firstElementChild as HTMLImageElement | null;
+    if (!popup || !img) return;
+    img.src = src;
+    const rect = tile.getBoundingClientRect();
+    const popupW = popup.offsetWidth || 168;
+    const popupH = popup.offsetHeight || 168;
+    const gap = 10;
+    let top = rect.top - popupH - gap;
+    if (top < 8) top = rect.bottom + gap;
+    let left = rect.left + rect.width / 2 - popupW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - popupW - 8));
+    popup.style.top = `${Math.round(top)}px`;
+    popup.style.left = `${Math.round(left)}px`;
+    popup.classList.add("is-visible");
+  }
+
+  function hidePreview() {
+    previewRef.current?.classList.remove("is-visible");
+  }
+
+  // 紀錄整排消失（換照片、清空）時，跟著收掉還浮著的預覽。
+  useEffect(() => hidePreview, [versions.length > 0, photo.photo_id]);
+
   return (
     <div class="results-canvas-col" id="results-canvas-col">
       <div class="results-canvas-top" id="results-canvas-top" ref={topRef}>
@@ -324,6 +359,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                     id="compare-toggle-btn"
                     class="canvas-btn"
                     type="button"
+                    disabled={originPicked}
                     title="compare"
                     aria-label={generated ? "查看原始照片" : "查看美化結果"}
                     onClick={() => setShowGenerated(!showGenerated)}
@@ -353,7 +389,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                     />
                   </svg>
                 </button>
-                {job && !busy && (
+                {/* 看原圖時這顆下載的還是那一版的成果，對不上畫面 -- 先收起來。 */}
+                {job && !busy && !originPicked && (
                   <div class="canvas-btn-wrap" id="download-menu-wrap">
                     <a
                       id="download-link"
@@ -482,7 +519,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               <div class="version-strip-head">
                 <span class="version-strip-title">美化紀錄</span>
                 <span id="version-strip-count" class="version-strip-count">
-                  第 {idx + 1}／{versions.length} 組
+                  {originPicked ? "原圖" : `第 ${idx + 1}／${versions.length} 組`}
                 </span>
                 <span class="version-strip-note">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -496,16 +533,25 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               <div id="version-strip-track" class="version-strip-track" role="tablist" aria-label="這張照片的美化紀錄">
                 <div class="version-strip-origin">
                   <div class="version-origin">
-                    <div class="version-origin-tile">
+                    <button
+                      type="button"
+                      class={`version-origin-tile${originPicked ? " is-current" : ""}`}
+                      role="tab"
+                      aria-selected={originPicked}
+                      title="原圖"
+                      onClick={() => setOriginPicked(true)}
+                      onMouseEnter={(e) => showPreview(e.currentTarget, urls.sourceThumb(photo.analyze_job_id))}
+                      onMouseLeave={hidePreview}
+                    >
                       <img src={urls.sourceThumb(photo.analyze_job_id)} alt="" />
-                    </div>
+                    </button>
                     <span class="version-group-label">原圖</span>
                   </div>
                   <div class="version-strip-divider" />
                 </div>
                 <div class="version-strip-versions">
                   {versions.map((v) => {
-                    const on = v.version_id === current?.version_id;
+                    const on = !originPicked && v.version_id === current?.version_id;
                     return (
                       <div class={`version-group${on ? " is-current" : ""}`} data-version-id={v.version_id}>
                         <div class="version-group-tiles">
@@ -515,7 +561,14 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                             role="tab"
                             aria-selected={on}
                             title={`第 ${v.ordinal} 版`}
-                            onClick={() => onSelect(v)}
+                            onClick={() => {
+                              // 點的若是同一版，version_id 沒變、上面的 effect 不會跑，這裡自己切回 After。
+                              setOriginPicked(false);
+                              setShowGenerated(true);
+                              onSelect(v);
+                            }}
+                            onMouseEnter={(e) => showPreview(e.currentTarget, urls.resultThumb(versionJob(v)))}
+                            onMouseLeave={hidePreview}
                           >
                             <img src={urls.resultThumb(versionJob(v))} alt="" />
                           </button>
@@ -543,6 +596,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
             </div>
           )}
         </div>
+      </div>
+      <div ref={previewRef} class="version-tile-preview" aria-hidden="true">
+        <img alt="" />
       </div>
       <div
         id="compare-fullscreen-backdrop"

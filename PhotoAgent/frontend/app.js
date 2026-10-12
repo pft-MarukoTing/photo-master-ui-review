@@ -171,6 +171,9 @@
     if (!currentRunList || currentRunOnSelect == null || currentRunIndex == null) return;
     if (idx < 0 || idx >= currentRunList.length || idx === currentRunIndex) return;
     if (!isSelectableRun(currentRunList[idx])) return;
+    // Any real switch (tile or arrow) leaves the 原圖 pick -- the run it
+    // lands on renders on its After side (renderResult -> setCompareView).
+    clearVersionStripOriginPick();
     if (els.runSwitchLoading) els.runSwitchLoading.hidden = false;
     if (els.runSwitchPrev) els.runSwitchPrev.disabled = true;
     if (els.runSwitchNext) els.runSwitchNext.disabled = true;
@@ -10739,6 +10742,27 @@
   // alternative to the hover preview, see below) can mark the right tile
   // .is-current without needing its own copy of that argument threaded in.
   let versionStripCurrentIdx = null;
+  // True while the strip's 原圖 tile is the picked one: the photo is pinned
+  // to the original, so #compare-toggle-btn has nothing to compare against
+  // (disabled) and the download, which would still hand over the run's
+  // result, is put away until a version tile is picked again.
+  let versionStripOriginPicked = false;
+
+  function pickVersionStripOrigin() {
+    versionStripOriginPicked = true;
+    setCompareView(false);
+    if (els.compareToggleBtn) els.compareToggleBtn.disabled = true;
+    if (els.downloadMenuWrap) els.downloadMenuWrap.hidden = true;
+    syncVersionStripCurrent();
+  }
+
+  function clearVersionStripOriginPick() {
+    if (!versionStripOriginPicked) return;
+    versionStripOriginPicked = false;
+    if (els.compareToggleBtn) els.compareToggleBtn.disabled = false;
+    if (els.downloadMenuWrap) els.downloadMenuWrap.hidden = false;
+    syncVersionStripCurrent();
+  }
 
   // Positions #version-tile-preview over whichever tile the pointer is on,
   // reusing that tile's own <img src> (see the element's comment in
@@ -10775,6 +10799,7 @@
   }
 
   function hideVersionStrip() {
+    clearVersionStripOriginPick();
     if (!els.versionStrip) return;
     els.versionStrip.hidden = true;
     els.versionStrip.classList.remove("is-busy");
@@ -10805,6 +10830,9 @@
     }
     els.versionStrip.hidden = false;
     if (versionStripRuns !== runs) {
+      // A new list is a new case (or a new version just landed): it opens on
+      // its current run's After side, not on a 原圖 pick left from before.
+      clearVersionStripOriginPick();
       versionStripRuns = runs;
       els.versionStripTrack.textContent = "";
       // The original is pinned in front of the versions and fenced off with a
@@ -10814,15 +10842,17 @@
       // has pointed at the original since the first upload. Without this tile a
       // flat row of thumbnails reads as a chain, which is the one thing it isn't.
       //
-      // Deliberately not a button: #compare-toggle-btn on the photo is already the
-      // way to look at the original, and a second affordance that behaves
-      // differently while sitting inside a row of tiles that DO navigate would be
-      // worse than none. This tile answers "where did these come from", not "take
-      // me somewhere".
+      // Clickable like the version tiles: picking it pins the photo to the
+      // original (pickVersionStripOrigin), and picking any version returns.
       const origin = document.createElement("div");
       origin.className = "version-origin";
-      const originTile = document.createElement("div");
+      const originTile = document.createElement("button");
+      originTile.type = "button";
       originTile.className = "version-origin-tile";
+      originTile.setAttribute("role", "tab");
+      originTile.title = "原圖";
+      originTile.setAttribute("aria-label", "原圖");
+      originTile.addEventListener("click", pickVersionStripOrigin);
       const originImg = document.createElement("img");
       // originalImgThumbUrl mirrors whatever #original-img is showing (a local blob
       // for a fresh upload, sourceThumbnailUrl when opened from history) and
@@ -10896,23 +10926,48 @@
         }
         tile.title = runSwitcherLabel(runs, idx);
         tile.setAttribute("aria-label", tile.title);
-        tile.addEventListener("click", () => selectRunAt(idx));
+        tile.addEventListener("click", () => {
+          // The run already on screen: selectRunAt would no-op, so leaving
+          // the 原圖 pick and flipping back to After happens here instead.
+          if (versionStripOriginPicked && idx === currentRunIndex) {
+            clearVersionStripOriginPick();
+            setCompareView(true);
+            return;
+          }
+          selectRunAt(idx);
+        });
         tile.addEventListener("mouseenter", () => showVersionTilePreview(tile, img.src));
         tile.addEventListener("mouseleave", hideVersionTilePreview);
         groupTiles.append(tile);
       });
     }
-    const current = runs[currentIdx];
     versionStripCurrentIdx = currentIdx;
+    syncVersionStripCurrent({ reveal: true });
+  }
+
+  // Marks whichever tile is in play -- the current run's, or the 原圖 tile
+  // while it is picked -- and the count beside the title to match.
+  function syncVersionStripCurrent({ reveal = false } = {}) {
+    const runs = versionStripRuns;
+    const currentIdx = versionStripCurrentIdx;
+    if (!runs || !els.versionStripTrack) return;
+    const current = runs[currentIdx];
     if (els.versionStripCount) {
-      els.versionStripCount.textContent = current && current.versionTotal
-        ? `第 ${current.versionNumber}／${current.versionTotal} 組`
-        : "";
+      els.versionStripCount.textContent = versionStripOriginPicked
+        ? "原圖"
+        : current && current.versionTotal
+          ? `第 ${current.versionNumber}／${current.versionTotal} 組`
+          : "";
+    }
+    const originTile = els.versionStripTrack.querySelector(".version-origin-tile");
+    if (originTile) {
+      originTile.classList.toggle("is-current", versionStripOriginPicked);
+      originTile.setAttribute("aria-selected", versionStripOriginPicked ? "true" : "false");
     }
     els.versionStripTrack.querySelectorAll(".version-tile").forEach((tile) => {
       const idx = Number(tile.dataset.index);
       const run = runs[idx];
-      const isCurrent = idx === currentIdx;
+      const isCurrent = !versionStripOriginPicked && idx === currentIdx;
       tile.classList.toggle("is-current", isCurrent);
       tile.setAttribute("aria-selected", isCurrent ? "true" : "false");
       // Errored is the one state that outlives a re-render: loadHistoryRun
@@ -10923,7 +10978,7 @@
       // track in a long case (opening one lands on the newest, i.e. the far
       // right). Deferred a frame because on a first render the tiles have
       // only just been appended and the track has no scroll extent yet.
-      if (isCurrent) requestAnimationFrame(() => revealVersionTile(tile));
+      if (isCurrent && reveal) requestAnimationFrame(() => revealVersionTile(tile));
     });
   }
 
