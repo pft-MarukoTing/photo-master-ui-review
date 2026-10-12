@@ -53,6 +53,7 @@ export function Header(props: { onHome: () => void; onHistory: () => void; showH
       <div class="header-inner">
         <button type="button" class="logo" id="logo-home-btn" onClick={props.onHome}>
           Photo<em>Master</em>
+          <span class="logo-env-badge" id="logo-env-badge" title="開發環境">DEV</span>
         </button>
         <div class="header-actions">
           {props.showHome && (
