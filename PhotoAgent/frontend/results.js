@@ -658,6 +658,9 @@ window.PhotoAgentResults = (() => {
       input.type = "checkbox";
       input.id = `${element.id}-${index}`;
       input.dataset.recipeIndex = String(index);
+      // The item's own text: switching to the chat page carries checks over
+      // by text, since its list is ordered differently (app.js writeModeHandoff).
+      input.dataset.recipeText = String(item || "");
       input.checked = true;
       input.disabled = isReadOnlyLocked();
       const box = document.createElement("span");

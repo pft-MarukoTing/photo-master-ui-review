@@ -966,6 +966,8 @@ div.chat-proposal-row{cursor:default}
 #chat-report-btn.btn:hover{background:rgba(var(--accent-rgb),.12);border-color:rgba(var(--accent-rgb),.6)}
 /* Above every other dialog, the same as the old #report-modal. */
 #chat-report-modal{z-index:2001}
+/* 開在最近照片側欄上面時也要看得到。 */
+#chat-confirm-modal{z-index:2000}
 
 /* Header theme button: same .btn-sm as its neighbours; only the swatch is
    sized up to the 14px <Icon> they carry, so all three glyphs line up. */

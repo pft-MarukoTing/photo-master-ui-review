@@ -171,6 +171,11 @@
     if (!currentRunList || currentRunOnSelect == null || currentRunIndex == null) return;
     if (idx < 0 || idx >= currentRunList.length || idx === currentRunIndex) return;
     if (!isSelectableRun(currentRunList[idx])) return;
+    // Another version puts its own settings in the revise panel; asked
+    // before the loading overlay goes up so the prompt isn't sitting on it.
+    const from = currentRunList[currentRunIndex];
+    const to = currentRunList[idx];
+    if (to.versionId && to.versionId !== from?.versionId && !(await confirmDropReview(DROP_REVIEW_FOR_VERSION))) return;
     // Any real switch (tile or arrow) leaves the 原圖 pick -- the run it
     // lands on renders on its After side (renderResult -> setCompareView).
     clearVersionStripOriginPick();
@@ -260,6 +265,17 @@
   // a finished history case can be marked as archived when its revise panel
   // discovers that its analysis is no longer compatible.
   let currentCaseHistoryImageKey = null;
+  // Adjustments carried over from the chat page for the case #case= opened,
+  // applied once that case's review controls are on screen (applyPendingModeHandoff).
+  let pendingModeHandoff = null;
+  // The review controls as this case first showed them, to tell whether
+  // leaving the page would throw away edits not yet sent with 美化
+  // (isReviewDirty). Tied to the singleFlowState it was taken for; dropped
+  // once 美化 sends the edits.
+  let reviewBaseline = null;
+  // Set once the user has already agreed to leave (or the edits went along
+  // to the chat page), so beforeunload does not ask a second time.
+  let leaveConfirmed = false;
 
   function timestampValue(value) {
     const number = Number(value);
@@ -980,6 +996,7 @@
     const caseKey = new URLSearchParams(location.hash.slice(1)).get("case");
     if (!caseKey) return;
     history.replaceState(null, "", location.pathname + location.search);
+    pendingModeHandoff = takeModeHandoff(caseKey);
     // Reveal as soon as the case is on screen, not when openCaseByKey
     // resolves: a 待美化 case's runPendingReviewFlow only resolves once the
     // user acts on it, which kept the page hidden until a reload.
@@ -995,6 +1012,160 @@
     } finally {
       document.removeEventListener("photoagent:sectionchange", onSection);
       reveal();
+    }
+  }
+
+  // 對話模式 ⇄ 自訂模式: the photo's not-yet-rendered adjustments go along
+  // with the switch. Same tab, same origin, so sessionStorage: the page being
+  // left writes, the page opening that same case reads and deletes. The
+  // format is shared with frontend-chat/src/handoff.ts -- change both
+  // together. Neutral terms only: the engine is image_model + image_quality,
+  // and 修圖建議 checks go by item text, since the two pages list them in
+  // different orders.
+  const MODE_HANDOFF_KEY = "photoagent:mode-handoff";
+  const MODE_HANDOFF_MAX_AGE_MS = 2 * 60 * 1000;
+
+  // The single-photo review as it stands, in the handoff's own terms; null
+  // when no single photo's review is up.
+  function readReviewState() {
+    const state = singleFlowState;
+    if (!state?.analysis || currentDetailBatchRecord()) return null;
+    const { options } = readStyleSelectionsFromDom();
+    const recipe = {};
+    if (els.apRecipeList) {
+      els.apRecipeList.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+        if (cb.dataset.recipeText) recipe[cb.dataset.recipeText] = cb.checked;
+      });
+    }
+    const review = {
+      image_model: state.imageModel,
+      image_quality: state.imageQuality,
+      aspect_ratio: state.aspectRatio,
+      advanced_options: readAdvancedOptionsFromDom("ap"),
+      style_options: options,
+      face_issue_overrides: getFaceIssueOverrides(),
+      body_reshape_enabled: getBodyReshapeReviewEnabled(),
+      user_prompt: els.promptInput ? els.promptInput.value.trim() : "",
+      overwrite_prompt: !!els.promptOverwriteToggle?.checked,
+      recipe: Object.keys(recipe).length ? recipe : undefined,
+    };
+    if (isDebugUiActive && els.apRunCountSelect) review.run_count = parseInt(els.apRunCountSelect.value, 10) || 1;
+    return review;
+  }
+
+  // Taken the first time a case's review controls are up, and again after
+  // each 美化 (which clears it). Reopening the revise panel after 取消 keeps
+  // the old one, so edits kept across 取消 still count as unsent.
+  function markReviewBaseline() {
+    if (reviewBaseline && reviewBaseline.owner === singleFlowState) return;
+    const review = readReviewState();
+    reviewBaseline = review ? { owner: singleFlowState, key: JSON.stringify(review) } : null;
+  }
+
+  function isReviewDirty() {
+    if (!reviewBaseline || reviewBaseline.owner !== singleFlowState) return false;
+    const review = readReviewState();
+    return !!review && JSON.stringify(review) !== reviewBaseline.key;
+  }
+
+  // Before something on this same page replaces the revise panel (another
+  // version, another photo): true when there is nothing unsent to lose, or
+  // the user agreed to drop it.
+  async function confirmDropReview(message) {
+    if (!isReviewDirty()) return true;
+    return showConfirmModal(message, { confirmLabel: "繼續", cancelLabel: "留在這裡", danger: false });
+  }
+  const DROP_REVIEW_FOR_PHOTO = "這張照片還沒美化的調整會清掉。確定要打開另一張嗎？";
+  const DROP_REVIEW_FOR_VERSION = "還沒美化的調整會換成這一版的設定。確定要切換嗎？";
+
+  // True when the edits were handed over and the chat page will pick them up.
+  function writeModeHandoff(caseKey) {
+    const review = caseKey ? readReviewState() : null;
+    if (!review) return false;
+    try {
+      sessionStorage.setItem(MODE_HANDOFF_KEY, JSON.stringify({ case_id: caseKey, at: Date.now(), ...review }));
+      return true;
+    } catch {
+      return false; // nothing carried over -- the switch itself still goes ahead
+    }
+  }
+
+  // Read-and-delete, whatever case it was for, so a stale one never applies later.
+  function takeModeHandoff(caseKey) {
+    let handoff = null;
+    try {
+      const raw = sessionStorage.getItem(MODE_HANDOFF_KEY);
+      sessionStorage.removeItem(MODE_HANDOFF_KEY);
+      handoff = raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+    if (!handoff || handoff.case_id !== caseKey) return null;
+    if (!(Date.now() - (handoff.at || 0) < MODE_HANDOFF_MAX_AGE_MS)) return null;
+    return handoff;
+  }
+
+  // Puts the chat page's adjustments onto the review controls of the case
+  // now on screen, the way the user's own clicks would. Called right after
+  // those controls are built: the 待美化 review (runPendingReviewFlow) or a
+  // finished case's revise panel (backToProcessFromResults).
+  function applyPendingModeHandoff() {
+    const handoff = pendingModeHandoff;
+    if (!handoff || handoff.case_id !== currentCaseHistoryImageKey || currentDetailBatchRecord()) return;
+    pendingModeHandoff = null;
+    if (!(Date.now() - (handoff.at || 0) < MODE_HANDOFF_MAX_AGE_MS)) return;
+
+    const model = findModelQualityOptionByPair(handoff.image_model, handoff.image_quality);
+    if (model && model.model === handoff.image_model && model.quality === handoff.image_quality) {
+      applyModelQualityChange(model.value);
+    }
+    if (isDebugUiActive && typeof handoff.run_count === "number") applyRunCountChange(handoff.run_count);
+    if (handoff.advanced_options) {
+      // As if each switch were flipped by hand: its per-person lock follows,
+      // and 修圖建議 re-filters (applyAdvancedOptionsChange).
+      const keys = {
+        eye_closed_detection: els.apEyeClosedDetectionToggle,
+        gaze_contact_detection: els.apEyeGazeFocusToggle,
+        hair_mess_detection: els.apHairMessDetectionToggle,
+        smile_adjustment: els.apSmileAdjustmentToggle,
+      };
+      Object.entries(keys).forEach(([key, control]) => {
+        const want = handoff.advanced_options[key];
+        if (!control || typeof want !== "boolean" || control.checked === want) return;
+        control.checked = want;
+        const face = ADVANCED_OPTION_FACE_CATEGORIES.find((c) => c.control === control);
+        if (face) setFaceIssueCategoryLock(face.category, want);
+      });
+      applyAdvancedOptionsChange();
+    }
+    if (els.promptInput && typeof handoff.user_prompt === "string") els.promptInput.value = handoff.user_prompt;
+    if (els.promptOverwriteToggle && typeof handoff.overwrite_prompt === "boolean") {
+      els.promptOverwriteToggle.checked = handoff.overwrite_prompt;
+    }
+    applyFaceIssueOverrides(handoff.face_issue_overrides);
+    if (typeof handoff.body_reshape_enabled === "boolean") setBodyReshapeReviewEnabled(handoff.body_reshape_enabled);
+    renderFaceReviewCards();
+    // Recipe checks by text; an item the chat page never listed keeps its default.
+    let recipeChecked = null;
+    if (handoff.recipe && els.apRecipeList) {
+      recipeChecked = [];
+      els.apRecipeList.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+        const index = Number(cb.dataset.recipeIndex);
+        if (!Number.isInteger(index) || index < 0) return;
+        recipeChecked[index] = handoff.recipe[cb.dataset.recipeText] !== false;
+      });
+    }
+    // The chat page leaves a style at its default by leaving it out.
+    const style = handoff.style_options || null;
+    const options = style && Object.fromEntries(
+      ["pose", "angle", "lighting", "size"].map((k) => [k, style[k] || "default"]));
+    applyStyleSelections({ options, recipeChecked });
+    updateInlineAnalysisContinueBtnState();
+    // Last: a ratio this photo has no composition for asks before reframing,
+    // the same confirm a pick from the picker gets.
+    const ratio = handoff.aspect_ratio;
+    if (ratio && ratio !== singleFlowState?.aspectRatio && findAspectRatioOption(ratio)?.value === ratio) {
+      handleUserAspectRatioPick(ratio);
     }
   }
 
@@ -3346,6 +3517,10 @@
     // readOnly branch based on ITS OWN canRestart, not this case's.
     if (els.apRestartActions) els.apRestartActions.hidden = true;
     await showPendingResults(analysis, preset);
+    if (!readOnly) {
+      markReviewBaseline();
+      applyPendingModeHandoff();
+    }
     if (readOnly) {
       if (els.inlineAnalysisContinueBtn) els.inlineAnalysisContinueBtn.hidden = true;
       updateApCaseSettingsTrigger();
@@ -3365,6 +3540,7 @@
     // to land them back on.
     for (;;) {
       await waitForPendingResultsAction();
+      reviewBaseline = null; // sent with this 美化
       // Always proceeds straight into #canvas-loading below (no "cancel" branch
       // here, unlike closeInlineAnalysisPanel's callers) -- skip
       // .results-canvas-row's panel-close animation (styles.css) since there's
@@ -5053,6 +5229,7 @@
     // Any prior single-image run's "回到流程" state refers to a different
     // photo (or no longer applies once batch mode starts) -- drop it.
     singleFlowState = null;
+    reviewBaseline = null;
     lastSingleSelections = null;
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.costBtn) els.costBtn.hidden = true;
@@ -6003,9 +6180,14 @@
     }
 
     captureInlineReviseSnapshot();
+    markReviewBaseline();
+    // After the snapshot: what the chat page changed counts as a change here
+    // too, so 美化 is not blocked as if nothing had been touched.
+    applyPendingModeHandoff();
     updateInlineAnalysisContinueBtnState();
 
     const action = await waitForInlineAnalysisAction();
+    if (action !== "cancel") reviewBaseline = null; // sent with this 美化
     // Closing straight into #canvas-loading (below) rather than back onto
     // the photo -- skip .results-canvas-row's panel-close animation (styles.
     // css) here, since there's no photo on screen for it to slide/grow
@@ -6843,7 +7025,10 @@
     item.appendChild(media);
     item.appendChild(textCol);
     if (record.status === "error") item.title = record.error || "處理失敗";
-    item.addEventListener("click", () => selectBatchRecord(record));
+    item.addEventListener("click", async () => {
+      if (record !== currentBatchRecord && !(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
+      selectBatchRecord(record);
+    });
     return item;
   }
 
@@ -7329,11 +7514,13 @@
   // the page was linked in with ?user_id= -- that identity is re-resolved
   // from the URL on every load, same as before logout.
   async function handleLogout() {
+    const unsent = isReviewDirty() ? "這張照片還沒美化的調整也會清掉。" : "";
     const confirmed = await showConfirmModal(
-      "登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。確定要登出嗎？",
+      `登出後，這個瀏覽器將不再記得目前的使用者名稱，需要重新輸入才能再次查看處理紀錄。${unsent}確定要登出嗎？`,
       { confirmLabel: "登出", danger: false }
     );
     if (!confirmed) return;
+    leaveConfirmed = true;
     clearCurrentUser();
     window.location.reload();
   }
@@ -7881,6 +8068,7 @@
             }
             li.addEventListener("click", async () => {
               if (li.classList.contains("opening")) return;
+              if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
               li.classList.add("opening");
               try {
                 await viewAnalyzeHistoryRecord(job, { alreadyAnalyzed: analyzed });
@@ -7930,6 +8118,7 @@
               return;
             }
             if (li.classList.contains("opening")) return;
+            if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
             li.classList.add("opening");
             const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
             if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
@@ -7973,6 +8162,7 @@
           // a double-click re-entering it mid-poll.
           li.addEventListener("click", async () => {
             if (li.classList.contains("opening")) return;
+            if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
             li.classList.add("opening");
             try {
               await viewProcessingHistoryRecord(job);
@@ -8478,6 +8668,7 @@
           // The drawer only closes once the record is actually on screen --
           // a report whose results expired leaves the admin in the list
           // (with viewHistoryRecord's notice) instead of on a stale page.
+          if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
           const opened = await viewHistoryRecord({
             path: r.path,
             runs: [r.job_id],
@@ -13051,25 +13242,40 @@
     chatUiBtn.setAttribute("href", `chat/${location.search}`);
     chatUiBtn.addEventListener("click", async (event) => {
       if (chatUiBtn.hasAttribute("aria-disabled")) { event.preventDefault(); return; }
+      // A new tab leaves this page as it is.
+      if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+      event.preventDefault();
       const user = getCurrentUser();
-      if (!user || event.metaKey || event.ctrlKey || event.shiftKey) return;
       // A photo uploaded on this page has no case key on the client -- only
       // its jobs, which /case resolves (see findCaseForJob).
       const jobId = lastResult?.jobId || (selectedFile && singleFlowState?.analyzeJobId);
-      if (!currentCaseHistoryImageKey && !jobId) return;
-      event.preventDefault();
       let caseKey = currentCaseHistoryImageKey;
-      if (!caseKey) {
+      if (user && !caseKey && jobId) {
         try {
           caseKey = (await getHistoryCase(user, { jobId }))?.case?.image_key || null;
         } catch {
           caseKey = null; // not in history yet -- just open the chat page
         }
       }
+      if (!writeModeHandoff(caseKey) && isReviewDirty()) {
+        const leave = await showConfirmModal(
+          "這張照片還沒美化的調整沒辦法帶到對話模式，切過去就會清掉。確定要切換嗎？",
+          { confirmLabel: "切換", cancelLabel: "留在這裡", danger: false }
+        );
+        if (!leave) return;
+      }
+      leaveConfirmed = true;
       location.href = `chat/${location.search}${caseKey ? `#case=${encodeURIComponent(caseKey)}` : ""}`;
     });
   }
   setupCompactHeaderActions();
+  // Reload, close, or any other way off the page: the browser's own leave
+  // prompt (its wording cannot be changed) when review edits are unsent.
+  window.addEventListener("beforeunload", (event) => {
+    if (leaveConfirmed || !isReviewDirty()) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
   // The portrait-settings panel is a popover on the upload page. Close it
   // when the user clicks anywhere outside the shared fold, while allowing
   // clicks inside the panel (including its toggles) to pass through.
@@ -13117,7 +13323,17 @@
   // 首頁 is the chat page's now -- this page only serves the analysis/result
   // screens, so 回到首頁 (and the logo) leave for it, keeping the query
   // string the same way #chat-ui-btn does.
-  const goChatHome = () => { location.href = `chat/${location.search}`; };
+  const goChatHome = async () => {
+    if (isReviewDirty()) {
+      const leave = await showConfirmModal(
+        "這張照片還沒美化的調整會清掉。確定要回到首頁嗎？",
+        { confirmLabel: "回到首頁", cancelLabel: "留在這裡", danger: false }
+      );
+      if (!leave) return;
+    }
+    leaveConfirmed = true;
+    location.href = `chat/${location.search}`;
+  };
   els.resetButton.addEventListener("click", goChatHome);
   if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", goChatHome);
   if (els.compareToggleBtn) {

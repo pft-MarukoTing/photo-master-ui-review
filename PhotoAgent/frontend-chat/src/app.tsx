@@ -32,7 +32,8 @@ import {
 } from "./chat";
 import { facePeople, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
 import { Icon } from "./icons";
-import { CASE_PREFIX, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
+import { CASE_PREFIX, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
+import { handoffPatch, takeHandoff, writeHandoff } from "./handoff";
 import { resolveUser } from "./identity";
 import { ResultsCanvas, StepIndicator, stepState, versionJob } from "./results";
 import {
@@ -332,6 +333,8 @@ const analysisJob = (p: Photo) => p.analysis_job_id || p.analyze_job_id;
 
 export function App() {
   const [caps, setCaps] = useState<Capabilities | null>(null);
+  // 開機時打開的 #case= 連結也要用到 caps，那時 state 還沒更新到 closure 裡。
+  const capsRef = useRef<Capabilities | null>(null);
   const [debugUi, setDebugUi] = useState(false);
   const [bootError, setBootError] = useState("");
   const [demos, setDemos] = useState<string[] | null>(null);
@@ -345,6 +348,7 @@ export function App() {
   const [tab, setTab] = useState<GalleryTab>("recent");
   const [selection, setSelection] = useState<GallerySelection>(null);
   const [drawer, setDrawer] = useState(false);
+  const [leaveAsk, setLeaveAsk] = useState<{ message: string; answer: (ok: boolean) => void } | null>(null);
 
   // Pre-session chat
   const [step, setStep] = useState<PreStep>("start");
@@ -434,6 +438,7 @@ export function App() {
         setUser(user);
         const [c, cfg] = await Promise.all([api.capabilities(), api.config()]);
         setCaps(c);
+        capsRef.current = c;
         setSettings(defaultSettings(c));
         setDebugUi(!!cfg.debugUi);
         api
@@ -472,8 +477,8 @@ export function App() {
     setDrawer(false);
     setError("");
     try {
-      if (id.startsWith(CASE_PREFIX)) {
-        const caseId = id.slice(CASE_PREFIX.length);
+      const caseId = id.startsWith(CASE_PREFIX) ? id.slice(CASE_PREFIX.length) : null;
+      if (caseId) {
         try {
           const r = await api.fromCase(caseId);
           id = r.session_id;
@@ -486,8 +491,9 @@ export function App() {
           throw e;
         }
       }
-      const s = await api.getSession(id);
+      let s = await api.getSession(id);
       if (!s.photos.length) throw new Error("這個對話沒有照片");
+      if (caseId) s = await applyHandoff(s, caseId);
       setSession(s);
       setSelected(null);
       setPhase("session");
@@ -499,6 +505,58 @@ export function App() {
       setError(errorText(e));
     }
   }
+
+  // 從自訂模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
+  // 帶不過去就算了，照片照樣打開，用的是這邊原本的 plan。
+  async function applyHandoff(s: Session, caseId: string): Promise<Session> {
+    const h = takeHandoff(caseId);
+    const c = capsRef.current;
+    const p = h && c && s.photos.find((x) => x.case_id === caseId);
+    if (!h || !c || !p || isBusy(p)) return s;
+    try {
+      const r = await api.analysis(s.session_id, p.photo_id).catch(() => null);
+      const analysis = r?.status === "success" ? (r.result?.analysis as Analysis) : null;
+      const patch = handoffPatch(h, p.plan, c, analysis);
+      // 引擎、張數在一般帳號可能不給改，被擋就不帶這兩項，其他照樣帶。
+      await api.patchPhotoPlan(s.session_id, p.photo_id, patch).catch(() => {
+        const { render_option, run_count, ...rest } = patch;
+        return api.patchPhotoPlan(s.session_id, p.photo_id, rest);
+      });
+      return await api.getSession(s.session_id);
+    } catch {
+      return s;
+    }
+  }
+
+  // 上傳頁挑好的照片、打的字、選的設定都只在這一頁，離開就沒了；開始對話後
+  // 每個調整都存在後端，不用問。關分頁、重新整理用瀏覽器自己的離開提示（文字
+  // 改不了），頁面裡換照片、回首頁用 confirmLeave。
+  const unsentHome = phase !== "session" && (!!source || notes.length > 0);
+  function confirmLeave(where: string): Promise<boolean> {
+    if (!unsentHome) return Promise.resolve(true);
+    const what = notes.length ? "剛剛選的照片和打的需求" : "剛剛選的照片";
+    return new Promise((resolve) =>
+      setLeaveAsk({
+        message: `${what}還沒開始美化，${where}就會清掉。確定嗎？`,
+        answer: (ok) => {
+          setLeaveAsk(null);
+          resolve(ok);
+        },
+      }),
+    );
+  }
+  async function openOtherSession(id: string) {
+    if (await confirmLeave("打開另一張")) openSession(id);
+  }
+  useEffect(() => {
+    if (!unsentHome) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [unsentHome]);
 
   const photo = activePhoto(session);
   const messages = session?.messages || [];
@@ -634,7 +692,7 @@ export function App() {
     if (!sel) return;
     // A past chat opens right away; a sample on the home page is only selected.
     if (phase === "chat" || sel.kind === "session") {
-      if (sel.kind === "session") openSession(sel.id);
+      if (sel.kind === "session") openOtherSession(sel.id);
       else choose({ kind: "demo", name: sel.name });
       return;
     }
@@ -976,7 +1034,9 @@ export function App() {
     <Header
       caseId={phase === "session" ? photo?.case_id : null}
       jobId={phase === "session" ? photo?.active_version?.job_id || photo?.analyze_job_id || null : null}
-      onHome={goHome}
+      onHome={async () => {
+        if (await confirmLeave("回到首頁")) goHome();
+      }}
       onHistory={() => {
         refreshSessions();
         setDrawer(true);
@@ -984,6 +1044,9 @@ export function App() {
       showHome={phase !== "home"}
       showHistory={phase === "session"}
       showOldUi={phase === "session"}
+      onOldUi={() => {
+        if (caps && photo?.case_id) writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis);
+      }}
       oldUiBusy={!!photo && isBusy(photo)}
     />
   );
@@ -992,9 +1055,12 @@ export function App() {
       open={drawer}
       sessions={sessions}
       currentId={session?.session_id || null}
-      onOpen={openSession}
+      onOpen={openOtherSession}
       onClose={() => setDrawer(false)}
     />
+  );
+  const confirmEl = leaveAsk && (
+    <ConfirmModal message={leaveAsk.message} confirmLabel="繼續" cancelLabel="留在這裡" onAnswer={leaveAsk.answer} />
   );
   // Both returns mount it; it draws nothing until opened.
   const samplesEl = (
@@ -1035,6 +1101,7 @@ export function App() {
         </main>
         {drawerEl}
         {samplesEl}
+        {confirmEl}
       </>
     );
   }
@@ -1174,6 +1241,7 @@ export function App() {
       </main>
       {drawerEl}
       {samplesEl}
+      {confirmEl}
     </>
   );
 }

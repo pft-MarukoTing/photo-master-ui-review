@@ -146,6 +146,48 @@ function ReportModal(props: { jobId: string | null; onClose: () => void }) {
   );
 }
 
+// 自訂模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下。
+export function ConfirmModal(props: {
+  message: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  onAnswer: (ok: boolean) => void;
+}) {
+  const { onAnswer } = props;
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onAnswer(false);
+    };
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onAnswer]);
+
+  return createPortal(
+    <div class="error-modal" id="chat-confirm-modal">
+      <div class="error-modal-backdrop" onClick={() => onAnswer(false)} />
+      <div class="error-modal-box" role="alertdialog" aria-modal="true" aria-labelledby="chat-confirm-title" aria-describedby="chat-confirm-msg">
+        <div class="error-modal-hdr">
+          <span id="chat-confirm-title" class="notice-modal-title">
+            Photo<em>Master</em>
+          </span>
+        </div>
+        <p id="chat-confirm-msg" class="error-modal-msg">
+          {props.message}
+        </p>
+        <div class="account-modal-actions">
+          <button class="chat-chip is-ghost" type="button" autoFocus onClick={() => onAnswer(false)}>
+            {props.cancelLabel}
+          </button>
+          <button class="chat-chip is-primary" type="button" onClick={() => onAnswer(true)}>
+            {props.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // Same order as 自訂模式's header, so switching modes moves nothing:
 // 回到首頁 · 最近照片 · mode switch · 主題 · 回報.
 // showHistory is off while the gallery (with its 最近對話 tab) is on screen.
@@ -159,6 +201,8 @@ export function Header(props: {
   showHistory?: boolean;
   showOldUi?: boolean;
   oldUiBusy?: boolean;
+  // Right before leaving for 自訂模式: hands this photo's adjustments over.
+  onOldUi?: () => void;
   // The photo on screen, which 自訂模式 then opens on.
   caseId?: string | null;
   // The edit (or, before one, the analysis) on screen, which 回報 points at.
@@ -192,7 +236,7 @@ export function Header(props: {
                 <span class="btn-label">自訂模式</span>
               </button>
             ) : (
-              <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式">
+              <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式" onClick={props.onOldUi}>
                 <Icon name="layout" size={14} />
                 <span class="btn-label">自訂模式</span>
               </a>
