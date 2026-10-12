@@ -100,6 +100,10 @@ export const api = {
   createSession: () => request<Session>(`${CHAT}/sessions`, json("POST", {})),
   listSessions: (limit = 30) =>
     request<{ sessions: SessionSummary[] }>(`${CHAT}/sessions${q({ limit })}`),
+  // The session a history case opens in: its own if still live, else one
+  // rebuilt from history. 409 when the chat page cannot open it at all.
+  fromCase: (caseId: string) =>
+    request<{ session_id: string; created: boolean }>(`${CHAT}/sessions/from-case`, json("POST", { case_id: caseId })),
   postMessage: (id: string, card: Dict, text = "") =>
     request<Message>(`${sid(id)}/messages`, json("POST", { role: "user", card, ...(text ? { text } : {}) })),
   // Several at once, in order: the upload page's conversation, carried into the session it starts.
@@ -157,7 +161,8 @@ export const urls = {
   demoImage: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}`,
   demoThumb: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}/thumbnail`,
   styleThumb: (group: string, value: string) => `${BASE}/assets/optional_style/${group}/thumbs/${styleThumbFile(group, value)}.webp`,
-  oldUi: () => `${BASE}/`,
+  // With a case, 自訂模式 opens straight on it.
+  oldUi: (caseId?: string | null) => `${BASE}/${location.search}${caseId ? `#case=${encodeURIComponent(caseId)}` : ""}`,
 };
 
 const STYLE_FILE_ALIAS: Record<string, Record<string, string>> = {

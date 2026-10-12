@@ -139,6 +139,9 @@ def _summary(session_id, session):
         ),
         "status": state,
         "rendered_count": len(rendered),
+        # Which history cases this session already covers: the home page
+        # lists the rest of the user's history next to it (routes/chat.py).
+        "case_ids": [p["case_id"] for p in photos],
     }
 
 
@@ -154,6 +157,18 @@ def list_sessions(user, limit=20):
             continue
         out.append(_summary(session_id, session))
     return out
+
+
+def find_session_for_case(user, case_id):
+    """The newest live session holding the photo `case_id`, or None -- a
+    case reopened from history goes back to its own conversation while
+    that still exists."""
+    for raw_id in _client().zrevrange(_index_key(user), 0, -1):
+        session_id = _decode(raw_id)
+        session = load_session(user, session_id)
+        if session and any(p["case_id"] == case_id for p in session["photos"]):
+            return session_id
+    return None
 
 
 def save_batch_plans(user, session_id, defaults, plans):

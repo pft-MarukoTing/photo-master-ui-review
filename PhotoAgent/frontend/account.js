@@ -25,6 +25,18 @@ window.PhotoAgentAccount = (() => {
     return (raw || "").trim();
   }
 
+  // The guest identity the chat UI (frontend-chat/src/identity.ts) keeps in
+  // this browser for a visit with neither ?user_id= nor ?admin. Adopted here
+  // (read only -- never created) so that switching between the two modes
+  // stays on the same history; null when the chat page was never opened.
+  function chatGuest() {
+    try {
+      return normalizeUsername(localStorage.getItem("photomaster-chat-guest")) || null;
+    } catch {
+      return null;
+    }
+  }
+
   async function initFromUrl() {
     const params = new URLSearchParams(window.location.search);
     const userId = params.get("user_id");
@@ -38,7 +50,8 @@ window.PhotoAgentAccount = (() => {
       // is recorded and recallable like any other account instead of
       // getCurrentUser() staying null and every history write silently
       // no-op'ing (backend's _record_history_safely).
-      currentUser = params.has("admin") ? "admin" : null;
+      currentUser = params.has("admin") ? "admin" : chatGuest();
+      isGuest = !!currentUser && currentUser !== "admin";
       return currentUser;
     }
     try {

@@ -4302,6 +4302,7 @@
        entirely instead of opening a panel with one, already-selected row. */
     .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
+    body.is-opening-case > main { visibility: hidden; }
   </style>
 </head>
 <body>
@@ -4353,6 +4354,11 @@
       if (theme !== "default") document.body.dataset.theme = theme;
       document.body.dataset.themeMode = THEME_MODE[theme];
     } catch (_) { /* never block first paint on a theming failure */ }
+    // A #case= link (the chat page's 自訂模式 button) opens that case as
+    // soon as the account resolves -- keep the upload page undrawn until
+    // then (app.js's openCaseFromHash drops the class) so the switch goes
+    // straight from the chat's photo to this one.
+    if (/(^#|&)case=/.test(location.hash)) document.body.classList.add("is-opening-case");
   })();
 </script>
 

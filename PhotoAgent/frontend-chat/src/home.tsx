@@ -47,7 +47,14 @@ function ThemeToggle() {
 }
 
 // showHistory is off while the gallery (with its 最近對話 tab) is on screen.
-export function Header(props: { onHome: () => void; onHistory: () => void; showHome: boolean; showHistory?: boolean }) {
+export function Header(props: {
+  onHome: () => void;
+  onHistory: () => void;
+  showHome: boolean;
+  showHistory?: boolean;
+  // The photo on screen, which 自訂模式 then opens on.
+  caseId?: string | null;
+}) {
   return (
     <header class="site-header">
       <div class="header-inner">
@@ -68,7 +75,7 @@ export function Header(props: { onHome: () => void; onHistory: () => void; showH
               <span class="btn-label">對話紀錄</span>
             </button>
           )}
-          <a class="btn btn-secondary btn-sm" href={`${urls.oldUi()}${location.search}`} title="切換到自訂模式">
+          <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式">
             <Icon name="layout" size={14} />
             <span class="btn-label">自訂模式</span>
           </a>
@@ -212,6 +219,13 @@ export function SessionTile(props: { s: SessionSummary; selected: boolean; onCli
   );
 }
 
+// What a row is picked by: its session, or for a history case with none,
+// `case:<case_id>` -- openSession tells the two apart.
+export const CASE_PREFIX = "case:";
+export function rowId(s: SessionSummary): string {
+  return s.session_id ?? `${CASE_PREFIX}${s.case_id}`;
+}
+
 // Sessions arrive newest first, so a day's run of them is contiguous: one
 // group per calendar day, in that same order. The tiles carry no date of
 // their own any more -- the heading is where the date lives, which is how
@@ -245,10 +259,10 @@ function SessionDays(props: {
           <div class={props.gridClass}>
             {day.rows.map((s) => (
               <SessionTile
-                key={s.session_id}
+                key={rowId(s)}
                 s={s}
-                selected={s.session_id === props.selectedId}
-                onClick={() => props.onPick(s.session_id)}
+                selected={rowId(s) === props.selectedId}
+                onClick={() => props.onPick(rowId(s))}
               />
             ))}
           </div>

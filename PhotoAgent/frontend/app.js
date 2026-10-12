@@ -970,7 +970,68 @@
     await initFromUrl();
     applyAccountUi();
     checkAdminAccess();
+    await openCaseFromHash();
   })();
+
+  // #case=<image_key>: the chat page's 自訂模式 link for the photo it has
+  // open. Opened like a click on that case in the history drawer; the hash
+  // is dropped either way so a reload lands on the upload page as usual.
+  async function openCaseFromHash() {
+    const caseKey = new URLSearchParams(location.hash.slice(1)).get("case");
+    if (!caseKey) return;
+    history.replaceState(null, "", location.pathname + location.search);
+    try {
+      await openCaseByKey(caseKey);
+    } finally {
+      document.body.classList.remove("is-opening-case");
+    }
+  }
+
+  async function openCaseByKey(caseKey) {
+    const user = getCurrentUser();
+    if (!user) return;
+    let entry = null;
+    try {
+      entry = (await getHistoryCase(user, { imageKey: caseKey }))?.case || null;
+    } catch {
+      entry = null;
+    }
+    if (!entry) {
+      showNoticeModal("找不到這張照片的處理紀錄。");
+      return;
+    }
+    try {
+      await openHistoryCase(entry);
+    } catch (error) {
+      showNoticeModal(friendlyError(error));
+    }
+  }
+
+  // The same choice a click on the case's history-drawer tile makes
+  // (renderTileStatus): 待美化 / 分析中 opens the analysis, a finished
+  // edit opens its result, one still running opens its progress.
+  async function openHistoryCase(job) {
+    const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
+    const statuses = await Promise.all(
+      jobIds.map((id) => getJobStatusCached(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
+    );
+    const failure = (s) => friendlyError({ message: s?.error_message || s?.error, code: s?.error });
+    if (job.stage === "analyze") {
+      if (statuses[0]?.status === "error") {
+        showNoticeModal(failure(statuses[0]));
+        return;
+      }
+      await viewAnalyzeHistoryRecord(job, { alreadyAnalyzed: statuses[0]?.status === "success" });
+      return;
+    }
+    if (statuses.some((s) => s.status === "success")) {
+      await viewHistoryRecord(job);
+    } else if (statuses.every((s) => s.status === "error")) {
+      showNoticeModal(failure(statuses[0]));
+    } else {
+      await viewProcessingHistoryRecord(job);
+    }
+  }
 
   // Upload-page option pills (#image-model-quality-picker etc.): a
   // details/summary popover (same visual language as the analysis-preview's
@@ -12904,8 +12965,31 @@
   setupCompactUploadSelectors();
   // Keep the query string (env flags etc.) across the switch to the chat UI,
   // the same way the chat page's 自訂模式 link does on the way back.
+  // An open case goes along as #case=<image_key>: the chat page reopens it
+  // in its conversation, or rebuilds one from history (routes/chat.py's
+  // /sessions/from-case).
   const chatUiBtn = document.getElementById("chat-ui-btn");
-  if (chatUiBtn) chatUiBtn.setAttribute("href", `chat/${location.search}`);
+  if (chatUiBtn) {
+    chatUiBtn.setAttribute("href", `chat/${location.search}`);
+    chatUiBtn.addEventListener("click", async (event) => {
+      const user = getCurrentUser();
+      if (!user || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      // A photo uploaded on this page has no case key on the client -- only
+      // its jobs, which /case resolves (see findCaseForJob).
+      const jobId = lastResult?.jobId || (selectedFile && singleFlowState?.analyzeJobId);
+      if (!currentCaseHistoryImageKey && !jobId) return;
+      event.preventDefault();
+      let caseKey = currentCaseHistoryImageKey;
+      if (!caseKey) {
+        try {
+          caseKey = (await getHistoryCase(user, { jobId }))?.case?.image_key || null;
+        } catch {
+          caseKey = null; // not in history yet -- just open the chat page
+        }
+      }
+      location.href = `chat/${location.search}${caseKey ? `#case=${encodeURIComponent(caseKey)}` : ""}`;
+    });
+  }
   setupCompactHeaderActions();
   // The portrait-settings panel is a popover on the upload page. Close it
   // when the user clicks anywhere outside the shared fold, while allowing

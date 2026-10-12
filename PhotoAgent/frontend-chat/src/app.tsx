@@ -32,7 +32,7 @@ import {
 } from "./chat";
 import { facePeople, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
 import { Icon } from "./icons";
-import { Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
+import { CASE_PREFIX, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { resolveUser } from "./identity";
 import { ResultsCanvas, StepIndicator, stepState, versionJob } from "./results";
 import {
@@ -117,6 +117,11 @@ type Note = {
 };
 
 // 點頭像回答「哪一位」、直接送出時 AI 回的那句。沒問模型，所以話是這裡寫好的。
+// The whole 對話紀錄 list: every live session plus every history case (the
+// backend's LISTED_SESSIONS_MAX + HISTORY_MAX_LEN), since 自訂模式's 最近照片
+// reaches all of a user's cases too.
+const LISTED_MAX = 300;
+
 const WHO_ANSWERED_REPLY = "好，這個我記下來了。還有其他想改的地方嗎？沒有的話，可以從下面選「分析」或「一鍵美化」喔！";
 
 // What a note asks for, as the list shows it and the prompt carries it.
@@ -298,9 +303,13 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
+// #session=<id>, or #case=<case_id> from 自訂模式 (a history case, which
+// openSession resolves to its session) -- in openSession's row-id form.
 function sessionHash(): string | null {
   const m = location.hash.match(/session=([^&]+)/);
-  return m ? decodeURIComponent(m[1]) : null;
+  if (m) return decodeURIComponent(m[1]);
+  const c = location.hash.match(/case=([^&]+)/);
+  return c ? `${CASE_PREFIX}${decodeURIComponent(c[1])}` : null;
 }
 
 function setSessionHash(id: string | null) {
@@ -329,6 +338,10 @@ export function App() {
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
 
   const [phase, setPhase] = useState<Phase>("home");
+  // Landing on a #session / #case link (the other mode's 對話模式 button):
+  // the home page stays undrawn until that session is open, so the switch
+  // goes straight from one mode's photo to the other's.
+  const [opening, setOpening] = useState(() => !!sessionHash());
   const [tab, setTab] = useState<GalleryTab>("recent");
   const [selection, setSelection] = useState<GallerySelection>(null);
   const [drawer, setDrawer] = useState(false);
@@ -430,16 +443,18 @@ export function App() {
         const list = await refreshSessions();
         if (!list.length) setTab("sample");
         const id = sessionHash();
-        if (id) await openSession(id);
+        // Staying undrawn when it hands the case to 自訂模式 instead.
+        if (id && (await openSession(id)) === "left") return;
       } catch (e) {
         setBootError(errorText(e));
       }
+      setOpening(false);
     })();
   }, []);
 
   async function refreshSessions(): Promise<SessionSummary[]> {
     try {
-      const r = await api.listSessions(30);
+      const r = await api.listSessions(LISTED_MAX);
       const list = (r.sessions || []).filter((s) => s.photo_count > 0);
       setSessions(list);
       return list;
@@ -450,10 +465,27 @@ export function App() {
   }
 
   // ── Session loading and polling ───────────────────────────────────────────
-  async function openSession(id: string) {
+  // `id` is a session, or `case:<case_id>` for a history case: that case's
+  // own session, or one rebuilt from history. A case the chat page cannot
+  // open (no analysis left, or the AIPoC path) opens in 自訂模式 instead.
+  async function openSession(id: string): Promise<"left" | void> {
     setDrawer(false);
     setError("");
     try {
+      if (id.startsWith(CASE_PREFIX)) {
+        const caseId = id.slice(CASE_PREFIX.length);
+        try {
+          const r = await api.fromCase(caseId);
+          id = r.session_id;
+          if (r.created) refreshSessions();
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 409) {
+            location.href = urls.oldUi(caseId);
+            return "left";
+          }
+          throw e;
+        }
+      }
       const s = await api.getSession(id);
       if (!s.photos.length) throw new Error("這個對話沒有照片");
       setSession(s);
@@ -924,7 +956,7 @@ export function App() {
       </>
     );
   }
-  if (!caps || !settings) return <Header onHome={() => {}} onHistory={() => {}} showHome={false} />;
+  if (!caps || !settings || opening) return <Header onHome={() => {}} onHistory={() => {}} showHome={false} />;
 
   const hiddenInput = (
     <input
@@ -942,6 +974,7 @@ export function App() {
 
   const header = (
     <Header
+      caseId={phase === "session" ? photo?.case_id : null}
       onHome={goHome}
       onHistory={() => {
         refreshSessions();

@@ -87,7 +87,7 @@ class FakeRedis:
 
     def zrevrange(self, key, start, end):
         members = sorted(self.data.get(key, {}).items(), key=lambda kv: kv[1], reverse=True)
-        return [m for m, _ in members][start:end + 1]
+        return [m for m, _ in members][start:(end + 1) or None]
 
     def zrem(self, key, member):
         self.data.get(key, {}).pop(member, None)
@@ -108,6 +108,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.history = []       # record_history kwargs
         self.next_job = iter(f"job{i}" for i in range(1000))
         self.analysis = {**base_analysis(), "compatibility_version": 5}
+        self.cases = {}         # case_id -> history entry with versions (see self.case)
 
         def enqueue(engine_params, src_content=None, job_id=None):
             job_id = job_id or next(self.next_job)
@@ -121,7 +122,7 @@ class ChatRoutesTest(unittest.TestCase):
             job = self.jobs.get(job_id)
             if job is None:
                 return None
-            return {**job, "0_res0": {"cusKeys": [f"{job_id}/analysis.json"]}}
+            return {"0_res0": {"cusKeys": [f"{job_id}/analysis.json"]}, **job}
 
         def record_history(username, job_id, path, case_id, version_id, params=None, based_on=None):
             self.history.append({"job_id": job_id, "case_id": case_id, "version_id": version_id,
@@ -138,6 +139,9 @@ class ChatRoutesTest(unittest.TestCase):
             # the trip through the job's info hash gets there.
             patch.object(chat.chat_queue, "run", lambda params: chat.chat_jobs.run(json.loads(json.dumps(params)))),
             patch.object(api, "record_history", record_history),
+            patch.object(chat, "get_history", lambda user, limit=50, offset=0: sorted(
+                self.cases.values(), key=lambda e: e["ts"], reverse=True)[offset:offset + limit]),
+            patch.object(chat, "get_history_entry", lambda user, case_id, include_versions=True: self.cases.get(case_id)),
             patch.object(api, "get_current_compatibility_version", lambda: 5),
             # 詳細解說 is on by default: no test reaches a real model for the
             # opening or the render note unless it patches one in itself.
@@ -180,6 +184,24 @@ class ChatRoutesTest(unittest.TestCase):
         """The session's row in the list -- what a history tile renders."""
         listed = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()
         return next(s for s in listed["sessions"] if s["session_id"] == sid)
+
+    def case(self, case_id, versions, ts=100.0, path="local"):
+        """A history case as account.get_history_entry returns it, from
+        (version_id, kind, job_ids) oldest first."""
+        rows = [{"version_id": vid, "kind": kind, "runs": list(runs), "path": path, "based_on": None,
+                 "created_at": ts, "results": [{"job_id": j, "run": 1, "field": "0_res0"} for j in runs]}
+                for vid, kind, runs in versions]
+        edits = [v for v in rows if v["kind"] == "edit"]
+        self.cases[case_id] = {"image_key": case_id, "path": path, "ts": ts, "uploaded_at": ts,
+                               "modified_at": ts if edits else None, "runs": rows[-1]["runs"], "versions": rows}
+        return self.cases[case_id]
+
+    def cards(self, sid, kind=None):
+        body = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        return [m["card"] for m in body["messages"] if m.get("card") and (kind is None or m["card"]["type"] == kind)]
+
+    def from_case(self, case_id):
+        return self.client.post("/api/photo-agent/chat/sessions/from-case", json={"user": USER, "case_id": case_id})
 
     def render(self, sid, photo):
         res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
@@ -248,6 +270,113 @@ class ChatRoutesTest(unittest.TestCase):
         row = self.summary(sid)
         self.assertEqual(row["thumbnail_result"], {"job_id": later["job_ids"][0], "run": 1})
         self.assertEqual(row["rendered_count"], 2)
+
+    def test_history_cases_without_a_session_are_listed(self):
+        """A case no live session holds -- edited in 自訂模式, or left by an
+        expired session -- is a row of its own; one a session holds is not
+        listed twice, and an AIPoC-path case is left out."""
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        self.case(photo["case_id"], [(photo["analyze_job_id"], "analyze", [photo["analyze_job_id"]])], ts=50)
+        self.case("c_custom", [("a1", "analyze", ["a1"]), ("e1", "edit", ["e1"])], ts=10)
+        self.case("c_upload", [("a2", "analyze", ["a2"])], ts=5)
+        self.case("c_aipoc", [("a3", "edit", ["a3"])], ts=20, path="aipoc")
+        rows = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()["sessions"]
+        self.assertEqual([r["session_id"] or r["case_id"] for r in rows], [sid, "c_custom", "c_upload"])
+        custom, upload = rows[1], rows[2]
+        self.assertEqual((custom["status"], custom["thumbnail_result"], custom["thumbnail_job_id"]),
+                         ("done", {"job_id": "e1", "run": 1}, "e1"))
+        self.assertEqual((upload["status"], upload["thumbnail_result"]), ("ready", None))
+
+    def test_a_case_with_a_live_session_reopens_it(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res = self.from_case(photo["case_id"])
+        self.assertEqual((res.status_code, res.get_json()), (200, {"session_id": sid, "created": False}))
+
+    def test_a_case_without_a_session_is_rebuilt_from_history(self):
+        self.jobs.update({
+            "a1": {"status": "success", "error": None, "srcKeys": ["c1/src.jpg"]},
+            "e1": {"status": "success", "error": None},
+            "e2": {"status": "error", "error": "boom"},
+            "e3": {"status": "success", "error": None},
+        })
+        self.analysis.update({"photo_summary": "海邊合照", "detected_issues": ["偏暗"]})
+        self.case("c1", [("a1", "analyze", ["a1"]), ("e1", "edit", ["e1"]), ("e2", "edit", ["e2"]),
+                         ("e3", "edit", ["e3"])])
+        res = self.from_case("c1")
+        self.assertEqual(res.status_code, 201)
+        sid = res.get_json()["session_id"]
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        photo = session["photos"][0]
+        self.assertEqual((photo["case_id"], photo["src_keys"], photo["analyze_job_id"], photo["status"]),
+                         ("c1", ["c1/src.jpg"], "a1", "ready"))
+        self.assertEqual(photo["active_version"]["version_id"], "e3")
+        # The photo and its analysis as a fresh upload shows them, then the
+        # versions that came out -- no conversation, and nothing for e2.
+        self.assertEqual([m["card"]["type"] for m in session["messages"]],
+                         ["photos_added", "analysis_ready", "analysis_brief", "render_done", "render_done"])
+        done = [m["card"] for m in session["messages"]][3:]
+        self.assertEqual([(c["version_id"], c["via"]) for c in done], [("e1", "custom"), ("e3", "custom")])
+        # Opening it again neither rebuilds nor reposts.
+        self.assertEqual(self.from_case("c1").get_json(), {"session_id": sid, "created": False})
+        self.assertEqual(len(self.cards(sid, "render_done")), 2)
+
+    def test_a_one_shot_case_is_rebuilt_from_its_edit_job(self):
+        """A case 自訂模式 made in one go (review skipped) has only edit
+        versions: the first one's job carries the analysis inside its result
+        metadata, and that version still shows as the first render."""
+        meta = {"analysis": {**self.analysis, "photo_summary": "一次完成的合照"}}
+        self.jobs.update({
+            "e1": {"status": "success", "error": None, "srcKeys": ["c1/src.jpg"],
+                   "0_res0": {"runs": [{"cusKeys": ["e1/result.jpg", "e1/meta.json"]}]}},
+            "e2": {"status": "success", "error": None},
+        })
+        p = patch.object(chat, "download_bytes", lambda key, job_id: (
+            json.dumps(meta if key == "e1/meta.json" else {}).encode(), None))
+        p.start()
+        self.addCleanup(p.stop)
+        self.case("c1", [("e1", "edit", ["e1"]), ("e2", "edit", ["e2"])])
+        res = self.from_case("c1")
+        self.assertEqual(res.status_code, 201, res.get_json())
+        sid = res.get_json()["session_id"]
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        photo = session["photos"][0]
+        self.assertEqual((photo["analyze_job_id"], photo["status"], photo["active_version"]["version_id"]),
+                         ("e1", "ready", "e2"))
+        self.assertEqual([m["card"]["type"] for m in session["messages"]],
+                         ["photos_added", "analysis_ready", "analysis_brief", "render_done", "render_done"])
+        self.assertEqual([c["version_id"] for c in self.cards(sid, "render_done")], ["e1", "e2"])
+        res = self.client.get(self.url(sid, f"/photos/{photo['photo_id']}/analysis"), query_string={"user": USER})
+        self.assertEqual(res.get_json()["result"]["analysis"]["photo_summary"], "一次完成的合照")
+
+    def test_a_case_with_no_analysis_cannot_open_in_chat(self):
+        self.case("c1", [("e1", "edit", ["e1"])])
+        self.assertEqual(self.from_case("c1").status_code, 409)
+        self.case("c2", [("a2", "analyze", ["a2"])])  # its job has expired out of Redis
+        self.assertEqual(self.from_case("c2").status_code, 409)
+        self.assertEqual(self.from_case("nope").status_code, 404)
+
+    def test_a_custom_mode_version_shows_up_in_the_session(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        a = photo["analyze_job_id"]
+        self.jobs["x1"] = {"status": "success", "error": None}
+        self.case(photo["case_id"], [(a, "analyze", [a]), ("x1", "edit", ["x1"])])
+        self.assertEqual([(c["version_id"], c.get("via")) for c in self.cards(sid, "render_done")], [("x1", "custom")])
+        self.assertEqual(len(self.cards(sid, "render_done")), 1)  # posted once
+
+        # One still running is followed like a chat render.
+        self.jobs["x2"] = {"status": "processing", "error": None}
+        self.case(photo["case_id"], [(a, "analyze", [a]), ("x1", "edit", ["x1"]), ("x2", "edit", ["x2"])])
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(session["photos"][0]["status"], "rendering")
+        self.jobs["x2"]["status"] = "success"
+        new = self.status(sid)["new_messages"]
+        self.assertEqual([(m["card"]["type"], m["card"]["version_id"], m["card"].get("via")) for m in new],
+                         [("render_done", "x2", "custom")])
+        self.assertNotIn("plan", new[0]["card"])
+        self.assertEqual(self.status(sid)["session"]["photos"][0]["active_version"]["version_id"], "x2")
 
     def test_session_tile_is_failed_only_when_nothing_survived(self):
         sid = self.new_session()

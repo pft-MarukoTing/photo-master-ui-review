@@ -31,7 +31,7 @@ from flask import Blueprint, current_app, jsonify, request
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
 from backend.services import chat_queue, chat_session as store
-from backend.services.account import get_history_entry, normalize_username
+from backend.services.account import HISTORY_MAX_LEN, get_history, get_history_entry, normalize_username
 from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id
 from backend.services.template_params import get_engine_params_template
@@ -110,19 +110,32 @@ def _photo(session, photo_id):
 
 def _load_analysis(job_id):
     """(analysis, None) or (None, error) for a finished analyze job -- the
-    same lookup /analyze/result does."""
+    same lookup /analyze/result does.
+
+    Also a one-shot analyze+edit job (自訂模式 with review skipped -- an old
+    case's only job): its analysis rides inside the first run's result
+    metadata, the second of [image, metadata] where an analyze job keys the
+    analysis alone."""
     info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"])
     if info is None:
         return None, "Job not found"
     if info.get("status") != "success":
         return None, info.get("error") or f"analysis is {info.get('status') or 'pending'}"
-    result_keys = (info.get("0_res0") or {}).get("cusKeys") or []
+    res0 = info.get("0_res0") or {}
+    runs = res0.get("runs")
+    result_keys = ((runs[0] if runs else res0).get("cusKeys")) or []
     if not result_keys:
         return None, "job succeeded but analysis key is missing"
-    analysis_bytes, download_error = download_bytes(result_keys[0], job_id)
+    combined = len(result_keys) > 1
+    analysis_bytes, download_error = download_bytes(result_keys[1 if combined else 0], job_id)
     if download_error or analysis_bytes is None:
         return None, f"failed to download analysis: {download_error}"
-    return json.loads(analysis_bytes), None
+    analysis = json.loads(analysis_bytes)
+    if combined:
+        analysis = analysis.get("analysis") if isinstance(analysis, dict) else None
+        if not analysis:
+            return None, "job result carries no analysis"
+    return analysis, None
 
 
 def _analysis_job_id(photo):
@@ -152,16 +165,176 @@ def create_session():
     return jsonify(store.create_session(user)), 201
 
 
+# Live sessions read to tell which history cases already have one.
+LISTED_SESSIONS_MAX = 100
+
+
 @chat_bp.get("/sessions")
 def list_sessions():
+    """Live sessions, and every history case none of them holds -- a photo
+    edited only in 自訂模式, or one whose session has expired -- as one list,
+    newest first. A case row has no session_id; opening it goes through
+    /sessions/from-case."""
     user = _user(request.args.get("user"))
-    limit = request.args.get("limit", 20, type=int)
-    return jsonify({"sessions": store.list_sessions(user, limit=max(1, min(limit, 100)))})
+    # Up to the whole merged list: 自訂模式's 最近照片 pages through every
+    # case, so a cap here would hide older ones only on the chat side.
+    limit = max(1, min(request.args.get("limit", 20, type=int), LISTED_SESSIONS_MAX + HISTORY_MAX_LEN))
+    sessions = store.list_sessions(user, limit=LISTED_SESSIONS_MAX)
+    covered = {case_id for s in sessions for case_id in s["case_ids"]}
+    cases = [_case_summary(e) for e in get_history(user, limit=HISTORY_MAX_LEN)
+             if e["image_key"] not in covered and _opens_in_chat(e)]
+    rows = sorted(sessions + cases, key=lambda r: r["updated_at"] or 0, reverse=True)
+    return jsonify({"sessions": rows[:limit]})
+
+
+def _opens_in_chat(entry):
+    """Only local-path cases: the chat page reads images through /result
+    and /source, which an AIPoC-path job never wrote to."""
+    return (entry.get("path") or "local") == "local" and bool(entry.get("runs"))
+
+
+def _case_summary(entry):
+    """A history case shaped like a session row (chat_session._summary)."""
+    edited = bool(entry.get("modified_at"))
+    runs = entry.get("runs") or []
+    return {
+        "session_id": None,
+        "case_id": entry["image_key"],
+        "created_at": entry.get("uploaded_at") or entry.get("ts"),
+        "updated_at": entry.get("ts"),
+        "photo_count": 1,
+        # Any job of the case shares its source, so the latest one serves.
+        "thumbnail_job_id": runs[0] if runs else None,
+        "thumbnail_result": {"job_id": runs[0], "run": 1} if edited and runs else None,
+        "status": "done" if edited else "ready",
+        "rendered_count": 1 if edited else 0,
+        "case_ids": [entry["image_key"]],
+    }
+
+
+@chat_bp.post("/sessions/from-case")
+def session_from_case():
+    """Open a history case in the chat page: its live session if it still
+    has one, else a new one-photo session rebuilt from history -- the
+    photo, its analysis and every version, without the conversation that
+    made them (which expired with the old session, or never existed for a
+    case made in 自訂模式).
+
+    409 when there is nothing for the chat page to work from: a case whose
+    analysis is gone or that ran on the AIPoC path. The client then opens
+    it in 自訂模式 instead.
+    """
+    body = _body()
+    user = _user(body.get("user"))
+    case_id = body.get("case_id")
+    if not isinstance(case_id, str) or not case_id:
+        raise _RequestError("case_id is required")
+    existing = store.find_session_for_case(user, case_id)
+    if existing:
+        return jsonify({"session_id": existing, "created": False})
+
+    entry = get_history_entry(user, case_id)
+    if not entry:
+        raise _RequestError("case not found", 404)
+    if not _opens_in_chat(entry):
+        raise _RequestError("unsupported_path", 409)
+    versions = entry.get("versions") or []
+    # A case made in one go (自訂模式 with review skipped) has no analyze
+    # version: its first edit's job did the analysis too (_load_analysis).
+    analyze = (next((v for v in reversed(versions) if v["kind"] == "analyze" and v["runs"]), None)
+               or next((v for v in versions if v["runs"] and (v.get("path") or "local") == "local"), None))
+    if analyze is None:
+        raise _RequestError("no_analysis", 409)
+    job_id = analyze["runs"][0]
+    info = get_job_info(job_id, keyToGet=["status", "error", "srcKeys"])
+    if not info or not info.get("srcKeys"):
+        raise _RequestError("no_analysis", 409)
+    if analyze["kind"] != "analyze" and _load_analysis(job_id)[1]:
+        raise _RequestError("no_analysis", 409)
+
+    session = store.create_session(user)
+    session_id = session["session_id"]
+    photo = {
+        "photo_id": f"p_{uuid.uuid4().hex[:12]}",
+        "filename": None,
+        "case_id": case_id,
+        "src_keys": list(info["srcKeys"]),
+        "analyze_job_id": job_id,
+        "status": "analyzing",
+        "error": None,
+        "pending_render": None,
+        "queued_render": None,
+        "active_version": None,
+    }
+    store.add_photos(user, session_id, session, [photo])
+    store.append_messages(user, session_id, [store.make_message(
+        "user", card={"type": "photos_added", "photo_ids": [photo["photo_id"]]})])
+    # A finished analysis lands the way a status poll would land it, so the
+    # page opens on the same analysis card as a fresh upload; one still
+    # running is left to the polls.
+    session = store.load_session(user, session_id)
+    photo = session["photos"][0]
+    store.append_messages(user, session_id, _advance_analyzing(user, session_id, photo, {}, rebuilt=True))
+    _sync_from_history(user, session_id, store.load_session(user, session_id))
+    return jsonify({"session_id": session_id, "created": True}), 201
+
+
+def _sync_from_history(user, session_id, session):
+    """Post the versions a session's photos got outside it as render_done
+    cards, so the chat page lists them like its own -- edits made in
+    自訂模式, and those of an expired session a photo was reopened from.
+    A version is posted once (claimed by its version_id, like a chat
+    render). One still running is followed as the photo's pending render,
+    so the page shows it rendering and the status polls post it."""
+    statuses, messages, posted = {}, [], None
+    for photo in session["photos"]:
+        if photo["status"] != "ready":
+            continue
+        entry = get_history_entry(user, photo["case_id"]) or {}
+        edits = [v for v in entry.get("versions") or []
+                 if v["kind"] != "analyze" and v["runs"] and (v.get("path") or "local") == "local"]
+        if not edits:
+            continue
+        if posted is None:
+            posted = {(m.get("card") or {}).get("version_id")
+                      for m in store.get_messages(user, session_id, limit=store.MESSAGES_MAX_LEN)}
+        changed = False
+        for version in edits:
+            version_id = version["version_id"]
+            if version_id in posted:
+                continue
+            jobs = {job_id: _job_status(job_id, statuses) for job_id in version["runs"]}
+            if any(j["status"] not in TERMINAL_STATUSES for j in jobs.values()):
+                if any(j["status"] is None for j in jobs.values()):
+                    continue  # a job that has expired out of Redis never finishes
+                photo["status"] = "rendering"
+                photo["pending_render"] = {"action_id": version_id, "job_ids": list(version["runs"]),
+                                           "based_on": version.get("based_on"), "base": "custom", "plan": None}
+                changed = True
+                break
+            # A one-shot case's first version is also the photo's analyze
+            # job, whose own token _advance_analyzing already took.
+            token = f"version:{version_id}" if version_id == photo["analyze_job_id"] else version_id
+            if not store.claim(user, session_id, token):
+                continue
+            succeeded = [job_id for job_id, j in jobs.items() if j["status"] == "success"]
+            if not succeeded:
+                continue
+            photo["active_version"] = store.active_version(version_id, succeeded[0])
+            changed = True
+            messages.append(store.make_message("assistant", card={
+                "type": "render_done", "photo_id": photo["photo_id"], "version_id": version_id,
+                "job_ids": succeeded, "failed_job_ids": [j for j in version["runs"] if j not in succeeded],
+                "via": "custom"}))
+        if changed:
+            store.save_photo_state(user, session_id, photo)
+    store.append_messages(user, session_id, messages)
 
 
 @chat_bp.get("/sessions/<session_id>")
 def get_session(session_id):
     user = _user(request.args.get("user"))
+    _sync_from_history(user, session_id, _session(user, session_id))
     session = _session(user, session_id)
     limit = request.args.get("messages_limit", 100, type=int)
     return jsonify({**session, "messages": store.get_messages(user, session_id, limit=max(1, min(limit, store.MESSAGES_MAX_LEN)))})
@@ -1045,7 +1218,9 @@ def _render_note(user, session_id, photo, plan, job_id, based_on):
     return note.strip() if isinstance(note, str) and note.strip() else None
 
 
-def _advance_analyzing(user, session_id, photo, statuses):
+def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
+    """`rebuilt`: a photo reopened from history, whose brief is the
+    analysis's own summary -- not worth a worker call on opening a case."""
     job = _job_status(photo["analyze_job_id"], statuses)
     if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, photo["analyze_job_id"]):
         return []
@@ -1065,7 +1240,7 @@ def _advance_analyzing(user, session_id, photo, statuses):
     if analysis is not None:
         # Before the queued render below reads the plan.
         _name_prompt_faces(user, session_id, photo, analysis)
-        detailed = photo["plan"].get("detailed_explanation")
+        detailed = photo["plan"].get("detailed_explanation") and not rebuilt
         brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
                  or build_brief(analysis))
         if brief:
@@ -1093,7 +1268,13 @@ def _advance_rendering(user, session_id, photo, statuses):
     succeeded = [job_id for job_id, j in jobs.items() if j["status"] == "success"]
     photo["status"] = "ready"
     photo["pending_render"] = None
-    if succeeded:
+    if succeeded and pending.get("base") == "custom":
+        # A 自訂模式 render followed by _sync_from_history: no chat plan made it.
+        photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
+        card = {"type": "render_done", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
+                "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded],
+                "via": "custom"}
+    elif succeeded:
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
         plan = pending.get("plan") or photo["plan"]
         card = {"type": "render_done", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
