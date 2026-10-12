@@ -1200,6 +1200,10 @@
   // (renderTileStatus): 待美化 / 分析中 opens the analysis, a finished
   // edit opens its result, one still running opens its progress.
   async function openHistoryCase(job) {
+    if (isAnalyzedAfterEdits(job)) {
+      await viewHistoryRecord(job);
+      return;
+    }
     const jobIds = Array.isArray(job.runs) && job.runs.length ? job.runs : [job.job_id];
     const statuses = await Promise.all(
       jobIds.map((id) => getJobStatusCached(id, { path: job.path }).catch((err) => ({ status: "error", error: err?.code, error_message: err?.message })))
@@ -1220,6 +1224,15 @@
     } else {
       await viewProcessingHistoryRecord(job);
     }
+  }
+
+  // A 「只照需求改」 case analyzed afterwards (幫我分析, from either mode):
+  // the analysis is its newest version, so the summary reads stage
+  // "analyze" like an upload paused for review -- but the case already has
+  // edits to show. It opens on those, with the analysis as the strip's
+  // trailing 待美化 tile (viewHistoryRecord), not as a fresh upload's review.
+  function isAnalyzedAfterEdits(job) {
+    return job?.stage === "analyze" && !!job.modified_at;
   }
 
   // Upload-page option pills (#image-model-quality-picker etc.): a
@@ -8222,7 +8235,8 @@
               if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
               li.classList.add("opening");
               try {
-                await viewAnalyzeHistoryRecord(job, { alreadyAnalyzed: analyzed });
+                if (isAnalyzedAfterEdits(job)) await viewHistoryRecord(job);
+                else await viewAnalyzeHistoryRecord(job, { alreadyAnalyzed: analyzed });
               } finally {
                 li.classList.remove("opening");
               }
@@ -9796,6 +9810,7 @@
     if (job.path === "local") {
       selectedFile = null;
       singleRuns = runs;
+      if (isAnalyzedAfterEdits(job) && attachedAnalysis) versionStripPendingRuns = runs;
       // Open on the NEWEST version, which is what this page showed back when
       // the latest edit was the only one a case kept. runs is oldest-version-
       // first (fetchHistoryVersionRuns), so that is the last version in it,
