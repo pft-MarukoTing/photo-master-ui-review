@@ -1930,6 +1930,10 @@ function SessionView(props: {
   // Bumped when an answer lands at the end of the talk and the timeline should
   // go there, even if the user had scrolled up.
   const [toBottom, setToBottom] = useState(0);
+  // 分析或美化一完成（分析後的開場、第 N 版完成），對話捲到這一段的開頭（ChatPanel toStart）。
+  const lastDone =
+    [...messages].reverse().find((m) => ["analysis_brief", "render_done", "render_failed"].includes(m.card?.type as string))
+      ?.id ?? null;
   useEffect(() => {
     setPointed([]);
     setHot({});
@@ -2842,6 +2846,7 @@ function SessionView(props: {
                 <ChatPanel
                   sub={sub}
                   toBottom={toBottom}
+                  toStart={lastDone}
                   onDropFile={busy ? undefined : props.onFile}
                   footer={
                     <>

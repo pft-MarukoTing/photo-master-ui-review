@@ -14,6 +14,11 @@ export function ChatPanel(props: {
   // Changes when an answer lands at the end: go back to the bottom and stick
   // there again, whether or not the user had scrolled up.
   toBottom?: number;
+  // Changes when a result lands (the opening after the analysis, 第 N 版完成):
+  // go to the start of what just arrived, whether or not the user had scrolled
+  // up. The start, not the bottom -- a result card is often taller than the
+  // timeline, and the bottom would show only the end of its note.
+  toStart?: string | null;
   onDropFile?: (file: File) => void;
 }) {
   const timeline = useRef<HTMLDivElement>(null);
@@ -21,11 +26,36 @@ export function ChatPanel(props: {
 
   // Stick to the bottom as messages arrive, unless the user scrolled up.
   const pinned = useRef(true);
+  // The first message of a result that just landed (toStart): the timeline
+  // stays on its start until the user scrolls or more messages follow it.
+  const anchor = useRef<HTMLElement | null>(null);
+  const seen = useRef(new WeakSet<Element>());
+  const lastStart = useRef(props.toStart);
+  const align = () => {
+    const el = timeline.current;
+    const a = anchor.current;
+    if (!el || !a || !a.isConnected) return;
+    el.scrollTop += a.getBoundingClientRect().top - el.getBoundingClientRect().top - 8;
+  };
   useLayoutEffect(() => {
     const el = timeline.current;
-    if (el && pinned.current) el.scrollTop = el.scrollHeight;
+    if (!el) return;
+    const msgs = Array.from(el.querySelectorAll(":scope > .chat-msg"));
+    const fresh = msgs.filter((m) => !seen.current.has(m));
+    if (props.toStart !== lastStart.current) {
+      lastStart.current = props.toStart;
+      anchor.current = (fresh[0] || msgs[msgs.length - 1] || null) as HTMLElement | null;
+    } else if (anchor.current && fresh.length) {
+      // Talk went on after the result: back to following the end.
+      anchor.current = null;
+      pinned.current = true;
+    }
+    for (const m of msgs) seen.current.add(m);
+    if (anchor.current) align();
+    else if (pinned.current) el.scrollTop = el.scrollHeight;
   });
   useLayoutEffect(() => {
+    anchor.current = null;
     pinned.current = true;
     const el = timeline.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -35,7 +65,8 @@ export function ChatPanel(props: {
     if (!el) return;
     // Late-loading images and cards change the height after render.
     const ro = new ResizeObserver(() => {
-      if (pinned.current) el.scrollTop = el.scrollHeight;
+      if (anchor.current) align();
+      else if (pinned.current) el.scrollTop = el.scrollHeight;
     });
     for (const child of Array.from(el.children)) ro.observe(child);
     const mo = new MutationObserver(() => {
@@ -82,6 +113,9 @@ export function ChatPanel(props: {
           const el = e.currentTarget;
           pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
         }}
+        // The user taking the scroll over lets go of the result's start.
+        onWheel={() => (anchor.current = null)}
+        onTouchStart={() => (anchor.current = null)}
       >
         {props.children}
       </div>
