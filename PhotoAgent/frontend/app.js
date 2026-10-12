@@ -989,7 +989,7 @@
     await openCaseFromHash();
   })();
 
-  // #case=<image_key>: the chat page's 自訂模式 link for the photo it has
+  // #case=<image_key>: the chat page's 面板模式 link for the photo it has
   // open. Opened like a click on that case in the history drawer; the hash
   // is dropped either way so a reload lands on the upload page as usual.
   async function openCaseFromHash() {
@@ -1015,7 +1015,7 @@
     }
   }
 
-  // 對話模式 ⇄ 自訂模式: the photo's not-yet-rendered adjustments go along
+  // 對話模式 ⇄ 面板模式: the photo's not-yet-rendered adjustments go along
   // with the switch. Same tab, same origin, so sessionStorage: the page being
   // left writes, the page opening that same case reads and deletes. The
   // format is shared with frontend-chat/src/handoff.ts -- change both
@@ -13233,7 +13233,7 @@
   ensureAdvancedSettingsFoldIn(els.uploadInlineSettingsRow2);
   setupCompactUploadSelectors();
   // Keep the query string (env flags etc.) across the switch to the chat UI,
-  // the same way the chat page's 自訂模式 link does on the way back.
+  // the same way the chat page's 面板模式 link does on the way back.
   // An open case goes along as #case=<image_key>: the chat page reopens it
   // in its conversation, or rebuilds one from history (routes/chat.py's
   // /sessions/from-case).

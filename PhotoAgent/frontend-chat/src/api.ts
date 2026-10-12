@@ -181,7 +181,7 @@ export const urls = {
   demoImage: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}`,
   demoThumb: (f: string) => `${API}/photo-agent/demo-images/${enc(f)}/thumbnail`,
   styleThumb: (group: string, value: string) => `${BASE}/assets/optional_style/${group}/thumbs/${styleThumbFile(group, value)}.webp`,
-  // With a case, 自訂模式 opens straight on it.
+  // With a case, 面板模式 opens straight on it.
   oldUi: (caseId?: string | null) => `${BASE}/${location.search}${caseId ? `#case=${encodeURIComponent(caseId)}` : ""}`,
 };
 

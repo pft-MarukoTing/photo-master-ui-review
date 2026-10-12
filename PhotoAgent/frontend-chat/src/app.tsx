@@ -120,7 +120,7 @@ type Note = {
 
 // 點頭像回答「哪一位」、直接送出時 AI 回的那句。沒問模型，所以話是這裡寫好的。
 // The whole 對話紀錄 list: every live session plus every history case (the
-// backend's LISTED_SESSIONS_MAX + HISTORY_MAX_LEN), since 自訂模式's 最近照片
+// backend's LISTED_SESSIONS_MAX + HISTORY_MAX_LEN), since 面板模式's 最近照片
 // reaches all of a user's cases too.
 const LISTED_MAX = 300;
 
@@ -312,7 +312,7 @@ function errorText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-// #session=<id>, or #case=<case_id> from 自訂模式 (a history case, which
+// #session=<id>, or #case=<case_id> from 面板模式 (a history case, which
 // openSession resolves to its session) -- in openSession's row-id form.
 function sessionHash(): string | null {
   const m = location.hash.match(/session=([^&]+)/);
@@ -462,7 +462,7 @@ export function App() {
         const list = await refreshSessions();
         if (!list.length) setTab("sample");
         const id = sessionHash();
-        // Staying undrawn when it hands the case to 自訂模式 instead.
+        // Staying undrawn when it hands the case to 面板模式 instead.
         if (id && (await openSession(id)) === "left") return;
       } catch (e) {
         setBootError(errorText(e));
@@ -486,7 +486,7 @@ export function App() {
   // ── Session loading and polling ───────────────────────────────────────────
   // `id` is a session, or `case:<case_id>` for a history case: that case's
   // own session, or one rebuilt from history. A case the chat page cannot
-  // open (no analysis left, or the AIPoC path) opens in 自訂模式 instead.
+  // open (no analysis left, or the AIPoC path) opens in 面板模式 instead.
   async function openSession(id: string): Promise<"left" | void> {
     setDrawer(false);
     setError("");
@@ -520,7 +520,7 @@ export function App() {
     }
   }
 
-  // 從自訂模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
+  // 從面板模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
   // 帶不過去就算了，照片照樣打開，用的是這邊原本的 plan。
   async function applyHandoff(s: Session, caseId: string): Promise<Session> {
     const h = takeHandoff(caseId);
@@ -656,8 +656,8 @@ export function App() {
     );
   }
 
-  // 刪最近照片裡的格子，跟自訂模式一樣：先問一聲；刪的是紀錄（對話，連同它照片在
-  // 自訂模式的紀錄），已經產生的圖不動。刪到正開著的這段對話、或刪到一格不剩，就
+  // 刪最近照片裡的格子，跟面板模式一樣：先問一聲；刪的是紀錄（對話，連同它照片在
+  // 面板模式的紀錄），已經產生的圖不動。刪到正開著的這段對話、或刪到一格不剩，就
   // 收起抽屜回首頁。回傳真的刪了沒。
   async function removeRows(ids: string[] | "all"): Promise<boolean> {
     const message =

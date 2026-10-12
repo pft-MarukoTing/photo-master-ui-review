@@ -195,7 +195,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-note{margin:0;font-size:var(--chat-fs-xs);line-height:1.7;color:var(--n64);text-wrap:pretty}
 .chat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-3) var(--sp-4)}
 /* 處理中的工作紀錄 -- 標題和轉環都在左邊畫布那一層（.canvas-busy）上，這裡只講細節。
-   跟自訂模式的進度句（styles.css .progress-feed-*）同一套：只留三句，最新的在最下面、
+   跟面板模式的進度句（styles.css .progress-feed-*）同一套：只留三句，最新的在最下面、
    字重加粗並掃一道 accent 的光，往上一句 .85、再上一句 .58。新的一句從下面滑進來，
    講到最後一句還沒好就改成每 4 秒再掃一次（is-holding）。 */
 .chat-working ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--sp-1)}
@@ -977,12 +977,12 @@ div.chat-proposal-row{cursor:default}
   .version-tile.is-pending svg{width:16px;height:16px}
 }
 
-/* Header buttons: same compact pill 自訂模式 gives its header row
+/* Header buttons: same compact pill 面板模式 gives its header row
    (index.html <style>: #changelog-btn.btn/#chat-ui-btn.btn/... ), instead of
    the taller, 10px-radius .btn-sm, so switching modes doesn't change them. */
 .header-actions .btn{height:32px;padding:0 14px;gap:6px;font-size:13px;border-radius:999px}
 
-/* 回報: 自訂模式's #report-btn treatment -- a tinted outline, worth a second
+/* 回報: 面板模式's #report-btn treatment -- a tinted outline, worth a second
    look without shouting. Its own id: #report-btn is position:fixed there. */
 #chat-report-btn.btn{background:var(--card-2);color:var(--accent);border:1px solid rgba(var(--accent-rgb),.4)}
 #chat-report-btn.btn:hover{background:rgba(var(--accent-rgb),.12);border-color:rgba(var(--accent-rgb),.6)}
@@ -994,7 +994,7 @@ div.chat-proposal-row{cursor:default}
    磚的勾勾也在右上角，有 × 的時候收起來；多選時沒有 ×，勾勾照常顯示。 */
 .demo-image-tile .chat-tile-remove{display:flex}
 .demo-image-tile:has(.chat-tile-remove) .demo-image-tile-check{display:none}
-/* 多選時跟自訂模式（.history-cube-check）一樣：每格露出空的圓圈，勾起來的那格填色打勾。
+/* 多選時跟面板模式（.history-cube-check）一樣：每格露出空的圓圈，勾起來的那格填色打勾。
    舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上。 */
 .history-list.chat-picking .demo-image-tile-check{opacity:1}
 .history-list.chat-picking .demo-image-tile-check svg{opacity:0;transition:opacity .15s}

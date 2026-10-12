@@ -4355,7 +4355,7 @@
       if (theme !== "default") document.body.dataset.theme = theme;
       document.body.dataset.themeMode = THEME_MODE[theme];
     } catch (_) { /* never block first paint on a theming failure */ }
-    // A #case= link (the chat page's 自訂模式 button) opens that case as
+    // A #case= link (the chat page's 面板模式 button) opens that case as
     // soon as the account resolves -- keep the upload page undrawn until
     // then (app.js's openCaseFromHash drops the class) so the switch goes
     // straight from the chat's photo to this one.
@@ -4391,7 +4391,7 @@
         </svg>
         <span id="account-badge-label" class="btn-label"></span>
       </button>
-      <!-- Counterpart of the chat page's 自訂模式 link: switches to the chat UI at
+      <!-- Counterpart of the chat page's 面板模式 link: switches to the chat UI at
            <base>/chat/, carrying the query string over the same way. The href
            is relative so it works without JS; app.js rewrites it with the
            current search once it loads. -->

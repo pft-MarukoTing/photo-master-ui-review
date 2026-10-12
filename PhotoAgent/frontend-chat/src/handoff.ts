@@ -1,11 +1,11 @@
-// 對話模式 ⇄ 自訂模式切換時，把這張照片還沒美化的調整一起帶過去。
+// 對話模式 ⇄ 面板模式切換時，把這張照片還沒美化的調整一起帶過去。
 //
 // 兩邊是同一個 origin、同一個分頁，所以放 sessionStorage：要走的那一頁寫，
-// 打開同一個 case 的那一頁讀了就刪。格式兩邊共用，自訂模式那邊的讀寫在
+// 打開同一個 case 的那一頁讀了就刪。格式兩邊共用，面板模式那邊的讀寫在
 // frontend/app.js（MODE_HANDOFF_KEY），改這裡要一起改。
 //
 // 用兩邊都講得通的詞，不用任何一邊自己的：美化引擎是 image_model + quality
-// （對話模式的 render_option 是 id，自訂模式是 "model:quality"）；修圖建議
+// （對話模式的 render_option 是 id，面板模式是 "model:quality"）；修圖建議
 // 用文字對勾選，不用位置——兩邊列的清單順序、有沒有濾掉關閉的人像修正都不一樣。
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
 import { recipeItems } from "./util";

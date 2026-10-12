@@ -296,7 +296,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(row["rendered_count"], 2)
 
     def test_history_cases_without_a_session_are_listed(self):
-        """A case no live session holds -- edited in 自訂模式, or left by an
+        """A case no live session holds -- edited in 面板模式, or left by an
         expired session -- is a row of its own; one a session holds is not
         listed twice, and an AIPoC-path case is left out."""
         sid = self.new_session()
@@ -331,7 +331,7 @@ class ChatRoutesTest(unittest.TestCase):
 
     def test_a_deleted_session_takes_its_photos_history_along(self):
         """Gone from the list, and its photo does not come back as a case
-        row -- 自訂模式 stops listing it too."""
+        row -- 面板模式 stops listing it too."""
         self.patch_history_deletes()
         sid, other = self.new_session(), self.new_session()
         photo = self.ready_photo(sid)
@@ -405,7 +405,7 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(len(self.cards(sid, "render_done")), 2)
 
     def test_a_one_shot_case_is_rebuilt_from_its_edit_job(self):
-        """A case 自訂模式 made in one go (review skipped) has only edit
+        """A case 面板模式 made in one go (review skipped) has only edit
         versions: the first one's job carries the analysis inside its result
         metadata, and that version still shows as the first render."""
         meta = {"analysis": {**self.analysis, "photo_summary": "一次完成的合照"}}

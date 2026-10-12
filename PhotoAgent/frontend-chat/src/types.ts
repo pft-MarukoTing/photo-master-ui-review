@@ -88,7 +88,7 @@ export interface Session {
 export type SessionState = "analyzing" | "rendering" | "failed" | "done" | "ready";
 
 // A row of the history list: a live session, or a history case no session
-// holds (edited only in 自訂模式, or its session expired) -- session_id null,
+// holds (edited only in 面板模式, or its session expired) -- session_id null,
 // opened through api.fromCase.
 export interface SessionSummary {
   session_id: string | null;

@@ -119,7 +119,7 @@ def _load_analysis(job_id):
     """(analysis, None) or (None, error) for a finished analyze job -- the
     same lookup /analyze/result does.
 
-    Also a one-shot analyze+edit job (自訂模式 with review skipped -- an old
+    Also a one-shot analyze+edit job (面板模式 with review skipped -- an old
     case's only job): its analysis rides inside the first run's result
     metadata, the second of [image, metadata] where an analyze job keys the
     analysis alone."""
@@ -179,11 +179,11 @@ LISTED_SESSIONS_MAX = 100
 @chat_bp.get("/sessions")
 def list_sessions():
     """Live sessions, and every history case none of them holds -- a photo
-    edited only in 自訂模式, or one whose session has expired -- as one list,
+    edited only in 面板模式, or one whose session has expired -- as one list,
     newest first. A case row has no session_id; opening it goes through
     /sessions/from-case."""
     user = _user(request.args.get("user"))
-    # Up to the whole merged list: 自訂模式's 最近照片 pages through every
+    # Up to the whole merged list: 面板模式's 最近照片 pages through every
     # case, so a cap here would hide older ones only on the chat side.
     limit = max(1, min(request.args.get("limit", 20, type=int), LISTED_SESSIONS_MAX + HISTORY_MAX_LEN))
     sessions = store.list_sessions(user, limit=LISTED_SESSIONS_MAX)
@@ -228,12 +228,12 @@ DELETE_ROWS_MAX = LISTED_SESSIONS_MAX + HISTORY_MAX_LEN
 
 @chat_bp.post("/sessions/delete")
 def delete_sessions():
-    """Removes rows of the list the way 自訂模式's 最近照片 removes its cases:
+    """Removes rows of the list the way 面板模式's 最近照片 removes its cases:
     {rows: [...]} names sessions and `case:<case_id>` rows, {all: true}
     empties the list. A session goes with the history cases of its photos,
-    so 自訂模式 stops listing them too and the photo does not come back here
+    so 面板模式 stops listing them too and the photo does not come back here
     as a case row. Only the records go; jobs and their images stay, as in
-    自訂模式."""
+    面板模式."""
     body = _body()
     user = _user(body.get("user"))
     if body.get("all") is True:
@@ -266,11 +266,11 @@ def session_from_case():
     has one, else a new one-photo session rebuilt from history -- the
     photo, its analysis and every version, without the conversation that
     made them (which expired with the old session, or never existed for a
-    case made in 自訂模式).
+    case made in 面板模式).
 
     409 when there is nothing for the chat page to work from: a case whose
     analysis is gone or that ran on the AIPoC path. The client then opens
-    it in 自訂模式 instead.
+    it in 面板模式 instead.
     """
     body = _body()
     user = _user(body.get("user"))
@@ -287,7 +287,7 @@ def session_from_case():
     if not _opens_in_chat(entry):
         raise _RequestError("unsupported_path", 409)
     versions = entry.get("versions") or []
-    # A case made in one go (自訂模式 with review skipped) has no analyze
+    # A case made in one go (面板模式 with review skipped) has no analyze
     # version: its first edit's job did the analysis too (_load_analysis).
     analyze = (next((v for v in reversed(versions) if v["kind"] == "analyze" and v["runs"]), None)
                or next((v for v in versions if v["runs"] and (v.get("path") or "local") == "local"), None))
@@ -330,7 +330,7 @@ def session_from_case():
 def _sync_from_history(user, session_id, session):
     """Post the versions a session's photos got outside it as render_done
     cards, so the chat page lists them like its own -- edits made in
-    自訂模式, and those of an expired session a photo was reopened from.
+    面板模式, and those of an expired session a photo was reopened from.
     A version is posted once (claimed by its version_id, like a chat
     render). One still running is followed as the photo's pending render,
     so the page shows it rendering and the status polls post it."""
@@ -1438,7 +1438,7 @@ def _advance_rendering(user, session_id, photo, statuses):
     photo["status"] = "ready"
     photo["pending_render"] = None
     if succeeded and pending.get("base") == "custom":
-        # A 自訂模式 render followed by _sync_from_history: no chat plan made it.
+        # A 面板模式 render followed by _sync_from_history: no chat plan made it.
         photo["active_version"] = store.active_version(pending["action_id"], succeeded[0])
         card = {"type": "render_done", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
                 "job_ids": succeeded, "failed_job_ids": [j for j in pending["job_ids"] if j not in succeeded],

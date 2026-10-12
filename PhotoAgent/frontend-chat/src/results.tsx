@@ -133,7 +133,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
   // 比較鈕就先停用；再點任何一版才回到那一版的 After。
   const [originPicked, setOriginPicked] = useState(false);
-  // 紀錄縮圖 hover 時浮出的大一點的預覽，沿用自訂模式的 .version-tile-preview。
+  // 紀錄縮圖 hover 時浮出的大一點的預覽，沿用面板模式的 .version-tile-preview。
   const previewRef = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   // What each finished job was made with, keyed by job id -- see the fetch
@@ -312,7 +312,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
 
   const idx = current ? versions.findIndex((v) => v.version_id === current.version_id) : -1;
 
-  // 和自訂模式的 showVersionTilePreview 同一套算法：預設浮在縮圖正上方，
+  // 和面板模式的 showVersionTilePreview 同一套算法：預設浮在縮圖正上方，
   // 上面沒位置就翻到下方，左右夾在視窗內。直接用縮圖本身的 src，不多打一次請求。
   function showPreview(tile: HTMLElement, src: string) {
     const popup = previewRef.current;
