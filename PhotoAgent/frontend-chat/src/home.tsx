@@ -25,7 +25,7 @@ import { dayLabel, timeLabel } from "./util";
 // across .header-actions and this collapses to the swatch alone.
 // Its own chat-* id, not the old #theme-toggle-btn: the old index.html <style>
 // (inlined by vite.config.ts) turns that id into a 32px pill, which made it
-// the odd one out next to 回到首頁 / 自訂模式's plain .btn-sm.
+// the odd one out next to 回到首頁 / 面板模式's plain .btn-sm.
 function ThemeToggle() {
   const [theme, setTheme] = useState<ThemeKey>(currentTheme);
   return (
@@ -146,7 +146,7 @@ function ReportModal(props: { jobId: string | null; onClose: () => void }) {
   );
 }
 
-// 自訂模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下。
+// 面板模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下。
 export function ConfirmModal(props: {
   message: string;
   confirmLabel: string;
@@ -191,10 +191,10 @@ export function ConfirmModal(props: {
   );
 }
 
-// Same order as 自訂模式's header, so switching modes moves nothing:
+// Same order as 面板模式's header, so switching modes moves nothing:
 // 回到首頁 · 最近照片 · mode switch · 主題 · 回報.
 // showHistory is off while the gallery (with its 最近對話 tab) is on screen.
-// showOldUi likewise: 自訂模式 only takes over a photo's analysis/result, so
+// showOldUi likewise: 面板模式 only takes over a photo's analysis/result, so
 // the switch exists only once a session is open, and is held while the photo
 // is analyzing or rendering (the other mode would open on a half-done job).
 export function Header(props: {
@@ -204,9 +204,9 @@ export function Header(props: {
   showHistory?: boolean;
   showOldUi?: boolean;
   oldUiBusy?: boolean;
-  // Right before leaving for 自訂模式: hands this photo's adjustments over.
+  // Right before leaving for 面板模式: hands this photo's adjustments over.
   onOldUi?: () => void;
-  // The photo on screen, which 自訂模式 then opens on.
+  // The photo on screen, which 面板模式 then opens on.
   caseId?: string | null;
   // The edit (or, before one, the analysis) on screen, which 回報 points at.
   jobId?: string | null;
@@ -236,12 +236,12 @@ export function Header(props: {
             (props.oldUiBusy ? (
               <button class="btn btn-secondary btn-sm" type="button" disabled title="分析或美化完成後才能切換">
                 <Icon name="layout" size={14} />
-                <span class="btn-label">自訂模式</span>
+                <span class="btn-label">面板模式</span>
               </button>
             ) : (
-              <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式" onClick={props.onOldUi}>
+              <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到面板模式" onClick={props.onOldUi}>
                 <Icon name="layout" size={14} />
-                <span class="btn-label">自訂模式</span>
+                <span class="btn-label">面板模式</span>
               </a>
             ))}
           <ThemeToggle />
@@ -364,7 +364,7 @@ const SESSION_BADGES: Record<SessionState, string> = {
   failed: "失敗",
 };
 
-// 每格右上角的 ×，跟自訂模式最近照片那顆同一個樣子（.history-cube-remove）。磚本身是
+// 每格右上角的 ×，跟面板模式最近照片那顆同一個樣子（.history-cube-remove）。磚本身是
 // <button>，裡面不能再放一顆按鈕，所以這顆用 span 當按鈕，點了不往外傳。
 function RemoveMark({ onRemove }: { onRemove: () => void }) {
   const go = (e: Event) => {
@@ -575,7 +575,7 @@ export function Gallery(props: {
   );
 }
 
-// 跟自訂模式的最近照片一樣：每格一顆 ×；標題旁「選取多筆」進入多選，勾好按「刪除所選」；
+// 跟面板模式的最近照片一樣：每格一顆 ×；標題旁「選取多筆」進入多選，勾好按「刪除所選」；
 // 「全部刪除」一次清空。按鈕的 id 沿用舊頁面的，樣式（舊頁面 index.html 的那段 style，
 // 建置時帶進來）就一模一樣。刪之前要不要確定、刪完怎麼辦，交給 app.tsx。
 const TRASH_ICON = (
