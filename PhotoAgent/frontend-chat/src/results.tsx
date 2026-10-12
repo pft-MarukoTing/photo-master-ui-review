@@ -80,6 +80,8 @@ interface MadeWith {
   hint: string;
 }
 
+const NO_DETAILS: MadeWith = { portraits: [], recipes: [], styles: [], hint: "" };
+
 const DETAIL_LABEL: Record<Detail, string> = { face: "人像調整", recipe: "美化項目", style: "美化風格", prompt: "個人化" };
 // The bubble's heading: 個人化 is the pill's short form of 個人化需求.
 const DETAIL_TITLE: Record<Detail, string> = { ...DETAIL_LABEL, prompt: "個人化需求" };
@@ -137,9 +139,14 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   const topRef = useRef<HTMLDivElement>(null);
   const tagsRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
+  // Result images that have finished loading (or failed to), keyed by job id.
+  const [loaded, setLoaded] = useState<Record<string, true>>({});
   const job = current ? versionJob(current) : null;
+  // 結果圖和底下那排按鈕是兩條各自回來的請求：圖片和 result 都到齊才翻到 After，
+  // 兩者才會一起出現，而不是圖先冒出來、按鈕慢半拍才補上。
+  const ready = !!job && !!loaded[job] && !!madeWith[job];
   // 處理中一律看原圖：美化中擺上一版的成果，會讓人以為那就是正在等的這一張。
-  const generated = !!job && showGenerated && !busy;
+  const generated = ready && showGenerated && !busy;
 
   // A new version always opens on the After side.
   useEffect(() => setShowGenerated(true), [current?.version_id]);
@@ -155,18 +162,22 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
     api
       .result(job)
       .then((r: Dict) => {
+        if (dropped) return;
         const analysis = r.result?.analysis;
-        if (dropped || !analysis) return;
-        const entry: MadeWith = {
-          portraits: executedPortraits(analysis),
-          recipes: executedRecipeItems(analysis),
-          styles: executedStyleLabels(caps, analysis),
-          hint: personalizationText(analysis),
-        };
+        const entry: MadeWith = analysis
+          ? {
+              portraits: executedPortraits(analysis),
+              recipes: executedRecipeItems(analysis),
+              styles: executedStyleLabels(caps, analysis),
+              hint: personalizationText(analysis),
+            }
+          : NO_DETAILS;
         setMadeWith((m) => ({ ...m, [job]: entry }));
       })
       .catch(() => {
-        /* the row is extra: a result that will not load just leaves it off */
+        // The row is extra: a result that will not load just leaves it off --
+        // but still settles, so the After side is not held back waiting for it.
+        if (!dropped) setMadeWith((m) => ({ ...m, [job]: NO_DETAILS }));
       });
     return () => {
       dropped = true;
@@ -347,7 +358,14 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
             <div class="photo-frame">
               <img id="original-img" class="compare-img compare-img-original" src={source} alt="原始照片" />
               {job && (
-                <img id="generated-img" class="compare-img compare-img-generated" src={urls.resultImage(job)} alt="美化結果" />
+                <img
+                  id="generated-img"
+                  class="compare-img compare-img-generated"
+                  src={urls.resultImage(job)}
+                  alt="美化結果"
+                  onLoad={() => setLoaded((l) => ({ ...l, [job]: true }))}
+                  onError={() => setLoaded((l) => ({ ...l, [job]: true }))}
+                />
               )}
               {busy && (
                 <div class="canvas-busy" role="status" aria-live="polite">
