@@ -3107,6 +3107,34 @@ button.version-origin-tile:focus-visible {
   opacity: .35;
   transform: none;
 }
+/* The version 幫我分析 just added: analyzed, not yet 美化'd, so it has no
+   image of its own. The original under a dashed accent frame reads as a slot
+   waiting to be filled -- dashes are the right amount of attention here,
+   unlike on the 原圖 tile, because this is where the next step lands. Not a
+   button, so no hover lift. */
+.version-pending {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+}
+.version-pending-tile {
+  width: 64px;
+  height: 64px;
+  border: 2px dashed rgba(var(--accent-rgb),.6);
+  border-radius: 9px;
+  background: rgba(var(--accent-rgb),.08);
+  overflow: hidden;
+}
+.version-pending-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: .4;
+}
+.version-pending .version-group-label { color: var(--accent); }
 /* Which image within its own edit, shown only where a version produced more
    than one -- a corner chip rather than extra label text, so a 1-image
    version and a 3-image one still occupy the same vertical space. */
@@ -3180,6 +3208,7 @@ button.version-origin-tile:focus-visible {
 @media (max-width: 560px) {
   .version-tile { width: 54px; height: 54px; }
   .version-origin-tile { width: 54px; height: 54px; }
+  .version-pending-tile { width: 54px; height: 54px; }
   .version-strip-divider { height: 54px; }
   .version-strip-origin { gap: 10px; }
   .version-strip { margin: 10px -12px -12px; padding: 8px 10px; }

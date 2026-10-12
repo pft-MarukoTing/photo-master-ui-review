@@ -23,11 +23,11 @@ def _import_backend():
     with patch.dict(sys.modules, stubs):
         from backend import app as app_module
         from backend.routes import api, chat
-        from backend.services import chat_session
-    return app_module, api, chat, chat_session
+        from backend.services import account, chat_session
+    return app_module, api, chat, chat_session, account
 
 
-app_module, api, chat, chat_session = _import_backend()
+app_module, api, chat, chat_session, account = _import_backend()
 
 
 # The analysis fields the panel builds its face tabs from.
@@ -1037,6 +1037,72 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_brief", "render_started"])
         self.assertEqual(done["session"]["photos"][0]["status"], "rendering")
 
+    def analyzed_from_custom_mode(self, sid, photo, status):
+        """自訂模式's 「幫我分析」 on the photo's case: an analyze job attached
+        to the case (api.analyze_existing), not a version of it."""
+        self.jobs[self.enqueued[-1][0]]["status"] = "success"  # the 只照需求改 render
+        self.status(sid)
+        self.jobs["z1"] = {"status": status, "error": None}
+        a = photo["analyze_job_id"]
+        self.case(photo["case_id"], [(a, "analyze", [a])])["analysis_job_id"] = "z1"
+
+    def test_an_analysis_asked_for_in_custom_mode_reaches_the_session(self):
+        sid = self.new_session()
+        photo, _ = self.only_what_i_said(sid)
+        self.analyzed_from_custom_mode(sid, photo, "processing")
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual((session["photos"][0]["status"], session["photos"][0]["analysis_job_id"]), ("analyzing", "z1"))
+
+        self.analysis = self.real_analysis
+        self.jobs["z1"]["status"] = "success"
+        done = self.status(sid)
+        # Its brief only: the check is 自訂模式's to open, where it was asked for.
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_brief"])
+        state = done["session"]["photos"][0]
+        self.assertEqual((state["status"], state["analysis_skipped"], state["analysis_job_id"]), ("ready", False, "z1"))
+        self.assertEqual(self.status(sid)["new_messages"], [])  # adopted once
+
+    def test_a_failed_custom_mode_analysis_is_not_adopted(self):
+        sid = self.new_session()
+        photo, _ = self.only_what_i_said(sid)
+        self.analyzed_from_custom_mode(sid, photo, "error")
+        state = self.status(sid)["session"]["photos"][0]
+        self.assertEqual((state["status"], state["analysis_skipped"]), ("ready", True))
+
+    def test_the_chats_own_analysis_is_attached_to_the_case(self):
+        sid = self.new_session()
+        photo, _ = self.only_what_i_said(sid)
+        self.jobs[self.enqueued[-1][0]]["status"] = "success"
+        self.status(sid)
+        with patch.object(chat, "attach_case_analysis") as attach:
+            self.client.post(self.url(sid, f"/photos/{photo['photo_id']}/analyze"), json={"user": USER})
+        attach.assert_called_once_with(USER, photo["case_id"], self.enqueued[-1][0])
+
+    def test_analyze_existing_runs_on_the_prior_jobs_photo(self):
+        prior = {"j0": {"srcKeys": ["case/j0/src.jpg"]}}
+        enqueued = []
+
+        def enqueue(engine_params, src_content=None):
+            enqueued.append(engine_params)
+            return "new1"
+
+        with patch.object(api, "get_job_info", lambda job_id, keyToGet=None: prior.get(job_id)), \
+                patch.object(api, "enqueue", enqueue), \
+                patch.object(api, "attach_case_analysis") as attach:
+            res = self.client.post("/api/photo-agent/analyze/j0", json={
+                "user": USER, "preset": "natural", "user_prompt": "make it warmer",
+                "advanced_options": {"smile_adjustment": False}})
+            self.assertEqual((res.status_code, res.get_json()), (202, {"job_id": "new1"}))
+            self.assertEqual(enqueued[0]["srcKeys"], ["case/j0/src.jpg"])
+            params = enqueued[0]["acts"][0]["params"]
+            self.assertEqual((params["stage"], params["user_prompt"]), ("analyze", "make it warmer"))
+            self.assertNotIn("skip_analysis", params)
+            attach.assert_called_once_with(USER, "case/j0/src.jpg", "new1")
+
+            missing = self.client.post("/api/photo-agent/analyze/gone", json={"user": USER})
+            self.assertEqual(missing.status_code, 404)
+            self.assertEqual(len(enqueued), 1)
+
     def test_queued_render_is_cancelled_when_analysis_fails(self):
         sid = self.new_session()
         photo = self.add_photos(sid)[0]
@@ -1547,3 +1613,43 @@ class ChatRoutesTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CaseAnalysisHistoryTest(unittest.TestCase):
+    """account's side of 「幫我分析」 on a 「只照需求改」 case: the analysis is
+    filed beside the case, not as one of its versions."""
+
+    def setUp(self):
+        self.account = account
+
+        class Redis(FakeRedis):
+            def hget(self, key, field):
+                return self.data.get(key, {}).get(field)
+
+            def hdel(self, key, *fields):
+                for field in fields:
+                    self.data.get(key, {}).pop(field, None)
+
+        self.redis = Redis()
+        p = patch.object(account, "pf_redis_client", self.redis)
+        p.start()
+        self.addCleanup(p.stop)
+        for case_id in ("c1", "c2"):
+            self.redis.hset(account._cases_key(USER), case_id, json.dumps({"ts": 1.0, "runs": ["e1"]}))
+
+    def test_an_attached_analysis_is_handed_back_with_its_case(self):
+        self.account.attach_case_analysis(USER, "c1", "z1")
+        self.assertEqual(self.account.get_history_entry(USER, "c1", include_versions=False)["analysis_job_id"], "z1")
+        self.assertNotIn("analysis_job_id", self.account.get_history_entry(USER, "c2", include_versions=False))
+        listed = {e["image_key"]: e.get("analysis_job_id") for e in self.account.get_history(USER)}
+        self.assertEqual(listed, {"c1": "z1", "c2": None})
+        # Not a version: the case's runs are what they were.
+        self.assertEqual(self.account.get_history_entry(USER, "c1", include_versions=False)["runs"], ["e1"])
+
+    def test_deleting_the_case_forgets_its_analysis(self):
+        self.account.attach_case_analysis(USER, "c1", "z1")
+        self.account.attach_case_analysis(USER, "c2", "z2")
+        self.account.delete_history_entry(USER, "c1")
+        self.assertEqual(self.redis.hgetall(self.account._case_analysis_key(USER)), {"c2": "z2"})
+        self.account.clear_history(USER)
+        self.assertEqual(self.redis.hgetall(self.account._case_analysis_key(USER)), {})

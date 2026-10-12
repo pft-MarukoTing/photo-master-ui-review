@@ -24,6 +24,7 @@
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,
+    analyzeExistingJob,
     getAnalyzeResult,
     continueJob,
     rerunJob,
@@ -213,6 +214,12 @@
   // from the backend), so this is what showSingleResult/finishSingleFlow
   // fall back to for the zip download's source entry instead.
   let selectedFileSourceUrl = null;
+  // The analysis 「幫我分析」 attached to the history case on screen
+  // (api.py's analyze_existing). A 「只照需求改」 case's versions all carry
+  // the skipped stub, so applyHistoryVersionContext shows this in its place,
+  // whichever version is stepped to. Set by viewHistoryRecord and by
+  // adoptSkippedCaseAnalysis.
+  let historyCaseAnalysis = null;
   // "Who owns the screen right now." Every long-running flow snapshots this
   // when it starts and re-checks it before touching the DOM again, so a job
   // whose result lands after the user has moved on quietly drops its render
@@ -1633,6 +1640,11 @@
     const restartVisible = !!(els.apRestartActions && !els.apRestartActions.hidden);
     btn.hidden = !(runVisible || restartVisible);
     if (btn.hidden) closeApCaseSettingsModal();
+    // 幫我分析 runs ahead of a 美化, so only beside one -- and only while the
+    // case still has nothing but 「只照需求改」's stub analysis.
+    if (els.apSkipAnalyzeBtn) {
+      els.apSkipAnalyzeBtn.hidden = !(runVisible && singleFlowState?.analysis?._skipped_analysis);
+    }
     const dirty = !!apCaseSettingsBaseline && apCaseSettingsBaseline !== snapshotApCaseSettings();
     if (els.apCaseSettingsDirty) els.apCaseSettingsDirty.hidden = !dirty;
     // The tooltip carries what the button used to say on its face. It can
@@ -2278,6 +2290,145 @@
         delete btn.dataset.reframeHeld;
       }
     });
+  }
+
+  // #ap-skip-analyze-btn (a 「只照需求改」 case, see #ap-skip-hint): runs the
+  // analysis the case skipped, right here, and fills the panel with it.
+  if (els.apSkipAnalyzeBtn) {
+    els.apSkipAnalyzeBtn.addEventListener("click", () => analyzeSkippedCase());
+  }
+
+  async function analyzeSkippedCase() {
+    const state = singleFlowState;
+    if (!state?.analysis?._skipped_analysis || !state.analyzeJobId) return;
+    const confirmed = await showConfirmModal(
+      "AI 會分析整張照片，整理出美化建議；你寫的個人化需求會保留。要繼續嗎？",
+      { confirmLabel: "開始分析", danger: false, costSteps: [analysisPreflightStep()] }
+    );
+    if (!confirmed || singleFlowState !== state) return;
+    // The case on screen, not singleFlowState: stepping to another version
+    // replaces that object but keeps the case, and the result still belongs.
+    const myToken = historyViewToken;
+    setSkipHintBusy(true);
+    hideError();
+    const restoreCanvas = showSkippedCaseAnalyzing();
+    let landed = false;
+    try {
+      const jobId = await analyzeExistingJob({
+        jobId: state.analyzeJobId,
+        preset: state.presetKey,
+        imageQuality: state.imageQuality,
+        imageModel: state.imageModel,
+        analysisModel: state.analysisModel,
+        aspectRatio: state.aspectRatio,
+        aiPhotoEditing: state.aiPhotoEditing,
+        runQa: state.runQa,
+        singlePassEdit: state.singlePassEdit,
+        advancedOptions: readAdvancedOptionsFromDom("ap"),
+        userPrompt: els.promptInput?.value.trim() || "",
+        user: getCurrentUser()
+      });
+      await pollJobStatus(jobId, { path: "local" });
+      const analysis = (await getAnalyzeResult(jobId)).result.analysis;
+      if (historyViewToken !== myToken) return;
+      adoptSkippedCaseAnalysis(analysis, jobId);
+      landed = true;
+    } catch (error) {
+      if (historyViewToken === myToken) showError(`分析失敗：${error.message || error}`);
+    } finally {
+      // Left alone once another record took the screen: opening it already
+      // tore this loading card down and put its own view up.
+      if (historyViewToken === myToken) restoreCanvas();
+      setSkipHintBusy(false);
+    }
+    // After the restore, which puts the strip back as it was: the analysis
+    // is a new version, so the strip comes up with it at the end even for a
+    // case that had only one edit to show before.
+    if (landed && historyViewToken === myToken) {
+      refreshVersionsAfterEdit({ pendingAnalysis: true }).catch(() => {});
+    }
+  }
+
+  // The same 正在分析照片 card (thinking rings + analyze progress feed) a
+  // fresh upload shows, played in place over the photo the way a revise's
+  // 美化 does, instead of leaving the analysis to a line of text in the
+  // panel. Returns the undo. The panel is put away while it plays, as a
+  // revise's 美化 does, and reopened with the analysis in it. The version
+  // strip is only hidden, not torn down (hideVersionStrip): the analysis is
+  // a version without an image to show there, so it comes back as it was.
+  function showSkippedCaseAnalyzing() {
+    const prevStage = flowStage;
+    const stripWasHidden = els.versionStrip ? els.versionStrip.hidden : true;
+    const panelWasOpen = !!els.resultsCanvasRow?.classList.contains("showing-analysis");
+    // Straight into #canvas-loading, no photo for the close to animate
+    // against -- same as backToProcessFromResults' 美化.
+    if (panelWasOpen) {
+      els.resultsCanvasRow.classList.add("no-transition");
+      closeInlineAnalysisPanel();
+    }
+    setFlowStage("analyzing");
+    setAnalysisPreviewDisabled(true);
+    if (els.canvasLoadingThumb) els.canvasLoadingThumb.src = originalImgThumbUrl || els.originalImg.src;
+    setProcTitle("正在分析照片");
+    startProcSubRotation(analyzeSubMessages);
+    if (els.photoFrameWrap) els.photoFrameWrap.hidden = true;
+    if (els.versionStrip) els.versionStrip.hidden = true;
+    if (els.canvasLoading) els.canvasLoading.hidden = false;
+    if (panelWasOpen) requestAnimationFrame(() => els.resultsCanvasRow.classList.remove("no-transition"));
+    return () => {
+      stopProcSubRotation();
+      if (els.canvasLoading) els.canvasLoading.hidden = true;
+      if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
+      if (els.versionStrip) els.versionStrip.hidden = stripWasHidden;
+      // backToProcessFromResults' wait for 美化 is still listening: only the
+      // panel was put away, so it is put back the same way it opened.
+      if (panelWasOpen) openInlineAnalysisPanel(false);
+      setAnalysisPreviewDisabled(false);
+      setFlowStage(prevStage);
+      updateInlineAnalysisContinueBtnState();
+    };
+  }
+
+  // Fills the panel the way opening an analyzed case would, keeping what the
+  // user typed into 個人化需求 meanwhile. 只照需求改 is turned off: asking for
+  // the analysis is asking for the whole photo to be worked on. jobId is the
+  // analysis' own job, now the case's newest version (api.analyze_existing):
+  // the next 美化 continues from it.
+  function adoptSkippedCaseAnalysis(analysis, jobId) {
+    historyCaseAnalysis = analysis;
+    const userPrompt = els.promptInput?.value || "";
+    singleFlowState.analysis = analysis;
+    if (jobId) singleFlowState.analyzeJobId = jobId;
+    setCurrentCaseAnalysisVersion(analysis);
+    lastSingleSelections = { ...(lastSingleSelections || {}), userPrompt, overwritePrompt: false };
+    renderAnalysisPreview({ analysis: stripDisabledTopicItems(analysis, singleFlowState.advancedOptions), preset: singleFlowState.preset, expanded: true });
+    applyAdvancedOptionsOption(recordAdvancedOptions(singleFlowState.advancedOptions, analysis), "ap");
+    if (els.promptInput) els.promptInput.value = userPrompt;
+    if (els.promptOverwriteToggle) els.promptOverwriteToggle.checked = false;
+    updateInlineAnalysisContinueBtnState();
+  }
+
+  const SKIP_HINT_TEXT = "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有美化建議。可以直接在下方修改個人化需求；需要 AI 的美化建議，請按「美化」左邊的「幫我分析」。";
+
+  function setSkipHintBusy(busy) {
+    if (els.apSkipAnalyzeBtn) {
+      els.apSkipAnalyzeBtn.disabled = busy;
+      els.apSkipAnalyzeBtn.textContent = busy ? "分析中…" : "幫我分析";
+    }
+    if (els.apSkipHintText) {
+      els.apSkipHintText.textContent = busy
+        ? "正在分析整張照片，完成後美化建議會顯示在這裡。"
+        : SKIP_HINT_TEXT;
+    }
+    const btn = els.inlineAnalysisContinueBtn;
+    if (!btn) return;
+    if (busy) {
+      btn.dataset.skipHintHeld = btn.disabled ? "1" : "";
+      btn.disabled = true;
+    } else if ("skipHintHeld" in btn.dataset) {
+      btn.disabled = btn.dataset.skipHintHeld === "1";
+      delete btn.dataset.skipHintHeld;
+    }
   }
 
   // 生成張數 (single-image RUN count) can now be preset on the upload screen,
@@ -8943,14 +9094,27 @@
   // touching anything unless the case really does have more than one version
   // -- a first-ever edit has nothing to show, and leaving the live list
   // alone there keeps its per-RUN timings, which a re-fetch would drop.
-  async function refreshVersionsAfterEdit() {
+  //
+  // pendingAnalysis: called after 幫我分析 instead (analyzeSkippedCase). The
+  // analysis is the case's newest version but has no image of its own, so it
+  // is the strip's trailing 待美化 tile (versionStripPendingRuns) rather
+  // than an entry in the list -- and one edit before it is already enough to
+  // show the strip for.
+  async function refreshVersionsAfterEdit({ pendingAnalysis = false } = {}) {
     // singleRuns is null for the ordinary single-RUN edit -- that path never
     // builds a run list at all (see finishSingleFlow's runCount === 1
     // branch), and lastResult is the only record of what it just produced.
     // It is also the path most edits take, so it is the one that matters
     // most here.
     const live = singleRuns && singleRuns.length ? singleRuns : null;
-    if (live && live.some((r) => r.versionId)) return; // already showing versions
+    if (live && live.some((r) => r.versionId)) { // already showing versions
+      if (pendingAnalysis) {
+        versionStripPendingRuns = live;
+        versionStripRuns = null; // same list, one more tile: rebuild the strip
+        renderSingleRunSwitcher();
+      }
+      return;
+    }
     const user = getCurrentUser();
     const anchor = live
       ? (live[singleMirrorIndex] || live.find((r) => r.status === "done") || live[0])
@@ -8960,7 +9124,7 @@
     if (!user || !anchor || !anchor.jobId) return;
 
     const found = await findCaseForJob(user, anchor.jobId);
-    if (!found || found.shown.length < 2) return;
+    if (!found || found.shown.length < (pendingAnalysis ? 1 : 2)) return;
     const { shown, latest } = found;
     const latestRuns = await fetchVersionRuns(latest.runs || [], latest.path || "local");
     const rebuilt = buildVersionRunList(shown, latestRuns, "local");
@@ -8976,6 +9140,7 @@
       });
     }
     singleRuns = rebuilt;
+    if (pendingAnalysis) versionStripPendingRuns = rebuilt;
     const sameImage = rebuilt.findIndex((r) => r.jobId === anchor.jobId
       && r.sourceRun === (anchor.sourceRun || anchor.run));
     singleMirrorIndex = sameImage >= 0
@@ -9472,8 +9637,11 @@
     // only when an AI edit actually ran, see pipeline.py's finish_stage) is a
     // more accurate fallback than a blind default for that one specifically.
     const extraInfo = run.result["extra-info"] || {};
-    const { analysis: restoredAnalysis, selections } =
-      restoreReviseSelections(run.result.analysis, params.user_prompt, params.overwrite_prompt);
+    const attached = run.result.analysis?._skipped_analysis ? historyCaseAnalysis : null;
+    // Analyzed since: the next 美化 works off the full analysis, not just
+    // the 個人化需求 the version was made with.
+    const { analysis: restoredAnalysis, selections } = restoreReviseSelections(
+      attached || run.result.analysis, params.user_prompt, params.overwrite_prompt && !attached);
     singleFlowState = {
       analysis: restoredAnalysis,
       analyzeJobId: run.jobId,
@@ -9516,6 +9684,19 @@
       recordAdvancedOptions(singleFlowState.advancedOptions, singleFlowState.analysis), "ap");
   }
 
+  // The analysis a 「只照需求改」 case got afterwards (from 自訂模式's
+  // 「幫我分析」 or the chat's), which get_history hands over as
+  // analysis_job_id. One still running or failed reads as none: the case
+  // opens on its stub and 幫我分析 is offered again.
+  async function fetchAttachedCaseAnalysis(job, runs) {
+    if (!job.analysis_job_id || !runs.some((run) => run.result?.analysis?._skipped_analysis)) return null;
+    try {
+      return (await getAnalyzeResult(job.analysis_job_id)).result.analysis || null;
+    } catch {
+      return null;
+    }
+  }
+
   // Reconstructs the full single-photo results view (recipe/analysis/QA
   // panel, RUN switcher, before/after compare, download) for a finished
   // history entry, pulling this job's data fresh from the backend instead of
@@ -9547,6 +9728,7 @@
     // equivalent of applyHistoryVersionContext and would show older versions
     // without ever re-pointing the page at them.
     const runs = await fetchAllHistoryRuns(job, { allVersions: job.path === "local" });
+    const attachedAnalysis = job.path === "local" ? await fetchAttachedCaseAnalysis(job, runs) : null;
     // Superseded while the runs were loading -- don't hide (or render into)
     // a screen that now belongs to something else.
     if (historyViewToken !== myToken) return false;
@@ -9610,6 +9792,7 @@
     if (els.canvasLoading) els.canvasLoading.hidden = true;
     if (els.photoFrameWrap) els.photoFrameWrap.hidden = false;
 
+    historyCaseAnalysis = attachedAnalysis;
     if (job.path === "local") {
       selectedFile = null;
       singleRuns = runs;
@@ -11057,6 +11240,39 @@
   // (stepping between two images of one case) just moves .is-current, so the
   // tiles' <img>s are never re-created and never re-request their thumbnails.
   let versionStripRuns = null;
+  // The run list a 幫我分析 landed on (refreshVersionsAfterEdit's
+  // pendingAnalysis): that analysis is the case's newest version, shown as a
+  // 待美化 tile after the list's last one. Tied to the list object rather
+  // than a flag, so the next 美化 or opening another record -- both build a
+  // new list -- drops it without anyone having to remember to.
+  let versionStripPendingRuns = null;
+
+  function hasPendingAnalysisTile(runs) {
+    return !!runs && runs.length > 0 && versionStripPendingRuns === runs;
+  }
+
+  // Not a button: there is no image to land on yet. It is the version the
+  // next 美化 produces from the analysis now in the panel -- the original
+  // under a dashed accent frame, the way an empty slot waiting to be filled
+  // reads.
+  function buildPendingAnalysisTile(thumbUrl) {
+    const wrap = document.createElement("div");
+    wrap.className = "version-pending";
+    const tile = document.createElement("div");
+    tile.className = "version-pending-tile";
+    tile.title = "已分析完成，按「美化」就會產生這一組";
+    tile.setAttribute("aria-label", tile.title);
+    const img = document.createElement("img");
+    img.src = thumbUrl;
+    img.alt = "";
+    img.loading = "lazy";
+    tile.append(img);
+    const label = document.createElement("span");
+    label.className = "version-group-label";
+    label.textContent = "待美化";
+    wrap.append(tile, label);
+    return wrap;
+  }
   // Mirrors whichever currentIdx the last renderVersionStrip call was given --
   // kept around purely so openVersionStripPreviewModal (mobile's tap
   // alternative to the hover preview, see below) can mark the right tile
@@ -11144,7 +11360,8 @@
   // thumbnail, since that global tracks the single-image flow's photo.
   function renderVersionStrip(runs, currentIdx, originThumbUrl) {
     if (!els.versionStrip || !els.versionStripTrack) return;
-    if (!runs || runs.length <= 1 || !runs.some((r) => r.versionTotal)) {
+    const pending = hasPendingAnalysisTile(runs);
+    if (!runs || (runs.length <= 1 && !pending) || !runs.some((r) => r.versionTotal)) {
       hideVersionStrip();
       return;
     }
@@ -11260,6 +11477,7 @@
         tile.addEventListener("mouseleave", hideVersionTilePreview);
         groupTiles.append(tile);
       });
+      if (pending) versionsScroll.append(buildPendingAnalysisTile(originImg.src));
     }
     versionStripCurrentIdx = currentIdx;
     syncVersionStripCurrent({ reveal: true });
@@ -11405,7 +11623,7 @@
   // re-pointing to that run means for the caller (batch re-renders via
   // syncRecordMirror+showBatchDoneMain, single via showSingleResult).
   function updateRunSwitcher(runs, currentIdx, onSelectDone, { originThumbUrl } = {}) {
-    if (runs.length <= 1) {
+    if (runs.length <= 1 && !hasPendingAnalysisTile(runs)) {
       resetRunSwitcher();
       return;
     }
@@ -11516,7 +11734,7 @@
   // a different version has to re-point the whole page at it.
   function renderSingleRunSwitcher() {
     const runs = singleRuns || [];
-    if (runs.length <= 1) {
+    if (runs.length <= 1 && !hasPendingAnalysisTile(runs)) {
       resetRunSwitcher();
       return;
     }
@@ -12702,6 +12920,7 @@
 
   function resetApp() {
     hideError();
+    historyCaseAnalysis = null;
     // Going back to the upload screen hands the screen to nobody -- whatever
     // job is still running in the background (a revise the user kicked off
     // from the results page, say) must not render itself here later, on top

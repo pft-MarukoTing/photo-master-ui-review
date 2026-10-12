@@ -244,8 +244,12 @@ def detect_face_crops(image_bytes: bytes) -> list:
         left, top, right, bottom = _padded_face_box(img, x, y, w, h)
         logger.info("detect_face_crops: raw_box=(%d,%d,%d,%d) crop_box=(left=%d,top=%d,right=%d,bottom=%d)", x, y, w, h, left, top, right, bottom)
         crop = img.crop((left, top, right, bottom))
+        # Resized to _FACE_CROP_MAX_SIDE both ways: a small face is zoomed up,
+        # and the face of a high-res close-up (often several thousand px) is
+        # brought down -- analysis models that count image patches reject an
+        # oversized crop outright instead of resampling it.
         longest = max(crop.width, crop.height)
-        if longest < _FACE_CROP_MAX_SIDE:
+        if longest != _FACE_CROP_MAX_SIDE:
             scale = _FACE_CROP_MAX_SIDE / longest
             crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
         crops.append({**_normalized_face_entry(img, x, y, w, h), "bytes": _to_jpeg_bytes(crop)})

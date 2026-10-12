@@ -315,6 +315,35 @@ window.PhotoAgentApi = (() => {
     return data.jobs || [];
   }
 
+  // Analyze the photo an earlier job already holds -- 自訂模式's 「幫我分析」
+  // on a 「只照需求改」 case. Not a version of its own: the backend attaches
+  // it to the case (api.py's analyze_existing), so with `user` set, later
+  // opens of the case and its chat session pick it up.
+  async function analyzeExistingJob({ jobId, preset, imageQuality, imageModel, analysisModel, aspectRatio, aiPhotoEditing, runQa, singlePassEdit, userPrompt, advancedOptions, user }) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze/${encodeURIComponent(jobId)}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        preset,
+        image_quality: imageQuality,
+        image_model: imageModel || "gpt-image-2",
+        analysis_model: analysisModel || "gpt-5.6-luna",
+        aspect_ratio: aspectRatio || "auto",
+        ai_photo_editing: aiPhotoEditing ? "true" : "false",
+        run_qa: runQa === false ? "false" : "true",
+        single_pass_edit: !!singlePassEdit,
+        advanced_options: advancedOptions || {},
+        user_prompt: userPrompt || "",
+        user: user || ""
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `送出分析失敗：HTTP ${response.status}`);
+    }
+    return data.job_id;
+  }
+
   async function getAnalyzeResult(jobId) {
     const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/analyze/result/${encodeURIComponent(jobId)}`);
     const data = await response.json().catch(() => ({}));
@@ -728,6 +757,7 @@ window.PhotoAgentApi = (() => {
     getUiConfig,
     analyzeJob,
     analyzeJobBatch,
+    analyzeExistingJob,
     getAnalyzeResult,
     continueJob,
     rerunJob,

@@ -1883,7 +1883,17 @@ function SessionView(props: {
       }
     });
   }
-  const cats: Category[] = adjusting || opened.includes("settings") ? [...baseCats, "settings"] : baseCats;
+  // 只照需求改的那一版再調整：美化只看個人化需求，人像、美化建議、風格、設定
+  // 都碰不到結果，所以只給這一項。看的是這一輪開的時候有沒有寫需求，中途清掉
+  // 也不會突然冒出其他項目；「幫我分析」開的那輪會把 overwrite_prompt 關掉，
+  // 回到完整清單。
+  const promptOnlyRound =
+    adjusting && !!photo.plan.overwrite_prompt && !!String(roundPlan?.user_prompt || "").trim();
+  const cats: Category[] = promptOnlyRound
+    ? ["prompt"]
+    : adjusting || opened.includes("settings")
+      ? [...baseCats, "settings"]
+      : baseCats;
   const lastOpened = opened.length ? opened[opened.length - 1] : null;
   // 分析後的第一輪用漸進引導：排在最前面、還沒看過也還沒略過的那一項，就是
   // 下一句要談的。（調整後再美化那一輪維持原本的選單。）
@@ -2449,15 +2459,31 @@ function SessionView(props: {
                 <>
                   {/* 再進來的人最容易搞混兩件事：建議是對哪張照片講的、開關又是從哪來的。
                       建議永遠是看原圖分析的，不會因為已經修過一版就換；開關則是上一版的。 */}
-                  {c.via !== "proposal" && !check && (
+                  {c.via !== "proposal" && !check && promptOnlyRound && (
+                    <p class="chat-text chat-muted">
+                      這版只照你的需求改，所以這輪只要改個人化需求就好。想整張一起美化的話，按「幫我分析」。
+                    </p>
+                  )}
+                  {c.via !== "proposal" && !check && !promptOnlyRound && (
                     <p class="chat-text chat-muted">
                       裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。
                     </p>
                   )}
                   {showChips && c.via !== "proposal" && (
-                    <p class="chat-text">可以調整{cats.map((x) => CATEGORIES[x].label).join("、")}，想先看哪一項？</p>
+                    <p class="chat-text">
+                      {cats.length > 1
+                        ? `可以調整${cats.map((x) => CATEGORIES[x].label).join("、")}，想先看哪一項？`
+                        : `點下面的「${CATEGORIES[cats[0]].label}」就可以改。`}
+                    </p>
                   )}
-                  {showChips && <div class="chat-choices">{catChips()}</div>}
+                  {showChips && (
+                    <div class="chat-choices">
+                      {catChips()}
+                      {promptOnlyRound && (
+                        <Chip label="幫我分析" icon="sliders" disabled={busy || !ready} onClick={checkOriginal} />
+                      )}
+                    </div>
+                  )}
                   <p class="chat-text chat-muted">
                     改好按下方的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
                   </p>
@@ -2522,13 +2548,14 @@ function SessionView(props: {
         if (!v) return null;
         // 最新這版只照需求改：分析找到的那些都還沒動，問要不要攤開來看。
         // 答過（好 → 開一輪調整；不用了 → check_declined）就不再問。上傳時就跳過
-        // 分析的照片手上可能還沒有分析，照樣要問（checkOriginal 會先補跑）。
+        // 分析的照片手上可能還沒有分析，照樣要問（checkOriginal 會先補跑）。這版
+        // 之後才補做的分析（自訂模式按了「幫我分析」）也算問過了：摘要接在後面。
         const offerCheck =
           idx === lastRender &&
           !adjusting &&
           !!photo.plan.overwrite_prompt &&
           (skippedAnalysis || !!analysis) &&
-          !messages.slice(idx + 1).some((x) => x.card?.type === "check_declined");
+          !messages.slice(idx + 1).some((x) => x.card?.type === "check_declined" || x.card?.type === "analysis_brief");
         return (
           <AssistantMsg>
             <ResultCard

@@ -741,6 +741,29 @@
       color: var(--text-2);
     }
     .ap-photo-summary-text:empty { display: none; }
+    /* #ap-skip-analyze-btn: 幫我分析, left of 美化 for a 「只照需求改」 case
+       (#ap-skip-hint explains why). Secondary to 美化, so the tonal accent
+       pill rather than the gradient -- same sizing as its neighbour. */
+    .ap-skip-analyze-btn {
+      border: 1px solid rgba(var(--accent-rgb),.25);
+      background: rgba(var(--accent-rgb),.12);
+      color: var(--accent);
+      font-family: inherit;
+    }
+    .ap-skip-analyze-btn:hover:not(:disabled) {
+      background: rgba(var(--accent-rgb),.18);
+      border-color: rgba(var(--accent-rgb),.4);
+    }
+    .ap-skip-analyze-btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+    .ap-skip-analyze-btn:disabled { opacity: .55; cursor: progress; }
+    /* The collapsed side panel stacks 美化 into a 44px letter column, which
+       a second label can't share; 幫我分析 comes back with the panel. */
+    body.side-panel-layout #results-analysis-slot:has(#ap-analysis-shell:not([open])) .ap-skip-analyze-btn {
+      display: none;
+    }
     .ap-photo-summary-toggle[hidden] { display: none; }
     .ap-photo-summary-toggle {
       position: absolute;
@@ -4308,7 +4331,7 @@
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
     body.is-opening-case > main { visibility: hidden; }
   </style>
-  <script type="module" crossorigin src="./static/index-C2hp2RDi.js"></script>
+  <script type="module" crossorigin src="./static/index-KJfAqIO4.js"></script>
   <link rel="stylesheet" crossorigin href="./static/index-DurpKtU0.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">

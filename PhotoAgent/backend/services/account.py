@@ -153,6 +153,10 @@ def _jobindex_key(username):
     return f"{_user_base(username)}:jobindex"
 
 
+def _case_analysis_key(username):
+    return f"{_user_base(username)}:case_analysis"
+
+
 def _legacy_key(username):
     return LEGACY_HISTORY_KEY_FORMAT.format(user=username)
 
@@ -434,6 +438,17 @@ def record_history(username, job_id, path, case_id, version_id, params=None, bas
     _prune_oldest(username)
 
 
+def attach_case_analysis(username, case_id, job_id):
+    """Point `case_id` at an analysis run on its photo after the fact -- the
+    one a 「只照需求改」 upload skipped, asked for later in either mode.
+
+    The analysis is also recorded as a version of its own (record_history);
+    this pointer is what both modes read back off the case
+    (get_history_entry's analysis_job_id) to fill in the stub analysis such a
+    case's renders carry."""
+    pf_redis_client.hset(_case_analysis_key(username), case_id, job_id)
+
+
 # ── Pruning ───────────────────────────────────────────────────────────────
 
 def _prune_versions(username, case_id, versions):
@@ -488,6 +503,8 @@ def get_history(username, limit=50, offset=0):
     """Case summaries, newest first. Reads only the summary hash -- opening a
     case (get_history_entry) is what pulls its versions."""
     raw_entries = pf_redis_client.hgetall(_cases_key(username)) or {}
+    analyses = {_decode(field): _decode(job_id)
+                for field, job_id in (pf_redis_client.hgetall(_case_analysis_key(username)) or {}).items()}
     entries = []
     seen = set()
     for field, raw in raw_entries.items():
@@ -502,6 +519,7 @@ def get_history(username, limit=50, offset=0):
         # Still called image_key on the wire: it is what every existing
         # caller, frontend included, already names this identifier.
         entry["image_key"] = case_id
+        _with_case_analysis(entry, analyses.get(case_id))
         entries.append(entry)
     # Cases that only ever existed under v2 and haven't been touched since.
     for field, raw in (pf_redis_client.hgetall(_legacy_key(username)) or {}).items():
@@ -523,11 +541,18 @@ def get_history(username, limit=50, offset=0):
     return entries[offset:offset + limit]
 
 
+def _with_case_analysis(entry, job_id):
+    if job_id:
+        entry["analysis_job_id"] = job_id
+    return entry
+
+
 def get_history_entry(username, case_id, include_versions=True):
     """Resolve one case by its durable case/history key, with its full version
     list -- newest last, the order the UI walks them in."""
     raw = pf_redis_client.hget(_cases_key(username), case_id)
     entry = _loads(raw) if raw else None
+    analysis_job_id = _decode(pf_redis_client.hget(_case_analysis_key(username), case_id))
     if entry is None:
         converted = _legacy_as_case(_legacy_entry(username, case_id), case_id)
         if not converted:
@@ -536,8 +561,9 @@ def get_history_entry(username, case_id, include_versions=True):
         entry["image_key"] = case_id
         if include_versions:
             entry["versions"] = versions
-        return entry
+        return _with_case_analysis(entry, analysis_job_id)
     entry["image_key"] = case_id
+    _with_case_analysis(entry, analysis_job_id)
     if include_versions:
         entry["versions"] = _group_versions(_load_version_records(username, case_id))
     return entry
@@ -578,6 +604,7 @@ def delete_history_entry(username, case_id):
     _forget_jobs(username, versions, [])
     pf_redis_client.delete(_versions_key(username, case_id))
     pf_redis_client.hdel(_cases_key(username), case_id)
+    pf_redis_client.hdel(_case_analysis_key(username), case_id)
     # A case that was never migrated out of v2 would otherwise reappear in
     # get_history's legacy pass right after being deleted.
     pf_redis_client.hdel(_legacy_key(username), case_id)
@@ -622,4 +649,5 @@ def clear_history(username):
         pf_redis_client.delete(_versions_key(username, case_id))
     pf_redis_client.delete(_cases_key(username))
     pf_redis_client.delete(_jobindex_key(username))
+    pf_redis_client.delete(_case_analysis_key(username))
     pf_redis_client.delete(_legacy_key(username))

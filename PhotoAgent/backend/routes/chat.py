@@ -33,6 +33,7 @@ from backend.routes.api import _apply_review_selections, _parse_and_validate_par
 from backend.services import chat_queue, chat_session as store
 from backend.services.account import (
     HISTORY_MAX_LEN,
+    attach_case_analysis,
     clear_history,
     delete_history_entry,
     get_history,
@@ -341,9 +342,7 @@ def _sync_from_history(user, session_id, session):
         entry = get_history_entry(user, photo["case_id"]) or {}
         edits = [v for v in entry.get("versions") or []
                  if v["kind"] != "analyze" and v["runs"] and (v.get("path") or "local") == "local"]
-        if not edits:
-            continue
-        if posted is None:
+        if edits and posted is None:
             posted = {(m.get("card") or {}).get("version_id")
                       for m in store.get_messages(user, session_id, limit=store.MESSAGES_MAX_LEN)}
         changed = False
@@ -374,14 +373,44 @@ def _sync_from_history(user, session_id, session):
                 "type": "render_done", "photo_id": photo["photo_id"], "version_id": version_id,
                 "job_ids": succeeded, "failed_job_ids": [j for j in version["runs"] if j not in succeeded],
                 "via": "custom"}))
+        if _adopt_case_analysis(photo, entry, statuses):
+            changed = True
+            # Usually long finished by the time the chat opens: land it now,
+            # rather than show the photo as 分析中 until the next status poll.
+            job_id = photo["analysis_job_id"]
+            job = _job_status(job_id, statuses)
+            if job["status"] in TERMINAL_STATUSES and store.claim(user, session_id, job_id):
+                messages.extend(_advance_reanalysis(user, session_id, photo, job))
         if changed:
             store.save_photo_state(user, session_id, photo)
     store.append_messages(user, session_id, messages)
 
 
+def _adopt_case_analysis(photo, entry, statuses):
+    """A 「只照需求改」 photo analyzed from 自訂模式 (api.analyze_existing):
+    follow that job as this photo's reanalysis, so its brief lands the way
+    the chat's own 「幫我分析」 does -- right away when it's already done
+    (_sync_from_history), else from the status polls. One that failed is
+    left alone -- the photo keeps working off its stub, as after a failed
+    chat-side analysis."""
+    job_id = entry.get("analysis_job_id")
+    if (not job_id or not photo.get("analysis_skipped") or photo["status"] != "ready"
+            or job_id == photo.get("analysis_job_id")):
+        return False
+    if _job_status(job_id, statuses)["status"] in (None, "error"):
+        return False
+    photo["analysis_job_id"] = job_id
+    photo["reanalysis"] = "custom"
+    photo["status"] = "analyzing"
+    photo["planned_ratio"] = None
+    photo["error"] = None
+    return True
+
+
 @chat_bp.get("/sessions/<session_id>")
 def get_session(session_id):
     user = _user(request.args.get("user"))
+    _advance_photos(user, session_id, _session(user, session_id))
     _sync_from_history(user, session_id, _session(user, session_id))
     session = _session(user, session_id)
     limit = request.args.get("messages_limit", 100, type=int)
@@ -527,6 +556,13 @@ def _start_analysis(user, session_id, photo, why):
     photo["planned_ratio"] = None
     photo["error"] = None
     store.save_photo_state(user, session_id, photo)
+    # A new version of the case, as in 自訂模式 (api.analyze_existing).
+    _record_history_safely(user, job_id, "local", engine_params["srcKeys"][0], job_id, params=params)
+    # So 自訂模式 opening this case reads it too, not the renders' stub.
+    try:
+        attach_case_analysis(user, photo["case_id"], job_id)
+    except Exception:
+        current_app.logger.warning("attach_case_analysis failed for %s", job_id, exc_info=True)
 
 
 @chat_bp.post("/sessions/<session_id>/photos/<photo_id>/analyze")
@@ -1380,9 +1416,11 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
 
 def _advance_reanalysis(user, session_id, photo, job):
     """The real analysis 「幫我分析」 asked for on a photo whose upload
-    skipped it (analyze_photo). The photo goes back to ready either way; on
-    success it lands as the same check card a 「原圖還有可以修的地方」 answer
-    opens, so the page lists what it found."""
+    skipped it (analyze_photo, or 自訂模式 via _adopt_case_analysis). The
+    photo goes back to ready either way; on success a chat-side request
+    ("check") lands as the same check card a 「原圖還有可以修的地方」 answer
+    opens, so the page lists what it found. One made in 自訂模式 ("custom")
+    only posts its brief: the user already went through it there."""
     why = photo["reanalysis"]
     queued = photo["queued_render"]
     photo["status"] = "ready"
@@ -1467,7 +1505,15 @@ def _advance_rendering(user, session_id, photo, statuses):
 @chat_bp.get("/sessions/<session_id>/status")
 def session_status(session_id):
     user = _user(request.args.get("user"))
-    session = _session(user, session_id)
+    statuses, messages = _advance_photos(user, session_id, _session(user, session_id))
+    return jsonify({"session": store.load_session(user, session_id), "jobs": statuses, "new_messages": messages})
+
+
+def _advance_photos(user, session_id, session):
+    """Land whatever a session's busy photos were waiting on that has since
+    finished, and post it. The status polls run this; so does opening the
+    session, since a photo left mid-render (the user switched to 自訂模式)
+    would otherwise reopen as still working until the first poll."""
     statuses, messages = {}, []
     for photo in session["photos"]:
         if photo["status"] == "analyzing":
@@ -1477,4 +1523,4 @@ def session_status(session_id):
         elif photo["status"] == "rendering" and photo["pending_render"]:
             messages += _advance_rendering(user, session_id, photo, statuses)
     store.append_messages(user, session_id, messages)
-    return jsonify({"session": store.load_session(user, session_id), "jobs": statuses, "new_messages": messages})
+    return statuses, messages

@@ -3430,6 +3430,26 @@ window.PhotoAgentResults = (() => {
     // back to 修圖建議 in renderFaceReviewCards if this photo has no faces),
     // same as selectedFaceIndex resetting to 0 in renderFaceThumbnails below.
     activeReviewTab = "face";
+    // A 「只照需求改」 case has only the stub analysis: nothing to summarize
+    // or recommend, so #ap-skip-hint stands in for the 照片總覽 card (its
+    // 幫我分析 is app.js's, beside 美化), the
+    // empty 美化建議 and 風格調整 tabs go, and the panel opens on 個人化需求 -- the
+    // part that still applies. (人像檢查 hides itself: the stub has no faces.)
+    const skipped = Boolean(analysis?._skipped_analysis);
+    if (els.apSkipHint) els.apSkipHint.hidden = !skipped;
+    if (els.apPhotoSummary) els.apPhotoSummary.hidden = skipped;
+    if (els.apReviewTabRecipe) els.apReviewTabRecipe.hidden = skipped;
+    if (els.apReviewTabStyle) els.apReviewTabStyle.hidden = skipped;
+    // The shell's heading speaks of AI suggestions this case doesn't have.
+    if (els.apAnalysisShellTitleText) {
+      els.apAnalysisShellTitleText.textContent = skipped ? "需求與調整" : "分析與調整";
+    }
+    if (els.apAnalysisShellDesc) {
+      els.apAnalysisShellDesc.textContent = skipped
+        ? "這個版本依照你的個人化需求修圖，可以在這裡修改需求或調整設定"
+        : "這是 AI 分析後提供的建議，你可依此在這裡進一步調整設定";
+    }
+    if (skipped) activeReviewTab = "prompt";
     // #ap-analysis-shell (the outer title+collapse frame) mirrors
     // #ap-review-panel's own open state -- both are opened by default for
     // the first-time 分析 review and the 結果 page/a revise.
