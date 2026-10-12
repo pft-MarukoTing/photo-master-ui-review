@@ -360,6 +360,28 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .home-start-btn{display:inline-flex;align-items:center;gap:var(--sp-2);min-height:48px;padding:0 var(--sp-6) 0 var(--sp-5);border-radius:999px;font-size:var(--chat-fs-lg);font-weight:700;
   background:var(--cta);color:var(--on-cta);border:0;box-shadow:0 8px 22px rgba(var(--accent-rgb),.30)}
 .home-start-btn svg{width:18px;height:18px}
+/* 首頁唯一要按的那顆：每隔幾秒輕輕跳兩下，落地時從按鈕邊緣擴散出一圈 accent 色的光暈，
+   把視線拉過來。大部分時間是靜止的，跳完就停，不會一直晃；滑鼠移上去或用鍵盤停在上面時
+   不跳，免得按的時候它正好跳開。光暈是另一層（::after），不動按鈕本身的陰影。 */
+.home-start-btn{position:relative;animation:home-start-hop 3.2s ease-in-out 1.2s infinite}
+.home-start-btn::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  box-shadow:0 0 0 0 rgba(var(--accent-rgb),.55);opacity:0;animation:home-start-glow 3.2s ease-out 1.2s infinite}
+.home-start-btn:hover,.home-start-btn:focus-visible,
+.home-start-btn:hover::after,.home-start-btn:focus-visible::after{animation:none}
+/* 跳動排在週期前段，落地（70%）之後留約 0.9 秒給光暈慢慢散開。 */
+@keyframes home-start-hop{
+  0%,54%,100%{transform:translateY(0)}
+  62%{transform:translateY(-8px)}
+  70%{transform:translateY(0)}
+  76%{transform:translateY(-3px)}
+  82%{transform:translateY(0)}
+}
+@keyframes home-start-glow{
+  0%,68%{opacity:0;box-shadow:0 0 0 0 rgba(var(--accent-rgb),.55)}
+  71%{opacity:1;box-shadow:0 0 0 0 rgba(var(--accent-rgb),.55)}
+  100%{opacity:0;box-shadow:0 0 0 16px rgba(var(--accent-rgb),0)}
+}
+@media (prefers-reduced-motion:reduce){.home-start-btn,.home-start-btn::after{animation:none}}
 .chat-choices{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
 /* The forward actions and the utility actions are different kinds of thing,
    so they are two groups with a wider gutter between them rather than four
