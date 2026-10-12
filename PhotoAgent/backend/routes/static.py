@@ -1,7 +1,7 @@
 import hashlib
 import os
 
-from flask import Blueprint, current_app, jsonify, redirect, send_from_directory
+from flask import Blueprint, current_app, jsonify, redirect, request, send_from_directory
 
 from aiserver_utils.pf_redis import pf_redis_client
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
@@ -106,7 +106,9 @@ def version():
 @static_bp.get("/chat")
 def chat_redirect():
     # Relative, so it keeps whatever prefix a proxy mounted this app under.
-    return redirect("chat/")
+    # Keep the encrypted user_id (and other flags) when adding the slash.
+    query = request.query_string.decode("ascii")
+    return redirect("chat/" + ("?" + query if query else ""))
 
 
 @static_bp.get("/chat/")
