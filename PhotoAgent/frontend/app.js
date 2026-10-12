@@ -1326,7 +1326,10 @@
     const mql = window.matchMedia("(max-width: 900px)");
     const sync = () => {
       if (mql.matches) items.forEach((el) => secondRow.appendChild(el));
-      else items.forEach((el) => row.insertBefore(el, spacer));
+      // Back in front of 主題, not just the spacer: 主題 stays in this row
+      // throughout, so inserting before the spacer alone would leave it
+      // first. Order matches the chat page: ... 主題 · 回報.
+      else items.forEach((el) => row.insertBefore(el, els.themeToggleBtn || spacer));
     };
     mql.addEventListener("change", sync);
     sync();
@@ -5046,7 +5049,6 @@
     if (els.resultsCanvasRow) { els.resultsCanvasRow.hidden = false; els.resultsCanvasRow.classList.remove("showing-analysis"); }
     if (els.resultsBody) els.resultsBody.classList.remove("showing-analysis");
     resetRunSwitcher();
-    if (els.reloadBatchBtn) els.reloadBatchBtn.hidden = true;
     if (els.batchDownloadAllBtn) els.batchDownloadAllBtn.hidden = true;
     if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
   }
@@ -6086,9 +6088,8 @@
 
   // ── Batch step 1: analyze every image, then show the review grid ─────────
   async function startSubmitBatch(skipReview = false) {
-    // Same reason as startSubmit's own bump -- this covers reloadBatch, the
-    // one caller that doesn't come through startSubmit (which has already
-    // bumped by the time it delegates here).
+    // Same reason as startSubmit's own bump (which has already bumped by the
+    // time it delegates here) -- kept so this stays safe to call directly.
     historyViewToken += 1;
     const presetKey = "natural";
     const modelQualityOpt = findModelQualityOption(els.imageModelQualitySelect?.value) || {};
@@ -10390,13 +10391,6 @@
     else openCompareFullscreen();
   }
 
-  // "重新分析": wipe every record's analysis/edit state and re-run step 1
-  // from scratch, same as the initial submit -- for when the recipe needs a
-  // clean re-analyze rather than a manual revise.
-  function reloadBatch() {
-    startSubmitBatch();
-  }
-
   // ── Core dispatcher: sidebar click -> whatever main-area view matches the
   // selected record's current status. Replaces the old grid/detail-pagination/
   // separate-review-screen split entirely -- one page, one selection model. ──
@@ -13035,8 +13029,12 @@
       if (e.target.dataset.close) closeVersionStripPreviewModal();
     });
   }
-  els.resetButton.addEventListener("click", resetApp);
-  if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", resetApp);
+  // 首頁 is the chat page's now -- this page only serves the analysis/result
+  // screens, so 回到首頁 (and the logo) leave for it, keeping the query
+  // string the same way #chat-ui-btn does.
+  const goChatHome = () => { location.href = `chat/${location.search}`; };
+  els.resetButton.addEventListener("click", goChatHome);
+  if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", goChatHome);
   if (els.compareToggleBtn) {
     els.compareToggleBtn.addEventListener("click", () =>
       setCompareView(!els.compareCard?.classList.contains("showing-generated")));
@@ -13088,7 +13086,6 @@
   els.downloadLink.addEventListener("click", handleDownloadClick);
   if (els.downloadCurrentBtn) els.downloadCurrentBtn.addEventListener("click", handleDownloadCurrentBtnClick);
   if (els.downloadAllRunsBtn) els.downloadAllRunsBtn.addEventListener("click", handleDownloadAllRunsBtnClick);
-  if (els.reloadBatchBtn) els.reloadBatchBtn.addEventListener("click", reloadBatch);
   if (els.errorModalClose) els.errorModalClose.addEventListener("click", closeErrorModal);
   if (els.errorModal) {
     els.errorModal.addEventListener("click", (e) => {

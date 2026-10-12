@@ -975,6 +975,7 @@ export function App() {
   const header = (
     <Header
       caseId={phase === "session" ? photo?.case_id : null}
+      jobId={phase === "session" ? photo?.active_version?.job_id || photo?.analyze_job_id || null : null}
       onHome={goHome}
       onHistory={() => {
         refreshSessions();
@@ -982,6 +983,7 @@ export function App() {
       }}
       showHome={phase !== "home"}
       showHistory={phase === "session"}
+      showOldUi={phase === "session"}
     />
   );
   const drawerEl = (

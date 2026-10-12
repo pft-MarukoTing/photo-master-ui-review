@@ -1,8 +1,9 @@
 // Header, the home page's intro, the 最近對話 / 範例照片 gallery and the
-// 對話紀錄 drawer -- old markup and classes throughout.
+// 最近照片 drawer -- old markup and classes throughout.
 import type { ComponentChildren } from "preact";
-import { useState } from "preact/hooks";
-import { urls } from "./api";
+import { createPortal } from "preact/compat";
+import { useEffect, useState } from "preact/hooks";
+import { api, getUser, urls } from "./api";
 import heroAfter from "./assets/hero_after.jpg";
 import heroBefore from "./assets/hero_before.jpg";
 import { Icon } from "./icons";
@@ -46,15 +47,122 @@ function ThemeToggle() {
   );
 }
 
+// 回報, the old page's #report-modal markup and classes (its <style> comes
+// along, see vite.config.ts). No 畫面截圖 row: that one is html2canvas on the
+// old page's own DOM. Without a jobId it files a general report, the same as
+// the old button pressed with nothing on screen.
+function ReportModal(props: { jobId: string | null; onClose: () => void }) {
+  const { onClose } = props;
+  const [name, setName] = useState(getUser);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onClose]);
+
+  const submit = async () => {
+    if (!name.trim()) {
+      setError("請輸入你的名稱。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await api.report(name.trim(), props.jobId, note.trim());
+      setDone(true);
+    } catch (err) {
+      setError((err as Error).message || "回報失敗，請稍後再試。");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Portalled to <body>: .site-header's backdrop-filter would otherwise be the
+  // containing block and stacking context for this fixed overlay.
+  return createPortal(
+    <div class="error-modal" id="chat-report-modal">
+      <div class="error-modal-backdrop" onClick={onClose} />
+      <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-report-title">
+        <div class="error-modal-hdr">
+          <span id="chat-report-title" class="notice-modal-title">{props.jobId ? "回報此結果" : "回報問題"}</span>
+          <button class="error-modal-close" type="button" aria-label="關閉" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        {done ? (
+          <>
+            <p class="chat-text">已回報，我們會盡快確認{props.jobId ? "這筆結果" : ""}。</p>
+            <div class="account-modal-actions">
+              <button class="chat-chip" type="button" onClick={onClose}>
+                關閉
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <label class="report-modal-label" for="chat-report-name">
+              你的名稱
+            </label>
+            <input
+              id="chat-report-name"
+              class="account-modal-input"
+              type="text"
+              placeholder="輸入你的名稱"
+              maxLength={64}
+              value={name}
+              onInput={(e) => setName(e.currentTarget.value)}
+            />
+            <label class="report-modal-label" for="chat-report-note">
+              問題描述（選填）
+            </label>
+            <textarea
+              id="chat-report-note"
+              class="report-modal-textarea"
+              placeholder={props.jobId ? "請描述這筆結果的問題…" : "請描述遇到的問題…"}
+              maxLength={500}
+              value={note}
+              onInput={(e) => setNote(e.currentTarget.value)}
+            />
+            {error && <p class="account-modal-error">{error}</p>}
+            <div class="account-modal-actions">
+              <button class="chat-chip is-ghost" type="button" onClick={onClose}>
+                取消
+              </button>
+              <button class="chat-chip is-primary" type="button" disabled={busy} onClick={submit}>
+                {busy ? "送出中…" : "送出回報"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// Same order as 自訂模式's header, so switching modes moves nothing:
+// 回到首頁 · 最近照片 · mode switch · 主題 · 回報.
 // showHistory is off while the gallery (with its 最近對話 tab) is on screen.
+// showOldUi likewise: 自訂模式 only takes over a photo's analysis/result, so
+// the switch exists only once a session is open.
 export function Header(props: {
   onHome: () => void;
   onHistory: () => void;
   showHome: boolean;
   showHistory?: boolean;
+  showOldUi?: boolean;
   // The photo on screen, which 自訂模式 then opens on.
   caseId?: string | null;
+  // The edit (or, before one, the analysis) on screen, which 回報 points at.
+  jobId?: string | null;
 }) {
+  const [reporting, setReporting] = useState(false);
   return (
     <header class="site-header">
       <div class="header-inner">
@@ -71,17 +179,30 @@ export function Header(props: {
           )}
           {props.showHistory && (
             <button id="chat-history-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onHistory}>
-              <Icon name="chat" size={14} />
-              <span class="btn-label">對話紀錄</span>
+              <Icon name="clock" size={14} />
+              <span class="btn-label">最近照片</span>
             </button>
           )}
-          <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式">
-            <Icon name="layout" size={14} />
-            <span class="btn-label">自訂模式</span>
-          </a>
+          {props.showOldUi && (
+            <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式">
+              <Icon name="layout" size={14} />
+              <span class="btn-label">自訂模式</span>
+            </a>
+          )}
           <ThemeToggle />
+          <button
+            id="chat-report-btn"
+            class="btn btn-sm"
+            type="button"
+            title={props.jobId ? "回報此結果" : "回報問題"}
+            onClick={() => setReporting(true)}
+          >
+            <Icon name="report" size={14} />
+            <span class="btn-label">回報</span>
+          </button>
         </div>
       </div>
+      {reporting && <ReportModal jobId={props.jobId || null} onClose={() => setReporting(false)} />}
     </header>
   );
 }

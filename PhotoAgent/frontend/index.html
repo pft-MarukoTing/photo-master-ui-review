@@ -3278,7 +3278,7 @@
        entry points into it. */
     #register-account-btn, #history-logout-btn { display: none; }
     /* #register-account-btn keeps its text label at every width, unlike
-       #reload-batch-btn/#reset-btn (icon+label, moved down into
+       #reset-btn (icon+label, moved down into
        #header-actions-secondary under 900px instead, see
        setupCompactHeaderActions in app.js, so they can show their own label
        again). setupCompactHeaderActions moves this button along with them,
@@ -3382,6 +3382,7 @@
        the same override so all three read as the same size/shape pill
        instead of falling back to a taller, square .btn-sm. */
     #header-settings-btn.btn,
+    #account-badge.btn,
     #changelog-btn.btn,
     #chat-ui-btn.btn,
     #theme-toggle-btn.btn {
@@ -4367,15 +4368,6 @@
   <div class="header-inner">
     <button type="button" class="logo" id="logo-home-btn">Photo<em>Master</em></button>
     <div class="header-actions">
-      <button id="reload-batch-btn" class="btn btn-secondary" type="button" hidden>
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M4 4v6h6M20 20v-6h-6" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M4.5 15a8 8 0 0014.5 3M19.5 9A8 8 0 005 6" stroke="currentColor"
-            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span class="btn-label">重新分析</span>
-      </button>
       <button id="reset-btn" class="btn btn-secondary btn-sm" type="button" hidden>
         <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
           <path d="M3 11l9-8 9 8" stroke="currentColor"
@@ -4384,6 +4376,20 @@
             stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="btn-label">回到首頁</span>
+      </button>
+      <!-- 最近照片: opens the history drawer (applyAccountUi/openHistoryPage,
+           app.js). Second in the row, right after 回到首頁, in the same slot
+           and with the same pill as the chat page's 最近照片 -- both open
+           the one shared history, so switching modes keeps it in place. The
+           label is set into #account-badge-label so applyAccountUi's
+           textContent write doesn't clobber the clock icon. -->
+      <button id="account-badge" class="btn btn-secondary btn-sm" type="button" hidden>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span id="account-badge-label" class="btn-label"></span>
       </button>
       <!-- Counterpart of the chat page's 自訂模式 link: switches to the chat UI at
            <base>/chat/, carrying the query string over the same way. The href
@@ -4452,20 +4458,6 @@
           <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span>花費金額</span>
-      </button>
-      <!-- Doubles as the entry point into the history drawer (see
-           applyAccountUi/openHistoryPage, app.js) -- no separate history-nav
-           button exists; the clock icon (same one that button used to use)
-           signals "this opens your processing history" alongside the
-           「最近照片」文字，set separately into #account-badge-label so
-           applyAccountUi's textContent write doesn't clobber this icon. -->
-      <button id="account-badge" class="account-badge" type="button" hidden>
-        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-          <path d="M12 8v4l3 3" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M2 5v4h4" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span id="account-badge-label"></span>
       </button>
       <!-- Cycles through the fixed theme list on every click (applyTheme's
            caller in app.js just advances to the next entry) -- pulled out of

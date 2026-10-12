@@ -569,7 +569,7 @@ body[data-theme-mode="light"] .site-header {
   color: transparent;
 }
 
-/* Reset/reload-batch buttons: shown across every screen (not just results),
+/* Header buttons: shown across every screen (not just results),
    since .header-inner itself is global -- .header-inner's own
    justify-content:space-between is what actually pins this to the right,
    right at .logo's own vertical center. */
@@ -5499,7 +5499,6 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
      file, so a same-specificity rule here would lose the tie and never take
      effect. Chaining #header-actions-secondary's own id in front of each
      button's id instead outranks them regardless of source order. */
-  #header-actions-secondary #reload-batch-btn.btn,
   #header-actions-secondary #reset-btn.btn,
   #header-actions-secondary #changelog-btn.btn,
   #header-actions-secondary #chat-ui-btn.btn,
@@ -5507,7 +5506,7 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
   #header-actions-secondary #admin-reports-btn.btn,
   #header-actions-secondary #register-account-btn.btn,
   #header-actions-secondary #cost-btn,
-  #header-actions-secondary #account-badge { padding: 0 8px; }
+  #header-actions-secondary #account-badge.btn { padding: 0 8px; }
 
   /* #reset-btn/#header-settings-btn additionally go icon-only there (the
      rest keep their label) -- same treatment as #report-btn-spacer. Same

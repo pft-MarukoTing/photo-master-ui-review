@@ -265,7 +265,6 @@ window.PhotoAgentDom = (() => {
     apOptionsCardHome: document.querySelector("#ap-options-card-home"),
     stepIndicatorSlot: document.querySelector("#step-indicator-slot"),
     pageScrollHint: document.querySelector("#page-scroll-hint"),
-    reloadBatchBtn: document.querySelector("#reload-batch-btn"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),
     errorModal: document.querySelector("#error-modal"),
     errorModalBox: document.querySelector(".error-modal-box"),
@@ -355,11 +354,14 @@ window.PhotoAgentDom = (() => {
     Object.values(els.sections).forEach((section) => section.classList.remove("visible"));
     els.sections[name]?.classList.add("visible");
     document.dispatchEvent(new CustomEvent("photoagent:sectionchange", { detail: { name } }));
-    // #reset-btn lives in the global header, but only makes sense on the
-    // results screen -- "上傳照片" doesn't apply while already on the upload
-    // screen, and the processing screen has no completed result yet to
-    // discard either.
-    if (els.resetButton) els.resetButton.hidden = name !== "results";
+    // #reset-btn (回到首頁) lives in the global header and shows on every
+    // screen but upload, which is already 首頁 -- the same rule the chat
+    // page's own 回到首頁 follows. On the processing screen it stays visible
+    // but disabled, for the same reason as #logo-home-btn below.
+    if (els.resetButton) {
+      els.resetButton.hidden = name === "upload";
+      els.resetButton.disabled = name === "processing";
+    }
     // #changelog-btn lives in the global header too, but 版本紀錄 is only
     // relevant while picking settings to run a new job on the upload
     // screen -- not mid-processing or while reviewing a finished result.

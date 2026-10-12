@@ -26,6 +26,9 @@ let currentUser = "";
 export function setUser(user: string) {
   currentUser = user;
 }
+export function getUser() {
+  return currentUser;
+}
 
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(url, init);
@@ -60,6 +63,17 @@ export const api = {
   config: () => request<Dict>(`${API}/config`).catch(() => ({} as Dict)),
   decryptUserId: (userId: string) =>
     request<{ user: string }>(`${API}/photo-agent/decrypt-user-id?user_id=${encodeURIComponent(userId)}`),
+  // 回報: the same endpoint and fields as the old page's #report-btn
+  // (photo-agent-api.js reportJob), minus the screenshot. job_id is left out
+  // for a general report with no photo on screen.
+  report: (name: string, jobId: string | null, note: string) => {
+    const form = new FormData();
+    form.append("user", name);
+    if (jobId) form.append("job_id", jobId);
+    form.append("path", "local");
+    if (note) form.append("note", note);
+    return request<{ reported: boolean; report_id: string }>(`${API}/photo-agent/report`, { method: "POST", body: form });
+  },
   demoImages: () => request<{ images: string[] }>(`${API}/photo-agent/demo-images`),
   // The local face detector on a photo that has no session yet, so the upload
   // page can offer the same 指定對象 picker the session has. Boxes only -- the

@@ -103,6 +103,28 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
       </>
     ),
   },
+  // 最近照片: the old header's history clock, so both modes draw it the same.
+  clock: {
+    sw: 2.5,
+    body: (
+      <>
+        <path d="M12 8v4l3 3" />
+        <path d="M3.5 9a8.5 8.5 0 1 1-1 4.5" />
+        <path d="M2 5v4h4" />
+      </>
+    ),
+  },
+  // 回報: the old #report-btn's bubble with an exclamation mark.
+  report: {
+    sw: 2.5,
+    body: (
+      <>
+        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+        <path d="M12 7.5v4.5" />
+        <path d="M12 15.01h.01" />
+      </>
+    ),
+  },
   layout: {
     sw: 2,
     body: (
