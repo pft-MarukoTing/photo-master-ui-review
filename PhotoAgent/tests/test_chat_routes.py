@@ -96,6 +96,10 @@ class FakeRedis:
 USER = "tester"
 
 
+def offline(*args, **kwargs):
+    raise RuntimeError("no model in tests")
+
+
 class ChatRoutesTest(unittest.TestCase):
     def setUp(self):
         self.redis = FakeRedis()
@@ -135,6 +139,10 @@ class ChatRoutesTest(unittest.TestCase):
             patch.object(chat.chat_queue, "run", lambda params: chat.chat_jobs.run(json.loads(json.dumps(params)))),
             patch.object(api, "record_history", record_history),
             patch.object(api, "get_current_compatibility_version", lambda: 5),
+            # 詳細解說 is on by default: no test reaches a real model for the
+            # opening or the render note unless it patches one in itself.
+            patch.object(chat.chat_assistant, "call_opening", offline),
+            patch.object(chat.chat_assistant, "call_render_note", offline),
         ]
         for p in patches:
             p.start()
@@ -335,9 +343,13 @@ class ChatRoutesTest(unittest.TestCase):
             {"label": "left", "is_person": True, "blink_issue": {"blink_failure_confidence": 0.5, "should_fix": False}}],
             **ONE_FACE})
         sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": False}})
         photo = self.add_photos(sid)[0]
         self.jobs[photo["analyze_job_id"]]["status"] = "success"
-        messages = self.status(sid)["new_messages"]
+        seen = []
+        with patch.object(chat.chat_assistant, "call_opening", lambda context: seen.append(context)):
+            messages = self.status(sid)["new_messages"]
+        self.assertEqual(seen, [])
         self.assertEqual([m["card"]["type"] for m in messages], ["analysis_ready", "analysis_brief"])
         brief = messages[1]["card"]
         self.assertEqual((brief["photo_id"], brief["summary"], brief["issues"]), (photo["photo_id"], "海邊合照", ["偏暗"]))
@@ -602,6 +614,7 @@ class ChatRoutesTest(unittest.TestCase):
 
     def test_without_detailed_explanation_there_is_no_note(self):
         sid = self.new_session()
+        self.client.patch(self.url(sid, "/plan"), json={"user": USER, "plan": {"detailed_explanation": False}})
         self.ready_photo(sid)
         render = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()["renders"][0]
         self.jobs[render["job_ids"][0]]["status"] = "success"

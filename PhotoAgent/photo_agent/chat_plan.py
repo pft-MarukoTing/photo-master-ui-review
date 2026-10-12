@@ -43,7 +43,7 @@ def default_settings():
         "advanced_options": normalize_advanced_options(None),
         # The assistant speaks as a senior retoucher (chat_assistant.VOICE).
         # A setting, not a style: it changes how replies read, not the render.
-        "detailed_explanation": False,
+        "detailed_explanation": True,
     }
 
 

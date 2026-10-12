@@ -286,8 +286,8 @@ def _message_line(message, names):
     return f"{who}: {text}" if text else None
 
 
-# 「詳細解說」(plan.detailed_explanation, off by default): how the replies sound,
-# added after INSTRUCTION only when the user turned it on in 設定. What the
+# 「詳細解說」(plan.detailed_explanation, on by default): how the replies sound,
+# added after INSTRUCTION unless the user turned it off in 設定. What the
 # assistant may say and do stays INSTRUCTION's; this is only the voice.
 VOICE = """VOICE
 You are a senior retoucher talking about this one photo. The user should come away sure that you have looked at their photo and know what to do with it. Where this differs from the tone in REPLY, follow this.

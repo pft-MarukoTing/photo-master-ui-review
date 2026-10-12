@@ -357,10 +357,10 @@ class ReviewLineTest(unittest.TestCase):
 class DetailedExplanationTest(unittest.TestCase):
     def test_the_voice_is_only_there_when_turned_on(self):
         off, on = model_says(), model_says()
-        ask(off)
         plan = default_plan()
-        plan["detailed_explanation"] = True
-        ask(on, plan=plan)
+        plan["detailed_explanation"] = False
+        ask(off, plan=plan)
+        ask(on)
         self.assertNotIn(chat_assistant.VOICE, off.seen[0])
         self.assertIn(chat_assistant.VOICE, on.seen[0])
 

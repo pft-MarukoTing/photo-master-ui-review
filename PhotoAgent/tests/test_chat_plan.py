@@ -98,11 +98,11 @@ class PhotoOnlyTest(unittest.TestCase):
 
 
 class DetailedExplanationTest(unittest.TestCase):
-    def test_off_by_default_and_a_boolean(self):
-        self.assertIs(default_plan()["detailed_explanation"], False)
-        plan, error = apply_plan_patch(default_plan(), {"detailed_explanation": True}, settings_only=True)
+    def test_on_by_default_and_a_boolean(self):
+        self.assertIs(default_plan()["detailed_explanation"], True)
+        plan, error = apply_plan_patch(default_plan(), {"detailed_explanation": False}, settings_only=True)
         self.assertIsNone(error)
-        self.assertIs(plan["detailed_explanation"], True)
+        self.assertIs(plan["detailed_explanation"], False)
         self.assertNotIn("detailed_explanation", build_render_form(plan, "finish"))
         plan, error = apply_plan_patch(default_plan(), {"detailed_explanation": "yes"})
         self.assertIsNone(plan)

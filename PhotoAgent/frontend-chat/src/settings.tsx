@@ -10,7 +10,7 @@ export function defaultSettings(caps: Capabilities): Settings {
     render_option: d.render_option,
     aspect_ratio: d.aspect_ratio,
     advanced_options: Object.fromEntries(caps.advanced_options.map((o) => [o.key, o.default])),
-    detailed_explanation: false,
+    detailed_explanation: true,
   };
 }
 
