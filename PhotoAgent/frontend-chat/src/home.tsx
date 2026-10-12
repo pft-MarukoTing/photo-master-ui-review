@@ -24,7 +24,7 @@ import { dayLabel, timeLabel } from "./util";
 // across .header-actions and this collapses to the swatch alone.
 // Its own chat-* id, not the old #theme-toggle-btn: the old index.html <style>
 // (inlined by vite.config.ts) turns that id into a 32px pill, which made it
-// the odd one out next to 回到首頁 / 舊版介面's plain .btn-sm.
+// the odd one out next to 回到首頁 / 自訂模式's plain .btn-sm.
 function ThemeToggle() {
   const [theme, setTheme] = useState<ThemeKey>(currentTheme);
   return (
@@ -67,9 +67,9 @@ export function Header(props: { onHome: () => void; onHistory: () => void; showH
               <span class="btn-label">對話紀錄</span>
             </button>
           )}
-          <a class="btn btn-secondary btn-sm" href={`${urls.oldUi()}${location.search}`} title="切換到原本的介面">
+          <a class="btn btn-secondary btn-sm" href={`${urls.oldUi()}${location.search}`} title="切換到自訂模式">
             <Icon name="layout" size={14} />
-            <span class="btn-label">舊版介面</span>
+            <span class="btn-label">自訂模式</span>
           </a>
           <ThemeToggle />
         </div>

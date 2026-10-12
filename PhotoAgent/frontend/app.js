@@ -12847,6 +12847,10 @@
   // right away, since the app always starts on the upload screen.
   ensureAdvancedSettingsFoldIn(els.uploadInlineSettingsRow2);
   setupCompactUploadSelectors();
+  // Keep the query string (env flags etc.) across the switch to the chat UI,
+  // the same way the chat page's 自訂模式 link does on the way back.
+  const chatUiBtn = document.getElementById("chat-ui-btn");
+  if (chatUiBtn) chatUiBtn.setAttribute("href", `chat/${location.search}`);
   setupCompactHeaderActions();
   // The portrait-settings panel is a popover on the upload page. Close it
   // when the user clicks anywhere outside the shared fold, while allowing

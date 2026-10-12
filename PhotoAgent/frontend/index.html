@@ -3383,6 +3383,7 @@
        instead of falling back to a taller, square .btn-sm. */
     #header-settings-btn.btn,
     #changelog-btn.btn,
+    #chat-ui-btn.btn,
     #theme-toggle-btn.btn {
       height: 32px;
       padding: 0 14px;
@@ -4378,6 +4379,17 @@
         </svg>
         <span class="btn-label">回到首頁</span>
       </button>
+      <!-- Counterpart of the chat page's 自訂模式 link: switches to the chat UI at
+           <base>/chat/, carrying the query string over the same way. The href
+           is relative so it works without JS; app.js rewrites it with the
+           current search once it loads. -->
+      <a id="chat-ui-btn" class="btn btn-secondary btn-sm" href="chat/" title="切換到對話模式">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" stroke="currentColor"
+            stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="btn-label">對話模式</span>
+      </a>
       <button id="changelog-btn" class="btn btn-secondary btn-sm" type="button">
         <svg width="12" height="12" fill="none" viewBox="0 0 24 24">
           <path d="M6 4h9l3 3v13a1 1 0 01-1 1H6a1 1 0 01-1-1V5a1 1 0 011-1z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
