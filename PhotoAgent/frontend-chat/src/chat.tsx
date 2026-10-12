@@ -286,8 +286,10 @@ export function useWorkLog(
 }
 
 // 處理中的那張卡。左邊畫布上壓著一層轉環，上面已經寫了「正在分析／美化照片」，
-// 這裡不再放標題和進度條；整張卡的工作就是講細節：做完的一句句留著（淡一點、
-// 打勾），正在做的那句在最下面，帶一顆跟流程列同款的呼吸點，右邊是已經等了幾秒。
+// 這裡不再放標題和進度條；整張卡的工作就是講細節。跟自訂模式的進度句同一套：
+// 只留最近三句，最新的在最下面、帶一道掃過的光，往上一句淡一點、再上一句更淡；
+// 新的一句從下面滑進來，舊的往上讓位。最後一句講完還沒好，就每隔幾秒再掃一次光，
+// 讓人知道還在跑。最新那句右邊是已經等了幾秒。
 // 已經等了多久。自己每秒重畫，不拉著整個 SessionView 一起；從前端看到這輪開始
 // 的那一刻算 -- 後端的照片狀態沒有帶開始時間，重新整理後跟工作紀錄一樣從頭算。
 function Elapsed({ since }: { since: number }) {
@@ -302,20 +304,55 @@ function Elapsed({ since }: { since: number }) {
 }
 
 export function WorkingCard({ done, now, since }: { done: string[]; now: string; since: number }) {
+  const rows = [...done.slice(-2), now];
+  // 每一句在這一段裡是第幾句，當 key：同一句換位置時是同一個節點，才移得過去。
+  const first = done.length + 1 - rows.length;
+  const list = useRef<HTMLOListElement>(null);
+  const tops = useRef(new Map<number, number>());
+  const stage = useRef(since);
+  useLayoutEffect(() => {
+    const el = list.current;
+    if (!el) return;
+    // 換了一段（分析 → 美化）就從頭排，不拿上一段的位置來移。
+    if (stage.current !== since) {
+      stage.current = since;
+      tops.current = new Map();
+    }
+    const still = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const next = new Map<number, number>();
+    el.querySelectorAll<HTMLLIElement>("li[data-i]").forEach((li) => {
+      const i = Number(li.dataset.i);
+      next.set(i, li.offsetTop);
+      const before = tops.current.get(i);
+      if (!still && before != null && before !== li.offsetTop) {
+        li.animate?.([{ transform: `translateY(${before - li.offsetTop}px)` }, { transform: "none" }], {
+          duration: 350,
+          easing: "cubic-bezier(.2,.7,.2,1)",
+        });
+      }
+    });
+    tops.current = next;
+  }, [done.length, now, since]);
+  // 一句停得比換句的最長間隔還久，就是講到最後一句了：改成循環掃光。
+  const [holding, setHolding] = useState(false);
+  useEffect(() => {
+    setHolding(false);
+    const t = window.setTimeout(() => setHolding(true), STEP_MAX_MS + 1500);
+    return () => clearTimeout(t);
+  }, [now]);
   return (
     <div class="chat-card chat-working">
-      <ol>
-        {done.map((t, i) => (
-          <li key={i} class="is-done">
-            <Icon name="check" />
-            {t}
-          </li>
-        ))}
-        <li key={done.length} class="is-now">
-          <span class="chat-flow-dot" aria-hidden="true" />
-          <span>{now}</span>
-          <Elapsed since={since} />
-        </li>
+      <ol ref={list}>
+        {rows.map((t, k) => {
+          const age = rows.length - 1 - k;
+          const cls = age === 0 ? (holding ? "is-now is-holding" : "is-now") : age === 1 ? "is-prev" : "is-old";
+          return (
+            <li key={first + k} data-i={first + k} class={cls}>
+              <span class="chat-working-text">{t}</span>
+              {age === 0 && <Elapsed since={since} />}
+            </li>
+          );
+        })}
       </ol>
     </div>
   );

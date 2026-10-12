@@ -195,21 +195,35 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-note{margin:0;font-size:var(--chat-fs-xs);line-height:1.7;color:var(--n64);text-wrap:pretty}
 .chat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-3) var(--sp-4)}
 /* 處理中的工作紀錄 -- 標題和轉環都在左邊畫布那一層（.canvas-busy）上，這裡只講細節。
-   做完的那幾句退成 --n64 打勾，正在做的那句用 accent 字色加流程列同款的呼吸點，
-   和 .chat-flow-step 的 is-done／is-now 是同一套語彙。新長出來的那句從下面淡入，
-   講過的不動 -- 一直在動的只有最下面那一行。 */
+   跟自訂模式的進度句（styles.css .progress-feed-*）同一套：只留三句，最新的在最下面、
+   字重加粗並掃一道 accent 的光，往上一句 .85、再上一句 .58。新的一句從下面滑進來，
+   講到最後一句還沒好就改成每 4 秒再掃一次（is-holding）。 */
 .chat-working ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--sp-1)}
-.chat-working li{display:flex;align-items:baseline;gap:var(--sp-2);font-size:var(--chat-fs-md);line-height:1.6;text-wrap:pretty}
-.chat-working li>svg,.chat-working li>.chat-flow-dot{flex-shrink:0;align-self:center;margin-inline:2px}
-.chat-working li>svg{width:12px;height:12px;margin-inline:0}
-.chat-working li.is-done{color:var(--n64)}
-.chat-working li.is-now{color:var(--accent-text);font-weight:600;animation:chat-working-in .4s ease-out}
+.chat-working li{display:flex;align-items:baseline;gap:var(--sp-2);font-size:var(--chat-fs-md);line-height:1.6;
+  text-wrap:pretty;color:var(--text)}
+.chat-working li.is-old{opacity:.58}
+.chat-working li.is-prev{opacity:.85}
+.chat-working li.is-now{font-weight:600;animation:chat-working-in .35s ease-out both}
 /* 已經等了幾秒：靠右、等寬數字，跳秒時字才不會左右晃；字重和顏色退回一般，
    不跟正在做的那句搶。 */
 .chat-working-time{margin-left:auto;padding-left:var(--sp-3);flex-shrink:0;font-size:var(--chat-fs-sm);
   font-weight:400;color:var(--n54);font-variant-numeric:tabular-nums;white-space:nowrap}
-@keyframes chat-working-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.chat-working li.is-now{animation:none}.chat-working .chat-flow-dot{animation:none;opacity:1}}
+@supports ((background-clip:text) or (-webkit-background-clip:text)){
+  .chat-working li.is-now .chat-working-text{
+    background-image:linear-gradient(110deg,var(--text) 40%,var(--accent-text) 48%,#fff 50%,var(--accent-text) 52%,var(--text) 60%);
+    background-size:250% 100%;background-position:100% 0;
+    background-clip:text;-webkit-background-clip:text;color:transparent;-webkit-text-fill-color:transparent;
+    animation:chat-working-shine 1.5s ease-in-out 1s both}
+  .chat-working li.is-now.is-holding .chat-working-text{animation:chat-working-shine-loop 4s ease-in-out infinite}
+}
+@keyframes chat-working-in{from{opacity:.3;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes chat-working-shine{from{background-position:100% 0}to{background-position:0% 0}}
+@keyframes chat-working-shine-loop{0%{background-position:100% 0}37.5%,100%{background-position:0% 0}}
+@media (prefers-reduced-motion:reduce),(forced-colors:active){
+  .chat-working li.is-now{animation:none}
+  .chat-working li.is-now .chat-working-text,.chat-working li.is-now.is-holding .chat-working-text{
+    animation:none;background:none;color:var(--text);-webkit-text-fill-color:currentColor}
+}
 
 /* ── 處理中蓋在原圖上的那一層 ──────────────────────────────────────────
    分析中和美化中用同一層，所以兩個階段左欄看起來是同一件事在繼續，而不是
