@@ -108,6 +108,7 @@ class Choice:
     value: str
     label: str
     debug_only: bool = False
+    hidden: bool = False  # still accepted, never offered to a client
 
 
 # "auto" follows the analysis's proposed crop, "original" keeps the source
@@ -153,7 +154,7 @@ class StyleGroup:
 
 
 # Values must match config.STYLE_OPTION_INSTRUCTIONS. "default" (不指定) or an
-# empty value means no pick. Angle "side" is supported but not shown in the UI.
+# empty value means no pick. Angle "side" is accepted but hidden from clients.
 STYLE_GROUPS: Tuple[StyleGroup, ...] = (
     StyleGroup("pose", "姿勢", (
         Choice("playful", "俏皮"), Choice("candid", "自然抓拍"), Choice("strong", "強勢"),
@@ -161,7 +162,7 @@ STYLE_GROUPS: Tuple[StyleGroup, ...] = (
         Choice("vsign", "勝利手勢"), Choice("cheer", "歡呼"),
     )),
     StyleGroup("angle", "拍攝角度", (
-        Choice("high", "俯拍"), Choice("low", "仰拍"), Choice("eye", "平視"), Choice("side", "側拍"),
+        Choice("high", "俯拍"), Choice("low", "仰拍"), Choice("eye", "平視"), Choice("side", "側拍", hidden=True),
     )),
     StyleGroup("lighting", "光線", (
         Choice("gold", "金色光調"), Choice("soft", "柔光"), Choice("cool", "藍調光線"), Choice("night", "夜色"),
@@ -285,7 +286,7 @@ def normalize_level(category: str, level: str) -> Optional[str]:
 # ── GET /api/capabilities ─────────────────────────────────────────────────────
 
 def _choices(choices, debug):
-    return [{"value": c.value, "label": c.label} for c in choices if debug or not c.debug_only]
+    return [{"value": c.value, "label": c.label} for c in choices if not c.hidden and (debug or not c.debug_only)]
 
 
 def describe(*, debug: bool = False) -> dict:
