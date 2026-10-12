@@ -154,19 +154,63 @@ export function renderMeta(caps: Capabilities, plan: Plan): string {
 // the photo's plan as it is now -- a photo's plan moves on with every round of
 // adjusting, while these describe the one version on screen.
 
-// The non-default 修圖風格 picks as bare option labels ("俯拍", "夜色"), no
-// category prefix: they end up sitting on the photo itself, not in a labelled
-// field. Driven off the capabilities list so the labels stay the ones the
-// option cards offered.
-export function styleTagLabels(caps: Capabilities, styleOptions: Dict | null | undefined): string[] {
-  if (!styleOptions) return [];
+// Port of the old result row's read-out (results.js actualEditorPromptText /
+// buildExecutedStyleOptionTagLabels / buildExecutedRecipeItems): a label only
+// counts once its command reached the Editor prompt the finish job stored on
+// analysis.prompts, not merely because it was picked or recommended. The
+// gaze-only second pass is included because a two-pass run executes gaze there.
+export function editorPromptText(a: Analysis | null | undefined): string {
+  const prompts = a?.prompts;
+  if (!prompts || typeof prompts !== "object") return "";
+  return [prompts.image_edit, prompts.gaze_repair_pass]
+    .filter((v): v is string => typeof v === "string" && !!v.trim())
+    .map((v) => v.trim())
+    .join("\n");
+}
+
+// A prompt written over by the user (overwrite_prompt) no longer carries any
+// of the commands below, so it reads as nothing executed rather than a guess.
+export function executedPrompt(a: Analysis | null | undefined): string {
+  if ((a?.user_instruction as Dict | undefined)?.overwrite_prompt) return "";
+  return editorPromptText(a);
+}
+
+const EXECUTED_STYLE_MARKERS: Record<string, RegExp> = {
+  pose: /(?:^|\n)-\s*Pose\s*:/i,
+  angle: /(?:^|\n)-\s*Angle\s*:/i,
+  lighting: /(?:^|\n)-\s*Lighting\s*:/i,
+  size: /(?:^|\n)-\s*Framing size\s*:/i,
+};
+
+// The non-default 修圖風格 picks the Editor prompt actually carried, as bare
+// option labels ("俯拍", "夜色") -- the labels the option cards offered.
+export function executedStyleLabels(caps: Capabilities, a: Analysis | null | undefined): string[] {
+  const prompt = executedPrompt(a);
+  const picks = (a?.style_options || {}) as Dict;
+  if (!prompt) return [];
   return caps.style_options
     .map((g) => {
-      const value = styleOptions[g.id];
-      if (!value || value === g.default) return "";
+      const value = picks[g.id];
+      const marker = EXECUTED_STYLE_MARKERS[g.id];
+      if (!value || value === g.default || !marker || !marker.test(prompt)) return "";
       return g.choices.find((c) => c.value === value)?.label || "";
     })
     .filter(Boolean);
+}
+
+// The approved 美化項目 whose command appears in the Editor prompt, named by
+// their retouch_recipe line (falling back to the command itself).
+export function executedRecipeItems(a: Analysis | null | undefined): string[] {
+  const prompt = executedPrompt(a);
+  if (!prompt) return [];
+  const plan: unknown[] = Array.isArray(a?.correction_plan) ? a!.correction_plan : [];
+  const recipes: unknown[] = Array.isArray(a?.retouch_recipe) ? a!.retouch_recipe : [];
+  const out = plan.flatMap((command, i) => {
+    if (typeof command !== "string" || !command.trim() || !prompt.includes(command.trim())) return [];
+    const label = recipes[i];
+    return [typeof label === "string" && label.trim() ? label.trim() : command.trim()];
+  });
+  return [...new Set(out)];
 }
 
 // The 個人化需求 this version was submitted with. pipeline.py keeps the user's

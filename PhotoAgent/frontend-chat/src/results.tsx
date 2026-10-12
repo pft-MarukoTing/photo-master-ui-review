@@ -4,7 +4,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, urls } from "./api";
 import type { Capabilities, Dict, Photo, Version } from "./types";
-import { personalizationText, styleTagLabels } from "./util";
+import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
+import { executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
 
@@ -60,13 +61,56 @@ export function versionJob(v: Version): string {
 }
 
 // The floating read-out row keeps to one line (styles.css: .recipe-tags is
-// flex-wrap:nowrap) however many picks it carries -- rather than clipping a
-// cramped label with an ellipsis, shrink every chip's font-size in lockstep
-// until each one's full text fits, so the labels stay readable, just smaller.
+// flex-wrap:nowrap): labels while they fit, and only the icons once the row is
+// too narrow for them -- the old result row's fitRecipeTagsRow.
 const TAG_BASE_FONT = 12;
-const TAG_MIN_FONT = 8;
+const TAG_GAP = 8;
 // How far the bubble's tail is kept from either rounded end of its body.
 const TAIL_EDGE_INSET = 18;
+
+// The four read-outs of what a version was made with, in the old row's order.
+// Each is a button that opens the bubble with its details; the icons are the
+// old review tabs' (人像檢查 / 美化建議 / 美化風格 / 個人化需求).
+type Detail = "face" | "recipe" | "style" | "prompt";
+
+interface MadeWith {
+  portraits: PortraitDone[];
+  recipes: string[];
+  styles: string[];
+  hint: string;
+}
+
+const DETAIL_LABEL: Record<Detail, string> = { face: "人像調整", recipe: "美化項目", style: "美化風格", prompt: "個人化" };
+// The bubble's heading: 個人化 is the pill's short form of 個人化需求.
+const DETAIL_TITLE: Record<Detail, string> = { ...DETAIL_LABEL, prompt: "個人化需求" };
+
+function DetailIcon({ detail }: { detail: Detail }) {
+  const line = { stroke: "currentColor", "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" } as const;
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {detail === "face" && (
+        <>
+          <circle cx="12" cy="8" r="4" {...line} />
+          <path d="M4 20c0-4 3.5-6 8-6s8 2 8 6" {...line} />
+        </>
+      )}
+      {detail === "recipe" && (
+        <>
+          <rect x="5" y="4" width="14" height="17" rx="2.5" {...line} />
+          <path d="M8.5 10.5l1.8 1.8L14.5 8" {...line} />
+          <path d="M8.5 16l1.8 1.8L14.5 13.5" {...line} />
+        </>
+      )}
+      {detail === "style" && (
+        <>
+          <path d="M3.5 20.5L12 12" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" />
+          <path d="M16 2.5l1.7 4L21.5 8l-3.8 1.5L16 13.5l-1.7-4L10.5 8l3.8-1.5L16 2.5z" fill="currentColor" />
+        </>
+      )}
+      {detail === "prompt" && <path d="M4 4h16v12H8l-4 4V4z" {...line} />}
+    </svg>
+  );
+}
 
 interface CanvasProps {
   caps: Capabilities;
@@ -87,11 +131,11 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   const [fullscreen, setFullscreen] = useState(false);
   // What each finished job was made with, keyed by job id -- see the fetch
   // below for why this is read back per version rather than taken from the plan.
-  const [madeWith, setMadeWith] = useState<Record<string, { styles: string[]; hint: string }>>({});
-  const [hintOpen, setHintOpen] = useState(false);
+  const [madeWith, setMadeWith] = useState<Record<string, MadeWith>>({});
+  // Which read-out the bubble is showing, if any.
+  const [open, setOpen] = useState<Detail | null>(null);
   const topRef = useRef<HTMLDivElement>(null);
   const tagsRef = useRef<HTMLDivElement>(null);
-  const pillRef = useRef<HTMLSpanElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const job = current ? versionJob(current) : null;
   // 處理中一律看原圖：美化中擺上一版的成果，會讓人以為那就是正在等的這一張。
@@ -100,7 +144,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   // A new version always opens on the After side.
   useEffect(() => setShowGenerated(true), [current?.version_id]);
 
-  // The 修圖風格 picks and 個人化需求 this version was rendered with. They come
+  // What this version was rendered with: the 人像 fixes, 美化項目 and 修圖風格
+  // picks that reached the Editor prompt, and its 個人化需求. They come
   // from the finish job's own stored result -- the photo's plan has usually
   // moved on by now (every adjust round rewrites it), and the message log
   // never carried them. Cached per job: a version's record never changes.
@@ -112,8 +157,10 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
       .then((r: Dict) => {
         const analysis = r.result?.analysis;
         if (dropped || !analysis) return;
-        const entry = {
-          styles: styleTagLabels(caps, analysis.style_options),
+        const entry: MadeWith = {
+          portraits: executedPortraits(analysis),
+          recipes: executedRecipeItems(analysis),
+          styles: executedStyleLabels(caps, analysis),
           hint: personalizationText(analysis),
         };
         setMadeWith((m) => ({ ...m, [job]: entry }));
@@ -126,36 +173,36 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
     };
   }, [job]);
 
-  // Whatever request the bubble was quoting belongs to the version (and the
-  // side) that was on screen when it opened.
-  useEffect(() => setHintOpen(false), [current?.version_id, showGenerated]);
+  // Whatever the bubble was quoting belongs to the version (and the side) that
+  // was on screen when it opened.
+  useEffect(() => setOpen(null), [current?.version_id, showGenerated]);
 
   useEffect(() => {
-    if (!fullscreen && !hintOpen) return;
+    if (!fullscreen && !open) return;
     // One Escape chain, innermost first: the bubble floats over the photo, so
     // dismissing it should not also drop the fullscreen view behind it.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (hintOpen) setHintOpen(false);
+      if (open) setOpen(null);
       else setFullscreen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [fullscreen, hintOpen]);
+  }, [fullscreen, open]);
 
-  // Dismiss the bubble by clicking anywhere outside it. The pill is excluded
-  // because mousedown lands before its own click, which would otherwise close
-  // and immediately reopen the bubble.
+  // Dismiss the bubble by clicking anywhere outside it. The row's buttons are
+  // excluded because mousedown lands before their own click, which would
+  // otherwise close and immediately reopen (or switch) the bubble.
   useEffect(() => {
-    if (!hintOpen) return;
+    if (!open) return;
     const onDown = (e: MouseEvent) => {
       const target = e.target as Node;
-      if (bubbleRef.current?.contains(target) || pillRef.current?.contains(target)) return;
-      setHintOpen(false);
+      if (bubbleRef.current?.contains(target) || tagsRef.current?.contains(target)) return;
+      setOpen(null);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [hintOpen]);
+  }, [open]);
 
   // Keep the column from collapsing while the card is position:fixed.
   useEffect(() => {
@@ -166,31 +213,33 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   }, [fullscreen]);
 
   const tags = (job && madeWith[job]) || null;
-  const styleLabel = tags ? tags.styles.join(" / ") : "";
-  const hint = tags ? tags.hint : "";
-  const hasTags = !!(styleLabel || hint);
+  const details: Detail[] = [];
+  if (tags?.portraits.length) details.push("face");
+  if (tags?.recipes.length) details.push("recipe");
+  if (tags?.styles.length) details.push("style");
+  if (tags?.hint) details.push("prompt");
+  const shown = open && details.includes(open) ? open : null;
+  const source = urls.sourceImage(photo.analyze_job_id);
+  const faceThumbs = useBoxThumbs(tags?.portraits.map((p) => p.box) || [], source);
 
-  // Shrink the row's chips until nothing is clipped (offsetWidth < scrollWidth
-  // is the standard "this text is being cut off" check), resetting to the base
-  // size first so a version with fewer picks is not left at an earlier shrink.
-  // Then aim the bubble's tail at the pill, whose position moves with every
-  // re-fit -- the row is centred, so its widths depend on what it holds.
+  // Labels while every button's full text fits side by side, icons only once it
+  // does not: measured at the base size with the labels showing, since flex
+  // shrinking would otherwise hide the overflow being measured. Then aim the
+  // bubble's tail at the open button, which moves with every re-fit -- the row
+  // is centred, so its positions depend on what it holds.
   function fitTags() {
-    const chips = Array.from(tagsRef.current?.children || []) as HTMLElement[];
-    if (!chips.length) return;
-    let size = TAG_BASE_FONT;
-    const apply = () => chips.forEach((chip) => (chip.style.fontSize = `${size}px`));
-    apply();
-    const clipped = () => chips.some((chip) => chip.scrollWidth > chip.clientWidth + 1);
-    while (size > TAG_MIN_FONT && clipped()) {
-      size -= 1;
-      apply();
-    }
+    const row = tagsRef.current;
+    const chips = Array.from(row?.children || []) as HTMLElement[];
+    if (!row || !chips.length) return;
+    row.classList.remove("is-icon-only");
+    chips.forEach((chip) => (chip.style.fontSize = `${TAG_BASE_FONT}px`));
+    const required = chips.reduce((sum, chip) => sum + chip.scrollWidth, 0) + (chips.length - 1) * TAG_GAP;
+    row.classList.toggle("is-icon-only", required > row.clientWidth);
   }
 
   function positionTail() {
     const bubble = bubbleRef.current;
-    const pill = pillRef.current;
+    const pill = shown && tagsRef.current?.querySelector<HTMLElement>(`[data-detail="${shown}"]`);
     if (!bubble || !pill) return;
     const bubbleRect = bubble.getBoundingClientRect();
     // Zero while the bubble is hidden -- nothing to aim yet.
@@ -204,11 +253,11 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   useLayoutEffect(() => {
     fitTags();
     positionTail();
-  }, [styleLabel, hint, hintOpen, generated, fullscreen]);
+  }, [tags, shown, generated, fullscreen]);
 
   // Window resize, rotating a phone and the fullscreen toggle all change how
   // much room the row has, independent of any re-render -- and each of those
-  // moves the pill under an open bubble, so the tail follows the re-fit.
+  // moves the button under an open bubble, so the tail follows the re-fit.
   useEffect(() => {
     const row = tagsRef.current;
     if (!row || typeof ResizeObserver === "undefined") return;
@@ -218,9 +267,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
     });
     observer.observe(row);
     return () => observer.disconnect();
-  }, [hasTags]);
+  }, [details.length > 0]);
 
-  const source = urls.sourceImage(photo.analyze_job_id);
   const idx = current ? versions.findIndex((v) => v.version_id === current.version_id) : -1;
 
   return (
@@ -313,62 +361,85 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               )}
             </div>
 
-            {/* What this version was actually asked for, floating at the
-                bottom of the photo: the non-default 修圖風格 picks read out as
-                one quiet label, and -- when the run carried a 個人化需求 -- a
-                pressable 個人化 pill that quotes it. Hidden by styles.css while
-                the Original is showing, since both describe the result. */}
-            {hasTags && (
+            {/* What this version was actually made with, floating at the
+                bottom of the photo -- the old result row's buttons: 人像調整,
+                美化項目 and 美化風格 for what reached the Editor prompt, and
+                個人化 for the request it carried. Each opens the bubble below
+                with its details. Hidden by styles.css while the Original is
+                showing, since all of them describe the result. */}
+            {details.length > 0 && (
               <div id="recipe-tags" class="recipe-tags" ref={tagsRef}>
-                {styleLabel && <span>{styleLabel}</span>}
-                {hint && (
-                  <span
-                    ref={pillRef}
-                    class="recipe-tag-personalize"
-                    role="button"
-                    tabIndex={0}
-                    title="點一下看這次填寫的個人化需求"
+                {details.map((d) => (
+                  <button
+                    type="button"
+                    class="portrait-check-toggle result-detail-toggle recipe-tag-personalize"
+                    data-detail={d}
+                    title={DETAIL_LABEL[d]}
+                    aria-label={DETAIL_LABEL[d]}
                     aria-controls="personalize-popover"
-                    aria-expanded={hintOpen}
-                    onClick={() => setHintOpen(!hintOpen)}
-                    onKeyDown={(e: KeyboardEvent) => {
-                      if (e.key !== "Enter" && e.key !== " ") return;
-                      e.preventDefault();
-                      setHintOpen(!hintOpen);
-                    }}
+                    aria-expanded={shown === d}
+                    onClick={() => setOpen(shown === d ? null : d)}
                   >
-                    個人化
-                  </span>
-                )}
+                    <DetailIcon detail={d} />
+                    <b class="result-detail-label">{DETAIL_LABEL[d]}</b>
+                  </button>
+                ))}
               </div>
             )}
-            {/* The pill has no room for a whole sentence, so the request
-                itself lives in this speech bubble over the photo. Dismissed
-                by its X, an outside click, Escape, or any version /
-                Before-After switch. */}
-            {hint && (
+            {/* The buttons have no room for the details themselves, so they
+                live in this speech bubble over the photo. Dismissed by its X,
+                an outside click, Escape, or any version / Before-After switch. */}
+            {details.length > 0 && (
               <div
                 ref={bubbleRef}
                 id="personalize-popover"
                 class="personalize-popover"
                 role="dialog"
-                aria-label="個人化需求"
-                hidden={!hintOpen}
+                aria-label={shown ? DETAIL_TITLE[shown] : undefined}
+                hidden={!shown}
               >
                 <div class="personalize-popover-head">
-                  <span class="personalize-popover-title">個人化需求</span>
+                  <span class="personalize-popover-title">{shown && DETAIL_TITLE[shown]}</span>
                   <button
                     class="personalize-popover-close"
                     type="button"
                     aria-label="關閉"
-                    onClick={() => setHintOpen(false)}
+                    onClick={() => setOpen(null)}
                   >
                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
                       <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
                     </svg>
                   </button>
                 </div>
-                <p class="personalize-popover-text">{hint}</p>
+                <div class="personalize-popover-text">
+                  {shown === "face" && tags && (
+                    <div class="portrait-adjustment-list" role="list">
+                      {tags.portraits.map((p, i) => (
+                        <div class="portrait-adjustment-row" role="listitem">
+                          <img class="portrait-adjustment-thumbnail" src={faceThumbs[i] || undefined} alt={p.label} title={p.label} />
+                          <div class="portrait-adjustment-items">
+                            {p.tags.map((t) => (
+                              <span class="portrait-adjustment-item" aria-label={`${t}，已完成`}>
+                                <span class="portrait-check-complete" aria-hidden="true">
+                                  ✓
+                                </span>
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {(shown === "recipe" || shown === "style") && tags && (
+                    <ul class="result-detail-list">
+                      {(shown === "recipe" ? tags.recipes : tags.styles).map((item) => (
+                        <li>{item}</li>
+                      ))}
+                    </ul>
+                  )}
+                  {shown === "prompt" && tags?.hint}
+                </div>
               </div>
             )}
           </div>
