@@ -1761,7 +1761,7 @@ window.PhotoAgentResults = (() => {
       sources.push({ subject, subjectIndex: match.index, box, thumbnailBox: detectionBox });
     });
     subjects.forEach((subject, subjectIndex) => {
-      if (!subject || subject.is_person !== true || represented.has(subjectIndex)) return;
+      if (represented.has(subjectIndex) || !recoverableSubject(analysis, subject)) return;
       const box = subject.box;
       if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;
       represented.add(subjectIndex);
@@ -1774,7 +1774,7 @@ window.PhotoAgentResults = (() => {
         w: box.w * 0.64,
         h: box.h * 0.32,
       };
-      sources.push({ subject, subjectIndex, box: headBox });
+      sources.push({ subject, subjectIndex, box: headBox, thumbnailBox: box });
     });
     return sources;
   }
@@ -2248,6 +2248,18 @@ window.PhotoAgentResults = (() => {
     return [];
   }
 
+  function recoverableSubject(analysis, subject) {
+    const box = subject?.box;
+    if (subject?.is_person !== true || !box
+      || ![box.x, box.y, box.w, box.h].every(Number.isFinite)
+      || box.x < 0 || box.y < 0 || box.w <= 0 || box.h <= 0
+      || box.x + box.w > 1 || box.y + box.h > 1) return false;
+    const detection = subject.local_detection_index;
+    return !(Number.isInteger(detection) && detection > 0
+      && (analysis.local_face_review || []).some(review => review?.detection_index === detection
+        && (review.matched_subject_index === -1 || review.is_real_face === false)));
+  }
+
   function renderFaceThumbnails(analysis) {
     reviewAdvancedOptions = { ...(analysis?._advanced_options || {}) };
     facePoseSuggestionState = null;
@@ -2255,22 +2267,15 @@ window.PhotoAgentResults = (() => {
     // selected meaningless -- always land back on the first person.
     selectedFaceIndex = 0;
     const faces = localFaceEntries(analysis);
-    const bodySubjects = bodyReshapeEnabled
-      ? (Array.isArray(analysis?.subjects) ? analysis.subjects : [])
-        .map((subject, subjectIndex) => ({ subject, subjectIndex }))
-        .filter(({ subject }) => subject?.is_person === true
-          && subject.body_reshape && typeof subject.body_reshape === "object"
-          && (subject.body_reshape.analysis_status === "error"
-            || ((subject.body_reshape.should_edit !== false || subject.body_reshape._user_disabled)
-              && typeof subject.body_reshape.edit_prompt === "string"
-              && subject.body_reshape.edit_prompt.trim())))
-      : [];
+    const recoveredSubjects = (Array.isArray(analysis?.subjects) ? analysis.subjects : [])
+      .map((subject, subjectIndex) => ({ subject, subjectIndex }))
+      .filter(({ subject }) => recoverableSubject(analysis, subject));
     const bodyDisabledSubjects = new Set(
       (Array.isArray(analysis?._disabled_body_reshape_subjects)
         ? analysis._disabled_body_reshape_subjects : [])
         .filter((index) => Number.isInteger(index) && index >= 0)
     );
-    if (!faces.length && !bodySubjects.length) {
+    if (!faces.length && !recoveredSubjects.length) {
       // No 人像檢查 tab to show -- renderFaceReviewCards (below) hides that
       // tab button and falls back to the 修圖建議 tab, it just needs
       // faceThumbEntries cleared first.
@@ -2288,6 +2293,7 @@ window.PhotoAgentResults = (() => {
       img.addEventListener("load", () => renderFaceThumbnails(analysis), { once: true });
       return;
     }
+    const detectedSubjectIndexes = new Set();
     faceThumbEntries = faces
       // detectionIndex is 1-based and must reflect each face's own position
       // in the original (unfiltered) faces/_local_face_boxes array -- it has
@@ -2315,6 +2321,10 @@ window.PhotoAgentResults = (() => {
         // for it, since the model may have described this exact person from
         // its coordinate-only text hint alone.
         if (!subject && (matched || !sentToModel)) return null;
+        if (index >= 0) {
+          if (detectedSubjectIndexes.has(index)) return null;
+          detectedSubjectIndexes.add(index);
+        }
         return {
           box: f.box,
           issues: faceIssueEntries(subject, index, bodyDisabledSubjects.has(index)),
@@ -2325,15 +2335,13 @@ window.PhotoAgentResults = (() => {
       })
       .filter(Boolean);
 
-    // Body plans are attached to subjects[], while the face tab list is based
-    // on local face detections. Add a lightweight person-box fallback so a
-    // valid body command is still switchable when that person has no local
-    // face crop.
+    // Append formally analyzed people missed by the detector, including body
+    // plans, without manufacturing a face box or changing their subject index.
     const representedSubjectIndexes = new Set(
       faceThumbEntries.map((entry) => entry.subjectIndex)
         .filter((index) => Number.isInteger(index) && index >= 0)
     );
-    bodySubjects.forEach(({ subject, subjectIndex }) => {
+    recoveredSubjects.forEach(({ subject, subjectIndex }) => {
       if (representedSubjectIndexes.has(subjectIndex)) return;
       const box = subject.box;
       if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;

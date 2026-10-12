@@ -153,6 +153,22 @@ class ChatRoutesTest(unittest.TestCase):
             self.addCleanup(p.stop)
         self.client = app_module.create_app({"TESTING": True}).test_client()
 
+    def test_chat_redirect_preserves_identity_query(self):
+        query = "user_id=MmNZsuz813FItZ%2Flhfy2Bw%3D%3D&admin&tag=a&tag=b"
+        response = self.client.get("/chat?" + query)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "chat/?" + query)
+        final = self.client.get("/chat?" + query, follow_redirects=True)
+        self.addCleanup(final.close)
+        self.assertEqual(final.request.path, "/chat/")
+        self.assertEqual(final.request.query_string.decode("ascii"), query)
+        self.assertEqual(final.request.args["user_id"], "MmNZsuz813FItZ/lhfy2Bw==")
+
+    def test_chat_redirect_without_query(self):
+        response = self.client.get("/chat")
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["Location"], "chat/")
+
     # --- helpers -----------------------------------------------------------
 
     def url(self, sid, suffix=""):

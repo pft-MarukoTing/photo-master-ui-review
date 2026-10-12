@@ -58,6 +58,7 @@ def face_people(analysis):
         crops = analysis.get("_face_crop_boxes")
         faces = [{"box": b, "sent_to_model": True} for b in crops] if isinstance(crops, list) else []
     people = []
+    represented = set()
     for i, face in enumerate(faces):
         box = _box(face.get("box")) if isinstance(face, dict) else None
         if not box:
@@ -65,9 +66,29 @@ def face_people(analysis):
         index, matched = _subject_for_detection(analysis, subjects, i + 1, box)
         if index < 0 and (matched or face.get("sent_to_model") is False):
             continue
+        if index >= 0:
+            if index in represented:
+                continue
+            represented.add(index)
         number = len(people) + 1
         label = _text(subjects[index].get("label")) if index >= 0 else ""
         people.append({"number": number, "subject_index": index, "name": label or f"人物 {number}", "box": box})
+    for index, subject in enumerate(subjects):
+        if not isinstance(subject, dict) or subject.get("is_person") is not True or index in represented:
+            continue
+        detection = subject.get("local_detection_index")
+        if isinstance(detection, int) and not isinstance(detection, bool) and detection > 0:
+            if any(isinstance(review, dict) and review.get("detection_index") == detection
+                   and (review.get("matched_subject_index") == -1 or review.get("is_real_face") is False)
+                   for review in analysis.get("local_face_review") or []):
+                continue
+        box = _box(subject.get("box"))
+        if not box or not (0 <= box["x"] and 0 <= box["y"] and box["w"] > 0 and box["h"] > 0
+                           and box["x"] + box["w"] <= 1 and box["y"] + box["h"] <= 1):
+            continue
+        number = len(people) + 1
+        people.append({"number": number, "subject_index": index,
+                       "name": _text(subject.get("label")) or f"人物 {number}", "box": box})
     return people
 
 

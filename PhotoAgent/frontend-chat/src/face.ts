@@ -132,19 +132,41 @@ function localFaceBoxes(a: Analysis): Dict[] {
   return [];
 }
 
+// A subject box is a person thumbnail, never a fabricated detector result.
+function recoverableSubject(a: Analysis, subject: Dict): boolean {
+  const box = subject?.box;
+  if (subject?.is_person !== true || !finiteBox(box)
+    || box.x < 0 || box.y < 0 || box.w <= 0 || box.h <= 0
+    || box.x + box.w > 1 || box.y + box.h > 1) return false;
+  const detection = subject.local_detection_index;
+  return !(Number.isInteger(detection) && detection > 0
+    && (a.local_face_review || []).some(r => r?.detection_index === detection
+      && (r.matched_subject_index === -1 || r.is_real_face === false)));
+}
+
 export function faceEntries(a: Analysis, overrides: Record<string, FaceOverride> = {}): FaceEntry[] {
   const out: FaceEntry[] = [];
+  const represented = new Set<number>();
   localFaceBoxes(a).forEach((f, i) => {
     if (!finiteBox(f?.box)) return;
     const sentToModel = f.sent_to_model !== false;
     const { subject, index, matched } = subjectForDetection(a, i + 1, f.box);
     if (!subject && (matched || !sentToModel)) return;
+    if (index >= 0) {
+      if (represented.has(index)) return;
+      represented.add(index);
+    }
     out.push({
       box: f.box,
       subjectIndex: index,
       label: (subject as Dict | null)?.label || "",
       issues: subject ? issuesFor(subject, index, overrides) : [],
     });
+  });
+  (Array.isArray(a.subjects) ? a.subjects : []).forEach((subject, index) => {
+    if (represented.has(index) || !recoverableSubject(a, subject)) return;
+    out.push({ box: subject.box, subjectIndex: index, label: subject.label || "",
+      issues: issuesFor(subject, index, overrides) });
   });
   return out;
 }
@@ -253,9 +275,7 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
   const disabledBodies = new Set(Array.isArray(a._disabled_body_reshape_subjects) ? a._disabled_body_reshape_subjects : []);
   const subjects = Array.isArray(a.subjects) ? a.subjects : [];
 
-  // Every person once: detected faces first (they carry a crop), then any
-  // person subject no detection matched. Only the first kind gets a row, but
-  // both count toward "more than one person" for the Subject-scoped check.
+  // Every person once, using the same recovery eligibility as the face panel.
   const seen = new Set<number>();
   const people: { subject: Dict; index: number; box: Box | null }[] = [];
   localFaceBoxes(a).forEach((f, i) => {
@@ -267,9 +287,9 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
     people.push({ subject, index, box });
   });
   subjects.forEach((s, i) => {
-    if (s?.is_person !== true || seen.has(i) || !finiteBox(s.box)) return;
+    if (seen.has(i) || !recoverableSubject(a, s)) return;
     seen.add(i);
-    people.push({ subject: s, index: i, box: null });
+    people.push({ subject: s, index: i, box: s.box });
   });
 
   return people

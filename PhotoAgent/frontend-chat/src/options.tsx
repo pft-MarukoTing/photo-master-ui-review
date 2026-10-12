@@ -36,9 +36,9 @@ export const PROMPT_MAX = 2000; // chat_plan.USER_PROMPT_MAX_LEN
 const SUGGESTED_HINT = "看過原圖後建議調整";
 
 // 這個人有沒有東西要修。分析標出來的（flagged）和已經開著的（allowed）都算 --
-// 一項都沒有的人在人像面板上問不出問題，不列。把人身上的項目全部關掉不會讓他
-// 消失：flagged 留著，反悔的路就還在。
+// 用於修正摘要；有分析項目但未建議修正的人仍可在面板自行設定。
 const hasFixes = (f: FaceEntry) => f.subjectIndex >= 0 && f.issues.some((x) => x.flagged || x.allowed);
+const canConfigurePerson = (f: FaceEntry) => f.subjectIndex >= 0 && f.issues.length > 0;
 
 // 面板的開場白。again：這一輪是美化過之後的再調整，見 AGAIN_INTRO。人像只有在
 // 面板裡真的列出不只一個人時，才講「每個人可以分開調整」-- 只有一個人的照片講
@@ -46,14 +46,14 @@ const hasFixes = (f: FaceEntry) => f.subjectIndex >= 0 && f.issues.some((x) => x
 export function introFor(cat: Category, a: Analysis, plan: Plan, again = false): string {
   const base = again ? AGAIN_INTRO[cat] : CATEGORIES[cat].intro;
   if (cat !== "face") return base;
-  const people = faceEntries(a, plan.face_issue_overrides || {}).filter(hasFixes).length;
+  const people = faceEntries(a, plan.face_issue_overrides || {}).filter(canConfigurePerson).length;
   return people > 1 ? `照片裡每個人都可以分開調整，${base}` : base;
 }
 
 // The categories this photo has anything to show in, in the order offered.
 export function categoriesFor(a: Analysis, caps: Capabilities, plan: Plan): Category[] {
   const out: Category[] = [];
-  if (faceEntries(a, plan.face_issue_overrides || {}).some(hasFixes)) out.push("face");
+  if (faceEntries(a, plan.face_issue_overrides || {}).some(canConfigurePerson)) out.push("face");
   if (recipeItems(a).length) out.push("recipe");
   if (styleGroups(a, caps).length) out.push("style");
   if (plan.user_prompt?.trim()) out.push("prompt");
@@ -349,7 +349,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
   // 人物 N 的編號跟著完整的 faceEntries 走，和面板分頁、開場白那句話同一套 --
   // 這裡少列幾個人，不該讓剩下的人改名。
   const all = faceEntries(analysis, plan.face_issue_overrides || {});
-  const entries = all.filter(hasFixes);
+  const entries = all.filter(canConfigurePerson);
   const set = (issue: FaceIssue, value: FaceOverride) =>
     onPatch({ face_issue_overrides: { [issue.key]: value } });
   const faceOf = (f: FaceEntry): FaceRef => faces[f.subjectIndex] || { name: f.label || `人物 ${all.indexOf(f) + 1}`, thumb: "" };
