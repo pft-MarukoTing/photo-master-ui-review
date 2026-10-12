@@ -49,6 +49,10 @@ export interface Photo {
   // 改了長寬比後重新構圖的那支 job；完成後分析改從它讀（analysis_job_id）。
   pending_reframe?: { job_id: string; aspect_ratio: string; previous: string } | null;
   analysis_job_id?: string | null;
+  // 上傳頁選「只照需求改」：沒有跑分析，只量了尺寸；「幫我分析」才補跑真的分析。
+  analysis_skipped?: boolean;
+  // 補跑中的分析是為了什麼："check" 給使用者看，"render" 是排在它後面的美化。
+  reanalysis?: "check" | "render" | null;
   planned_ratio?: string | null;
   pending_render?: { action_id: string; job_ids: string[]; base?: string } | null;
   queued_render?: Dict | null;

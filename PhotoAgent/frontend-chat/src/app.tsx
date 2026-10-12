@@ -70,6 +70,7 @@ import {
   renderMeta,
   reframeLoadingMessage,
   renderSubMessages,
+  promptSubMessages,
   analyzeSubMessages,
   timeLabel,
   versionsFromMessages,
@@ -296,6 +297,13 @@ const GREETING = "嗨！先選一張想美化的照片（一次一張）。要�
 // 個人化需求存檔後自動送出的那一句。chat_assistant.INSTRUCTION 會認這句話，改字要兩邊一起改。
 const PROMPT_REVIEW_ASK = "我改了個人化需求，幫我確認一下內容。";
 
+// 帶著個人化需求按一鍵美化時問的兩條路。只照需求改 = overwrite_prompt：修圖
+// 只拿個人化需求當指令；順便整張美化 = 照分析修完，需求一起加上去（原本的做法）。
+// 只照需求改那條也是 session 裡那張美化卡的標題。按鈕是使用者的話、說明是
+// AI 的話，兩邊都不用「我」，主詞才不會打架。
+const ONLY_PROMPT_LABEL = "只照需求改";
+const WITH_ANALYSIS_LABEL = "順便整張美化";
+
 function errorText(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.body?.error === "photos_not_ready") return "照片還在處理中，請稍候再試。";
@@ -378,6 +386,10 @@ export function App() {
   // Bumped to empty the composer: a line it still holds has just become part
   // of the conversation.
   const [preClear, setPreClear] = useState(0);
+  // 帶著個人化需求按一鍵美化：先問要只改使用者說的，還是整體美化再加上需求。
+  // 留著按下去那一刻的 later / log，選好之後照原樣開始；`overwrite` 是選了哪
+  // 一個，上傳中那排選項定格在它身上，失敗了還能重選。
+  const [renderAsk, setRenderAsk] = useState<{ later: Note | null; log: Note[]; overwrite?: boolean } | null>(null);
 
   // Session
   const [session, setSession] = useState<Session | null>(null);
@@ -626,6 +638,7 @@ export function App() {
     setPreEdit(null);
     setPrePointed([]);
     setPreAsk(null);
+    setRenderAsk(null);
     setSamplesOpen(false);
     if (caps) setSettings(defaultSettings(caps));
   }
@@ -707,6 +720,7 @@ export function App() {
     // A new photo has its own people: what was typed stays, who it was aimed
     // at does not.
     setPrePointed([]);
+    setRenderAsk(null);
     setNotes((n) => (n.some((x) => x.persons.length) ? n.map((x) => ({ ...x, persons: [] })) : n));
     setVia(s.kind === "file" ? "upload" : "sample");
     setStep("picked");
@@ -797,6 +811,8 @@ export function App() {
       return { persons, ...(wish && wish !== text ? { wish } : {}) };
     };
     setPreAsk(note);
+    // 又多講了一句，需求變了，剛才那個問題就不算數，等講完再按一次。
+    setRenderAsk(null);
     if (typed) setPreClear((n) => n + 1);
     try {
       const r = await api.promptReview(
@@ -846,8 +862,15 @@ export function App() {
 
   // `later` 是要帶進 session、照片好了再回答的那句；沒給就看最後一句是不是。
   // `log` 是到這一刻為止的對話：打字要求開始的那句剛收下，還沒進 state。
-  function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes) {
+  // `overwrite` 是一鍵美化前問到的答案：true 只照個人化需求改，false 整體美化
+  // 再加上需求。有需求卻還沒問過，就先問，不開始。
+  function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
     if (!source || !caps || !settings) return;
+    if (mode === "render" && overwrite === undefined && notesPrompt(log, preEdit).trim()) {
+      setRenderAsk({ later, log });
+      return;
+    }
+    setRenderAsk(mode === "render" && overwrite !== undefined ? { later, log, overwrite } : null);
     // 個人化需求只認已經送出、也已經讓 AI 看過的那幾句。輸入框裡打了沒送的字
     // 就當沒打過：它沒進過對話，也沒過把關，不該從這裡偷渡進 user_prompt。
     const kept = keptNotes(log);
@@ -864,7 +887,10 @@ export function App() {
       // The defaults a photo added next starts from, so the upload below picks
       // the 個人化需求 up without a second patch.
       if (userPrompt || !sameSettings(settings, defaultSettings(caps))) {
-        await api.patchPlan(id, { ...settings, ...(userPrompt ? { user_prompt: userPrompt } : {}) });
+        await api.patchPlan(id, {
+          ...settings,
+          ...(userPrompt ? { user_prompt: userPrompt, overwrite_prompt: !!overwrite } : {}),
+        });
       }
       let blob: Blob;
       let name: string;
@@ -889,7 +915,7 @@ export function App() {
       if (carried.length) await api.postMessages(id, carried);
       if (mode === "render") {
         await api.render(id, [added.photo_id]);
-        await afterRender(id, "一鍵美化", "spark", { ...settings });
+        await afterRender(id, overwrite ? ONLY_PROMPT_LABEL : "一鍵美化", "spark", { ...settings });
       } else {
         setSession(await api.getSession(id));
       }
@@ -995,6 +1021,20 @@ export function App() {
       if (!into || !(await api.replaceMessage(id, into.id, next).then(() => true, () => false))) {
         await api.postMessage(id, next);
       }
+      setSession(await api.getSession(id));
+    });
+  }
+
+  // 「幫我分析」 on a photo uploaded with 「只照需求改」: its analysis was
+  // skipped, so run it now. Back to 整體美化 first -- the next render follows
+  // the analysis too. The status polls post the check card when it lands.
+  function analyzePhoto() {
+    if (!session || !photo) return Promise.resolve(false);
+    const id = session.session_id;
+    const pid = photo.photo_id;
+    return run(async () => {
+      await api.patchPhotoPlan(id, pid, { overwrite_prompt: false });
+      await api.analyze(id, pid);
       setSession(await api.getSession(id));
     });
   }
@@ -1150,6 +1190,7 @@ export function App() {
             onPatch={patchFromChat}
             onSavePrompt={savePrompt}
             onPost={postFromChat}
+            onAnalyze={analyzePhoto}
             onResolve={resolveProposal}
           />
         </main>
@@ -1273,8 +1314,10 @@ export function App() {
                       onClear={() => {
                         setNotes(dropNotes(notes, () => true));
                         setPreEdit(null);
+                        setRenderAsk(null);
                       }}
                       onPrompt={(text, upTo) => {
+                        setRenderAsk(null);
                         // 改成空的就是清掉，跟按「清除所有需求」同一件事。
                         if (!text) {
                           setNotes(dropNotes(notes, () => true));
@@ -1283,6 +1326,10 @@ export function App() {
                       }}
                       onEdit={() => setStep("settings")}
                       onStart={startSession}
+                      renderAsk={renderAsk && { overwrite: renderAsk.overwrite }}
+                      onRenderMode={(overwrite) =>
+                        renderAsk && startSession("render", renderAsk.later, renderAsk.log, overwrite)
+                      }
                       onAnswer={(text) => void reviewNote(text, [], notes, false)}
                     />
                   </ChatPanel>
@@ -1418,6 +1465,9 @@ function PreChat(props: {
   onPrompt: (text: string, upTo: number) => void;
   onEdit: () => void;
   onStart: (mode: "analyze" | "render") => void;
+  // 一鍵美化前在問需求怎麼套用；`overwrite` 是已經選了的那個（上傳中）。
+  renderAsk: { overwrite?: boolean } | null;
+  onRenderMode: (overwrite: boolean) => void;
   // One of the options under the AI's question, tapped.
   onAnswer: (text: string) => void;
 }) {
@@ -1446,6 +1496,7 @@ function PreChat(props: {
   // 要確認的東西跟要按下去的地方是同一處。跟 session 的個人化需求一樣是一整段，
   // 看到的就是送出去的 user_prompt；要刪要改直接改字。
   const kept = !!props.prompt;
+  const asking = props.renderAsk;
   const review = kept && (
     <div class="chat-card chat-notes">
       <span class="chat-meta">個人化需求</span>
@@ -1463,7 +1514,7 @@ function PreChat(props: {
       {/* Reading order follows the order of operations: adjust the settings
           first, then run. 分析 and 一鍵美化 are peers -- both are "go", they
           differ only in how far they go -- so they carry the same weight. */}
-      {(step === "picked" || kept) && (
+      {!asking && (step === "picked" || kept) && (
         <div class="chat-actions-aux">
           {step === "picked" && <Chip label="設定" icon="gear" kind="ghost" disabled={held} onClick={props.onEdit} />}
           {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
@@ -1480,8 +1531,24 @@ function PreChat(props: {
         </div>
       )}
       <div class="chat-actions-main">
-        <Chip label="分析" icon="search" kind="primary" disabled={held} onClick={() => props.onStart("analyze")} />
-        <Chip label="一鍵美化" icon="spark" kind="primary" disabled={held} onClick={() => props.onStart("render")} />
+        {/* 按了一鍵美化、正在問怎麼套用時，這排就是已經做過的選擇：定格，
+            一鍵美化維持選取的樣子，跟回答過的其他提問一樣。 */}
+        <Chip
+          label="分析"
+          icon="search"
+          kind={asking ? undefined : "primary"}
+          settled={!!asking}
+          disabled={held}
+          onClick={() => props.onStart("analyze")}
+        />
+        <Chip
+          label="一鍵美化"
+          icon="spark"
+          kind={asking ? "picked" : "primary"}
+          settled={!!asking}
+          disabled={held}
+          onClick={() => props.onStart("render")}
+        />
       </div>
     </div>
   );
@@ -1637,6 +1704,35 @@ function PreChat(props: {
         </AssistantMsg>
       )}
 
+      {/* 需求要怎麼套用，只有使用者自己知道：「把背景換成海邊」可能是只想換
+          背景，也可能是想順便整張修好。兩條路一樣重，不替人預設。 */}
+      {asking && (
+        <>
+          <UserMsg>
+            <ClickBubble icon="spark" label="一鍵美化" />
+          </UserMsg>
+          <AssistantMsg>
+            <p class="chat-text">要只照你的需求改，還是順便整張美化？</p>
+            <p class="chat-text chat-muted">
+              {ONLY_PROMPT_LABEL}：只動你寫的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：你的需求照做，光線、人像、構圖也一起修。
+            </p>
+            <div class="chat-choices">
+              {[
+                { label: WITH_ANALYSIS_LABEL, overwrite: false },
+                { label: ONLY_PROMPT_LABEL, overwrite: true },
+              ].map((o) => (
+                <Chip
+                  label={o.label}
+                  kind={asking.overwrite === o.overwrite ? "picked" : undefined}
+                  settled={busy && asking.overwrite !== undefined}
+                  disabled={held}
+                  onClick={() => props.onRenderMode(o.overwrite)}
+                />
+              ))}
+            </div>
+          </AssistantMsg>
+        </>
+      )}
       {busy && source && !pending && !scanning && (
         <AssistantMsg>
           <p class="chat-text chat-muted">正在上傳照片…</p>
@@ -1688,6 +1784,9 @@ function canonical(v: unknown): unknown {
 function snapshotOf(plan: Plan): Dict {
   const out: Dict = { user_prompt: plan.user_prompt || "" };
   for (const k of ADJUSTABLE) if (plan[k] !== undefined) out[k] = plan[k];
+  // 只照需求改 → 整體美化 也是一種改動：同樣的設定修出來會不一樣。只記 true，
+  // 舊的快照沒有這個欄位，false 和沒寫要算同一件事。
+  if (plan.overwrite_prompt) out.overwrite_prompt = true;
   return canonical(out) as Dict;
 }
 
@@ -1710,6 +1809,7 @@ function SessionView(props: {
   onPatch: (patch: Plan) => Promise<boolean>;
   onSavePrompt: (text: string) => Promise<boolean>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
+  onAnalyze: () => Promise<boolean>;
   onResolve: (
     proposal: Proposal,
     choice: ProposalChoice,
@@ -1824,6 +1924,9 @@ function SessionView(props: {
   // 再美化一次, or 美化 in a round with nothing changed, asks first; any new
   // message or change drops the question.
   const [confirmRerun, setConfirmRerun] = useState(false);
+  // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
+  // 記著按的是哪顆美化，問完照那顆的字送出去。
+  const [askMode, setAskMode] = useState<{ label: string; icon: string } | null>(null);
   // Bumped when an answer lands at the end of the talk and the timeline should
   // go there, even if the user had scrolled up.
   const [toBottom, setToBottom] = useState(0);
@@ -1831,7 +1934,19 @@ function SessionView(props: {
     setPointed([]);
     setHot({});
   }, [pid]);
-  useEffect(() => setConfirmRerun(false), [pid, messages.length, messages[messages.length - 1]?.card?.category, unchanged]);
+  useEffect(() => {
+    setConfirmRerun(false);
+    setAskMode(null);
+  }, [pid, messages.length, messages[messages.length - 1]?.card?.category, unchanged]);
+  const promptNow = (photo.plan.user_prompt || "").trim();
+  const promptChanged =
+    !!promptNow && (fresh || (adjusting && String(roundPlan?.user_prompt || "").trim() !== promptNow));
+  // 美化（第一輪、調整後）都走這裡。需求是這一輪新寫的就先問；沒動需求、
+  // 上一版又是只照需求改的話，這一輪改的是別的項目，要回到整體美化才改得到。
+  const renderRound = (label: string, icon: string) => {
+    if (promptChanged) return setAskMode({ label, icon });
+    props.onRender(label, icon, photo.plan.overwrite_prompt ? { overwrite_prompt: false } : undefined);
+  };
 
   const people = facePeople(analysis);
   const thumbs = useFaceThumbs(analysis, source);
@@ -1978,6 +2093,17 @@ function SessionView(props: {
   }
   const lastProposalId = [...messages].reverse().find((m) => m.card?.type === "llm_reply" && m.card.proposal)?.card?.proposal.id;
   const brief: Dict | null = messages.find((m) => m.card?.type === "analysis_brief")?.card || null;
+  // 上傳頁面選了「只照需求改」：真的沒有分析，只量了尺寸，美化直接照需求修。
+  // 說要分析時（「幫我分析」）才補跑，結果落在 adjust_opened via check 那張卡。
+  const skippedAnalysis = analysis ? !!analysis._skipped_analysis : !!photo.analysis_skipped;
+  // 只照需求改完、要看原圖問題：開一輪調整，同時回到整體美化，下一版才會照
+  // 分析修。快照在 patch 之前拍，這一輪一開就算「改過」，不會被當成原設定重跑。
+  // 上傳時就跳過分析的照片手上沒有分析，要先補跑（onAnalyze），出來後後端貼同一張 check 卡。
+  // 訊息列表 render 時就會用到，所以要宣告在列表之前。
+  const checkOriginal = () =>
+    skippedAnalysis
+      ? props.onAnalyze()
+      : props.onPost({ type: "adjust_opened", plan: snapshotOf(photo.plan), via: "check" }, { overwrite_prompt: false });
 
   // 按下「套用」的那一刻就已經確認了，所以不再自動把面板攤開要人再看一次。改到
   // 的是哪幾項先記下來，等使用者從下面的項目點進去時再標出來。
@@ -2170,10 +2296,15 @@ function SessionView(props: {
           </>
         );
       case "analysis_ready": {
+        // 沒分析的那次只是量完尺寸，沒什麼好報的，直接接著修。
+        if (c.skipped) {
+          const answer = answerIn(idx);
+          return answer ? <AssistantMsg>{answer}</AssistantMsg> : null;
+        }
         if (!analysis) return <AssistantMsg><p class="chat-text">分析完成。</p></AssistantMsg>;
         return (
           <AssistantMsg>
-            {brief ? (
+            {skippedAnalysis ? null : brief ? (
               <BriefCard brief={brief} />
             ) : (
               <p class="chat-text">分析完成。</p>
@@ -2289,26 +2420,32 @@ function SessionView(props: {
         // 套用完的開場就把下一步問掉：直接美化，還是先改下面這幾項。項目一旦點
         // 開，問句沒了對象，話就收回成單純的一句交代。
         const showChips = live && !opened.length;
+        const check = c.via === "check";
         const openLine =
           c.via === "proposal"
             ? showChips
               ? "已套用，想直接美化，還是再調下面這幾項？"
               : "已套用，開始新的一輪調整。"
-            : "好，從上次的設定開始調整。";
+            : check
+              ? "好，這是我分析整張照片的結果："
+              : "好，從上次的設定開始調整。";
         return (
           <>
-            {c.via !== "proposal" && (
+            {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
+            {c.via !== "proposal" && !c.requested && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon="sliders" label="調整" />
+                <ClickBubble icon="sliders" label={check ? "幫我分析" : "調整"} />
               </UserMsg>
             )}
             <AssistantMsg>
               <p class="chat-text">{openLine}</p>
+              {check && brief && <BriefCard brief={brief} />}
+              {check && live && <p class="chat-text chat-muted">你的需求會留著，這次美化會照分析一起修，再加上你的需求。</p>}
               {live && (
                 <>
                   {/* 再進來的人最容易搞混兩件事：建議是對哪張照片講的、開關又是從哪來的。
                       建議永遠是看原圖分析的，不會因為已經修過一版就換；開關則是上一版的。 */}
-                  {c.via !== "proposal" && (
+                  {c.via !== "proposal" && !check && (
                     <p class="chat-text chat-muted">
                       裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。
                     </p>
@@ -2337,7 +2474,28 @@ function SessionView(props: {
             </AssistantMsg>
           </>
         );
+      case "analysis_requested":
+        return (
+          <UserMsg meta={clockLabel(m.created_at)}>
+            <ClickBubble icon="sliders" label="幫我分析" />
+          </UserMsg>
+        );
       case "analysis_failed":
+        // 補跑的分析失敗：照片還是好的，照需求修的那幾版也都在，再試一次就好。
+        if (c.reanalysis)
+          return (
+            <AssistantMsg>
+              <p class="chat-text chat-error">這次分析沒有成功：{c.error}</p>
+              <p class="chat-text">
+                {c.queued_render_cancelled ? "排定的美化也先取消了。" : ""}照你需求修的版本都還在，可以再試一次分析。
+              </p>
+              {idx === messages.length - 1 && !busy && (
+                <div class="chat-choices">
+                  <Chip label="再試一次" icon="sliders" disabled={!ready} onClick={checkOriginal} />
+                </div>
+              )}
+            </AssistantMsg>
+          );
         return (
           <AssistantMsg>
             <p class="chat-text chat-error">
@@ -2358,17 +2516,53 @@ function SessionView(props: {
       case "render_done": {
         const v = versions.find((x) => x.version_id === c.version_id);
         if (!v) return null;
+        // 最新這版只照需求改：分析找到的那些都還沒動，問要不要攤開來看。
+        // 答過（好 → 開一輪調整；不用了 → check_declined）就不再問。上傳時就跳過
+        // 分析的照片手上可能還沒有分析，照樣要問（checkOriginal 會先補跑）。
+        const offerCheck =
+          idx === lastRender &&
+          !adjusting &&
+          !!photo.plan.overwrite_prompt &&
+          (skippedAnalysis || !!analysis) &&
+          !messages.slice(idx + 1).some((x) => x.card?.type === "check_declined");
         return (
           <AssistantMsg>
             <ResultCard
               job={versionJob(v)}
               ordinal={v.ordinal}
               failed={(c.failed_job_ids || []).length}
-              next={idx === lastRender && !adjusting}
+              next={idx === lastRender && !adjusting && !offerCheck}
               note={typeof c.note === "string" ? c.note : undefined}
             />
             {answerIn(idx)}
+            {offerCheck && (
+              <>
+                <p class="chat-text">這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？</p>
+                <div class="chat-choices">
+                  <Chip label="好，幫我分析" icon="sliders" disabled={busy || !ready} onClick={checkOriginal} />
+                  <Chip label="不用了" icon="x" disabled={busy} onClick={() => props.onPost({ type: "check_declined" })} />
+                </div>
+              </>
+            )}
           </AssistantMsg>
+        );
+      }
+      case "check_declined": {
+        const live = idx === messages.length - 1 && !busy;
+        return (
+          <>
+            <UserMsg meta={clockLabel(m.created_at)}>
+              <ClickBubble icon="x" label="不用了" />
+            </UserMsg>
+            <AssistantMsg>
+              <p class="chat-text">好。還有想改的地方，直接輸入告訴我就行；想讓我分析整張照片，也隨時跟我說。</p>
+              {live && (
+                <div class="chat-choices">
+                  <Chip label="幫我分析" icon="sliders" disabled={!ready} onClick={checkOriginal} />
+                </div>
+              )}
+            </AssistantMsg>
+          </>
         );
       }
       case "render_failed":
@@ -2470,8 +2664,14 @@ function SessionView(props: {
 
   // 處理中這一份文案兩邊分工：title 壓在左邊畫布的轉環底下講「在做什麼」，
   // lines 進聊天那張卡，一句句講細節、講過的留著。算在同一個地方，兩邊才不會各講各的。
-  const busyCopy =
-    photo.status === "analyzing"
+  // 「只照需求改」上傳那次的 analyzing 只是在量尺寸，對使用者來說已經在修了；
+  // stage 跟美化同一個，接下去 rendering 時工作紀錄才是同一段。
+  // 只照需求改的那幾句不講光影色彩，見 promptSubMessages。
+  const skipping = photo.status === "analyzing" && !!photo.analysis_skipped && !photo.reanalysis;
+  const promptOnly = !!photo.plan.overwrite_prompt && !!photo.plan.user_prompt?.trim();
+  const busyCopy = skipping
+    ? { stage: "rendering", title: "正在照你的需求修", lines: promptSubMessages() }
+    : photo.status === "analyzing"
       ? { stage: "analyzing", title: "正在分析照片", lines: analyzeSubMessages(renderQueued, !!waiting) }
       : reframing
         ? {
@@ -2482,7 +2682,11 @@ function SessionView(props: {
             ],
           }
         : photo.status === "rendering"
-          ? { stage: "rendering", title: "正在美化照片", lines: renderSubMessages() }
+          ? {
+              stage: "rendering",
+              title: promptOnly ? "正在照你的需求修" : "正在美化照片",
+              lines: promptOnly ? promptSubMessages() : renderSubMessages(),
+            }
           : null;
   const workLog = useWorkLog(busyCopy?.stage ?? null, busyCopy?.lines ?? []);
 
@@ -2497,7 +2701,35 @@ function SessionView(props: {
   let quick = null;
   // 下方那排按鈕上寫的字，問 AI 時一起送過去，它的回覆才指得出現在能按什麼。
   let bar: string[] = [];
-  if (confirmRerun && photo.status === "ready" && adjusting) {
+  if (askMode && photo.status === "ready" && editing) {
+    // 跟上傳頁面那一題同一套字，兩邊才不會各講各的。
+    working = (
+      <AssistantMsg>
+        <p class="chat-text">要只照你的需求改，還是順便整張美化？</p>
+        <p class="chat-text chat-muted">
+          {ONLY_PROMPT_LABEL}：只動你寫的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：你的需求照做，光線、人像、構圖也一起修。
+        </p>
+      </AssistantMsg>
+    );
+    quick = (
+      <QuickBar>
+        <Chip label="先不美化" icon="sliders" disabled={busy} onClick={() => setAskMode(null)} />
+        <Chip
+          label={WITH_ANALYSIS_LABEL}
+          icon={askMode.icon}
+          disabled={busy}
+          onClick={() => props.onRender(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
+        />
+        <Chip
+          label={ONLY_PROMPT_LABEL}
+          icon={askMode.icon}
+          disabled={busy}
+          onClick={() => props.onRender(ONLY_PROMPT_LABEL, askMode.icon, { overwrite_prompt: true })}
+        />
+      </QuickBar>
+    );
+    bar = ["先不美化", WITH_ANALYSIS_LABEL, ONLY_PROMPT_LABEL];
+  } else if (confirmRerun && photo.status === "ready" && adjusting) {
     working = (
       <AssistantMsg>
         <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續調整？</p>
@@ -2542,7 +2774,7 @@ function SessionView(props: {
           icon="spark"
           kind="primary"
           disabled={busy}
-          onClick={() => (unchanged ? setConfirmRerun(true) : props.onRender("美化", "spark"))}
+          onClick={() => (unchanged ? setConfirmRerun(true) : renderRound("美化", "spark"))}
         />
       </QuickBar>
     );
@@ -2551,9 +2783,9 @@ function SessionView(props: {
     quick = (
       <QuickBar label={lastOpened ? undefined : "或直接選："}>
         {lastOpened ? (
-          <Chip label="美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
+          <Chip label="美化" icon="spark" kind="primary" disabled={busy} onClick={() => renderRound("美化", "spark")} />
         ) : (
-          <Chip label="照建議直接美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("照建議直接美化", "spark")} />
+          <Chip label="照建議直接美化" icon="spark" kind="primary" disabled={busy} onClick={() => renderRound("照建議直接美化", "spark")} />
         )}
       </QuickBar>
     );

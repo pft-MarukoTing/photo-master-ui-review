@@ -392,6 +392,14 @@ class RenderNoteTest(unittest.TestCase):
         self.assertIn('THIS ROUND: [{"label":"個人化需求","added":["加上標題「台北」"]}]', seen[0])
         self.assertIn("EARLIER NOTES:\n- 裁成 4:5 了。", seen[0])
 
+    def test_a_wishes_only_version_talks_about_the_wishes_alone(self):
+        seen = []
+        plan = {**default_plan(), "user_prompt": "把左邊的藍傘拿掉", "overwrite_prompt": True}
+        chat_assistant.write_render_note(analysis(), plan, model=lambda c, i: seen.append(c) or {"note": "x"})
+        chat_assistant.write_render_note(analysis(), default_plan(), model=lambda c, i: seen.append(c) or {"note": "x"})
+        self.assertIn(chat_assistant.ONLY_WISHES_RULE, seen[0])
+        self.assertNotIn(chat_assistant.ONLY_WISHES_RULE, seen[1])
+
     def test_a_first_version_says_so(self):
         seen = []
         chat_assistant.write_render_note(analysis(), default_plan(), model=lambda c, i: seen.append(c) or {"note": "x"})

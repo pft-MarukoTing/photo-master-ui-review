@@ -250,6 +250,28 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     return analysis
 
 
+def skipped_analysis_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None) -> dict:
+    """Step 2 skipped: the analysis a photo gets when the user only wants
+    their own 個人化需求 applied (overwrite_prompt) -- no analyzer call, so the
+    edit can start right away. finish_stage then edits from the user's text
+    alone; reframe_stage refuses it (there is no composition to re-plan).
+
+    Shaped like analyze_stage's result so the two-stage flow stores and hands
+    it back the same way; a real analysis can replace it later."""
+    logger.info("Step 2 skipped (aspect_ratio=%s)", aspect_ratio)
+    analysis = {
+        "_skipped_analysis": True,
+        "_aspect_ratio_pref_at_analysis": aspect_ratio,
+        "prompts": {},
+        "timings": {},
+        "usage": {},
+        "_advanced_options": dict(advanced_options or {}),
+        "compatibility_version": CURRENT_COMPATIBILITY_VERSION,
+    }
+    img_w, img_h = get_image_dimensions(image_bytes)
+    return apply_derived_aspect_ratio(analysis, img_w, img_h, aspect_ratio_pref=aspect_ratio)
+
+
 def _next_reframe_stage_key(usage):
     """Each reframe call gets its own usage key so repeated reframes add up instead of overwriting."""
     key, n = "Step 2b - photo_reframe", 1

@@ -970,6 +970,73 @@ class ChatRoutesTest(unittest.TestCase):
         params = dict(self.enqueued)[started["job_ids"][0]]["acts"][0]["params"]
         self.assertEqual(params["user_prompt"], "cooler")
 
+    def only_what_i_said(self, sid):
+        """A photo uploaded with 「只照需求改」, its render queued as the
+        upload page queues it, and its sizing-only analysis landed."""
+        res = self.client.patch(self.url(sid, "/plan"), json={
+            "user": USER, "plan": {"user_prompt": "make it warmer", "overwrite_prompt": True}})
+        self.assertEqual(res.status_code, 200, res.get_json())
+        photo = self.add_photos(sid)[0]
+        self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [photo["photo_id"]]})
+        self.analysis.update({"photo_summary": "海邊合照", "detected_issues": ["偏暗"]})
+        self.real_analysis, self.analysis = self.analysis, {
+            "_skipped_analysis": True, "_aspect_ratio_pref_at_analysis": "auto", "compatibility_version": 5}
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        return photo, self.status(sid)
+
+    def test_only_what_i_said_skips_the_analysis(self):
+        sid = self.new_session()
+        photo, done = self.only_what_i_said(sid)
+        self.assertTrue(photo["analysis_skipped"])
+        self.assertTrue(dict(self.enqueued)[photo["analyze_job_id"]]["acts"][0]["params"]["skip_analysis"])
+        # No brief of an analysis that never ran; the render goes straight on.
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_ready", "render_started"])
+        self.assertTrue(done["new_messages"][0]["card"]["skipped"])
+
+    def test_asking_for_the_analysis_runs_it_and_opens_the_check(self):
+        sid = self.new_session()
+        photo, _ = self.only_what_i_said(sid)
+        pid = photo["photo_id"]
+        self.jobs[self.enqueued[-1][0]]["status"] = "success"
+        self.status(sid)
+        res = self.client.post(self.url(sid, f"/photos/{pid}/analyze"), json={"user": USER})
+        self.assertEqual(res.status_code, 202, res.get_json())
+        job_id, engine_params = self.enqueued[-1]
+        self.assertNotIn("skip_analysis", engine_params["acts"][0]["params"])
+        self.assertEqual(engine_params["srcKeys"], photo["src_keys"])
+        self.assertEqual(self.status(sid)["session"]["photos"][0]["status"], "analyzing")
+
+        self.analysis = self.real_analysis
+        self.jobs[job_id]["status"] = "success"
+        done = self.status(sid)
+        cards = [m["card"] for m in done["new_messages"]]
+        self.assertEqual([(c["type"], c.get("via"), c.get("requested")) for c in cards],
+                         [("analysis_brief", None, None), ("adjust_opened", "check", True)])
+        self.assertTrue(cards[1]["plan"]["overwrite_prompt"])
+        state = done["session"]["photos"][0]
+        self.assertEqual((state["status"], state["analysis_skipped"], state["analysis_job_id"]),
+                         ("ready", False, job_id))
+        again = self.client.post(self.url(sid, f"/photos/{pid}/analyze"), json={"user": USER})
+        self.assertEqual(again.status_code, 409)
+
+    def test_beautifying_a_skipped_photo_analyzes_it_first(self):
+        sid = self.new_session()
+        photo, _ = self.only_what_i_said(sid)
+        pid = photo["photo_id"]
+        self.jobs[self.enqueued[-1][0]]["status"] = "success"
+        self.status(sid)
+        self.client.patch(self.url(sid, f"/photos/{pid}/plan"), json={"user": USER, "plan": {"overwrite_prompt": False}})
+        res = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": [pid]})
+        self.assertEqual((res.status_code, res.get_json()["queued"]), (202, [pid]))
+        job_id, engine_params = self.enqueued[-1]
+        self.assertEqual(engine_params["acts"][0]["params"]["stage"], "analyze")
+
+        self.analysis = self.real_analysis
+        self.jobs[job_id]["status"] = "success"
+        done = self.status(sid)
+        self.assertEqual([m["card"]["type"] for m in done["new_messages"]], ["analysis_brief", "render_started"])
+        self.assertEqual(done["session"]["photos"][0]["status"], "rendering")
+
     def test_queued_render_is_cancelled_when_analysis_fails(self):
         sid = self.new_session()
         photo = self.add_photos(sid)[0]

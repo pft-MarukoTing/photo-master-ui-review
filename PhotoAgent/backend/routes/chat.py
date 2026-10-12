@@ -457,6 +457,13 @@ def add_photos(session_id):
     if error:
         raise _RequestError(error)
     params["stage"] = "analyze"
+    # 「只照需求改」 on the upload page: the render only follows the user's
+    # words, so the analysis it would never read is skipped -- the worker
+    # just sizes the photo. 「幫我分析」 later runs the real one (analyze_photo).
+    skip = bool(session["defaults"].get("overwrite_prompt")
+                and (session["defaults"].get("user_prompt") or "").strip())
+    if skip:
+        params["skip_analysis"] = True
 
     photos, errors = [], []
     for image in images:
@@ -481,6 +488,7 @@ def add_photos(session_id):
             "pending_render": None,
             "queued_render": None,
             "active_version": None,
+            "analysis_skipped": skip,
         })
 
     if photos:
@@ -490,6 +498,51 @@ def add_photos(session_id):
     session = store.load_session(user, session_id)
     added = {p["photo_id"] for p in photos}
     return jsonify({"photos": [p for p in session["photos"] if p["photo_id"] in added], "errors": errors}), 202
+
+
+def _needs_analysis(photo):
+    """A photo uploaded with 「只照需求改」 has no real analysis; a render
+    that also beautifies -- overwrite_prompt off, or nothing written to
+    follow -- has to wait for one."""
+    plan = photo["plan"]
+    return bool(photo.get("analysis_skipped")
+                and not (plan.get("overwrite_prompt") and (plan.get("user_prompt") or "").strip()))
+
+
+def _start_analysis(user, session_id, photo, why):
+    """Run the analysis a photo's upload skipped, on its source image. `why`
+    is "check" (the user asked to see it: it lands as a check card) or
+    "render" (a render queued behind it starts when it lands)."""
+    params, error = _parse_and_validate_params(build_render_form(photo["plan"], "analyze"))
+    if error:
+        raise _RequestError(error)
+    params["stage"] = "analyze"
+    engine_params = get_engine_params_template()
+    engine_params["srcKeys"] = list(photo["src_keys"])
+    engine_params["acts"][0]["params"] = params
+    job_id = enqueue(engine_params, src_content=None)
+    photo["analysis_job_id"] = job_id
+    photo["reanalysis"] = why
+    photo["status"] = "analyzing"
+    photo["planned_ratio"] = None
+    photo["error"] = None
+    store.save_photo_state(user, session_id, photo)
+
+
+@chat_bp.post("/sessions/<session_id>/photos/<photo_id>/analyze")
+def analyze_photo(session_id, photo_id):
+    """「幫我分析」 on a photo whose upload skipped the analysis."""
+    body = _body()
+    user = _user(body.get("user"))
+    photo = _photo(_session(user, session_id), photo_id)
+    if not photo.get("analysis_skipped"):
+        raise _RequestError("this photo has been analyzed", 409)
+    if photo["status"] != "ready":
+        raise _RequestError(f"photo {photo_id} is {photo['status']}, not ready", 409)
+    _start_analysis(user, session_id, photo, "check")
+    store.append_messages(user, session_id, [store.make_message(
+        "user", card={"type": "analysis_requested", "photo_id": photo_id})])
+    return jsonify({"photo_id": photo_id, "status": photo["status"]}), 202
 
 
 @chat_bp.get("/sessions/<session_id>/photos/<photo_id>/analysis")
@@ -684,7 +737,13 @@ def _advance_reframing(user, session_id, photo, statuses):
 
 def _start_queued_render(user, session_id, photo, queued):
     """A render asked for while the photo was busy starts now, with its plan
-    as it is now."""
+    as it is now -- after the analysis, if it now needs the one its upload
+    skipped."""
+    if _needs_analysis(photo):
+        _start_analysis(user, session_id, photo, "render")
+        photo["queued_render"] = queued
+        store.save_photo_state(user, session_id, photo)
+        return []
     prepared, problem = _prepare_render(photo)
     if problem:
         photo["error"] = problem[1]
@@ -782,10 +841,13 @@ def render(session_id):
     else:
         raise _RequestError("photo_ids must be a non-empty list of photo ids or \"all\"")
 
-    to_render, to_queue = [], []
+    to_render, to_queue, to_analyze = [], [], []
     for photo in photos:
         if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
             to_queue.append(photo)
+            continue
+        if photo["status"] == "ready" and _needs_analysis(photo):
+            to_analyze.append(photo)
             continue
         if photo["status"] != "ready":
             state = "queued" if photo["queued_render"] else photo["status"]
@@ -796,6 +858,9 @@ def render(session_id):
         to_render.append((photo, prepared))
 
     renders = [_start_render(user, session_id, photo, prepared, base) for photo, prepared in to_render]
+    for photo in to_analyze:
+        _start_analysis(user, session_id, photo, "render")
+    to_queue += to_analyze
     for photo in to_queue:
         photo["queued_render"] = {"base": base}
         store.save_photo_state(user, session_id, photo)
@@ -810,6 +875,8 @@ def render(session_id):
 def _ask_render(user, session_id, photo):
     """A typed 一鍵美化: render now, or queue it while the photo is analyzing,
     as the render route would. Returns the messages that follow the reply."""
+    if photo["status"] == "ready" and _needs_analysis(photo):
+        _start_analysis(user, session_id, photo, "render")
     if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
         photo["queued_render"] = {"base": "original"}
         store.save_photo_state(user, session_id, photo)
@@ -1162,7 +1229,7 @@ def _follow_up_analysis(photo):
     its brief, and the names its 個人化需求 refers people by. Both are extra --
     failing to read the analysis here just means neither happens, and the
     render path reports its own read failure."""
-    analysis, error = _load_analysis(photo["analyze_job_id"])
+    analysis, error = _load_analysis(_analysis_job_id(photo))
     if error:
         current_app.logger.warning("chat follow-up skipped for %s: %s", photo["photo_id"], error)
         return None
@@ -1269,9 +1336,12 @@ def _render_note(user, session_id, photo, plan, job_id, based_on):
 def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
     """`rebuilt`: a photo reopened from history, whose brief is the
     analysis's own summary -- not worth a worker call on opening a case."""
-    job = _job_status(photo["analyze_job_id"], statuses)
-    if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, photo["analyze_job_id"]):
+    job_id = _analysis_job_id(photo)
+    job = _job_status(job_id, statuses)
+    if job["status"] not in TERMINAL_STATUSES or not store.claim(user, session_id, job_id):
         return []
+    if photo.get("reanalysis"):
+        return _advance_reanalysis(user, session_id, photo, job)
     queued = photo["queued_render"]
     photo["queued_render"] = None
     if job["status"] != "success":
@@ -1283,9 +1353,11 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
             "queued_render_cancelled": bool(queued)})]
 
     photo["status"] = "ready"
-    messages = [store.make_message("assistant", card={"type": "analysis_ready", "photo_id": photo["photo_id"]})]
     analysis = _follow_up_analysis(photo)
-    if analysis is not None:
+    skipped = bool((analysis or {}).get("_skipped_analysis"))
+    messages = [store.make_message("assistant", card={
+        "type": "analysis_ready", "photo_id": photo["photo_id"], **({"skipped": True} if skipped else {})})]
+    if analysis is not None and not skipped:
         # Before the queued render below reads the plan.
         _name_prompt_faces(user, session_id, photo, analysis)
         detailed = photo["plan"].get("detailed_explanation") and not rebuilt
@@ -1302,6 +1374,55 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
     photo["queued_render"] = None
     if not queued:
         store.save_photo_state(user, session_id, photo)
+        return messages
+    return messages + _start_queued_render(user, session_id, photo, queued)
+
+
+def _advance_reanalysis(user, session_id, photo, job):
+    """The real analysis 「幫我分析」 asked for on a photo whose upload
+    skipped it (analyze_photo). The photo goes back to ready either way; on
+    success it lands as the same check card a 「原圖還有可以修的地方」 answer
+    opens, so the page lists what it found."""
+    why = photo["reanalysis"]
+    queued = photo["queued_render"]
+    photo["status"] = "ready"
+    photo["reanalysis"] = None
+    photo["queued_render"] = None
+    photo_id = photo["photo_id"]
+    analysis = _load_analysis(photo["analysis_job_id"])[0] if job["status"] == "success" else None
+    if analysis is None:
+        # Back to the stub the photo had, so 「只照需求改」 keeps working.
+        photo["analysis_job_id"] = None
+        photo["error"] = job["error"] or "analysis failed"
+        store.save_photo_state(user, session_id, photo)
+        return [store.make_message("assistant", card={
+            "type": "analysis_failed", "photo_id": photo_id, "error": photo["error"],
+            "queued_render_cancelled": bool(queued), "reanalysis": True})]
+    photo["analysis_skipped"] = False
+    photo["planned_ratio"] = _planned_for(analysis)
+    photo["error"] = None
+    _name_prompt_faces(user, session_id, photo, analysis)
+    store.save_photo_state(user, session_id, photo)
+    # The brief the upload skipped: the check card below lists it.
+    detailed = photo["plan"].get("detailed_explanation")
+    brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
+             or build_brief(analysis))
+    messages = [store.make_message("assistant", card={
+        "type": "analysis_brief", "photo_id": photo_id, **brief})] if brief else []
+    if why == "check":
+        plan = {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}
+        # The round starts from 只照需求改 (as the page's snapshotOf), so
+        # beautifying the whole photo already counts as a change.
+        plan["overwrite_prompt"] = True
+        messages.append(store.make_message("assistant", card={
+            "type": "adjust_opened", "photo_id": photo_id, "via": "check", "requested": True, "plan": plan}))
+    # A 長寬比 changed while analyzing is re-planned first; a queued render
+    # waits for it.
+    photo["queued_render"] = queued
+    if _reframe_if_needed(user, session_id, photo, analysis):
+        return messages
+    photo["queued_render"] = None
+    if not queued:
         return messages
     return messages + _start_queued_render(user, session_id, photo, queued)
 

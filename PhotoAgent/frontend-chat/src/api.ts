@@ -158,6 +158,9 @@ export const api = {
   patchPlan: (id: string, plan: Plan) => request<Dict>(`${sid(id)}/plan`, json("PATCH", { plan })),
   patchPhotoPlan: (id: string, photoId: string, plan: Plan) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/plan`, json("PATCH", { plan })),
+  // 「幫我分析」 on a photo uploaded with 「只照需求改」, whose analysis was skipped.
+  analyze: (id: string, photoId: string) =>
+    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analyze`, json("POST", {})),
   render: (id: string, photoIds: string[]) =>
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,

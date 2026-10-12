@@ -10,7 +10,7 @@ from aiserver_utils.queue import set_job_info
 from engine_result_code import RESULT_INVALID_PARAMETER, RESULT_UNKNOWN_INTERNAL_ERROR
 from image_tools import ensure_jpeg_bytes, RESULT_JPEG_QUALITY
 from photo_agent import EFFECT_NAME, validate_photo_agent_request
-from pipeline import analyze_stage, reframe_stage, review_stage, finish_stage
+from pipeline import analyze_stage, skipped_analysis_stage, reframe_stage, review_stage, finish_stage
 
 
 def build_job_metadata(task_info):
@@ -169,6 +169,12 @@ class PhotoAgentJobProcessor:
                         params["analysis"],
                         aspect_ratio=params.get("aspect_ratio", "auto"),
                         analysis_model=params["analysis_model"],
+                    )
+                elif params.get("skip_analysis"):
+                    analysis = skipped_analysis_stage(
+                        image_bytes,
+                        aspect_ratio=params.get("aspect_ratio", "auto"),
+                        advanced_options=params.get("advanced_options", {}),
                     )
                 else:
                     analysis = analyze_stage(
