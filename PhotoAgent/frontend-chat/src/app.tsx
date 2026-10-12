@@ -24,7 +24,7 @@ import {
   UploadBubble,
   UserMsg,
   WorkingCard,
-  useRotatingText,
+  useWorkLog,
   type Change,
   type FaceRef,
   type Proposal,
@@ -69,6 +69,7 @@ import {
   renderMeta,
   reframeLoadingMessage,
   renderSubMessages,
+  analyzeSubMessages,
   timeLabel,
   versionsFromMessages,
 } from "./util";
@@ -1691,8 +1692,6 @@ function SessionView(props: {
   // messages carry.
   const askedIndices = (card: Dict | null | undefined): number[] =>
     Array.isArray(card?.subject_indices) ? card!.subject_indices : card?.subject_index != null ? [card.subject_index] : [];
-  // 美化中的副標，和左邊畫布上的那一句同一份文案。
-  const renderSub = useRotatingText(renderSubMessages(caps, photo.plan), photo.status === "rendering");
   const faces: Record<number, FaceRef> = {};
   const pickable: (FaceRef & { subjectIndex: number })[] = [];
   people.forEach((p, i) => {
@@ -2309,33 +2308,26 @@ function SessionView(props: {
   const renderQueued = !!photo.queued_render && (photo.status === "analyzing" || reframing);
 
   // 處理中這一份文案兩邊分工：title 壓在左邊畫布的轉環底下講「在做什麼」，
-  // text 進聊天那張卡講細節。算在同一個地方，兩邊才不會各講各的。
+  // lines 進聊天那張卡，一句句講細節、講過的留著。算在同一個地方，兩邊才不會各講各的。
   const busyCopy =
     photo.status === "analyzing"
-      ? {
-          title: "正在分析照片",
-          text: renderQueued
-            ? waiting
-              ? "分析完成後會自動開始美化，美化好就回答你的問題…"
-              : "分析完成後會自動開始美化…"
-            : waiting
-              ? "正在辨識照片中的人物、光線與構圖，分析完就回答你的問題…"
-              : "正在辨識照片中的人物、光線與構圖…",
-        }
+      ? { stage: "analyzing", title: "正在分析照片", lines: analyzeSubMessages(renderQueued, !!waiting) }
       : reframing
         ? {
+            stage: "reframing",
             title: "正在重新構圖",
-            text: renderQueued
-              ? "重新構圖完成後會自動開始美化…"
-              : reframeLoadingMessage(photo.pending_reframe?.aspect_ratio),
+            lines: [
+              renderQueued ? "重新構圖完成後會自動開始美化…" : reframeLoadingMessage(photo.pending_reframe?.aspect_ratio),
+            ],
           }
         : photo.status === "rendering"
-          ? { title: "正在美化照片", text: renderSub }
+          ? { stage: "rendering", title: "正在美化照片", lines: renderSubMessages() }
           : null;
+  const workLog = useWorkLog(busyCopy?.stage ?? null, busyCopy?.lines ?? []);
 
   let working = busyCopy ? (
     <AssistantMsg>
-      <WorkingCard text={busyCopy.text} />
+      <WorkingCard done={workLog.done} now={workLog.now} since={workLog.since} />
     </AssistantMsg>
   ) : null;
 

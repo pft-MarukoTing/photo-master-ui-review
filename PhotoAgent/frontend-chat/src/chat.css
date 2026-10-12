@@ -194,10 +194,22 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    .chat-meta, but it wraps, so it needs the measure and the leading. */
 .chat-note{margin:0;font-size:var(--chat-fs-xs);line-height:1.7;color:var(--n64);text-wrap:pretty}
 .chat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:var(--sp-3) var(--sp-4)}
-/* 只有一句進度文案 -- 標題和轉環都在左邊畫布那一層（.canvas-busy）上。美化中這句
-   每 5 秒換一次，長短差很多；留兩行高度，換句時下面的快捷鍵才不會跟著上下跳。 */
-.chat-working p{margin:0;min-height:3.2em;font-size:var(--chat-fs-md);line-height:1.6;
-  color:var(--n84);text-wrap:pretty}
+/* 處理中的工作紀錄 -- 標題和轉環都在左邊畫布那一層（.canvas-busy）上，這裡只講細節。
+   做完的那幾句退成 --n64 打勾，正在做的那句用 accent 字色加流程列同款的呼吸點，
+   和 .chat-flow-step 的 is-done／is-now 是同一套語彙。新長出來的那句從下面淡入，
+   講過的不動 -- 一直在動的只有最下面那一行。 */
+.chat-working ol{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:var(--sp-1)}
+.chat-working li{display:flex;align-items:baseline;gap:var(--sp-2);font-size:var(--chat-fs-md);line-height:1.6;text-wrap:pretty}
+.chat-working li>svg,.chat-working li>.chat-flow-dot{flex-shrink:0;align-self:center;margin-inline:2px}
+.chat-working li>svg{width:12px;height:12px;margin-inline:0}
+.chat-working li.is-done{color:var(--n64)}
+.chat-working li.is-now{color:var(--accent-text);font-weight:600;animation:chat-working-in .4s ease-out}
+/* 已經等了幾秒：靠右、等寬數字，跳秒時字才不會左右晃；字重和顏色退回一般，
+   不跟正在做的那句搶。 */
+.chat-working-time{margin-left:auto;padding-left:var(--sp-3);flex-shrink:0;font-size:var(--chat-fs-sm);
+  font-weight:400;color:var(--n54);font-variant-numeric:tabular-nums;white-space:nowrap}
+@keyframes chat-working-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.chat-working li.is-now{animation:none}.chat-working .chat-flow-dot{animation:none;opacity:1}}
 
 /* ── 處理中蓋在原圖上的那一層 ──────────────────────────────────────────
    分析中和美化中用同一層，所以兩個階段左欄看起來是同一件事在繼續，而不是

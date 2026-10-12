@@ -217,33 +217,110 @@ export function FacePicker(props: {
   );
 }
 
-// 舊版 app.js 的 startProcSubRotation：每 5 秒換下一句，整份跑完後只在最後兩
-// 句之間來回，不繞回第一句 -- 等久了的人看到的該是「快完成了」，不是又從頭
-// 講一次。active 收掉時歸零，下一輪美化重新從第一句開始。
-const ROTATE_MS = 5000;
+// 處理中的工作紀錄：隔幾秒多講一句，講過的留在上面，不是換掉 -- 等的人往上
+// 看得到已經做過哪些事。整份講完就停在最後一句，不再重複（舊版 app.js 會在最後
+// 兩句之間來回，疊成紀錄後那樣會一直長出一樣的話）。
+// stage 是現在在做哪一段（分析、重新構圖、美化）；一鍵美化會從分析直接接到美化，
+// 前一段講過的照樣留著，只有整輪忙完（stage 變回 null）才清掉，下一輪從頭講。
+// 每句隔多久是亂數，3～7 秒：固定 5 秒一跳，看起來就是計時器，不像在做事。平均
+// 還是 5 秒，分析那份 12 句照樣大約一分鐘講完。
+const STEP_MIN_MS = 3000;
+const STEP_MAX_MS = 7000;
 
-export function useRotatingText(messages: string[], active: boolean): string {
-  const [i, setI] = useState(0);
-  useEffect(() => {
-    if (!active) {
-      setI(0);
-      return;
-    }
-    const t = setInterval(() => setI((n) => n + 1), ROTATE_MS);
-    return () => clearInterval(t);
-  }, [active]);
-  if (!messages.length) return "";
-  const lastTwo = Math.max(0, messages.length - 2);
-  return messages[i < messages.length ? i : lastTwo + ((i - messages.length) % 2)];
+// 每一句出現在這一段開始後的第幾毫秒，換段時一次抽好。
+function stepMarks(count: number): number[] {
+  const marks: number[] = [];
+  let at = 0;
+  for (let i = 1; i < count; i++) {
+    at += STEP_MIN_MS + Math.random() * (STEP_MAX_MS - STEP_MIN_MS);
+    marks.push(at);
+  }
+  return marks;
 }
 
-// 處理中的那張卡，只剩一句話。左邊畫布上壓著一層轉環，上面已經寫了「正在分析／
-// 美化照片」，這裡再放一次標題和一條跑不完的進度條，是同一件事講三次。留下的這句
-// 是會隨著進度換的那一句 -- 整張卡的工作就是講細節，狀態由左邊那層負責。
-export function WorkingCard({ text }: { text: string }) {
+// 講到第幾句照這一段開始了多久算，不靠計數器：輪詢每 2 秒就重畫一次，算時間的話
+// 重畫幾次都不會多跳一句。換段在 render 裡當下收起來，不等 effect -- 不然分析接
+// 美化的那一格畫面，前面講過的會先消失一下。
+export function useWorkLog(
+  stage: string | null,
+  lines: string[],
+): { done: string[]; now: string; since: number } {
+  const log = useRef({
+    stage: null as string | null,
+    // since：這一整輪從什麼時候開始忙（秒數從這裡算，換段不歸零）；start：這一段。
+    since: 0,
+    start: 0,
+    marks: [] as number[],
+    lines: [] as string[],
+    past: [] as string[],
+  });
+  const [, tick] = useState(0);
+  const said = (l: typeof log.current) => {
+    const elapsed = Date.now() - l.start;
+    return Math.min(l.lines.length, 1 + l.marks.filter((m) => m <= elapsed).length);
+  };
+  const l = log.current;
+  if (stage !== l.stage) {
+    l.past = stage && l.stage ? [...l.past, ...l.lines.slice(0, said(l))] : [];
+    if (stage && !l.stage) l.since = Date.now();
+    l.stage = stage;
+    l.start = Date.now();
+    l.marks = stepMarks(lines.length);
+  }
+  l.lines = lines;
+  // 排到下一句該出現的時間點重畫一次，講完最後一句就不再排。
+  useEffect(() => {
+    if (!stage) return;
+    let t = 0;
+    const next = () => {
+      const elapsed = Date.now() - log.current.start;
+      const at = log.current.marks.find((m) => m > elapsed);
+      if (at == null) return;
+      t = window.setTimeout(() => {
+        tick((k) => k + 1);
+        next();
+      }, at - elapsed + 20);
+    };
+    next();
+    return () => clearTimeout(t);
+  }, [stage]);
+  const n = said(l);
+  if (!stage || !n) return { done: [], now: "", since: 0 };
+  return { done: [...l.past, ...lines.slice(0, n - 1)], now: lines[n - 1], since: l.since };
+}
+
+// 處理中的那張卡。左邊畫布上壓著一層轉環，上面已經寫了「正在分析／美化照片」，
+// 這裡不再放標題和進度條；整張卡的工作就是講細節：做完的一句句留著（淡一點、
+// 打勾），正在做的那句在最下面，帶一顆跟流程列同款的呼吸點，右邊是已經等了幾秒。
+// 已經等了多久。自己每秒重畫，不拉著整個 SessionView 一起；從前端看到這輪開始
+// 的那一刻算 -- 後端的照片狀態沒有帶開始時間，重新整理後跟工作紀錄一樣從頭算。
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const sec = Math.max(0, Math.floor((now - since) / 1000));
+  const text = sec < 60 ? `${sec} 秒` : `${Math.floor(sec / 60)} 分 ${String(sec % 60).padStart(2, "0")} 秒`;
+  return <span class="chat-working-time">{text}</span>;
+}
+
+export function WorkingCard({ done, now, since }: { done: string[]; now: string; since: number }) {
   return (
     <div class="chat-card chat-working">
-      <p>{text}</p>
+      <ol>
+        {done.map((t, i) => (
+          <li key={i} class="is-done">
+            <Icon name="check" />
+            {t}
+          </li>
+        ))}
+        <li key={done.length} class="is-now">
+          <span class="chat-flow-dot" aria-hidden="true" />
+          <span>{now}</span>
+          <Elapsed since={since} />
+        </li>
+      </ol>
     </div>
   );
 }

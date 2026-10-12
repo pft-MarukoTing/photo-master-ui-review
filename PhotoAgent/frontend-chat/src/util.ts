@@ -95,14 +95,6 @@ export function renderOptionLabel(caps: Capabilities, id?: string): string {
   return opt ? opt.label.replace(/^GPT Image 2\.5\s*/, "") : id || "";
 }
 
-// 「Sunburst」-- 這一版用的影像模型，前綴和 renderOptionLabel 砍掉的同一個，
-// 聊天版從頭到尾都是這樣叫它。
-export function imageModelLabel(caps: Capabilities, renderOption?: string): string {
-  const opt = caps.render.options.find((o) => o.id === renderOption);
-  const model = caps.render.image_models?.find((m) => m.id === opt?.image_model);
-  return (model?.label || opt?.image_model || "").replace(/^GPT Image 2\.5\s*/, "");
-}
-
 export function aspectLabel(caps: Capabilities, value?: string): string {
   return caps.render.aspect_ratios.find((a) => a.value === value)?.label || value || "";
 }
@@ -118,24 +110,47 @@ export function analysisModelLabel(caps: Capabilities, id?: string): string {
   return caps.render.analysis_models.find((m) => m.id === id)?.label || id || "";
 }
 
-// 美化中的副標：和舊版 app.js 的 editSubMessages（AI 美化那一支）同一份文案，
-// 只有模型名稱跟著聊天版的叫法。舊版沒有一句在講第幾版 -- 第幾版是美化紀錄的
-// 事，等的人想知道的是現在在做什麼。
-// 舊版那句「（已完成 X/N 張）」這裡拿掉：聊天版只輪詢整張照片的狀態，拿不到
-// 單一 RUN 的進度，寫了也是假的。
-export function renderSubMessages(caps: Capabilities, plan: Plan): string[] {
-  const model = imageModelLabel(caps, plan.render_option);
+// 處理中聊天卡上的工作紀錄，隔幾秒多一句、講過的留著（useWorkLog）。
+// 美化那份從舊版 app.js 的 editSubMessages（AI 美化那一支）來，但不講用哪個模型
+// 修 -- 那是設定裡的事，等的人不需要在這裡看到引擎名稱。疊成紀錄後每句都掛「請稍候」會一路重複，所以拿掉，「美化仍在進行中」
+// 和「即將完成」這種只是換句話等的也拿掉。
+// 舊版那句「（已完成 X/N 張）」也不放：聊天版只輪詢整張照片的狀態，拿不到單一
+// RUN 的進度，寫了也是假的。
+export function renderSubMessages(): string[] {
   return [
-    model ? `AI 正在使用 ${model} 美化，請稍候…` : "AI 正在美化，請稍候…",
-    "AI 正在調整光影與細節，請稍候…",
-    "AI 正在細修色調，請稍候…",
-    "AI 正在校正白平衡與色彩，請稍候…",
-    "AI 正在優化背景與構圖，請稍候…",
-    "AI 正在強化畫面細節，請稍候…",
-    "美化仍在進行中，感謝您的耐心等候…",
-    "AI 正在進行最後的品質檢查…",
-    "快完成了，請再稍候一下…",
-    "即將完成，請再稍候一下…",
+    "AI 正在美化照片…",
+    "正在調整光影與細節…",
+    "正在細修色調…",
+    "正在校正白平衡與色彩…",
+    "正在優化背景與構圖…",
+    "正在強化畫面細節…",
+    "正在做最後的品質檢查…",
+    "快完成了，再等一下…",
+  ];
+}
+
+// 分析中的那份。第一句講完分析之後接著做什麼（一鍵美化會自動美化、有問題等著
+// 回答），後面照分析結果欄位的順序（prompts.py 的分析 schema：類型與場景 → 問題
+// 診斷 → 光影目標 → 構圖 → 水平透視 → 干擾元素 → 長寬比裁切 → 色彩 → 修復需求 →
+// 美化配方）一項一句，講的都是它真的有在看的東西。分析大約要一分鐘，12 句平均 5 秒
+// 一句剛好鋪滿，不會太早講到「快好了」。
+// 照片裡不一定有人（風景、商品、食物），所以每一句都不提人、臉、膚色 -- 拍一盤
+// 菜卻看到「正在找出照片裡的每個人」很怪。
+export function analyzeSubMessages(renderQueued: boolean, waiting: boolean): string[] {
+  const then = renderQueued ? "，分析完會自動開始美化" : waiting ? "，分析完就回答你的問題" : "";
+  return [
+    `正在辨識照片中的主體、光線與構圖${then}…`,
+    "正在判斷照片的類型與場景…",
+    "正在找出畫面目前不夠精緻的地方…",
+    "正在決定成品的光影與色彩方向…",
+    "正在評估構圖與取景方式…",
+    "正在檢查水平線與透視有沒有歪…",
+    "正在找出背景裡可能干擾的元素…",
+    "正在評估裁切範圍與長寬比…",
+    "正在檢查曝光、白平衡與色彩…",
+    "正在評估清晰度與雜訊…",
+    "正在整理建議調整的項目…",
+    "快分析好了，再等一下…",
   ];
 }
 

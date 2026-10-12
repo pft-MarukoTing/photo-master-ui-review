@@ -121,7 +121,7 @@ interface CanvasProps {
   // 看起來是最新的設定。
   pending?: boolean;
   // 分析中／美化中壓在轉環底下的那行字。在 app.tsx 和聊天那張處理中卡片一起算，
-  // 兩邊才不會各講各的（也不會各自跑一套 5 秒輪播）。
+  // 兩邊才不會各講各的（也不會各自跑一套輪播）。
   busy?: { title: string } | null;
   onSelect: (v: Version) => void;
 }
