@@ -349,6 +349,8 @@ export function App() {
   const [selection, setSelection] = useState<GallerySelection>(null);
   const [drawer, setDrawer] = useState(false);
   const [leaveAsk, setLeaveAsk] = useState<{ message: string; answer: (ok: boolean) => void } | null>(null);
+  // 刪除前的那一問（notice：刪不掉時只有「確定」的那句）。
+  const [deleteAsk, setDeleteAsk] = useState<{ message: string; notice?: boolean; done: (ok: boolean) => void } | null>(null);
 
   // Pre-session chat
   const [step, setStep] = useState<PreStep>("start");
@@ -626,6 +628,48 @@ export function App() {
     setPreAsk(null);
     setSamplesOpen(false);
     if (caps) setSettings(defaultSettings(caps));
+  }
+
+  function ask(message: string, notice = false): Promise<boolean> {
+    return new Promise((done) =>
+      setDeleteAsk({
+        message,
+        notice,
+        done: (ok) => {
+          setDeleteAsk(null);
+          done(ok);
+        },
+      }),
+    );
+  }
+
+  // 刪最近照片裡的格子，跟自訂模式一樣：先問一聲；刪的是紀錄（對話，連同它照片在
+  // 自訂模式的紀錄），已經產生的圖不動。刪到正開著的這段對話、或刪到一格不剩，就
+  // 收起抽屜回首頁。回傳真的刪了沒。
+  async function removeRows(ids: string[] | "all"): Promise<boolean> {
+    const message =
+      ids === "all"
+        ? "確定要刪除所有處理紀錄嗎？此操作無法復原。"
+        : ids.length > 1
+          ? `確定要刪除這 ${ids.length} 筆處理紀錄嗎？`
+          : "確定要刪除這筆處理紀錄嗎？";
+    if (!(await ask(message))) return false;
+    try {
+      await api.deleteRows(ids);
+    } catch {
+      await ask(ids === "all" ? "刪除所有紀錄失敗，請稍後再試。" : "刪除紀錄失敗，請稍後再試。", true);
+      return false;
+    }
+    const gone = (id: string) => ids === "all" || ids.includes(id);
+    const openGone =
+      !!session && (gone(session.session_id) || session.photos.some((p) => !!p.case_id && gone(`${CASE_PREFIX}${p.case_id}`)));
+    if (selection?.kind === "session" && gone(selection.id)) setSelection(null);
+    const list = await refreshSessions();
+    if (openGone || !list.length) {
+      setDrawer(false);
+      if (phase === "session") goHome();
+    }
+    return true;
   }
 
   function goHome() {
@@ -1057,10 +1101,20 @@ export function App() {
       currentId={session?.session_id || null}
       onOpen={openOtherSession}
       onClose={() => setDrawer(false)}
+      onRemove={removeRows}
+      onClearAll={() => removeRows("all")}
     />
   );
   const confirmEl = leaveAsk && (
     <ConfirmModal message={leaveAsk.message} confirmLabel="繼續" cancelLabel="留在這裡" onAnswer={leaveAsk.answer} />
+  );
+  const askEl = deleteAsk && (
+    <ConfirmModal
+      message={deleteAsk.message}
+      confirmLabel={deleteAsk.notice ? "確定" : "刪除"}
+      cancelLabel={deleteAsk.notice ? undefined : "取消"}
+      onAnswer={deleteAsk.done}
+    />
   );
   // Both returns mount it; it draws nothing until opened.
   const samplesEl = (
@@ -1102,6 +1156,7 @@ export function App() {
         {drawerEl}
         {samplesEl}
         {confirmEl}
+        {askEl}
       </>
     );
   }
@@ -1115,6 +1170,7 @@ export function App() {
       selection={phase === "chat" ? null : selection}
       onSelect={onGallerySelect}
       onConfirm={onGalleryConfirm}
+      onRemove={(id) => removeRows([id])}
     />
   );
 
@@ -1242,6 +1298,7 @@ export function App() {
       {drawerEl}
       {samplesEl}
       {confirmEl}
+      {askEl}
     </>
   );
 }

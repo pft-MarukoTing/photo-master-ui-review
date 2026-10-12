@@ -150,7 +150,8 @@ function ReportModal(props: { jobId: string | null; onClose: () => void }) {
 export function ConfirmModal(props: {
   message: string;
   confirmLabel: string;
-  cancelLabel: string;
+  // 沒給就只有一顆確認鍵（像刪不掉時的那句提醒）。
+  cancelLabel?: string;
   onAnswer: (ok: boolean) => void;
 }) {
   const { onAnswer } = props;
@@ -175,9 +176,11 @@ export function ConfirmModal(props: {
           {props.message}
         </p>
         <div class="account-modal-actions">
-          <button class="chat-chip is-ghost" type="button" autoFocus onClick={() => onAnswer(false)}>
-            {props.cancelLabel}
-          </button>
+          {props.cancelLabel && (
+            <button class="chat-chip is-ghost" type="button" autoFocus onClick={() => onAnswer(false)}>
+              {props.cancelLabel}
+            </button>
+          )}
           <button class="chat-chip is-primary" type="button" onClick={() => onAnswer(true)}>
             {props.confirmLabel}
           </button>
@@ -361,7 +364,30 @@ const SESSION_BADGES: Record<SessionState, string> = {
   failed: "失敗",
 };
 
-export function SessionTile(props: { s: SessionSummary; selected: boolean; onClick: () => void }) {
+// 每格右上角的 ×，跟自訂模式最近照片那顆同一個樣子（.history-cube-remove）。磚本身是
+// <button>，裡面不能再放一顆按鈕，所以這顆用 span 當按鈕，點了不往外傳。
+function RemoveMark({ onRemove }: { onRemove: () => void }) {
+  const go = (e: Event) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onRemove();
+  };
+  return (
+    <span
+      class="history-cube-remove chat-tile-remove"
+      role="button"
+      tabIndex={0}
+      aria-label="刪除紀錄"
+      title="刪除紀錄"
+      onClick={go}
+      onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && go(e)}
+    >
+      ×
+    </span>
+  );
+}
+
+export function SessionTile(props: { s: SessionSummary; selected: boolean; onClick: () => void; onRemove?: () => void }) {
   const { s } = props;
   // A result can outlive nothing else here, but its thumbnail is generated
   // on demand from job artifacts the session (30 days) can outlast -- so a
@@ -388,6 +414,7 @@ export function SessionTile(props: { s: SessionSummary; selected: boolean; onCli
       onImgError={showResult ? () => setBrokenJob(result.job_id) : undefined}
     >
       {label && <span class={`session-tile-badge is-${s.status}`}>{label}</span>}
+      {props.onRemove && <RemoveMark onRemove={props.onRemove} />}
     </Tile>
   );
 }
@@ -423,6 +450,9 @@ function SessionDays(props: {
   gridClass: string;
   selectedId: string | null;
   onPick: (id: string) => void;
+  // 多選刪除時，哪幾格是勾起來的（有給就不看 selectedId）。
+  picked?: Set<string>;
+  onRemove?: (id: string) => void;
 }) {
   return (
     <>
@@ -434,8 +464,9 @@ function SessionDays(props: {
               <SessionTile
                 key={rowId(s)}
                 s={s}
-                selected={rowId(s) === props.selectedId}
+                selected={props.picked ? props.picked.has(rowId(s)) : rowId(s) === props.selectedId}
                 onClick={() => props.onPick(rowId(s))}
+                onRemove={props.onRemove && (() => props.onRemove!(rowId(s)))}
               />
             ))}
           </div>
@@ -456,6 +487,7 @@ export function Gallery(props: {
   selection: GallerySelection;
   onSelect: (s: GallerySelection) => void;
   onConfirm: () => void;
+  onRemove?: (id: string) => void;
 }) {
   const { tab, selection } = props;
   const recent = tab === "recent";
@@ -512,6 +544,7 @@ export function Gallery(props: {
                   gridClass="history-grid"
                   selectedId={selection?.kind === "session" ? selection.id : null}
                   onPick={(id) => props.onSelect({ kind: "session", id })}
+                  onRemove={props.onRemove}
                 />
               )
             : (props.demos || []).map((name) => (
@@ -542,13 +575,59 @@ export function Gallery(props: {
   );
 }
 
+// 跟自訂模式的最近照片一樣：每格一顆 ×；標題旁「選取多筆」進入多選，勾好按「刪除所選」；
+// 「全部刪除」一次清空。按鈕的 id 沿用舊頁面的，樣式（舊頁面 index.html 的那段 style，
+// 建置時帶進來）就一模一樣。刪之前要不要確定、刪完怎麼辦，交給 app.tsx。
+const TRASH_ICON = (
+  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+    <path d="M4 7h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
+    <path
+      d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+    <path
+      d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"
+      stroke="currentColor"
+      stroke-width="2.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>
+);
+
 export function HistoryDrawer(props: {
   open: boolean;
   sessions: SessionSummary[] | null;
   currentId: string | null;
   onOpen: (id: string) => void;
   onClose: () => void;
+  // 刪掉這幾格；回傳真的刪了沒（取消或失敗是 false）。
+  onRemove: (ids: string[]) => Promise<boolean>;
+  onClearAll: () => void;
 }) {
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const stopPicking = () => {
+    setPicking(false);
+    setPicked(new Set());
+  };
+  // 抽屜收起來就不帶著多選狀態，下次打開是一般的樣子。
+  useEffect(() => {
+    if (!props.open) stopPicking();
+  }, [props.open]);
+  const toggle = (id: string) =>
+    setPicked((p) => {
+      const next = new Set(p);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const hasRows = !!props.sessions?.length;
+  const count = picked.size;
+  const delHint = count ? `刪除所選（${count} 張）` : "刪除所選";
   return (
     <>
       <div class={`history-drawer-backdrop${props.open ? " drawer-open" : ""}`} onClick={props.onClose} />
@@ -567,14 +646,66 @@ export function HistoryDrawer(props: {
         <div class="history-header">
           <div class="history-header-top">
             <h2>對話紀錄</h2>
+            {hasRows && (
+              <div class="history-header-actions">
+                {picking ? (
+                  <>
+                    <button
+                      id="history-delete-selected-btn"
+                      class="btn btn-outline btn-sm"
+                      type="button"
+                      disabled={!count}
+                      aria-label={delHint}
+                      title={delHint}
+                      onClick={async () => {
+                        if (await props.onRemove([...picked])) stopPicking();
+                      }}
+                    >
+                      {TRASH_ICON}
+                    </button>
+                    <button id="history-select-cancel-btn" class="btn btn-outline btn-sm" type="button" onClick={stopPicking}>
+                      取消
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      id="history-select-btn"
+                      class="btn btn-outline btn-sm"
+                      type="button"
+                      aria-label="選取多筆"
+                      title="選取多筆"
+                      onClick={() => setPicking(true)}
+                    >
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                        <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2" />
+                        <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                      </svg>
+                    </button>
+                    <button
+                      id="history-clear-all-btn"
+                      class="btn btn-outline btn-sm"
+                      type="button"
+                      aria-label="全部刪除"
+                      title="全部刪除"
+                      onClick={props.onClearAll}
+                    >
+                      {TRASH_ICON}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
-        <div class="history-list">
+        <div class={`history-list${picking ? " chat-picking" : ""}`}>
           <SessionDays
             sessions={props.sessions || []}
             gridClass="demo-images-grid chat-history-grid"
             selectedId={props.currentId}
-            onPick={props.onOpen}
+            onPick={picking ? toggle : props.onOpen}
+            picked={picking ? picked : undefined}
+            onRemove={picking ? undefined : (id) => props.onRemove([id])}
           />
         </div>
         <p class="history-empty" hidden={!props.sessions || props.sessions.length > 0}>

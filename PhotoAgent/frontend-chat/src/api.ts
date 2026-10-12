@@ -114,6 +114,9 @@ export const api = {
   createSession: () => request<Session>(`${CHAT}/sessions`, json("POST", {})),
   listSessions: (limit = 30) =>
     request<{ sessions: SessionSummary[] }>(`${CHAT}/sessions${q({ limit })}`),
+  // 最近照片的刪除：幾格（對話的 id，或 `case:<case_id>`），或 "all" 全部。
+  deleteRows: (rows: string[] | "all") =>
+    request<{ deleted: string[] | "all" }>(`${CHAT}/sessions/delete`, json("POST", rows === "all" ? { all: true } : { rows })),
   // The session a history case opens in: its own if still live, else one
   // rebuilt from history. 409 when the chat page cannot open it at all.
   fromCase: (caseId: string) =>

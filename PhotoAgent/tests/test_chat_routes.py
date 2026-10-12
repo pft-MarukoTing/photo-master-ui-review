@@ -92,6 +92,14 @@ class FakeRedis:
     def zrem(self, key, member):
         self.data.get(key, {}).pop(member, None)
 
+    def zrange(self, key, start, end):
+        members = sorted(self.data.get(key, {}).items(), key=lambda kv: kv[1])
+        return [m for m, _ in members][start:(end + 1) or None]
+
+    def delete(self, *keys):
+        for key in keys:
+            self.data.pop(key, None)
+
 
 USER = "tester"
 
@@ -303,6 +311,64 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual((custom["status"], custom["thumbnail_result"], custom["thumbnail_job_id"]),
                          ("done", {"job_id": "e1", "run": 1}, "e1"))
         self.assertEqual((upload["status"], upload["thumbnail_result"]), ("ready", None))
+
+    # --- deleting rows --------------------------------------------------
+
+    def delete_rows(self, body):
+        return self.client.post("/api/photo-agent/chat/sessions/delete", json={"user": USER, **body})
+
+    def listed(self):
+        rows = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()["sessions"]
+        return [r["session_id"] or r["case_id"] for r in rows]
+
+    def patch_history_deletes(self):
+        cleared = []
+        for p in (patch.object(chat, "delete_history_entry", lambda user, case_id: self.cases.pop(case_id, None)),
+                  patch.object(chat, "clear_history", lambda user: cleared.append(user) or self.cases.clear())):
+            p.start()
+            self.addCleanup(p.stop)
+        return cleared
+
+    def test_a_deleted_session_takes_its_photos_history_along(self):
+        """Gone from the list, and its photo does not come back as a case
+        row -- 自訂模式 stops listing it too."""
+        self.patch_history_deletes()
+        sid, other = self.new_session(), self.new_session()
+        photo = self.ready_photo(sid)
+        self.ready_photo(other)
+        self.case(photo["case_id"], [(photo["analyze_job_id"], "analyze", [photo["analyze_job_id"]])], ts=50)
+        res = self.delete_rows({"rows": [sid]})
+        self.assertEqual((res.status_code, res.get_json()), (200, {"deleted": [sid]}))
+        self.assertNotIn(photo["case_id"], self.cases)
+        self.assertEqual(self.listed(), [other])
+        self.assertEqual(self.client.get(self.url(sid), query_string={"user": USER}).status_code, 404)
+
+    def test_a_case_row_is_deleted_from_history(self):
+        self.patch_history_deletes()
+        self.case("c_custom", [("a1", "analyze", ["a1"]), ("e1", "edit", ["e1"])], ts=10)
+        self.case("c_keep", [("a2", "analyze", ["a2"])], ts=5)
+        res = self.delete_rows({"rows": ["case:c_custom"]})
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(self.listed(), ["c_keep"])
+
+    def test_all_rows_are_deleted_at_once(self):
+        cleared = self.patch_history_deletes()
+        self.new_session()
+        self.ready_photo(self.new_session())
+        self.case("c_custom", [("a1", "analyze", ["a1"]), ("e1", "edit", ["e1"])], ts=10)
+        res = self.delete_rows({"all": True})
+        self.assertEqual((res.status_code, res.get_json()), (200, {"deleted": "all"}))
+        self.assertEqual(cleared, [USER])
+        self.assertEqual(self.listed(), [])
+
+    def test_a_bad_row_deletes_nothing(self):
+        self.patch_history_deletes()
+        sid = self.new_session()
+        self.ready_photo(sid)
+        for body in ({"rows": [sid, "../x"]}, {"rows": []}, {"rows": "all"}, {}):
+            with self.subTest(body=body):
+                self.assertEqual(self.delete_rows(body).status_code, 400)
+        self.assertEqual(self.listed(), [sid])
 
     def test_a_case_with_a_live_session_reopens_it(self):
         sid = self.new_session()

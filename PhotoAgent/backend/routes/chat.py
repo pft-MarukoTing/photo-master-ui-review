@@ -31,7 +31,14 @@ from flask import Blueprint, current_app, jsonify, request
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
 from backend.services import chat_queue, chat_session as store
-from backend.services.account import HISTORY_MAX_LEN, get_history, get_history_entry, normalize_username
+from backend.services.account import (
+    HISTORY_MAX_LEN,
+    clear_history,
+    delete_history_entry,
+    get_history,
+    get_history_entry,
+    normalize_username,
+)
 from backend.services.compatibility import get_min_compatible_version
 from backend.services.put_job import download_bytes, enqueue, get_session_id
 from backend.services.template_params import get_engine_params_template
@@ -210,6 +217,47 @@ def _case_summary(entry):
         "rendered_count": 1 if edited else 0,
         "case_ids": [entry["image_key"]],
     }
+
+
+# A row of the list that is a history case with no session: `case:<case_id>`
+# (home.tsx CASE_PREFIX).
+CASE_ROW_PREFIX = "case:"
+# The most rows one delete can name: the whole list.
+DELETE_ROWS_MAX = LISTED_SESSIONS_MAX + HISTORY_MAX_LEN
+
+
+@chat_bp.post("/sessions/delete")
+def delete_sessions():
+    """Removes rows of the list the way 自訂模式's 最近照片 removes its cases:
+    {rows: [...]} names sessions and `case:<case_id>` rows, {all: true}
+    empties the list. A session goes with the history cases of its photos,
+    so 自訂模式 stops listing them too and the photo does not come back here
+    as a case row. Only the records go; jobs and their images stay, as in
+    自訂模式."""
+    body = _body()
+    user = _user(body.get("user"))
+    if body.get("all") is True:
+        store.delete_all_sessions(user)
+        clear_history(user)
+        return jsonify({"deleted": "all"})
+    rows = body.get("rows")
+    if (not isinstance(rows, list) or not rows or len(rows) > DELETE_ROWS_MAX
+            or not all(isinstance(r, str) and r for r in rows)):
+        return jsonify({"error": "rows must be a non-empty list of row ids"}), 400
+    # All checked before any is removed, so a bad id deletes nothing.
+    bad = [r for r in rows if not r.startswith(CASE_ROW_PREFIX) and not SESSION_ID_RE.match(r)]
+    if bad:
+        return jsonify({"error": f"invalid session id: {bad[0]}"}), 400
+    for row in rows:
+        if row.startswith(CASE_ROW_PREFIX):
+            delete_history_entry(user, row[len(CASE_ROW_PREFIX):])
+            continue
+        session = store.load_session(user, row)
+        for photo in (session or {}).get("photos", []):
+            if photo.get("case_id"):
+                delete_history_entry(user, photo["case_id"])
+        store.delete_session(user, row)
+    return jsonify({"deleted": rows})
 
 
 @chat_bp.post("/sessions/from-case")

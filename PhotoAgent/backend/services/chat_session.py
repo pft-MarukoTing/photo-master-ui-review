@@ -159,6 +159,22 @@ def list_sessions(user, limit=20):
     return out
 
 
+def delete_session(user, session_id):
+    """Drops one session, its messages and its index entry."""
+    redis = _client()
+    redis.delete(_session_key(user, session_id), _messages_key(user, session_id))
+    redis.zrem(_index_key(user), session_id)
+
+
+def delete_all_sessions(user):
+    """Drops every session of the user, live or not, and the index."""
+    redis = _client()
+    for raw_id in redis.zrange(_index_key(user), 0, -1):
+        session_id = _decode(raw_id)
+        redis.delete(_session_key(user, session_id), _messages_key(user, session_id))
+    redis.delete(_index_key(user))
+
+
 def find_session_for_case(user, case_id):
     """The newest live session holding the photo `case_id`, or None -- a
     case reopened from history goes back to its own conversation while

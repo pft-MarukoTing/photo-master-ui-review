@@ -968,6 +968,16 @@ div.chat-proposal-row{cursor:default}
 #chat-report-modal{z-index:2001}
 /* 開在最近照片側欄上面時也要看得到。 */
 #chat-confirm-modal{z-index:2000}
+/* 最近照片每格右上角的 ×：樣子是舊頁面的 .history-cube-remove（建置時帶進來的那段 style）。
+   磚的勾勾也在右上角，有 × 的時候收起來；多選時沒有 ×，勾勾照常顯示。 */
+.demo-image-tile .chat-tile-remove{display:flex}
+.demo-image-tile:has(.chat-tile-remove) .demo-image-tile-check{display:none}
+/* 多選時跟自訂模式（.history-cube-check）一樣：每格露出空的圓圈，勾起來的那格填色打勾。
+   舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上。 */
+.history-list.chat-picking .demo-image-tile-check{opacity:1}
+.history-list.chat-picking .demo-image-tile-check svg{opacity:0;transition:opacity .15s}
+.history-list.chat-picking .demo-image-tile.is-selected .demo-image-tile-check{background:var(--mv-grad);border-color:transparent}
+.history-list.chat-picking .demo-image-tile.is-selected .demo-image-tile-check svg{opacity:1}
 
 /* Header theme button: same .btn-sm as its neighbours; only the swatch is
    sized up to the 14px <Icon> they carry, so all three glyphs line up. */
