@@ -22,11 +22,14 @@ import { dayLabel, timeLabel } from "./util";
 // six, so the button needs no separate noun for 主題; the title carries the
 // affordance the label used to. At narrow widths styles.css hides .btn-label
 // across .header-actions and this collapses to the swatch alone.
+// Its own chat-* id, not the old #theme-toggle-btn: the old index.html <style>
+// (inlined by vite.config.ts) turns that id into a 32px pill, which made it
+// the odd one out next to 回到首頁 / 舊版介面's plain .btn-sm.
 function ThemeToggle() {
   const [theme, setTheme] = useState<ThemeKey>(currentTheme);
   return (
     <button
-      id="theme-toggle-btn"
+      id="chat-theme-btn"
       class="btn btn-secondary btn-sm"
       type="button"
       title="點擊切換主題"

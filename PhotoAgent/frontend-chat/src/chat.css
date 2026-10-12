@@ -928,3 +928,7 @@ div.chat-proposal-row{cursor:default}
 @media (max-width:560px){
   .version-tile.is-pending svg{width:16px;height:16px}
 }
+
+/* Header theme button: same .btn-sm as its neighbours; only the swatch is
+   sized up to the 14px <Icon> they carry, so all three glyphs line up. */
+#chat-theme-btn .theme-toggle-swatch{width:14px;height:14px}
