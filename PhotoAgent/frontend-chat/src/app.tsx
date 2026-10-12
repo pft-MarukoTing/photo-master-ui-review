@@ -984,6 +984,7 @@ export function App() {
       showHome={phase !== "home"}
       showHistory={phase === "session"}
       showOldUi={phase === "session"}
+      oldUiBusy={!!photo && isBusy(photo)}
     />
   );
   const drawerEl = (

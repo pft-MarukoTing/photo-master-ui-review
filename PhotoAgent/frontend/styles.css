@@ -5408,6 +5408,9 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
 .btn:active { transform: scale(.97); opacity: .85; }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
 .btn:disabled:hover { transform: none; box-shadow: none; }
+/* A link button can't be :disabled -- #chat-ui-btn is held via aria-disabled. */
+a.btn[aria-disabled] { opacity: .35; cursor: not-allowed; }
+a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }
 
 .btn-grad {
   background: var(--mv-grad);

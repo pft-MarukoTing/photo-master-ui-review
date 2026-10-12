@@ -150,13 +150,15 @@ function ReportModal(props: { jobId: string | null; onClose: () => void }) {
 // 回到首頁 · 最近照片 · mode switch · 主題 · 回報.
 // showHistory is off while the gallery (with its 最近對話 tab) is on screen.
 // showOldUi likewise: 自訂模式 only takes over a photo's analysis/result, so
-// the switch exists only once a session is open.
+// the switch exists only once a session is open, and is held while the photo
+// is analyzing or rendering (the other mode would open on a half-done job).
 export function Header(props: {
   onHome: () => void;
   onHistory: () => void;
   showHome: boolean;
   showHistory?: boolean;
   showOldUi?: boolean;
+  oldUiBusy?: boolean;
   // The photo on screen, which 自訂模式 then opens on.
   caseId?: string | null;
   // The edit (or, before one, the analysis) on screen, which 回報 points at.
@@ -183,12 +185,18 @@ export function Header(props: {
               <span class="btn-label">最近照片</span>
             </button>
           )}
-          {props.showOldUi && (
-            <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式">
-              <Icon name="layout" size={14} />
-              <span class="btn-label">自訂模式</span>
-            </a>
-          )}
+          {props.showOldUi &&
+            (props.oldUiBusy ? (
+              <button class="btn btn-secondary btn-sm" type="button" disabled title="分析或美化完成後才能切換">
+                <Icon name="layout" size={14} />
+                <span class="btn-label">自訂模式</span>
+              </button>
+            ) : (
+              <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到自訂模式">
+                <Icon name="layout" size={14} />
+                <span class="btn-label">自訂模式</span>
+              </a>
+            ))}
           <ThemeToggle />
           <button
             id="chat-report-btn"
