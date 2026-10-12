@@ -929,6 +929,11 @@ div.chat-proposal-row{cursor:default}
   .version-tile.is-pending svg{width:16px;height:16px}
 }
 
+/* Header buttons: same compact pill 自訂模式 gives its header row
+   (index.html <style>: #changelog-btn.btn/#chat-ui-btn.btn/... ), instead of
+   the taller, 10px-radius .btn-sm, so switching modes doesn't change them. */
+.header-actions .btn{height:32px;padding:0 14px;gap:6px;font-size:13px;border-radius:999px}
+
 /* Header theme button: same .btn-sm as its neighbours; only the swatch is
    sized up to the 14px <Icon> they carry, so all three glyphs line up. */
 #chat-theme-btn .theme-toggle-swatch{width:14px;height:14px}
