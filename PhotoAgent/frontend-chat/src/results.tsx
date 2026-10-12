@@ -145,11 +145,33 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   // 結果圖和底下那排按鈕是兩條各自回來的請求：圖片和 result 都到齊才翻到 After，
   // 兩者才會一起出現，而不是圖先冒出來、按鈕慢半拍才補上。
   const ready = !!job && !!loaded[job] && !!madeWith[job];
+  // 版本之間切換時，新的那版還沒到齊就先留著上一版的成果（圖和按鈕一起），
+  // 到齊再整組換上 -- 不然中間會閃一下原圖。只留同一張照片的：換照片就從原圖開始。
+  const [held, setHeld] = useState<{ photo: string; job: string } | null>(null);
+  useEffect(() => {
+    if (ready) setHeld({ photo: photo.photo_id, job: job! });
+  }, [ready, job, photo.photo_id]);
+  const shownJob = ready ? job : held && held.photo === photo.photo_id ? held.job : null;
   // 處理中一律看原圖：美化中擺上一版的成果，會讓人以為那就是正在等的這一張。
-  const generated = ready && showGenerated && !busy;
+  const generated = !!shownJob && showGenerated && !busy;
 
   // A new version always opens on the After side.
   useEffect(() => setShowGenerated(true), [current?.version_id]);
+
+  // 新版本的結果圖在背景先載好、解碼完，畫面上那張 <img> 換 src 時才不會空一拍。
+  useEffect(() => {
+    if (!job || loaded[job]) return;
+    let dropped = false;
+    const img = new Image();
+    img.src = urls.resultImage(job);
+    const done = () => {
+      if (!dropped) setLoaded((l) => ({ ...l, [job]: true }));
+    };
+    img.decode().then(done, done);
+    return () => {
+      dropped = true;
+    };
+  }, [job]);
 
   // What this version was rendered with: the 人像 fixes, 美化項目 and 修圖風格
   // picks that reached the Editor prompt, and its 個人化需求. They come
@@ -223,7 +245,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
     else top.style.height = "";
   }, [fullscreen]);
 
-  const tags = (job && madeWith[job]) || null;
+  const tags = (shownJob && madeWith[shownJob]) || null;
   const details: Detail[] = [];
   if (tags?.portraits.length) details.push("face");
   if (tags?.recipes.length) details.push("recipe");
@@ -357,15 +379,8 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
             </div>
             <div class="photo-frame">
               <img id="original-img" class="compare-img compare-img-original" src={source} alt="原始照片" />
-              {job && (
-                <img
-                  id="generated-img"
-                  class="compare-img compare-img-generated"
-                  src={urls.resultImage(job)}
-                  alt="美化結果"
-                  onLoad={() => setLoaded((l) => ({ ...l, [job]: true }))}
-                  onError={() => setLoaded((l) => ({ ...l, [job]: true }))}
-                />
+              {shownJob && (
+                <img id="generated-img" class="compare-img compare-img-generated" src={urls.resultImage(shownJob)} alt="美化結果" />
               )}
               {busy && (
                 <div class="canvas-busy" role="status" aria-live="polite">
