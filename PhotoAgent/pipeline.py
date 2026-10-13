@@ -192,7 +192,7 @@ def analyze_preview_stage(image_bytes: bytes, *, analysis_model: str, binding: d
         crops, candidates, low_state = detect_face_crops(image_bytes), [], 'disabled'
     detector_seconds = time.perf_counter() - t_detect
     preview, metrics = _request_subject_preview(data_url, crops, analysis_model,
-        selection_mode=True, low_confidence_candidates=candidates, low_state=low_state)
+        selection_mode=True, low_confidence_candidates=candidates, low_state=low_state, preview_image_bytes=image_bytes)
     context = {"format_version": 3, "binding": binding,
         "src_keys": src_keys, "coordinate_space": COORDINATE_SPACE,
         "image_size": list(get_image_dimensions(image_bytes)),

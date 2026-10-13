@@ -12,6 +12,7 @@ from photo_agent.subject_preview import (
 
 POLICY = 'stage_2_0_fixed_people_v1'
 MODE = 'ab_scene_first_v1'
+LOCATION_POLICY = 'confirmed_candidate_geometry_v1'
 
 
 def _box(value):
@@ -29,6 +30,16 @@ A and B are location candidates, never a pre-approved cast. Detector confidence
 measures face evidence, NOT protagonist probability. Clear, large or frontal
 faces and A membership do not establish inclusion. Same venue/activity,
 nearby tables or proximity alone do not establish a photographed group.
+Use the unmarked full photo for intent and the ID-marked full photo and
+ID-captioned TARGET FACE tiles to bind each candidate to its OWN visible face.
+A1 denotes detections key "1"; B1 denotes low_confidence_reviews key "b1".
+IDs are detector references, NOT top-to-bottom/left-to-right story order.
+For every ID describe ONLY the face inside its target rectangle, even when a
+nearby companion also appears in the tile. Keep label, reason, face_readable
+and role attached to that same person. Prefer visible traits and location in
+Traditional Chinese labels; do not infer family relationships as identification.
+Check every slot against its marked target before returning. Never shift labels
+or reasons between IDs to match the order in which people were noticed.
 Write scene_intent, then classify every supplied A detection and B candidate
 exactly once. Include intended photographic subjects or people visibly sharing
 the pose/interaction; exclude incidental background and unrelated groups.
@@ -41,29 +52,20 @@ with role. Confidence/clarity/presence of a box is not inclusion evidence.
 Fill the REQUIRED ID-keyed detections and low_confidence_reviews objects in
 the response schema: one slot for every supplied A/B candidate, even excluded
 ones. Do not omit B reviews just because additional_people references them.
-Python restores detection_index/candidate_id from each slot key; do not repeat
-IDs inside slot objects. Do not author A geometry or B detection_index. Each included B must map to exactly
-one included additional_people entry via thumbnail_candidate_id. That entry
-has its OWN semantic person box normalized against the EXIF-corrected original.
-For EVERY A/B-linked person, its box MUST INCLUDE that candidate's supplied
-original face_box, especially its head. Do not return a body-only region below
-the face. The numeric candidate coordinates are authoritative; do not estimate
-another location from the zoom image. If unsure of a broader person region,
-use the supplied tight face_box exactly; Python already has its padded icon.
-For EVERY additional_people entry, first align it with ALL supplied A/B
-location evidence. matched_detection_index is an existing A index or null.
-If it is the SAME person as any A detection, reference that A index, echo its
-role/readability, and set thumbnail_candidate_id=null. Python reuses that A
-identity and does not create a new person. Prefer not repeating A people at all.
-For a B person, matched_detection_index=null and thumbnail_candidate_id is its
-own B ID. A genuinely NEW person with no A/B candidate has BOTH references null.
-Do not call an existing candidate a new unlinked person, even with a tighter
-face box, a larger body box, a different label, or no supplied zoom image.
-Never promote an excluded A/B candidate through additional_people. Do not share
-one candidate between people. Unresolved or ambiguous identity is not a new
-confirmed subject. All references are against the ORIGINAL supplied candidates.
-For an included B/person match, additional_people.face_readable must echo the
-B decision exactly; do not make a second inconsistent readability decision.
+Python restores detection_index/candidate_id from each slot key. Valid candidate
+DECISIONS determine membership and readability; Python uses ORIGINAL candidate
+geometry for locations and thumbnails. Do NOT redraw A/B people or require a
+second body box to include them. Each included B exists directly from its B
+review, even if additional_people is empty. Never invent an A ID for a B person.
+additional_people is for genuinely NEW photographed people without any A/B
+candidate. Such people need a valid normalized original-image person box and
+both references null. Do not relabel an excluded candidate as an unlinked person.
+Prefer no repeated A/B descriptions. If a repeated description is returned,
+matched_detection_index references A or thumbnail_candidate_id references B;
+use at most one reference and box=null. Python ignores these redundant
+locations/descriptions and preserves the candidate's own decision and ID.
+Unresolved identity is not a confirmed new person. All references are against
+the ORIGINAL supplied candidates. Do not share an ID between different people.
 face_readable is independent of membership. Include each confirmed companion
 even if its details are unreadable. primary_detection_index refers only to A,
 or null. No server person IDs, feature analysis, repairs or invented face boxes.
@@ -104,6 +106,7 @@ def selection_schema(a_count=0, candidates=None):
     extra['properties']['matched_detection_index'] = {
         'type': ['integer', 'null'], 'enum': [None, *range(1, a_count + 1)]}
     extra['required'].append('matched_detection_index')
+    extra['properties']['box']['type'] = ['object', 'null']
     b = copy.deepcopy(props['detections']['items'])
     b['properties'].pop('detection_index')
     b['properties']['candidate_id'] = {'type': 'string'}
@@ -141,35 +144,6 @@ def normalize_model_selection(value, crops, candidates):
             if set(slots) != set(keys) or any(not isinstance(slots[k], dict) or id_field in slots[k] for k in keys):
                 raise ValueError('invalid_candidate_slots')
             result[field] = [{**slots[k], id_field: int(k) if id_field == 'detection_index' else k} for k in keys]
-    # New wire-only A references are resolved before minting person IDs. The
-    # canonical snapshot remains the existing A + B/unmatched proposal format.
-    extras = result.get('additional_people')
-    if isinstance(extras, list):
-        remaining = []
-        for person in extras:
-            if not isinstance(person, dict):
-                raise ValueError('invalid_additional_person')
-            person = copy.deepcopy(person)
-            aid = person.pop('matched_detection_index', None)
-            if aid is not None:
-                if type(aid) is not int or not 1 <= aid <= len(crops):
-                    raise ValueError('unknown_A_person_reference')
-                decision = result['detections'][aid - 1]
-                if (person.get('thumbnail_candidate_id') is not None
-                        or person.get('role') != decision.get('role')
-                        or person.get('face_readable') != decision.get('face_readable')
-                        or not _box(person.get('box'))):
-                    raise ValueError('conflicting_A_person_reference')
-                face, region = crops[aid - 1]['face_box'], person['box']
-                cx, cy = face['x'] + face['w']/2, face['y'] + face['h']/2
-                if not (region['x'] <= cx <= region['x']+region['w']
-                        and region['y'] <= cy <= region['y']+region['h']):
-                    raise ValueError('A_face_outside_person')
-                _decision({k: v for k, v in person.items() if k not in {'box', 'thumbnail_candidate_id'}} |
-                          {'candidate_id': ''}, 'candidate_id', '')
-                continue
-            remaining.append(person)
-        result['additional_people'] = remaining
     return result
 
 
@@ -215,73 +189,100 @@ def validate_selection(value, crops, candidates, *, low_state='ready', augmentat
     checked['detections'] = [{**d, 'face_box': copy.deepcopy(crops[i]['face_box'])} for i, d in enumerate(a)]
     checked.update(scene_intent=value['scene_intent'], low_confidence_reviews=[], additional_people=[],
                    low_confidence_state=low_state, augmentation_state=augmentation_state)
-    try:
-        if low_state == 'unavailable' or augmentation_state == 'unavailable':
-            if value['low_confidence_reviews'] or value['additional_people']:
-                raise ValueError('invalid_cancelled_augmentation')
-            return checked
-        reviews = value['low_confidence_reviews']
-        if not isinstance(reviews, list) or len(reviews) != len(candidates):
-            raise ValueError('incomplete_B_reviews')
-        for item, candidate in zip(reviews, candidates):
-            _decision(item, 'candidate_id', candidate['candidate_id'])
-        lookup = {c['candidate_id']: c for c in candidates}
-        decisions = {d['candidate_id']: d for d in reviews}
-        from config import SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE
-        extra = copy.deepcopy(value['additional_people'])
-        if not isinstance(extra, list) or len(extra) > SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE:
-            raise ValueError('invalid_additional_people_budget')
-        used = set()
-        boxes = [c['box'] for c in crops]
-        known_faces = [c['face_box'] for c in crops] + [c['face_box'] for c in candidates]
-        retained = []
-        for person in extra:
-            fields = {'label', 'role', 'face_readable', 'box', 'thumbnail_candidate_id', 'selection_evidence', 'reason'}
-            if not isinstance(person, dict) or set(person) != fields or not _box(person['box']):
-                raise ValueError('invalid_additional_person')
-            _decision({k: v for k, v in person.items() if k not in {'box', 'thumbnail_candidate_id'}} |
-                      {'candidate_id': ''}, 'candidate_id', '')
-            if person['role'] == 'not_real_face':
-                raise ValueError('invalid_additional_person')
-            box = person['box']
-            if person['thumbnail_candidate_id'] is None and _unlinked_identity_conflict(box, known_faces):
-                # Keep valid A/B decisions and unrelated new people. Dropping
-                # a conflicting proposal must not cancel a valid B girl.
-                continue
-            for other in boxes:
-                intersection = (max(0, min(box['x']+box['w'], other['x']+other['w'])-max(box['x'], other['x']))
-                                * max(0, min(box['y']+box['h'], other['y']+other['h'])-max(box['y'], other['y'])))
-                union = box['w']*box['h'] + other['w']*other['h'] - intersection
-                if intersection / union > .98:
-                    raise ValueError('ambiguous_duplicate_proposal')
-            boxes.append(box)
-            cid = person['thumbnail_candidate_id']
-            if cid is not None:
-                if not isinstance(cid, str) or cid not in lookup or cid in used:
-                    raise ValueError('unknown_or_shared_B_candidate')
-                decision = decisions[cid]
-                if (person['role'] != 'included' or decision['role'] != 'included'
-                        or person['face_readable'] != decision['face_readable']):
-                    raise ValueError('inconsistent_B_person')
-                box, face = person['box'], lookup[cid]['face_box']
-                cx, cy = face['x'] + face['w']/2, face['y'] + face['h']/2
-                if not (box['x'] <= cx <= box['x']+box['w'] and box['y'] <= cy <= box['y']+box['h']):
-                    raise ValueError('B_face_outside_person')
-                # Match is already explicit and unique. Extend only this person's
-                # semantic box to its OWN tight face; never substitute another ROI.
-                left, top = min(box['x'], face['x']), min(box['y'], face['y'])
-                right = max(box['x']+box['w'], face['x']+face['w'])
-                bottom = max(box['y']+box['h'], face['y']+face['h'])
-                if (left < box['x'] or top < box['y'] or right > box['x']+box['w'] or bottom > box['y']+box['h']):
-                    person['box'] = {'x': left, 'y': top, 'w': right-left, 'h': bottom-top}
-                used.add(cid)
-            retained.append(person)
-        if used != {d['candidate_id'] for d in reviews if d['role'] == 'included'}:
-            raise ValueError('unmatched_included_B')
-        checked.update(low_confidence_reviews=copy.deepcopy(reviews), additional_people=copy.deepcopy(retained))
-    except (ValueError, TypeError):
-        checked.update(low_confidence_state='unavailable', augmentation_state='unavailable')
+    diagnostics = {}
+    # Classifications and unlinked discovery are independent transactions.
+    # An invalid extra/body box can NEVER cancel an already validated B review.
+    reviews = value['low_confidence_reviews']
+    if low_state == 'unavailable':
+        if reviews:
+            raise ValueError('invalid_cancelled_candidate_reviews')
+    else:
+        try:
+            if not isinstance(reviews, list) or len(reviews) != len(candidates):
+                raise ValueError('incomplete_B_reviews')
+            for item, candidate in zip(reviews, candidates):
+                _decision(item, 'candidate_id', candidate['candidate_id'])
+            checked['low_confidence_reviews'] = copy.deepcopy(reviews)
+        except (ValueError, TypeError) as exc:
+            checked['low_confidence_state'] = 'unavailable'
+            diagnostics['candidate_error'] = str(exc) if isinstance(exc, ValueError) else 'invalid_ab_decision'
+    from config import SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE
+    extra = value['additional_people']
+    if augmentation_state == 'unavailable':
+        if extra:
+            raise ValueError('invalid_cancelled_augmentation')
+    else:
+        try:
+            if not isinstance(extra, list) or len(extra) > SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE:
+                raise ValueError('invalid_additional_people_budget')
+            known_faces = [c['face_box'] for c in crops] + [c['face_box'] for c in candidates]
+            candidate_ids = {c['candidate_id'] for c in candidates}
+            retained, boxes = [], []
+            for proposal in extra:
+                fields = {'label', 'role', 'face_readable', 'box', 'thumbnail_candidate_id', 'selection_evidence', 'reason'}
+                if not isinstance(proposal, dict) or set(proposal) not in (fields, fields | {'matched_detection_index'}):
+                    raise ValueError('invalid_additional_person')
+                person = copy.deepcopy(proposal)
+                aid = person.pop('matched_detection_index', None)
+                cid = person['thumbnail_candidate_id']
+                if aid is not None and cid is not None:
+                    raise ValueError('conflicting_candidate_reference')
+                if aid is not None:
+                    if type(aid) is not int or not 1 <= aid <= len(crops):
+                        raise ValueError('unknown_A_person_reference')
+                    # Candidate classification is the only authority; the
+                    # redundant description cannot add/promote/remove A.
+                    diagnostics['ignored_candidate_descriptions'] = diagnostics.get('ignored_candidate_descriptions', 0) + 1
+                    continue
+                if cid is not None:
+                    if not isinstance(cid, str) or cid not in candidate_ids:
+                        raise ValueError('unknown_or_shared_B_candidate')
+                    diagnostics['ignored_candidate_descriptions'] = diagnostics.get('ignored_candidate_descriptions', 0) + 1
+                    continue
+                if not _box(person['box']):
+                    raise ValueError('invalid_additional_person')
+                _decision({k: v for k, v in person.items() if k not in {'box', 'thumbnail_candidate_id'}} |
+                          {'candidate_id': ''}, 'candidate_id', '')
+                if person['role'] == 'not_real_face':
+                    raise ValueError('invalid_additional_person')
+                box = person['box']
+                if _unlinked_identity_conflict(box, known_faces):
+                    diagnostics['withheld_unlinked_proposals'] = diagnostics.get('withheld_unlinked_proposals', 0) + 1
+                    continue
+                for other in boxes:
+                    intersection = _overlap_area(box, other)
+                    union = box['w'] * box['h'] + other['w'] * other['h'] - intersection
+                    if intersection / union > .98:
+                        raise ValueError('ambiguous_duplicate_proposal')
+                boxes.append(box)
+                retained.append(person)
+            checked['additional_people'] = retained
+        except (ValueError, TypeError) as exc:
+            checked['augmentation_state'] = 'unavailable'
+            diagnostics['augmentation_error'] = str(exc) if isinstance(exc, ValueError) else 'invalid_additional_person'
+    if diagnostics:
+        checked['validation_diagnostics'] = diagnostics
     return checked
+
+
+def _validated_diagnostics(value):
+    if not isinstance(value, dict):
+        raise ValueError('invalid_preview_diagnostics')
+    from config import SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE
+    allowed = {'candidate_error': {'incomplete_B_reviews', 'invalid_ab_decision'},
+        'augmentation_error': {'invalid_additional_people_budget', 'invalid_additional_person', 'invalid_ab_decision',
+            'conflicting_candidate_reference', 'unknown_A_person_reference',
+            'unknown_or_shared_B_candidate', 'ambiguous_duplicate_proposal'}}
+    counts = {'ignored_candidate_descriptions', 'withheld_unlinked_proposals'}
+    if set(value) - set(allowed) - counts:
+        raise ValueError('invalid_preview_diagnostics')
+    for key, item in value.items():
+        if key in counts:
+            if type(item) is not int or not 0 <= item <= SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE:
+                raise ValueError('invalid_preview_diagnostics')
+        elif not isinstance(item, str) or item not in allowed[key]:
+            raise ValueError('invalid_preview_diagnostics')
+    return copy.deepcopy(value)
 
 
 def build_people(preview, crops, candidates, *, assign_ids=True):
@@ -296,16 +297,21 @@ def build_people(preview, crops, candidates, *, assign_ids=True):
             'box': copy.deepcopy(crop['box']), 'sent_to_model': crop.get('bytes') is not None,
             'label': item['label'], 'role': 'included', 'face_readable': item['face_readable'],
             'thumbnail_box': copy.deepcopy(crop['box']), 'thumbnail_candidate_id': None})
-    lookup = {c['candidate_id']: c for c in candidates}
+    for decision, candidate in zip(preview.get('low_confidence_reviews', []), candidates):
+        if decision['role'] != 'included':
+            continue
+        people.append({'preview_person_id': 'pp_' + uuid4().hex if assign_ids else None,
+            'source': 'full_image', 'detection_index': None, 'face_box': None, 'sent_to_model': False,
+            'box': copy.deepcopy(candidate['face_box']), 'label': decision['label'],
+            'role': 'included', 'face_readable': decision['face_readable'],
+            'thumbnail_candidate_id': candidate['candidate_id'], 'thumbnail_box': copy.deepcopy(candidate['box'])})
     for person in preview.get('additional_people', []):
         if person['role'] != 'included':
             continue
-        cid = person['thumbnail_candidate_id']
         people.append({'preview_person_id': 'pp_' + uuid4().hex if assign_ids else None, 'source': 'full_image',
             'detection_index': None, 'face_box': None, 'sent_to_model': False,
             **{k: copy.deepcopy(person[k]) for k in ('box', 'label', 'role', 'face_readable')},
-            'thumbnail_candidate_id': cid,
-            'thumbnail_box': copy.deepcopy(lookup[cid]['box'] if cid else person['box'])})
+            'thumbnail_candidate_id': None, 'thumbnail_box': copy.deepcopy(person['box'])})
     return people
 
 
@@ -427,6 +433,12 @@ def validate_context_fields(context, crops, preview):
                 or verified['low_confidence_reviews'] != preview.get('low_confidence_reviews')
                 or verified['low_confidence_state'] != low_state):
             raise ValueError('invalid_ab_snapshot_classification')
+        if 'validation_diagnostics' in preview:
+            diagnostics = _validated_diagnostics(preview['validation_diagnostics'])
+            if ('candidate_error' in diagnostics and low_state != 'unavailable'
+                    or 'augmentation_error' in diagnostics and preview.get('augmentation_state') != 'unavailable'):
+                raise ValueError('invalid_preview_diagnostics')
+            verified['validation_diagnostics'] = diagnostics
         preview = verified
     from photo_agent.subject_preview import unavailable_preview
     if preview.get('state') == 'unavailable':

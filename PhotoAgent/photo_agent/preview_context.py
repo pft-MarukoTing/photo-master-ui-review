@@ -46,10 +46,12 @@ def preview_versions():
     model_hash = _detector_model_hash(path, stat.st_mtime_ns, stat.st_size)
     from photo_agent import ab_preview
     import config
-    policy = repr((config.SUBJECT_PREVIEW_LOW_CONFIDENCE_THRESHOLD,
+    from photo_agent import preview_images
+    policy = repr((preview_images.POLICY, digest(inspect.getsource(preview_images)),
+        config.SUBJECT_PREVIEW_MAX_DETECTIONS, config.SUBJECT_PREVIEW_LOW_CONFIDENCE_THRESHOLD,
         config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_CANDIDATES,
         config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_ZOOMS, config.SUBJECT_PREVIEW_AB_MAX_OUTPUT_TOKENS,
-        ab_preview.POLICY, ab_preview.MODE))
+        ab_preview.POLICY, ab_preview.MODE, ab_preview.LOCATION_POLICY))
     return {"detector": "sdl-exif-v1:" + digest(repr((_FACE_CROP_MAX_COUNT, _FACE_CROP_MAX_SIDE,
                 _FACE_DETECT_CONFIDENCE_THRESHOLD, _FACE_DETECT_NMS_THRESHOLD)) + detector_code + model_hash),
             "prompt": digest(SUBJECT_PREVIEW_INSTRUCTION + ab_preview.INSTRUCTION + ab_preview.FIXED_INSTRUCTION + policy),

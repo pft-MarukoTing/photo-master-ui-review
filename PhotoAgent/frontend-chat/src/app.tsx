@@ -1414,9 +1414,7 @@ export function App() {
                       pending={preAsk}
                       scanning={preScanning}
                       previewActive={previewEnabled}
-                      previewError={preview.error || (preview.result?.state === "ready" &&
-                        preview.result.augmentation_state === "unavailable"
-                        ? "全圖人物補找暫時未完成，正式分析時會再確認。" : undefined)}
+                      previewError={preview.error}
                       faceCount={prePickable.length}
                       busy={busy}
                       error={error}
@@ -1714,13 +1712,6 @@ function PreChat(props: {
               onOpen={props.onView}
             />
           </UserMsg>
-          {/* 偵測跑完才問「想怎麼修」：那句話要先數清楚照片裡有幾個人，底下選人
-              的那排也要同時在位，使用者才有得點。 */}
-          {scanning && (
-            <AssistantMsg>
-              <p class="chat-text chat-muted">先看一下照片裡有誰…</p>
-            </AssistantMsg>
-          )}
           {props.previewActive && props.people.length > 0 && (
             <AssistantMsg>
               <div class="subject-preview" aria-label="人物初步辨識">

@@ -301,8 +301,8 @@ def _parse_response_json(data: dict) -> dict:
     return _parse_json_from_text(_extract_output_text(data))
 
 
-def _request_subject_preview(data_url, face_crops, analysis_model, *, selection_mode=False, low_confidence_candidates=None, low_state="ready"):
-    """One request, no backoff. Full preview and crops are reused byte-for-byte.
+def _request_subject_preview(data_url, face_crops, analysis_model, *, selection_mode=False, low_confidence_candidates=None, low_state="ready", preview_image_bytes=None):
+    """One request, no backoff. Stage 2.0 uses independent ID-marked visual references.
 
     Stage 2.0：分類真實 detector 候選，同時從全圖補找漏偵測人物。
     零候選仍呼叫模型；不重新偵測，也不做人物細節／修圖分析。
@@ -326,8 +326,20 @@ def _request_subject_preview(data_url, face_crops, analysis_model, *, selection_
             from photo_agent import ab_preview
             candidates = low_confidence_candidates or []
             instruction = ab_preview.INSTRUCTION if selection_mode else SUBJECT_PREVIEW_INSTRUCTION
-            content = [{"type": "input_text", "text": instruction},
-                       {"type": "input_image", "image_url": data_url}]
+            content = [{"type": "input_text", "text": instruction}]
+            if selection_mode:
+                content.append({"type": "input_text", "text": "Unmarked FULL PHOTO: decide photographic intent and interactions here."})
+            content.append({"type": "input_image", "image_url": data_url})
+            identity_images = None
+            if selection_mode:
+                from photo_agent.preview_images import prepare_identity_images
+                identity_images = prepare_identity_images(preview_image_bytes, face_crops, candidates)
+                diagnostics["visual_identity"] = {"policy": identity_images["policy"],
+                    "target_ids": list(identity_images["targets"])}
+                content.extend([{"type": "input_text", "text":
+                    "ID-marked FULL PHOTO of the SAME image. A1 maps to detections slot 1; "
+                    "B1 maps to low_confidence_reviews slot b1. Numbers locate faces, not scene order or priority."},
+                    {"type": "input_image", "image_url": image_to_data_url(identity_images["marked_full_bytes"], "image/jpeg")}])
             for index, crop in enumerate(face_crops, 1):
                 # Deliberately not _face_crop_content_items: that caption asks
                 # for eye/QC fields, which are out of scope for this preview.
@@ -335,16 +347,20 @@ def _request_subject_preview(data_url, face_crops, analysis_model, *, selection_
                     f"detection_index={index}; " + (f"tier=A; confidence={crop.get('confidence')}; " if selection_mode else "") + f"original face_box={json.dumps(crop['face_box'])}; "
                     f"padded crop_box={json.dumps(crop['box'])}. "
                     "These are location references, not a subject_index or repair target."
-                    + (" Coordinate-only reference; no zoom image supplied." if crop.get("bytes") is None else "")})
-                if crop.get("bytes") is not None:
-                    content.append({"type": "input_image", "image_url": image_to_data_url(crop["bytes"], "image/jpeg")})
+                    + (f" A{index} TARGET FACE: fill detections slot {index} for the face INSIDE the marked rectangle, not another visible face."
+                       if identity_images else (" Coordinate-only reference; no zoom image supplied." if crop.get("bytes") is None else ""))})
+                target_bytes = identity_images["targets"][f"A{index}"]["bytes"] if identity_images else crop.get("bytes")
+                if target_bytes is not None:
+                    content.append({"type": "input_image", "image_url": image_to_data_url(target_bytes, "image/jpeg")})
             for candidate in candidates:
                 content.append({"type": "input_text", "text":
                     f"candidate_id={candidate['candidate_id']}; tier=B; confidence={candidate['confidence']}; "
                     f"face_box={json.dumps(candidate['face_box'])}; padded crop_box={json.dumps(candidate['box'])}. "
-                    "Low-confidence location evidence only, not a protagonist or A detection ID."})
-                if candidate.get('bytes') is not None:
-                    content.append({"type": "input_image", "image_url": image_to_data_url(candidate['bytes'], 'image/jpeg')})
+                    "Low-confidence location evidence only, not a protagonist or A detection ID. "
+                    + (f"{candidate['candidate_id'].upper()} TARGET FACE: fill slot {candidate['candidate_id']} for this marked face only." if identity_images else "")})
+                target_bytes = identity_images["targets"][candidate['candidate_id'].upper()]["bytes"] if identity_images else candidate.get('bytes')
+                if target_bytes is not None:
+                    content.append({"type": "input_image", "image_url": image_to_data_url(target_bytes, 'image/jpeg')})
             payload = _responses_payload(analysis_model, content,
                 text_format=ab_preview.selection_schema(len(face_crops), candidates) if selection_mode else SUBJECT_PREVIEW_RESPONSE_SCHEMA,
                 reasoning_effort=SUBJECT_PREVIEW_REASONING_EFFORT)
@@ -468,7 +484,8 @@ def _fixed_person_crop_items(image_bytes, context, crops):
             b_count += 1
         items.append({'type': 'input_text', 'text':
             f"Fixed preview_person_id={person['preview_person_id']}; subject_index={index}; "
-            f"semantic person box={json.dumps(person['box'])}; "
+            f"Stage 2.0 location reference={json.dumps(person['box'])}; "
+            "Analyze the full-photo person/body extent independently; this location is not a body boundary. "
             + (f"face location={json.dumps(crop['face_box'])}. " if crop else '')
             + 'Already selected by 2.0. Use only for this person’s details; never reselect membership.'})
         if crop and crop.get('bytes') is not None:
