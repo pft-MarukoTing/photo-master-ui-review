@@ -366,7 +366,12 @@ export function App() {
   const [tab, setTab] = useState<GalleryTab>("recent");
   const [selection, setSelection] = useState<GallerySelection>(null);
   const [drawer, setDrawer] = useState(false);
-  const [leaveAsk, setLeaveAsk] = useState<{ message: string; answer: (ok: boolean) => void } | null>(null);
+  const [leaveAsk, setLeaveAsk] = useState<{
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+    answer: (ok: boolean) => void;
+  } | null>(null);
   // 刪除前的那一問（notice：刪不掉時只有「確定」的那句）。
   const [deleteAsk, setDeleteAsk] = useState<{ message: string; notice?: boolean; done: (ok: boolean) => void } | null>(null);
 
@@ -399,6 +404,8 @@ export function App() {
   // Bumped to empty the composer: a line it still holds has just become part
   // of the conversation.
   const [preClear, setPreClear] = useState(0);
+  // 輸入框裡打了還沒送出的字：換照片前要知道有沒有東西會被清掉。
+  const preDraft = useRef("");
   // 帶著個人化需求按一鍵美化：先問要只改使用者說的，還是整體美化再加上需求。
   // 留著按下去那一刻的 later / log，選好之後照原樣開始；`overwrite` 是選了哪
   // 一個，上傳中那排選項定格在它身上，失敗了還能重選。
@@ -678,6 +685,7 @@ export function App() {
     setVia(null);
     setSource(null);
     setNotes([]);
+    preDraft.current = "";
     setPreEdit(null);
     setPrePointed([]);
     setPreAsk(null);
@@ -761,14 +769,48 @@ export function App() {
     ++lastPick.current; // a demo pick also supersedes an in-flight HEIC decode
     setSamplesOpen(false);
     setSource(s);
-    // A new photo has its own people: what was typed stays, who it was aimed
-    // at does not.
+    // A new photo has its own people. (Swapping one on the upload page already
+    // cleared what was typed in swapSource; this keeps the pointing clean.)
     setPrePointed([]);
     setRenderAsk(null);
     setNotes((n) => (n.some((x) => x.persons.length) ? n.map((x) => ({ ...x, persons: [] })) : n));
     setVia(s.kind === "file" ? "upload" : "sample");
     setStep("picked");
     setError("");
+  }
+
+  // 上傳頁已經有照片時再挑一張：換了就是重新開始，這張打的需求、指定的人、選的
+  // 設定都跟著清掉，不帶到新照片上。有東西會被清掉（打過字、改過設定）才先問。
+  async function swapSource(s: Source) {
+    if (phase !== "chat" || !source) return choose(s);
+    if (s.kind === "demo" && source.kind === "demo" && s.name === source.name) {
+      setSamplesOpen(false);
+      return;
+    }
+    setSamplesOpen(false);
+    const typed = notes.length > 0 || !!preEdit || !!preAsk || !!preDraft.current.trim();
+    const tuned = !!caps && !!settings && !sameSettings(settings, defaultSettings(caps));
+    const ok = !(typed || tuned) || await new Promise<boolean>((resolve) =>
+      setLeaveAsk({
+        message: "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？",
+        confirmLabel: "更換",
+        cancelLabel: "取消",
+        answer: (yes) => {
+          setLeaveAsk(null);
+          resolve(yes);
+        },
+      }),
+    );
+    if (!ok) {
+      if (s.kind === "file") URL.revokeObjectURL(s.url);
+      return;
+    }
+    setNotes([]);
+    setPreEdit(null);
+    setPreAsk(null);
+    setPreClear((n) => n + 1);
+    if (caps) setSettings(defaultSettings(caps));
+    choose(s);
   }
 
   // HEIC has to be decoded before it can be shown, which takes a moment; a
@@ -784,10 +826,10 @@ export function App() {
     if (pick !== lastPick.current) return;
     const s: Source = { kind: "file", file, url: URL.createObjectURL(preview) };
     if (phase === "session") newChat(s);
-    else {
-      if (phase !== "chat") setPhase("chat");
+    else if (phase !== "chat") {
+      setPhase("chat");
       choose(s);
-    }
+    } else swapSource(s);
   }
 
   function onGallerySelect(sel: GallerySelection) {
@@ -795,7 +837,7 @@ export function App() {
     // A past chat opens right away; a sample on the home page is only selected.
     if (phase === "chat" || sel.kind === "session") {
       if (sel.kind === "session") openOtherSession(sel.id);
-      else choose({ kind: "demo", name: sel.name });
+      else swapSource({ kind: "demo", name: sel.name });
       return;
     }
     setSelection(sel);
@@ -1199,7 +1241,12 @@ export function App() {
     />
   );
   const confirmEl = leaveAsk && (
-    <ConfirmModal message={leaveAsk.message} confirmLabel="繼續" cancelLabel="留在這裡" onAnswer={leaveAsk.answer} />
+    <ConfirmModal
+      message={leaveAsk.message}
+      confirmLabel={leaveAsk.confirmLabel || "繼續"}
+      cancelLabel={leaveAsk.cancelLabel || "留在這裡"}
+      onAnswer={leaveAsk.answer}
+    />
   );
   const askEl = deleteAsk && (
     <ConfirmModal
@@ -1215,7 +1262,7 @@ export function App() {
       open={samplesOpen}
       demos={demos}
       picked={source?.kind === "demo" ? source.name : null}
-      onPick={(name) => choose({ kind: "demo", name })}
+      onPick={(name) => swapSource({ kind: "demo", name })}
       onClose={() => setSamplesOpen(false)}
     />
   );
@@ -1311,6 +1358,7 @@ export function App() {
                           // Only once there is a photo to replace; before that the
                           // greeting's two chips are the choice, right above.
                           onSample={source ? showSamples : undefined}
+                          onText={(t) => (preDraft.current = t)}
                           disabled={busy || !!preAsk || preHeld}
                           // Live once a photo is picked: what is typed here is the
                           // 個人化需求 the session starts with.
@@ -1557,8 +1605,7 @@ function PreChat(props: {
   // 時才退回原本那句總結。
   const last = log[log.length - 1];
   const settled = !pending && !!last && ("gone" in last || !!last.ask.reply);
-  // 換一張照片時需求會留著，所以這排按鍵在下一張還在偵測時也還在畫面上——那段
-  // 期間一樣不能按，不然等於跳過剛換上來的這些人。
+  // 照片還在偵測人物時這排按鍵不能按，不然等於跳過還沒找到的這些人。
   const held = busy || (scanning && !props.previewActive);
   // 送出前的最後一眼。對話往上捲是整段過程——被擋下來的句子、AI 回的話、設定
   // 卡夾在中間；這張只放真的會跟著進 session 的那段字，而且就擺在動作鍵正上方，
