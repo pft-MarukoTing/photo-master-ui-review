@@ -661,11 +661,14 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 }
 
 @media (max-width:900px){
+  .results-analysis-slot>.chat-panel{height:70dvh;min-height:400px}
+}
+/* 上傳頁：直拿的平板跟手機一樣。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
   /* On a phone the stage costs a second scroll area to show what the timeline
      already shows as a bubble. The conversation is the page here. */
   .prechat-stage{display:none}
   .upload-content-row>.home-chat{flex:1 1 auto;width:auto;height:70dvh;max-height:none;min-height:400px}
-  .results-analysis-slot>.chat-panel{height:70dvh;min-height:400px}
   /* A phone has no page worth leaving visible around the edges, so the dialog
      takes what it can and the tiles shrink to fit three to a row. */
   .sample-modal{top:calc(var(--header-h) + var(--sp-2));bottom:var(--sp-2);
@@ -1128,6 +1131,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-gallery-col .demo-image-tile .demo-image-tile-bg{display:none}
 }
 
+
 @media (min-width:601px) and (max-width:1200px) and (orientation:portrait){
   /* 一整頁：文案＋對照和磚列一起垂直置中。 */
   #upload-section .upload-container:has(.home-intro){padding:24px 32px 16px;min-height:calc(100dvh - var(--header-h))}
@@ -1181,4 +1185,74 @@ div.chat-proposal-row{cursor:default}
     font-size:12px;font-weight:600;line-height:1.4;color:var(--text-2)}
   #upload-section .upload-gallery-col .history-day-group:first-child>.history-day-heading{margin-top:0}
   #upload-section .upload-gallery-col .demo-image-tile{width:100%;border-radius:12px}
+}
+
+/* ---------- 上傳頁：看大圖 ----------
+   對話裡那張照片是個按鈕，點了開大圖。桌機、平板旁邊已經有大照片，所以這裡維持小縮圖、
+   只多一個 zoom-in 游標；手機沒有舞台，才在下面的手機區塊把它放大。 */
+.chat-upload-shot{position:relative;display:block;flex:none;padding:0;border:0;border-radius:10px;background:none;cursor:zoom-in}
+.chat-upload-shot img{display:block}
+.chat-upload-zoom,.chat-panel-photo{display:none}
+
+/* 大圖蓋住整頁（連 header），點照片以外的地方、關閉鈕或 Esc 都收起來。 */
+.photo-viewer{position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;box-sizing:border-box;
+  padding:calc(env(safe-area-inset-top) + 64px) 16px calc(env(safe-area-inset-bottom) + 24px);
+  background:rgba(0,0,0,.84);animation:photo-viewer-in .15s ease-out}
+.photo-viewer img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--radius-lg)}
+.photo-viewer-close{position:absolute;top:calc(env(safe-area-inset-top) + 12px);right:12px;display:flex;align-items:center;justify-content:center;
+  width:44px;height:44px;padding:0;border:0;border-radius:50%;background:rgba(255,255,255,.16);color:#fff;cursor:pointer}
+.photo-viewer-close:hover{background:rgba(255,255,255,.26)}
+@keyframes photo-viewer-in{from{opacity:0}}
+
+/* ---------- 手機上傳頁（≤600，以及直拿的平板）----------
+   平板直拿只有上傳頁走這套，首頁還是平板自己的版面。
+   對話就是整頁：拿掉卡片的圓角和陰影，吃滿 header 以下，輸入框貼底並留 iPhone 底部安全區。
+   照片在對話裡放大成 4:5；捲到看不到它時，頂端的「對話」那條換成照片列（兩者同高，
+   對話不會跳）。照片列點了直接看大圖。 */
+@media (max-width:600px),(max-width:1200px) and (orientation:portrait){
+  #upload-section .upload-container:has(.home-chat){height:calc(100dvh - var(--header-h));min-height:0;max-width:none;margin:0;padding:0;overflow:hidden}
+  #upload-section .upload-grid:has(.home-chat){flex:1 1 auto;min-height:0;margin:0;padding:0}
+  #upload-section .upload-content-row:has(>.home-chat){height:100%;min-height:0;padding:0;gap:0;align-items:stretch}
+  #upload-section .upload-content-row>.home-chat,
+  #upload-section .upload-content-row>.home-chat.is-solo{flex:1 1 auto;width:100%;max-width:none;height:100%;max-height:none;min-height:0;
+    border-radius:0;box-shadow:none}
+  .home-chat .chat-composer{padding-bottom:calc(var(--sp-3) + env(safe-area-inset-bottom))}
+
+  .chat-upload.is-zoom{flex-direction:column;align-items:flex-end;gap:var(--sp-2)}
+  .chat-upload.is-zoom .chat-upload-shot{width:min(62vw,260px);aspect-ratio:4/5;border-radius:16px;box-shadow:0 6px 16px rgba(0,0,0,.1)}
+  .chat-upload.is-zoom .chat-upload-shot img{width:100%;height:100%;border:0;border-radius:inherit;object-fit:cover}
+  .chat-upload-zoom{position:absolute;right:8px;bottom:8px;display:flex;align-items:center;justify-content:center;width:32px;height:32px;
+    border-radius:50%;background:rgba(255,255,255,.9);color:var(--n84);box-shadow:var(--shadow-sm)}
+
+  /* 選了照片之後，對話那條和照片列都是 64px。對話那條換行對齊置中，標題和副標照樣對基線。 */
+  .chat-panel.has-photo>.chat-panel-head{height:64px;box-sizing:border-box;padding-block:0;flex-wrap:wrap;align-content:center}
+  .chat-panel.is-photo-out>.chat-panel-head{display:none}
+  .chat-panel.is-photo-out>.chat-panel-photo{display:flex;align-items:center;gap:var(--sp-3);flex:none;width:100%;height:64px;box-sizing:border-box;
+    padding:0 var(--sp-4);border:0;border-bottom:1px solid var(--border);background:var(--n04);color:var(--n54);text-align:left;cursor:zoom-in;
+    font:inherit;animation:chat-photo-in .15s ease-out}
+  .chat-panel-photo img{flex:none;width:40px;height:50px;object-fit:cover;border-radius:8px}
+  .chat-panel-photo-text{display:grid;min-width:0;line-height:1.4}
+  .chat-panel-photo-text b{font-size:14px;font-weight:600;color:var(--n100)}
+  .chat-panel-photo-text small{font-size:var(--chat-fs-xs);color:var(--n54)}
+  .chat-panel-photo svg{margin-left:auto;flex:none}
+}
+@keyframes chat-photo-in{from{opacity:0;transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.chat-panel-photo,.photo-viewer{animation:none!important}}
+
+/* ---------- 平板上傳頁（橫拿）----------
+   一個螢幕高、不捲頁。照片在左、對話在右 500px，跟桌機同一個分法。直拿的平板走手機那套。 */
+@media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  #upload-section .upload-container:has(.home-chat){height:calc(100dvh - var(--header-h));min-height:0;max-width:none;margin:0;
+    padding:16px 24px 20px;box-sizing:border-box;overflow:hidden}
+  #upload-section .upload-grid:has(.home-chat){flex:1 1 auto;min-height:0;margin:0;padding:0}
+  #upload-section .upload-content-row:has(>.home-chat){height:100%;min-height:0;padding:0;gap:16px;align-items:stretch;justify-content:center}
+  #upload-section .upload-content-row>.prechat-stage{display:flex;max-height:none;min-height:0}
+  #upload-section .upload-content-row>.home-chat,
+  #upload-section .upload-content-row>.home-chat.is-solo{max-height:none;min-height:0}
+}
+@media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  #upload-section .upload-content-row:has(>.home-chat){flex-direction:row;gap:20px}
+  #upload-section .upload-content-row>.prechat-stage{flex:1 1 0%;width:auto;height:100%}
+  #upload-section .upload-content-row>.home-chat{flex:0 0 500px;width:500px;max-width:none;height:100%}
+  #upload-section .upload-content-row>.home-chat.is-solo{flex:0 1 auto;width:min(100%,720px);max-width:720px}
 }

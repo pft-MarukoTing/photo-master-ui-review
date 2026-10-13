@@ -20,6 +20,7 @@ import {
   ProposalCard,
   QuickBar,
   ResultCard,
+  PhotoViewer,
   SamplePicker,
   UploadBubble,
   UserMsg,
@@ -335,6 +336,10 @@ function sourceSrc(s: Source) {
   return s.kind === "file" ? s.url : urls.demoThumb(s.name);
 }
 
+function fullSrc(s: Source) {
+  return s.kind === "file" ? s.url : urls.demoImage(s.name);
+}
+
 function activePhoto(s: Session | null): Photo | null {
   if (!s || !s.photos.length) return null;
   return s.photos.find((p) => p.photo_id === s.active_photo_id) || s.photos[0];
@@ -377,6 +382,9 @@ export function App() {
   // The user's own edit of the 個人化需求 text, once there is one.
   const [preEdit, setPreEdit] = useState<PromptEdit | null>(null);
   const [samplesOpen, setSamplesOpen] = useState(false);
+  // 看大圖：上傳頁對話裡那張照片，或手機上頂端的照片列。
+  const [viewing, setViewing] = useState(false);
+  const closeViewer = () => setViewing(false);
   // Bumped when a photo lands. The composer is the one control here that looks
   // like chrome rather than a step, so it has to say "type here" itself: the
   // field bobs for a moment on every device, and the caret rides along only
@@ -1287,6 +1295,7 @@ export function App() {
                   <ChatPanel
                     class={`home-chat${source ? "" : " is-solo"}`}
                     sub="新對話"
+                    photo={source ? { src: sourceSrc(source), onOpen: () => setViewing(true) } : undefined}
                     onDropFile={busy ? undefined : pickFile}
                     footer={
                       <>
@@ -1325,20 +1334,21 @@ export function App() {
                           // Left to the composer once someone is pointed at, so the
                           // field says whose turn it is instead of this line --
                           // unless the pick is the answer, and then it says so.
+                          // 由長到短，Composer 挑輸入框放得下的那句。
                           placeholder={
                             prePointed.length && preWhoAsk
-                              ? "選好了就直接送出，也可以再打字補充"
+                              ? ["選好了就直接送出，也可以再打字補充", "選好就送出，或再打字補充"]
                               : !source || prePointed.length || preScanning
                               ? undefined
                               : openAsk(notes)
                                 ? openAsk(notes)!.asked!.options.length
-                                  ? "直接打字回答，或點上面的選項"
+                                  ? ["直接打字回答，或點上面的選項", "打字回答，或點上面的選項"]
                                   : prePickable.length > 1
-                                    ? "點頭像選人（可以選好幾位），或直接打字回答"
+                                    ? ["點頭像選人（可以選好幾位），或直接打字回答", "點頭像選人，或直接打字回答", "點頭像選人或打字回答"]
                                     : "直接打字回答"
                                 : prePickable.length > 1
-                                ? "想怎麼美化這張照片？點頭像可以指定要改誰"
-                                : "想怎麼美化這張照片？也可以留空直接開始"
+                                ? ["想怎麼美化這張照片？點頭像可以指定要改誰", "想怎麼美化？點頭像可以指定人", "想怎麼美化這張照片？"]
+                                : ["想怎麼美化這張照片？也可以留空直接開始", "想怎麼美化？留空也可以直接開始", "想怎麼美化這張照片？"]
                           }
                         />
                       </>
@@ -1363,6 +1373,7 @@ export function App() {
                       busy={busy}
                       error={error}
                       onUpload={() => fileInput.current?.click()}
+                      onView={() => setViewing(true)}
                       onSamples={showSamples}
                       onSettings={setSettings}
                       onClear={() => {
@@ -1400,6 +1411,7 @@ export function App() {
       {samplesEl}
       {confirmEl}
       {askEl}
+      <PhotoViewer src={viewing && source ? fullSrc(source) : null} onClose={closeViewer} />
     </>
   );
 }
@@ -1413,7 +1425,7 @@ function PreStage({ source }: { source: Source }) {
   return (
     <div class="prechat-stage">
       <div class="prechat-shot">
-        <img src={source.kind === "file" ? source.url : urls.demoImage(source.name)} alt="待美化的照片" />
+        <img src={fullSrc(source)} alt="待美化的照片" />
       </div>
     </div>
   );
@@ -1512,6 +1524,7 @@ function PreChat(props: {
   busy: boolean;
   error: string;
   onUpload: () => void;
+  onView: () => void;
   onSamples: () => void;
   onSettings: (s: Settings) => void;
   // The 個人化需求 as it will be sent: the kept lines, or the user's edit of them.
@@ -1648,7 +1661,11 @@ function PreChat(props: {
       {source && (
         <>
           <UserMsg>
-            <UploadBubble src={sourceSrc(source)} text={source.kind === "file" ? "上傳了這張" : "選了這張"} />
+            <UploadBubble
+              src={sourceSrc(source)}
+              text={source.kind === "file" ? "上傳了這張" : "選了這張"}
+              onOpen={props.onView}
+            />
           </UserMsg>
           {/* 偵測跑完才問「想怎麼修」：那句話要先數清楚照片裡有幾個人，底下選人
               的那排也要同時在位，使用者才有得點。 */}

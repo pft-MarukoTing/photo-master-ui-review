@@ -20,9 +20,28 @@ export function ChatPanel(props: {
   // timeline, and the bottom would show only the end of its note.
   toStart?: string | null;
   onDropFile?: (file: File) => void;
+  // The photo being worked on, before the session starts. On a phone, once its
+  // big copy in the timeline (UploadBubble with onOpen) scrolls off the top,
+  // the head gives its place to a bar showing it; tapping either opens it.
+  photo?: { src: string; onOpen: () => void };
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const [photoOut, setPhotoOut] = useState(false);
+  const photoSrc = props.photo?.src;
+  useEffect(() => {
+    const el = timeline.current;
+    const shot = el?.querySelector(".chat-upload.is-zoom .chat-upload-shot");
+    setPhotoOut(false);
+    if (!el || !shot) return;
+    // Out past the top only: below the fold it has not been seen yet.
+    const io = new IntersectionObserver(
+      ([e]) => setPhotoOut(!e.isIntersecting && e.boundingClientRect.top < (e.rootBounds?.top ?? 0)),
+      { root: el },
+    );
+    io.observe(shot);
+    return () => io.disconnect();
+  }, [photoSrc]);
 
   // Stick to the bottom as messages arrive, unless the user scrolled up.
   const pinned = useRef(true);
@@ -82,7 +101,9 @@ export function ChatPanel(props: {
   const drop = props.onDropFile;
   return (
     <div
-      class={`chat-panel${props.class ? ` ${props.class}` : ""}${dragging ? " is-dragging" : ""}`}
+      class={`chat-panel${props.class ? ` ${props.class}` : ""}${dragging ? " is-dragging" : ""}${
+        props.photo ? " has-photo" : ""
+      }${props.photo && photoOut ? " is-photo-out" : ""}`}
       onDragOver={
         drop &&
         ((e) => {
@@ -106,6 +127,16 @@ export function ChatPanel(props: {
         <span class="chat-panel-title">對話</span>
         <span class="chat-panel-sub">{props.sub}</span>
       </div>
+      {props.photo && (
+        <button type="button" class="chat-panel-photo" onClick={props.photo.onOpen} tabIndex={photoOut ? 0 : -1}>
+          <img src={props.photo.src} alt="" />
+          <span class="chat-panel-photo-text">
+            <b>這次要修的照片</b>
+            <small>點一下看大圖</small>
+          </span>
+          <Icon name="expand" size={16} />
+        </button>
+      )}
       <div
         class="chat-timeline"
         ref={timeline}
@@ -153,11 +184,45 @@ export function ClickBubble({ icon, label }: { icon: string; label: string }) {
   );
 }
 
-export function UploadBubble({ src, text }: { src: string; text: string }) {
+// With onOpen the photo is a button that opens it big -- on a phone it is
+// also drawn big here, since there is no stage beside the conversation.
+export function UploadBubble({ src, text, onOpen }: { src: string; text: string; onOpen?: () => void }) {
   return (
-    <div class="chat-upload">
-      <img src={src} alt="" />
+    <div class={`chat-upload${onOpen ? " is-zoom" : ""}`}>
+      {onOpen ? (
+        <button type="button" class="chat-upload-shot" aria-label="看大圖" onClick={onOpen}>
+          <img src={src} alt="" />
+          <span class="chat-upload-zoom" aria-hidden="true">
+            <Icon name="expand" size={14} />
+          </span>
+        </button>
+      ) : (
+        <img src={src} alt="" />
+      )}
       <div class="chat-bubble">{text}</div>
+    </div>
+  );
+}
+
+// The photo on its own over the page. Tapping anywhere but the photo, the
+// close button or Esc puts it away.
+export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () => void }) {
+  useEffect(() => {
+    if (!src) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [src, onClose]);
+
+  if (!src) return null;
+  return (
+    <div class="photo-viewer" role="dialog" aria-modal="true" aria-label="照片大圖" onClick={onClose}>
+      <img src={src} alt="待美化的照片" onClick={(e) => e.stopPropagation()} />
+      <button type="button" class="photo-viewer-close" aria-label="關閉" onClick={onClose}>
+        <Icon name="x" size={18} />
+      </button>
     </div>
   );
 }
@@ -534,6 +599,38 @@ export function FaceChip(props: {
   );
 }
 
+type Placeholder = string | string[];
+
+// 輸入框的提示一行就要讀完，被切掉的半句比短句更難懂。給一串由長到短的說法，
+// 量輸入框現在實際的字寬，挑第一句放得下的；都放不下就用最短那句。量的是框
+// 本身不是螢幕，所以手機、桌機的窄欄、被頭像標籤擠掉一段的框都算得到。
+function useFits(boxes: { current: HTMLElement | null }[], dep: unknown) {
+  const [width, setWidth] = useState(Infinity);
+  const [font, setFont] = useState("");
+  useLayoutEffect(() => {
+    const el = boxes.map((b) => b.current).find(Boolean);
+    if (!el) return;
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      setWidth(el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight));
+      setFont(`${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [dep]);
+  return (p: Placeholder) => {
+    const all = typeof p === "string" ? [p] : p;
+    if (all.length < 2 || !font || !(width > 0)) return all[0];
+    const ctx = (measureCtx ||= document.createElement("canvas").getContext("2d"));
+    if (!ctx) return all[0];
+    ctx.font = font;
+    return all.find((s) => ctx.measureText(s).width <= width) || all[all.length - 1];
+  };
+}
+let measureCtx: CanvasRenderingContext2D | null = null;
+
 export function Composer(props: {
   onFile?: (f: File) => void;
   // With it, the attach button is the way back to picking a photo rather than
@@ -550,7 +647,8 @@ export function Composer(props: {
   sendPicked?: boolean;
   // Bumped to move the cursor into the field.
   focusKey?: number;
-  placeholder?: string;
+  // 可以給一串說法，由長到短；輸入框放得下哪一句就用哪一句。
+  placeholder?: Placeholder;
   // Every keystroke, so a caller can act on text that was typed but not sent.
   onText?: (text: string) => void;
   // Bumped to bob the field for a moment, so the eye finds it.
@@ -562,6 +660,7 @@ export function Composer(props: {
   const { onFile, onSample, disabled, onSend } = props;
   const input = useRef<HTMLInputElement>(null);
   const field = useRef<HTMLInputElement>(null);
+  const still = useRef<HTMLDivElement>(null);
   const attach = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState(false);
   const [text, setText] = useState("");
@@ -606,6 +705,9 @@ export function Composer(props: {
   useEffect(() => {
     if (props.clearKey) write("");
   }, [props.clearKey]);
+
+  // 有沒有 onSend 決定量的是 <input> 還是那個假框，換了要重新掛。
+  const fits = useFits([field, still], !!onSend);
 
   const sendable = !!text.trim() || (!!props.sendPicked && who.length > 0);
 
@@ -715,7 +817,7 @@ export function Composer(props: {
               maxLength={4000}
               value={text}
               disabled={disabled}
-              placeholder={
+              placeholder={fits(
                 props.placeholder ||
                 (who.length > 1
                   ? "想怎麼調整這幾位？"
@@ -726,9 +828,9 @@ export function Composer(props: {
                     : // With more than one face, the field is the one line everyone
                       // reads before typing, so it carries the picker's affordance.
                       people.length > 1
-                      ? "想調整什麼？點頭像可以指定要改誰"
+                      ? ["想調整什麼？點頭像可以指定要改誰", "想調整什麼？點頭像指定人", "想調整什麼？"]
                       : "想調整什麼？")
-              }
+              )}
               onInput={(e) => write(e.currentTarget.value)}
               onKeyDown={(e) => {
                 // Enter while an IME is composing picks a candidate; it must not send.
@@ -740,7 +842,9 @@ export function Composer(props: {
             />
           </label>
         ) : (
-          <div class="chat-composer-field">{props.placeholder || "選好照片後就可以用文字告訴我想怎麼調整"}</div>
+          <div class="chat-composer-field" ref={still}>
+            {fits(props.placeholder || ["選好照片後就可以用文字告訴我想怎麼調整", "選好照片就可以打字告訴我"])}
+          </div>
         )}
         <button type="button" class="chat-send" title="送出" disabled={disabled || !onSend || !sendable} onClick={send}>
           <Icon name="up" />

@@ -136,6 +136,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
   },
   more: { sw: 3.2, body: <path d="M5 12h.01M12 12h.01M19 12h.01" /> },
   next: { sw: 2, body: <path d="M9 6l6 6-6 6" /> },
+  expand: { sw: 2, body: <path d="M14 4h6v6M10 20H4v-6M20 4l-6 6M4 20l6-6" /> },
 };
 
 export function Icon({ name, size }: { name: keyof typeof ICONS | string; size?: number }) {
