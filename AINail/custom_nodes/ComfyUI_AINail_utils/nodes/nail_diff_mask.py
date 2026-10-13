@@ -116,6 +116,9 @@ class NailDiffMask:
                     g = cv2.resize(g, (w, h), interpolation=cv2.INTER_AREA)
 
                 nails = _to_size(_diff_mask(c, g, thr, ok, ck), h, w)
+                # A tiny component can vanish when resizing to a small input; drop it so
+                # count, masks and boxes stay consistent (and _boxes_of never sees an empty mask).
+                nails = nails[nails.any(axis=(1, 2))]
                 counts.append(int(nails.shape[0]))
                 boxes.append(_boxes_of(nails))
                 if nails.shape[0] == 0:
