@@ -692,9 +692,17 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 
 /* Touch pointers have no hover to fall back on and a ~44px contact patch, so
    every tappable control clears that. Keyed off the pointer, not the width --
-   a 1024px tablet needs this and a narrow desktop window does not. */
+   a 1024px tablet needs this and a narrow desktop window does not.
+   Pills don't draw the full 44px -- a row of 44px pills on a phone reads as
+   a stack of slabs. They draw 36px and an invisible ::after takes the hit
+   area out 4px above and below; 4+4 is exactly the --sp-2 row gap, so
+   wrapped rows meet without overlapping. Rows and the input field stay a
+   real 44px, they are full-width and there the height is the layout. */
 @media (hover:none){
-  .chat-chip,.chat-opt-chip,.chat-opt-person-head,.chat-face-chip,.chat-composer-field{min-height:44px}
+  .chat-opt-person-head,.chat-composer-field{min-height:44px}
+  .chat-chip,.chat-opt-chip,.chat-face-chip{min-height:36px}
+  .chat-chip,.chat-face-chip,.chat-opt-split-more{position:relative}
+  .chat-chip::after,.chat-face-chip::after,.chat-opt-split-more::after{content:"";position:absolute;inset:-4px 0}
   .chat-opt-split-more{min-width:44px}
   .chat-attach,.chat-send{width:44px;height:44px}
   .chat-opt-row,.chat-proposal-row{padding-top:var(--sp-3);padding-bottom:var(--sp-3)}
