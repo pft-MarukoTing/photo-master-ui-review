@@ -300,8 +300,6 @@ const groupFaces = (g: NoteGroup): PromptFace[] =>
       preview_job_id: p.preview_job_id, source_sha256: p.source_sha256 } : {}) }));
 
 const GREETING = "嗨！先選一張想美化的照片（一次一張）。要自己上傳，還是從範例照片挑？";
-// 個人化需求存檔後自動送出的那一句。chat_assistant.INSTRUCTION 會認這句話，改字要兩邊一起改。
-const PROMPT_REVIEW_ASK = "我改了個人化需求，幫我確認一下內容。";
 
 // 帶著個人化需求按一鍵美化時問的兩條路。只照需求改 = overwrite_prompt：修圖
 // 只拿個人化需求當指令；順便整張美化 = 照分析修完，需求一起加上去（原本的做法）。
@@ -1083,11 +1081,12 @@ export function App() {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
-    setPendingAsk({ text: PROMPT_REVIEW_ASK, subjectIndices: [] });
+    // 沒有使用者泡泡，只顯示 AI 正在回。
+    setPendingAsk({ text: "", subjectIndices: [] });
     return run(async () => {
       try {
         await api.patchPhotoPlan(id, pid, { user_prompt: text });
-        await api.ask(id, pid, PROMPT_REVIEW_ASK);
+        await api.reviewPrompt(id, pid);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);

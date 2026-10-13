@@ -76,6 +76,11 @@ How this tool works. These are the only facts you may state about the tool; if a
 """
 
 
+# The line the page asks with after the user saves 個人化需求 by hand. It is the
+# model's cue only, never logged as something the user said; the PANEL CHECK
+# REQUEST below quotes it, so change both together.
+PANEL_CHECK_ASK = "我改了個人化需求，幫我確認一下內容。"
+
 INSTRUCTION = """You are the assistant in a photo retouching chat. The user is looking at one photo, its AI analysis, and the edit plan the next render (美化) will use. Reply to the user's latest message.
 
 SCOPE

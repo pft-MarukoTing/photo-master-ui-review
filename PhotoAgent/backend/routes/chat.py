@@ -1233,7 +1233,11 @@ def ask_photo(session_id, photo_id):
     waiting = body.get("waiting")
     if waiting is not None:
         return _answer_waiting(user, session_id, photo, waiting, _screen(body.get("screen")))
-    text = body.get("text")
+    # `prompt_saved`, in place of `text`: the user just saved 個人化需求 by hand
+    # and the model should tidy it. The model reads it as a line in the chat, but
+    # the log keeps only the reply -- the user never said it.
+    prompt_saved = body.get("prompt_saved") is True
+    text = chat_assistant.PANEL_CHECK_ASK if prompt_saved else body.get("text")
     if not isinstance(text, str) or not text.strip() or len(text) > MESSAGE_TEXT_MAX_LEN:
         raise _RequestError(f"text must be a non-empty string of at most {MESSAGE_TEXT_MAX_LEN} characters")
     # The faces the user tapped to say who the message is about.
@@ -1248,7 +1252,7 @@ def ask_photo(session_id, photo_id):
     asked = store.make_message("user", text.strip(), card)
     history = [m for m in store.get_messages(user, session_id, limit=chat_assistant.HISTORY_LEN)
                if (m.get("card") or {}).get("photo_id") in (None, photo_id)] + [asked]
-    return _answer(user, session_id, photo, history, screen, [asked])
+    return _answer(user, session_id, photo, history, screen, [] if prompt_saved else [asked])
 
 
 def _answer_waiting(user, session_id, photo, message_id, screen):

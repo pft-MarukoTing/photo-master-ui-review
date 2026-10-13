@@ -163,6 +163,12 @@ export const api = {
       `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
       json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}), ...(screen ? { screen } : {}) }),
     ),
+  // 使用者手動存了個人化需求，請 AI 整理。後端自己補問句，不會留下使用者訊息。
+  reviewPrompt: (id: string, photoId: string) =>
+    request<{ messages: Message[] }>(
+      `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
+      json("POST", { prompt_saved: true }),
+    ),
   // Answers a question that was posted as a waiting ask, once the photo is analyzed.
   answerWaiting: (id: string, photoId: string, messageId: string, screen?: Screen) =>
     request<{ messages: Message[] }>(

@@ -1180,6 +1180,19 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(session["messages"][-2:], messages)
         self.assertEqual(self.enqueued[1:], [])
 
+    def test_a_saved_prompt_is_checked_without_a_user_line(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        res, seen = self.ask(sid, photo, None, {
+            "reply": "內容已經很清楚了，不用再整理。", "action": "none", "patch_json": ""}, prompt_saved=True)
+        self.assertEqual(res.status_code, 200, res.get_json())
+        messages = res.get_json()["messages"]
+        self.assertEqual([(m["role"], m["card"]["type"]) for m in messages], [("assistant", "llm_reply")])
+        self.assertIn(f"user: {chat.chat_assistant.PANEL_CHECK_ASK}", seen[0])
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(session["messages"][-1:], messages)
+        self.assertNotIn(chat.chat_assistant.PANEL_CHECK_ASK, [m.get("text") for m in session["messages"]])
+
     def test_a_single_setting_is_applied_without_asking(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)
