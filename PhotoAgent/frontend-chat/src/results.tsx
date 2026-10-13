@@ -6,6 +6,7 @@ import { api, urls } from "./api";
 import type { Capabilities, Dict, Photo, Version } from "./types";
 import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
 import { executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
+import { Icon } from "./icons";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
 
@@ -126,9 +127,12 @@ interface CanvasProps {
   // 兩邊才不會各講各的（也不會各自跑一套輪播）。
   busy?: { title: string } | null;
   onSelect: (v: Version) => void;
+  // 手機和直拿的平板：照片左上角那顆「第 N 版 ▾」，開大圖檢視切版本。桌機用不到，
+  // 那邊有下面的美化紀錄；按鈕一直都在，只是桌機的 CSS 把它收起來。
+  onViewer?: () => void;
 }
 
-export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect }: CanvasProps) {
+export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
   // 比較鈕就先停用；再點任何一版才回到那一版的 After。
@@ -351,6 +355,13 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               <div id="compare-hint" class="compare-hint" hidden={!!busy}>
                 {generated ? "After" : "Before"}
               </div>
+              {onViewer && (
+                <button type="button" class="canvas-version-btn" onClick={onViewer} aria-label="看大圖、切換版本">
+                  {generated && current ? `第 ${current.ordinal} 版` : "原圖"}
+                  {versions.length > 0 && <small>共 {versions.length} 版</small>}
+                  <Icon name="expand" size={14} />
+                </button>
+              )}
               <div class="canvas-actions">
                 {/* 處理中這兩顆指的都是上一版，但畫面上蓋著的是原圖 + 處理中那一層，
                     按了看不出任何變化 -- 這段期間就收起來。全螢幕留著，它和哪一版無關。 */}
@@ -606,6 +617,223 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
         hidden={!fullscreen}
         onClick={() => setFullscreen(false)}
       />
+    </div>
+  );
+}
+
+// 手機和直拿的平板沒有左邊那張比較卡，點照片列或對話裡的成品就開這個：整頁深色、
+// 只有照片。按住「按住看原圖」換成原圖、放開回來；底下一排是美化紀錄，點了就切到
+// 那一版（跟桌機點紀錄一樣，會記成目前這版）。看原圖時下載收起來，跟比較卡同一個道理。
+export function VersionViewer({ photo, versions, current, open, onClose, onSelect }: {
+  photo: Photo;
+  versions: Version[];
+  current: Version | null;
+  open: boolean;
+  onClose: () => void;
+  onSelect: (v: Version) => void;
+}) {
+  const [originPicked, setOriginPicked] = useState(false);
+  const [holding, setHolding] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setOriginPicked(!current);
+    setHolding(false);
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [open]);
+
+  // 目前這一格捲進畫面裡：版本一多，最新的那格會在右邊看不到的地方。
+  useLayoutEffect(() => {
+    if (!open) return;
+    const track = trackRef.current;
+    const on = track?.querySelector<HTMLElement>(".version-viewer-tile.is-current");
+    if (!track || !on) return;
+    const left = on.offsetLeft - (track.clientWidth - on.offsetWidth) / 2;
+    track.scrollLeft = Math.max(0, left);
+  }, [open, current?.version_id, originPicked]);
+
+  if (!open) return null;
+  const source = urls.sourceImage(photo.analyze_job_id);
+  const job = current && !originPicked ? versionJob(current) : null;
+  const title = job ? `第 ${current!.ordinal} 版` : "原圖";
+  const release = () => setHolding(false);
+
+  return (
+    <div class="version-viewer" role="dialog" aria-modal="true" aria-label={`${title}大圖`}>
+      <div class="version-viewer-head">
+        <span class="version-viewer-title">
+          {holding ? "原圖" : title}
+          {versions.length > 0 && <small>共 {versions.length} 版</small>}
+        </span>
+        <button type="button" class="version-viewer-btn" aria-label="關閉" onClick={onClose}>
+          <Icon name="x" size={18} />
+        </button>
+      </div>
+      <div class="version-viewer-stage" onClick={(e) => e.target === e.currentTarget && onClose()}>
+        <img src={source} alt="原始照片" hidden={!!job && !holding} />
+        {job && <img src={urls.resultImage(job)} alt={`${title}美化結果`} hidden={holding} />}
+      </div>
+      <div class="version-viewer-foot">
+        {job && (
+          <div class="version-viewer-actions">
+            <button
+              type="button"
+              class={`version-viewer-hold${holding ? " is-on" : ""}`}
+              aria-pressed={holding}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setHolding(true);
+              }}
+              onPointerUp={release}
+              onPointerCancel={release}
+              onLostPointerCapture={release}
+              onKeyDown={(e) => (e.key === " " || e.key === "Enter") && setHolding(true)}
+              onKeyUp={release}
+              onBlur={release}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              按住看原圖
+            </button>
+            <a
+              class="version-viewer-btn"
+              href={urls.resultImage(job)}
+              download={`photomaster_${photo.photo_id}_v${current!.ordinal}.png`}
+              aria-label={`下載${title}`}
+              title="下載"
+            >
+              <Icon name="down" size={18} />
+            </a>
+          </div>
+        )}
+        {versions.length > 0 && (
+          <div class="version-viewer-track" ref={trackRef} role="tablist" aria-label="這張照片的美化紀錄">
+            <button
+              type="button"
+              class={`version-viewer-tile${!job ? " is-current" : ""}`}
+              role="tab"
+              aria-selected={!job}
+              onClick={() => setOriginPicked(true)}
+            >
+              <img src={urls.sourceThumb(photo.analyze_job_id)} alt="" />
+              <span>原圖</span>
+            </button>
+            {versions.map((v) => {
+              const on = !!job && v.version_id === current?.version_id;
+              return (
+                <button
+                  type="button"
+                  class={`version-viewer-tile${on ? " is-current" : ""}`}
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => {
+                    setOriginPicked(false);
+                    if (v.version_id !== current?.version_id) onSelect(v);
+                  }}
+                >
+                  <img src={urls.resultThumb(versionJob(v))} alt="" />
+                  <span>第 {v.ordinal} 版</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// 手機和直拿的平板：照片在上、對話在下，中間這條把手拖動調整比例。放開會吸到最近的
+// 一段（照片佔 25／45／70%），聚焦後 ↑↓ 一段一段跳。
+// 比例寫在 .results-canvas-row 的 --split 上，記在 localStorage，下次進來沿用。
+const SPLIT_STOPS = [0.25, 0.45, 0.7];
+const SPLIT_MIN = 0.2;
+const SPLIT_MAX = 0.75;
+const SPLIT_KEY = "chat-split";
+
+function readSplit(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(SPLIT_KEY) || "");
+    if (v >= SPLIT_MIN && v <= SPLIT_MAX) return v;
+  } catch {}
+  return SPLIT_STOPS[1];
+}
+
+export function SplitGrip() {
+  const ref = useRef<HTMLDivElement>(null);
+  const [split, setSplit] = useState(readSplit);
+  const drag = useRef<{ y: number; from: number; h: number } | null>(null);
+  const row = () => ref.current?.closest<HTMLElement>(".results-canvas-row") || null;
+
+  // 照片縮到最小那段時，底部那排美化項目標籤先收起來（CSS 看 is-split-small）。
+  useLayoutEffect(() => {
+    const r = row();
+    r?.style.setProperty("--split", String(split));
+    r?.classList.toggle("is-split-small", split < 0.32);
+  }, [split]);
+  useEffect(
+    () => () => {
+      const r = row();
+      r?.style.removeProperty("--split");
+      r?.classList.remove("is-split-small", "is-resizing");
+    },
+    [],
+  );
+
+  const clamp = (v: number) => Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, v));
+  const settle = (v: number) => {
+    const snapped = SPLIT_STOPS.reduce((a, b) => (Math.abs(b - v) < Math.abs(a - v) ? b : a));
+    setSplit(snapped);
+    try {
+      localStorage.setItem(SPLIT_KEY, String(snapped));
+    } catch {}
+  };
+  const end = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    row()?.classList.remove("is-resizing");
+    settle(split);
+  };
+
+  return (
+    <div
+      ref={ref}
+      class="split-grip"
+      role="separator"
+      aria-orientation="horizontal"
+      aria-label="拖動調整照片和對話的大小"
+      aria-valuemin={SPLIT_MIN * 100}
+      aria-valuemax={SPLIT_MAX * 100}
+      aria-valuenow={Math.round(split * 100)}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        const r = row();
+        if (!r) return;
+        // 不擋的話，滑鼠按著往下拖會被瀏覽器當成選字或拖曳，拖到一半就 pointercancel。
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        drag.current = { y: e.clientY, from: split, h: r.getBoundingClientRect().height };
+        r.classList.add("is-resizing");
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (d && d.h) setSplit(clamp(d.from + (e.clientY - d.y) / d.h));
+      }}
+      onPointerUp={end}
+      onPointerCancel={end}
+      onKeyDown={(e) => {
+        if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+        e.preventDefault();
+        const i = SPLIT_STOPS.findIndex((s) => Math.abs(s - split) < 0.01);
+        const next = (i < 0 ? 1 : i) + (e.key === "ArrowUp" ? -1 : 1);
+        settle(SPLIT_STOPS[Math.max(0, Math.min(SPLIT_STOPS.length - 1, next))]);
+      }}
+    >
+      <i />
     </div>
   );
 }

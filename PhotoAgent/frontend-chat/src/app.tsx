@@ -37,7 +37,7 @@ import { Icon } from "./icons";
 import { CASE_PREFIX, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { handoffPatch, takeHandoff, writeHandoff } from "./handoff";
 import { resolveUser } from "./identity";
-import { ResultsCanvas, StepIndicator, stepState, versionJob } from "./results";
+import { ResultsCanvas, SplitGrip, StepIndicator, VersionViewer, stepState, versionJob } from "./results";
 import {
   categoriesFor,
   introFor,
@@ -1966,6 +1966,13 @@ function SessionView(props: {
     null;
   const thumb = urls.sourceThumb(photo.analyze_job_id);
   const source = urls.sourceImage(photo.analyze_job_id);
+  // 手機／直拿平板的大圖檢視：照片左上的版本鈕和對話裡的成品都開這個。
+  const [viewing, setViewing] = useState(false);
+  const closeViewer = () => setViewing(false);
+  const openVersion = (v: Version) => {
+    if (v.version_id !== current?.version_id) props.onSelectVersion(v);
+    setViewing(true);
+  };
 
   // The options can be changed in one round at a time: after analysis until
   // the first render, and from 調整後再美化 until its render. What was said or
@@ -2706,6 +2713,7 @@ function SessionView(props: {
               failed={(c.failed_job_ids || []).length}
               next={idx === lastRender && !adjusting && !offerCheck}
               note={typeof c.note === "string" ? c.note : undefined}
+              onOpen={() => openVersion(v)}
             />
             {answerIn(idx)}
             {offerCheck && (
@@ -3010,8 +3018,10 @@ function SessionView(props: {
                 pending={adjusting && !unchanged}
                 busy={busyCopy}
                 onSelect={props.onSelectVersion}
+                onViewer={() => setViewing(true)}
               />
               <div class="results-analysis-slot" id="results-analysis-slot">
+                <SplitGrip />
                 <ChatPanel
                   sub={sub}
                   toBottom={toBottom}
@@ -3060,6 +3070,14 @@ function SessionView(props: {
           </div>
         </div>
       </section>
+      <VersionViewer
+        photo={photo}
+        versions={versions}
+        current={current}
+        open={viewing}
+        onClose={closeViewer}
+        onSelect={props.onSelectVersion}
+      />
     </>
   );
 }

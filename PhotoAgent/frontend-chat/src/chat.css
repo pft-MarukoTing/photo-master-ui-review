@@ -265,6 +265,9 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-result{display:flex;flex-direction:column;align-items:flex-start;gap:var(--sp-3);margin:0}
 .chat-result img{display:block;width:auto;max-width:100%;height:auto;max-height:240px;
   border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.12)}
+/* 點了開大圖檢視。桌機旁邊有比較卡，這裡只多一個 zoom-in 游標；手機在下面放大。 */
+.chat-result-shot{position:relative;display:block;max-width:100%;padding:0;border:0;border-radius:14px;background:none;cursor:zoom-in}
+.chat-result-hint-narrow{display:none}
 .chat-result-cap{display:flex;flex-direction:column;gap:var(--sp-2)}
 .chat-result h4{margin:0;font-family:var(--chat-serif);font-size:var(--chat-fs-lg);font-weight:600;color:var(--n100)}
 .chat-verdict{display:inline-flex;align-items:center;gap:var(--sp-1);font-size:var(--chat-fs-sm);color:var(--n64)}
@@ -1024,6 +1027,23 @@ div.chat-proposal-row{cursor:default}
    都設成 display:contents，讓裡面的東西直接變成 .upload-content-row 的 flex 子項，再用
    order 排。桌機、平板完全不受影響。 */
 .chat-header-more,.upload-gallery-all,.session-tile-when{display:none}
+/* 對話頁的 header 有五顆按鈕，攤開要約 807px；平板直拿（iPad mini 768）或手機橫拿放不下，
+   手機瀏覽器會整頁縮小來塞。這個寬度也收進 ⋯，選單長相跟下面手機的一樣。首頁只有兩顆，維持攤開。 */
+@media (min-width:601px) and (max-width:860px){
+  .site-header:has(#chat-home-btn) .header-inner{position:relative}
+  .site-header:has(#chat-home-btn) .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+    background:transparent;color:var(--text-2);cursor:pointer}
+  .site-header:has(#chat-home-btn) .chat-header-more[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
+  .site-header:has(#chat-home-btn) .header-actions{display:none}
+  .site-header:has(#chat-home-btn) .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);right:16px;z-index:1500;
+    min-width:200px;padding:6px;border-radius:16px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
+  .site-header:has(#chat-home-btn) .header-actions.is-open .btn,
+  .site-header:has(#chat-home-btn) .header-actions.is-open #chat-report-btn.btn{width:100%;height:44px;justify-content:flex-start;gap:10px;padding:0 12px;border:0;border-radius:10px;
+    background:transparent;color:var(--text);font-size:14px}
+  .site-header:has(#chat-home-btn) .header-actions.is-open .btn:hover{background:rgba(var(--accent-rgb),.08)}
+  .site-header:has(#chat-home-btn) .header-actions.is-open .btn[disabled]{opacity:.45}
+  .site-header:has(#chat-home-btn) .header-actions.is-open .btn-label{display:inline}
+}
 @media (max-width:600px){
   /* Header：三顆按鈕收進 ⋯ 選單。 */
   html:root{--header-h:56px}
@@ -1237,7 +1257,124 @@ div.chat-proposal-row{cursor:default}
   .chat-panel-photo svg{margin-left:auto;flex:none}
 }
 @keyframes chat-photo-in{from{opacity:0;transform:translateY(-6px)}}
-@media (prefers-reduced-motion:reduce){.chat-panel-photo,.photo-viewer{animation:none!important}}
+
+/* ---------- 對話頁：大圖檢視 ----------
+   整頁深色、只放照片。上面是第幾版和關閉；下面是「按住看原圖」、下載，和一排美化紀錄。
+   按鈕都是半透明白，不做實心。 */
+.version-viewer{position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;box-sizing:border-box;
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);background:#0c0c0e;color:#fff;animation:photo-viewer-in .15s ease-out}
+.version-viewer-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);height:60px;padding:0 var(--sp-3) 0 var(--sp-5)}
+.version-viewer-title{display:flex;align-items:baseline;gap:var(--sp-2);font-size:16px;font-weight:600}
+.version-viewer-title small{font-size:12px;font-weight:400;color:rgba(255,255,255,.6)}
+.version-viewer-btn{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;
+  background:rgba(255,255,255,.14);color:#fff;cursor:pointer;text-decoration:none}
+.version-viewer-btn:hover{background:rgba(255,255,255,.24)}
+.version-viewer-stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:var(--sp-2) var(--sp-4)}
+.version-viewer-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;
+  -webkit-user-select:none;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none}
+.version-viewer-stage img[hidden]{display:none}
+.version-viewer-foot{flex:none;display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-3) 0 var(--sp-4)}
+.version-viewer-actions{display:flex;align-items:center;justify-content:center;gap:var(--sp-3);padding:0 var(--sp-4)}
+.version-viewer-hold{height:44px;padding:0 22px;border:1px solid rgba(255,255,255,.28);border-radius:22px;background:rgba(255,255,255,.08);
+  color:#fff;font:inherit;font-size:14px;font-weight:500;cursor:pointer;touch-action:none;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.version-viewer-hold.is-on{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.56)}
+/* 版本少就置中，多了往右滑：頭尾各吃 auto margin，捲動時不會被切掉。 */
+.version-viewer-track{display:flex;gap:var(--sp-3);overflow-x:auto;padding:0 var(--sp-4);scrollbar-width:none;overscroll-behavior-x:contain}
+.version-viewer-track::-webkit-scrollbar{display:none}
+.version-viewer-track>:first-child{margin-left:auto}
+.version-viewer-track>:last-child{margin-right:auto}
+.version-viewer-tile{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;border:0;background:none;
+  color:rgba(255,255,255,.6);font:inherit;font-size:12px;line-height:1.3;cursor:pointer}
+.version-viewer-tile img{display:block;width:52px;height:64px;box-sizing:border-box;object-fit:cover;border:2px solid transparent;border-radius:10px;opacity:.6}
+.version-viewer-tile.is-current{color:#fff;font-weight:600}
+.version-viewer-tile.is-current img{border-color:#fff;opacity:1}
+.version-viewer-btn:focus-visible,.version-viewer-hold:focus-visible,.version-viewer-tile:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+/* ---------- 手機對話頁（≤600，以及直拿的平板）----------
+   照片在上、對話在下，各佔 header 以下的一段，比例由 --split（照片那段，0–1）決定，
+   中間的把手可以拖（SplitGrip）。對話那張往上蓋住照片底部 --split-overlap，蓋住的那段
+   半透明加模糊，往下才轉成實心。照片上的按鈕縮成角落的半透明圓鈕；美化紀錄收進左上的
+   「第 N 版」，點了開大圖檢視切版本。上面的流程列拿掉。桌機用不到的把手和版本鈕在這裡之外都收起來。 */
+.split-grip,.canvas-version-btn{display:none}
+@media (max-width:600px),(max-width:1200px) and (orientation:portrait){
+  .chat-flow-slot{display:none}
+  #results-body.showing-analysis{max-width:none;margin:0;padding:0}
+  #results-detail,
+  body.side-panel-layout #results-detail:has(.results-canvas-row.showing-analysis){flex:none;height:calc(100dvh - var(--header-h));min-height:0;padding:0;gap:0;overflow:hidden}
+  .results-canvas-row.showing-analysis,
+  body.side-panel-layout .results-canvas-row.showing-analysis{--split:.45;--split-overlap:30px;--split-veil:.2;--split-blur:24px;
+    position:relative;display:block;height:100%;min-height:0}
+
+  /* 照片那段：比較卡去掉外框，整段都是照片的底。 */
+  .results-canvas-row.showing-analysis .results-canvas-col,
+  body.side-panel-layout .results-canvas-row.showing-analysis .results-canvas-col{position:absolute;inset:0 0 auto;display:block;width:auto;
+    height:calc(var(--split) * 100%);min-height:0;max-height:none;transition:height .28s cubic-bezier(.2,.8,.2,1)}
+  .results-canvas-row.showing-analysis .results-canvas-top,
+  body.side-panel-layout .results-canvas-row.showing-analysis .results-canvas-top{height:100%!important;min-height:0;max-height:none}
+  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen){height:100%;min-height:0;max-height:none;box-sizing:border-box;
+    padding:0;border:0;border-radius:0;box-shadow:none;display:block}
+  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame-wrap{position:relative;height:100%;min-height:0;max-height:none;
+    display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:var(--sp-3) var(--sp-3) var(--sp-2)}
+  /* 照片底部故意留得比 --split-overlap 少，對話那張的半透明上緣才真的壓在照片上。
+     框撐滿這段高度、寬度照樣跟著圖走；圖在框裡等比縮到放得下。 */
+  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame{max-width:100%;height:100%;min-height:0;flex:none;box-shadow:none}
+  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame img{max-height:100%}
+  .results-canvas-row.showing-analysis .version-strip,
+  .results-canvas-row.showing-analysis #compare-hint,
+  .results-canvas-row.showing-analysis #compare-fullscreen-btn{display:none}
+
+  /* 角落的按鈕浮在照片上：左上版本、右上比較和下載。 */
+  .results-canvas-row.showing-analysis .canvas-header-row{position:absolute;inset:var(--sp-3) var(--sp-3) auto;z-index:2;margin:0;padding:0;
+    display:flex;align-items:center;justify-content:space-between;pointer-events:none}
+  .results-canvas-row.showing-analysis .canvas-header-row>*{pointer-events:auto}
+  .canvas-version-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:0;border-radius:16px;
+    background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--n100);
+    font:inherit;font-size:13px;font-weight:600;cursor:zoom-in}
+  .canvas-version-btn small{font-size:12px;font-weight:400;color:var(--n54)}
+  .canvas-version-btn svg{color:var(--n64)}
+  .results-canvas-row.showing-analysis .canvas-actions{gap:var(--sp-2);margin-left:auto}
+  .results-canvas-row.showing-analysis .canvas-actions .canvas-btn{width:36px;height:36px;border:0;border-radius:50%;
+    background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--n100);box-shadow:none}
+
+  /* 美化項目那排標籤放在被對話蓋住的那段上面；照片縮到最小那段時先收起來。 */
+  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .recipe-tags{bottom:calc(var(--split-overlap) + var(--sp-2))}
+  .results-canvas-row.showing-analysis.is-split-small .recipe-tags{display:none}
+
+  /* 對話那段：往上蓋住照片 --split-overlap。 */
+  .results-canvas-row.showing-analysis .results-analysis-slot,
+  body.side-panel-layout .results-canvas-row.showing-analysis .results-analysis-slot{position:absolute;inset:auto 0 0;z-index:3;
+    top:calc(var(--split) * 100% - var(--split-overlap));display:flex;flex-direction:column;width:auto;min-height:0;max-height:none;
+    border-radius:22px 22px 0 0;
+    background:linear-gradient(to bottom,rgba(250,244,246,var(--split-veil)) 0,rgba(250,244,246,var(--split-veil)) calc(var(--split-overlap) + 4px),var(--n04) calc(var(--split-overlap) + 30px));
+    -webkit-backdrop-filter:blur(var(--split-blur));backdrop-filter:blur(var(--split-blur));
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 -8px 24px rgba(51,20,31,.08);transition:top .28s cubic-bezier(.2,.8,.2,1)}
+  .results-canvas-row.is-resizing .results-canvas-col,
+  .results-canvas-row.is-resizing .results-analysis-slot{transition:none!important}
+
+  .split-grip{position:relative;flex:none;display:grid;place-items:center;height:var(--split-overlap);cursor:row-resize;touch-action:none;user-select:none;-webkit-user-select:none}
+  .split-grip::before{content:"";position:absolute;inset:-10px 0 -6px}
+  .split-grip i{width:40px;height:5px;border-radius:3px;background:rgba(51,20,31,.28);transition:width .2s,background .2s}
+  .split-grip:hover i,.results-canvas-row.is-resizing .split-grip i{width:56px;background:rgba(var(--accent-rgb),.7)}
+  .split-grip:focus-visible{outline:none}
+  .split-grip:focus-visible i{outline:2px solid var(--accent);outline-offset:4px}
+
+  .results-analysis-slot>.chat-panel{flex:1 1 auto;height:auto;min-height:0;border-left:0;padding-left:0}
+  .results-analysis-slot>.chat-panel>.chat-panel-head{display:none}
+  .results-analysis-slot>.chat-panel .chat-timeline{padding:var(--sp-1) var(--sp-4) var(--sp-3);
+    -webkit-mask:linear-gradient(to bottom,transparent 0,#000 18px);mask:linear-gradient(to bottom,transparent 0,#000 18px)}
+  .results-analysis-slot>.chat-panel .chat-composer{padding-bottom:calc(var(--sp-3) + env(safe-area-inset-bottom))}
+
+  /* 照片已經在上面了，對話裡的成品只要認得出是哪一版就好。點了一樣開大圖檢視。 */
+  .chat-result-shot{width:132px}
+  .chat-result-shot img{width:100%;max-height:none;border-radius:inherit}
+  .chat-result-hint-wide{display:none}
+  .chat-result-hint-narrow{display:inline}
+}
+@media (max-width:600px) and (prefers-reduced-motion:reduce),(max-width:1200px) and (orientation:portrait) and (prefers-reduced-motion:reduce){
+  .results-canvas-row.showing-analysis .results-canvas-col,.results-canvas-row.showing-analysis .results-analysis-slot{transition:none!important}
+}
+@media (prefers-reduced-motion:reduce){.chat-panel-photo,.photo-viewer,.version-viewer{animation:none!important}}
 
 /* ---------- 平板上傳頁（橫拿）----------
    一個螢幕高、不捲頁。照片在左、對話在右 500px，跟桌機同一個分法。直拿的平板走手機那套。 */
@@ -1255,4 +1392,11 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-content-row>.prechat-stage{flex:1 1 0%;width:auto;height:100%}
   #upload-section .upload-content-row>.home-chat{flex:0 0 500px;width:500px;max-width:none;height:100%}
   #upload-section .upload-content-row>.home-chat.is-solo{flex:0 1 auto;width:min(100%,720px);max-width:720px}
+}
+
+/* ---------- 平板對話頁（橫拿）----------
+   照片和對話照樣左右並排，對話固定 500px，跟上傳頁同寬，剩下的給照片。 */
+@media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  .results-canvas-row.showing-analysis .results-canvas-col{flex:1 1 0%;min-width:0}
+  .results-canvas-row.showing-analysis .results-analysis-slot{flex:0 0 500px;width:500px}
 }

@@ -23,12 +23,15 @@ export function ChatPanel(props: {
   // The photo being worked on, before the session starts. On a phone, once its
   // big copy in the timeline (UploadBubble with onOpen) scrolls off the top,
   // the head gives its place to a bar showing it; tapping either opens it.
-  photo?: { src: string; onOpen: () => void };
+  // always: the session page, where there is no such copy -- the bar stays up
+  // from the start, titled with the version on screen.
+  photo?: { src: string; onOpen: () => void; title?: string; note?: string; always?: boolean };
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [photoOut, setPhotoOut] = useState(false);
   const photoSrc = props.photo?.src;
+  const photoUp = !!props.photo && (photoOut || !!props.photo.always);
   useEffect(() => {
     const el = timeline.current;
     const shot = el?.querySelector(".chat-upload.is-zoom .chat-upload-shot");
@@ -103,7 +106,7 @@ export function ChatPanel(props: {
     <div
       class={`chat-panel${props.class ? ` ${props.class}` : ""}${dragging ? " is-dragging" : ""}${
         props.photo ? " has-photo" : ""
-      }${props.photo && photoOut ? " is-photo-out" : ""}`}
+      }${photoUp ? " is-photo-out" : ""}`}
       onDragOver={
         drop &&
         ((e) => {
@@ -128,11 +131,11 @@ export function ChatPanel(props: {
         <span class="chat-panel-sub">{props.sub}</span>
       </div>
       {props.photo && (
-        <button type="button" class="chat-panel-photo" onClick={props.photo.onOpen} tabIndex={photoOut ? 0 : -1}>
+        <button type="button" class="chat-panel-photo" onClick={props.photo.onOpen} tabIndex={photoUp ? 0 : -1}>
           <img src={props.photo.src} alt="" />
           <span class="chat-panel-photo-text">
-            <b>這次要修的照片</b>
-            <small>點一下看大圖</small>
+            <b>{props.photo.title || "這次要修的照片"}</b>
+            <small>{props.photo.note || "點一下看大圖"}</small>
           </span>
           <Icon name="expand" size={16} />
         </button>
@@ -462,12 +465,14 @@ const qaCache = new Map<string, { verdict: string; score: string; pass: boolean 
 // next：這是最新的一版、下方正擺著「調整」時才講下一步。舊的結果卡不講，不然
 // 往上捲會看到每一版都在叫人去按一顆已經不在的按鈕。
 // note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。
-export function ResultCard({ job, ordinal, failed, next, note }: {
+export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
   job: string;
   ordinal: number;
   failed: number;
   next?: boolean;
   note?: string;
+  // 手機上旁邊沒有比較卡，成品放大、點了開大圖檢視。
+  onOpen?: () => void;
 }) {
   const [qa, setQa] = useState(qaCache.get(job) || null);
   useEffect(() => {
@@ -497,7 +502,16 @@ export function ResultCard({ job, ordinal, failed, next, note }: {
   // canvas on the left already loaded, so this costs no extra fetch.
   return (
     <figure class="chat-result">
-      <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />
+      {onOpen ? (
+        <button type="button" class="chat-result-shot" aria-label={`看第 ${ordinal} 版大圖`} onClick={onOpen}>
+          <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />
+          <span class="chat-upload-zoom" aria-hidden="true">
+            <Icon name="expand" size={14} />
+          </span>
+        </button>
+      ) : (
+        <img src={urls.resultImage(job)} alt={`第 ${ordinal} 版美化結果`} />
+      )}
       <figcaption class="chat-result-cap">
         <h4>第 {ordinal} 版完成</h4>
         {note && <p class="chat-text">{note}</p>}
@@ -509,7 +523,8 @@ export function ResultCard({ job, ordinal, failed, next, note }: {
         )}
         <p class="chat-text chat-muted">
           {failed > 0 && `有 ${failed} 張沒有成功，已略過。`}
-          左側可比較 Before / After，也可從「美化紀錄」切換版本。
+          <span class="chat-result-hint-wide">左側可比較 Before / After，也可從「美化紀錄」切換版本。</span>
+          <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點左上的版本也能切換。</span>
         </p>
         {next && <p class="chat-text">還想改哪裡的話，按下方的「調整」，或直接打字跟我說。</p>}
       </figcaption>
