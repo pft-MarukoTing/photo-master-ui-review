@@ -448,7 +448,7 @@ def validate_context_fields(context, crops, preview):
     people = context.get('preview_people')
     if not isinstance(people, list):
         raise ValueError('invalid_preview_people')
-    evidence_crops = [c | {'bytes': b'supplied' if c['sent_to_model'] else None} for c in crops]
+    evidence_crops = [{**c, 'bytes': b'supplied' if c['sent_to_model'] else None} for c in crops]
     projection = build_people(preview, evidence_crops, candidates, assign_ids=False)
     if len(projection) != len(people):
         raise ValueError('fixed_people_membership_mismatch')
