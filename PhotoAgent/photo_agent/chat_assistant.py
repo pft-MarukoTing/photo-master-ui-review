@@ -336,7 +336,8 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
 
 # 開了「詳細解說」時，分析一好，聊天裡第一則講照片的話。分析的原文是寫給
 # 修圖模型的問題清單，直接貼出來像在挑毛病；這裡改成修圖師的口吻：先說這張好在
-# 哪，再說要做的兩三件事，每件附上為什麼、修完會怎樣。要做的事只能從
+# 哪，再說要做的兩三件事，每件附上為什麼、修完會怎樣。讚美和清單之間用一小句
+# 承接（這次要把照片往哪個方向帶），不然從欣賞直接跳到「我會先處理」太突然。要做的事只能從
 # retouch_recipe 拿（那是這次美化真的會做的），問題和目標只拿來說原因跟結果，
 # 才不會答應了做不到的事。形狀跟 chat_brief.build_brief 一樣，頁面照原樣顯示。
 OPENING_POINTS_MAX = 3
@@ -359,7 +360,7 @@ OPENING_INSTRUCTION = """You are a senior photo retoucher. A photo has just been
 
 Write in Traditional Chinese (Taiwan), plain everyday words.
 
-"lead": one or two short sentences. When WISHES holds what the user asked for, one clause of the lead answers it: tie it to what is in this photo and the feeling they are after, in a few words of your own, never quoting the wish whole (「你想要的雪景感，正好襯得住他們紅色的圍巾」). Say it as something you will do, never as already done. Start with what is best about this photo -- the moment, the light, the story -- in concrete words from PHOTO (who and what is in it, where). Describe the photo as it is now (「有種雪地裡散步的安靜感」); never 「保留了」「保有」, which sound as if it had already been edited. Then end with 「我會先處理這幾件事：」 and nothing before it about the plan: the points say what you will do, so the lead never previews them. Do not list problems here.
+"lead": one or two short sentences. When WISHES holds what the user asked for, one clause of the lead answers it: tie it to what is in this photo and the feeling they are after, in a few words of your own, never quoting the wish whole (「你想要的雪景感，正好襯得住他們紅色的圍巾」). Say it as something you will do, never as already done. Start with what is best about this photo -- the moment, the light, the story -- in concrete words from PHOTO (who and what is in it, where). Describe the photo as it is now (「有種雪地裡散步的安靜感」); never 「保留了」「保有」, which sound as if it had already been edited. Then bridge to the plan in one short clause: the direction this edit takes the photo, as a quality of the whole picture in a few words from GOAL, tied to what you just praised (「有種雪地裡散步的安靜感，為了讓這份安靜更乾淨，」) -- never a specific change, since the points say those. End the lead with a colon that leads into the points, worded your own way each time with the same meaning as 「我會先處理這幾件事：」. Do not list problems here.
 
 "points": two or three items, most visible first. Each is one sentence: what you will do, and why or what it will look like after. Start each with the action itself (「把畫面右側的路人裁掉，…」); never open a point with 「我會」 -- the lead already says it (「把偏黃的色溫收回一點，雪會回到白、膚色也更自然」). Take every item from RECIPE -- those are the changes this edit will actually make -- and never promise anything RECIPE does not hold. Use ISSUES and GOAL only for the why and the after. Merge small related items and leave the rest out.
 
