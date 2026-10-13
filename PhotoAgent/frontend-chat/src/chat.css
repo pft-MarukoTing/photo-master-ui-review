@@ -857,7 +857,9 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
   font:inherit;font-size:var(--chat-fs-md);color:var(--n84);text-align:left;cursor:pointer}
 button.chat-proposal-row:hover{border-color:var(--n34)}
 div.chat-proposal-row{cursor:default}
-.chat-proposal-label{flex:1 0 auto;white-space:nowrap}
+/* 短標籤（個人化需求、閉眼）照舊一行、不被擠斷；美化建議那種整句的標籤最多佔滿一列再換行，
+   不會撐出卡片。 */
+.chat-proposal-label{flex:1 0 auto;max-width:100%;overflow-wrap:anywhere}
 .chat-proposal-label b{color:var(--n100);margin-right:var(--sp-1)}
 .chat-proposal-diff{display:inline-flex;align-items:baseline;gap:var(--sp-1);min-width:0;max-width:100%;font-size:var(--chat-fs-sm);line-height:1.5}
 .chat-proposal-diff svg{flex-shrink:0;align-self:center}
