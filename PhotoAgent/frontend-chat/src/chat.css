@@ -994,8 +994,9 @@ div.chat-proposal-row{cursor:default}
    磚的勾勾也在右上角，有 × 的時候收起來；多選時沒有 ×，勾勾照常顯示。 */
 .demo-image-tile .chat-tile-remove{display:flex}
 .demo-image-tile:has(.chat-tile-remove) .demo-image-tile-check{display:none}
-/* 多選時跟面板模式（.history-cube-check）一樣：每格露出空的圓圈，勾起來的那格填色打勾。
-   舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上。 */
+/* 舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上（首頁範例照片選了要打勾）。 */
+.demo-image-tile.is-selected .demo-image-tile-check{opacity:1;background:var(--mv-grad);border-color:transparent}
+/* 多選時跟面板模式（.history-cube-check）一樣：每格露出空的圓圈，勾起來的那格填色打勾。 */
 .history-list.chat-picking .demo-image-tile-check{opacity:1}
 .history-list.chat-picking .demo-image-tile-check svg{opacity:0;transition:opacity .15s}
 .history-list.chat-picking .demo-image-tile.is-selected .demo-image-tile-check{background:var(--mv-grad);border-color:transparent}
