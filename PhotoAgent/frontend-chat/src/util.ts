@@ -304,3 +304,51 @@ export function qaText(qc: { pass?: boolean; overall_status?: string } | undefin
   if (!qc) return "";
   return qc.pass === false ? qc.overall_status || "需人工複查" : qc.overall_status || "可展示";
 }
+
+// 下載成品：跟面板模式（app.js downloadCurrentResultImage）一樣看檔頭決定副檔名。
+// 成品現在存成 JPEG，但較早的工作 /result/<job>/image 還是回 PNG，寫死副檔名會
+// 讓舊檔名不對。iPhone／iPad 走分享面板才存得進照片，其他照舊用 <a download>。
+function imageFormatOf(buf: ArrayBuffer): { ext: string; mime: string } {
+  const h = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  return h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47
+    ? { ext: "png", mime: "image/png" }
+    : { ext: "jpg", mime: "image/jpeg" };
+}
+
+const isIOS = () =>
+  /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+
+function saveVia(href: string, name: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+export async function downloadImage(url: string, base: string): Promise<void> {
+  let file: File;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const buf = await res.arrayBuffer();
+    const { ext, mime } = imageFormatOf(buf);
+    file = new File([buf], `${base}.${ext}`, { type: mime });
+  } catch {
+    // 讀不到就退回直接下載那個網址，至少檔案拿得到。
+    saveVia(url, `${base}.jpg`);
+    return;
+  }
+  if (isIOS() && navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+      return;
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+    }
+  }
+  const href = URL.createObjectURL(file);
+  saveVia(href, file.name);
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
+}

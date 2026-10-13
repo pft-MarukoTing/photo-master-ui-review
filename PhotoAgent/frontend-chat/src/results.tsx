@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, urls } from "./api";
 import type { Capabilities, Dict, Photo, Version } from "./types";
 import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
-import { executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
+import { downloadImage, executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
 import { Icon } from "./icons";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
@@ -407,7 +407,11 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       id="download-link"
                       class="canvas-btn"
                       href={urls.resultImage(job)}
-                      download={`photomaster_${photo.photo_id}_v${current!.ordinal}.png`}
+                      download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        void downloadImage(urls.resultImage(job), `photomaster_${photo.photo_id}_v${current!.ordinal}`);
+                      }}
                       title="下載結果"
                       aria-label="下載結果"
                     >
@@ -702,7 +706,11 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
             <a
               class="version-viewer-btn"
               href={urls.resultImage(job)}
-              download={`photomaster_${photo.photo_id}_v${current!.ordinal}.png`}
+              download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
+              onClick={(e) => {
+                e.preventDefault();
+                void downloadImage(urls.resultImage(job), `photomaster_${photo.photo_id}_v${current!.ordinal}`);
+              }}
               aria-label={`下載${title}`}
               title="下載"
             >
