@@ -289,6 +289,14 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    flush against the rule, so the strip holds 52px as a floor: the chips get
    10px each side, and the strip keeps one height whether or not faces show. */
 .chat-footbar{min-height:52px}
+/* Phone width: 指定對象 + a face + 下一步： + two chips outgrow the strip, and
+   the faces -- the side that gives way -- got squeezed to a sliver. The
+   labels give way first: the cue goes, and the adjust label keeps only
+   還沒美化：. The chips name their own action, while 指定對象 is the only
+   thing saying what tapping a face does. 440 covers two faces plus the widest
+   pair (照建議直接美化) with its cue. */
+.chat-footbar{container-type:inline-size}
+@container (max-width:440px){.chat-quick-label.is-cue,.chat-quick-label-detail{display:none}}
 .chat-footbar+.chat-composer{border-top:0;padding-top:0}
 /* A fixed 20px rather than align-self:stretch -- the faces are half again as
    tall as the chips, and a full-height rule drew attention to that. */
@@ -748,11 +756,44 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
 .chat-text .chat-face-chip.is-small,.chat-recap .chat-face-chip.is-small{vertical-align:middle;margin:-2px 2px 0}
 .chat-face-picker{display:flex;align-items:center;gap:var(--sp-2);flex:1 1 auto;min-width:0}
 .chat-face-picker-label{font-size:var(--chat-fs-sm);color:var(--n54);flex-shrink:0}
-/* Scrolls rather than wraps: a wrap would grow the strip a row at a time and
-   eat the transcript above it, and the number of faces is the photo's to
-   decide, not ours. Same plain native scroller as .chat-opt-style-row. The 2px
-   of vertical padding is for the picked ring, which is drawn outside the box. */
+/* Only shown while every face fits (FacePicker folds it otherwise), so it
+   never wraps or scrolls in practice; overflow-x stays as a guard for the
+   frame before the fold is measured. The 2px of vertical padding is for the
+   picked ring, which is drawn outside the box. */
 .chat-face-track{display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow-x:auto;padding:2px 0}
+/* Too many faces for the room: FacePicker folds them into this one button,
+   which opens .chat-face-panel. The button stays as tall as a face in the row
+   so the strip does not jump when it folds. Plain faces, no picked ring --
+   who is picked already shows as the token in the field below. */
+.chat-face-picker{position:relative}
+.chat-face-fold{display:inline-flex;align-items:center;gap:var(--sp-1);flex-shrink:0;padding:3px var(--sp-2) 3px 3px;
+  border:1px solid var(--n34);border-radius:999px;background:var(--card);color:var(--n64);cursor:pointer;
+  font:600 var(--chat-fs-sm)/1 Inter,'Noto Sans TC',system-ui,sans-serif}
+.chat-face-fold:hover,.chat-face-fold.is-open{border-color:var(--accent);color:var(--accent-text)}
+.chat-face-fold-faces{display:inline-flex;align-items:center}
+.chat-face-fold .chat-face-chip.is-avatar{padding:0;border:0;background:none}
+.chat-face-fold .chat-face-chip.is-avatar img,.chat-face-fold .chat-face-chip.is-avatar .chat-face-blank{width:40px;height:40px;
+  box-shadow:0 0 0 2px var(--card)}
+.chat-face-fold-faces>.chat-face-chip+.chat-face-chip{margin-left:-12px}
+.chat-face-fold svg{flex-shrink:0;transition:transform .15s ease}
+.chat-face-fold.is-open svg{transform:rotate(180deg)}
+/* Opens upward over the transcript, like .chat-attach-menu -- the strip is the
+   bottom of the screen. A grid, not a list: there are no names to list, only
+   faces to recognise. As wide as the strip allows (100cqw is the strip, which
+   is the container), so a crowded photo grows rows rather than a scroller. */
+.chat-face-panel{position:absolute;left:0;bottom:calc(100% + var(--sp-2));z-index:20;
+  width:max-content;max-width:calc(100cqw - 2 * var(--sp-4));
+  display:flex;flex-direction:column;gap:var(--sp-2);padding:var(--sp-2) var(--sp-3) var(--sp-3);border-radius:12px;
+  border:1px solid var(--border);background:var(--card);
+  box-shadow:0 14px 32px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.06);
+  animation:chat-attach-menu-in .14s ease-out}
+.chat-face-panel-head{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
+  font-size:var(--chat-fs-sm);color:var(--n54)}
+.chat-face-panel-x{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;margin-right:calc(-1 * var(--sp-2));
+  padding:0;border:0;border-radius:50%;background:none;color:var(--n64);cursor:pointer}
+.chat-face-panel-x:hover{background:var(--n04);color:var(--n84)}
+.chat-face-grid{display:flex;flex-wrap:wrap;gap:var(--sp-2);padding:2px}
+@media (prefers-reduced-motion:reduce){.chat-face-panel{animation:none}}
 
 /* The live composer */
 .chat-composer-field.is-live{gap:var(--sp-1);padding:var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-3);cursor:text;min-width:0}

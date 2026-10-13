@@ -260,10 +260,12 @@ export function Chip(props: {
   );
 }
 
-export function QuickBar({ label, children }: { label?: string; children: ComponentChildren }) {
+// `cue`: the label only leads into the chips (下一步：), so a narrow strip can
+// drop it; a label that says something the chips do not stays.
+export function QuickBar({ label, cue, children }: { label?: ComponentChildren; cue?: boolean; children: ComponentChildren }) {
   return (
     <div class="chat-quick">
-      {label && <span class="chat-quick-label">{label}</span>}
+      {label && <span class={cue ? "chat-quick-label is-cue" : "chat-quick-label"}>{label}</span>}
       {children}
     </div>
   );
@@ -286,35 +288,129 @@ export function FootBar({ quick, faces }: { quick?: ComponentChildren; faces?: C
   );
 }
 
-// The label sits outside the scroller so it stays put while the faces move.
+// The faces sit in a row while they fit. When they do not, the row folds into
+// one button -- a couple of faces and +N -- that opens every face upward in a
+// grid: a scroller hid the rest without a hint and left the last face cut in
+// half. The fit is measured on the picker's own width, which is whatever the
+// strip leaves after the actions, so it does not depend on what is inside.
 // Each tap adds that face to the pick or takes it back out; the pick keeps the
-// order the faces were tapped in.
+// order the faces were tapped in. Picking several is the point, so a tap does
+// not close the panel -- its X, the button again, Esc or a tap outside do.
+const FACE_W = 48; // .chat-face-chip.is-avatar: 40 + 3px pad + 1px border, each side
+const FACE_GAP = 8; // --sp-2
+const FOLDED_FACES = 2;
+
 export function FacePicker(props: {
   people: (FaceRef & { subjectIndex: number })[];
   pointed: number[];
   onPoint?: (subjectIndices: number[]) => void;
 }) {
+  const { people } = props;
+  const box = useRef<HTMLDivElement>(null);
+  const label = useRef<HTMLSpanElement>(null);
+  const [folded, setFolded] = useState(false);
+  const [open, setOpen] = useState(false);
+  // The pick when the panel opened. Closing it on purpose (X, the button, Esc)
+  // moves to the field the way a tap in the row does, if the pick changed; a
+  // tap outside landed on something else, so it does not.
+  const opened = useRef("");
+  const key = props.pointed.join(",");
+  const close = (focus: boolean) => {
+    setOpen(false);
+    if (focus && key && key !== opened.current) {
+      box.current?.closest(".chat-panel")?.querySelector<HTMLInputElement>(".chat-composer-field.is-live input")?.focus();
+    }
+  };
+
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const need = people.length * FACE_W + (people.length - 1) * FACE_GAP;
+    const fit = () => setFolded(need > el.clientWidth - (label.current?.offsetWidth || 0) - FACE_GAP);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [people.length]);
+
+  useEffect(() => {
+    if (!folded) setOpen(false);
+  }, [folded]);
+
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: Event) => {
+      if (!box.current?.contains(e.target as Node)) close(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && close(true);
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open, key]);
+
+  const faces = people.map((p) => {
+    const picked = props.pointed.includes(p.subjectIndex);
+    return (
+      <FaceChip
+        face={p}
+        avatarOnly
+        picked={picked}
+        title={picked ? `取消指定${faceLabel(p)}` : `指定${faceLabel(p)}`}
+        onClick={() =>
+          props.onPoint?.(
+            picked ? props.pointed.filter((i) => i !== p.subjectIndex) : [...props.pointed, p.subjectIndex],
+          )
+        }
+      />
+    );
+  });
+  const more = people.length - FOLDED_FACES;
+
   return (
-    <div class="chat-face-picker">
-      <span class="chat-face-picker-label">指定對象</span>
-      <div class="chat-face-track">
-        {props.people.map((p) => {
-          const picked = props.pointed.includes(p.subjectIndex);
-          return (
-            <FaceChip
-              face={p}
-              avatarOnly
-              picked={picked}
-              title={picked ? `取消指定${faceLabel(p)}` : `指定${faceLabel(p)}`}
-              onClick={() =>
-                props.onPoint?.(
-                  picked ? props.pointed.filter((i) => i !== p.subjectIndex) : [...props.pointed, p.subjectIndex],
-                )
-              }
-            />
-          );
-        })}
-      </div>
+    <div class="chat-face-picker" ref={box}>
+      <span class="chat-face-picker-label" ref={label}>
+        指定對象
+      </span>
+      {folded ? (
+        <>
+          <button
+            type="button"
+            class={`chat-face-fold${open ? " is-open" : ""}`}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            aria-label={`指定對象，共 ${people.length} 位`}
+            onClick={() => {
+              if (open) return close(true);
+              opened.current = key;
+              setOpen(true);
+            }}
+          >
+            <span class="chat-face-fold-faces">
+              {people.slice(0, FOLDED_FACES).map((p) => (
+                <FaceChip face={p} avatarOnly />
+              ))}
+            </span>
+            {more > 0 && <span class="chat-face-fold-more">+{more}</span>}
+            <Icon name="chevron-up" size={14} />
+          </button>
+          {open && (
+            <div class="chat-face-panel" role="dialog" aria-label="指定對象">
+              <div class="chat-face-panel-head">
+                <span>指定對象</span>
+                <button type="button" class="chat-face-panel-x" aria-label="關閉" onClick={() => close(true)}>
+                  <Icon name="x" size={16} />
+                </button>
+              </div>
+              <div class="chat-face-grid">{faces}</div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div class="chat-face-track">{faces}</div>
+      )}
     </div>
   );
 }
@@ -684,7 +780,10 @@ export function Composer(props: {
   const one = who.length === 1 ? who[0] : null;
   const whoKey = who.map((p) => p.subjectIndex).join(",");
 
+  // Not while the 指定對象 panel is open: on a phone every face tapped there
+  // would pop the keyboard. The panel hands focus over when it closes.
   useEffect(() => {
+    if (field.current?.closest(".chat-panel")?.querySelector(".chat-face-panel")) return;
     if (props.focusKey || whoKey) field.current?.focus();
   }, [props.focusKey, whoKey]);
 

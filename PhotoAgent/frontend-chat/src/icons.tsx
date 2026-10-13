@@ -44,6 +44,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
     ),
   },
   up: { sw: 2, body: <path d="M12 19V6M6 11l6-6 6 6" /> },
+  "chevron-up": { sw: 2, body: <path d="M6 15l6-6 6 6" /> },
   search: {
     sw: 2,
     body: (

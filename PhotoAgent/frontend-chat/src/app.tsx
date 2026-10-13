@@ -2948,7 +2948,17 @@ function SessionView(props: {
     quick = null;
   } else if (adjusting) {
     quick = (
-      <QuickBar label={dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化：` : undefined}>
+      <QuickBar
+        label={
+          dirtyCats.length ? (
+            <>
+              {/* 窄的時候只剩「還沒美化：」，改了哪幾項讓位給頭像。 */}
+              <span class="chat-quick-label-detail">改了{dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，</span>
+              還沒美化：
+            </>
+          ) : undefined
+        }
+      >
         <Chip
           label="美化"
           icon="spark"
@@ -2961,7 +2971,7 @@ function SessionView(props: {
     bar = ["美化"];
   } else if (fresh) {
     quick = (
-      <QuickBar label={lastOpened ? undefined : "或直接選："}>
+      <QuickBar label={lastOpened ? undefined : "或直接選："} cue>
         {lastOpened ? (
           <Chip label="美化" icon="spark" kind="primary" disabled={busy} onClick={() => renderRound("美化", "spark")} />
         ) : (
@@ -2972,7 +2982,7 @@ function SessionView(props: {
     bar = [lastOpened ? "美化" : "照建議直接美化"];
   } else if (versions.length && current) {
     quick = (
-      <QuickBar label="下一步：">
+      <QuickBar label="下一步：" cue>
         <Chip label="調整" icon="sliders" disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </QuickBar>
