@@ -170,6 +170,12 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-timeline>:first-child{margin-top:auto}
 .chat-msg{display:flex;gap:var(--sp-3);align-items:flex-start}
 .chat-msg.is-user{justify-content:flex-end}
+/* 新進來的 AI 訊息一字一字打出來（ChatPanel 的 typeMessages）：還沒輪到的那幾則
+   先不佔位，輪到時淡入再開始打字。 */
+.chat-msg.is-waiting{display:none}
+.chat-msg.is-entering{animation:chat-msg-in .2s ease-out both}
+@keyframes chat-msg-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.chat-msg.is-entering{animation:none}}
 .chat-avatar{width:28px;height:28px;flex-shrink:0;border-radius:50%;background:var(--mv-grad);display:flex;align-items:center;justify-content:center;
   color:#fff;font-size:var(--chat-fs-sm);font-weight:800;box-shadow:var(--shadow-sm)}
 .chat-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:var(--sp-2)}

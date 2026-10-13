@@ -6,6 +6,85 @@ import { api, urls } from "./api";
 import { Icon } from "./icons";
 import { qaText } from "./util";
 
+// 新進來的 AI 訊息一字一字打出來：一則打完才換下一則。每 TYPE_MS 出幾個字，
+// 長的那則加快，一則最多約 TYPE_MAX_MS 打完；兩則之間停 TYPE_GAP_MS。
+const TYPE_MS = 30;
+const TYPE_MAX_MS = 1600;
+const TYPE_GAP_MS = 200;
+
+// 只動 .chat-text 裡的文字節點，卡片、按鈕、圖片在那則出現時就整個顯示。
+// 文字是直接改 DOM 的：Preact 只在內容變了才重寫文字節點，所以每次寫入前先
+// 比對，被 Preact 改過的節點就不再碰。回傳的函式立刻全部顯示完。
+function typeMessages(msgs: HTMLElement[]): () => void {
+  type Item = { node: Text; chars: string[]; shown: string };
+  let i = 0;
+  let items: Item[] = [];
+  let k = 0;
+  let n = 0;
+  let step = 1;
+  let raf = 0;
+  let next = 0;
+  for (const m of msgs) m.classList.add("is-waiting");
+  const start = () => {
+    const m = msgs[i];
+    m.classList.remove("is-waiting");
+    m.classList.add("is-entering");
+    m.addEventListener("animationend", () => m.classList.remove("is-entering"), { once: true });
+    items = [];
+    for (const p of Array.from(m.querySelectorAll(".chat-text"))) {
+      const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+      for (let t = walk.nextNode() as Text | null; t; t = walk.nextNode() as Text | null) {
+        if (!t.data) continue;
+        items.push({ node: t, chars: Array.from(t.data), shown: "" });
+        t.data = "";
+      }
+    }
+    k = 0;
+    n = 0;
+    const total = items.reduce((sum, it) => sum + it.chars.length, 0);
+    step = Math.max(1, Math.ceil((total * TYPE_MS) / TYPE_MAX_MS));
+  };
+  const tick = (now: number) => {
+    if (now >= next) {
+      next = now + TYPE_MS;
+      let left = step;
+      while (left > 0 && k < items.length) {
+        const it = items[k];
+        if (it.node.data !== it.shown) {
+          k++;
+          n = 0;
+          continue;
+        }
+        n = Math.min(it.chars.length, n + left);
+        left -= n - Array.from(it.shown).length;
+        it.shown = it.node.data = it.chars.slice(0, n).join("");
+        if (n >= it.chars.length) {
+          k++;
+          n = 0;
+        }
+      }
+      if (k >= items.length) {
+        if (++i >= msgs.length) {
+          raf = 0;
+          return;
+        }
+        next = now + TYPE_GAP_MS;
+        start();
+      }
+    }
+    raf = requestAnimationFrame(tick);
+  };
+  start();
+  raf = requestAnimationFrame(tick);
+  return () => {
+    if (!raf) return;
+    cancelAnimationFrame(raf);
+    raf = 0;
+    for (const it of items.slice(k)) if (it.node.data === it.shown) it.node.data = it.chars.join("");
+    for (const m of msgs.slice(i + 1)) m.classList.remove("is-waiting");
+  };
+}
+
 export function ChatPanel(props: {
   sub: string;
   class?: string;
@@ -53,6 +132,8 @@ export function ChatPanel(props: {
   const anchor = useRef<HTMLElement | null>(null);
   const seen = useRef(new WeakSet<Element>());
   const lastStart = useRef(props.toStart);
+  const typing = useRef<(() => void) | null>(null);
+  useEffect(() => () => typing.current?.(), []);
   const align = () => {
     const el = timeline.current;
     const a = anchor.current;
@@ -78,6 +159,15 @@ export function ChatPanel(props: {
         pinned.current = true;
       }
       if (reply && (pinned.current || anchor.current) && !anchor.current?.isConnected) anchor.current = reply;
+    }
+    // 新進來的 AI 訊息一字一字打出來（typeMessages）。只在對話進行中：第一次
+    // 載入或換一串對話（fresh 等於全部）直接整串顯示。又有新訊息進來時，還沒
+    // 打完的先一口氣補完，再打新的。使用者自己的訊息不等。
+    if (fresh.length && fresh.length < msgs.length) {
+      typing.current?.();
+      typing.current = null;
+      const ai = fresh.filter((m) => !m.classList.contains("is-user")) as HTMLElement[];
+      if (ai.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) typing.current = typeMessages(ai);
     }
     for (const m of msgs) seen.current.add(m);
     if (anchor.current) align();
