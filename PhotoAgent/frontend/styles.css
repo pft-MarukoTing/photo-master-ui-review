@@ -1607,11 +1607,27 @@ body[data-theme-mode="light"] .upload-main-col {
   gap: 7px;
 }
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .option-pill-group,
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold,
 .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .split-run {
   flex: 0 1 auto;
   width: fit-content;
   min-width: 0;
+}
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .option-pill-group > .option-pill-label {
+  display: none;
+}
+.ap-style-compact-label {
+  display: none;
+}
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) .ap-style-compact-label {
+  display: inline;
+  margin-right: 4px;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) .aspect-ratio-picker .option-pill-icon {
+  display: none;
 }
 @media (max-width: 720px) {
   .upload-main-col > .upload-below-zone {
@@ -1630,12 +1646,14 @@ body[data-theme-mode="light"] .upload-main-col {
        guaranteed) while justify-self:center keeps it sized to its own
        content instead of stretching across the span. */
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, auto);
+    justify-content: center;
     column-gap: 4px;
     row-gap: 8px;
     align-items: center;
   }
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .upload-inline-settings-menu,
+  .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > .option-pill-group,
   .upload-main-col .upload-inline-settings-row-1:has(> .upload-inline-settings-menu:not([hidden])) > #advanced-settings-fold {
     min-width: 0;
     max-width: 100%;

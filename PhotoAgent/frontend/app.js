@@ -1129,8 +1129,8 @@
   }
 
   // When the three upload selectors no longer fit on one line, move the
-  // existing selector groups (and their live picker state) into one compact
-  // menu. They move back automatically once the row has room again.
+  // model selector groups (and their live picker state) into one compact
+  // menu; 長寬比 stays its own pill. They move back once the row has room.
   function setupCompactUploadSelectors() {
     const row = document.querySelector(".upload-inline-settings-row-1");
     const secondRow = document.querySelector("#upload-inline-settings-row-2");
@@ -1143,13 +1143,15 @@
     if (!row || !secondRow || !menu || !panel || !portraitFold || !modal || !modalBody) return;
     const groups = Array.from(row.children).filter((el) => el.classList.contains("option-pill-group"));
     if (!groups.length) return;
+    const aspectGroup = groups.find((group) => group.querySelector("#image-aspect-ratio-picker"));
+    const menuGroups = groups.filter((group) => group !== aspectGroup);
     let compact = false;
 
     const closeModal = () => {
       if (modal.hidden) return;
       portraitFold.open = false;
       portraitFold.classList.remove("standalone-modal");
-      groups.forEach((group) => panel.appendChild(group));
+      menuGroups.forEach((group) => panel.appendChild(group));
       if (compact) {
         row.appendChild(portraitFold);
         const runControl = row.querySelector(".split-run") || secondRow.querySelector(".split-run");
@@ -1166,7 +1168,7 @@
     const openModal = (kind) => {
       closeModal();
       modalTitle.textContent = kind === "model" ? "模型設定" : "人像修正設定";
-      if (kind === "model") groups.forEach((group) => modalBody.appendChild(group));
+      if (kind === "model") menuGroups.forEach((group) => modalBody.appendChild(group));
       else {
         modalBody.appendChild(portraitFold);
         // The standalone portrait-settings modal is an editor window, so
@@ -1200,9 +1202,10 @@
       const firstTop = groups[0].getBoundingClientRect().top;
       const wrapped = groups.some((group) => group.getBoundingClientRect().top > firstTop + 2);
       if (wrapped) {
-        groups.forEach((group) => panel.appendChild(group));
-        // In compact mode the portrait control and Run join the compact
-        // selector button in the first row, in that order.
+        menuGroups.forEach((group) => panel.appendChild(group));
+        // In compact mode 長寬比, the portrait control and Run join the
+        // compact selector button in the first row, in that order.
+        if (aspectGroup) row.appendChild(aspectGroup);
         row.appendChild(portraitFold);
         const runControl = secondRow.querySelector(".split-run");
         if (runControl) row.appendChild(runControl);
