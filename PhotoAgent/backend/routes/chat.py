@@ -43,7 +43,7 @@ from backend.services.account import (
     normalize_username,
 )
 from backend.services.compatibility import get_min_compatible_version
-from backend.services.put_job import download_bytes, enqueue, get_session_id
+from backend.services.put_job import download_bytes, enqueue, get_session_id, lost_job_error
 from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
@@ -193,12 +193,29 @@ def list_sessions():
     # Up to the whole merged list: 面板模式's 最近照片 pages through every
     # case, so a cap here would hide older ones only on the chat side.
     limit = max(1, min(request.args.get("limit", 20, type=int), LISTED_SESSIONS_MAX + HISTORY_MAX_LEN))
-    sessions = store.list_sessions(user, limit=LISTED_SESSIONS_MAX)
+    sessions = [_landed(user, s) if s["status"] in BUSY_SESSION_STATUSES else s
+                for s in store.list_sessions(user, limit=LISTED_SESSIONS_MAX)]
     covered = {case_id for s in sessions for case_id in s["case_ids"]}
     cases = [_case_summary(e) for e in get_history(user, limit=HISTORY_MAX_LEN)
              if e["image_key"] not in covered and _opens_in_chat(e)]
     rows = sorted(sessions + cases, key=lambda r: r["updated_at"] or 0, reverse=True)
     return jsonify({"sessions": rows[:limit]})
+
+
+# A tile badge that only a running job keeps up (chat_session._summary).
+BUSY_SESSION_STATUSES = ("analyzing", "rendering")
+
+
+def _landed(user, row):
+    """A busy session's row once whatever it was waiting on has landed --
+    the photo state only moves when something advances it, so a render that
+    finished after the user left would otherwise stay 美化中 on its tile
+    until the session is opened."""
+    session = store.load_session(user, row["session_id"])
+    if session is None:
+        return row
+    _advance_photos(user, row["session_id"], session)
+    return store.session_summary(user, row["session_id"]) or row
 
 
 def _opens_in_chat(entry):
@@ -1486,8 +1503,10 @@ def _review_history(history):
 
 def _job_status(job_id, statuses):
     if job_id not in statuses:
-        info = get_job_info(job_id, keyToGet=["status", "error"]) or {}
-        statuses[job_id] = {"status": info.get("status"), "error": info.get("error")}
+        info = get_job_info(job_id, keyToGet=["status", "error", "ts"]) or {}
+        lost = lost_job_error(job_id, info)
+        statuses[job_id] = ({"status": lost["status"], "error": lost["error_message"]} if lost
+                            else {"status": info.get("status"), "error": info.get("error")})
     return statuses[job_id]
 
 

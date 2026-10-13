@@ -1,6 +1,7 @@
 import io
 import json
 import sys
+import time
 import types
 import unittest
 from unittest.mock import MagicMock, patch
@@ -23,11 +24,11 @@ def _import_backend():
     with patch.dict(sys.modules, stubs):
         from backend import app as app_module
         from backend.routes import api, chat
-        from backend.services import account, chat_session
-    return app_module, api, chat, chat_session, account
+        from backend.services import account, chat_session, put_job
+    return app_module, api, chat, chat_session, account, put_job
 
 
-app_module, api, chat, chat_session, account = _import_backend()
+app_module, api, chat, chat_session, account, put_job = _import_backend()
 
 
 # The analysis fields the panel builds its face tabs from.
@@ -294,6 +295,23 @@ class ChatRoutesTest(unittest.TestCase):
         row = self.summary(sid)
         self.assertEqual(row["thumbnail_result"], {"job_id": later["job_ids"][0], "run": 1})
         self.assertEqual(row["rendered_count"], 2)
+
+    def test_session_tile_lands_a_render_that_finished_after_the_user_left(self):
+        """A render that finishes with nobody polling the session: the list
+        itself lands it, instead of keeping the tile at 美化中 until the
+        session is opened."""
+        sid = self.new_session()
+        (photo,) = self.add_photos(sid, 1)
+        self.jobs[photo["analyze_job_id"]]["status"] = "success"
+        self.status(sid)
+        render = self.render(sid, photo)
+        self.assertEqual(self.summary(sid)["status"], "rendering")
+        self.jobs[render["job_ids"][0]]["status"] = "success"
+        row = self.summary(sid)
+        self.assertEqual((row["status"], row["rendered_count"]), ("done", 1))
+        self.assertEqual(row["thumbnail_result"], {"job_id": render["job_ids"][0], "run": 1})
+        messages = self.client.get(self.url(sid), query_string={"user": USER}).get_json()["messages"]
+        self.assertEqual(sum(m["card"]["type"] == "render_done" for m in messages if m.get("card")), 1)
 
     def test_history_cases_without_a_session_are_listed(self):
         """A case no live session holds -- edited in 面板模式, or left by an
@@ -1115,6 +1133,40 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(done["session"]["photos"][0]["status"], "failed")
         self.assertIsNone(done["session"]["photos"][0]["queued_render"])
         self.assertEqual(len(self.enqueued), before)
+
+    def _lose_job(self, job_id, minutes_ago, queued=False):
+        """A job with no status, queued `minutes_ago` -- still on the queue, or
+        popped by a worker that died before finishing it."""
+        self.jobs[job_id] = {"status": None, "error": None, "ts": int((time.time() - minutes_ago * 60) * 1000)}
+        queue = MagicMock()
+        queue.zscore.side_effect = lambda q, member: 1.0 if queued else None
+        p = patch.object(put_job, "get_redis_conn", lambda: queue)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_a_job_lost_mid_analysis_fails_the_photo(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self._lose_job(photo["analyze_job_id"], minutes_ago=30)
+        done = self.status(sid)
+        card = done["new_messages"][0]["card"]
+        self.assertEqual((card["type"], card["error"]), ("analysis_failed", "處理到一半中斷了"))
+        self.assertEqual(done["session"]["photos"][0]["status"], "failed")
+
+    def test_a_job_without_status_is_not_lost_while_young_or_queued(self):
+        sid = self.new_session()
+        photo = self.add_photos(sid)[0]
+        self._lose_job(photo["analyze_job_id"], minutes_ago=3)
+        self.assertEqual(self.status(sid)["session"]["photos"][0]["status"], "analyzing")
+        self._lose_job(photo["analyze_job_id"], minutes_ago=30, queued=True)
+        self.assertEqual(self.status(sid)["session"]["photos"][0]["status"], "analyzing")
+
+    def test_status_reports_a_lost_job_as_failed(self):
+        self._lose_job("lost1", minutes_ago=30)
+        with patch.object(api, "get_job_info", lambda job_id, keyToGet=None: dict(self.jobs[job_id])):
+            body = self.client.get("/api/photo-agent/status/lost1").get_json()
+        self.assertEqual((body["status"], body["error"], body["error_message"]), ("error", "job_lost", "處理到一半中斷了"))
+        self.assertNotIn("ts", body)
 
     def test_queued_render_that_cannot_start_reports_why(self):
         sid = self.new_session()

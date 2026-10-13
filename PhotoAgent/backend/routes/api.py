@@ -19,7 +19,7 @@ from pipeline import analyze_stage, reframe_stage
 from backend.services.account import attach_case_analysis, create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
-from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot
+from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot, lost_job_error
 from backend.services.report import delete_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
 from backend.services.template_params import get_engine_params_template
 
@@ -561,9 +561,11 @@ def status(job_id):
     # until the worker has actually started the combined job. runs_done lets
     # the frontend notice a new RUN has landed (and go fetch it via /result)
     # without having to re-download every RUN's data on every poll tick.
-    info = _readable_job_info(job_id, ["status", "error", "error_message", "stage", "run_count", "runs_done"])
+    info = _readable_job_info(job_id, ["status", "error", "error_message", "stage", "run_count", "runs_done", "ts"])
     if info is None:
         return jsonify({"error": "Job not found"}), 404
+    info.update(lost_job_error(job_id, info) or {})
+    info.pop("ts", None)
     return jsonify(info)
 
 

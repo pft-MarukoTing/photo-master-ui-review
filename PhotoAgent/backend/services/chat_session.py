@@ -145,6 +145,12 @@ def _summary(session_id, session):
     }
 
 
+def session_summary(user, session_id):
+    """list_sessions' row for one session, or None if absent/expired."""
+    session = load_session(user, session_id)
+    return _summary(session_id, session) if session else None
+
+
 def list_sessions(user, limit=20):
     """Newest first. Index entries whose session has expired are dropped."""
     redis = _client()

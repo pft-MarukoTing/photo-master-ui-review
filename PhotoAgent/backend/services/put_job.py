@@ -166,6 +166,34 @@ def enqueue(engine_param_dict, src_content=None, job_id=None, queue=MSG_ID_QUEUE
     return job_id
 
 
+# A job the worker popped off the queue but never finished -- its process was
+# killed mid-job (a redeploy, a crash) -- keeps an info hash with no status
+# forever: nothing puts it back on the queue (the heartbeat's requeue runs in
+# that same process), so a page polling it would show it working forever.
+# Jobs finish within a few minutes of being queued; one still waiting in the
+# queue (the worker is down) isn't lost, it runs once a worker is back.
+JOB_LOST = "job_lost"
+JOB_LOST_MESSAGE = "處理到一半中斷了"
+JOB_LOST_AFTER_SECONDS = int(os.getenv("JOB_LOST_AFTER_SECONDS", "900"))
+
+
+def lost_job_error(job_id, info, queue=MSG_ID_QUEUE):
+    """For a lost job, the status/error fields to report it as failed with;
+    None for any other. `info` is get_job_info's for it, with "status" and
+    "ts" (when it was queued, ms) among the keys read."""
+    if not info or info.get("status") or not info.get("ts"):
+        return None
+    try:
+        queued_at = int(info["ts"]) / 1000
+    except (TypeError, ValueError):
+        return None
+    if time.time() - queued_at < JOB_LOST_AFTER_SECONDS:
+        return None
+    if get_redis_conn().zscore(queue, job_id) is not None:
+        return None
+    return {"status": "error", "error": JOB_LOST, "error_message": JOB_LOST_MESSAGE}
+
+
 def create_presigned_url(object_name, action, content_type=None):
     s3_accessor = get_s3_accessor()
     s3_client = s3_accessor.s3_client_proxy.s3Client
