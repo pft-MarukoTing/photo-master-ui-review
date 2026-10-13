@@ -146,6 +146,67 @@ function ReportModal(props: { jobId: string | null; onClose: () => void }) {
   );
 }
 
+// 面板模式 #changelog-modal 的版型，內容一樣讀舊頁面旁邊那份 changelog.json（新的在最前面，
+// 只有最新一筆預設展開）。讀一次就留著，同一次開頁內容不會變。
+type ChangelogEntry = { date?: string; changes?: string[] };
+let changelogCache: ChangelogEntry[] | null = null;
+
+function ChangelogModal(props: { onClose: () => void }) {
+  const { onClose } = props;
+  const [entries, setEntries] = useState(changelogCache);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onClose]);
+  useEffect(() => {
+    if (changelogCache) return;
+    let live = true;
+    fetch("../changelog.json")
+      .then((res) => res.json())
+      .then((list: ChangelogEntry[]) => {
+        changelogCache = list;
+        if (live) setEntries(list);
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  return createPortal(
+    <div class="error-modal" id="chat-changelog-modal">
+      <div class="error-modal-backdrop" onClick={onClose} />
+      <div class="error-modal-box changelog-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-changelog-title">
+        <div class="error-modal-hdr">
+          <span id="chat-changelog-title" class="notice-modal-title">版本紀錄</span>
+          <button class="error-modal-close" type="button" aria-label="關閉" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div class="changelog-modal-body">
+          {failed
+            ? "無法載入版本紀錄。"
+            : entries?.map((entry, i) => (
+                <details class="changelog-entry" open={i === 0} key={entry.date || i}>
+                  <summary class="changelog-entry-date">{entry.date || ""}</summary>
+                  <ul class="changelog-entry-list">
+                    {(entry.changes || []).map((change) => (
+                      <li key={change}>{change}</li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // 面板模式 #confirm-modal 的版型：一句話、兩個選項。Esc 跟點背景都算留下。
 export function ConfirmModal(props: {
   message: string;
@@ -192,7 +253,8 @@ export function ConfirmModal(props: {
 }
 
 // Same order as 面板模式's header, so switching modes moves nothing:
-// 回到首頁 · 最近照片 · mode switch · 主題 · 回報.
+// 回到首頁 · 最近照片 · mode switch · 版本紀錄 · 主題 · 回報.
+// showChangelog: 版本紀錄 only on 首頁, as 面板模式 shows it only on its upload screen.
 // showHistory is off while the gallery (with its 最近對話 tab) is on screen.
 // showOldUi likewise: 面板模式 only takes over a photo's analysis/result, so
 // the switch exists only once a session is open, and is held while the photo
@@ -202,6 +264,7 @@ export function Header(props: {
   onHistory: () => void;
   showHome: boolean;
   showHistory?: boolean;
+  showChangelog?: boolean;
   showOldUi?: boolean;
   oldUiBusy?: boolean;
   // Right before leaving for 面板模式: hands this photo's adjustments over.
@@ -212,6 +275,7 @@ export function Header(props: {
   jobId?: string | null;
 }) {
   const [reporting, setReporting] = useState(false);
+  const [changelog, setChangelog] = useState(false);
   // 手機上 header 只放得下 logo 跟一顆 ⋯，其他按鈕收進這裡展開的選單（chat.css 只在窄螢幕
   // 把 .header-actions 變成選單；寬螢幕這顆 ⋯ 不顯示，選單狀態也就沒有作用）。
   const [menu, setMenu] = useState(false);
@@ -271,6 +335,12 @@ export function Header(props: {
                 <span class="btn-label">面板模式</span>
               </a>
             ))}
+          {props.showChangelog && (
+            <button id="chat-changelog-btn" class="btn btn-secondary btn-sm" type="button" onClick={() => setChangelog(true)}>
+              <Icon name="changelog" size={14} />
+              <span class="btn-label">版本紀錄</span>
+            </button>
+          )}
           <ThemeToggle />
           <button
             id="chat-report-btn"
@@ -285,6 +355,7 @@ export function Header(props: {
         </div>
       </div>
       {reporting && <ReportModal jobId={props.jobId || null} onClose={() => setReporting(false)} />}
+      {changelog && <ChangelogModal onClose={() => setChangelog(false)} />}
     </header>
   );
 }

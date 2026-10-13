@@ -115,6 +115,16 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
       </>
     ),
   },
+  // 版本紀錄: the old #changelog-btn's document with lines.
+  changelog: {
+    sw: 2,
+    body: (
+      <>
+        <path d="M6 4h9l3 3v13a1 1 0 01-1 1H6a1 1 0 01-1-1V5a1 1 0 011-1z" />
+        <path d="M9 10h6M9 14h6M9 18h3" />
+      </>
+    ),
+  },
   // 回報: the old #report-btn's bubble with an exclamation mark.
   report: {
     sw: 2.5,

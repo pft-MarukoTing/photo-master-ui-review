@@ -1221,6 +1221,7 @@ export function App() {
       }}
       showHome={phase !== "home"}
       showHistory={phase === "session"}
+      showChangelog={phase === "home"}
       showOldUi={phase === "session"}
       onOldUi={() => {
         if (caps && photo?.case_id) writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis);
