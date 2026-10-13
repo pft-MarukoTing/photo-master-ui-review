@@ -295,6 +295,9 @@ def describe(*, debug: bool = False) -> dict:
     render_options = [o for o in RENDER_OPTIONS if debug or not o.debug_only]
     render_models = {o.image_model for o in render_options}
     return {
+        "features": {"subject_preview": bool(getattr(config, "ENABLE_CHAT_SUBJECT_PREVIEW", False)),
+                     "subject_preview_format_version": 3,
+                     "low_confidence_candidates": bool(getattr(config, "ENABLE_PREVIEW_LOW_CONFIDENCE_CANDIDATES", False))},
         "render": {
             "options": [
                 {"id": o.id, "image_model": o.image_model, "quality": o.quality, "label": o.label}

@@ -166,7 +166,55 @@ def _normalize_quality_check_result(result):
     return qa
 
 
-def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"]) -> dict:
+def analyze_preview_stage(image_bytes: bytes, *, analysis_model: str, binding: dict, src_keys: list) -> dict:
+    """Standalone Worker preview: one detector pass and one bounded 2.0 request.
+
+    No formal analysis, QC, body, review, edit or history is produced here.
+    Unavailable classification remains a successful best-effort preview job.
+    """
+    from image_tools import create_preview_bytes, detect_face_crops, detect_preview_candidates
+    from photo_agent import ab_preview
+    import config
+    from openai_client import _request_subject_preview
+    from photo_agent.preview_context import FORMAT_VERSION, validate_preview_binding, validate_preview_context, source_sha256
+    from photo_agent.subject_preview import COORDINATE_SPACE, build_preview_people
+    binding = validate_preview_binding(binding)
+    if source_sha256(image_bytes) != binding["source_sha256"] or analysis_model != binding["analysis_model"]:
+        raise ValueError("preview_source_mismatch")
+    started = time.perf_counter()
+    data_url = image_to_data_url(create_preview_bytes(image_bytes), "image/jpeg")
+    t_detect = time.perf_counter()
+    if config.ENABLE_PREVIEW_LOW_CONFIDENCE_CANDIDATES:
+        detected = detect_preview_candidates(image_bytes)
+        crops, candidates = detected['face_crops'], detected['low_confidence_candidates']
+        low_state = detected['low_confidence_state']
+    else:
+        crops, candidates, low_state = detect_face_crops(image_bytes), [], 'disabled'
+    detector_seconds = time.perf_counter() - t_detect
+    preview, metrics = _request_subject_preview(data_url, crops, analysis_model,
+        selection_mode=True, low_confidence_candidates=candidates, low_state=low_state)
+    context = {"format_version": 3, "binding": binding,
+        "src_keys": src_keys, "coordinate_space": COORDINATE_SPACE,
+        "image_size": list(get_image_dimensions(image_bytes)),
+        "candidate_selection_mode": ab_preview.MODE, "subject_handoff_policy": ab_preview.POLICY,
+        "low_confidence_state": preview.get('low_confidence_state', low_state),
+        "low_confidence_candidates": [{k: c[k] for k in ('candidate_id', 'confidence', 'box', 'face_box')} |
+            {'sent_to_model': c.get('bytes') is not None} for c in candidates],
+        "detections": [{"detection_index": i, "box": c["box"], "face_box": c["face_box"],
+                        "confidence": c.get('confidence'), "sent_to_model": c.get("bytes") is not None}
+                       for i, c in enumerate(crops, 1)],
+        "subject_preview": preview, "preview_people": ab_preview.build_people(preview, crops, candidates)}
+    result = validate_preview_context(context, image_bytes=image_bytes, src_keys=src_keys)
+    result["timing"] = {"detector_seconds": round(detector_seconds, 4),
+        "llm_seconds": metrics["duration_seconds"], "worker_seconds": round(time.perf_counter() - started, 4),
+        "completed_at": time.time()}
+    result["usage"] = {k: metrics.get(k) for k in ("model", "usage", "attempted")}
+    logger.info("Preview %s detector=%.4fs llm=%.4fs state=%s", binding["preview_job_id"],
+                detector_seconds, metrics["duration_seconds"], preview["state"])
+    return result
+
+
+def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"], *, precomputed_preview=None) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
     The user's instruction is passed through in finish_stage instead of here --
@@ -189,7 +237,8 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     # Step 2 — analyze
     t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
-    analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model)
+    preview_args = {"precomputed_preview": precomputed_preview} if precomputed_preview is not None else {}
+    analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
     analysis = sanitize_body_reshape_analysis(analysis)
     if not body_reshape_enabled():
         # Keep the stage boundary clean even when an alternate analyzer or a

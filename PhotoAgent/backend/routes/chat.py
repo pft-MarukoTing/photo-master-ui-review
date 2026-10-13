@@ -1,8 +1,9 @@
 """Chat page API: a session of photos, their edit plans and a message log,
 over the same analyze/finish jobs and history the review page uses.
 
-Nothing here runs a job of its own kind. Adding a photo enqueues exactly
-what /analyze does; rendering enqueues exactly what /continue does, one job
+Selecting a photo can enqueue a separate best-effort analyze_preview job.
+Adding a session photo enqueues what /analyze does; rendering enqueues
+exactly what /continue does, one job
 per run, all recorded in history under one action_id. Images and version
 lists are read through the existing /result, /source and /history routes.
 
@@ -24,9 +25,10 @@ never change again, so they are left out of both.
 import copy
 import json
 import re
+import time
 import uuid
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from aiserver_utils.queue import get_job_info
 from backend.routes.api import _apply_review_selections, _parse_and_validate_params, _record_history_safely
@@ -46,6 +48,10 @@ from backend.services.template_params import get_engine_params_template
 from compatibility_version import get_compatibility_version, is_compatible
 from image_tools import create_preview_bytes, image_to_data_url
 from photo_agent import capabilities, chat_assistant, chat_jobs
+import config as agent_config
+from photo_agent.preview_context import (
+    MAX_UPLOAD_BYTES, PREVIEW_CONTEXT_FIELD, source_sha256, preview_versions, validate_preview_binding, validate_preview_context,
+)
 from photo_agent.chat_brief import build_brief, resolve_prompt_faces
 from photo_agent.chat_plan import (
     USER_PROMPT_MAX_LEN,
@@ -432,6 +438,39 @@ def _posted_message(body):
     return store.make_message(role, text, card)
 
 
+def _bind_message_thumbnails(messages, user, session_id):
+    session = _session(user, session_id)
+    for message in messages:
+        card = message.get('card') or {}
+        if not card.get('pre') or not isinstance(card.get('faces'), list):
+            continue
+        referenced = [f for f in card['faces'] if isinstance(f, dict) and 'preview_person_id' in f]
+        if not referenced:
+            continue
+        for face in referenced:
+            face.pop('thumbnail_box', None)
+        try:
+            photo = _photo(session, card.get('photo_id'))
+            info = get_job_info(photo['analyze_job_id'], keyToGet=['acts', 'srcKeys'])
+            acts = info['acts'] if isinstance(info['acts'], list) else json.loads(info['acts'])
+            context = acts[0]['params'].get('precomputed_preview')
+            if not context or context.get('format_version') != 3:
+                continue
+            context = validate_preview_context(context, src_keys=photo['src_keys'])
+            if context['binding']['user'] != user:
+                continue
+            people = {p['preview_person_id']: p for p in context['preview_people']}
+            for face in referenced:
+                person = people.get(face['preview_person_id']) if isinstance(face['preview_person_id'], str) else None
+                if person:
+                    face['box'] = person['box']
+                    face['thumbnail_box'] = person['thumbnail_box']
+        except (_RequestError, ValueError, KeyError, TypeError):
+            # Pending metadata may be temporarily unavailable. The UI can
+            # resolve the same person ID from the formal trusted analysis later.
+            continue
+
+
 @chat_bp.post("/sessions/<session_id>/messages")
 def post_message(session_id):
     """One message, or with `messages` a list of them appended in one go --
@@ -442,12 +481,14 @@ def post_message(session_id):
     batch = body.get("messages")
     if batch is None:
         message = _posted_message(body)
+        _bind_message_thumbnails([message], user, session_id)
         store.append_messages(user, session_id, [message])
         return jsonify(message), 201
     if not isinstance(batch, list) or not 0 < len(batch) <= MESSAGES_POST_MAX \
             or not all(isinstance(m, dict) for m in batch):
         raise _RequestError(f"messages must be a list of 1 to {MESSAGES_POST_MAX} JSON objects")
     messages = [_posted_message(m) for m in batch]
+    _bind_message_thumbnails(messages, user, session_id)
     store.append_messages(user, session_id, messages)
     return jsonify({"messages": messages}), 201
 
@@ -464,6 +505,7 @@ def replace_message(session_id, message_id):
     last = store.get_messages(user, session_id, limit=1)
     if not last or last[0]["id"] != message_id or last[0]["role"] != "user":
         return jsonify({"error": "only the newest user message can be replaced"}), 409
+    _bind_message_thumbnails([{"card": card}], user, session_id)
     message = store.replace_last_message(user, session_id, message_id, card)
     if message is None:
         return jsonify({"error": "only the newest user message can be replaced"}), 409
@@ -471,6 +513,147 @@ def replace_message(session_id, message_id):
 
 
 # --- photos ----------------------------------------------------------------
+
+def _owned_preview(user, preview_job_id):
+    """Resolve only a server-created preview job owned by this Chat user.
+
+    Matches existing normalized-user access semantics (not a new auth system).
+    Neither client-supplied S3 keys nor a preview JSON body are trusted.
+    """
+    if not isinstance(preview_job_id, str) or not SESSION_ID_RE.fullmatch(preview_job_id):
+        raise _RequestError("Preview not found", 404)
+    info = get_job_info(preview_job_id, keyToGet=["status", "acts", "srcKeys", "dstKeys", "0_res0", "endTs", PREVIEW_CONTEXT_FIELD])
+    try:
+        params = info["acts"][0]["params"]
+        binding = params["preview_binding"]
+        if params["stage"] != "analyze_preview" or binding["user"] != user or binding["preview_job_id"] != preview_job_id:
+            raise ValueError("wrong_preview_owner_or_type")
+        binding = validate_preview_binding(binding)
+        keys = info["srcKeys"]
+        if not isinstance(keys, list) or len(keys) != 1 or not isinstance(keys[0], str):
+            raise ValueError("invalid_preview_source")
+    except (KeyError, TypeError, IndexError, ValueError):
+        raise _RequestError("Preview not found or expired", 404)
+    return info, binding
+
+
+def _preview_snapshot(info, binding):
+    """Use finished 2.0 data even while artifact upload is running/failed.
+
+    UI and formal submission resolve the same server-owned, validated snapshot;
+    neither accepts a context supplied by the browser. Old workers still use S3.
+    """
+    raw = info.get(PREVIEW_CONTEXT_FIELD)
+    if raw is not None:
+        try:
+            snapshot = validate_preview_context(raw, src_keys=info["srcKeys"], binding=binding)
+            timing = raw.get("timing", {})
+            return snapshot, timing if isinstance(timing, dict) else {}
+        except (ValueError, TypeError, KeyError):
+            current_app.logger.warning("Invalid preview snapshot job=%s", binding["preview_job_id"])
+    return _preview_artifact(info, binding)
+
+
+def _preview_artifact(info, binding):
+    if info.get("status") != "success":
+        return None
+    try:
+        key = info["0_res0"]["cusKeys"][0]
+        dst = info["dstKeys"][0]
+        expected = (dst.rsplit('/', 1)[0] + '/' if '/' in dst else '') + '0_res0_preview.json'
+        if key != expected:
+            raise ValueError("wrong_preview_artifact")
+        data, error = download_bytes(key, binding["preview_job_id"])
+        if error or not data or len(data) > 1024 * 1024:
+            raise ValueError("preview_artifact_unavailable")
+        raw = json.loads(data)
+        snapshot = validate_preview_context(raw, src_keys=info["srcKeys"], binding=binding)
+        return snapshot, raw.get("timing", {})
+    except Exception:
+        current_app.logger.warning("Preview artifact unavailable job=%s", binding["preview_job_id"])
+        raise _RequestError("人物預覽暫時無法讀取，仍可進行分析。", 502)
+
+
+@chat_bp.post("/previews")
+def create_preview():
+    if not agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
+        raise _RequestError("Preview disabled", 404)
+    user = _user(request.form.get("user"))
+    image = request.files.get("image")
+    if image is None or not image.filename:
+        raise _RequestError("image file is required")
+    data = image.read(MAX_UPLOAD_BYTES + 1)
+    if not data or len(data) > MAX_UPLOAD_BYTES:
+        raise _RequestError("照片大小需介於 1 byte 與 30 MB。", 413)
+    try:
+        from image_tools import get_image_dimensions
+        get_image_dimensions(data)  # existing HEIC/EXIF decoder, not face detection
+    except Exception:
+        raise _RequestError("無法讀取照片，請使用有效的圖片檔案。", 422)
+    params, error = _parse_and_validate_params(request.form)
+    if error:
+        raise _RequestError(error)
+    job_id = get_session_id()
+    binding = {"preview_job_id": job_id, "user": user, "source_sha256": source_sha256(data),
+        "created_at": time.time(), "versions": preview_versions(), "analysis_model": params["analysis_model"]}
+    params.update(stage="analyze_preview", preview_binding=binding, preview_format_version=3)
+    engine = get_engine_params_template()
+    engine["acts"][0]["params"] = params
+    try:
+        enqueue(engine, src_content=[data], job_id=job_id)
+    except Exception:
+        raise _RequestError("無法開始人物預覽，仍可稍後進行分析。", 503)
+    current_app.logger.info("Preview selected_to_enqueue_seconds=%.4f job=%s",
+                            time.time() - binding["created_at"], job_id)
+    return jsonify({"preview_job_id": job_id, "source_sha256": binding["source_sha256"],
+                    "status": "queued", "provisional": True}), 202
+
+
+@chat_bp.get("/previews/<preview_job_id>")
+def preview_status(preview_job_id):
+    if not agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
+        raise _RequestError("Preview disabled", 404)
+    info, binding = _owned_preview(_user(request.args.get("user")), preview_job_id)
+    status = info.get("status") or "queued"
+    body = {"preview_job_id": preview_job_id, "source_sha256": binding["source_sha256"],
+            "status": status, "provisional": True}
+    artifact = _preview_snapshot(info, binding)
+    if artifact is None:
+        if status == "error":
+            return jsonify({**body, "state": "error", "message": "人物預覽未完成，仍可進行分析。"})
+        return jsonify({**body, "state": "pending", "message": "正在初步辨識照片中的人物。"})
+    snapshot, timing = artifact
+    preview = snapshot["subject_preview"]
+    classified = {d["detection_index"]: d for d in preview.get("detections", [])}
+    faces = [{**d, "label": classified.get(d["detection_index"], {}).get("label", ""),
+              "role": classified.get(d["detection_index"], {}).get("role", "uncertain")}
+             for d in snapshot["detections"]]
+    # No API/model envelopes, diagnostic output or internal S3 paths go to UI.
+    end_ts = info.get("endTs")
+    return jsonify({**body, "state": preview["state"], "faces": faces,
+        "format_version": snapshot["format_version"], "people": snapshot.get("preview_people", []),
+        "augmentation_state": preview.get("augmentation_state"),
+        "low_confidence_state": snapshot.get("low_confidence_state"),
+        "reusable": True,
+        "coordinate_space": snapshot["coordinate_space"],
+        "completed_at": timing.get("completed_at") or (end_ts / 1000 if type(end_ts) in (int, float) else None),
+        "message": "人物初步辨識完成。" if preview["state"] == "ready" else "人物預覽暫時不可用，仍可進行分析。"})
+
+
+@chat_bp.get("/previews/<preview_job_id>/image")
+def preview_image(preview_job_id):
+    """Owned EXIF-corrected source for browser crops, including HEIC."""
+    if not agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
+        raise _RequestError("Preview disabled", 404)
+    info, _ = _owned_preview(_user(request.args.get("user")), preview_job_id)
+    try:
+        from image_tools import create_preview_bytes
+        data, error = download_bytes(info["srcKeys"][0], preview_job_id)
+        if error or not data:
+            raise ValueError("source_unavailable")
+        return Response(create_preview_bytes(data), mimetype="image/jpeg")
+    except Exception:
+        raise _RequestError("無法讀取人物預覽圖片。", 502)
 
 @chat_bp.post("/sessions/<session_id>/photos")
 def add_photos(session_id):
@@ -498,14 +681,56 @@ def add_photos(session_id):
     for image in images:
         try:
             engine_params = get_engine_params_template()
-            engine_params["acts"][0]["params"] = params
-            job_id = enqueue(engine_params, src_content=[image.read()])
+            photo_params = copy.deepcopy(params)
+            data = image.read()
+            preview_id = request.form.get("preview_job_id") if len(images) == 1 else None
+            reuse = False
+            if preview_id and agent_config.ENABLE_CHAT_SUBJECT_PREVIEW:
+                info, binding = _owned_preview(user, preview_id)
+                if (binding["source_sha256"] != source_sha256(data)
+                        or request.form.get("source_sha256") != binding["source_sha256"]
+                        or binding["analysis_model"] != photo_params["analysis_model"]):
+                    raise _RequestError("Preview does not match this photo or settings", 409)
+                engine_params["srcKeys"] = list(info["srcKeys"])
+                reuse = True
+                # Freeze now: formal worker never waits for or resolves a token.
+                # Completed 2.0 is reusable before S3/job completion; absence
+                # of a valid snapshot retains the original analyzer fallback.
+                preview_params = info['acts'][0]['params'] if isinstance(info.get('acts'), list) else json.loads(info['acts'])[0]['params']
+                frozen_raw = info.get(PREVIEW_CONTEXT_FIELD)
+                if isinstance(frozen_raw, str):
+                    try:
+                        frozen_raw = json.loads(frozen_raw)
+                    except ValueError:
+                        frozen_raw = None
+                strict_ready = (preview_params.get('preview_format_version') == 3
+                    and (info.get('status') == 'success' or
+                         (isinstance(frozen_raw, dict) and frozen_raw.get('subject_preview', {}).get('state') == 'ready')))
+                try:
+                    resolved = _preview_snapshot(info, binding)
+                    if resolved is not None:
+                        snapshot, _ = resolved
+                        if strict_ready and snapshot['format_version'] != 3:
+                            raise _RequestError('人物預覽版本不符，請重新預覽。', 409)
+                        photo_params["precomputed_preview"] = snapshot
+                    elif strict_ready:
+                        raise _RequestError('人物清單暫時無法交接，請重試預覽。', 409)
+                except _RequestError as exc:
+                    if strict_ready:
+                        raise _RequestError("人物清單暫時無法交接，請重試預覽。", 409) from exc
+                    pass
+            engine_params["acts"][0]["params"] = photo_params
+            job_id = enqueue(engine_params, src_content=None if reuse else [data])
+            current_app.logger.info("Formal analyze job=%s preview_source_reused=%s preview_context_reused=%s",
+                job_id, reuse, "precomputed_preview" in photo_params)
+        except _RequestError:
+            raise
         except Exception as exc:
             errors.append({"filename": image.filename, "error": str(exc)})
             continue
         # Same history row /analyze writes, so the photo shows up in history
         # (and can be reopened from it) even if the session later expires.
-        _record_history_safely(user, job_id, "local", engine_params["srcKeys"][0], job_id, params=params)
+        _record_history_safely(user, job_id, "local", engine_params["srcKeys"][0], job_id, params=photo_params)
         photos.append({
             "photo_id": f"p_{uuid.uuid4().hex[:12]}",
             "filename": image.filename,
@@ -797,6 +1022,8 @@ def _prepare_render(photo):
     (prepared, None) or (None, (reason, message, http_status)), reason being
     a stable code the chat page can word for the user."""
     plan = photo["plan"]
+    if any("detection_index" in f or "preview_person_id" in f for f in plan.get("prompt_faces", [])):
+        return None, ("unresolved_preview_person", "指定人物尚未確認，請重新指定或清除該需求。", 409)
     params, error = _parse_and_validate_params(build_render_form(plan, "finish"))
     if error:
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
@@ -1395,7 +1622,17 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
         "type": "analysis_ready", "photo_id": photo["photo_id"], **({"skipped": True} if skipped else {})})]
     if analysis is not None and not skipped:
         # Before the queued render below reads the plan.
-        _name_prompt_faces(user, session_id, photo, analysis)
+        try:
+            _name_prompt_faces(user, session_id, photo, analysis)
+        except ValueError as exc:
+            # Keep the user's wish/reference for correction. Never silently
+            # assign it to another subject, and never auto-render that plan.
+            photo["error"] = str(exc)
+            store.save_photo_state(user, session_id, photo)
+            messages.append(store.make_message("assistant", card={
+                "type": "render_failed", "photo_id": photo["photo_id"],
+                "reason": "unresolved_preview_person", "error": str(exc)}))
+            return messages
         detailed = photo["plan"].get("detailed_explanation") and not rebuilt
         brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
                  or build_brief(analysis))

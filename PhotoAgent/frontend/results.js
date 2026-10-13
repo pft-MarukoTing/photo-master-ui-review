@@ -1777,7 +1777,9 @@ window.PhotoAgentResults = (() => {
         w: box.w * 0.64,
         h: box.h * 0.32,
       };
-      sources.push({ subject, subjectIndex, box: headBox, thumbnailBox: box });
+      const thumbnail = analysis?._subject_thumbnail_boxes?.[String(subjectIndex)];
+      sources.push({ subject, subjectIndex, box: headBox, thumbnailBox:
+        thumbnail && [thumbnail.x, thumbnail.y, thumbnail.w, thumbnail.h].every(Number.isFinite) ? thumbnail : box });
     });
     return sources;
   }
@@ -2253,7 +2255,9 @@ window.PhotoAgentResults = (() => {
 
   function recoverableSubject(analysis, subject) {
     const box = subject?.box;
-    if (subject?.is_person !== true || !box
+    const fixed = Array.isArray(analysis?._fixed_preview_person_ids)
+      && analysis._fixed_preview_person_ids.includes(subject?.preview_person_id);
+    if ((!fixed && subject?.is_person !== true) || !box
       || ![box.x, box.y, box.w, box.h].every(Number.isFinite)
       || box.x < 0 || box.y < 0 || box.w <= 0 || box.h <= 0
       || box.x + box.w > 1 || box.y + box.h > 1) return false;
@@ -2346,7 +2350,9 @@ window.PhotoAgentResults = (() => {
     );
     recoveredSubjects.forEach(({ subject, subjectIndex }) => {
       if (representedSubjectIndexes.has(subjectIndex)) return;
-      const box = subject.box;
+      const thumbnail = analysis?._subject_thumbnail_boxes?.[String(subjectIndex)];
+      const box = thumbnail && [thumbnail.x, thumbnail.y, thumbnail.w, thumbnail.h].every(Number.isFinite)
+        ? thumbnail : subject.box;
       if (!box || ![box.x, box.y, box.w, box.h].every(Number.isFinite)) return;
       faceThumbEntries.push({
         box,

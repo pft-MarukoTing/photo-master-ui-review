@@ -52,6 +52,14 @@ def face_people(analysis):
     """The faces the detail panel shows, in its order (frontend-chat face.ts
     faceEntries): [{number, subject_index, name, box}]. `number` is the
     panel's "人物 N"; subject_index is -1 for a face with no subject."""
+    if isinstance(analysis.get('_fixed_preview_person_ids'), list):
+        ids = set(analysis['_fixed_preview_person_ids'])
+        return [{'number': number, 'subject_index': index,
+                 'name': _text(subject.get('label')) or f'人物 {number}', 'box': subject['box'],
+                 'thumbnail_box': (analysis.get('_subject_thumbnail_boxes') or {}).get(str(index), subject['box'])}
+                for number, (index, subject) in enumerate(
+                    ((i, s) for i, s in enumerate(analysis.get('subjects') or [])
+                     if s.get('preview_person_id') in ids and _box(s.get('box'))), 1)]
     subjects = analysis.get("subjects") if isinstance(analysis.get("subjects"), list) else []
     faces = analysis.get("_local_face_boxes")
     if not isinstance(faces, list):
@@ -72,7 +80,7 @@ def face_people(analysis):
             represented.add(index)
         number = len(people) + 1
         label = _text(subjects[index].get("label")) if index >= 0 else ""
-        people.append({"number": number, "subject_index": index, "name": label or f"人物 {number}", "box": box})
+        people.append({"number": number, "detection_index": i + 1, "subject_index": index, "name": label or f"人物 {number}", "box": box})
     for index, subject in enumerate(subjects):
         if not isinstance(subject, dict) or subject.get("is_person") is not True or index in represented:
             continue
@@ -93,18 +101,11 @@ def face_people(analysis):
 
 
 def resolve_prompt_faces(analysis, prompt_faces):
-    """{the text a pre-session face pick wrote into user_prompt: the text it
-    should read now}, for every pick whose box is still a face in the panel.
+    """Resolve v2 IDs, legacy detector IDs, or older geometry-only references.
 
-    The upload page lets the user point at a face before the photo has been
-    analyzed, so the pick can only survive as words -- a name from the local
-    detection order ("人物 2") and where that face stands in the frame. By the
-    time there is an analysis the name can be stale: face_people drops a face
-    the analyzer saw nothing in and renumbers what is left, and it prefers the
-    analyzer's own label for a person, which is also what the model reading
-    the prompt can actually resolve. Matching the box -- both sides carry the
-    same padded detection box, so the overlap is 1.0 -- is what says which
-    person the pick meant.
+    An explicit identity must pass reciprocal binding and photo/job checks;
+    failures never fall back to names, order or geometry. Only references
+    without preview identity retain the historical overlap path.
     """
     people = face_people(analysis)
     rewrites = {}
@@ -112,6 +113,49 @@ def resolve_prompt_faces(analysis, prompt_faces):
         box = _box(face.get("box")) if isinstance(face, dict) else None
         ref = _text(face.get("ref")) if isinstance(face, dict) else ""
         if not box or not ref:
+            if isinstance(face, dict) and "preview_person_id" in face:
+                raise ValueError("指定人物的引用資料無效，請重新指定。")
+            continue
+        if "preview_person_id" in face:
+            identity = analysis.get("_subject_preview_identity") or {}
+            if any(face.get(k) != identity.get(k) for k in ("preview_job_id", "source_sha256")):
+                raise ValueError("指定人物的預覽與此照片不符，請重新指定。")
+            person_id = face["preview_person_id"]
+            if (not isinstance(person_id, str) or not identity.get("preview_job_id")
+                    or not identity.get("source_sha256")):
+                raise ValueError("指定人物的引用資料無效，請重新指定。")
+            index = (analysis.get("_preview_person_bindings") or {}).get(person_id)
+            subjects = analysis.get("subjects") or []
+            if (type(index) is not int or not 0 <= index < len(subjects)
+                    or subjects[index].get("preview_person_id") != person_id
+                    or sum(s.get("preview_person_id") == person_id for s in subjects) != 1):
+                raise ValueError("指定的人物未完成身份確認，請重新指定或清除該需求。")
+            label = _text(subjects[index].get("label"))
+            if not label:
+                raise ValueError("指定人物的名稱不可用，請重新指定。")
+            where = _text(face.get("where"))
+            rewrites[ref] = f"{label}（{where}）" if where else label
+            continue
+        if "detection_index" in face:
+            # New preview references are resolved ONLY by reciprocal IDs from
+            # the same photo/job, never by overlap or a provisional array index.
+            identity = analysis.get("_subject_preview_identity") or {}
+            if any(face.get(k) != identity.get(k) for k in ("preview_job_id", "source_sha256")):
+                raise ValueError("指定人物的預覽與此照片不符，請重新指定。")
+            detection = face["detection_index"]
+            review = next((r for r in analysis.get("local_face_review", [])
+                           if r.get("detection_index") == detection), None)
+            index = review.get("matched_subject_index") if review else None
+            subjects = analysis.get("subjects") or []
+            if (type(index) is not int or not 0 <= index < len(subjects)
+                    or review.get("is_real_face") is not True
+                    or subjects[index].get("local_detection_index") != detection):
+                raise ValueError("指定的人物未納入本次分析，請重新確認需求。")
+            label = _text(subjects[index].get("label"))
+            if not label:
+                raise ValueError("指定人物的名稱不可用，請重新指定。")
+            where = _text(face.get("where"))
+            rewrites[ref] = f"{label}（{where}）" if where else label
             continue
         best, found = 0.5, None
         for person in people:

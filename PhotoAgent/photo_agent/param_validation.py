@@ -124,6 +124,19 @@ def _validate_single_key(value, field_name: str) -> str:
 
 def _validate_params(params: dict) -> dict:
     normalized = dict(params)
+    stage = normalized.get("stage", "full")
+    if stage not in ("analyze_preview", "analyze", "reframe", "finish", "full"):
+        raise RuntimeError("unsupported stage", RESULT_INVALID_PARAMETER)
+    try:
+        from photo_agent.preview_context import validate_preview_binding, validate_preview_context
+        if stage == "analyze_preview":
+            normalized["preview_binding"] = validate_preview_binding(normalized.get("preview_binding"))
+        if normalized.get("precomputed_preview") is not None:
+            if stage != "analyze":
+                raise ValueError("preview_context_requires_analyze")
+            normalized["precomputed_preview"] = validate_preview_context(normalized["precomputed_preview"])
+    except ValueError as exc:
+        raise RuntimeError(str(exc), RESULT_INVALID_PARAMETER) from exc
 
     preset = normalized.get("preset", capabilities.DEFAULT_PRESET)
     if not isinstance(preset, str) or preset not in VALID_PRESETS:
@@ -156,6 +169,10 @@ def _validate_params(params: dict) -> dict:
             RESULT_INVALID_PARAMETER,
         )
     normalized["analysis_model"] = analysis_model
+    context = normalized.get("precomputed_preview")
+    binding = normalized.get("preview_binding") if stage == "analyze_preview" else context.get("binding") if context else None
+    if binding and binding["analysis_model"] != analysis_model:
+        raise RuntimeError("preview_analysis_model_mismatch", RESULT_INVALID_PARAMETER)
 
     aspect_ratio = normalized.get("aspect_ratio", capabilities.DEFAULT_ASPECT_RATIO)
     if not isinstance(aspect_ratio, str) or aspect_ratio not in VALID_ASPECT_RATIOS:

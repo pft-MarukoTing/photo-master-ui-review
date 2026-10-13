@@ -59,6 +59,16 @@ function json(method: string, body: Dict): RequestInit {
 const sid = (id: string) => `${CHAT}/sessions/${encodeURIComponent(id)}`;
 
 export const api = {
+  createPreview(file: Blob, filename: string, analysisModel: string): Promise<import("./subject-preview").PreviewStatus> {
+    const form = new FormData();
+    form.append("user", currentUser);
+    form.append("image", file, filename);
+    form.append("analysis_model", analysisModel);
+    return request(`${CHAT}/previews`, { method: "POST", body: form, signal: AbortSignal.timeout(30000) });
+  },
+  previewStatus(jobId: string): Promise<import("./subject-preview").PreviewStatus> {
+    return request(`${CHAT}/previews/${encodeURIComponent(jobId)}${q()}`, { signal: AbortSignal.timeout(10000) });
+  },
   capabilities: () => request<Capabilities>(`${API}/capabilities`),
   config: () => request<Dict>(`${API}/config`).catch(() => ({} as Dict)),
   decryptUserId: (userId: string) =>
@@ -134,10 +144,14 @@ export const api = {
   getSession: (id: string, messagesLimit = 500) =>
     request<Session>(`${sid(id)}${q({ messages_limit: messagesLimit })}`),
   status: (id: string) => request<Dict>(`${sid(id)}/status${q()}`),
-  uploadPhoto: (id: string, file: Blob, filename: string) => {
+  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string }) => {
     const form = new FormData();
     form.set("user", currentUser);
     form.append("image", file, filename);
+    if (preview) {
+      form.append("preview_job_id", preview.preview_job_id);
+      form.append("source_sha256", preview.source_sha256);
+    }
     return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
   },
   analysis: (id: string, photoId: string) =>
@@ -174,6 +188,7 @@ export const api = {
 const enc = encodeURIComponent;
 const withRun = (url: string, run?: number) => (run ? `${url}?run=${run}` : url);
 export const urls = {
+  previewImage: (job: string) => `${CHAT}/previews/${enc(job)}/image${q()}`,
   sourceImage: (job: string) => `${API}/photo-agent/source/${enc(job)}/image`,
   sourceThumb: (job: string) => `${API}/photo-agent/source/${enc(job)}/thumbnail`,
   resultImage: (job: string, run?: number) => withRun(`${API}/photo-agent/result/${enc(job)}/image`, run),

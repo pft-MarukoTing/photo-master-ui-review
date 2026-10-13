@@ -90,7 +90,34 @@ def _validated_prompt_faces(value):
                 raise ValueError(f"plan.prompt_faces[].{key} must be a string of at most "
                                  f"{PROMPT_FACE_TEXT_MAX_LEN} characters")
             texts[key] = text
-        faces.append({"box": dict(zip(("x", "y", "w", "h"), (float(n) for n in numbers))), **texts})
+        identity = {}
+        if "preview_person_id" in entry:
+            import re
+            if "detection_index" in entry:
+                raise ValueError("v2 prompt identity cannot also carry detection_index")
+            for key, pattern in (("preview_person_id", r"pp_[a-f0-9]{32}"),
+                                 ("preview_job_id", r"[A-Za-z0-9_-]{1,64}"),
+                                 ("source_sha256", r"[a-f0-9]{64}")):
+                if not isinstance(entry.get(key), str) or not re.fullmatch(pattern, entry[key]):
+                    raise ValueError("invalid prompt person identity")
+                identity[key] = entry[key]
+            if not (0 <= numbers[0] <= 1 and 0 <= numbers[1] <= 1 and numbers[2] > 0 and numbers[3] > 0
+                    and numbers[0] + numbers[2] <= 1.000001 and numbers[1] + numbers[3] <= 1.000001):
+                raise ValueError("invalid prompt person box")
+        elif "detection_index" in entry:
+            detection = entry["detection_index"]
+            if type(detection) is not int or detection < 1:
+                raise ValueError("invalid prompt face detection_index")
+            import re
+            for key, pattern in (("preview_job_id", r"[A-Za-z0-9_-]{1,64}"),
+                                 ("source_sha256", r"[a-f0-9]{64}")):
+                if not isinstance(entry.get(key), str) or not re.fullmatch(pattern, entry[key]):
+                    raise ValueError("invalid prompt face identity")
+                identity[key] = entry[key]
+            identity["detection_index"] = detection
+        elif "preview_job_id" in entry or "source_sha256" in entry:
+            raise ValueError("prompt face identity requires detection_index")
+        faces.append({"box": dict(zip(("x", "y", "w", "h"), (float(n) for n in numbers))), **texts, **identity})
     return faces
 
 

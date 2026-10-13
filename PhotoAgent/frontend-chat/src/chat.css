@@ -1008,3 +1008,9 @@ div.chat-proposal-row{cursor:default}
 
 /* 全螢幕時比較卡是 z-index 1000，hover 預覽要浮在它上面。 */
 #results-canvas-col .version-tile-preview{z-index:1002}
+
+.subject-preview { display: grid; gap: .55rem; }
+.subject-preview-people { display: grid; gap: .55rem; }
+.subject-preview-person { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; font-size: .88rem; line-height: 1.5; }
+.subject-preview-avatar { width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--surface, #ffffff08); }
+.subject-preview-person img { width: 2.4rem; height: 2.4rem; border-radius: 50%; object-fit: cover; border: 1px solid var(--border, #ffffff22); }

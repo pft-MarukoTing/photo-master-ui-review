@@ -13,6 +13,7 @@ instead -- the same env-driven client aiserver_utils.queue itself uses.
 import json
 import os
 import threading
+import time
 import uuid
 from datetime import datetime
 
@@ -151,6 +152,10 @@ def enqueue(engine_param_dict, src_content=None, job_id=None, queue=MSG_ID_QUEUE
         _upload_source_thumbnail(src_content[0], engine_param_dict["srcKeys"][0], job_id)
 
     upload_dict = engine_param_dict.copy()
+    # After upload and immediately before Redis insertion: queue wait excludes
+    # the original photo's S3-upload latency. Other job stages are untouched.
+    if engine_param_dict.get("acts") and engine_param_dict["acts"][0].get("params", {}).get("stage") == "analyze_preview":
+        engine_param_dict["acts"][0]["params"]["preview_enqueued_at"] = time.time()
     upload_dict["srcKeys"] = json.dumps(engine_param_dict["srcKeys"])
     upload_dict["dstKeys"] = json.dumps(engine_param_dict["dstKeys"])
     upload_dict["acts"] = json.dumps(engine_param_dict["acts"])

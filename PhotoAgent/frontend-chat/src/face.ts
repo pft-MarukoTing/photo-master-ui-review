@@ -50,6 +50,8 @@ export interface FaceIssue {
 }
 
 export interface FaceEntry {
+  thumbnailBox?: Box;
+  detectionIndex?: number; // 1-based detector ID, absent for AI-only subjects
   box: Box;
   subjectIndex: number;
   label: string;
@@ -146,6 +148,16 @@ function recoverableSubject(a: Analysis, subject: Dict): boolean {
 
 export function faceEntries(a: Analysis, overrides: Record<string, FaceOverride> = {}): FaceEntry[] {
   const out: FaceEntry[] = [];
+  if (Array.isArray(a._fixed_preview_person_ids)) {
+    const ids = new Set(a._fixed_preview_person_ids);
+    return (a.subjects || []).flatMap((subject, index) => {
+      if (!ids.has(subject.preview_person_id) || !finiteBox(subject.box)) return [];
+      const thumbnail = a._subject_thumbnail_boxes?.[String(index)];
+      return [{ box: subject.box, thumbnailBox: finiteBox(thumbnail) ? thumbnail : subject.box,
+        subjectIndex: index, label: subject.label || "",
+        issues: subject.is_person === true ? issuesFor(subject, index, overrides) : [] }];
+    });
+  }
   const represented = new Set<number>();
   localFaceBoxes(a).forEach((f, i) => {
     if (!finiteBox(f?.box)) return;
@@ -157,6 +169,7 @@ export function faceEntries(a: Analysis, overrides: Record<string, FaceOverride>
       represented.add(index);
     }
     out.push({
+      detectionIndex: i + 1,
       box: f.box,
       subjectIndex: index,
       label: (subject as Dict | null)?.label || "",
@@ -289,7 +302,7 @@ export function executedPortraits(a: Analysis | null | undefined): PortraitDone[
   subjects.forEach((s, i) => {
     if (seen.has(i) || !recoverableSubject(a, s)) return;
     seen.add(i);
-    people.push({ subject: s, index: i, box: s.box });
+    people.push({ subject: s, index: i, box: finiteBox(a._subject_thumbnail_boxes?.[String(i)]) ? a._subject_thumbnail_boxes[String(i)] : s.box });
   });
 
   return people
@@ -363,6 +376,8 @@ export function cropFaceThumbnail(img: HTMLImageElement, box: Box): string {
 // The people the panel's face tabs show, named as the tabs name them. The
 // backend's chat_brief.face_people numbers them the same way.
 export interface Person {
+  thumbnailBox?: Box;
+  detectionIndex?: number;
   subjectIndex: number;
   name: string;
   box: Box;
@@ -370,14 +385,14 @@ export interface Person {
 
 export function facePeople(a: Analysis | null): Person[] {
   if (!a) return [];
-  return faceEntries(a).map((f, i) => ({ subjectIndex: f.subjectIndex, name: f.label || `人物 ${i + 1}`, box: f.box }));
+  return faceEntries(a).map((f, i) => ({ detectionIndex: f.detectionIndex, subjectIndex: f.subjectIndex, name: f.label || `人物 ${i + 1}`, box: f.box, thumbnailBox: f.thumbnailBox }));
 }
 
 // Face crops of the source image, one per facePeople entry (same order).
 const thumbCache = new Map<string, string[]>();
 
 export function useFaceThumbs(a: Analysis | null, sourceUrl: string): string[] {
-  return useBoxThumbs(facePeople(a).map((p) => p.box), sourceUrl);
+  return useBoxThumbs(facePeople(a).map((p) => p.thumbnailBox || p.box), sourceUrl);
 }
 
 // The same crops for boxes that did not come from an analysis -- the upload

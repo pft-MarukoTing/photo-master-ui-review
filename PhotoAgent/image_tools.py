@@ -143,7 +143,7 @@ def _normalized_face_entry(img, x, y, w, h):
     }
 
 
-def _detect_faces_px(img, caller):
+def _detect_faces_px(img, caller, *, with_confidence=False):
     """The detector's own boxes for `img` as (x, y, w, h) in its pixel space,
     largest first, with the small false positives dropped.
 
@@ -172,7 +172,7 @@ def _detect_faces_px(img, caller):
         return []
 
     # bbox is [x1, y1, x2, y2] in the original image's pixel space already.
-    boxes = [(x1, y1, x2 - x1, y2 - y1) for x1, y1, x2, y2 in (f["bbox"] for f in faces)]
+    boxes = [(*f["bbox"][:2], f["bbox"][2] - f["bbox"][0], f["bbox"][3] - f["bbox"][1], f["confidence"]) for f in faces]
     boxes = sorted(boxes, key=lambda b: b[2] * b[3], reverse=True)
     largest_area = boxes[0][2] * boxes[0][3]
     # A real face's false-positive companions from background texture/pattern
@@ -180,7 +180,7 @@ def _detect_faces_px(img, caller):
     # drops those without needing a second model to tell them apart.
     filtered = [b for b in boxes if b[2] * b[3] >= largest_area * 0.2]
     logger.info("%s: image=%dx%d raw_boxes=%s filtered=%s", caller, img.width, img.height, boxes, filtered)
-    return filtered
+    return filtered if with_confidence else [b[:4] for b in filtered]
 
 
 def detect_face_crops(image_bytes: bytes) -> list:
@@ -225,7 +225,7 @@ def detect_face_crops(image_bytes: bytes) -> list:
     if img.width < 1 or img.height < 1:
         return []
 
-    filtered = _detect_faces_px(img, "detect_face_crops")
+    filtered = _detect_faces_px(img, "detect_face_crops", with_confidence=True)
     if not filtered:
         return []
 
@@ -240,7 +240,7 @@ def detect_face_crops(image_bytes: bytes) -> list:
 
     t_crop0 = time.perf_counter()
     crops = []
-    for x, y, w, h in kept:
+    for x, y, w, h, confidence in kept:
         left, top, right, bottom = _padded_face_box(img, x, y, w, h)
         logger.info("detect_face_crops: raw_box=(%d,%d,%d,%d) crop_box=(left=%d,top=%d,right=%d,bottom=%d)", x, y, w, h, left, top, right, bottom)
         crop = img.crop((left, top, right, bottom))
@@ -252,15 +252,39 @@ def detect_face_crops(image_bytes: bytes) -> list:
         if longest != _FACE_CROP_MAX_SIDE:
             scale = _FACE_CROP_MAX_SIDE / longest
             crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
-        crops.append({**_normalized_face_entry(img, x, y, w, h), "bytes": _to_jpeg_bytes(crop)})
+        crops.append({**_normalized_face_entry(img, x, y, w, h), "confidence": confidence, "bytes": _to_jpeg_bytes(crop)})
     aiutils_logger.log('[detect_face_crops] crop timing', crop_count=len(kept),
                         crop_total_ms=round((time.perf_counter() - t_crop0) * 1000, 1))
 
     # Cheap (arithmetic only, no PIL crop/resize/encode) entries for the
     # locally-detected faces beyond the crop cap -- never sent to the model.
-    for x, y, w, h in extra:
-        crops.append({**_normalized_face_entry(img, x, y, w, h), "bytes": None})
+    for x, y, w, h, confidence in extra:
+        crops.append({**_normalized_face_entry(img, x, y, w, h), "confidence": confidence, "bytes": None})
     return crops
+
+
+def restore_face_crops(image_bytes: bytes, detections: list) -> list:
+    """Rebuild capped zoom images from validated EXIF-original detector boxes.
+
+    No detection, ID matching, geometry inference or base64 payload storage.
+    Pixel rounding reverses the detector's normalized integer crop bounds.
+    """
+    img = _open_rgb(image_bytes)
+    result = []
+    for item in detections:
+        b = item["box"]
+        bounds = (round(b["x"] * img.width), round(b["y"] * img.height),
+                  round((b["x"] + b["w"]) * img.width), round((b["y"] + b["h"]) * img.height))
+        data = None
+        if item["sent_to_model"]:
+            crop = img.crop(bounds)
+            longest = max(crop.size)
+            if longest < _FACE_CROP_MAX_SIDE:
+                scale = _FACE_CROP_MAX_SIDE / longest
+                crop = crop.resize((round(crop.width * scale), round(crop.height * scale)), Image.LANCZOS)
+            data = _to_jpeg_bytes(crop)
+        result.append({"box": dict(b), "face_box": dict(item["face_box"]), "bytes": data})
+    return result
 
 
 def detect_face_boxes(image_bytes: bytes) -> list:
@@ -1590,3 +1614,52 @@ def create_local_enhanced_bytes(image_bytes: bytes, crop_box: dict, context: dic
     img = Image.merge("RGB", (r, g, b))
 
     return _to_png_bytes(img)
+
+
+def detect_preview_candidates(image_bytes: bytes) -> dict:
+    """One inference; A uses its original area filter, B retains small faces.
+
+    Only preview callers use the lower candidate floor. B candidates are
+    separately identified evidence and never enter the A detector roster.
+    """
+    import config
+    img = _open_rgb(image_bytes)
+    floor = config.SUBJECT_PREVIEW_LOW_CONFIDENCE_THRESHOLD
+    if not 0 <= floor < _FACE_DETECT_CONFIDENCE_THRESHOLD:
+        raise ValueError("invalid_preview_candidate_threshold")
+    try:
+        bgr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+        with _FACE_DETECTOR_LOCK:
+            faces = _face_detector().detect(bgr, floor, _FACE_DETECT_NMS_THRESHOLD)
+    except Exception:
+        logger.warning("Preview candidate detector failed", exc_info=True)
+        return {"face_crops": [], "low_confidence_candidates": [], "low_confidence_state": "unavailable"}
+    valid = [f for f in faces if f['confidence'] > floor and
+             0 <= f['bbox'][0] < f['bbox'][2] <= img.width and
+             0 <= f['bbox'][1] < f['bbox'][3] <= img.height]
+    a = sorted([f for f in valid if f['confidence'] > _FACE_DETECT_CONFIDENCE_THRESHOLD],
+               key=lambda f: (f['bbox'][2]-f['bbox'][0])*(f['bbox'][3]-f['bbox'][1]), reverse=True)
+    if a:
+        largest = (a[0]['bbox'][2]-a[0]['bbox'][0])*(a[0]['bbox'][3]-a[0]['bbox'][1])
+        a = [f for f in a if (f['bbox'][2]-f['bbox'][0])*(f['bbox'][3]-f['bbox'][1]) >= largest * .2]
+    b = sorted([f for f in valid if f['confidence'] <= _FACE_DETECT_CONFIDENCE_THRESHOLD],
+               key=lambda f: f['confidence'], reverse=True)
+    state = 'ready'
+    if len(b) > config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_CANDIDATES:
+        b, state = [], 'budget_exceeded'
+    def entry(f, zoom):
+        x, y, right, bottom = f['bbox']
+        result = {**_normalized_face_entry(img, x, y, right-x, bottom-y), 'confidence': float(f['confidence']), 'bytes': None}
+        if zoom:
+            bounds = _padded_face_box(img, x, y, right-x, bottom-y)
+            crop = img.crop(bounds)
+            longest = max(crop.size)
+            if longest < _FACE_CROP_MAX_SIDE:
+                scale = _FACE_CROP_MAX_SIDE / longest
+                crop = crop.resize((round(crop.width*scale), round(crop.height*scale)), Image.LANCZOS)
+            result['bytes'] = _to_jpeg_bytes(crop)
+        return result
+    crops = [entry(f, i < _FACE_CROP_MAX_COUNT) for i, f in enumerate(a)]
+    candidates = [{**entry(f, i < config.SUBJECT_PREVIEW_MAX_LOW_CONFIDENCE_ZOOMS),
+                   'candidate_id': 'b' + str(i+1)} for i, f in enumerate(b)]
+    return {'face_crops': crops, 'low_confidence_candidates': candidates, 'low_confidence_state': state}

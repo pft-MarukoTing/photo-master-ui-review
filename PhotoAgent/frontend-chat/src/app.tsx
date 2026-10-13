@@ -31,6 +31,7 @@ import {
   type ProposalChoice,
 } from "./chat";
 import { facePeople, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
+import { useSubjectPreview } from "./subject-preview";
 import { Icon } from "./icons";
 import { CASE_PREFIX, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { handoffPatch, takeHandoff, writeHandoff } from "./handoff";
@@ -80,7 +81,7 @@ type Phase = "home" | "chat" | "session";
 type PreStep = "start" | "picked" | "settings";
 type Source = { kind: "file"; file: File; url: string } | { kind: "demo"; name: string };
 // A face picked on the upload page: no name yet, so where it stands and its box.
-type PrePerson = FaceRef & { where: string; box: Box };
+type PrePerson = FaceRef & { where: string; box: Box; thumbnail_box?: Box; preview_person_id?: string; detection_index?: number; preview_job_id?: string; source_sha256?: string };
 
 // A line typed before the session exists, with the people the user had pointed
 // at when they sent it, in the order they were tapped. The name and the where are taken at that moment: the
@@ -270,7 +271,7 @@ function carriedLog(ns: Note[], photoId: string, later: Note | null) {
     }
     const n = t.ask;
     const card: Dict = { type: "ask", photo_id: photoId, pre: true };
-    if (n.persons.length) card.faces = n.persons.map((p) => ({ box: p.box, where: p.where }));
+    if (n.persons.length) card.faces = n.persons.map((p) => ({ box: p.box, thumbnail_box: p.thumbnail_box, preview_person_id: p.preview_person_id, where: p.where }));
     if (n === later) card.waiting = true;
     out.push({ role: "user", text: n.text, card });
     if (n.reply) reply(n.reply);
@@ -291,7 +292,11 @@ function openAsk(ns: Note[]): Note | null {
 // pick travels alongside the prompt as plan.prompt_faces and the server settles
 // the name once it has an analysis.
 const groupFaces = (g: NoteGroup): PromptFace[] =>
-  g.persons.map((p) => ({ box: p.box, ref: faceRef(p), where: p.where }));
+  g.persons.map((p) => ({ box: p.box, ref: faceRef(p), where: p.where,
+    ...(p.preview_person_id ? { preview_person_id: p.preview_person_id,
+      preview_job_id: p.preview_job_id, source_sha256: p.source_sha256 } :
+      p.detection_index ? { detection_index: p.detection_index,
+      preview_job_id: p.preview_job_id, source_sha256: p.source_sha256 } : {}) }));
 
 const GREETING = "嗨！先選一張想美化的照片（一次一張）。要自己上傳，還是從範例照片挑？";
 // 個人化需求存檔後自動送出的那一句。chat_assistant.INSTRUCTION 會認這句話，改字要兩邊一起改。
@@ -404,44 +409,74 @@ export function App() {
   const fileInput = useRef<HTMLInputElement>(null);
 
   // ── The upload page's own face picker ─────────────────────────────────────
-  // The local detector runs on the picked photo right away, so the faces are
-  // there to point at while the first request is still being typed -- the same
-  // picker, in the same place, as the one the session has.
+  // A separate worker preview starts on selection; feature-off retains the
+  // original local-detector path. Neither creates a formal Chat session yet.
   const preFull = !source ? "" : source.kind === "file" ? source.url : urls.demoImage(source.name);
-  const preScan = useDetectedFaces(source ? preFull : null, async () => {
+  const previewEnabled = !!caps?.features?.subject_preview;
+  const loadSource = async () => {
     if (!source) throw new Error("no source");
     if (source.kind === "file") return { blob: source.file, name: source.file.name };
     const res = await fetch(urls.demoImage(source.name));
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return { blob: await res.blob(), name: source.name };
-  });
-  const preFaces = preScan.people;
-  const preThumbs = useBoxThumbs(preFaces.map((p) => p.box), preFull);
+  };
+  const preview = useSubjectPreview(source && phase === "chat" && previewEnabled ? preFull : null,
+    settings?.analysis_model || caps?.render.defaults.analysis_model || "", loadSource);
+  const previewReviewIdentity = useRef(preview.identity);
+  previewReviewIdentity.current = preview.identity;
+  useEffect(() => {
+    setPrePointed([]);
+    setPreAsk(null);
+    setNotes((n) => n.some((x) => x.persons.length) ? n.map((x) => ({ ...x, persons: [] })) : n);
+    setPreEdit(null);
+  }, [preview.identity]);
+  const selectionIdentity = `${preFull}#${settings?.analysis_model || caps?.render.defaults.analysis_model || ""}`;
+  const sourceIdentity = useRef(selectionIdentity);
+  sourceIdentity.current = selectionIdentity;
+  // Feature-off alone uses Flask detection. The successful preview path must
+  // never issue a second /detect-faces request while creating the worker job.
+  const preScan = useDetectedFaces(source && caps && !previewEnabled ? preFull : null, loadSource);
+  const preFaces: { subjectIndex: number; name: string; box: Box; role?: string;
+    thumbnail_box?: Box; preview_person_id?: string; detection_index?: number }[] = previewEnabled
+    ? (preview.result?.format_version === 2 || preview.result?.format_version === 3)
+      ? (preview.result.people || []).map((p, index) => ({
+          subjectIndex: index, name: p.label, box: p.box, role: p.role, preview_person_id: p.preview_person_id, thumbnail_box: p.thumbnail_box,
+        }))
+      : (preview.result?.faces || []).filter((f) => f.role !== "not_real_face").map((f) => ({
+          subjectIndex: f.detection_index - 1, name: f.label, box: f.box, role: f.role,
+          detection_index: f.detection_index,
+        })) : preScan.people;
+  const preThumbs = useBoxThumbs(preFaces.map((p) => p.thumbnail_box || p.box),
+    previewEnabled && preview.result ? urls.previewImage(preview.result.preview_job_id) : preFull);
   // The detector hands faces back largest first, an order nobody looking at the
   // photo can see. Counting from the left is the one order the photo itself
   // shows, so that is how a face gets put into words here.
   const preOrder = [...preFaces].sort((a, b) => a.box.x + a.box.w / 2 - (b.box.x + b.box.w / 2));
   const preWhere = (subjectIndex: number) =>
     `照片中從左邊數來第 ${preOrder.findIndex((q) => q.subjectIndex === subjectIndex) + 1} 位`;
-  // Nothing has been analysed, so nobody has a name: the chip is the face, and
-  // the position is only there for the tooltip and for anyone who cannot see it.
+  // Picker indices are local display positions. References serialize opaque
+  // server person IDs, independent of formal subject order.
   const prePickable = preFaces.map((p) => ({
-    name: "",
+    previewRole: "role" in p ? String(p.role) : "",
+    name: p.name,
     where: preWhere(p.subjectIndex),
-    thumb: preThumbs[p.subjectIndex] || "",
+    thumb: preThumbs[preFaces.indexOf(p)] || "",
     subjectIndex: p.subjectIndex,
   }));
-  // 照片剛進來、偵測還沒回來時，畫面跟「沒有人」長得一模一樣。先問「想怎麼修」
-  // 的話，使用者會對著還沒出現的頭像做決定，等人臉補上來那句話又整句換掉。所以
-  // 等偵測跟頭像都到齊再往下走——頭像也要等，不然選人的那排會先閃一輪空圈。
-  const preScanning = !!source && (!preScan.ready || preThumbs.length !== preFaces.length);
+  // Preview loading is informational, not a lock on ordinary chat. Legacy
+  // mode keeps its existing detector/thumbnail readiness gate unchanged.
+  const preScanning = !!source && (previewEnabled ? !preview.ready : (!preScan.ready || preThumbs.length !== preFaces.length));
+  const preHeld = previewEnabled ? false : preScanning;
   useEffect(() => {
     if (source && !preScanning) setPickHint((n) => n + 1);
   }, [source, preScanning]);
   const preRefs = (subjectIndices: number[]): PrePerson[] =>
     subjectIndices.flatMap((i) => {
       const p = preFaces.find((q) => q.subjectIndex === i);
-      return p ? [{ name: p.name, thumb: preThumbs[p.subjectIndex] || "", where: preWhere(p.subjectIndex), box: p.box }] : [];
+      return p ? [{ name: p.name, thumb: preThumbs[preFaces.indexOf(p)] || "", where: preWhere(p.subjectIndex), box: p.box, thumbnail_box: p.thumbnail_box,
+        ...(previewEnabled && preview.result ? { ...(p.preview_person_id
+          ? { preview_person_id: p.preview_person_id } : { detection_index: p.detection_index }),
+          preview_job_id: preview.result.preview_job_id, source_sha256: preview.result.source_sha256 } : {}) }] : [];
     });
 
   // ── Boot ──────────────────────────────────────────────────────────────────
@@ -715,6 +750,7 @@ export function App() {
   }
 
   function choose(s: Source) {
+    ++lastPick.current; // a demo pick also supersedes an in-flight HEIC decode
     setSamplesOpen(false);
     setSource(s);
     // A new photo has its own people: what was typed stays, who it was aimed
@@ -798,6 +834,8 @@ export function App() {
   ): Promise<Note[] | null> {
     // 回答 AI 的提問時沒再點人，就沿用被問的那句指的人：「想換成什麼顏色？」
     // 「棕色」講的還是同一位。
+    const expectedPreview = preview.identity;
+    const stillCurrent = () => previewReviewIdentity.current === expectedPreview;
     const asking = openAsk(base);
     const picked = preRefs(subjectIndices);
     const note: Note = { text, persons: picked.length ? picked : asking?.persons || [] };
@@ -821,6 +859,7 @@ export function App() {
         reviewHistory(base),
         preOrder.map((p) => preWhere(p.subjectIndex)),
       );
+      if (!stillCurrent()) return null;
       const settled: Note = {
         ...note,
         reply: r.reply,
@@ -836,11 +875,12 @@ export function App() {
     } catch {
       // 問不到就放行：一次模型失敗不該讓人卡在上傳頁面，而且進了 session，
       // 個人化需求面板按下確認時還會再過一次。
+      if (!stillCurrent()) return null;
       const kept = { ...note, ...completed() };
       setNotes([...base, kept]);
       return [...base, kept];
     } finally {
-      setPreAsk(null);
+      if (stillCurrent()) setPreAsk(null);
     }
   }
 
@@ -875,6 +915,9 @@ export function App() {
     // 就當沒打過：它沒進過對話，也沒過把關，不該從這裡偷渡進 user_prompt。
     const kept = keptNotes(log);
     run(async () => {
+      const selectedSource = selectionIdentity;
+      const previewIdentity = previewEnabled ? await preview.forSubmission() : undefined;
+      if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
       const s = await api.createSession();
       const id = s.session_id;
       const userPrompt = notesPrompt(log, preEdit).slice(0, PROMPT_MAX);
@@ -903,7 +946,8 @@ export function App() {
         blob = await res.blob();
         name = source.name;
       }
-      const up = await api.uploadPhoto(id, blob, name);
+      if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
+      const up = await api.uploadPhoto(id, blob, name, previewIdentity);
       const added = up.photos?.[0];
       if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
       // On the photo, not the session defaults: a second photo has its own
@@ -913,6 +957,7 @@ export function App() {
       // 的 AI 就回答它，使用者不用再問一次。
       const carried = carriedLog(log, added.photo_id, later);
       if (carried.length) await api.postMessages(id, carried);
+      if (sourceIdentity.current !== selectedSource) return;
       if (mode === "render") {
         await api.render(id, [added.photo_id]);
         await afterRender(id, overwrite ? ONLY_PROMPT_LABEL : "一鍵美化", "spark", { ...settings });
@@ -1252,7 +1297,7 @@ export function App() {
                           // Only once there is a photo to replace; before that the
                           // greeting's two chips are the choice, right above.
                           onSample={source ? showSamples : undefined}
-                          disabled={busy || !!preAsk || preScanning}
+                          disabled={busy || !!preAsk || preHeld}
                           // Live once a photo is picked: what is typed here is the
                           // 個人化需求 the session starts with.
                           onSend={
@@ -1305,6 +1350,10 @@ export function App() {
                       prompt={notesPrompt(notes, preEdit)}
                       pending={preAsk}
                       scanning={preScanning}
+                      previewActive={previewEnabled}
+                      previewError={preview.error || (preview.result?.state === "ready" &&
+                        preview.result.augmentation_state === "unavailable"
+                        ? "全圖人物補找暫時未完成，正式分析時會再確認。" : undefined)}
                       faceCount={prePickable.length}
                       busy={busy}
                       error={error}
@@ -1439,7 +1488,7 @@ function PreChat(props: {
   caps: Capabilities;
   // Everyone the detector found, so the AI's words about where someone stands
   // can show that face instead.
-  people: FaceRef[];
+  people: (FaceRef & { previewRole?: string })[];
   step: PreStep;
   via: "upload" | "sample" | null;
   source: Source | null;
@@ -1450,6 +1499,8 @@ function PreChat(props: {
   // The photo is in, the local detector has not come back yet. Asking what to
   // do belongs after this: who is in the photo is half of the answer.
   scanning: boolean;
+  previewActive: boolean;
+  previewError?: string;
   // How many people the local detector found in the picked photo: the picker
   // under the composer only appears from two up, and so does the line about it.
   faceCount: number;
@@ -1490,7 +1541,7 @@ function PreChat(props: {
   const settled = !pending && !!last && ("gone" in last || !!last.ask.reply);
   // 換一張照片時需求會留著，所以這排按鍵在下一張還在偵測時也還在畫面上——那段
   // 期間一樣不能按，不然等於跳過剛換上來的這些人。
-  const held = busy || scanning;
+  const held = busy || (scanning && !props.previewActive);
   // 送出前的最後一眼。對話往上捲是整段過程——被擋下來的句子、AI 回的話、設定
   // 卡夾在中間；這張只放真的會跟著進 session 的那段字，而且就擺在動作鍵正上方，
   // 要確認的東西跟要按下去的地方是同一處。跟 session 的個人化需求一樣是一整段，
@@ -1601,7 +1652,25 @@ function PreChat(props: {
               <p class="chat-text chat-muted">先看一下照片裡有誰…</p>
             </AssistantMsg>
           )}
-          {!scanning && (
+          {props.previewActive && props.people.length > 0 && (
+            <AssistantMsg>
+              <div class="subject-preview" aria-label="人物初步辨識">
+                <span class="chat-meta">人物初步辨識</span>
+                <div class="subject-preview-people">
+                  {props.people.map((person) => (
+                    <div class="subject-preview-person">
+                      <span class="subject-preview-avatar">{person.thumb && <img src={person.thumb} alt="" />}</span>
+                      <span>{person.name || person.where}</span>
+                      {person.previewRole === "bystander" && <small class="chat-muted">背景人物</small>}
+                      {person.previewRole === "uncertain" && <small class="chat-muted">待確認</small>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </AssistantMsg>
+          )}
+          {props.previewError && <AssistantMsg><p class="chat-text chat-muted">{props.previewError}</p></AssistantMsg>}
+          {(!scanning || props.previewActive) && (
           <AssistantMsg>
             {/* The picker below already says 指定對象; this line says what it is
                 for, and says it in the same breath as the rest, so the greeting
@@ -1967,11 +2036,15 @@ function SessionView(props: {
   // 上傳頁面帶過來的句子，指的人當時還沒有名字：頭像照它帶來的框裁，名字留白，
   // 跟上傳頁面上那顆泡泡長得一樣。
   // 一句可以指好幾位（`faces`）；更早的訊息只帶一個 `box`/`where`。
-  const preFacesOf = (card: Dict | null | undefined): { box: Box; where?: string }[] =>
+  const preFacesOf = (card: Dict | null | undefined): { box: Box; thumbnail_box?: Box; preview_person_id?: string; where?: string }[] =>
     Array.isArray(card?.faces) ? card!.faces : card?.box ? [{ box: card.box, where: card.where }] : [];
   const preAsks = messages.filter((m) => m.card?.type === "ask" && preFacesOf(m.card).length);
   const preBoxes = preAsks.flatMap((m) => preFacesOf(m.card));
-  const preThumbs = useBoxThumbs(preBoxes.map((f) => f.box), source);
+  const preThumbs = useBoxThumbs(preBoxes.map((f) => {
+    const index = f.preview_person_id ? analysis?._preview_person_bindings?.[f.preview_person_id] : undefined;
+    const samePerson = Number.isInteger(index) && analysis?.subjects?.[index]?.preview_person_id === f.preview_person_id;
+    return (samePerson ? analysis?._subject_thumbnail_boxes?.[String(index)] : undefined) || f.thumbnail_box || f.box;
+  }), source);
   const preFaces = (m: (typeof messages)[number]): FaceRef[] => {
     const i = preAsks.indexOf(m);
     if (i < 0) return [];

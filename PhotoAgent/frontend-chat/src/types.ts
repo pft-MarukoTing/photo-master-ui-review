@@ -7,6 +7,10 @@ export type FaceOverride = false | { allowed: true; level?: string };
 // user_prompt; the box is what the server matches against the analysis once
 // it lands, so it can swap that text for the name the face panel uses.
 export interface PromptFace {
+  preview_person_id?: string;
+  detection_index?: number;
+  preview_job_id?: string;
+  source_sha256?: string;
   box: { x: number; y: number; w: number; h: number };
   ref: string;
   where: string;
@@ -113,6 +117,7 @@ export interface Choice {
 }
 
 export interface Capabilities {
+  features?: { subject_preview?: boolean; subject_preview_format_version?: number; low_confidence_candidates?: boolean };
   render: {
     analysis_models: { id: string; label: string }[];
     aspect_ratios: Choice[];
