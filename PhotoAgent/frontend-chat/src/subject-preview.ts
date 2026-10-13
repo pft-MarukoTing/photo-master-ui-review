@@ -119,18 +119,13 @@ export function useSubjectPreview(key: string | null, model: string, load: Load)
 
   const shown = state.key === identity ? state : { key: identity, ready: !identity };
   return { ...shown, identity,
-    async forSubmission(maxWaitMs = 15000) {
-      const expected = identity;
-      const deadline = Date.now() + maxWaitMs;
-      // Only the regular UI poll reads status. Formal submission has a finite
-      // wait and freezes the result available at that instant, never a token
-      // that a worker must wait on.
-      while (current.current.key === expected && !current.current.ready && Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      if (current.current.key !== expected) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
+    async forSubmission(_maxWaitMs = 0) {
+      // Freeze only the completed result available at the click. A pending
+      // job ID must never let the upload route adopt a later preview snapshot.
+      if (current.current.key !== identity) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
       const r = current.current.result;
-      return r ? { preview_job_id: r.preview_job_id, source_sha256: r.source_sha256 } : undefined;
+      return r?.state === "ready" && r.reusable
+        ? { preview_job_id: r.preview_job_id, source_sha256: r.source_sha256 } : undefined;
     },
   };
 }

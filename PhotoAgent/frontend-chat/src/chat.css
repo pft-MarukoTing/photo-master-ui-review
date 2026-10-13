@@ -425,6 +425,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    of operations -- settings, then run -- so the emphasis sits on the right,
    which is also where the eye lands last. */
 .chat-actions{align-items:center;gap:var(--sp-2) var(--sp-5)}
+/* Standalone pre-chat controls align with message text without an AI avatar. */
+.prechat-actions{margin-left:calc(28px + var(--sp-3));min-width:0;flex-shrink:0}
 .chat-actions-main,.chat-actions-aux{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
 .chat-chip.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo)}
 /* An answered turn. Not disabled -- disabled says "unavailable for now", and

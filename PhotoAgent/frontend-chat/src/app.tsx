@@ -300,6 +300,11 @@ const groupFaces = (g: NoteGroup): PromptFace[] =>
       p.detection_index ? { detection_index: p.detection_index,
       preview_job_id: p.preview_job_id, source_sha256: p.source_sha256 } : {}) }));
 
+function withoutPreviewIdentity({ preview_person_id, detection_index, preview_job_id,
+  source_sha256, ...geometry }: PrePerson): PrePerson {
+  return geometry;
+}
+
 const GREETING = "嗨！先選一張想美化的照片（一次一張）。要自己上傳，還是從範例照片挑？";
 
 // 帶著個人化需求按一鍵美化時問的兩條路。只照需求改 = overwrite_prompt：修圖
@@ -409,7 +414,7 @@ export function App() {
   // 留著按下去那一刻的 later / log，選好之後照原樣開始；`overwrite` 是選了哪
   // 一個，上傳中那排選項定格在它身上，失敗了還能重選。
   const [renderAsk, setRenderAsk] = useState<{ later: Note | null; log: Note[]; overwrite?: boolean } | null>(null);
-  // 按了分析／一鍵美化到進 session 之間：等人物辨識、建 session、上傳、送出，
+  // 按了分析／一鍵美化到進 session 之間：建 session、上傳、送出，
   // 前後可以好幾秒。做到哪一步就多講一句，按下去當下畫面就有回應。
   const [starting, setStarting] = useState<StartProgress | null>(null);
 
@@ -421,6 +426,8 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [pendingAsk, setPendingAsk] = useState<{ text: string; subjectIndices: number[] } | null>(null);
 
+  const [submitting, setSubmitting] = useState<{ source: Source; mode: "analyze" | "render"; since: number } | null>(null);
+  const submissionLock = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
@@ -437,19 +444,26 @@ export function App() {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return { blob: await res.blob(), name: source.name };
   };
-  const preview = useSubjectPreview(source && phase === "chat" && previewEnabled ? preFull : null,
+  const preview = useSubjectPreview(source && phase === "chat" && previewEnabled && !submitting ? preFull : null,
     settings?.analysis_model || caps?.render.defaults.analysis_model || "", loadSource);
   const previewReviewIdentity = useRef(preview.identity);
   previewReviewIdentity.current = preview.identity;
-  useEffect(() => {
-    setPrePointed([]);
-    setPreAsk(null);
-    setNotes((n) => n.some((x) => x.persons.length) ? n.map((x) => ({ ...x, persons: [] })) : n);
-    setPreEdit(null);
-  }, [preview.identity]);
   const selectionIdentity = `${preFull}#${settings?.analysis_model || caps?.render.defaults.analysis_model || ""}`;
   const sourceIdentity = useRef(selectionIdentity);
   sourceIdentity.current = selectionIdentity;
+  const reviewedSource = useRef(preFull);
+  useEffect(() => {
+    const samePhoto = reviewedSource.current === preFull;
+    reviewedSource.current = preFull;
+    setPrePointed([]);
+    setPreAsk(null);
+    // A model change keeps same-photo instructions as ordinary geometry;
+    // leaving preview temporarily for submission must not clear any notes.
+    setNotes((n) => n.some((x) => x.persons.length) ? n.map((x) => ({
+      ...x, persons: samePhoto ? x.persons.map(withoutPreviewIdentity) : [],
+    })) : n);
+    if (!samePhoto) setPreEdit(null);
+  }, [selectionIdentity]);
   // Feature-off alone uses Flask detection. The successful preview path must
   // never issue a second /detect-faces request while creating the worker job.
   const preScan = useDetectedFaces(source && caps && !previewEnabled ? preFull : null, loadSource);
@@ -957,7 +971,7 @@ export function App() {
   // `overwrite` 是一鍵美化前問到的答案：true 只照個人化需求改，false 整體美化
   // 再加上需求。有需求卻還沒問過，就先問，不開始。
   function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
-    if (!source || !caps || !settings || busy) return;
+    if (!source || !caps || !settings || busy || submissionLock.current) return;
     if (mode === "render" && overwrite === undefined && notesPrompt(log, preEdit).trim()) {
       setRenderAsk({ later, log });
       return;
@@ -965,21 +979,25 @@ export function App() {
     setRenderAsk(mode === "render" && overwrite !== undefined ? { later, log, overwrite } : null);
     // 個人化需求只認已經送出、也已經讓 AI 看過的那幾句。輸入框裡打了沒送的字
     // 就當沒打過：它沒進過對話，也沒過把關，不該從這裡偷渡進 user_prompt。
-    const kept = keptNotes(log);
+    submissionLock.current = true;
+    const selectedSource = selectionIdentity;
+    // Call before leaving preview: this promise contains an already-frozen,
+    // nonblocking decision and cannot adopt a result arriving during upload.
+    const previewDecision = previewEnabled ? preview.forSubmission() : Promise.resolve(undefined);
+    const since = Date.now();
     const say = (line: string) => setStarting((s) => s && { ...s, lines: [...s.lines, line] });
-    setStarting({
-      mode,
-      overwrite,
-      since: Date.now(),
-      lines: ["正在上傳照片…"],
-    });
+    setStarting({ mode, overwrite, since, lines: ["正在上傳照片…"] });
+    setSubmitting({ source, mode, since });
     void run(async () => {
-      const selectedSource = selectionIdentity;
-      const previewIdentity = previewEnabled ? await preview.forSubmission() : undefined;
+      const previewIdentity = await previewDecision;
+      const submissionLog = previewEnabled && !previewIdentity ? log.map((note) => ({
+        ...note, persons: note.persons.map(withoutPreviewIdentity),
+      })) : log;
+      const kept = keptNotes(submissionLog);
       if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
       const s = await api.createSession();
       const id = s.session_id;
-      const userPrompt = notesPrompt(log, preEdit).slice(0, PROMPT_MAX);
+      const userPrompt = notesPrompt(submissionLog, preEdit).slice(0, PROMPT_MAX);
       // Only the picks the prompt still spells out: one entry per person
       // already names each face once, and PROMPT_MAX can still cut the last
       // entry off.
@@ -1009,26 +1027,42 @@ export function App() {
       const up = await api.uploadPhoto(id, blob, name, previewIdentity);
       const added = up.photos?.[0];
       if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
+      if (sourceIdentity.current !== selectedSource) return;
       say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
+      const uploadedSession = await api.getSession(id);
+      if (sourceIdentity.current !== selectedSource) return;
+      setSession(uploadedSession);
+      setSelected(null);
+      setPhase("session");
+      setSessionHash(id);
+      setSubmitting(null);
       // On the photo, not the session defaults: a second photo has its own
       // faces and must not inherit these.
       if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces });
       // 上傳頁面聊過的接在照片後面。等著回答的那句也在裡面：分析一好，session
       // 的 AI 就回答它，使用者不用再問一次。
-      const carried = carriedLog(log, added.photo_id, later);
+      const carried = carriedLog(submissionLog, added.photo_id, later);
       if (carried.length) await api.postMessages(id, carried);
       if (sourceIdentity.current !== selectedSource) return;
       if (mode === "render") {
         await api.render(id, [added.photo_id]);
+        if (sourceIdentity.current !== selectedSource) return;
         await afterRender(id, overwrite ? ONLY_PROMPT_LABEL : "一鍵美化", "spark", { ...settings });
       } else {
-        setSession(await api.getSession(id));
+        const completedSession = await api.getSession(id);
+        if (sourceIdentity.current !== selectedSource) return;
+        setSession(completedSession);
       }
+      if (sourceIdentity.current !== selectedSource) return;
       setSelected(null);
       setPhase("session");
       setSessionHash(id);
       refreshSessions();
-    }).finally(() => setStarting(null));
+    }).finally(() => {
+      submissionLock.current = false;
+      setSubmitting(null);
+      setStarting(null);
+    });
   }
 
   function renderPhoto(label: string, icon: string, patch?: Plan) {
@@ -1278,6 +1312,34 @@ export function App() {
       onClose={() => setSamplesOpen(false)}
     />
   );
+
+  if (submitting) {
+    return (
+      <>
+        {header}
+        <main>
+          <section id="upload-section" class="section visible">
+            <div class="container upload-container">
+              <div class="upload-grid">
+              <div class="upload-content-row is-chat">
+                <PreStage source={submitting.source} />
+                <ChatPanel class="home-chat has-photo" sub={submitting.mode === "analyze" ? "分析" : "一鍵美化"} footer={null}>
+                  <AssistantMsg>
+                    <p class="chat-text">{submitting.mode === "analyze" ? "正在準備分析照片" : "正在準備一鍵美化"}</p>
+                    <WorkingCard done={starting?.lines.slice(0, -1) || []}
+                      now={starting?.lines[starting.lines.length - 1] || "正在上傳照片…"}
+                      since={submitting.since} />
+                  </AssistantMsg>
+                </ChatPanel>
+              </div>
+              </div>
+            </div>
+          </section>
+        </main>
+        {drawerEl}{confirmEl}{askEl}
+      </>
+    );
+  }
 
   if (phase === "session" && session && photo) {
     return (
@@ -1728,6 +1790,18 @@ function PreChat(props: {
               onOpen={props.onView}
             />
           </UserMsg>
+
+          {(!scanning || props.previewActive) && (
+          <AssistantMsg>
+            <p class="chat-text">照片選好了。想怎麼修，直接打在下面的對話框告訴我。</p>
+            {/* 底下那三顆鍵都只有兩四個字，差在哪得自己猜。這裡一顆補一句：分
+                析是先看過再決定，一鍵美化是現在就動手，設定是動手前先換工具。寫
+                「讓你看」不寫「跟你確認」——分析完照樣可以直接按美化，一項一項
+                挑是可以做的事，不是非做不可。 */}
+            <p class="chat-text">要先看我對這張照片的分析，還是直接幫你美化？</p>
+            <p class="chat-text chat-muted">分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。</p>
+          </AssistantMsg>
+          )}
           {props.previewActive && props.people.length > 0 && (
             <AssistantMsg>
               <div class="subject-preview" aria-label="人物初步辨識">
@@ -1743,27 +1817,14 @@ function PreChat(props: {
                   ))}
                 </div>
               </div>
+              <p class="chat-text">{props.people.length === 1
+                ? "只有一個人，可以針對這個人說明如何修圖。"
+                : `裡面有 ${props.people.length} 個人，只想改其中一位的話，點一下頭像即可。`}</p>
             </AssistantMsg>
           )}
           {props.previewError && <AssistantMsg><p class="chat-text chat-muted">{props.previewError}</p></AssistantMsg>}
-          {(!scanning || props.previewActive) && (
-          <AssistantMsg>
-            {/* The picker below already says 指定對象; this line says what it is
-                for, and says it in the same breath as the rest, so the greeting
-                stays two thoughts instead of three announcements. */}
-            <p class="chat-text">
-              {props.faceCount > 1
-                ? `照片選好了，裡面有 ${props.faceCount} 個人。想怎麼修就打在下面的對話框；只想改其中一位，點一下頭像就行。`
-                : "照片選好了。想怎麼修，直接打在下面的對話框告訴我。"}
-            </p>
-            {/* 底下那三顆鍵都只有兩四個字，差在哪得自己猜。這裡一顆補一句：分
-                析是先看過再決定，一鍵美化是現在就動手，設定是動手前先換工具。寫
-                「讓你看」不寫「跟你確認」——分析完照樣可以直接按美化，一項一項
-                挑是可以做的事，不是非做不可。 */}
-            <p class="chat-text">要先看我對這張照片的分析，還是直接幫你美化？</p>
-            <p class="chat-text chat-muted">分析會先讓你看我打算修什麼，一鍵美化就直接修完；想換引擎或長寬比，先按設定。</p>
-            {step === "picked" && !notes.length && !pending && actions}
-          </AssistantMsg>
+          {(!scanning || props.previewActive) && step === "picked" && !notes.length && !pending && (
+            <div class="prechat-actions">{actions}</div>
           )}
         </>
       )}
