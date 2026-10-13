@@ -48,8 +48,8 @@ export function ChatPanel(props: {
 
   // Stick to the bottom as messages arrive, unless the user scrolled up.
   const pinned = useRef(true);
-  // The first message of a result that just landed (toStart): the timeline
-  // stays on its start until the user scrolls or more messages follow it.
+  // The first message of a result that just landed (toStart), or of the AI's
+  // reply: the timeline stays on its start until the user scrolls or sends.
   const anchor = useRef<HTMLElement | null>(null);
   const seen = useRef(new WeakSet<Element>());
   const lastStart = useRef(props.toStart);
@@ -67,10 +67,17 @@ export function ChatPanel(props: {
     if (props.toStart !== lastStart.current) {
       lastStart.current = props.toStart;
       anchor.current = (fresh[0] || msgs[msgs.length - 1] || null) as HTMLElement | null;
-    } else if (anchor.current && fresh.length) {
-      // Talk went on after the result: back to following the end.
-      anchor.current = null;
-      pinned.current = true;
+    } else if (fresh.length && fresh.length < msgs.length) {
+      // 使用者送出新的一句：回到跟著末端。AI 接著回話：停在這一輪回覆的開頭，
+      // 讓人從上往下讀 -- 長回覆捲到底只看得到結尾。同一輪後面再補的卡片不搶走
+      // 開頭；「正在回覆」的泡泡被換掉時，改對齊到換上來的那則。
+      // (fresh 等於全部 = 第一次載入或換了一串對話，照舊停在最底。)
+      const reply = fresh.find((m) => !m.classList.contains("is-user")) as HTMLElement | undefined;
+      if (fresh.some((m) => m.classList.contains("is-user"))) {
+        anchor.current = null;
+        pinned.current = true;
+      }
+      if (reply && (pinned.current || anchor.current) && !anchor.current?.isConnected) anchor.current = reply;
     }
     for (const m of msgs) seen.current.add(m);
     if (anchor.current) align();
