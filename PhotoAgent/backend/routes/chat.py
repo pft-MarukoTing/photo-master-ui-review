@@ -979,7 +979,8 @@ def _advance_reframing(user, session_id, photo, statuses):
         photo["queued_render"] = None
         messages = [store.make_message("assistant", card={
             "type": "reframe_failed", "photo_id": photo_id, "aspect_ratio": pending["aspect_ratio"],
-            "previous": pending["previous"], "error": error, "queued_render_cancelled": bool(queued)})]
+            "previous": pending["previous"], "error": error, "error_code": job.get("error_code"),
+            "queued_render_cancelled": bool(queued)})]
         # The 長寬比 goes back to the one the composition is still planned
         # for -- unless it was changed again meanwhile, which re-plans anew.
         if photo["plan"].get("aspect_ratio") == pending["aspect_ratio"]:
@@ -1503,10 +1504,16 @@ def _review_history(history):
 
 def _job_status(job_id, statuses):
     if job_id not in statuses:
-        info = get_job_info(job_id, keyToGet=["status", "error", "ts"]) or {}
+        info = get_job_info(job_id, keyToGet=["status", "error", "error_message", "ts"]) or {}
         lost = lost_job_error(job_id, info)
-        statuses[job_id] = ({"status": lost["status"], "error": lost["error_message"]} if lost
-                            else {"status": info.get("status"), "error": info.get("error")})
+        # error is the worker's raw failure text (an OpenAI safety rejection,
+        # a timeout's message, ...) and error_code its short code -- the UI
+        # turns the pair into user-facing copy, as the 面板模式 UI does.
+        if lost:
+            statuses[job_id] = {"status": lost["status"], "error": lost["error_message"], "error_code": lost["error"]}
+        else:
+            statuses[job_id] = {"status": info.get("status"), "error": info.get("error_message") or info.get("error"),
+                                "error_code": info.get("error")}
     return statuses[job_id]
 
 
@@ -1636,7 +1643,7 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
         store.save_photo_state(user, session_id, photo)
         return [store.make_message("assistant", card={
             "type": "analysis_failed", "photo_id": photo["photo_id"], "error": photo["error"],
-            "queued_render_cancelled": bool(queued)})]
+            "error_code": job.get("error_code"), "queued_render_cancelled": bool(queued)})]
 
     photo["status"] = "ready"
     analysis = _follow_up_analysis(photo)
@@ -1695,7 +1702,7 @@ def _advance_reanalysis(user, session_id, photo, job):
         store.save_photo_state(user, session_id, photo)
         return [store.make_message("assistant", card={
             "type": "analysis_failed", "photo_id": photo_id, "error": photo["error"],
-            "queued_render_cancelled": bool(queued), "reanalysis": True})]
+            "error_code": job.get("error_code"), "queued_render_cancelled": bool(queued), "reanalysis": True})]
     photo["analysis_skipped"] = False
     photo["planned_ratio"] = _planned_for(analysis)
     photo["error"] = None
@@ -1753,9 +1760,10 @@ def _advance_rendering(user, session_id, photo, statuses):
             if note:
                 card["note"] = note
     else:
-        photo["error"] = next((j["error"] for j in jobs.values() if j["error"]), None) or "render failed"
+        failed = next((j for j in jobs.values() if j["error"]), {})
+        photo["error"] = failed.get("error") or "render failed"
         card = {"type": "render_failed", "photo_id": photo["photo_id"], "version_id": pending["action_id"],
-                "error": photo["error"]}
+                "error": photo["error"], "error_code": failed.get("error_code")}
     store.save_photo_state(user, session_id, photo)
     # A 長寬比 changed while rendering is re-planned now.
     _reframe_if_needed(user, session_id, photo)

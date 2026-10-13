@@ -69,6 +69,7 @@ import {
   rememberRenderLabel,
   renderLabelFor,
   reframeBy,
+  jobErrorText,
   renderMeta,
   reframeLoadingMessage,
   renderSubMessages,
@@ -2688,7 +2689,7 @@ function SessionView(props: {
         if (c.reanalysis)
           return (
             <AssistantMsg>
-              <p class="chat-text chat-error">這次分析沒有成功：{c.error}</p>
+              <p class="chat-text chat-error">這次分析沒有成功：{jobErrorText(c.error, c.error_code).text}</p>
               <p class="chat-text">
                 {c.queued_render_cancelled ? "排定的美化也先取消了。" : ""}照你需求修的版本都還在，可以再試一次分析。
               </p>
@@ -2702,7 +2703,7 @@ function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text chat-error">
-              這張照片分析沒有成功：{c.error}
+              這張照片分析沒有成功：{jobErrorText(c.error, c.error_code).text}
               {c.queued_render_cancelled ? "。排定的美化也一併取消了。" : ""}
             </p>
           </AssistantMsg>
@@ -2770,12 +2771,18 @@ function SessionView(props: {
           </>
         );
       }
-      case "render_failed":
+      case "render_failed": {
+        const err = jobErrorText(c.error, c.error_code);
         return (
           <AssistantMsg>
-            <p class="chat-text chat-error">這次美化沒有成功：{c.error}</p>
+            <p class="chat-text chat-error">這次美化沒有成功：{err.text}。</p>
+            {/* 被安全審查擋下的，同一張照片再試多半還是一樣。 */}
+            {err.safety && idx === messages.length - 1 && !busy && (
+              <p class="chat-text">可以回到首頁換一張照片，或按「調整」換個方式再試。</p>
+            )}
           </AssistantMsg>
         );
+      }
       case "reframe_done":
         return (
           <AssistantMsg>
@@ -2793,7 +2800,7 @@ function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text chat-error">
-              {reframeBy(c.aspect_ratio)}重新構圖沒有成功：{c.error}。比例先改回「{aspectLabel(caps, c.previous)}」
+              {reframeBy(c.aspect_ratio)}重新構圖沒有成功：{jobErrorText(c.error, c.error_code).text}。比例先改回「{aspectLabel(caps, c.previous)}」
               {c.queued_render_cancelled ? "，排定的美化也一併取消了" : ""}。
             </p>
             {idx === messages.length - 1 && !isBusy(photo) && (

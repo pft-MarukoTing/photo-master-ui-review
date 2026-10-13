@@ -89,6 +89,39 @@ export function reframeLoadingMessage(ratio?: string): string {
   return `依 ${ratio} 重新構圖中…`;
 }
 
+// ── Job errors ──────────────────────────────────────────────────────────────
+// 失敗卡上的 error 是 worker 的原始錯誤文字，error_code 是它的短代碼；和舊版
+// app.js 的 friendlyError 同一套說法。OpenAI 安全審查擋下的不是暫時性錯誤，
+// 同一張照片再試多半一樣，所以另外標出來，卡片好接「換一張照片」。
+const SAFETY_VIOLATION_LABELS: Record<string, string> = {
+  sexual: "照片可能包含裸露或性暗示內容",
+  violence: "照片可能包含暴力或血腥內容",
+  "self-harm": "照片可能包含自我傷害相關內容",
+  self_harm: "照片可能包含自我傷害相關內容",
+  hate: "照片可能包含仇恨或歧視相關內容",
+  harassment: "照片可能包含騷擾相關內容",
+};
+
+export function jobErrorText(error?: string, code?: string): { text: string; safety: boolean } {
+  const msg = error || "";
+  if (/rejected by the safety system/i.test(msg)) {
+    const listed = msg.match(/safety_violations=\[([^\]]*)\]/i)?.[1] || "";
+    const reasons = listed
+      .split(",")
+      .map((v) => SAFETY_VIOLATION_LABELS[v.trim().replace(/^['"]|['"]$/g, "").toLowerCase()])
+      .filter(Boolean);
+    return {
+      text: reasons.length
+        ? `${[...new Set(reasons)].join("、")}，平台政策不允許編輯這類內容`
+        : "照片裡可能有平台政策不允許編輯的內容（例如受著作權保護的角色、商標，或其他敏感內容）",
+      safety: true,
+    };
+  }
+  if (code === "ai_service_timeout") return { text: "系統回應逾時", safety: false };
+  // 卡片自己接句號；後端寫好的中文句子本身就帶了。
+  return { text: msg.replace(/[。.\s]+$/, "") || "發生未知錯誤", safety: false };
+}
+
 // ── Settings labels ─────────────────────────────────────────────────────────
 export function renderOptionLabel(caps: Capabilities, id?: string): string {
   const opt = caps.render.options.find((o) => o.id === id);

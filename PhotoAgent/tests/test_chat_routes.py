@@ -931,6 +931,18 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(done["session"]["photos"][0]["status"], "ready")
         self.assertIsNone(done["session"]["photos"][0]["active_version"])
 
+    def test_render_failed_carries_raw_message_and_code(self):
+        # The worker's error is a short code; its error_message is what the UI
+        # can tell a safety rejection by.
+        sid = self.new_session()
+        self.ready_photo(sid)
+        render = self.client.post(self.url(sid, "/render"), json={"user": USER, "photo_ids": "all"}).get_json()["renders"][0]
+        self.jobs[render["job_ids"][0]] = {"status": "error", "error": "unknown_internal_error",
+                                           "error_message": "Image edit failed: rejected by the safety system."}
+        card = self.status(sid)["new_messages"][0]["card"]
+        self.assertEqual((card["error"], card["error_code"]),
+                         ("Image edit failed: rejected by the safety system.", "unknown_internal_error"))
+
     def test_render_is_all_or_nothing(self):
         sid = self.new_session()
         ready = self.ready_photo(sid)
