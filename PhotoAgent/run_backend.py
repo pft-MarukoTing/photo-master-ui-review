@@ -27,7 +27,7 @@ if __name__ == "__main__":
 
     app = create_app(config={"DEBUG_UI": args.debug_ui})
     host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8997"))
+    port = int(os.environ.get("PORT", "8991"))
     debug = os.environ.get("DEBUG", "false").lower() == "true"
     # threaded=True: batch mode fires off several long-running requests at
     # once (synchronous per-image analyze/upload calls in the /analyze-batch,

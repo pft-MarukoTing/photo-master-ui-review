@@ -450,14 +450,12 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               )}
               {busy && (
                 <div class="canvas-busy" role="status" aria-live="polite">
-                  <div class="canvas-busy-body">
-                    <div class="proc-visual canvas-busy-rings" aria-hidden="true">
-                      <div class="think-ring" />
-                      <div class="think-ring" />
-                      <div class="think-ring" />
-                    </div>
-                    <p class="canvas-busy-title">{busy.title}</p>
+                  <div class="proc-visual canvas-busy-rings" aria-hidden="true">
+                    <div class="think-ring" />
+                    <div class="think-ring" />
+                    <div class="think-ring" />
                   </div>
+                  <p class="canvas-busy-title">{busy.title}</p>
                 </div>
               )}
             </div>

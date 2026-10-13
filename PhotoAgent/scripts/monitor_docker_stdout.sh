@@ -1,1 +1,1 @@
-while true; do docker exec photo-agent-chat-peggy-dev sh -c 'tail -f log/server_stdout.log'; done
+while true; do docker exec photo-agent sh -c 'tail -f log/server_stdout.log'; done

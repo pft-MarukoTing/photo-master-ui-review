@@ -235,7 +235,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    張照片的小圓圖只是重複。 */
 .canvas-busy{
   position:absolute;inset:0;z-index:4;
-  padding:var(--sp-5);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:var(--sp-3);padding:var(--sp-5);
   background:rgba(var(--glass-rgb),.55);
   backdrop-filter:blur(8px) saturate(.9);
   -webkit-backdrop-filter:blur(8px) saturate(.9);
@@ -244,33 +245,13 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 @supports not ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))){
   .canvas-busy{background:rgba(var(--glass-rgb),.86)}
 }
-/* 這一層的 z-index 只在照片框裡面比：手機版對話那張（.results-analysis-slot，z-index 3）
-   往上蓋住照片底部，處理中這層不能反過來壓到對話上。 */
-.photo-frame:has(> .canvas-busy){isolation:isolate}
 /* .photo-frame 的寬度是跟著圖走的，圖還沒載到時會塌成一條 -- 給這一層一個下限，
    第一次分析時才不會先閃一條窄的霧玻璃。 */
 .photo-frame:has(> .canvas-busy){min-width:min(100%,320px)}
-/* 這一層只有轉環和一行字，所以轉環要夠大才撐得住 480px 高的框 -- 上限 156px。
-   手機上照片會被對話那張壓到只剩一小段，轉環就跟著這一層的大小（container）縮，
-   整圈都要看得到；內圈的 22px/44px 換成同比例的百分比，縮小時三圈才不會擠成一團。
-   44px 是一行標題（16px 字）加上和轉環之間的 gap。 */
-.canvas-busy{container-type:size;overflow:hidden;border-radius:inherit}
-.canvas-busy-body{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--sp-3)}
-.canvas-busy .canvas-busy-rings{width:min(156px,100cqw,100cqh - 44px);height:auto;aspect-ratio:1;
+/* 這一層只有轉環和一行字，所以轉環要夠大才撐得住 480px 高的框 -- 180px 的
+   .proc-visual 收到 156px 就好，負邊距把縮放後空出來的框收回來。 */
+.canvas-busy-rings{transform:scale(.87);transform-origin:center;margin:-12px;
   filter:drop-shadow(0 1px 3px rgba(0,0,0,.28))}
-.canvas-busy-rings .think-ring:nth-child(2){inset:12.2%}
-.canvas-busy-rings .think-ring:nth-child(3){inset:24.4%}
-/* 矮到上下兩層會讓轉環小得看不清時（約 200px），標題改疊在轉環正中間
-   （同一格 grid 疊兩層），轉環吃滿整個高度。 */
-@container (max-height:200px){
-  .canvas-busy-body{display:grid;grid-template:minmax(0,1fr)/minmax(0,1fr);place-items:center}
-  .canvas-busy-body>*{grid-area:1/1}
-  .canvas-busy .canvas-busy-rings{width:min(156px,100cqw,100cqh)}
-  /* 轉環有 filter，會自成一層畫在一般文字之後 -- 標題要明確墊高才壓得住線；
-     再給一圈和底色同色的暈，字穿過線的地方才不會被切斷。 */
-  .canvas-busy-title{position:relative;z-index:1;
-    text-shadow:0 0 6px rgba(var(--glass-rgb),.95),0 0 2px rgba(var(--glass-rgb),.95)}
-}
 /* 1.5px 的線縮完剩 1.3px，壓在照片上會斷掉。 */
 .canvas-busy .think-ring{border-width:2px}
 .canvas-busy-title{margin:0;font-size:var(--chat-fs-lg);font-weight:800;
@@ -1408,9 +1389,6 @@ div.chat-proposal-row{cursor:default}
   /* 美化項目那排標籤放在被對話蓋住的那段上面；照片縮到最小那段時先收起來。 */
   .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .recipe-tags{bottom:calc(var(--split-overlap) + var(--sp-2))}
   .results-canvas-row.showing-analysis.is-split-small .recipe-tags{display:none}
-  /* 照片底部有一段壓在對話那張底下，處理中那層的轉環要在看得到的那段裡置中。 */
-  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .canvas-busy{
-    padding:var(--sp-3) var(--sp-5) calc(var(--sp-3) + var(--split-overlap) - var(--sp-2))}
 
   /* 對話那段：往上蓋住照片 --split-overlap。 */
   .results-canvas-row.showing-analysis .results-analysis-slot,
