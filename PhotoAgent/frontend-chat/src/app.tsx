@@ -2914,50 +2914,46 @@ function SessionView(props: {
         <p class="chat-text chat-muted">
           {ONLY_PROMPT_LABEL}：只動你寫的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：你的需求照做，光線、人像、構圖也一起修。
         </p>
+        {/* 問題的答案直接接在問題底下，不放下方那排：三顆加上指定對象的頭像，
+            手機寬度擠不下，會疊在一起。 */}
+        <div class="chat-choices">
+          <Chip label="先不美化" icon="sliders" disabled={busy} onClick={() => setAskMode(null)} />
+          <Chip
+            label={WITH_ANALYSIS_LABEL}
+            icon={askMode.icon}
+            disabled={busy}
+            onClick={() => props.onRender(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
+          />
+          <Chip
+            label={ONLY_PROMPT_LABEL}
+            icon={askMode.icon}
+            disabled={busy}
+            onClick={() => props.onRender(ONLY_PROMPT_LABEL, askMode.icon, { overwrite_prompt: true })}
+          />
+        </div>
       </AssistantMsg>
-    );
-    quick = (
-      <QuickBar>
-        <Chip label="先不美化" icon="sliders" disabled={busy} onClick={() => setAskMode(null)} />
-        <Chip
-          label={WITH_ANALYSIS_LABEL}
-          icon={askMode.icon}
-          disabled={busy}
-          onClick={() => props.onRender(WITH_ANALYSIS_LABEL, askMode.icon, { overwrite_prompt: false })}
-        />
-        <Chip
-          label={ONLY_PROMPT_LABEL}
-          icon={askMode.icon}
-          disabled={busy}
-          onClick={() => props.onRender(ONLY_PROMPT_LABEL, askMode.icon, { overwrite_prompt: true })}
-        />
-      </QuickBar>
     );
     bar = ["先不美化", WITH_ANALYSIS_LABEL, ONLY_PROMPT_LABEL];
   } else if (confirmRerun && photo.status === "ready" && adjusting) {
     working = (
       <AssistantMsg>
         <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續調整？</p>
+        <div class="chat-choices">
+          <Chip label="繼續調整" icon="sliders" disabled={busy} onClick={() => setConfirmRerun(false)} />
+          <Chip label="照原設定美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
+        </div>
       </AssistantMsg>
-    );
-    quick = (
-      <QuickBar>
-        <Chip label="繼續調整" icon="sliders" disabled={busy} onClick={() => setConfirmRerun(false)} />
-        <Chip label="照原設定美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
-      </QuickBar>
     );
     bar = ["繼續調整", "照原設定美化"];
   } else if (confirmRerun && photo.status === "ready" && !adjusting) {
     working = (
       <AssistantMsg>
         <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先調整設定？</p>
+        <div class="chat-choices">
+          <Chip label="先調整" icon="sliders" disabled={busy} onClick={enterAdjust} />
+          <Chip label="照原設定再美化" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
+        </div>
       </AssistantMsg>
-    );
-    quick = (
-      <QuickBar>
-        <Chip label="先調整" icon="sliders" disabled={busy} onClick={enterAdjust} />
-        <Chip label="照原設定再美化" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
-      </QuickBar>
     );
     bar = ["先調整", "照原設定再美化"];
   } else if ((photo.status === "analyzing" || reframing) && !renderQueued) {
