@@ -1008,7 +1008,7 @@ export function App() {
       const up = await api.uploadPhoto(id, blob, name, previewIdentity);
       const added = up.photos?.[0];
       if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
-      say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備照你的需求修…" : "照片傳好了，準備開始美化…");
+      say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
       // On the photo, not the session defaults: a second photo has its own
       // faces and must not inherit these.
       if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces });
@@ -2875,7 +2875,7 @@ function SessionView(props: {
   const skipping = photo.status === "analyzing" && !!photo.analysis_skipped && !photo.reanalysis;
   const promptOnly = !!photo.plan.overwrite_prompt && !!photo.plan.user_prompt?.trim();
   const busyCopy = skipping
-    ? { stage: "rendering", title: "正在照你的需求修", lines: promptSubMessages() }
+    ? { stage: "rendering", title: "正在調整照片", lines: promptSubMessages() }
     : photo.status === "analyzing"
       ? { stage: "analyzing", title: "正在分析照片", lines: analyzeSubMessages(renderQueued, !!waiting) }
       : reframing
@@ -2889,7 +2889,7 @@ function SessionView(props: {
         : photo.status === "rendering"
           ? {
               stage: "rendering",
-              title: promptOnly ? "正在照你的需求修" : "正在美化照片",
+              title: promptOnly ? "正在調整照片" : "正在美化照片",
               lines: promptOnly ? promptSubMessages() : renderSubMessages(),
             }
           : null;
