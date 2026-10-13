@@ -343,6 +343,35 @@
       revealExtra
     };
     renderCurrentCaseTimes();
+    syncCaseHash();
+  }
+
+  // Keeps #case=<image_key> on the URL while a photo is on screen, so a
+  // reload reopens it (openCaseFromHash) instead of landing on the upload
+  // page. replaceState, not a new history entry: 上一頁 is unchanged. A
+  // photo uploaded on this page has only its jobs until /case resolves one
+  // (findCaseForJob), same as the 對話模式 button.
+  let caseHashLookupJobId = null;
+  function syncCaseHash() {
+    const setHash = (key) => {
+      const hash = key ? `#case=${encodeURIComponent(key)}` : "";
+      if (location.hash === hash) return;
+      history.replaceState(history.state, "", location.pathname + location.search + hash);
+    };
+    if (currentSectionName === "upload") { setHash(null); return; }
+    if (currentCaseHistoryImageKey) { setHash(currentCaseHistoryImageKey); return; }
+    const user = getCurrentUser();
+    const jobId = lastResult?.jobId || singleFlowState?.analyzeJobId;
+    if (!user || !jobId || jobId === caseHashLookupJobId) return;
+    caseHashLookupJobId = jobId;
+    getHistoryCase(user, { jobId })
+      .then((res) => {
+        const key = res?.case?.image_key;
+        // Only if that photo is still the one on screen.
+        if (key && currentSectionName !== "upload" && !currentCaseHistoryImageKey
+          && (lastResult?.jobId || singleFlowState?.analyzeJobId) === jobId) setHash(key);
+      })
+      .catch(() => { caseHashLookupJobId = null; }); // not in history yet; try on the next screen change
   }
 
   // Records which compatibility_version (compatibility_version.py) the case now
@@ -997,12 +1026,11 @@
   })();
 
   // #case=<image_key>: the chat page's 面板模式 link for the photo it has
-  // open. Opened like a click on that case in the history drawer; the hash
-  // is dropped either way so a reload lands on the upload page as usual.
+  // open, or the photo this page had open before a reload (syncCaseHash).
+  // Opened like a click on that case in the history drawer.
   async function openCaseFromHash() {
     const caseKey = new URLSearchParams(location.hash.slice(1)).get("case");
     if (!caseKey) return;
-    history.replaceState(null, "", location.pathname + location.search);
     pendingModeHandoff = takeModeHandoff(caseKey);
     // Reveal as soon as the case is on screen, not when openCaseByKey
     // resolves: a 待美化 case's runPendingReviewFlow only resolves once the
@@ -1019,6 +1047,8 @@
     } finally {
       document.removeEventListener("photoagent:sectionchange", onSection);
       reveal();
+      // Not opened (signed out, case gone): don't keep retrying on reload.
+      if (currentSectionName === "upload") syncCaseHash();
     }
   }
 
@@ -13659,6 +13689,7 @@
   // from re-triggering the observer that showed it.
   document.addEventListener("photoagent:sectionchange", (event) => {
     currentSectionName = event.detail?.name || "upload";
+    syncCaseHash();
     pageScrollHintDismissed = false;
     updatePageScrollHint();
   });
