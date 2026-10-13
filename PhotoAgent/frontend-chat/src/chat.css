@@ -788,6 +788,10 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
    frame before the fold is measured. The 2px of vertical padding is for the
    picked ring, which is drawn outside the box. */
 .chat-face-track{display:flex;align-items:center;gap:var(--sp-2);min-width:0;overflow-x:auto;padding:2px 0}
+/* overflow-x:auto 會把 overflow-y 也變成 auto：縮放下臉高多出 1px 小數，就長出一條
+   幾乎跟整排一樣高的直向捲軸（主題色，看起來像一條橘色粗線）。這排不靠捲動，捲軸一律藏掉。 */
+.chat-face-track{overflow-y:hidden;scrollbar-width:none}
+.chat-face-track::-webkit-scrollbar{display:none}
 /* Too many faces for the room: FacePicker folds them into this one button,
    which opens .chat-face-panel. The button stays as tall as a face in the row
    so the strip does not jump when it folds. Plain faces, no picked ring --
@@ -1369,7 +1373,9 @@ div.chat-proposal-row{cursor:default}
 .split-grip,.canvas-version-btn{display:none}
 @media (max-width:600px),(max-width:1200px) and (orientation:portrait){
   .chat-flow-slot{display:none}
-  #results-body.showing-analysis{max-width:none;margin:0;padding:0}
+  /* 舊版只在 ≤900 把 .results-body 轉直排；901–1200 直拿的平板還是橫排，
+     #results-detail 的 flex:none 就會被縮成 0 寬，整頁空白。這套版面一律直排。 */
+  #results-body.showing-analysis{flex-direction:column;max-width:none;margin:0;padding:0}
   #results-detail,
   body.side-panel-layout #results-detail:has(.results-canvas-row.showing-analysis){flex:none;height:calc(100dvh - var(--header-h));min-height:0;padding:0;gap:0;overflow:hidden}
   .results-canvas-row.showing-analysis,
