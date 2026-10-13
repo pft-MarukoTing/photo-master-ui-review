@@ -308,6 +308,8 @@ export function qaText(qc: { pass?: boolean; overall_status?: string } | undefin
 // 下載成品：跟面板模式（app.js downloadCurrentResultImage）一樣看檔頭決定副檔名。
 // 成品現在存成 JPEG，但較早的工作 /result/<job>/image 還是回 PNG，寫死副檔名會
 // 讓舊檔名不對。iPhone／iPad 走分享面板才存得進照片，其他照舊用 <a download>。
+// 回傳下載成不成功，給畫面跳「已下載完成。」或錯誤；分享面板按取消也算完成，
+// 跟面板模式一樣 -- 頁面分不出使用者在面板裡到底存了沒。
 function imageFormatOf(buf: ArrayBuffer): { ext: string; mime: string } {
   const h = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
   return h[0] === 0x89 && h[1] === 0x50 && h[2] === 0x4e && h[3] === 0x47
@@ -327,7 +329,7 @@ function saveVia(href: string, name: string) {
   a.remove();
 }
 
-export async function downloadImage(url: string, base: string): Promise<void> {
+export async function downloadImage(url: string, base: string): Promise<boolean> {
   let file: File;
   try {
     const res = await fetch(url);
@@ -336,19 +338,18 @@ export async function downloadImage(url: string, base: string): Promise<void> {
     const { ext, mime } = imageFormatOf(buf);
     file = new File([buf], `${base}.${ext}`, { type: mime });
   } catch {
-    // 讀不到就退回直接下載那個網址，至少檔案拿得到。
-    saveVia(url, `${base}.jpg`);
-    return;
+    return false;
   }
   if (isIOS() && navigator.canShare?.({ files: [file] })) {
     try {
       await navigator.share({ files: [file] });
-      return;
+      return true;
     } catch (err) {
-      if ((err as Error)?.name === "AbortError") return;
+      if ((err as Error)?.name === "AbortError") return true;
     }
   }
   const href = URL.createObjectURL(file);
   saveVia(href, file.name);
   setTimeout(() => URL.revokeObjectURL(href), 10000);
+  return true;
 }

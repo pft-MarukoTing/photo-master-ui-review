@@ -7,6 +7,8 @@ import type { Capabilities, Dict, Photo, Version } from "./types";
 import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
 import { downloadImage, executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
 import { Icon } from "./icons";
+import { ConfirmModal } from "./home";
+import type { VNode } from "preact";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
 
@@ -132,8 +134,20 @@ interface CanvasProps {
   onViewer?: () => void;
 }
 
+// 下載後跟面板模式一樣：成功跳「已下載完成。」，失敗跳「下載失敗，請稍後再試。」。
+function useDownload(): [(job: string, base: string) => void, VNode | null] {
+  const [notice, setNotice] = useState<string | null>(null);
+  const start = (job: string, base: string) =>
+    void downloadImage(urls.resultImage(job), base).then((ok) =>
+      setNotice(ok ? "已下載完成。" : "下載失敗，請稍後再試。"),
+    );
+  const el = notice ? <ConfirmModal message={notice} confirmLabel="確定" onAnswer={() => setNotice(null)} /> : null;
+  return [start, el];
+}
+
 export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
+  const [download, downloadNotice] = useDownload();
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
   // 比較鈕就先停用；再點任何一版才回到那一版的 After。
   const [originPicked, setOriginPicked] = useState(false);
@@ -410,7 +424,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
                       onClick={(e) => {
                         e.preventDefault();
-                        void downloadImage(urls.resultImage(job), `photomaster_${photo.photo_id}_v${current!.ordinal}`);
+                        download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
                       }}
                       title="下載結果"
                       aria-label="下載結果"
@@ -621,6 +635,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
         hidden={!fullscreen}
         onClick={() => setFullscreen(false)}
       />
+      {downloadNotice}
     </div>
   );
 }
@@ -638,6 +653,7 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
 }) {
   const [originPicked, setOriginPicked] = useState(false);
   const [holding, setHolding] = useState(false);
+  const [download, downloadNotice] = useDownload();
   const trackRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -709,7 +725,7 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
               download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
               onClick={(e) => {
                 e.preventDefault();
-                void downloadImage(urls.resultImage(job), `photomaster_${photo.photo_id}_v${current!.ordinal}`);
+                download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
               }}
               aria-label={`下載${title}`}
               title="下載"
@@ -751,6 +767,7 @@ export function VersionViewer({ photo, versions, current, open, onClose, onSelec
           </div>
         )}
       </div>
+      {downloadNotice}
     </div>
   );
 }
