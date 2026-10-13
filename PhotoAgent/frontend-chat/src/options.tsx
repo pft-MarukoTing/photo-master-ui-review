@@ -509,6 +509,15 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   }, [hot]);
   const group = groups.find((g) => g.id === open);
   const valueOf = (g: (typeof groups)[number]) => plan.style_options?.[g.id] || g.default;
+  // Picking closes the row -- the chip already shows what was picked, and an
+  // open wall of thumbnails after the choice is made just pushes the chat down.
+  // Clicking the picked thumbnail again only un-picks it and leaves the row
+  // open: the person is mid-choice, not done.
+  const pick = (value: string, close = true) => {
+    if (!group) return;
+    onPatch({ style_options: { [group.id]: value } });
+    if (close) setOpen(null);
+  };
   return (
     <>
       <div class="chat-choices">
@@ -530,7 +539,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
       </div>
       {group && (
         <div class="chat-opt-style-row">
-          <button type="button" class={`chat-opt-style-none${valueOf(group) === group.default ? " is-picked" : ""}`} disabled={busy} onClick={() => onPatch({ style_options: { [group.id]: group.default } })}>
+          <button type="button" class={`chat-opt-style-none${valueOf(group) === group.default ? " is-picked" : ""}`} disabled={busy} onClick={() => pick(group.default)}>
             不指定
           </button>
           {group.choices
@@ -540,7 +549,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
                 type="button"
                 class={`chat-opt-style-btn${valueOf(group) === c.value ? " is-picked" : ""}`}
                 disabled={busy}
-                onClick={() => onPatch({ style_options: { [group.id]: valueOf(group) === c.value ? group.default : c.value } })}
+                onClick={() => (valueOf(group) === c.value ? pick(group.default, false) : pick(c.value))}
               >
                 <img src={urls.styleThumb(group.id, c.value)} alt="" loading="lazy" />
                 <span>{c.label}</span>
