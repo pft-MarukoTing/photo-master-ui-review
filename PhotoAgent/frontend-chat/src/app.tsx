@@ -408,6 +408,9 @@ export function App() {
   // 留著按下去那一刻的 later / log，選好之後照原樣開始；`overwrite` 是選了哪
   // 一個，上傳中那排選項定格在它身上，失敗了還能重選。
   const [renderAsk, setRenderAsk] = useState<{ later: Note | null; log: Note[]; overwrite?: boolean } | null>(null);
+  // 按了分析／一鍵美化到進 session 之間：等人物辨識、建 session、上傳、送出，
+  // 前後可以好幾秒。做到哪一步就多講一句，按下去當下畫面就有回應。
+  const [starting, setStarting] = useState<StartProgress | null>(null);
 
   // Session
   const [session, setSession] = useState<Session | null>(null);
@@ -953,7 +956,7 @@ export function App() {
   // `overwrite` 是一鍵美化前問到的答案：true 只照個人化需求改，false 整體美化
   // 再加上需求。有需求卻還沒問過，就先問，不開始。
   function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
-    if (!source || !caps || !settings) return;
+    if (!source || !caps || !settings || busy) return;
     if (mode === "render" && overwrite === undefined && notesPrompt(log, preEdit).trim()) {
       setRenderAsk({ later, log });
       return;
@@ -962,7 +965,14 @@ export function App() {
     // 個人化需求只認已經送出、也已經讓 AI 看過的那幾句。輸入框裡打了沒送的字
     // 就當沒打過：它沒進過對話，也沒過把關，不該從這裡偷渡進 user_prompt。
     const kept = keptNotes(log);
-    run(async () => {
+    const say = (line: string) => setStarting((s) => s && { ...s, lines: [...s.lines, line] });
+    setStarting({
+      mode,
+      overwrite,
+      since: Date.now(),
+      lines: ["正在上傳照片…"],
+    });
+    void run(async () => {
       const selectedSource = selectionIdentity;
       const previewIdentity = previewEnabled ? await preview.forSubmission() : undefined;
       if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
@@ -998,6 +1008,7 @@ export function App() {
       const up = await api.uploadPhoto(id, blob, name, previewIdentity);
       const added = up.photos?.[0];
       if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
+      say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備照你的需求修…" : "照片傳好了，準備開始美化…");
       // On the photo, not the session defaults: a second photo has its own
       // faces and must not inherit these.
       if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces });
@@ -1016,7 +1027,7 @@ export function App() {
       setPhase("session");
       setSessionHash(id);
       refreshSessions();
-    });
+    }).finally(() => setStarting(null));
   }
 
   function renderPhoto(label: string, icon: string, patch?: Plan) {
@@ -1417,6 +1428,7 @@ export function App() {
                       previewError={preview.error}
                       faceCount={prePickable.length}
                       busy={busy}
+                      starting={starting}
                       error={error}
                       onUpload={() => fileInput.current?.click()}
                       onView={() => setViewing(true)}
@@ -1568,6 +1580,7 @@ function PreChat(props: {
   // under the composer only appears from two up, and so does the line about it.
   faceCount: number;
   busy: boolean;
+  starting: StartProgress | null;
   error: string;
   onUpload: () => void;
   onView: () => void;
@@ -1586,7 +1599,7 @@ function PreChat(props: {
   // One of the options under the AI's question, tapped.
   onAnswer: (text: string) => void;
 }) {
-  const { caps, step, via, source, busy, notes, pending, scanning } = props;
+  const { caps, step, via, source, busy, notes, pending, scanning, starting } = props;
   // 還沒分析，沒人有名字，AI 只能講站在哪裡（「從左邊數來第 2 位」）；那幾個字
   // 一樣換成頭像。
   const said = (text: string) =>
@@ -1611,6 +1624,8 @@ function PreChat(props: {
   // 看到的就是送出去的 user_prompt；要刪要改直接改字。
   const kept = !!props.prompt;
   const asking = props.renderAsk;
+  // 按下去就算選了：這排定格成紀錄，按的那顆維持選取的樣子；失敗了再解開。
+  const went = !asking && starting ? starting.mode : null;
   const review = kept && (
     <div class="chat-card chat-notes">
       <span class="chat-meta">個人化需求</span>
@@ -1628,7 +1643,7 @@ function PreChat(props: {
       {/* Reading order follows the order of operations: adjust the settings
           first, then run. 分析 and 一鍵美化 are peers -- both are "go", they
           differ only in how far they go -- so they carry the same weight. */}
-      {!asking && (step === "picked" || kept) && (
+      {!asking && !went && (step === "picked" || kept) && (
         <div class="chat-actions-aux">
           {step === "picked" && <Chip label="設定" icon="gear" kind="ghost" disabled={held} onClick={props.onEdit} />}
           {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
@@ -1650,16 +1665,16 @@ function PreChat(props: {
         <Chip
           label="分析"
           icon="search"
-          kind={asking ? undefined : "primary"}
-          settled={!!asking}
+          kind={went === "analyze" ? "picked" : asking || went ? undefined : "primary"}
+          settled={!!asking || !!went}
           disabled={held}
           onClick={() => props.onStart("analyze")}
         />
         <Chip
           label="一鍵美化"
           icon="spark"
-          kind={asking ? "picked" : "primary"}
-          settled={!!asking}
+          kind={asking || went === "render" ? "picked" : went ? undefined : "primary"}
+          settled={!!asking || !!went}
           disabled={held}
           onClick={() => props.onStart("render")}
         />
@@ -1862,10 +1877,25 @@ function PreChat(props: {
           </AssistantMsg>
         </>
       )}
-      {busy && source && !pending && !scanning && (
-        <AssistantMsg>
-          <p class="chat-text chat-muted">正在上傳照片…</p>
-        </AssistantMsg>
+      {starting && (
+        <>
+          <UserMsg>
+            {starting.mode === "analyze" ? (
+              <ClickBubble icon="search" label="分析" />
+            ) : asking ? (
+              <ClickBubble icon="spark" label={starting.overwrite ? ONLY_PROMPT_LABEL : WITH_ANALYSIS_LABEL} />
+            ) : (
+              <ClickBubble icon="spark" label="一鍵美化" />
+            )}
+          </UserMsg>
+          <AssistantMsg>
+            <WorkingCard
+              done={starting.lines.slice(0, -1)}
+              now={starting.lines[starting.lines.length - 1]}
+              since={starting.since}
+            />
+          </AssistantMsg>
+        </>
       )}
       {props.error && <ErrorMsg text={props.error} />}
     </>
@@ -1879,6 +1909,9 @@ function ErrorMsg({ text }: { text: string }) {
     </AssistantMsg>
   );
 }
+
+// 上傳頁按了分析／一鍵美化之後、進 session 之前，已經做到哪幾步。
+type StartProgress = { mode: "analyze" | "render"; overwrite?: boolean; since: number; lines: string[] };
 
 // ── Session ────────────────────────────────────────────────────────────────
 // 對提案單純說好。
