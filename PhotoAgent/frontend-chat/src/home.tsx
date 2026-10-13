@@ -212,6 +212,22 @@ export function Header(props: {
   jobId?: string | null;
 }) {
   const [reporting, setReporting] = useState(false);
+  // 手機上 header 只放得下 logo 跟一顆 ⋯，其他按鈕收進這裡展開的選單（chat.css 只在窄螢幕
+  // 把 .header-actions 變成選單；寬螢幕這顆 ⋯ 不顯示，選單狀態也就沒有作用）。
+  const [menu, setMenu] = useState(false);
+  useEffect(() => {
+    if (!menu) return;
+    const close = (e: Event) => {
+      if (!(e.target as Element).closest?.(".header-actions, .chat-header-more")) setMenu(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    document.addEventListener("pointerdown", close);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", close);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [menu]);
   return (
     <header class="site-header">
       <div class="header-inner">
@@ -219,7 +235,18 @@ export function Header(props: {
           Photo<em>Master</em>
           <span class="logo-env-badge" id="logo-env-badge" title="開發環境">DEV</span>
         </button>
-        <div class="header-actions">
+        <button
+          type="button"
+          class="chat-header-more"
+          aria-label="更多選項"
+          aria-expanded={menu}
+          aria-controls="chat-header-actions"
+          onClick={() => setMenu(!menu)}
+        >
+          <Icon name="more" size={22} />
+        </button>
+        {/* 選了哪一項選單就收起來；點擊從按鈕冒泡上來，按鈕自己的動作已經先跑完了。 */}
+        <div class={`header-actions${menu ? " is-open" : ""}`} id="chat-header-actions" onClick={() => setMenu(false)}>
           {props.showHome && (
             <button id="chat-home-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onHome}>
               <Icon name="house" size={14} />
@@ -415,6 +442,8 @@ export function SessionTile(props: { s: SessionSummary; selected: boolean; onCli
     >
       {label && <span class={`session-tile-badge is-${s.status}`}>{label}</span>}
       {props.onRemove && <RemoveMark onRemove={props.onRemove} />}
+      {/* 只有手機首頁的那一排會顯示（chat.css）：那裡沒有日期標題，時間就寫在磚下面。 */}
+      <span class="session-tile-when" aria-hidden="true">{timeLabel(s.updated_at)}</span>
     </Tile>
   );
 }
@@ -488,6 +517,8 @@ export function Gallery(props: {
   onSelect: (s: GallerySelection) => void;
   onConfirm: () => void;
   onRemove?: (id: string) => void;
+  // 手機上那一排只放得下幾張，「全部」打開完整的清單：最近對話是最近照片側欄，範例照片是範例視窗。
+  onAll?: (t: GalleryTab) => void;
 }) {
   const { tab, selection } = props;
   const recent = tab === "recent";
@@ -534,6 +565,12 @@ export function Gallery(props: {
             範例照片
           </button>
         </div>
+        {props.onAll && (
+          <button type="button" class="upload-gallery-all" onClick={() => props.onAll!(tab)}>
+            全部
+            <Icon name="next" size={16} />
+          </button>
+        )}
       </div>
       <div class="upload-gallery-scroll-frame">
         <div id="demo-images-grid" class="demo-images-grid">

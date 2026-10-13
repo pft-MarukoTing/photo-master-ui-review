@@ -1014,3 +1014,171 @@ div.chat-proposal-row{cursor:default}
 .subject-preview-person { display: grid; grid-template-columns: 2.4rem minmax(0, 1fr) auto; align-items: center; gap: .55rem; font-size: .88rem; line-height: 1.5; }
 .subject-preview-avatar { width: 2.4rem; height: 2.4rem; border-radius: 50%; background: var(--surface, #ffffff08); }
 .subject-preview-person img { width: 2.4rem; height: 2.4rem; border-radius: 50%; object-fit: cover; border: 1px solid var(--border, #ffffff22); }
+
+/* ---------- 手機首頁（≤600px）----------
+   版面照畫布上的 A：標題 → 前後對照 → 分頁＋全部 → 一排磚 → 底部固定的開始對話。
+   不改 DOM 順序，把 .home-intro / .home-hero / .home-hero-copy / .upload-gallery-col
+   都設成 display:contents，讓裡面的東西直接變成 .upload-content-row 的 flex 子項，再用
+   order 排。桌機、平板完全不受影響。 */
+.chat-header-more,.upload-gallery-all,.session-tile-when{display:none}
+@media (max-width:600px){
+  /* Header：三顆按鈕收進 ⋯ 選單。 */
+  html:root{--header-h:56px}
+  .site-header .header-inner{position:relative;padding:0 6px 0 16px}
+  .site-header .logo{font-size:20px}
+  .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+    background:transparent;color:var(--text-2);cursor:pointer}
+  .chat-header-more[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
+  .site-header .header-actions{display:none}
+  .site-header .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);right:8px;z-index:1500;
+    min-width:180px;padding:6px;border-radius:16px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}
+  .site-header .header-actions.is-open .btn,
+  .site-header .header-actions.is-open #chat-report-btn.btn{width:100%;height:44px;justify-content:flex-start;gap:10px;padding:0 12px;border:0;border-radius:10px;
+    background:transparent;color:var(--text);font-size:14px}
+  .site-header .header-actions.is-open .btn:hover{background:rgba(var(--accent-rgb),.08)}
+  .site-header .header-actions.is-open .btn[disabled]{opacity:.45}
+  .site-header .header-actions.is-open .btn-label{display:inline}
+
+  /* 首頁的欄：攤平、靠左、留出底部 CTA 的高度。 */
+  #upload-section .upload-container{padding-inline:16px}
+  #upload-section .upload-content-row{align-items:stretch;gap:0;padding-bottom:calc(108px + env(safe-area-inset-bottom))}
+  #upload-section .upload-content-row>.home-intro,
+  #upload-section .upload-content-row .home-hero,
+  #upload-section .upload-content-row .home-hero-copy,
+  #upload-section .upload-content-row>.upload-gallery-col{display:contents}
+
+  #upload-section .home-eyebrow{order:1;margin:16px 0 6px;font-size:12px;font-weight:600;letter-spacing:.08em;justify-content:flex-start}
+  #upload-section .home-eyebrow::before,#upload-section .home-eyebrow::after{display:none}
+  #upload-section .home-headline{order:2;font-size:26px;line-height:1.3;text-align:left}
+  #upload-section .home-lead{display:none}
+
+  /* 分頁＋全部：緊貼在它切換的那排磚上面。分頁做成 segmented control，「全部」靠右。 */
+  #upload-section .upload-gallery-heading{order:4;display:flex;align-items:center;justify-content:space-between;margin-top:20px;padding:0;border:0}
+  #upload-section .upload-gallery-tabs{flex:0 0 auto;gap:2px;padding:3px;border-radius:20px;background:var(--n14)}
+  #upload-section .upload-gallery-tab-recent-group,
+  #upload-section .upload-gallery-col .upload-gallery-tab-recent-group{background:transparent}
+  #upload-section .upload-gallery-tab{flex:0 0 auto;height:34px;padding:0 14px;border-radius:17px;font-size:13px;font-weight:500;color:var(--text-2);background:transparent}
+  #upload-section .upload-gallery-tab.is-active{background:var(--card);color:var(--accent);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  #upload-section .upload-gallery-tab-icon{display:none}
+  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding:0 0 0 8px;border:0;background:transparent;
+    color:var(--accent);font-size:13px;font-weight:500;cursor:pointer}
+
+  /* 前後對照：滿版、比桌機矮。左右滑留給滑桿，上下滑照樣捲頁面。 */
+  #upload-section .home-compare{order:3;max-width:none;width:100%;aspect-ratio:auto;height:clamp(180px,calc(100vh - 540px),380px);height:clamp(180px,calc(100svh - 540px),380px);margin-top:16px;justify-self:auto;box-shadow:0 10px 28px rgba(0,0,0,.12)}
+  .home-compare-range{touch-action:pan-y}
+
+  /* 一排磚：108×135，頭尾貼齊螢幕邊，可以橫向滑。 */
+  #upload-section .upload-gallery-scroll-frame{order:5;width:100%;min-width:0}
+  #demo-images-empty{order:6}
+  #demo-images-confirm-btn{order:7}
+  #upload-section .upload-gallery-col .demo-images-grid,
+  #upload-section .upload-gallery-col .demo-images-grid:has(.history-day-group){gap:8px;margin-inline:-16px;padding:0 16px 26px;
+    /* 寬度要寫死成外框＋兩側 16px，不能用 auto：它是 flex:0 0 auto，auto 會照內容撐開，磚全部攤出來就沒得滑了。 */
+    flex:0 0 auto;width:calc(100% + 32px);max-width:none;min-width:0;box-sizing:border-box;
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-inline:16px;scrollbar-width:none}
+  #upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar{display:none}
+  #upload-section .upload-gallery-col .history-day-heading{display:none}
+  #upload-section .upload-gallery-col .demo-image-tile{flex:0 0 108px;height:auto;padding-top:0;aspect-ratio:4/5;margin-top:12px;
+    border-radius:14px;overflow:visible;scroll-snap-align:start}
+  #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg){border-radius:inherit;object-fit:cover}
+  #upload-section .upload-gallery-col .demo-image-tile .demo-image-tile-bg{display:none}
+  #upload-section .upload-gallery-col .session-tile-when{display:block;position:absolute;top:calc(100% + 6px);left:0;
+    font-size:12px;line-height:1.2;color:var(--n64);white-space:nowrap;pointer-events:none}
+
+  /* 開始對話：固定在底部。跳動關掉（拇指正要按的時候不該跑），光暈保留。 */
+  #upload-section .home-start,
+  #upload-section .home-intro .home-start{position:fixed;left:0;right:0;bottom:0;z-index:50;margin:0;gap:6px;align-items:stretch;text-align:center;
+    padding:12px 16px calc(16px + env(safe-area-inset-bottom));background:var(--header-bg);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--border)}
+  #upload-section .home-start-btn{width:100%;justify-content:center;animation:none}
+}
+
+/* ---------- 平板首頁 ----------
+   直向（601–1200 寬）：文案和前後對照左右並排 → 分頁＋全部和一排磚（一次看到 5 張，可以橫滑）。
+   兩塊綁成一組在畫面上垂直置中，中間固定 32px，螢幕再高也不會被拉開。
+   橫向（901–1200 寬）：文案＋前後對照在左邊，右邊 280px 的側欄放分頁、日期、兩欄磚。
+   跟手機一樣不動 DOM；版面相關的規則都用 :has(.home-intro) 限定在首頁，進到對話就不套。
+   ≥1201 的桌機和 601–900 的橫向（手機橫拿）維持原樣。 */
+@media (min-width:601px) and (max-width:1200px) and (orientation:portrait),
+       (min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  /* Header：64px 高，按鈕放大到 44px 好按，不收進 ⋯。 */
+  html:root{--header-h:64px}
+  .site-header .header-inner{padding:0 20px 0 32px}
+  .header-actions .btn{height:44px;padding:0 16px}
+
+  /* 首頁的文案：靠左，字級照畫布。 */
+  #upload-section .home-hero-copy{align-items:flex-start;text-align:left}
+  #upload-section .home-eyebrow{justify-content:flex-start;margin-bottom:var(--sp-3);font-size:13px;font-weight:600;letter-spacing:.08em}
+  #upload-section .home-eyebrow::after{display:none}
+  #upload-section .home-lead{font-size:15px;line-height:1.7}
+  #upload-section .home-compare{max-width:none;width:100%;justify-self:stretch;border-radius:24px;box-shadow:0 16px 40px rgba(0,0,0,.12)}
+
+  /* 分頁做成 segmented control，跟手機同一套。 */
+  #upload-section .upload-gallery-heading{display:flex;align-items:center;justify-content:space-between;min-height:0;padding:0;border:0}
+  #upload-section .upload-gallery-tabs{gap:2px;padding:3px;border-radius:20px;background:var(--n14)}
+  #upload-section .upload-gallery-tab-recent-group,
+  #upload-section .upload-gallery-col .upload-gallery-tab-recent-group{background:transparent}
+  #upload-section .upload-gallery-tab{height:36px;padding:0 16px;border-radius:18px;font-size:13px;font-weight:500;color:var(--text-2);background:transparent}
+  #upload-section .upload-gallery-tab.is-active{background:var(--card);color:var(--accent);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  #upload-section .upload-gallery-tab-icon{display:none}
+
+  /* 磚：4:5、直接 cover，不要模糊底圖。 */
+  #upload-section .upload-gallery-col .demo-image-tile{height:auto;padding-top:0;aspect-ratio:4/5;margin:0;overflow:visible}
+  #upload-section .upload-gallery-col .demo-image-tile img:not(.demo-image-tile-bg){border-radius:inherit;object-fit:cover}
+  #upload-section .upload-gallery-col .demo-image-tile .demo-image-tile-bg{display:none}
+}
+
+@media (min-width:601px) and (max-width:1200px) and (orientation:portrait){
+  /* 一整頁：文案＋對照和磚列一起垂直置中。 */
+  #upload-section .upload-container:has(.home-intro){padding:24px 32px 16px;min-height:calc(100dvh - var(--header-h))}
+  #upload-section .upload-grid:has(.home-intro){flex:1 1 auto}
+  #upload-section .upload-content-row:has(>.home-intro){flex:1 1 auto;align-items:stretch;justify-content:center;gap:0}
+  #upload-section .upload-content-row>.home-intro{flex:0 0 auto;width:100%;max-width:none;padding:0}
+  #upload-section .home-hero{grid-template-columns:minmax(0,1fr) clamp(260px,41vw,340px);gap:36px}
+  #upload-section .home-headline{font-size:clamp(32px,4.6vw,38px)}
+
+  #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{order:1;width:100%;padding:32px 0 0;gap:12px}
+  #upload-section .upload-gallery-tabs{gap:4px;border-radius:22px}
+  #upload-section .upload-gallery-tab{height:38px;padding:0 18px;border-radius:19px;font-size:14px}
+  .upload-gallery-all{display:inline-flex;align-items:center;gap:2px;min-height:44px;padding:0 0 0 8px;border:0;background:transparent;
+    color:var(--accent);font-size:14px;font-weight:500;cursor:pointer}
+
+  /* 一次看到 5 張，更多的往右滑。頭尾貼齊 container 的內距，滑的時候不會被切一刀。 */
+  #upload-section .upload-gallery-col .demo-images-grid,
+  #upload-section .upload-gallery-col .demo-images-grid:has(.history-day-group){gap:12px;margin-inline:-32px;padding:6px 32px 28px;
+    --gallery-tile-size:calc((100cqw - 48px) / 5);
+    flex:0 0 auto;width:calc(100% + 64px);max-width:none;min-width:0;box-sizing:border-box;
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-inline:32px;scrollbar-width:none}
+  #upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar{display:none}
+  #upload-section .upload-gallery-col .history-day-heading{display:none}
+  #upload-section .upload-gallery-col .demo-image-tile{flex:0 0 var(--gallery-tile-size);border-radius:16px;scroll-snap-align:start}
+  #upload-section .upload-gallery-col .session-tile-when{display:block;position:absolute;top:calc(100% + 6px);left:0;
+    font-size:12px;line-height:1.2;color:var(--n64);white-space:nowrap;pointer-events:none}
+}
+
+@media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  /* 一個螢幕高，不捲；左邊主區、右邊側欄。 */
+  #upload-section .upload-container:has(.home-intro){height:calc(100dvh - var(--header-h));min-height:0;max-width:none;padding:0;overflow:hidden}
+  #upload-section .upload-grid:has(.home-intro){flex:1 1 auto;min-height:0;margin:0}
+  #upload-section .upload-content-row:has(>.home-intro){flex:1 1 auto;min-height:0;flex-direction:row;align-items:stretch;gap:0}
+  #upload-section .upload-content-row>.home-intro{flex:1 1 auto;width:auto;max-width:none;min-width:0;justify-content:center;padding:0 48px}
+  #upload-section .home-hero{grid-template-columns:minmax(0,1fr) clamp(260px,30vw,360px);gap:44px}
+  #upload-section .home-headline{font-size:clamp(30px,3.4vw,40px)}
+
+  #upload-section .upload-content-row:has(>.home-intro)>.upload-gallery-col{order:1;flex:0 0 280px;width:280px;height:auto;max-height:none;padding:20px 16px;gap:12px;
+    border:0;border-left:1px solid var(--border);border-radius:0;background:var(--card);overflow:hidden}
+  #upload-section .upload-gallery-tabs{flex:1 1 auto}
+  #upload-section .upload-gallery-tab{flex:1 1 0;padding:0 8px}
+  #upload-section .upload-gallery-scroll-frame{flex:1 1 auto;min-height:0}
+
+  /* 兩欄磚往下捲。styles.css 在 ≤1200 已經把日期群組拆成 display:contents，
+     所以日期標題和磚是同一層的格子：標題跨兩欄就是分組。 */
+  #upload-section .upload-gallery-col .demo-images-grid,
+  #upload-section .upload-gallery-col .demo-images-grid:has(.history-day-group){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:8px;
+    width:100%;min-height:0;max-height:100%;margin:0;padding:0 0 8px;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:none}
+  #upload-section .upload-gallery-col .demo-images-grid::-webkit-scrollbar{display:none}
+  #upload-section .upload-gallery-col .history-day-heading{grid-column:1/-1;display:block;margin:8px 0 0;padding:0;text-align:left;
+    font-size:12px;font-weight:600;line-height:1.4;color:var(--text-2)}
+  #upload-section .upload-gallery-col .history-day-group:first-child>.history-day-heading{margin-top:0}
+  #upload-section .upload-gallery-col .demo-image-tile{width:100%;border-radius:12px}
+}

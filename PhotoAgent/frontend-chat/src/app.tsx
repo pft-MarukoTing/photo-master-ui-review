@@ -1257,6 +1257,11 @@ export function App() {
       onSelect={onGallerySelect}
       onConfirm={onGalleryConfirm}
       onRemove={(id) => removeRows([id])}
+      onAll={(t) => {
+        if (t === "sample") return showSamples();
+        refreshSessions();
+        setDrawer(true);
+      }}
     />
   );
 
