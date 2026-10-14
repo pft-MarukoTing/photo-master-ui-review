@@ -18,7 +18,7 @@ export const CATEGORIES: Record<Category, { label: string; icon: string; intro: 
   recipe: { label: "美化建議", icon: "recipe", intro: "這是 AI 建議的美化項目，打勾的會套用，點一下可以開或關。" },
   style: { label: "風格", icon: "wand", intro: "想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。" },
   prompt: { label: "個人化需求", icon: "note", intro: "這段個人化需求會在美化時一起套用，可以直接修改或清除。" },
-  settings: { label: "美化設定", icon: "gear", intro: "這是美化時用的引擎與輸出設定，可以直接修改。" },
+  settings: { label: "美化設定", icon: "tune", intro: "這張照片美化時用的引擎與輸出設定，可以直接修改。" },
 };
 
 // 美化過一版之後再打開面板，看到的已經不是剛分析完的預設，而是上一版的設定。
@@ -640,7 +640,7 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           </select>
         </label>
         <label class={field("aspect_ratio")}>
-          <span class="chat-meta">比例</span>
+          <span class="chat-meta">長寬比</span>
           <select class="quality-select" value={plan.aspect_ratio} disabled={busy} onChange={(e) => onPatch({ aspect_ratio: val(e) })}>
             {caps.render.aspect_ratios.map((a) => (
               <option value={a.value}>{a.label}</option>
@@ -648,7 +648,7 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           </select>
         </label>
       </div>
-      <p class="chat-note">換比例會馬上依新比例重新構圖，美化建議裡的構圖也會跟著換。</p>
+      <p class="chat-note">換長寬比會馬上依新的長寬比重新構圖，美化建議裡的構圖也會跟著換。</p>
       {caps.advanced_options.length > 0 && (
         <div class="chat-settings-portrait">
           <span class="chat-meta">人像修正</span>

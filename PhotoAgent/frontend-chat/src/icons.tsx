@@ -21,17 +21,20 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
       </>
     ),
   },
-  sliders: {
-    sw: 2.2,
+  // 美化設定（這張照片的）：面板 #ap-case-settings-btn 那顆兩條線的滑桿。滑桿只代表
+  // 設定；「調整」用 pencil、「分析」用 search，齒輪是 header 的全域設定。
+  tune: {
+    sw: 1.8,
     body: (
       <>
-        <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0" />
-        <circle cx="16" cy="6" r="2" />
-        <circle cx="10" cy="12" r="2" />
-        <circle cx="18" cy="18" r="2" />
+        <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+        <circle cx="16" cy="7" r="2.2" />
+        <circle cx="10" cy="17" r="2.2" />
       </>
     ),
   },
+  // 調整：進去改這次的美化內容，是動作不是設定，所以不用滑桿。
+  pencil: { sw: 2, body: <path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4zM13.5 6.5l4 4" /> },
   down: { sw: 2, body: <path d="M12 4v11M7 10l5 5 5-5M5 20h14" /> },
   image: {
     sw: 2,

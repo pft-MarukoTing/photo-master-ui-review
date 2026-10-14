@@ -121,7 +121,7 @@ type Note = {
   // (「褲子也是」→「把男孩的褲子也換成白色」).
   // `text` stays what was typed -- that is what the bubble shows.
   wish?: string;
-  // 這句說了比例（「做成限動」），「設定」的長寬比就照它改了。`ratioBack`：這句
+  // 這句說了比例（「做成限動」），「美化設定」的長寬比就照它改了。`ratioBack`：這句
   // 後來不在了，長寬比也已經改回 AI 建議。
   ratio?: string;
   ratioBack?: boolean;
@@ -464,7 +464,7 @@ export function App() {
   sourceIdentity.current = selectionIdentity;
   const reviewedSource = useRef(preFull);
   // 長寬比是跟著說了比例的那句需求改的，那句不在個人化需求裡了（拿掉、清掉，或
-  // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「設定」自己改過的不動。
+  // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「美化設定」自己改過的不動。
   useEffect(() => {
     if (!caps) return;
     const prompt = notesPrompt(notes, preEdit);
@@ -974,7 +974,7 @@ export function App() {
         ...(r.accepted && r.aspect_ratio ? { ratio: r.aspect_ratio } : {}),
       };
       setNotes([...base, settled]);
-      // 「做成限動」這種說了比例的需求，同步改「設定」的長寬比
+      // 「做成限動」這種說了比例的需求，同步改「美化設定」的長寬比
       if (r.aspect_ratio) { const ratio = r.aspect_ratio; setSettings((s) => s && { ...s, aspect_ratio: ratio }); }
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
       if (r.start) startSession(r.start, laterNote(base), [...base, settled]);
@@ -1774,7 +1774,7 @@ function PreChat(props: {
           differ only in how far they go -- so they carry the same weight. */}
       {!asking && !went && (step === "picked" || kept) && (
         <div class="chat-actions-aux">
-          {step === "picked" && <Chip label="設定" icon="gear" kind="ghost" disabled={held} onClick={props.onEdit} />}
+          {step === "picked" && <Chip label="美化設定" icon="tune" kind="ghost" disabled={held} onClick={props.onEdit} />}
           {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
               數。所以沒有需求可清時這顆就不該在——按下去畫面不會有任何變化。 */}
           {kept && (
@@ -1898,7 +1898,7 @@ function PreChat(props: {
       {source && step === "settings" && (
         <>
           <UserMsg>
-            <ClickBubble icon="gear" label="設定" />
+            <ClickBubble icon="tune" label="美化設定" />
           </UserMsg>
           <AssistantMsg>
             <p class="chat-text">好，調整下面的設定，完成後選擇要分析還是一鍵美化。</p>
@@ -2760,7 +2760,7 @@ function SessionView(props: {
             {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
             {c.via !== "proposal" && !c.requested && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon="sliders" label={check ? "幫我分析" : "調整"} />
+                <ClickBubble icon={check ? "search" : "pencil"} label={check ? "幫我分析" : "調整"} />
               </UserMsg>
             )}
             <AssistantMsg>
@@ -2792,7 +2792,7 @@ function SessionView(props: {
                     <div class="chat-choices">
                       {catChips()}
                       {promptOnlyRound && (
-                        <Chip label="幫我分析" icon="sliders" disabled={busy || !ready} onClick={checkOriginal} />
+                        <Chip label="幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
                       )}
                     </div>
                   )}
@@ -2819,7 +2819,7 @@ function SessionView(props: {
       case "analysis_requested":
         return (
           <UserMsg meta={clockLabel(m.created_at)}>
-            <ClickBubble icon="sliders" label="幫我分析" />
+            <ClickBubble icon="search" label="幫我分析" />
           </UserMsg>
         );
       case "analysis_failed":
@@ -2833,7 +2833,7 @@ function SessionView(props: {
               </p>
               {idx === messages.length - 1 && !busy && (
                 <div class="chat-choices">
-                  <Chip label="再試一次" icon="sliders" disabled={!ready} onClick={checkOriginal} />
+                  <Chip label="再試一次" icon="search" disabled={!ready} onClick={checkOriginal} />
                 </div>
               )}
             </AssistantMsg>
@@ -2883,7 +2883,7 @@ function SessionView(props: {
               <>
                 <p class="chat-text">這版只照你的需求改，沒有分析整張照片。需要我幫你分析，看看還有哪些地方可以修嗎？</p>
                 <div class="chat-choices">
-                  <Chip label="好，幫我分析" icon="sliders" disabled={busy || !ready} onClick={checkOriginal} />
+                  <Chip label="好，幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
                   <Chip label="不用了" icon="x" disabled={busy} onClick={() => props.onPost({ type: "check_declined" })} />
                 </div>
               </>
@@ -2902,7 +2902,7 @@ function SessionView(props: {
               <p class="chat-text">好。還有想改的地方，直接輸入告訴我就行；想讓我分析整張照片，也隨時跟我說。</p>
               {live && (
                 <div class="chat-choices">
-                  <Chip label="幫我分析" icon="sliders" disabled={!ready} onClick={checkOriginal} />
+                  <Chip label="幫我分析" icon="search" disabled={!ready} onClick={checkOriginal} />
                 </div>
               )}
             </AssistantMsg>
@@ -3062,7 +3062,7 @@ function SessionView(props: {
         {/* 問題的答案直接接在問題底下，不放下方那排：三顆加上指定對象的頭像，
             手機寬度擠不下，會疊在一起。 */}
         <div class="chat-choices">
-          <Chip label="先不美化" icon="sliders" disabled={busy} onClick={() => setAskMode(null)} />
+          <Chip label="先不美化" icon="x" disabled={busy} onClick={() => setAskMode(null)} />
           <Chip
             label={WITH_ANALYSIS_LABEL}
             icon={askMode.icon}
@@ -3084,7 +3084,7 @@ function SessionView(props: {
       <AssistantMsg>
         <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續調整？</p>
         <div class="chat-choices">
-          <Chip label="繼續調整" icon="sliders" disabled={busy} onClick={() => setConfirmRerun(false)} />
+          <Chip label="繼續調整" icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
           <Chip label="照原設定美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
         </div>
       </AssistantMsg>
@@ -3095,7 +3095,7 @@ function SessionView(props: {
       <AssistantMsg>
         <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先調整設定？</p>
         <div class="chat-choices">
-          <Chip label="先調整" icon="sliders" disabled={busy} onClick={enterAdjust} />
+          <Chip label="先調整" icon="pencil" disabled={busy} onClick={enterAdjust} />
           <Chip label="照原設定再美化" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
         </div>
       </AssistantMsg>
@@ -3149,7 +3149,7 @@ function SessionView(props: {
   } else if (versions.length && current) {
     quick = (
       <QuickBar label="下一步：" cue>
-        <Chip label="調整" icon="sliders" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label="調整" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </QuickBar>
     );
@@ -3157,7 +3157,7 @@ function SessionView(props: {
   } else if (lastOutcome?.card?.type === "render_failed") {
     quick = (
       <QuickBar>
-        <Chip label="調整" icon="sliders" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label="調整" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label="再試一次" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
       </QuickBar>
     );

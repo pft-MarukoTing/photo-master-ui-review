@@ -1667,7 +1667,7 @@
     if (ratio && ratio !== "auto") {
       parts.push(findAspectRatioOption(ratio)?.label || ratio);
     }
-    return parts.join(" · ") || "分析與美化設定";
+    return parts.join(" · ") || "美化設定";
   }
 
   function updateApCaseSettingsTrigger() {
@@ -1695,8 +1695,8 @@
     // shown the values and left the user to work out which.
     const summary = apCaseSettingsSummaryText();
     const label = dirty
-      ? `開啟分析與美化設定：${summary}（設定與目前結果不同）`
-      : `開啟分析與美化設定：${summary}`;
+      ? `開啟美化設定：${summary}（設定與目前結果不同）`
+      : `開啟美化設定：${summary}`;
     btn.title = label;
     btn.setAttribute("aria-label", label);
   }

@@ -368,7 +368,7 @@ class ReviewLineTest(unittest.TestCase):
             return {"verdict": "keep", "reply": "好，記下來了。還有別的嗎？", "line": "", "options": [], "later": False}
         self.assertEqual(chat_assistant.review_line("外套換成藍色", "", model=model)["reply"], "好，記下來了。還有別的嗎？")
 
-    # 上傳頁說了比例（「做成限動」），「設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
+    # 上傳頁說了比例（「做成限動」），「美化設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
     def ratio(self, verdict, value):
         return chat_assistant.review_line("做成限動", "", model=lambda context: {
             "verdict": verdict, "reply": "", "line": "", "options": [], "later": False, "aspect_ratio": value})
@@ -376,7 +376,7 @@ class ReviewLineTest(unittest.TestCase):
     def test_a_kept_wish_that_names_a_shape_sets_the_ratio(self):
         result = self.ratio("keep", "9:16")
         self.assertEqual(result["aspect_ratio"], "9:16")
-        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + "長寬比也幫你換成「9:16（限動）」了，在「設定」裡隨時可以改。"
+        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + "長寬比也幫你換成「9:16（限動）」了，在「美化設定」裡隨時可以改。"
                          + chat_assistant.KEPT_NEXT)
 
     def test_a_ratio_only_comes_with_a_kept_wish_the_panel_offers(self):

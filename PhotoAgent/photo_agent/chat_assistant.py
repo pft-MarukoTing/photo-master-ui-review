@@ -67,7 +67,7 @@ How this tool works. These are the only facts you may state about the tool; if a
 - This is an AI photo retouching tool. On the upload page the user picks a photo (「自行上傳照片」 or 「從範例照片挑選」), can type what they want changed, and then starts with 「分析」 or 「一鍵美化」.
 - 「分析」: the AI looks the photo over first, finds the people in it and what could be improved, and lays out suggestions for the user to look over: what to fix on each person (人像), a list of 美化建議, and 風格 choices. The user can switch items on or off and type more wishes, then press 「美化」. 分析 itself does not change the photo. Put it in plain words, e.g. 「分析會先看過這張照片，找出照片裡的人和可以修的地方，整理成建議給你參考」 -- never 「修圖打算」, which Taiwanese users do not say (「修圖計畫」 is fine), and never 「讓你挑」「讓你挑選」, which sound odd here -- say 「給你參考」, or 「你看過、決定要留哪些再美化」.
 - 「一鍵美化」: analyzes and retouches in one go, using the AI's own suggestions plus the user's 個人化需求, with no step in between. The result can still be changed afterwards.
-- 「設定」 on the upload page (「美化設定」 in the session): 美化引擎 is the AI model and quality used to retouch (higher quality is usually finer but takes longer); 長寬比 is the output shape (「AI 建議」 lets the AI choose, 「原圖比例」 keeps the photo's own shape, and fixed ones like 「4:5（IG 貼文）」 or 「9:16（限動）」 fit a given use); 人像修正 (閉眼修正、視線修正、髮絲整理、笑容調整) is on by default -- switch off any the user does not want touched. Some setups also offer 分析引擎, the model that analyzes the photo.
+- 「美化設定」 (on the upload page and in the session): 美化引擎 is the AI model and quality used to retouch (higher quality is usually finer but takes longer); 長寬比 is the output shape (「AI 建議」 lets the AI choose, 「原圖比例」 keeps the photo's own shape, and fixed ones like 「4:5（IG 貼文）」 or 「9:16（限動）」 fit a given use); 人像修正 (閉眼修正、視線修正、髮絲整理、笑容調整) is on by default -- switch off any the user does not want touched. Some setups also offer 分析引擎, the model that analyzes the photo.
 - 個人化需求: the user's own wishes in their own words -- change the background or clothes, add or remove something, tidy the scene, a pose, an expression. They are the editor's top goal when retouching. On the upload page each line typed goes into the 個人化需求 list above the start buttons, where it can be edited, or all cleared with 「清除所有需求」. When there are several people, tapping a person's 頭像 under the chat box before typing says who the wish is for; tapping several 頭像 aims the same wish at all of them, and tapping one again takes it back out.
 - 人像 panel (after 分析): per person, 閉眼 (open eyes that are shut), 視線 (look into the lens), 髮絲 (保留髮絲動態 or 梳整俐落), 笑容 (自動、不笑、微笑、開朗笑、大笑). A dot marks what the analysis suggests fixing.
 - 美化建議 panel: the retouch items the analysis came up with; checked ones are applied.
@@ -948,7 +948,7 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
 # 建議就會變成 user_prompt 裡使用者的話，壓過分析的判斷。要靠前一句才看得懂的
 # 那句（回答追問的「棕色」、接著講的「褲子也是」）由模型補成完整的一句，清單裡
 # 每一句才能單獨讀、單獨刪。補出來的句子開頭若帶著人物，人物拆開回給頁面掛。
-# 上傳頁「設定」裡的長寬比選項：說出比例的需求會直接改這個設定。
+# 上傳頁「美化設定」裡的長寬比選項：說出比例的需求會直接改這個設定。
 REVIEW_RATIOS = {c.value: c.label for c in capabilities.ASPECT_RATIOS if not c.hidden and not c.debug_only}
 
 REVIEW_SCHEMA = {
@@ -973,7 +973,7 @@ REVIEW_SCHEMA = {
 
 REVIEW_INSTRUCTION = """You are the assistant on the upload page of a photo retouching tool. The user has picked a photo and is typing what they want done to it, one line at a time. The wishes are kept in a list on screen and handed to the editor once the photo has been analyzed.
 
-The photo has not been analyzed yet: there is no analysis to read and no confirmation card. The page only has a small 「設定」 with the 長寬比 and a few switches, set before anything starts. PEOPLE IN PHOTO lists the faces found on the photo so far, left to right, by where they stand; the user can tap one or more of them before typing, and then the line starts with those people, joined by 「、」, and 「：」 -- the wish is for each of them. Nothing has been applied yet.
+The photo has not been analyzed yet: there is no analysis to read and no confirmation card. The page only has a small 「美化設定」 with the 長寬比 and a few switches, set before anything starts. PEOPLE IN PHOTO lists the faces found on the photo so far, left to right, by where they stand; the user can tap one or more of them before typing, and then the line starts with those people, joined by 「、」, and 「：」 -- the wish is for each of them. Nothing has been applied yet.
 
 YOUR JOB is to decide what happens to NEW LINE and say a sentence about it: collect what the user wants, and answer their questions about how this tool works (TOOL GUIDE). You never judge the photo. Do not suggest fixes, do not point out problems (closed eyes, clutter, lighting, blur) and do not recommend a style -- the editor works that out after the analysis, and anything you suggest would be taken for the user's own wish.
 
@@ -1004,7 +1004,7 @@ THE "later" FIELD
 Some questions can only be answered once the photo is analyzed: how to retouch this photo, what could be fixed or what would suit it (「這張要怎麼修？」、「適合什麼風格？」), words to go with this photo (a title, ad copy, a caption), and questions about what it shows that PEOPLE IN PHOTO cannot answer. When you offer 分析 for one of them, "later" is true: whichever of 分析 or 一鍵美化 the user then starts, NEW LINE goes along to the editor, and the editor answers it as soon as the photo is done -- after 分析, or after the retouch for 一鍵美化 -- so the user does not have to ask again. Word the promise so it holds for both: 「分析或美化好之後，我就…」, never 「分析完我就…」. Everything else is false: a line that only sounds ready to go (「這樣就好」、「然後呢？」) asks nothing, and an offer that leads with 一鍵美化 is for a user who is ready to go, with no question left to answer.
 
 THE "aspect_ratio" FIELD
-The 長寬比 in 「設定」 decides the shape of the result; RATIOS lists its values. When the verdict is "keep" and NEW LINE plainly asks for a frame shape, "aspect_ratio" is the value that matches, so the setting follows the wish instead of contradicting it: an exact ratio (「9:16」、「裁成 4:5」), or a use that has one shape -- 限動、直式短影音 "9:16"; IG 貼文 "4:5"; 方形、大頭貼 "1:1"; 桌布、寬螢幕、橫式影片 "16:9"; 「不要裁」、「保持原本的比例」 "original". Only when the shape is plain from the words: a framing wish that names no shape (「裁掉旁邊的雜物」、「構圖好看一點」、「拉近一點」、「做成海報」) is "". A shape RATIOS does not have (「21:9」、「5:7」) is "" too: never swap in a near one the user did not ask for -- put it in "asked_ratio" instead, written as width:height (「21比9」 -> "21:9"), and the page asks the user about it. "asked_ratio" is "" in every other case. Every other verdict: "" for both. The page tells the user about the change itself, so the reply stays as for "keep".
+The 長寬比 in 「美化設定」 decides the shape of the result; RATIOS lists its values. When the verdict is "keep" and NEW LINE plainly asks for a frame shape, "aspect_ratio" is the value that matches, so the setting follows the wish instead of contradicting it: an exact ratio (「9:16」、「裁成 4:5」), or a use that has one shape -- 限動、直式短影音 "9:16"; IG 貼文 "4:5"; 方形、大頭貼 "1:1"; 桌布、寬螢幕、橫式影片 "16:9"; 「不要裁」、「保持原本的比例」 "original". Only when the shape is plain from the words: a framing wish that names no shape (「裁掉旁邊的雜物」、「構圖好看一點」、「拉近一點」、「做成海報」) is "". A shape RATIOS does not have (「21:9」、「5:7」) is "" too: never swap in a near one the user did not ask for -- put it in "asked_ratio" instead, written as width:height (「21比9」 -> "21:9"), and the page asks the user about it. "asked_ratio" is "" in every other case. Every other verdict: "" for both. The page tells the user about the change itself, so the reply stays as for "keep".
 
 OPTIONS
 - "clarify" case (b): two to four short answers to your own question, a few words each (「白色」、「海邊」). They answer what the user left out; they are not suggestions for the photo. For case (a) the user taps a face, so options is [].
@@ -1018,7 +1018,7 @@ REPLY
 - "render": say you are starting 一鍵美化 now, e.g. 「好，馬上幫你一鍵美化。」.
 - "analyze": say you are analyzing the photo now, e.g. 「好，我先幫你分析這張照片。」.
 - "offer": a question asking whether to do it for them, e.g. 「要不要我先幫你分析這張照片？分析完會整理出可以修的地方給你參考。」 or 「需求都寫好了的話，要不要直接幫你一鍵美化？」. For words to go with the photo, offer 分析 so the words can fit the photo, e.g. 「要不要我先幫你分析這張照片？分析或美化好之後，我就照照片的內容幫你想幾句文案。」 with ["幫我分析", "一鍵美化"] and "later" true. For how to retouch or what would suit it, say what you will point out once 分析 is done, e.g. 「要不要我先幫你分析這張照片？分析或美化好之後，我就告訴你可以從哪些地方修起。」 with ["幫我分析", "一鍵美化"] and "later" true. Never say what this photo needs, and do not write the words yet.
-- "answer": answer the question from TOOL GUIDE only, in plain words, never field names. If TOOL GUIDE does not cover it, say you are not sure. Answer about the tool, not the photo: do not say what this photo needs or which choice suits it. When a next step fits, end with it as a question offering to do it, never as an instruction to press a button. That offer is the last sentence, and the options answer exactly it: never close with a different question (「你想要我再說明其他設定嗎？」「你想用哪一種？」「還有其他問題嗎？」), and never ask a question the options do not answer. For a question about a setting, say where it is (「設定」 on this page) and then offer the next step, e.g. 「長寬比可以選「AI 建議」讓 AI 決定、選「原圖比例」保留照片原本的形狀，也可以指定像「4:5（IG 貼文）」這種固定比例，在「設定」裡就能改。要不要我先幫你分析看看？」 Quote labels with 「」 only, never 〈〉 -- e.g. 「分析會先看過這張照片，找出照片裡的人和可以修的地方，整理成建議給你參考，不會直接改照片。要不要我先幫你分析看看？」 -- and give options as for "offer". Offer the step the question was about: after explaining 一鍵美化, 「要不要直接幫你一鍵美化？」 with ["一鍵美化", "幫我分析"]. When they asked whether the tool can do something to the photo (「可以換背景嗎？」), the next step is their wish, not 分析: ask what they want, e.g. 「可以喔！想換成什麼樣的背景？直接跟我說就好。」, options []. When the user turned down your offer, just accept it, e.g. 「好的，想到要怎麼修再跟我說喔！」, options [].
+- "answer": answer the question from TOOL GUIDE only, in plain words, never field names. If TOOL GUIDE does not cover it, say you are not sure. Answer about the tool, not the photo: do not say what this photo needs or which choice suits it. When a next step fits, end with it as a question offering to do it, never as an instruction to press a button. That offer is the last sentence, and the options answer exactly it: never close with a different question (「你想要我再說明其他設定嗎？」「你想用哪一種？」「還有其他問題嗎？」), and never ask a question the options do not answer. For a question about a setting, say where it is (「美化設定」 on this page) and then offer the next step, e.g. 「長寬比可以選「AI 建議」讓 AI 決定、選「原圖比例」保留照片原本的形狀，也可以指定像「4:5（IG 貼文）」這種固定比例，在「美化設定」裡就能改。要不要我先幫你分析看看？」 Quote labels with 「」 only, never 〈〉 -- e.g. 「分析會先看過這張照片，找出照片裡的人和可以修的地方，整理成建議給你參考，不會直接改照片。要不要我先幫你分析看看？」 -- and give options as for "offer". Offer the step the question was about: after explaining 一鍵美化, 「要不要直接幫你一鍵美化？」 with ["一鍵美化", "幫我分析"]. When they asked whether the tool can do something to the photo (「可以換背景嗎？」), the next step is their wish, not 分析: ask what they want, e.g. 「可以喔！想換成什麼樣的背景？直接跟我說就好。」, options []. When the user turned down your offer, just accept it, e.g. 「好的，想到要怎麼修再跟我說喔！」, options [].
 - Any next step you suggest is a question (「要不要幫你…？」), never an instruction like 「按下面的「分析」就行」.
 - "drop": decline gently and politely: a soft apology, then invite the user to tell you what they would like to change in this photo, e.g. 「不好意思，這個我幫不上忙。想怎麼修這張照片，再跟我說說看喔！」. If the line could not be made sense of at all, apologize for not following instead, e.g. 「不好意思，我沒看懂你的意思。想怎麼修這張照片，再跟我說說看喔！」. Never label their line (「這不是修圖需求」) or read like a rule being enforced, and do not list examples of what could be changed. Do not answer the question anyway, not even briefly, and do not offer to look it up.
 - To the user you already have the photo: never say you have not seen it, cannot see it, need to look at it first, or that there is no analysis yet (「我得先看過這張照片」、「目前還沒有分析」、「我看不到照片」). Offer 分析 as the next step instead.
@@ -1027,7 +1027,7 @@ REPLY
 
 
 def _ratio_note(ratio):
-    return f"長寬比也幫你換成「{REVIEW_RATIOS[ratio]}」了，在「設定」裡隨時可以改。" if ratio else ""
+    return f"長寬比也幫你換成「{REVIEW_RATIOS[ratio]}」了，在「美化設定」裡隨時可以改。" if ratio else ""
 
 
 # 使用者說的比例不在選項裡（21:9），不偷換成相近的：問要換成最接近的，還是交給
@@ -1112,7 +1112,7 @@ def _ratio_answer(line, history):
     wish, found = _swap_ratio(wish, asked.group(1), ratio)
     wish = wish if found else f"比例改成 {ratio}"
     return {**done, "kept": True, "line": wish, "aspect_ratio": ratio,
-            "reply": f"好，長寬比幫你換成「{REVIEW_RATIOS[ratio]}」了，在「設定」裡隨時可以改。" + KEPT_NEXT}
+            "reply": f"好，長寬比幫你換成「{REVIEW_RATIOS[ratio]}」了，在「美化設定」裡隨時可以改。" + KEPT_NEXT}
 
 
 def call_review(context):
@@ -1288,7 +1288,7 @@ def review_line(line, prompt, history=(), people=(), *, model=None):
     later = offer and result.get("later") is True and options[0] == OFFER_OPTIONS[0]
     kept = (not start and not ask and verdict not in ("answer", "offer")
             and (verdict != "drop" or _says_kept(reply)))
-    # 說了比例的需求要跟著改「設定」的長寬比：不然 AI 建議照樣跑，分析還可能
+    # 說了比例的需求要跟著改「美化設定」的長寬比：不然 AI 建議照樣跑，分析還可能
     # 建議相反的裁切，需求跟設定互相打架。
     ratio = result.get("aspect_ratio") if kept and result.get("aspect_ratio") in REVIEW_RATIOS else ""
     if kept and "？" not in reply and "?" not in reply:

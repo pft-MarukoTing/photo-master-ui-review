@@ -156,24 +156,25 @@ export function PrefsModal(props: {
             ×
           </button>
         </div>
+        {/* 跟面板 #ap-settings-modal 的開關列同一套 markup：全域設定兩邊長得一樣，
+            跟這張照片的「美化設定」（選單＋開關群組）一眼就分得出來。 */}
         <div class="settings-modal-body chat-prefs-body">
-          <div class="chat-settings-portrait">
-            <span class="chat-meta">對話風格</span>
-            <p class="chat-note">打開後，助理會更詳細地說明分析、建議與每一版的成果。</p>
-            <label class="chat-switch-row">
-              <span class="ios-switch">
-                <input
-                  type="checkbox"
-                  checked={!!prefs.detailed_explanation}
-                  onChange={(e) => set({ detailed_explanation: (e.currentTarget as HTMLInputElement).checked })}
-                />
-                <span class="ios-track">
-                  <span class="ios-thumb" />
-                </span>
+          <label class="option-row">
+            <div class="option-text">
+              <span class="option-label">詳細解說</span>
+              <span class="option-desc">開啟後，助理會更詳細地說明分析、建議與每一版的成果。</span>
+            </div>
+            <span class="ios-switch">
+              <input
+                type="checkbox"
+                checked={!!prefs.detailed_explanation}
+                onChange={(e) => set({ detailed_explanation: (e.currentTarget as HTMLInputElement).checked })}
+              />
+              <span class="ios-track">
+                <span class="ios-thumb" />
               </span>
-              <span>詳細解說</span>
-            </label>
-          </div>
+            </span>
+          </label>
         </div>
       </div>
     </div>,
