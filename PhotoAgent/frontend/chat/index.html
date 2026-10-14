@@ -3340,17 +3340,10 @@
        underlying account/login logic is untouched -- this only hides the
        entry points into it. */
     #register-account-btn, #history-logout-btn { display: none; }
-    /* #register-account-btn keeps its text label at every width, unlike
-       #reset-btn (icon+label, moved down into
-       #header-actions-secondary under 900px instead, see
-       setupCompactHeaderActions in app.js, so they can show their own label
-       again). setupCompactHeaderActions moves this button along with them,
-       but the id selector below already outranked ".header-actions
-       .btn-label {display:none}" (styles.css) regardless of which of the
-       two rows it's currently sitting in, so the move itself changes
-       nothing about its own label. Also sizes it down to match
-       #account-badge's own compact footprint rather than a full .btn-sm,
-       since this is a low-priority utility action next to the logo. */
+    /* #register-account-btn keeps its text label at every width (the id
+       selector outranks styles.css's ".header-actions .btn-label
+       {display:none}" on narrow phones), sized down to the same compact
+       pill as its neighbours. */
     #register-account-btn.btn {
       height: 32px;
       padding: 0 14px;
@@ -3364,10 +3357,7 @@
        #register-account-btn just above, plus the same 999px pill radius
        #account-badge itself uses (.btn-sm's own 10px would otherwise still
        show, since height/padding/gap/font-size aren't the only things that
-       differ). This sizing applies wherever #reset-btn currently sits --
-       .header-actions or, under 900px, #header-actions-secondary (see
-       setupCompactHeaderActions, app.js) -- since it's an always-on id
-       selector, not scoped to either row. */
+       differ). */
     #reset-btn.btn {
       height: 32px;
       padding: 0 14px;
@@ -3446,6 +3436,7 @@
        instead of falling back to a taller, square .btn-sm. */
     #header-settings-btn.btn,
     #new-chat-btn.btn,
+    #cost-btn.btn,
     #account-badge.btn,
     #changelog-btn.btn,
     #chat-ui-btn.btn,
@@ -4368,13 +4359,40 @@
     .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
     body.is-opening-case > main { visibility: hidden; }
+    /* header 的按鈕也一起等：剛進來還在上傳畫面的狀態（有版本紀錄、沒有回到首頁／新對話／
+       最近照片），案例一打開才換成結果頁那一組；先藏著，換好那一刻跟照片一起出現，
+       不讓人看到按鈕一顆顆增減。#report-btn 的 visibility 是 syncReportBtnPosition
+       寫在 inline style 上的，所以要 !important。 */
+    body.is-opening-case .header-actions,
+    body.is-opening-case .header-icon-btn,
+    body.is-opening-case #report-btn { visibility: hidden !important; }
 
-    /* ── 手機 header（≤600px），跟對話模式（frontend-chat/src/chat.css）一樣 ──
-       logo · 新對話 · 最近照片 · ⋯；其他按鈕收進 ⋯ 展開的選單。
+    /* ── header 按鈕，跟對話模式（frontend-chat/src/chat.css）一樣 ──
+       每顆都是同一款 32px 膠囊；圖示 14px，主題色塊也放大到 14px 跟它們對齊。 */
+    #theme-toggle-btn .theme-toggle-swatch { width: 14px; height: 14px; }
+
+    /* 平板（直拿 601–1200、橫拿 901–1200）：header 64px 高，按鈕放大到 44px 好按。
+       要寫在下面 ⋯ 選單的規則前面，選單打開時才蓋得過這裡的高度。 */
+    @media (min-width: 601px) and (max-width: 1200px) and (orientation: portrait),
+           (min-width: 901px) and (max-width: 1200px) and (orientation: landscape) {
+      html:root { --header-h: 64px; }
+      .site-header .header-inner { padding: 0 20px 0 32px; }
+      .site-header .header-actions > :is(#reset-btn, #new-chat-btn, #account-badge, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn),
+      #report-btn.btn, #report-btn-spacer.btn { height: 44px; padding: 0 16px; }
+    }
+
+    /* ── 窄 header：手機（≤600px），以及攤開放不下的平板／小桌機（≤1279px）──
+       logo · 新對話 · 最近照片 · ⋯；其他按鈕收進 ⋯ 展開的選單。對話模式在 940px 就攤開，
+       但面板模式按鈕多（最多 9 顆，攤開約 920px 寬，加 logo 要 1230px 左右），所以斷點拉到 1279px。
        選單項目逐顆列 id，才蓋得過上面各按鈕自己的 id 樣式。 */
     .header-icon-btn, #header-menu-report-btn { display: none; }
     @media (max-width: 600px) {
-      .site-header .header-inner { position: relative; padding: 0 6px 0 16px; }
+      html:root { --header-h: 56px; }
+      .site-header .header-inner { padding: 0 6px 0 16px; }
+      .site-header .logo { font-size: 20px; }
+    }
+    @media (max-width: 1279px) {
+      .site-header .header-inner { position: relative; }
       .header-icon-btn {
         display: flex; align-items: center; justify-content: center;
         width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
@@ -4394,8 +4412,8 @@
       .site-header .header-actions { display: none; }
       .site-header .header-actions.is-open {
         display: flex; flex-direction: column; align-items: stretch; gap: 2px;
-        position: absolute; top: calc(100% + 4px); right: 8px; z-index: 1500;
-        min-width: 180px; padding: 6px; border-radius: 16px;
+        position: absolute; top: calc(100% + 4px); right: 16px; z-index: 1500;
+        min-width: 200px; padding: 6px; border-radius: 16px;
         background: var(--card); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.16);
       }
       .header-actions.is-open > :is(#reset-btn, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn, #header-menu-report-btn) {
@@ -4408,9 +4426,12 @@
       .header-actions.is-open > :is(#reset-btn, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn, #header-menu-report-btn) svg { width: 14px; height: 14px; }
       .header-actions.is-open :is(#header-settings-btn, .btn) .btn-label { display: inline; }
     }
+    @media (max-width: 600px) {
+      .site-header .header-actions.is-open { right: 8px; min-width: 180px; }
+    }
   </style>
-  <script type="module" crossorigin src="./static/index-oKMIouuV.js"></script>
-  <link rel="stylesheet" crossorigin href="./static/index-GVyi8ZjA.css">
+  <script type="module" crossorigin src="./static/index-DbSKXqTm.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-r-YsTheq.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
   <!-- The attributes above are caramel, the fallback, so the common first load

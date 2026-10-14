@@ -1356,37 +1356,46 @@ div.chat-proposal-row{cursor:default}
 @keyframes chat-photo-in{from{opacity:0;transform:translateY(-6px)}}
 
 /* ---------- 對話頁：大圖檢視 ----------
-   整頁深色、只放照片。上面是第幾版和關閉；下面是「按住看原圖」、下載，和一排美化紀錄。
-   按鈕都是半透明白，不做實心。 */
+   跟著目前主題走：底色和光暈沿用 body 那組，字和按鈕用 --text／--on-surface-rgb，淺色主題也成立。
+   上面是第幾版和關閉；下面是「按住看原圖」、下載，和一排美化紀錄。按鈕是半透明色調，不做實心；
+   目前那一版用主題色框。 */
 .version-viewer{position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;box-sizing:border-box;
-  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);background:#0c0c0e;color:#fff;animation:photo-viewer-in .15s ease-out}
+  padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom);color:var(--text);
+  background:
+    radial-gradient(ellipse 120% 60% at 15% -10%, var(--bg-glow-1) 0%, transparent 60%),
+    radial-gradient(ellipse 90% 50% at 100% 105%, var(--bg-glow-2) 0%, transparent 60%),
+    var(--bg);
+  animation:photo-viewer-in .15s ease-out}
 .version-viewer-head{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);height:60px;padding:0 var(--sp-3) 0 var(--sp-5)}
 .version-viewer-title{display:flex;align-items:baseline;gap:var(--sp-2);font-size:16px;font-weight:600}
-.version-viewer-title small{font-size:12px;font-weight:400;color:rgba(255,255,255,.6)}
-.version-viewer-btn{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;
-  background:rgba(255,255,255,.14);color:#fff;cursor:pointer;text-decoration:none}
-.version-viewer-btn:hover{background:rgba(255,255,255,.24)}
+.version-viewer-title small{font-size:12px;font-weight:400;color:var(--text-2)}
+.version-viewer-btn{flex:none;display:flex;align-items:center;justify-content:center;width:44px;height:44px;box-sizing:border-box;padding:0;
+  border:1px solid var(--border-2);border-radius:50%;background:rgba(var(--on-surface-rgb),.06);color:var(--text);cursor:pointer;text-decoration:none;
+  transition:background .15s}
+.version-viewer-btn:hover{background:rgba(var(--on-surface-rgb),.12)}
 .version-viewer-stage{flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center;padding:var(--sp-2) var(--sp-4)}
-.version-viewer-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:12px;
+.version-viewer-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--radius);box-shadow:var(--shadow-lg);
   -webkit-user-select:none;user-select:none;-webkit-user-drag:none;-webkit-touch-callout:none}
 .version-viewer-stage img[hidden]{display:none}
 .version-viewer-foot{flex:none;display:flex;flex-direction:column;gap:var(--sp-4);padding:var(--sp-3) 0 var(--sp-4)}
 .version-viewer-actions{display:flex;align-items:center;justify-content:center;gap:var(--sp-3);padding:0 var(--sp-4)}
-.version-viewer-hold{height:44px;padding:0 22px;border:1px solid rgba(255,255,255,.28);border-radius:22px;background:rgba(255,255,255,.08);
-  color:#fff;font:inherit;font-size:14px;font-weight:500;cursor:pointer;touch-action:none;
+.version-viewer-hold{height:44px;padding:0 22px;border:1px solid var(--border-2);border-radius:22px;background:rgba(var(--on-surface-rgb),.06);
+  color:var(--text);font:inherit;font-size:14px;font-weight:500;cursor:pointer;touch-action:none;transition:background .15s,border-color .15s,color .15s;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-.version-viewer-hold.is-on{background:rgba(255,255,255,.24);border-color:rgba(255,255,255,.56)}
-/* 版本少就置中，多了往右滑：頭尾各吃 auto margin，捲動時不會被切掉。 */
-.version-viewer-track{display:flex;gap:var(--sp-3);overflow-x:auto;padding:0 var(--sp-4);scrollbar-width:none;overscroll-behavior-x:contain}
+.version-viewer-hold.is-on{background:rgba(var(--accent-rgb),.16);border-color:rgba(var(--accent-rgb),.5);color:var(--accent)}
+/* 版本少就置中，多了往右滑：頭尾各吃 auto margin，捲動時不會被切掉。上下留 4px 給目前那格的外框。 */
+.version-viewer-track{display:flex;gap:var(--sp-3);overflow-x:auto;padding:4px var(--sp-4);scrollbar-width:none;overscroll-behavior-x:contain}
 .version-viewer-track::-webkit-scrollbar{display:none}
 .version-viewer-track>:first-child{margin-left:auto}
 .version-viewer-track>:last-child{margin-right:auto}
 .version-viewer-tile{flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;padding:0;border:0;background:none;
-  color:rgba(255,255,255,.6);font:inherit;font-size:12px;line-height:1.3;cursor:pointer}
-.version-viewer-tile img{display:block;width:52px;height:64px;box-sizing:border-box;object-fit:cover;border:2px solid transparent;border-radius:10px;opacity:.6}
-.version-viewer-tile.is-current{color:#fff;font-weight:600}
-.version-viewer-tile.is-current img{border-color:#fff;opacity:1}
-.version-viewer-btn:focus-visible,.version-viewer-hold:focus-visible,.version-viewer-tile:focus-visible{outline:2px solid #fff;outline-offset:2px}
+  color:var(--text-2);font:inherit;font-size:12px;line-height:1.3;cursor:pointer}
+.version-viewer-tile img{display:block;width:52px;height:64px;box-sizing:border-box;object-fit:cover;border-radius:10px;opacity:.55;
+  box-shadow:0 0 0 1px var(--border-2);transition:opacity .15s,box-shadow .15s}
+.version-viewer-tile:hover img{opacity:.85}
+.version-viewer-tile.is-current{color:var(--text);font-weight:600}
+.version-viewer-tile.is-current img{opacity:1;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent)}
+.version-viewer-btn:focus-visible,.version-viewer-hold:focus-visible,.version-viewer-tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* ---------- 手機對話頁（≤600，以及直拿的平板）----------
    照片在上、對話在下，各佔 header 以下的一段，比例由 --split（照片那段，0–1）決定，
