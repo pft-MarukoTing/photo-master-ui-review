@@ -1553,9 +1553,11 @@
     const secondRow = els.headerActionsSecondary;
     const spacer = els.reportBtnSpacer;
     if (!row || !secondRow || !spacer) return;
-    const items = Array.from(row.children).filter((el) => el !== spacer && el !== els.themeToggleBtn);
+    const menuReport = document.getElementById("header-menu-report-btn");
+    const items = Array.from(row.children).filter((el) => el !== spacer && el !== els.themeToggleBtn && el !== menuReport);
     if (!items.length) return;
-    const mql = window.matchMedia("(max-width: 900px)");
+    // 手機（≤600px）不搬：那裡 .header-actions 變成 ⋯ 選單（setupHeaderMenu）。
+    const mql = window.matchMedia("(min-width: 601px) and (max-width: 900px)");
     const sync = () => {
       if (mql.matches) items.forEach((el) => secondRow.appendChild(el));
       // Back in front of 主題, not just the spacer: 主題 stays in this row
@@ -1565,6 +1567,36 @@
     };
     mql.addEventListener("change", sync);
     sync();
+  }
+
+  // 手機 header（≤600px）跟對話模式一樣：新對話、最近照片兩顆圖示留在外面（代按
+  // #new-chat-btn / #account-badge），其他按鈕收進 ⋯ 展開的選單（index.html <style>）。
+  // 選了哪一項選單就收起來；點外面或按 Esc 也收。
+  function setupHeaderMenu() {
+    const row = els.headerActions;
+    const more = document.getElementById("header-more-btn");
+    if (!row || !more) return;
+    const setOpen = (open) => {
+      row.classList.toggle("is-open", open);
+      more.setAttribute("aria-expanded", String(open));
+    };
+    more.addEventListener("click", () => setOpen(!row.classList.contains("is-open")));
+    row.addEventListener("click", (e) => {
+      if (e.target.closest("button, a")) setOpen(false);
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (row.classList.contains("is-open") && !e.target.closest?.(".header-actions, #header-more-btn")) setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && row.classList.contains("is-open")) setOpen(false);
+    });
+    const proxy = (id, target) => {
+      const btn = document.getElementById(id);
+      if (btn && target) btn.addEventListener("click", () => target.click());
+    };
+    proxy("header-new-icon", els.newChatButton);
+    proxy("header-history-icon", els.accountBadge);
+    proxy("header-menu-report-btn", els.reportBtn);
   }
 
   // Merged 修圖模型/影像品質 selector -- one option per valid model+quality
@@ -13541,6 +13573,7 @@
     });
   }
   setupCompactHeaderActions();
+  setupHeaderMenu();
   // Reload, close, or any other way off the page: the browser's own leave
   // prompt (its wording cannot be changed) when review edits are unsent.
   window.addEventListener("beforeunload", (event) => {
@@ -13607,6 +13640,21 @@
     location.href = `chat/${location.search}`;
   };
   els.resetButton.addEventListener("click", goChatHome);
+  // 新對話: like 回到首頁, over to the chat page, but straight to its 新對話
+  // photo-picking screen (#new) instead of its home.
+  if (els.newChatButton) {
+    els.newChatButton.addEventListener("click", async () => {
+      if (isReviewDirty()) {
+        const leave = await showConfirmModal(
+          "這張照片還沒美化的調整會清掉。確定要開新對話嗎？",
+          { confirmLabel: "開新對話", cancelLabel: "留在這裡", danger: false }
+        );
+        if (!leave) return;
+      }
+      leaveConfirmed = true;
+      location.href = `chat/${location.search}#new`;
+    });
+  }
   if (els.logoHomeBtn) els.logoHomeBtn.addEventListener("click", goChatHome);
   if (els.compareToggleBtn) {
     els.compareToggleBtn.addEventListener("click", () =>

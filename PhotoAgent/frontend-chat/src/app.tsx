@@ -364,7 +364,8 @@ export function App() {
   const [demos, setDemos] = useState<string[] | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[] | null>(null);
 
-  const [phase, setPhase] = useState<Phase>("home");
+  // #new: 面板模式的新對話，直接落在新對話的選照片畫面（開機時清掉這個 hash）。
+  const [phase, setPhase] = useState<Phase>(() => (location.hash === "#new" ? "chat" : "home"));
   // Landing on a #session / #case link (the other mode's 對話模式 button):
   // the home page stays undrawn until that session is open, so the switch
   // goes straight from one mode's photo to the other's.
@@ -529,6 +530,7 @@ export function App() {
           .catch(() => setDemos([]));
         const list = await refreshSessions();
         if (!list.length) setTab("sample");
+        if (location.hash === "#new") setSessionHash(null);
         const id = sessionHash();
         // Staying undrawn when it hands the case to 面板模式 instead.
         if (id && (await openSession(id)) === "left") return;

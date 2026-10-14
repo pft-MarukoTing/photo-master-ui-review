@@ -470,6 +470,20 @@
     }
     .step-indicator-slot > .ap-step-indicator { flex: 1; min-width: 0; }
     .step-indicator-slot > .mode-switch { margin: -3px 0 1px; }
+    /* 面板模式的按鈕大多是 .btn-secondary（卡片底＋細框＋小圓角），共用的
+       灰軌道膠囊放在這裡像外來的。只在這裡改成同一套外框，目前那段用淡主色
+       填色，跟對話頁把手旁那顆一致。總高維持 36px（1px 框＋2px 內距＋30px）。 */
+    .step-indicator-slot > .mode-switch {
+      padding: 2px;
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+      background: var(--card-2);
+    }
+    .step-indicator-slot > .mode-switch .mode-switch-opt { border-radius: 8px; }
+    .step-indicator-slot > .mode-switch .mode-switch-opt.is-active {
+      background: rgba(var(--accent-rgb), .14);
+      box-shadow: none;
+    }
     /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
     body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {
@@ -3431,6 +3445,7 @@
        the same override so all three read as the same size/shape pill
        instead of falling back to a taller, square .btn-sm. */
     #header-settings-btn.btn,
+    #new-chat-btn.btn,
     #account-badge.btn,
     #changelog-btn.btn,
     #chat-ui-btn.btn,
@@ -4353,8 +4368,48 @@
     .ap-style-item.is-single-option > .ap-style-trigger { pointer-events: none; cursor: default; opacity: .7; }
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
     body.is-opening-case > main { visibility: hidden; }
+
+    /* ── 手機 header（≤600px），跟對話模式（frontend-chat/src/chat.css）一樣 ──
+       logo · 新對話 · 最近照片 · ⋯；其他按鈕收進 ⋯ 展開的選單。
+       選單項目逐顆列 id，才蓋得過上面各按鈕自己的 id 樣式。 */
+    .header-icon-btn, #header-menu-report-btn { display: none; }
+    @media (max-width: 600px) {
+      .site-header .header-inner { position: relative; padding: 0 6px 0 16px; }
+      .header-icon-btn {
+        display: flex; align-items: center; justify-content: center;
+        width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%;
+        background: transparent; color: var(--text-2); cursor: pointer;
+      }
+      .header-icon-btn:hover { background: rgba(var(--accent-rgb), .08); }
+      #header-new-icon { margin-left: auto; }
+      #header-more-btn[aria-expanded="true"] { background: rgba(var(--accent-rgb), .1); color: var(--accent); }
+      /* 代按的那兩顆藏起來時，圖示也藏；第一顆不在時，下一顆接手把自己推到右邊。 */
+      .site-header:has(#new-chat-btn[hidden]) #header-new-icon { display: none; }
+      .site-header:has(#account-badge[hidden]) #header-history-icon { display: none; }
+      .site-header:has(#new-chat-btn[hidden]) #header-history-icon,
+      .site-header:has(#new-chat-btn[hidden]):has(#account-badge[hidden]) #header-more-btn { margin-left: auto; }
+      /* 新對話、最近照片外面已經有了，選單裡不再重複；固定定位的回報改由選單裡那顆代按。 */
+      #new-chat-btn.btn, #account-badge.btn, #report-btn-spacer.btn, #report-btn.btn { display: none; }
+
+      .site-header .header-actions { display: none; }
+      .site-header .header-actions.is-open {
+        display: flex; flex-direction: column; align-items: stretch; gap: 2px;
+        position: absolute; top: calc(100% + 4px); right: 8px; z-index: 1500;
+        min-width: 180px; padding: 6px; border-radius: 16px;
+        background: var(--card); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(0,0,0,.16);
+      }
+      .header-actions.is-open > :is(#reset-btn, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn, #header-menu-report-btn) {
+        display: flex; width: 100%; height: 44px; justify-content: flex-start; gap: 10px;
+        padding: 0 12px; border: 0; border-radius: 10px;
+        background: transparent; color: var(--text); font-size: 14px; box-shadow: none;
+      }
+      .header-actions.is-open > :is(#reset-btn, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn, #header-menu-report-btn)[hidden] { display: none; }
+      .header-actions.is-open > :is(#reset-btn, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn, #header-menu-report-btn):hover { background: rgba(var(--accent-rgb), .08); }
+      .header-actions.is-open > :is(#reset-btn, #chat-ui-btn, #changelog-btn, #header-settings-btn, #admin-reports-btn, #cost-btn, #theme-toggle-btn, #header-menu-report-btn) svg { width: 14px; height: 14px; }
+      .header-actions.is-open :is(#header-settings-btn, .btn) .btn-label { display: inline; }
+    }
   </style>
-  <script type="module" crossorigin src="./static/index-DODcjXw8.js"></script>
+  <script type="module" crossorigin src="./static/index-oKMIouuV.js"></script>
   <link rel="stylesheet" crossorigin href="./static/index-GVyi8ZjA.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">

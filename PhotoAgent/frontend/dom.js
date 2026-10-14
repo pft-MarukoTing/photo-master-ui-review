@@ -77,6 +77,7 @@ window.PhotoAgentDom = (() => {
     startFullButton: document.querySelector("#start-full-btn"),
     uploadInlineSettingsRow2: document.querySelector("#upload-inline-settings-row-2"),
     resetButton: document.querySelector("#reset-btn"),
+    newChatButton: document.querySelector("#new-chat-btn"),
     headerActions: document.querySelector(".header-actions"),
     // Populated by setupCompactHeaderActions (app.js) on narrow phones only.
     headerActionsSecondary: document.querySelector("#header-actions-secondary"),
@@ -366,6 +367,12 @@ window.PhotoAgentDom = (() => {
     if (els.resetButton) {
       els.resetButton.hidden = name === "upload";
       els.resetButton.disabled = name === "processing";
+    }
+    // 新對話 (#new-chat-btn) follows 回到首頁 exactly: the upload screen is
+    // already where it leads.
+    if (els.newChatButton) {
+      els.newChatButton.hidden = name === "upload";
+      els.newChatButton.disabled = name === "processing";
     }
     // #changelog-btn lives in the global header too, but 版本紀錄 is only
     // relevant while picking settings to run a new job on the upload
