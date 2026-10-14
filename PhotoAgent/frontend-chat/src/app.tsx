@@ -307,12 +307,12 @@ function withoutPreviewIdentity({ preview_person_id, detection_index, preview_jo
 
 const GREETING = "嗨！先選一張想美化的照片（一次一張）。要自己上傳，還是從範例照片挑？";
 
-// 帶著個人化需求按一鍵美化時問的兩條路。只照需求改 = overwrite_prompt：修圖
-// 只拿個人化需求當指令；順便整張美化 = 照分析修完，需求一起加上去（原本的做法）。
-// 只照需求改那條也是 session 裡那張美化卡的標題。按鈕是使用者的話、說明是
-// AI 的話，兩邊都不用「我」，主詞才不會打架。
-const ONLY_PROMPT_LABEL = "只照需求改";
-const WITH_ANALYSIS_LABEL = "順便整張美化";
+// 帶著個人化需求按一鍵美化時問的兩條路。僅依需求修改 = overwrite_prompt：修圖
+// 只拿個人化需求當指令；整體美化 = 照分析修完，需求一起加上去（原本的做法）。
+// 僅依需求修改那條也是 session 裡那張美化卡的標題。按鈕是使用者的話、說明是
+// AI 的話，兩邊都不用「我」，主詞才不會打架。說明的順序跟按鈕一樣，整體美化在前。
+const ONLY_PROMPT_LABEL = "僅依需求修改";
+const WITH_ANALYSIS_LABEL = "整體美化";
 
 function errorText(e: unknown): string {
   if (e instanceof ApiError) {
@@ -1930,9 +1930,9 @@ function PreChat(props: {
             <ClickBubble icon="spark" label="一鍵美化" />
           </UserMsg>
           <AssistantMsg>
-            <p class="chat-text">要只照你的需求改，還是順便整張美化？</p>
+            <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
             <p class="chat-text chat-muted">
-              {ONLY_PROMPT_LABEL}：只動你寫的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：你的需求照做，光線、人像、構圖也一起修。
+              {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。
             </p>
             <div class="chat-choices">
               {[
@@ -2998,9 +2998,9 @@ function SessionView(props: {
     // 跟上傳頁面那一題同一套字，兩邊才不會各講各的。
     working = (
       <AssistantMsg>
-        <p class="chat-text">要只照你的需求改，還是順便整張美化？</p>
+        <p class="chat-text">要整體美化，還是僅依你的需求修改？</p>
         <p class="chat-text chat-muted">
-          {ONLY_PROMPT_LABEL}：只動你寫的地方，其他保持原樣。{WITH_ANALYSIS_LABEL}：你的需求照做，光線、人像、構圖也一起修。
+          {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。
         </p>
         {/* 問題的答案直接接在問題底下，不放下方那排：三顆加上指定對象的頭像，
             手機寬度擠不下，會疊在一起。 */}
