@@ -450,7 +450,9 @@ body {
     radial-gradient(ellipse 900px 520px at 100% 0%, var(--bg-glow-2) 0%, transparent 55%),
     var(--bg);
   background-attachment: fixed;
-  font-family: 'Inter', -apple-system, system-ui, sans-serif;
+  /* 跟對話模式（frontend-chat/src/chat.css 的 body）同一組：Inter 顯示英數，Noto Sans TC 顯示中文。
+     Noto Sans TC 由兩邊 index.html 的 Google Fonts 連結載入。 */
+  font-family: Inter, 'Noto Sans TC', system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--text);
   --scrollbar-accent-rgb: 147,51,234;
   -webkit-font-smoothing: antialiased;

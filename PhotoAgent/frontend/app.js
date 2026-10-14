@@ -1536,40 +1536,7 @@
     refreshCompactUploadSelectors = refresh;
   }
 
-  // Below 900px (the same tablet/desktop line isSidePanelLayoutEnabled's
-  // callers use to drop the analysis panel below the preview instead of
-  // beside it), a shrunk .logo plus every .header-actions button (each
-  // previously squeezed down to an icon-only pill to fit) still crowded a
-  // narrow viewport once #account-badge/#admin-reports-btn were also
-  // showing. Move everything except #report-btn-spacer (the real
-  // #report-btn stays fixed-position, tracking that spacer regardless of
-  // where its siblings go) and #theme-toggle-btn (kept pinned directly to
-  // that spacer's left on every layout, not just desktop) down into
-  // #header-actions-secondary instead, so the rest can show their full
-  // label again -- and back into .header-actions once the viewport is wide
-  // enough to hold them there normally.
-  function setupCompactHeaderActions() {
-    const row = els.headerActions;
-    const secondRow = els.headerActionsSecondary;
-    const spacer = els.reportBtnSpacer;
-    if (!row || !secondRow || !spacer) return;
-    const menuReport = document.getElementById("header-menu-report-btn");
-    const items = Array.from(row.children).filter((el) => el !== spacer && el !== els.themeToggleBtn && el !== menuReport);
-    if (!items.length) return;
-    // 手機（≤600px）不搬：那裡 .header-actions 變成 ⋯ 選單（setupHeaderMenu）。
-    const mql = window.matchMedia("(min-width: 601px) and (max-width: 900px)");
-    const sync = () => {
-      if (mql.matches) items.forEach((el) => secondRow.appendChild(el));
-      // Back in front of 主題, not just the spacer: 主題 stays in this row
-      // throughout, so inserting before the spacer alone would leave it
-      // first. Order matches the chat page: ... 主題 · 回報.
-      else items.forEach((el) => row.insertBefore(el, els.themeToggleBtn || spacer));
-    };
-    mql.addEventListener("change", sync);
-    sync();
-  }
-
-  // 手機 header（≤600px）跟對話模式一樣：新對話、最近照片兩顆圖示留在外面（代按
+  // 窄 header（手機，以及攤開放不下的平板；斷點見 index.html <style>）跟對話模式一樣：新對話、最近照片兩顆圖示留在外面（代按
   // #new-chat-btn / #account-badge），其他按鈕收進 ⋯ 展開的選單（index.html <style>）。
   // 選了哪一項選單就收起來；點外面或按 Esc 也收。
   function setupHeaderMenu() {
@@ -3360,11 +3327,10 @@
   // already has both skins defined.
   const GALLERY_CARD_STYLE_KEY = "photoagent.galleryCardStyle";
   const GALLERY_LAYOUT_MODES = ["auto", "grid", "collage"];
-  // One shared MediaQueryList (same pattern as setupCompactHeaderActions's
-  // own `mql` above) rather than calling matchMedia() per read. Wrapped in
-  // try/catch and null-guarded everywhere below because this one runs at
-  // module scope, unlike setupCompactHeaderActions's, which sits inside a
-  // function: an exception there would cost that one feature, an exception
+  // One shared MediaQueryList rather than calling matchMedia() per read.
+  // Wrapped in try/catch and null-guarded everywhere below because this one
+  // runs at module scope, not inside a setup function: an exception in one of
+  // those would cost that one feature, an exception
   // here would abort the rest of this file's top-level evaluation and take
   // the whole app down with it. Null just means 預設 resolves as 格狀 and
   // stops following width -- both explicit modes, and everything else on
@@ -13572,7 +13538,6 @@
       location.href = `chat/${location.search}${caseKey ? `#case=${encodeURIComponent(caseKey)}` : ""}`;
     });
   }
-  setupCompactHeaderActions();
   setupHeaderMenu();
   // Reload, close, or any other way off the page: the browser's own leave
   // prompt (its wording cannot be changed) when review edits are unsent.
