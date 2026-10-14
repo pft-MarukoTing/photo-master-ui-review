@@ -8,7 +8,6 @@ import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
 import { downloadImage, executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
 import { Icon } from "./icons";
 import { ConfirmModal } from "./home";
-import { ModeSwitch, type PanelMode } from "./chat";
 import type { VNode } from "preact";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
@@ -58,6 +57,9 @@ export function StepIndicator({ step, state }: { step: number; state: StepState 
 
 const EXPAND = "M9 3H5a2 2 0 0 0-2 2v4M15 3h4a2 2 0 0 1 2 2v4M9 21H5a2 2 0 0 1-2-2v-4M15 21h4a2 2 0 0 0 2-2v-4";
 const RESTORE = "M9 3v4a2 2 0 0 1-2 2H3M15 3v4a2 2 0 0 0 2 2h4M9 21v-4a2 2 0 0 0-2-2H3M15 21v-4a2 2 0 0 1 2-2h4";
+
+// 手機和直拿的平板（跟 chat.css 那段 @media 同一個條件）：點照片開大圖檢視。
+const SPLIT_LAYOUT = "(max-width:600px),(max-width:1200px) and (orientation:portrait)";
 
 // The job to show for a version: the first one that did not fail.
 export function versionJob(v: Version): string {
@@ -130,12 +132,9 @@ interface CanvasProps {
   // 兩邊才不會各講各的（也不會各自跑一套輪播）。
   busy?: { title: string } | null;
   onSelect: (v: Version) => void;
-  // 手機和直拿的平板：照片左上角那顆「第 N 版 ▾」，開大圖檢視切版本。桌機用不到，
+  // 手機和直拿的平板：右上角那顆「第 N 版 ⌄」和點照片本身，都開大圖檢視切版本。桌機用不到，
   // 那邊有下面的美化紀錄；按鈕一直都在，只是桌機的 CSS 把它收起來。
   onViewer?: () => void;
-  // 手機和直拿的平板：照片左上、緊接在「第 N 版」旁邊的「對話｜面板」，對話那張就不用再放標頭。
-  // 桌機一樣由 CSS 收起來，那邊在對話框標頭上。
-  panelMode?: PanelMode;
 }
 
 // 下載後跟面板模式一樣：成功跳「已下載完成。」，失敗跳「下載失敗，請稍後再試。」。
@@ -149,7 +148,7 @@ function useDownload(): [(job: string, base: string) => void, VNode | null] {
   return [start, el];
 }
 
-export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer, panelMode }: CanvasProps) {
+export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
   const [download, downloadNotice] = useDownload();
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
@@ -181,6 +180,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   const shownJob = ready ? job : held && held.photo === photo.photo_id ? held.job : null;
   // 處理中一律看原圖：美化中擺上一版的成果，會讓人以為那就是正在等的這一張。
   const generated = !!shownJob && showGenerated && !busy && !originPicked;
+  // 剛進來、這一版的成果還沒到齊，手上也沒有上一版可以先擺：原圖先藏著（位置留著），
+  // 不然會先看到原圖、再跳成成果，像是畫面換了一張。
+  const arriving = !!job && !shownJob && showGenerated && !busy && !originPicked;
 
   // A new version always opens on the After side.
   useEffect(() => {
@@ -373,82 +375,91 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               <div id="compare-hint" class="compare-hint" hidden={!!busy}>
                 {generated ? "After" : "Before"}
               </div>
-              {panelMode && <ModeSwitch mode={panelMode} class="canvas-mode-switch" />}
-              {onViewer && (
-                <button type="button" class="canvas-version-btn" onClick={onViewer} aria-label="看大圖、切換版本">
-                  {generated && current ? `第 ${current.ordinal} 版` : "原圖"}
-                  <Icon name="expand" size={14} />
-                </button>
-              )}
-              <div class="canvas-actions">
-                {/* 處理中這兩顆指的都是上一版，但畫面上蓋著的是原圖 + 處理中那一層，
-                    按了看不出任何變化 -- 這段期間就收起來。全螢幕留著，它和哪一版無關。 */}
-                {job && !busy && (
-                  <button
-                    id="compare-toggle-btn"
-                    class="canvas-btn"
-                    type="button"
-                    disabled={originPicked}
-                    title="compare"
-                    aria-label={generated ? "查看原始照片" : "查看美化結果"}
-                    onClick={() => setShowGenerated(!showGenerated)}
-                  >
-                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                      <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2" />
-                      <path d="M12 4v16" stroke="currentColor" stroke-width="2" />
-                      <path d="M3 7h9V4" fill="currentColor" opacity=".9" stroke="none" />
-                    </svg>
+              {/* 手機上「第 N 版」和比較、下載併成一顆膠囊，固定在照片那段的右上角；桌機 display:contents，
+                  canvas-actions 照舊是標頭那排的一格。 */}
+              <div class="canvas-tools">
+                {onViewer && (
+                  <button type="button" class="canvas-version-btn" onClick={onViewer} aria-label="看大圖、切換版本">
+                    {generated && current ? `第 ${current.ordinal} 版` : "原圖"}
+                    <Icon name="caret" size={14} />
                   </button>
                 )}
-                <button
-                  id="compare-fullscreen-btn"
-                  class="canvas-btn"
-                  type="button"
-                  title={fullscreen ? "back to original window" : "full screen"}
-                  aria-label={fullscreen ? "返回原視窗" : "全螢幕檢視比較"}
-                  onClick={() => setFullscreen(!fullscreen)}
-                >
-                  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                    <path
-                      d={fullscreen ? RESTORE : EXPAND}
-                      stroke="currentColor"
-                      stroke-width="2"
-                      stroke-linecap="round"
-                      stroke-linejoin="round"
-                    />
-                  </svg>
-                </button>
-                {/* 看原圖時這顆下載的還是那一版的成果，對不上畫面 -- 先收起來。 */}
-                {job && !busy && !originPicked && (
-                  <div class="canvas-btn-wrap" id="download-menu-wrap">
-                    <a
-                      id="download-link"
+                <div class="canvas-actions">
+                  {/* 處理中這兩顆指的都是上一版，但畫面上蓋著的是原圖 + 處理中那一層，
+                      按了看不出任何變化 -- 這段期間就收起來。全螢幕留著，它和哪一版無關。 */}
+                  {job && !busy && (
+                    <button
+                      id="compare-toggle-btn"
                       class="canvas-btn"
-                      href={urls.resultImage(job)}
-                      download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
-                      }}
-                      title="下載結果"
-                      aria-label="下載結果"
+                      type="button"
+                      disabled={originPicked}
+                      title="compare"
+                      aria-label={generated ? "查看原始照片" : "查看美化結果"}
+                      onClick={() => setShowGenerated(!showGenerated)}
                     >
                       <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                        <path
-                          d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
-                          stroke="currentColor"
-                          stroke-width="2"
-                          stroke-linecap="round"
-                          stroke-linejoin="round"
-                        />
+                        <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="2" />
+                        <path d="M12 4v16" stroke="currentColor" stroke-width="2" />
+                        <path d="M3 7h9V4" fill="currentColor" opacity=".9" stroke="none" />
                       </svg>
-                    </a>
-                  </div>
-                )}
+                    </button>
+                  )}
+                  <button
+                    id="compare-fullscreen-btn"
+                    class="canvas-btn"
+                    type="button"
+                    title={fullscreen ? "back to original window" : "full screen"}
+                    aria-label={fullscreen ? "返回原視窗" : "全螢幕檢視比較"}
+                    onClick={() => setFullscreen(!fullscreen)}
+                  >
+                    <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                      <path
+                        d={fullscreen ? RESTORE : EXPAND}
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  {/* 看原圖時這顆下載的還是那一版的成果，對不上畫面 -- 先收起來。 */}
+                  {job && !busy && !originPicked && (
+                    <div class="canvas-btn-wrap" id="download-menu-wrap">
+                      <a
+                        id="download-link"
+                        class="canvas-btn"
+                        href={urls.resultImage(job)}
+                        download={`photomaster_${photo.photo_id}_v${current!.ordinal}.jpg`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          download(job, `photomaster_${photo.photo_id}_v${current!.ordinal}`);
+                        }}
+                        title="下載結果"
+                        aria-label="下載結果"
+                      >
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                          <path
+                            d="M12 3v13m0 0l-4.5-4.5M12 16l4.5-4.5M4 21h16"
+                            stroke="currentColor"
+                            stroke-width="2"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                          />
+                        </svg>
+                      </a>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            <div class="photo-frame">
-              <img id="original-img" class="compare-img compare-img-original" src={source} alt="原始照片" />
+            <div class="photo-frame" onClick={() => onViewer && matchMedia(SPLIT_LAYOUT).matches && onViewer()}>
+              <img
+                id="original-img"
+                class="compare-img compare-img-original"
+                src={source}
+                alt="原始照片"
+                style={arriving ? { visibility: "hidden" } : undefined}
+              />
               {shownJob && (
                 <img id="generated-img" class="compare-img compare-img-generated" src={urls.resultImage(shownJob)} alt="美化結果" />
               )}

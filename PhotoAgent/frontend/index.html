@@ -467,6 +467,20 @@
     }
     .step-indicator-slot > .ap-step-indicator { flex: 1; min-width: 0; }
     .step-indicator-slot > .mode-switch { margin: -3px 0 1px; }
+    /* 面板模式的按鈕大多是 .btn-secondary（卡片底＋細框＋小圓角），共用的
+       灰軌道膠囊放在這裡像外來的。只在這裡改成同一套外框，目前那段用淡主色
+       填色，跟對話頁把手旁那顆一致。總高維持 36px（1px 框＋2px 內距＋30px）。 */
+    .step-indicator-slot > .mode-switch {
+      padding: 2px;
+      border: 1px solid var(--border-2);
+      border-radius: 10px;
+      background: var(--card-2);
+    }
+    .step-indicator-slot > .mode-switch .mode-switch-opt { border-radius: 8px; }
+    .step-indicator-slot > .mode-switch .mode-switch-opt.is-active {
+      background: rgba(var(--accent-rgb), .14);
+      box-shadow: none;
+    }
     /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
     body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {

@@ -19,6 +19,7 @@ import {
   PROPOSAL_CHOICES,
   ProposalCard,
   QuickBar,
+  ModeSwitch,
   ResultCard,
   PhotoViewer,
   SamplePicker,
@@ -3139,10 +3140,11 @@ function SessionView(props: {
                 busy={busyCopy}
                 onSelect={props.onSelectVersion}
                 onViewer={() => setViewing(true)}
-                panelMode={props.panelMode}
               />
               <div class="results-analysis-slot" id="results-analysis-slot">
                 <SplitGrip />
+                {/* 手機上對話那張不放標頭，「對話｜面板」縮小放在把手那排右邊；桌機收起來，用標頭上那顆。 */}
+                <ModeSwitch mode={props.panelMode} class="sheet-mode-switch" />
                 <ChatPanel
                   sub={sub}
                   panelMode={props.panelMode}

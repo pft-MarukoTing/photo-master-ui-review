@@ -1391,9 +1391,10 @@ div.chat-proposal-row{cursor:default}
 /* ---------- 手機對話頁（≤600，以及直拿的平板）----------
    照片在上、對話在下，各佔 header 以下的一段，比例由 --split（照片那段，0–1）決定，
    中間的把手可以拖（SplitGrip）。對話那張往上蓋住照片底部 --split-overlap，蓋住的那段
-   半透明加模糊，往下才轉成實心。照片上的按鈕縮成角落的半透明圓鈕；美化紀錄收進左上的
-   「第 N 版」，點了開大圖檢視切版本。上面的流程列拿掉。桌機用不到的把手和版本鈕在這裡之外都收起來。 */
-.split-grip,.canvas-version-btn,.canvas-mode-switch{display:none}
+   半透明加模糊，往下才轉成實心。照片上的按鈕縮成右上角的半透明膠囊；美化紀錄收進
+   「第 N 版」，點了或點照片本身都開大圖檢視切版本。「對話｜面板」在把手那排右邊。上面的流程列拿掉。桌機用不到的把手和版本鈕在這裡之外都收起來。 */
+.split-grip,.canvas-version-btn,.sheet-mode-switch{display:none}
+.canvas-tools{display:contents}
 @media (max-width:600px),(max-width:1200px) and (orientation:portrait){
   .chat-flow-slot{display:none}
   /* 舊版只在 ≤900 把 .results-body 轉直排；901–1200 直拿的平板還是橫排，
@@ -1423,25 +1424,25 @@ div.chat-proposal-row{cursor:default}
   .results-canvas-row.showing-analysis #compare-hint,
   .results-canvas-row.showing-analysis #compare-fullscreen-btn{display:none}
 
-  /* 角落的按鈕浮在照片上：左上版本、右上比較和下載。 */
-  /* 左上「對話｜面板」在最左、緊接「第 N 版」，兩顆同一區、各自一顆；右上比較和下載。 */
-  .results-canvas-row.showing-analysis .canvas-header-row{position:absolute;inset:var(--sp-3) var(--sp-3) auto;z-index:2;margin:0;padding:0;
-    display:flex;align-items:center;gap:var(--sp-2);pointer-events:none}
+  /* 「第 N 版 ⌄｜比較｜下載」併成一顆膠囊，固定在照片那段的右上角，不跟著圖的寬窄移動。 */
+  .results-canvas-row.showing-analysis .canvas-header-row{position:absolute;inset:var(--sp-3) var(--sp-3) auto auto;z-index:2;margin:0;padding:0;
+    display:flex;align-items:center;pointer-events:none}
   .results-canvas-row.showing-analysis .canvas-header-row>*{pointer-events:auto}
-  .canvas-version-btn{display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:0;border-radius:16px;
-    background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--n100);
-    font:inherit;font-size:13px;font-weight:600;cursor:zoom-in}
-  .canvas-version-btn svg{color:var(--n64)}
-  .results-canvas-row.showing-analysis .canvas-actions{gap:var(--sp-2);margin-left:auto}
-  /* 跟旁邊的浮鈕同一種半透明白、同樣 36px 高；空間小，圖示收掉。目前那段（對話）用主色淡底
-     ＋主色字，不用實心白，免得在白底上糊成一片。 */
-  .canvas-mode-switch{display:inline-flex;padding:3px;background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-  .canvas-mode-switch .mode-switch-opt{height:30px;padding:0 12px}
-  .canvas-mode-switch .mode-switch-opt svg{display:none}
-  .canvas-mode-switch .mode-switch-opt.is-active{background:rgba(var(--accent-rgb),.12);box-shadow:none}
-  .canvas-mode-switch a.mode-switch-opt{color:var(--n100)}
-  .results-canvas-row.showing-analysis .canvas-actions .canvas-btn{width:36px;height:36px;border:0;border-radius:50%;
-    background:rgba(255,255,255,.82);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);color:var(--n100);box-shadow:none}
+  /* 膠囊退到背景裡：32px 高、比較透的白底加模糊（照片再花也讀得到），字和圖示用中灰、
+     不加粗。裡面的鈕不再各自有底，中間用一條短細線隔開；處理中比較和下載收起來，
+     就只剩「第 N 版」一段。 */
+  .results-canvas-row.showing-analysis .canvas-tools{display:flex;align-items:center;height:32px;border-radius:16px;overflow:hidden;
+    background:rgba(255,255,255,.58);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+  .canvas-version-btn{display:flex;align-items:center;gap:2px;height:100%;padding:0 8px 0 12px;border:0;background:none;
+    color:var(--n74);font:inherit;font-size:12px;font-weight:500;cursor:pointer}
+  .canvas-version-btn svg{color:var(--n54)}
+  .results-canvas-row.showing-analysis .canvas-actions{display:flex;height:100%;gap:0}
+  .results-canvas-row.showing-analysis .canvas-actions .canvas-btn{width:34px;height:32px;border:0;border-radius:0;box-shadow:none;
+    background:linear-gradient(rgba(51,20,31,.1),rgba(51,20,31,.1)) left center/1px 14px no-repeat;
+    -webkit-backdrop-filter:none;backdrop-filter:none;color:var(--n64);transform:none}
+  .results-canvas-row.showing-analysis .canvas-actions .canvas-btn svg{width:16px;height:16px}
+  .results-canvas-row.showing-analysis .canvas-tools :is(.canvas-version-btn,.canvas-btn):active{background-color:rgba(var(--accent-rgb),.12)}
+  .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame{cursor:zoom-in}
 
   /* 美化項目那排標籤放在被對話蓋住的那段上面；照片縮到最小那段時先收起來。 */
   .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .recipe-tags{bottom:calc(var(--split-overlap) + var(--sp-2))}
@@ -1469,8 +1470,15 @@ div.chat-proposal-row{cursor:default}
   .split-grip:focus-visible i{outline:2px solid var(--accent);outline-offset:4px}
 
   .results-analysis-slot>.chat-panel{flex:1 1 auto;height:auto;min-height:0;border-left:0;padding-left:0}
-  /* 「對話｜面板」改浮在照片上緣（.canvas-mode-switch），對話那張不放標頭，訊息直接從把手下面開始。 */
+  /* 對話那張不放標頭，訊息直接從把手下面開始；「對話｜面板」縮小放在把手那排右邊，
+     高度收在把手那排（--split-overlap）裡面，空間小，縮成小一號的切換鈕，圖示收掉。
+     卡片上再墊白底會像多貼一層，改成淡淡的主色填色，跟其他地方的強調方式一致。 */
   .results-analysis-slot>.chat-panel>.chat-panel-head{display:none}
+  .sheet-mode-switch{display:inline-flex;position:absolute;top:calc((var(--split-overlap) - 26px) / 2);right:var(--sp-3);z-index:1;padding:2px}
+  .sheet-mode-switch .mode-switch-opt{height:22px;padding:0 10px;border-radius:11px;font-size:12px}
+  .sheet-mode-switch{background:rgba(var(--accent-rgb),.06)}
+  .sheet-mode-switch .mode-switch-opt.is-active{background:rgba(var(--accent-rgb),.14);box-shadow:none}
+  .sheet-mode-switch .mode-switch-opt svg{display:none}
   .results-analysis-slot>.chat-panel .chat-timeline{padding:var(--sp-1) var(--sp-4) var(--sp-3);
     -webkit-mask:linear-gradient(to bottom,transparent 0,#000 18px);mask:linear-gradient(to bottom,transparent 0,#000 18px)}
   .results-analysis-slot>.chat-panel .chat-composer{padding-bottom:calc(var(--sp-3) + env(safe-area-inset-bottom))}

@@ -552,8 +552,10 @@
       /* Two-line steps here (circle stacked over name), so the slot is
          taller than the base 54px (measured: 73px box + the same 4px
          margin) -- kept in sync so the viewport-height screens subtract the
-         right amount at this breakpoint too. */
-      :root { --step-indicator-h: 77px; }
+         right amount at this breakpoint too.
+         「對話｜面板」在這裡另起一行放在步驟上面（見下面），所以再加上
+         它那行：padding-top 從 20 收到 12，+36 開關 +12 間距，共 117px。 */
+      :root { --step-indicator-h: 117px; }
       .ap-step-indicator { align-items: flex-start; }
       .ap-step {
         flex-direction: column;
@@ -562,10 +564,15 @@
       }
       .ap-step-name { font-size: 15px; }
       .ap-step-line { margin: 14px 14px 0; }
-      /* 窄螢幕步驟改直排，空間不多：開關收掉圖示、縮小左右留白。 */
-      .step-indicator-slot:not([hidden]) { gap: 12px; }
-      .step-indicator-slot > .mode-switch .mode-switch-opt { padding: 0 10px; }
-      .step-indicator-slot > .mode-switch svg { display: none; }
+      /* 步驟改直排後，開關跟它們擠在同一行會像第五個步驟。改成在步驟
+         上面自己一行、靠右，跟桌機一樣在右邊。 */
+      .step-indicator-slot:not([hidden]) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding-top: 12px;
+      }
+      .step-indicator-slot > .mode-switch { order: -1; align-self: flex-end; margin: 0; }
     }
 
     /* ── Shared collapsible-card shell for #ap-review-panel, the merged
@@ -4347,8 +4354,8 @@
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
     body.is-opening-case > main { visibility: hidden; }
   </style>
-  <script type="module" crossorigin src="./static/index--l0wuTd7.js"></script>
-  <link rel="stylesheet" crossorigin href="./static/index-D62HGnir.css">
+  <script type="module" crossorigin src="./static/index-DODcjXw8.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-GVyi8ZjA.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
   <!-- The attributes above are caramel, the fallback, so the common first load
