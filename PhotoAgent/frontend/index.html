@@ -4427,6 +4427,51 @@
     @media (max-width: 600px) {
       .site-header .header-actions.is-open { right: 8px; min-width: 180px; }
     }
+
+    /* ── 手機（≤600px）照片上的按鈕：跟對話模式一樣 ──
+       「第 N 版 ⌄｜比較｜下載」併成右上角一顆半透明膠囊；美化紀錄條、Before/After 字樣、
+       全螢幕鈕收起來，改由點照片或「第 N 版」開 #photo-viewer（大圖、按住看原圖、下載、
+       切換美化紀錄）。膠囊不做 overflow:hidden，下載和分析框的選單才不會被切掉；
+       所以按下去的回饋用字色，不用底色（底色會露出方角）。
+       z-index 壓在確認／提示彈窗（1000 起）底下，在檢視裡觸發的確認才看得到。 */
+    .canvas-version-btn { display: none; }
+    .canvas-tools { display: contents; }
+    #photo-viewer { z-index: 999; }
+    @media (max-width: 600px) {
+      .version-strip, #compare-hint, #compare-fullscreen-btn { display: none !important; }
+      .canvas-header-row {
+        top: 8px; right: 8px; left: auto;
+        display: flex; align-items: center; gap: 8px;
+        pointer-events: none;
+      }
+      .canvas-header-row > * { pointer-events: auto; }
+      .canvas-tools {
+        display: flex; align-items: center; height: 32px; border-radius: 16px;
+        background: rgba(var(--glass-rgb), .58);
+        -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      }
+      .canvas-version-btn {
+        display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 8px 0 12px;
+        border: 0; background: none; color: var(--n74);
+        font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer;
+      }
+      .canvas-version-btn svg { color: var(--n54); }
+      .canvas-header-row .canvas-actions { display: flex; height: 100%; gap: 0; }
+      .canvas-header-row .canvas-btn-wrap { height: 100%; }
+      .canvas-header-row .canvas-actions .canvas-btn {
+        width: 34px; height: 32px; border: 0; border-radius: 0; box-shadow: none;
+        background: linear-gradient(rgba(var(--on-surface-rgb), .12), rgba(var(--on-surface-rgb), .12)) left center / 1px 14px no-repeat;
+        -webkit-backdrop-filter: none; backdrop-filter: none;
+        color: var(--n64); transform: none;
+      }
+      .canvas-header-row .canvas-actions .canvas-btn svg { width: 16px; height: 16px; }
+      .canvas-header-row :is(.canvas-version-btn, .canvas-btn):active,
+      .canvas-header-row .canvas-btn.is-active { color: var(--accent); }
+      .compare-card:not(.is-fullscreen) .photo-frame { cursor: zoom-in; }
+    }
+    /* 一版生了好幾張時，檢視下排每格右上角標第幾張（沿用美化紀錄條的小標）。 */
+    #photo-viewer .version-viewer-tile { position: relative; }
+    #photo-viewer .version-tile-run { top: 2px; bottom: auto; right: 2px; }
   </style>
 </head>
 <body>
@@ -5703,6 +5748,15 @@
                      the current view by setCompareView (results.js). -->
                 <div id="compare-hint" class="compare-hint">After</div>
                 <div id="run-count-label" class="run-count-label" hidden></div>
+                <!-- 手機（≤600）上「第 N 版 ⌄｜比較｜下載」併成一顆膠囊（同對話模式）；
+                     其他寬度 .canvas-tools 是 display:contents，版本鈕收起來。 -->
+                <div class="canvas-tools">
+                <button id="canvas-version-btn" class="canvas-version-btn" type="button" aria-label="看大圖、切換版本">
+                  <span id="canvas-version-label">看大圖</span>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                </button>
                 <div class="canvas-actions">
                   <div class="canvas-btn-wrap" id="boxes-type-menu-wrap">
                     <button id="boxes-toggle-btn" class="canvas-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="選擇要顯示的分析框類型" title="選擇要顯示的分析框類型" hidden>
@@ -5760,6 +5814,7 @@
                       <button type="button" id="download-all-runs-btn" class="download-menu-item">全部下載（ZIP）</button>
                     </div>
                   </div>
+                </div>
                 </div>
               </div>
               <div class="photo-frame">
@@ -6493,6 +6548,35 @@
      Same shared backdrop+box modal shape as #changelog-modal above; the grid
      body reuses .version-tile/.version-origin-tile wholesale at a larger size
      (see .version-strip-preview-modal-grid, styles.css). -->
+<!-- 手機（≤600）的大圖檢視，跟對話模式同一套 .version-viewer 樣式：點照片或照片上的
+     「第 N 版」打開。上面是第幾版和關閉；下面「按住看原圖」、下載，和一排美化紀錄。
+     由 app.js 的 openPhotoViewer／renderPhotoViewer 填內容。 -->
+<div id="photo-viewer" class="version-viewer" role="dialog" aria-modal="true" aria-labelledby="photo-viewer-title" hidden>
+  <div class="version-viewer-head">
+    <span id="photo-viewer-title" class="version-viewer-title"></span>
+    <button id="photo-viewer-close" type="button" class="version-viewer-btn" aria-label="關閉">
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </button>
+  </div>
+  <div id="photo-viewer-stage" class="version-viewer-stage">
+    <img id="photo-viewer-original" alt="原始照片" hidden>
+    <img id="photo-viewer-result" alt="美化結果" hidden>
+  </div>
+  <div class="version-viewer-foot">
+    <div id="photo-viewer-actions" class="version-viewer-actions">
+      <button id="photo-viewer-hold" type="button" class="version-viewer-hold" aria-pressed="false">按住看原圖</button>
+      <button id="photo-viewer-download" type="button" class="version-viewer-btn" aria-label="下載" title="下載">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 4v11M7 10l5 5 5-5M5 20h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </div>
+    <div id="photo-viewer-track" class="version-viewer-track" role="tablist" aria-label="這張照片的美化紀錄"></div>
+  </div>
+</div>
+
 <div id="version-strip-preview-modal" class="error-modal" hidden>
   <div class="error-modal-backdrop" data-close="1"></div>
   <div class="error-modal-box version-strip-preview-modal-box" role="dialog" aria-modal="true" aria-labelledby="version-strip-preview-modal-title">

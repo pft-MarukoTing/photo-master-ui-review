@@ -11390,6 +11390,7 @@
     versionStripCurrentIdx = null;
     hideVersionTilePreview();
     closeVersionStripPreviewModal();
+    syncPhotoViewer();
   }
 
   // One tile per result image, grouped under its version's label, oldest
@@ -11564,6 +11565,7 @@
       // only just been appended and the track has no scroll extent yet.
       if (isCurrent && reveal) requestAnimationFrame(() => revealVersionTile(tile));
     });
+    syncPhotoViewer();
   }
 
   // Touch has no hover, so .version-tile-preview turns itself off below the
@@ -11634,6 +11636,189 @@
 
   function closeVersionStripPreviewModal() {
     if (els.versionStripPreviewModal) els.versionStripPreviewModal.hidden = true;
+  }
+
+  // ── 手機（≤600）的照片檢視，跟對話模式的 VersionViewer 同一套 ──
+  // 美化紀錄條在手機收起來，照片右上角的膠囊只剩「第 N 版 ⌄｜比較｜下載」；
+  // 點照片或「第 N 版」打開 #photo-viewer：大圖、按住看原圖、下載，下排切換美化紀錄。
+  // 選哪一張走的是美化紀錄條同一條路（pickVersionStripOrigin／selectRunAt），
+  // 關掉檢視以後照片停在剛選的那張（或原圖），跟在檢視裡看到的一樣。
+  const photoViewerMedia = window.matchMedia("(max-width: 600px)");
+  let photoViewerOpen = false;
+  let photoViewerHolding = false;
+  let photoViewerBusy = false;
+
+  // 分析完還沒美化（單張的 pendingResultsActive、批次的 analyzed）只有原圖；
+  // 那時 #generated-img 可能還留著上一張的圖，不能拿來當結果。
+  function photoViewerHasResult() {
+    return !!els.generatedImg?.getAttribute("src")
+      && !pendingResultsActive
+      && !(currentBatchRecord && currentBatchRecord.status === "analyzed");
+  }
+
+  function photoViewerCurrentRun() {
+    return versionStripRuns && versionStripCurrentIdx != null ? versionStripRuns[versionStripCurrentIdx] : null;
+  }
+
+  // 畫面上是不是原圖：從美化紀錄挑了原圖、還沒有結果，或 compare 切到 Before 都算。
+  function photoViewerShowingOriginal() {
+    return versionStripOriginPicked
+      || !photoViewerHasResult()
+      || !els.compareCard?.classList.contains("showing-generated");
+  }
+
+  // 膠囊上那顆的字：有美化紀錄時是「第 N 版」，畫面上是原圖時是「原圖」，沒有紀錄就是「看大圖」。
+  function syncCanvasVersionBtn() {
+    if (!els.canvasVersionLabel) return;
+    const run = photoViewerCurrentRun();
+    els.canvasVersionLabel.textContent = run && photoViewerShowingOriginal()
+      ? "原圖"
+      : run && run.versionTotal ? `第 ${run.versionNumber} 版` : "看大圖";
+  }
+
+  function syncPhotoViewer() {
+    syncCanvasVersionBtn();
+    if (photoViewerOpen) renderPhotoViewer();
+  }
+
+  function buildPhotoViewerTile(src, label, isCurrent, onPick) {
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "version-viewer-tile";
+    tile.classList.toggle("is-current", isCurrent);
+    tile.setAttribute("role", "tab");
+    tile.setAttribute("aria-selected", isCurrent ? "true" : "false");
+    const img = document.createElement("img");
+    img.src = src;
+    img.alt = "";
+    img.loading = "lazy";
+    const span = document.createElement("span");
+    span.textContent = label;
+    tile.append(img, span);
+    tile.addEventListener("click", onPick);
+    return tile;
+  }
+
+  async function pickPhotoViewerRun(idx) {
+    if (photoViewerBusy) return;
+    // 畫面上就是這張：selectRunAt 不會動，從原圖切回結果在這裡做（同美化紀錄條）。
+    if (idx === currentRunIndex) {
+      if (versionStripOriginPicked) clearVersionStripOriginPick();
+      if (photoViewerShowingOriginal()) setCompareView(true);
+      renderPhotoViewer();
+      return;
+    }
+    photoViewerBusy = true;
+    renderPhotoViewer();
+    try {
+      await selectRunAt(idx);
+    } finally {
+      photoViewerBusy = false;
+      syncPhotoViewer();
+    }
+  }
+
+  function renderPhotoViewer() {
+    if (!els.photoViewer) return;
+    const runs = versionStripRuns;
+    const run = photoViewerCurrentRun();
+    const hasResult = photoViewerHasResult();
+    const showOriginal = photoViewerShowingOriginal();
+    const originalSrc = els.originalImg?.getAttribute("src") || "";
+    const resultSrc = hasResult ? els.generatedImg.getAttribute("src") : "";
+
+    const title = showOriginal ? "原圖" : run && run.versionTotal ? `第 ${run.versionNumber} 版` : "美化結果";
+    els.photoViewerTitle.textContent = photoViewerHolding ? "原圖" : title;
+    const notes = [];
+    if (!showOriginal && run && run.runsInVersion > 1) notes.push(`第 ${run.runInVersion}／${run.runsInVersion} 張`);
+    if (run && run.versionTotal) notes.push(`共 ${run.versionTotal} 版`);
+    if (notes.length) {
+      const small = document.createElement("small");
+      small.textContent = notes.join(" · ");
+      els.photoViewerTitle.append(small);
+    }
+    els.photoViewer.setAttribute("aria-label", `${title}大圖`);
+
+    els.photoViewerOriginal.src = originalSrc;
+    els.photoViewerOriginal.hidden = !originalSrc || (!showOriginal && !photoViewerHolding);
+    if (resultSrc) els.photoViewerResult.src = resultSrc;
+    else els.photoViewerResult.removeAttribute("src");
+    els.photoViewerResult.alt = `${title}美化結果`;
+    els.photoViewerResult.hidden = !resultSrc || showOriginal || photoViewerHolding;
+
+    // 看結果時才有「按住看原圖」和下載；停在原圖時兩顆都收起來（同對話模式）。
+    const canHold = !showOriginal && !!originalSrc;
+    const canDownload = !showOriginal && !!lastResult;
+    els.photoViewerHold.hidden = !canHold;
+    els.photoViewerHold.classList.toggle("is-on", photoViewerHolding);
+    els.photoViewerHold.setAttribute("aria-pressed", photoViewerHolding ? "true" : "false");
+    els.photoViewerDownload.hidden = !canDownload;
+    els.photoViewerActions.hidden = !canHold && !canDownload;
+
+    const track = els.photoViewerTrack;
+    track.textContent = "";
+    track.hidden = !runs;
+    track.classList.toggle("is-busy", photoViewerBusy);
+    if (!runs) return;
+    const originThumb = els.versionStripTrack?.querySelector(".version-origin-tile img")?.getAttribute("src")
+      || originalImgThumbUrl || originalSrc;
+    track.append(buildPhotoViewerTile(originThumb, "原圖", showOriginal, () => {
+      if (!photoViewerShowingOriginal()) pickVersionStripOrigin();
+      renderPhotoViewer();
+    }));
+    runs.forEach((r, idx) => {
+      const isCurrent = !showOriginal && idx === versionStripCurrentIdx;
+      const tile = buildPhotoViewerTile(
+        resultThumbnailUrl(r.jobId, { run: r.sourceRun }),
+        r.versionTotal ? `第 ${r.versionNumber} 版` : `第 ${idx + 1} 張`,
+        isCurrent,
+        () => pickPhotoViewerRun(idx),
+      );
+      tile.disabled = !isSelectableRun(r);
+      tile.setAttribute("aria-label", r.versionTotal ? `第 ${r.versionNumber} 版，${runSwitcherLabel(runs, idx)}` : runSwitcherLabel(runs, idx));
+      if (r.runsInVersion > 1) {
+        const chip = document.createElement("span");
+        chip.className = "version-tile-run";
+        chip.textContent = String(r.runInVersion);
+        tile.append(chip);
+      }
+      track.append(tile);
+    });
+    // 目前那格捲到中間：版本一多，最新的那格會在右邊看不到的地方。
+    const on = track.querySelector(".version-viewer-tile.is-current");
+    if (on) track.scrollLeft = Math.max(0, on.offsetLeft - (track.clientWidth - on.offsetWidth) / 2);
+  }
+
+  function handlePhotoViewerKeydown(e) {
+    if (e.key === "Escape") closePhotoViewer();
+  }
+
+  function openPhotoViewer() {
+    if (!els.photoViewer || photoViewerOpen) return;
+    if (!els.originalImg?.getAttribute("src") && !photoViewerHasResult()) return;
+    closeDownloadMenu();
+    photoViewerOpen = true;
+    photoViewerHolding = false;
+    els.photoViewer.hidden = false;
+    document.documentElement.style.overflow = "hidden";
+    document.addEventListener("keydown", handlePhotoViewerKeydown);
+    renderPhotoViewer();
+    els.photoViewerClose.focus({ preventScroll: true });
+  }
+
+  function closePhotoViewer() {
+    if (!photoViewerOpen) return;
+    photoViewerOpen = false;
+    photoViewerHolding = false;
+    els.photoViewer.hidden = true;
+    document.documentElement.style.overflow = "";
+    document.removeEventListener("keydown", handlePhotoViewerKeydown);
+  }
+
+  function setPhotoViewerHolding(on) {
+    if (photoViewerHolding === on) return;
+    photoViewerHolding = on;
+    renderPhotoViewer();
   }
 
   // Scrolls the strip only when the tile isn't already fully in view, and
@@ -13584,6 +13769,52 @@
     });
   }
   if (els.versionStripPreviewBtn) els.versionStripPreviewBtn.addEventListener("click", openVersionStripPreviewModal);
+  if (els.canvasVersionBtn) els.canvasVersionBtn.addEventListener("click", openPhotoViewer);
+  // compare 切 Before/After 的地方很多（按鈕、renderResult、挑原圖），直接看 class 變化。
+  if (els.compareCard) {
+    new MutationObserver(syncPhotoViewer).observe(els.compareCard, { attributes: true, attributeFilter: ["class"] });
+  }
+  // 手機上點照片本身也打開大圖（照片上的按鈕、分析框不算）。
+  if (els.photoFrameWrap) {
+    els.photoFrameWrap.addEventListener("click", (e) => {
+      if (!photoViewerMedia.matches) return;
+      if (!e.target.closest(".photo-frame") || e.target.closest("button, a, input, label")) return;
+      if (els.compareCard?.classList.contains("is-fullscreen")) return;
+      openPhotoViewer();
+    });
+  }
+  // 轉成橫向或視窗拉寬，超過手機寬度就收起來，回到原本的版面。
+  photoViewerMedia.addEventListener("change", (e) => {
+    if (!e.matches) closePhotoViewer();
+  });
+  if (els.photoViewerClose) els.photoViewerClose.addEventListener("click", closePhotoViewer);
+  if (els.photoViewerStage) {
+    els.photoViewerStage.addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) closePhotoViewer();
+    });
+  }
+  if (els.photoViewerDownload) {
+    els.photoViewerDownload.addEventListener("click", () => {
+      if (lastResult) downloadCurrentResultOnly();
+    });
+  }
+  if (els.photoViewerHold) {
+    const hold = els.photoViewerHold;
+    const release = () => setPhotoViewerHolding(false);
+    hold.addEventListener("pointerdown", (e) => {
+      hold.setPointerCapture(e.pointerId);
+      setPhotoViewerHolding(true);
+    });
+    hold.addEventListener("pointerup", release);
+    hold.addEventListener("pointercancel", release);
+    hold.addEventListener("lostpointercapture", release);
+    hold.addEventListener("keydown", (e) => {
+      if (e.key === " " || e.key === "Enter") setPhotoViewerHolding(true);
+    });
+    hold.addEventListener("keyup", release);
+    hold.addEventListener("blur", release);
+    hold.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
   if (els.versionStripPreviewModalClose) els.versionStripPreviewModalClose.addEventListener("click", closeVersionStripPreviewModal);
   if (els.versionStripPreviewModal) {
     els.versionStripPreviewModal.addEventListener("click", (e) => {

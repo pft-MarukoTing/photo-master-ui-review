@@ -4429,9 +4429,54 @@
     @media (max-width: 600px) {
       .site-header .header-actions.is-open { right: 8px; min-width: 180px; }
     }
+
+    /* ── 手機（≤600px）照片上的按鈕：跟對話模式一樣 ──
+       「第 N 組 ⌄｜比較｜下載」併成右上角一顆半透明膠囊；美化紀錄條、Before/After 字樣、
+       全螢幕鈕收起來，改由點照片或「第 N 組」開 #photo-viewer（大圖、按住看原圖、下載、
+       切換美化紀錄）。膠囊不做 overflow:hidden，下載和分析框的選單才不會被切掉；
+       所以按下去的回饋用字色，不用底色（底色會露出方角）。
+       z-index 壓在確認／提示彈窗（1000 起）底下，在檢視裡觸發的確認才看得到。 */
+    .canvas-version-btn { display: none; }
+    .canvas-tools { display: contents; }
+    #photo-viewer { z-index: 999; }
+    @media (max-width: 600px) {
+      .version-strip, #compare-hint, #compare-fullscreen-btn { display: none !important; }
+      .canvas-header-row {
+        top: 8px; right: 8px; left: auto;
+        display: flex; align-items: center; gap: 8px;
+        pointer-events: none;
+      }
+      .canvas-header-row > * { pointer-events: auto; }
+      .canvas-tools {
+        display: flex; align-items: center; height: 32px; border-radius: 16px;
+        background: rgba(var(--glass-rgb), .58);
+        -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+      }
+      .canvas-version-btn {
+        display: flex; align-items: center; gap: 2px; height: 100%; padding: 0 8px 0 12px;
+        border: 0; background: none; color: var(--n74);
+        font: inherit; font-size: 12px; font-weight: 500; white-space: nowrap; cursor: pointer;
+      }
+      .canvas-version-btn svg { color: var(--n54); }
+      .canvas-header-row .canvas-actions { display: flex; height: 100%; gap: 0; }
+      .canvas-header-row .canvas-btn-wrap { height: 100%; }
+      .canvas-header-row .canvas-actions .canvas-btn {
+        width: 34px; height: 32px; border: 0; border-radius: 0; box-shadow: none;
+        background: linear-gradient(rgba(var(--on-surface-rgb), .12), rgba(var(--on-surface-rgb), .12)) left center / 1px 14px no-repeat;
+        -webkit-backdrop-filter: none; backdrop-filter: none;
+        color: var(--n64); transform: none;
+      }
+      .canvas-header-row .canvas-actions .canvas-btn svg { width: 16px; height: 16px; }
+      .canvas-header-row :is(.canvas-version-btn, .canvas-btn):active,
+      .canvas-header-row .canvas-btn.is-active { color: var(--accent); }
+      .compare-card:not(.is-fullscreen) .photo-frame { cursor: zoom-in; }
+    }
+    /* 一組生了好幾張時，檢視下排每格右上角標第幾張（沿用美化紀錄條的小標）。 */
+    #photo-viewer .version-viewer-tile { position: relative; }
+    #photo-viewer .version-tile-run { top: 2px; bottom: auto; right: 2px; }
   </style>
-  <script type="module" crossorigin src="./static/index-DFXcs5Sz.js"></script>
-  <link rel="stylesheet" crossorigin href="./static/index-CwNSYgLk.css">
+  <script type="module" crossorigin src="./static/index-B_oenR3i.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-B4N8Jf6Z.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
   <!-- The attributes above are caramel, the fallback, so the common first load
