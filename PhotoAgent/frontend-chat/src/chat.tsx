@@ -126,6 +126,9 @@ export function ChatPanel(props: {
   // up. The start, not the bottom -- a result card is often taller than the
   // timeline, and the bottom would show only the end of its note.
   toStart?: string | null;
+  // 整串對話還沒畫完：有些訊息要等晚到的資料（照片的分析）才出得來。那時才冒
+  // 出來的是舊紀錄，不是新的一輪 -- 等畫完再當成第一次載入，停在最底。
+  settling?: boolean;
   onDropFile?: (file: File) => void;
   // The photo being worked on, before the session starts. On a phone, once its
   // big copy in the timeline (UploadBubble with onOpen) scrolls off the top,
@@ -176,6 +179,10 @@ export function ChatPanel(props: {
   useLayoutEffect(() => {
     const el = timeline.current;
     if (!el) return;
+    if (props.settling) {
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+      return;
+    }
     const msgs = Array.from(el.querySelectorAll(":scope > .chat-msg"));
     const fresh = msgs.filter((m) => !seen.current.has(m));
     if (props.toStart !== lastStart.current) {

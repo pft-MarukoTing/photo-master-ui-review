@@ -1367,6 +1367,7 @@ export function App() {
             session={session}
             photo={photo}
             analysis={analyses[photo.photo_id]?.analysis || null}
+            analysisPending={analysisReady && !analyses[photo.photo_id]}
             selected={selected}
             pendingAsk={pendingAsk}
             busy={busy}
@@ -2036,6 +2037,8 @@ function SessionView(props: {
   session: Session;
   photo: Photo;
   analysis: Analysis | null;
+  // 分析好了、但還在路上（整頁剛載入時要另外抓）。這段期間有些訊息還畫不出來。
+  analysisPending: boolean;
   selected: string | null;
   pendingAsk: { text: string; subjectIndices: number[] } | null;
   busy: boolean;
@@ -3152,6 +3155,7 @@ function SessionView(props: {
                   panelMode={props.panelMode}
                   toBottom={toBottom}
                   toStart={lastDone}
+                  settling={props.analysisPending}
                   onDropFile={busy ? undefined : props.onFile}
                   footer={
                     <>
