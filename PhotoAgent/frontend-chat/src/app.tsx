@@ -1134,7 +1134,7 @@ export function App() {
   // 個人化需求是手打的，一條一條往下加，同一個人身上很容易留著兩種說法。存下來之後
   // 再問一次 AI，讓它把同一個人的事併成一句、矛盾的留後面那句，整理結果照常走提案卡，
   // 要不要換還是使用者決定。
-  function savePrompt(text: string) {
+  function savePrompt(text: string, screen?: Screen) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
@@ -1143,7 +1143,7 @@ export function App() {
     return run(async () => {
       try {
         await api.patchPhotoPlan(id, pid, { user_prompt: text });
-        await api.reviewPrompt(id, pid);
+        await api.reviewPrompt(id, pid, screen);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);
@@ -2043,7 +2043,7 @@ function SessionView(props: {
   onAsk: (text: string, subjectIndices: number[], screen?: Screen) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan) => Promise<boolean>;
-  onSavePrompt: (text: string) => Promise<boolean>;
+  onSavePrompt: (text: string, screen?: Screen) => Promise<boolean>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
   onResolve: (
@@ -2437,6 +2437,14 @@ function SessionView(props: {
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
         {c.proposal && idx + 1 === guideAt && messages[idx + 1].card?.auto && firstGuide()}
+        {/* 直接套用之後還是在調整中：跟一般回覆一樣把項目接在底下，不然只剩下方
+            那顆「美化」能按。後面跟著的只有套用自己寫進來的紀錄時，這則就是最後一句。 */}
+        {c.proposal?.direct &&
+          idx + 1 !== guideAt &&
+          editing &&
+          cats.length > 0 &&
+          !props.pendingAsk &&
+          messages.slice(idx + 1).every((x) => x.card?.auto) && <div class="chat-choices">{catChips()}</div>}
         {!c.proposal && (() => {
           // 對話不停在一句「再跟我說」。AI 問回來的話，底下是它給的答案，點了就
           // 當成使用者打的下一句送出，指著誰問的就繼續指著誰；答過了定格成紀錄，
@@ -2617,7 +2625,7 @@ function SessionView(props: {
                     busy={busy}
                     hot={hot[cat] || null}
                     onPatch={(p) => props.onPatch(p)}
-                    onSavePrompt={(t) => props.onSavePrompt(t)}
+                    onSavePrompt={(t) => props.onSavePrompt(t, screen)}
                   />
                   {fresh ? (
                     idx === lastStepIdx && guideTail({ except: cat })

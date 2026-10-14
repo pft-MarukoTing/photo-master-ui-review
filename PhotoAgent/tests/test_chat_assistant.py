@@ -152,6 +152,21 @@ class AskTest(unittest.TestCase):
                                     model=model, screen={"bar": ["調整", "再美化"], "topics": []})
         self.assertEqual(result["reply"], "好，光線改成「柔光」了。按下方的「美化」我就開始。")
 
+    def test_while_adjusting_the_reply_also_points_at_the_topics(self):
+        model = model_says(patch={"user_prompt": "頭巾換成紫色"})
+        result = chat_assistant.ask(analysis(), default_plan(), "ready",
+                                    [{"role": "user", "text": "頭巾換成紫色", "card": {"type": "ask"}}],
+                                    model=model, screen={"bar": ["美化"], "topics": ["人像", "美化建議"]})
+        self.assertTrue(result["proposal"]["direct"])
+        self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面，或按下方的「美化」我就開始。"))
+
+    def test_a_checked_prompt_points_at_the_topics(self):
+        result = chat_assistant.ask(analysis(), default_plan(), "ready",
+                                    [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK}],
+                                    model=model_says("內容很清楚，目前沒有重複或衝突。"),
+                                    screen={"bar": ["美化"], "topics": ["人像", "風格"]})
+        self.assertEqual(result["reply"], "好，個人化需求存好了。還想調整其他項目可以點下面，或按下方的「美化」我就開始。")
+
     def test_changes_the_ai_judged_still_ask(self):
         cases = {
             "two settings": {"style_options": {"lighting": "soft"}, "aspect_ratio": "original"},

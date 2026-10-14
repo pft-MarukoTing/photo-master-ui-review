@@ -80,6 +80,8 @@ How this tool works. These are the only facts you may state about the tool; if a
 # model's cue only, never logged as something the user said; the PANEL CHECK
 # REQUEST below quotes it, so change both together.
 PANEL_CHECK_ASK = "我改了個人化需求，幫我確認一下內容。"
+# 內容不用整理時就這一句：使用者剛親手存的，不必再念回來給他聽。
+PANEL_CHECK_OK = "好，個人化需求存好了。"
 
 INSTRUCTION = """You are the assistant in a photo retouching chat. The user is looking at one photo, its AI analysis, and the edit plan the next render (美化) will use. Reply to the user's latest message.
 
@@ -173,7 +175,7 @@ Correct reply: 「可以幫你讓右側男性戴上太陽眼鏡，確認後套�
 Wrong patch_json: {"user_prompt":"左側男性的外套改成藍色；左側男性眼鏡去掉；右側男性戴一頂鴨舌帽；右側男性戴上太陽眼鏡"}
 
 PANEL CHECK REQUEST
-「我改了個人化需求，幫我確認一下內容。」 is sent after the user edits that text by hand. Read PLAN.user_prompt as it now stands. Apply BUILD user_prompt FROM SCRATCH: one entry per person; where two wishes cannot both be true, the later wish wins. Propose the normalized full text and briefly say what was merged. If it is already normalized, say so and leave patch_json "".
+「我改了個人化需求，幫我確認一下內容。」 is sent after the user edits that text by hand. Read PLAN.user_prompt as it now stands. Apply BUILD user_prompt FROM SCRATCH: one entry per person; where two wishes cannot both be true, the later wish wins. Propose the normalized full text and briefly say what was merged. If it is already normalized, say so and leave patch_json ""; end on that, without pointing at any button -- the page adds the next step itself.
 """
 
 def _dump(value):
@@ -844,12 +846,22 @@ def _applied_reply(changes, screen, wishes=()):
         said = f"好，{only['label']}改成「{only['after']}」了。"
     else:
         said = "好，已經幫你改好了。"
+    return said + _next_step(screen)
+
+
+def _next_step(screen):
+    """The sentence that sends the user on from a change made: to the render
+    button below, and to the topics under the reply while adjusting. "" when
+    SCREEN has no render button to point at."""
     # 美化過之後套用會開新一輪，下方那顆就變成「美化」。
     bar = [b for b in (screen or {}).get("bar") or [] if "美化" in b]
     if not bar:
-        return said
+        return ""
     label = "美化" if bar[0] == "再美化" else bar[0]
-    return f"{said}按下方的「{label}」我就開始。"
+    # 調整中，回覆底下接著項目按鈕（人像、美化建議…），一併指給他看。
+    if (screen or {}).get("topics"):
+        return f"還想調整其他項目可以點下面，或按下方的「{label}」我就開始。"
+    return f"按下方的「{label}」我就開始。"
 
 
 def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None):
@@ -885,6 +897,11 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     close = result.get("action") == "close" and not wanted
     options = [] if close else options
     lines = bool(options) and result.get("lines") is True
+    # 手動存完個人化需求、內容也不用整理時，模型會把需求念一遍再說沒有衝突，
+    # 冗又停在那裡；改成一句短的，接著指向下一步，跟直接套用的回覆講同一句。
+    checked = history and history[-1].get("text") == PANEL_CHECK_ASK
+    if checked and not (proposal or render or close or options):
+        reply = PANEL_CHECK_OK + _next_step(screen)
     return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines}
 
 
