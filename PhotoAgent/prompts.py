@@ -406,7 +406,7 @@ AXIS_DEFINITIONS = {
     "saturation": "color intensity",
     "skin": "skin tone or complexion specifically",
     "sharpen": "acuity, clarity, noise",
-    "distraction": "toning down, blurring, or cleaning up scene elements",
+    "distraction": "a scene element removed with the scene continued behind it, or toned down when it cannot be",
     "crop": "composition reframing: crop boundaries, output aspect ratio, frame-relative subject scale or placement",
     "alignment": "whole-frame rotation, horizon/vertical straightening, or keystone/perspective correction",
     "expression": "facial expression repair, eye openness, accidental blink or half-closed eyes",
@@ -555,7 +555,7 @@ Analysis goal:
 Hard limits:
 - Do not change the subject into something else.
 - Do not add text, logos, watermarks, extra people, fantasy elements, or a new scene.
-- Preserve scene identity, material, perspective, and spatial relationships outside approved local edits. A real fixture diagnosed as obstructing the subject or their view is an approved local removal when the covered scene can be plausibly continued.
+- Preserve scene identity, material, perspective, and spatial relationships outside approved local edits. A real fixture distraction_strategy judges a distraction is an approved local removal when the covered scene can be plausibly continued.
 - Cleanup may remove a harmful obstruction locally while keeping the same scene; do not turn a casual/lifestyle/documentary scene into a studio, catalog, or different location unless the user explicitly asks for that.
 - For people, preserve identity, face, body shape, pose, and natural skin texture.
 - For products, food, pets, architecture, and landscapes, preserve shape, material, and scene truth.
@@ -578,7 +578,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "photo_summary": "一句話描述照片內容與整體觀感。",
   "subject_category": "人物 / 食物 / 產品 / 風景 / 建築 / 寵物 / 其他",
   "scene_category": "室內 / 戶外 / 街拍 / 商業 / 旅行 / 日常 / 其他",
-  "main_subject": "主要主體是誰或什麼。",
+  "main_subject": "主要主體是誰或什麼：拍攝者取景要呈現的對象，不是避不開、剛好入鏡的物件。",
   "scene_type": "更具體的場景類型。",
   "aesthetic_diagnosis": "說明照片目前不夠精緻的原因。",
   "detected_issues": ["2 到 6 個具體問題。"],
@@ -593,7 +593,7 @@ _RETURN_SHAPE_OVERALL = """Return exactly this JSON shape:
   "visual_balance_strategy": "左右與上下視覺重量如何處理。",
   "empty_space_strategy": "畫面空白、留白或大面積背景的構圖功能；若沒有功能，說明如何縮減或重新平衡。",
   "alignment_strategy": "水平線、垂直線與透視穩定性；說明是否需要輕微旋轉或透視校正，或為何保留傾斜。",
-  "distraction_strategy": "裁切後重新評估背景/前景元素：哪些是真正干擾、哪些是場景脈絡、哪些只是中性背景。場景脈絡須在這張照片裡發揮可見作用（場所辨識、尺度、敘事、引導線或平衡）；只是實際存在、卻切過畫面而無此作用的元素是干擾。針對每個干擾元素，說明具體且可執行的處理方式。",
+  "distraction_strategy": "裁切後，先逐一裁決 detected_issues 指為干擾或遮擋的每個元素：寫成「X：移除」，並說明移除後由哪些相鄰畫面延續；只有大到無法合理補出背景時才寫「X：弱化」並說明原因，不可原樣保留。再判斷其餘元素：拍攝者取景要呈現的是脈絡，避不開、剛好入鏡的是干擾，同樣裁決；它透露的場所或尺度，畫面其餘部分仍交代得了。",
   "scene_preservation_strategy": "如何保留原始場景內容、背景結構、材質身分、透視與空間關係；不要在此限制曝光、白平衡、對比、色相或飽和度。",
   "roi_anchor": "主視覺焦點應落在哪裡，以及為什麼。",
   "recommended_aspect_ratio": "original 或 Aspect-ratio policy 列出的比例之一",
@@ -748,7 +748,7 @@ Intent: Choose framing from subject meaning, scene context, visual balance, usef
 
 - For completeness-first presentation, catalog-like, symmetrical, circular, stacked, shape-critical, food/product/object/still-life images, centered or near-centered balance is often competitive.
 - For lifestyle, story, portrait, street, travel, action, gaze, gesture, interaction, leading lines, asymmetry, or intentional negative space, off-center, thirds, diagonal, symmetry, or context-preserving framing may be stronger.
-- Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not.
+- Empty space must have a visible job: direction, story, scale, calmness, graphic balance, leading lines, room for action, environmental context, rhythm, or intentional negative space. Preserve generous breathing room when it serves those jobs; reduce or rebalance empty/background areas when they do not. These are jobs of empty space, not reasons to keep a distracting object.
 - Reassess foreground elements after the proposed crop. An element separating the subject from what they view or engage with is an obstruction, not contextual framing. Crop only if its entire connected visible footprint leaves the final frame while subjects and useful context remain; otherwise keep the frame viable for full local removal.
 - Check alignment when credible horizontal/vertical references exist. Correct unintended tilt or keystone only when it feels unstable or physically implausible; preserve intentional slant only when it has a clear visual purpose.
 - Preserve scene identity, background structure, surface material, perspective, spatial relationships, and real-world context outside approved local edits. The captured outer boundaries remain independently editable.
