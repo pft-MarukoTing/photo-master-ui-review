@@ -253,9 +253,10 @@ export function ConfirmModal(props: {
 }
 
 // Same order as 面板模式's header, so switching modes moves nothing:
-// 回到首頁 · 最近照片 · mode switch · 版本紀錄 · 主題 · 回報.
+// 回到首頁 · 最近照片 · mode switch · 版本紀錄 · 主題 · 回報. 新對話 (chat only,
+// right after 回到首頁) opens the photo-picking page for another photo.
 // showChangelog: 版本紀錄 only on 首頁, as 面板模式 shows it only on its upload screen.
-// showHistory is off while the gallery (with its 最近對話 tab) is on screen.
+// showHistory is off on 首頁, whose gallery has its own 最近對話 tab.
 // showOldUi likewise: 面板模式 only takes over a photo's analysis/result, so
 // the switch exists only once a session is open, and is held while the photo
 // is analyzing or rendering (the other mode would open on a half-done job).
@@ -263,6 +264,7 @@ export function Header(props: {
   onHome: () => void;
   onHistory: () => void;
   showHome: boolean;
+  onNewChat?: () => void;
   showHistory?: boolean;
   showChangelog?: boolean;
   showOldUi?: boolean;
@@ -299,6 +301,17 @@ export function Header(props: {
           Photo<em>Master</em>
           <span class="logo-env-badge" id="logo-env-badge" title="開發環境">DEV</span>
         </button>
+        {/* 收成 ⋯ 的寬度，新對話跟最近照片不進選單，留在 header 上一鍵就到（寬螢幕不顯示，用攤開的那顆）。 */}
+        {props.onNewChat && (
+          <button type="button" class="chat-header-icon" aria-label="新對話" title="新對話" onClick={props.onNewChat}>
+            <Icon name="plus" size={22} />
+          </button>
+        )}
+        {props.showHistory && (
+          <button type="button" class="chat-header-icon" aria-label="最近照片" title="最近照片" onClick={props.onHistory}>
+            <Icon name="clock" size={22} />
+          </button>
+        )}
         <button
           type="button"
           class="chat-header-more"
@@ -315,6 +328,12 @@ export function Header(props: {
             <button id="chat-home-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onHome}>
               <Icon name="house" size={14} />
               <span class="btn-label">回到首頁</span>
+            </button>
+          )}
+          {props.onNewChat && (
+            <button id="chat-new-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onNewChat}>
+              <Icon name="plus" size={14} />
+              <span class="btn-label">新對話</span>
             </button>
           )}
           {props.showHistory && (

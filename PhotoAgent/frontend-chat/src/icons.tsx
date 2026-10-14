@@ -55,6 +55,7 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
     ),
   },
   x: { sw: 2, body: <path d="M6 6l12 12M18 6L6 18" /> },
+  plus: { sw: 2, body: <path d="M12 5v14M5 12h14" /> },
   house: {
     sw: 2.5,
     body: (

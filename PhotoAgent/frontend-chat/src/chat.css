@@ -1108,13 +1108,19 @@ div.chat-proposal-row{cursor:default}
    不改 DOM 順序，把 .home-intro / .home-hero / .home-hero-copy / .upload-gallery-col
    都設成 display:contents，讓裡面的東西直接變成 .upload-content-row 的 flex 子項，再用
    order 排。桌機、平板完全不受影響。 */
-.chat-header-more,.upload-gallery-all,.session-tile-when{display:none}
-/* 對話頁的 header 有五顆按鈕，攤開要約 807px；平板直拿（iPad mini 768）或手機橫拿放不下，
-   手機瀏覽器會整頁縮小來塞。這個寬度也收進 ⋯，選單長相跟下面手機的一樣。首頁只有兩顆，維持攤開。 */
-@media (min-width:601px) and (max-width:860px){
+.chat-header-more,.chat-header-icon,.upload-gallery-all,.session-tile-when{display:none}
+/* 對話頁的 header 有六顆按鈕，攤開要約 900px；平板直拿時按鈕放大到 44px，要約 1020px
+   （Surface Pro 直拿 960 會把 logo 擠扁）。放不下的寬度也收進 ⋯，選單長相跟下面手機的一樣。
+   首頁只有兩顆，維持攤開。 */
+@media (min-width:601px) and (max-width:940px),(min-width:601px) and (max-width:1023px) and (orientation:portrait){
   .site-header:has(#chat-home-btn) .header-inner{position:relative}
   .site-header:has(#chat-home-btn) .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}
+  .site-header:has(#chat-home-btn) .chat-header-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+    background:transparent;color:var(--text-2);cursor:pointer}
+  .site-header:has(#chat-home-btn) .chat-header-icon:hover{background:rgba(var(--accent-rgb),.08)}
+  .site-header:has(#chat-home-btn) .chat-header-icon ~ :is(.chat-header-icon,.chat-header-more){margin-left:0}
+  .site-header:has(#chat-home-btn) :is(#chat-new-btn,#chat-history-btn){display:none}
   .site-header:has(#chat-home-btn) .chat-header-more[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
   .site-header:has(#chat-home-btn) .header-actions{display:none}
   .site-header:has(#chat-home-btn) .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);right:16px;z-index:1500;
@@ -1127,13 +1133,19 @@ div.chat-proposal-row{cursor:default}
   .site-header:has(#chat-home-btn) .header-actions.is-open .btn-label{display:inline}
 }
 @media (max-width:600px){
-  /* Header：三顆按鈕收進 ⋯ 選單。 */
+  /* Header：新對話、最近照片留在外面，其他按鈕收進 ⋯ 選單。 */
   html:root{--header-h:56px}
   .site-header .header-inner{position:relative;padding:0 6px 0 16px}
   .site-header .logo{font-size:20px}
   .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}
   .chat-header-more[aria-expanded="true"]{background:rgba(var(--accent-rgb),.1);color:var(--accent)}
+  /* 新對話、最近照片搬出選單，依序放在 ⋯ 左邊。 */
+  .chat-header-icon{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
+    background:transparent;color:var(--text-2);cursor:pointer}
+  .chat-header-icon:hover{background:rgba(var(--accent-rgb),.08)}
+  .chat-header-icon ~ :is(.chat-header-icon,.chat-header-more){margin-left:0}
+  .site-header :is(#chat-new-btn,#chat-history-btn){display:none}
   .site-header .header-actions{display:none}
   .site-header .header-actions.is-open{display:flex;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:calc(100% + 4px);right:8px;z-index:1500;
     min-width:180px;padding:6px;border-radius:16px;background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16)}

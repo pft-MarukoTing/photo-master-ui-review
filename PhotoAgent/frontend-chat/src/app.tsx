@@ -625,6 +625,17 @@ export function App() {
       }),
     );
   }
+  // 對話都存在後端，離開不會掉東西；問一下只是避免誤按。
+  function askNewChat() {
+    setLeaveAsk({
+      message: "要開新對話處理另一張照片嗎？目前這段對話可以從「最近照片」再打開。",
+      confirmLabel: "開新對話",
+      answer: (ok) => {
+        setLeaveAsk(null);
+        if (ok) newChat();
+      },
+    });
+  }
   async function openOtherSession(id: string) {
     if (await confirmLeave("打開另一張")) openSession(id);
   }
@@ -1266,7 +1277,8 @@ export function App() {
         setDrawer(true);
       }}
       showHome={phase !== "home"}
-      showHistory={phase === "session"}
+      onNewChat={phase === "session" ? askNewChat : undefined}
+      showHistory={phase !== "home"}
       showChangelog={phase === "home"}
       showOldUi={phase === "session"}
       onOldUi={() => {
