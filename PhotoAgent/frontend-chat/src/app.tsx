@@ -124,7 +124,7 @@ type Note = {
 };
 
 // 點頭像回答「哪一位」、直接送出時 AI 回的那句。沒問模型，所以話是這裡寫好的。
-// The whole 對話紀錄 list: every live session plus every history case (the
+// The whole 最近照片 list: every live session plus every history case (the
 // backend's LISTED_SESSIONS_MAX + HISTORY_MAX_LEN), since 面板模式's 最近照片
 // reaches all of a user's cases too.
 const LISTED_MAX = 300;

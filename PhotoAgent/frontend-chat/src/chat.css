@@ -1028,10 +1028,21 @@ div.chat-proposal-row{cursor:default}
 .chat-opt-style-none.is-picked,.chat-opt-style-btn.is-picked{border-color:var(--accent);border-style:solid;color:var(--accent-text)}
 .chat-opt-style-none[disabled],.chat-opt-style-btn[disabled]{cursor:not-allowed;opacity:.6}
 
-/* 對話紀錄 drawer: the same square three-column mosaic as the home gallery,
+/* 最近照片 drawer: the same square three-column mosaic as the home gallery,
    one grid per day under a 今天/昨天/M月D日 heading (SessionDays, home.tsx).
    The home rail gets this grouping from the old sheet's .history-day-group
-   rules; the drawer is chat-only, so its heading is styled here. */
+   rules; the drawer is chat-only, so its heading is styled here.
+   Only the list scrolls: the old sheet scrolls the whole aside, which took
+   the header and the close button away with it. The list runs to the
+   drawer's edges (negative margin, padding back) so the scrollbar sits at
+   the edge and tile focus rings aren't clipped; flex 0 1 auto so it only
+   shrinks when it overflows and 目前還沒有照片 stays under the header. No
+   logout button here, so the old 64px bottom room goes too. */
+.history-drawer{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
+.history-drawer .history-header{flex:none}
+.history-drawer .history-list{flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
+  margin:-4px -20px 0;padding:4px 20px 20px}
+.history-drawer .history-empty{margin:0 0 20px}
 .history-drawer .history-day-group+.history-day-group{margin-top:var(--sp-4)}
 .history-drawer .history-day-heading{margin:0 0 var(--sp-1);
   font:600 var(--chat-fs-sm)/1.4 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);letter-spacing:.02em}

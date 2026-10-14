@@ -1,4 +1,4 @@
-// Header, the home page's intro, the 最近對話 / 範例照片 gallery and the
+// Header, the home page's intro, the 最近照片 / 範例照片 gallery and the
 // 最近照片 drawer -- old markup and classes throughout.
 import type { ComponentChildren } from "preact";
 import { createPortal } from "preact/compat";
@@ -259,7 +259,7 @@ export function ConfirmModal(props: {
 // (ChatPanel's panelMode), as 面板模式's way back is the same switch beside its
 // step indicator.
 // showChangelog: 版本紀錄 only on 首頁, as 面板模式 shows it only on its upload screen.
-// showHistory is off on 首頁, whose gallery has its own 最近對話 tab.
+// showHistory is off on 首頁, whose gallery has its own 最近照片 tab.
 export function Header(props: {
   onHome: () => void;
   onHistory: () => void;
@@ -589,7 +589,7 @@ export function Gallery(props: {
   onSelect: (s: GallerySelection) => void;
   onConfirm: () => void;
   onRemove?: (id: string) => void;
-  // 手機上那一排只放得下幾張，「全部」打開完整的清單：最近對話是最近照片側欄，範例照片是範例視窗。
+  // 手機上那一排只放得下幾張，「全部」打開完整的清單：最近照片開側欄，範例照片開範例視窗。
   onAll?: (t: GalleryTab) => void;
 }) {
   const { tab, selection } = props;
@@ -609,9 +609,9 @@ export function Gallery(props: {
               onClick={() => props.onTab("recent")}
             >
               <span class="upload-gallery-tab-icon" aria-hidden="true">
-                <Icon name="chat" size={14} />
+                <Icon name="clock" size={14} />
               </span>
-              最近對話
+              最近照片
             </button>
           </div>
           <button
@@ -667,7 +667,7 @@ export function Gallery(props: {
         </div>
       </div>
       <p id="demo-images-empty" class="history-empty" hidden={!list || list.length > 0}>
-        {recent ? "還沒有對話，按「開始對話」挑一張照片吧。" : "目前沒有可顯示的照片。"}
+        {recent ? "還沒有照片，按「開始對話」挑一張吧。" : "目前沒有可顯示的照片。"}
       </p>
       {!recent && (
         <button
@@ -740,7 +740,7 @@ export function HistoryDrawer(props: {
   return (
     <>
       <div class={`history-drawer-backdrop${props.open ? " drawer-open" : ""}`} onClick={props.onClose} />
-      <aside class={`history-drawer${props.open ? " drawer-open" : ""}`} role="dialog" aria-label="對話紀錄">
+      <aside class={`history-drawer${props.open ? " drawer-open" : ""}`} role="dialog" aria-label="最近照片">
         <button class="history-drawer-close-btn" type="button" aria-label="關閉" onClick={props.onClose}>
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24">
             <path
@@ -754,7 +754,7 @@ export function HistoryDrawer(props: {
         </button>
         <div class="history-header">
           <div class="history-header-top">
-            <h2>對話紀錄</h2>
+            <h2>最近照片</h2>
             {hasRows && (
               <div class="history-header-actions">
                 {picking ? (
@@ -818,7 +818,7 @@ export function HistoryDrawer(props: {
           />
         </div>
         <p class="history-empty" hidden={!props.sessions || props.sessions.length > 0}>
-          目前還沒有對話。
+          目前還沒有照片。
         </p>
       </aside>
     </>
