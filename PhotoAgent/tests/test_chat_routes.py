@@ -1474,6 +1474,13 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertIn("LINES SO FAR:\n左側男性的帽子拿掉", seen[0])
         self.assertIn("NEW LINE:\n外套換成藍色", seen[0])
 
+    def test_a_wish_that_names_a_shape_sets_the_ratio(self):
+        res, _ = self.review("做成限動", {"verdict": "keep", "reply": "", "line": "", "options": [], "aspect_ratio": "9:16"})
+        self.assertEqual(res.get_json()["aspect_ratio"], "9:16")
+        self.assertIn("「9:16（限動）」", res.get_json()["reply"])
+        res, _ = self.review("外套換成藍色", {"verdict": "keep", "reply": "", "line": "", "options": [], "aspect_ratio": ""})
+        self.assertNotIn("aspect_ratio", res.get_json())
+
     # The sentence the user reads and the fate of the line are one answer, so
     # a model that forgets to say what to do with the line cannot leave it
     # saying 「好，這個我記下來了。」 over a line that was thrown away.

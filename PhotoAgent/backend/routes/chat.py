@@ -1476,6 +1476,10 @@ def prompt_review():
         out["line"] = answer["line"][:USER_PROMPT_MAX_LEN]
         if answer["persons"]:
             out["persons"] = answer["persons"]
+    if accepted and answer.get("aspect_ratio") in chat_assistant.REVIEW_RATIOS:
+        # A wish that names a shape (「做成限動」) sets the page's 長寬比 to it,
+        # so the analysis plans for that shape instead of picking its own.
+        out["aspect_ratio"] = answer["aspect_ratio"]
     return jsonify(out)
 
 

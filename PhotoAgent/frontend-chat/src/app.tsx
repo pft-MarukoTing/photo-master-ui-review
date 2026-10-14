@@ -121,6 +121,10 @@ type Note = {
   // (「褲子也是」→「把男孩的褲子也換成白色」).
   // `text` stays what was typed -- that is what the bubble shows.
   wish?: string;
+  // 這句說了比例（「做成限動」），「設定」的長寬比就照它改了。`ratioBack`：這句
+  // 後來不在了，長寬比也已經改回 AI 建議。
+  ratio?: string;
+  ratioBack?: boolean;
 };
 
 // 點頭像回答「哪一位」、直接送出時 AI 回的那句。沒問模型，所以話是這裡寫好的。
@@ -175,9 +179,10 @@ function conversation(ns: Note[]): Turn[] {
 // 是在對話——上面那句「我記下來了」還在原地，是真的講過的；底下這句接著說現在
 // 不算數了，兩句合起來才是完整的經過。
 function goneReply(t: { gone: Note[]; left: number }) {
-  if (t.gone.length > 1) return "好，個人化需求都清掉了，美化時就不另外加了。";
   const what = `「${wishText(t.gone[0])}」`;
-  return t.left ? `好，${what}就不做了，其他的照舊。` : `好，${what}就不做了，目前沒有其他個人化需求。`;
+  const back = t.gone.some((n) => n.ratioBack) ? "長寬比也改回「AI 建議」了。" : "";
+  if (t.gone.length > 1) return `好，個人化需求都清掉了，美化時就不另外加了。${back}`;
+  return t.left ? `好，${what}就不做了，其他的照舊。${back}` : `好，${what}就不做了，目前沒有其他個人化需求。${back}`;
 }
 
 // How a person is written into plan.user_prompt. Nothing has been analyzed yet,
@@ -455,6 +460,19 @@ export function App() {
   const sourceIdentity = useRef(selectionIdentity);
   sourceIdentity.current = selectionIdentity;
   const reviewedSource = useRef(preFull);
+  // 長寬比是跟著說了比例的那句需求改的，那句不在個人化需求裡了（拿掉、清掉，或
+  // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「設定」自己改過的不動。
+  useEffect(() => {
+    if (!caps) return;
+    const prompt = notesPrompt(notes, preEdit);
+    const live = (n: Note) => n.kept !== false && !n.dropped && prompt.includes(wishText(n));
+    const gone = notes.filter((n) => n.ratio && !n.ratioBack && !live(n));
+    if (!gone.length) return;
+    const current = settings?.aspect_ratio;
+    const back = gone.some((n) => n.ratio === current) && !notes.some((n) => n.ratio === current && live(n));
+    setNotes((ns) => ns.map((n) => (!gone.includes(n) ? n : back && n.ratio === current ? { ...n, ratioBack: true } : { ...n, ratio: undefined })));
+    if (back) setSettings((s) => s && { ...s, aspect_ratio: caps.render.defaults.aspect_ratio });
+  }, [notes, preEdit]);
   useEffect(() => {
     const samePhoto = reviewedSource.current === preFull;
     reviewedSource.current = preFull;
@@ -948,8 +966,11 @@ export function App() {
         ...(r.ask ? { asked: { options: r.options || [] } } : {}),
         ...(r.offer ? { offered: { options: r.options || [], ...(r.later ? { later: true } : {}) } } : {}),
         ...(r.accepted ? completed(r.line, r.persons) : {}),
+        ...(r.accepted && r.aspect_ratio ? { ratio: r.aspect_ratio } : {}),
       };
       setNotes([...base, settled]);
+      // 「做成限動」這種說了比例的需求，同步改「設定」的長寬比
+      if (r.aspect_ratio) { const ratio = r.aspect_ratio; setSettings((s) => s && { ...s, aspect_ratio: ratio }); }
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
       if (r.start) startSession(r.start, laterNote(base), [...base, settled]);
       return r.accepted ? [...base, settled] : null;

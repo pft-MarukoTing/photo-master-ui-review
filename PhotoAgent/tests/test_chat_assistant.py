@@ -368,6 +368,76 @@ class ReviewLineTest(unittest.TestCase):
             return {"verdict": "keep", "reply": "好，記下來了。還有別的嗎？", "line": "", "options": [], "later": False}
         self.assertEqual(chat_assistant.review_line("外套換成藍色", "", model=model)["reply"], "好，記下來了。還有別的嗎？")
 
+    # 上傳頁說了比例（「做成限動」），「設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
+    def ratio(self, verdict, value):
+        return chat_assistant.review_line("做成限動", "", model=lambda context: {
+            "verdict": verdict, "reply": "", "line": "", "options": [], "later": False, "aspect_ratio": value})
+
+    def test_a_kept_wish_that_names_a_shape_sets_the_ratio(self):
+        result = self.ratio("keep", "9:16")
+        self.assertEqual(result["aspect_ratio"], "9:16")
+        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + "長寬比也幫你換成「9:16（限動）」了，在「設定」裡隨時可以改。"
+                         + chat_assistant.KEPT_NEXT)
+
+    def test_a_ratio_only_comes_with_a_kept_wish_the_panel_offers(self):
+        self.assertEqual(self.ratio("answer", "9:16")["aspect_ratio"], "")
+        self.assertEqual(self.ratio("keep", "7:5")["aspect_ratio"], "")
+        result = self.ratio("keep", "")
+        self.assertEqual(result["aspect_ratio"], "")
+        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + chat_assistant.KEPT_NEXT)
+
+    # 說了面板沒有的比例（21:9），先問要不要換成最接近的，不默默當成 AI 建議。
+    def test_a_shape_the_panel_lacks_asks_for_the_nearest(self):
+        result = chat_assistant.review_line("做成 21:9", "", model=lambda context: {
+            "verdict": "keep", "reply": "好，記下來了。", "line": "", "options": [], "later": False,
+            "aspect_ratio": "", "asked_ratio": "21:9"})
+        self.assertFalse(result["kept"])
+        self.assertTrue(result["ask"])
+        self.assertEqual(result["aspect_ratio"], "")
+        self.assertEqual(result["reply"], "目前沒有 21:9 這個比例，最接近的是「16:9（桌布）」，要換成這個嗎？")
+        self.assertEqual(result["options"], ["換成 16:9", chat_assistant.RATIO_ASK_AI])
+
+    def ratio_question(self, line, wish="做成 21:9，背景調亮", people=()):
+        history = [{"role": "user", "text": wish},
+                   {"role": "assistant", "question": True, "options": ["換成 16:9", chat_assistant.RATIO_ASK_AI],
+                    "text": "目前沒有 21:9 這個比例，最接近的是「16:9（桌布）」，要換成這個嗎？"}]
+
+        def model(context):
+            raise AssertionError("the model was asked")
+        return chat_assistant.review_line(line, "", history, people, model=model)
+
+    def test_taking_the_nearest_sets_it_and_keeps_the_rest_of_the_wish(self):
+        result = self.ratio_question("換成 16:9")
+        self.assertTrue(result["kept"])
+        self.assertEqual(result["aspect_ratio"], "16:9")
+        self.assertEqual(result["line"], "做成 16:9，背景調亮")
+        self.assertIn("16:9（桌布）", result["reply"])
+
+    def test_the_tap_still_reaches_the_people_it_was_about(self):
+        who = "照片中從左邊數來第 1 位"
+        result = self.ratio_question(f"{who}：換成 16:9", wish=f"{who}：做成 21:9", people=[who])
+        self.assertEqual(result["aspect_ratio"], "16:9")
+        self.assertEqual(result["persons"], [who])
+        self.assertEqual(result["line"], "做成 16:9")
+
+    def test_leaving_it_to_the_ai_keeps_the_rest_of_the_wish(self):
+        result = self.ratio_question(chat_assistant.RATIO_ASK_AI)
+        self.assertTrue(result["kept"])
+        self.assertEqual(result["aspect_ratio"], "")
+        self.assertEqual(result["line"], "背景調亮")
+        self.assertEqual(result["reply"], chat_assistant.RATIO_ASK_AI_REPLY_REST + chat_assistant.KEPT_NEXT)
+
+    def test_leaving_only_the_ratio_to_the_ai_keeps_nothing(self):
+        who = "照片中從左邊數來第 1 位"
+        for wish, people in (("裁成21比9的比例", ()), (f"{who}：做成 21:9", [who])):
+            result = self.ratio_question(chat_assistant.RATIO_ASK_AI, wish=wish, people=people)
+            self.assertFalse(result["kept"], wish)
+            self.assertEqual(result["line"], "", wish)
+            self.assertEqual(result["reply"], chat_assistant.RATIO_ASK_AI_REPLY + chat_assistant.KEPT_NEXT)
+
+    def test_another_way_of_writing_the_ratio_is_still_swapped(self):
+        self.assertEqual(self.ratio_question("換成 16:9", wish="背景調亮然後裁成21比9")["line"], "背景調亮然後裁成16:9")
+
 
 class DetailedExplanationTest(unittest.TestCase):
     def test_the_voice_is_only_there_when_turned_on(self):
@@ -414,6 +484,19 @@ class RenderNoteTest(unittest.TestCase):
         chat_assistant.write_render_note(analysis(), default_plan(), model=lambda c, i: seen.append(c) or {"note": "x"})
         self.assertIn(chat_assistant.ONLY_WISHES_RULE, seen[0])
         self.assertNotIn(chat_assistant.ONLY_WISHES_RULE, seen[1])
+
+    # 個人化需求裡寫了 4:5，比例卻還是 AI 建議：說明只能照實際套用的設定講。
+    def test_the_note_is_told_which_settings_were_applied(self):
+        seen = []
+        plan = {**default_plan(), "user_prompt": "做成 IG 貼文 4:5"}
+        chat_assistant.write_render_note(analysis(), plan, model=lambda c, i: seen.append(c) or {"note": "x"})
+        self.assertIn('APPLIED SETTINGS: {"比例":"AI 建議"', seen[0])
+        self.assertIn('"閉眼修正":"開"', seen[0])
+        plan["aspect_ratio"] = "4:5"
+        plan["advanced_options"] = {**(plan.get("advanced_options") or {}), "eye_closed_detection": False}
+        chat_assistant.write_render_note(analysis(), plan, model=lambda c, i: seen.append(c) or {"note": "x"})
+        self.assertIn('"比例":"4:5（IG 貼文）"', seen[1])
+        self.assertIn('"閉眼修正":"關"', seen[1])
 
     def test_a_first_version_says_so(self):
         seen = []

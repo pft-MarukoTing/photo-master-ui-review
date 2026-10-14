@@ -116,6 +116,7 @@ export const api = {
       line?: string;
       persons?: string[];
       start?: "render" | "analyze";
+      aspect_ratio?: string;
     }>(
       `${CHAT}/prompt-review`,
       json("POST", { text, prompt, history, people }),
