@@ -625,9 +625,9 @@ function PromptOptions({ plan, busy, hot, onPatch, onSavePrompt }: Body) {
 
 function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
   // The analysis model is fixed once the photo is analyzed, so it is not here.
+  // 張數不在這裡：對話模式一次只出一張，多張目前不支援。
   const val = (e: Event) => (e.currentTarget as HTMLSelectElement).value;
   const field = (key: string) => `chat-field${hot.has(key) ? " is-ai-hot" : ""}`;
-  const counts = Array.from({ length: Math.max(1, caps.render.max_run_count) }, (_, i) => i + 1);
   return (
     <div class="chat-settings-editor">
       <div class="chat-settings-fields">
@@ -644,14 +644,6 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           <select class="quality-select" value={plan.aspect_ratio} disabled={busy} onChange={(e) => onPatch({ aspect_ratio: val(e) })}>
             {caps.render.aspect_ratios.map((a) => (
               <option value={a.value}>{a.label}</option>
-            ))}
-          </select>
-        </label>
-        <label class={field("run_count")}>
-          <span class="chat-meta">張數</span>
-          <select class="quality-select" value={String(plan.run_count || 1)} disabled={busy} onChange={(e) => onPatch({ run_count: Number(val(e)) })}>
-            {counts.map((n) => (
-              <option value={String(n)}>{n} 張</option>
             ))}
           </select>
         </label>

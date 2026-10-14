@@ -1123,10 +1123,10 @@ div.chat-proposal-row{cursor:default}
    都設成 display:contents，讓裡面的東西直接變成 .upload-content-row 的 flex 子項，再用
    order 排。桌機、平板完全不受影響。 */
 .chat-header-more,.chat-header-icon,.upload-gallery-all,.session-tile-when{display:none}
-/* 對話頁的 header 有六顆按鈕，攤開要約 900px；平板直拿時按鈕放大到 44px，要約 1020px
+/* 對話頁的 header 有七顆按鈕，攤開要約 980px；平板直拿時按鈕放大到 44px，要約 1100px
    （Surface Pro 直拿 960 會把 logo 擠扁）。放不下的寬度也收進 ⋯，選單長相跟下面手機的一樣。
    首頁只有兩顆，維持攤開。 */
-@media (min-width:601px) and (max-width:940px),(min-width:601px) and (max-width:1023px) and (orientation:portrait){
+@media (min-width:601px) and (max-width:1023px),(min-width:601px) and (max-width:1100px) and (orientation:portrait){
   .site-header:has(#chat-home-btn) .header-inner{position:relative}
   .site-header:has(#chat-home-btn) .chat-header-more{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin-left:auto;padding:0;border:0;border-radius:50%;
     background:transparent;color:var(--text-2);cursor:pointer}

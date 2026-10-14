@@ -76,7 +76,6 @@ export function handoffPatch(h: Handoff, current: Plan, caps: Capabilities, anal
   const option = caps.render.options.find((o) => o.image_model === h.image_model && o.quality === h.image_quality);
   if (option) patch.render_option = option.id;
   if (h.aspect_ratio && caps.render.aspect_ratios.some((a) => a.value === h.aspect_ratio)) patch.aspect_ratio = h.aspect_ratio;
-  if (typeof h.run_count === "number") patch.run_count = Math.max(1, Math.min(h.run_count, caps.render.max_run_count));
   if (h.advanced_options) patch.advanced_options = h.advanced_options;
   if (h.style_options) patch.style_options = h.style_options;
   // face_issue_overrides 在後端是逐鍵合併的，所以這邊沒有的鍵要明確送 null 清掉，

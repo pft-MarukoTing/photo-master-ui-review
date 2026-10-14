@@ -1,9 +1,39 @@
+import { createPortal } from "preact/compat";
+import { useEffect } from "preact/hooks";
 import type { Capabilities, Plan } from "./types";
 import { renderOptionLabel } from "./util";
 
 export type Settings = Pick<Plan, "analysis_model" | "render_option" | "aspect_ratio" | "advanced_options" | "detailed_explanation">;
 
-export function defaultSettings(caps: Capabilities): Settings {
+// header 設定裡的那一項：跟著使用者走，不跟著照片走。換照片、開新對話都不會
+// 清掉，重新整理也還在；引擎、長寬比跟人像修正才是每張照片各自的。
+export type Prefs = Pick<Settings, "detailed_explanation">;
+
+const PREFS_KEY = "chat-prefs";
+
+export function loadPrefs(): Prefs {
+  let saved: Partial<Prefs> = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(PREFS_KEY) || "{}") || {};
+  } catch {
+    /* storage may be blocked */
+  }
+  return {
+    detailed_explanation: typeof saved.detailed_explanation === "boolean" ? saved.detailed_explanation : true,
+  };
+}
+
+export function savePrefs(p: Prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {
+    /* storage may be blocked */
+  }
+}
+
+// 沒給 prefs 是後端自己的預設：拿來判斷要不要 patch plan。給了是這個使用者的
+// 起點：換照片、開新對話都回到這裡。
+export function defaultSettings(caps: Capabilities, prefs?: Prefs): Settings {
   const d = caps.render.defaults;
   return {
     analysis_model: d.analysis_model,
@@ -11,6 +41,7 @@ export function defaultSettings(caps: Capabilities): Settings {
     aspect_ratio: d.aspect_ratio,
     advanced_options: Object.fromEntries(caps.advanced_options.map((o) => [o.key, o.default])),
     detailed_explanation: true,
+    ...prefs,
   };
 }
 
@@ -30,12 +61,10 @@ export function SettingsEditor({
   caps,
   settings,
   onChange,
-  lockAnalysis,
 }: {
   caps: Capabilities;
   settings: Settings;
   onChange: (s: Settings) => void;
-  lockAnalysis?: boolean;
 }) {
   const set = (patch: Partial<Settings>) => onChange({ ...settings, ...patch });
   const val = (e: Event) => (e.currentTarget as HTMLSelectElement).value;
@@ -44,12 +73,7 @@ export function SettingsEditor({
       <div class="chat-settings-fields">
         <label class="chat-field">
           <span class="chat-meta">分析引擎</span>
-          <select
-            class="quality-select"
-            value={settings.analysis_model}
-            disabled={lockAnalysis}
-            onChange={(e) => set({ analysis_model: val(e) })}
-          >
+          <select class="quality-select" value={settings.analysis_model} onChange={(e) => set({ analysis_model: val(e) })}>
             {caps.render.analysis_models.map((m) => (
               <option value={m.id}>{m.label}</option>
             ))}
@@ -104,23 +128,55 @@ export function SettingsEditor({
           );
         })}
       </div>
-      <div class="chat-settings-portrait">
-        <span class="chat-meta">對話風格</span>
-        <p class="chat-note">打開後，助理會更詳細地說明分析、建議與每一版的成果。</p>
-        <label class="chat-switch-row">
-          <span class="ios-switch">
-            <input
-              type="checkbox"
-              checked={!!settings.detailed_explanation}
-              onChange={(e) => set({ detailed_explanation: (e.currentTarget as HTMLInputElement).checked })}
-            />
-            <span class="ios-track">
-              <span class="ios-thumb" />
-            </span>
-          </span>
-          <span>詳細解說</span>
-        </label>
-      </div>
     </div>
+  );
+}
+
+// header 的「設定」：沿用面板模式 #settings-modal 的外框。改了就生效，沒有儲存鍵，
+// 跟上傳頁的設定卡一樣；對話中切換也是當下就套用（app.tsx）。
+export function PrefsModal(props: {
+  prefs: Prefs;
+  onChange: (p: Prefs) => void;
+  onClose: () => void;
+}) {
+  const { prefs, onChange, onClose } = props;
+  const set = (patch: Partial<Prefs>) => onChange({ ...prefs, ...patch });
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onClose]);
+  return createPortal(
+    <div class="error-modal" id="chat-prefs-modal">
+      <div class="error-modal-backdrop" onClick={onClose} />
+      <div class="error-modal-box" role="dialog" aria-modal="true" aria-labelledby="chat-prefs-title">
+        <div class="error-modal-hdr">
+          <span id="chat-prefs-title" class="settings-modal-title">設定</span>
+          <button class="error-modal-close" type="button" aria-label="關閉" onClick={onClose}>
+            ×
+          </button>
+        </div>
+        <div class="settings-modal-body chat-prefs-body">
+          <div class="chat-settings-portrait">
+            <span class="chat-meta">對話風格</span>
+            <p class="chat-note">打開後，助理會更詳細地說明分析、建議與每一版的成果。</p>
+            <label class="chat-switch-row">
+              <span class="ios-switch">
+                <input
+                  type="checkbox"
+                  checked={!!prefs.detailed_explanation}
+                  onChange={(e) => set({ detailed_explanation: (e.currentTarget as HTMLInputElement).checked })}
+                />
+                <span class="ios-track">
+                  <span class="ios-thumb" />
+                </span>
+              </span>
+              <span>詳細解說</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }

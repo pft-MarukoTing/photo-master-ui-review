@@ -30,9 +30,10 @@ TIMEOUT_SECONDS = 45
 HISTORY_LEN = 20
 
 # What a typed request may change. The rest (image model, analysis model,
-# prompt overwrite, Body Reshape) stays in the panel. preset is not
+# run count, prompt overwrite, Body Reshape) stays in the panel; chat renders
+# one image per round. preset is not
 # adjustable at all, so the model never sees it and a patch for it is dropped.
-PATCHABLE_KEYS = ("aspect_ratio", "run_count", "user_prompt", "style_options",
+PATCHABLE_KEYS = ("aspect_ratio", "user_prompt", "style_options",
                   "advanced_options", "recipe_checked", "face_issue_overrides")
 # Analysis fields the model has no use for.
 DROPPED_ANALYSIS_KEYS = ("prompts", "local_face_review", "correction_plan", "correction_axes", "correction_inverse")
@@ -147,7 +148,7 @@ Decide in this order:
 
 PATCH
 patch_json is either "" or a JSON object string containing only changed keys:
-- "aspect_ratio", "run_count": one of the listed values.
+- "aspect_ratio": one of the listed values.
 - "style_options": {"<group>": "<choice>"}; "default" clears a group.
 - "advanced_options": {"<key>": true|false}; switches a portrait fix on/off for everyone.
 - "face_issue_overrides": {"<subject_index>:<category>": false | {"allowed": true} | {"allowed": true, "level": "<level>"} | null}. false means do not fix this person; {"allowed": true} means fix; null returns to the AI's own call. Copy the keys exactly from FACES. The category is one of the English category names in FACES. A request about someone's eyes (「眼睛」) changes both that person's blink_issue and gaze_issue keys.
@@ -237,7 +238,6 @@ def _fields(debug):
     caps = capabilities.describe(debug=debug)
     return {
         "aspect_ratio": {a["value"]: a["label"] for a in caps["render"]["aspect_ratios"]},
-        "run_count": f"1-{caps['render']['max_run_count']}",
         "style_options": {g["id"]: {"label": g["label"], "choices": {c["value"]: c["label"] for c in g["choices"]}}
                           for g in caps["style_options"]},
         "advanced_options": {o.key: o.label for o in capabilities.ADVANCED_OPTIONS
@@ -706,7 +706,6 @@ def describe_changes(before, after, analysis, debug=False):
     ratios = fields["aspect_ratio"]
     add("aspect_ratio", "比例", ratios.get(before["aspect_ratio"], before["aspect_ratio"]),
         ratios.get(after["aspect_ratio"], after["aspect_ratio"]))
-    add("run_count", "張數", f"{before['run_count']} 張", f"{after['run_count']} 張")
     for group, spec in fields["style_options"].items():
         add(f"style_options.{group}", spec["label"],
             _choice_label(spec["choices"], before["style_options"].get(group)),
@@ -738,7 +737,7 @@ def describe_changes(before, after, analysis, debug=False):
 # --- applying without asking -------------------------------------------------
 
 # 一個設定換一個值，說的就是要的結果，不必再確認一次。
-PLAIN_SETTING_KEYS = ("style_options", "aspect_ratio", "run_count")
+PLAIN_SETTING_KEYS = ("style_options", "aspect_ratio")
 
 
 def _picked(history, analysis=None):

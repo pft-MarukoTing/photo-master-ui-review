@@ -267,6 +267,8 @@ export function Header(props: {
   onNewChat?: () => void;
   showHistory?: boolean;
   showChangelog?: boolean;
+  // 開 header 的「設定」（對話風格）；彈窗由 app 負責。
+  onSettings?: () => void;
   // The edit (or, before one, the analysis) on screen, which 回報 points at.
   jobId?: string | null;
 }) {
@@ -340,6 +342,12 @@ export function Header(props: {
             <button id="chat-changelog-btn" class="btn btn-secondary btn-sm" type="button" onClick={() => setChangelog(true)}>
               <Icon name="changelog" size={14} />
               <span class="btn-label">版本紀錄</span>
+            </button>
+          )}
+          {props.onSettings && (
+            <button id="chat-settings-btn" class="btn btn-secondary btn-sm" type="button" onClick={props.onSettings}>
+              <Icon name="gear" size={14} />
+              <span class="btn-label">設定</span>
             </button>
           )}
           <ThemeToggle />

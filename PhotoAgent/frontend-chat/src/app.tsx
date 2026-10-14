@@ -52,7 +52,7 @@ import {
   type Category,
   type Hot,
 } from "./options";
-import { defaultSettings, sameSettings, SettingsEditor, type Settings } from "./settings";
+import { defaultSettings, loadPrefs, PrefsModal, savePrefs, sameSettings, SettingsEditor, type Prefs, type Settings } from "./settings";
 import type {
   Analysis,
   Capabilities,
@@ -392,6 +392,9 @@ export function App() {
   const [via, setVia] = useState<"upload" | "sample" | null>(null);
   const [source, setSource] = useState<Source | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // header 設定裡的對話風格；settings 每次重來都從這裡起跳。
+  const [prefs, setPrefs] = useState<Prefs | null>(null);
+  const [prefsOpen, setPrefsOpen] = useState(false);
   // What the user typed in the composer before the session starts, one entry
   // per message. Together they become the new photo's plan.user_prompt, so the
   // 個人化需求 card in the session opens with them.
@@ -540,7 +543,9 @@ export function App() {
         const [c, cfg] = await Promise.all([api.capabilities(), api.config()]);
         setCaps(c);
         capsRef.current = c;
-        setSettings(defaultSettings(c));
+        const p = loadPrefs();
+        setPrefs(p);
+        setSettings(defaultSettings(c, p));
         setDebugUi(!!cfg.debugUi);
         api
           .demoImages()
@@ -619,9 +624,9 @@ export function App() {
       const r = await api.analysis(s.session_id, p.photo_id).catch(() => null);
       const analysis = r?.status === "success" ? (r.result?.analysis as Analysis) : null;
       const patch = handoffPatch(h, p.plan, c, analysis);
-      // 引擎、張數在一般帳號可能不給改，被擋就不帶這兩項，其他照樣帶。
+      // 引擎在一般帳號可能不給改，被擋就不帶這項，其他照樣帶。
       await api.patchPhotoPlan(s.session_id, p.photo_id, patch).catch(() => {
-        const { render_option, run_count, ...rest } = patch;
+        const { render_option, ...rest } = patch;
         return api.patchPhotoPlan(s.session_id, p.photo_id, rest);
       });
       return await api.getSession(s.session_id);
@@ -740,7 +745,7 @@ export function App() {
     setPreAsk(null);
     setRenderAsk(null);
     setSamplesOpen(false);
-    if (caps) setSettings(defaultSettings(caps));
+    if (caps) setSettings(defaultSettings(caps, prefs || undefined));
   }
 
   function ask(message: string, notice = false): Promise<boolean> {
@@ -838,7 +843,7 @@ export function App() {
     }
     setSamplesOpen(false);
     const typed = notes.length > 0 || !!preEdit || !!preAsk || !!preDraft.current.trim();
-    const tuned = !!caps && !!settings && !sameSettings(settings, defaultSettings(caps));
+    const tuned = !!caps && !!settings && !sameSettings(settings, defaultSettings(caps, prefs || undefined));
     const ok = !(typed || tuned) || await new Promise<boolean>((resolve) =>
       setLeaveAsk({
         message: "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？",
@@ -858,7 +863,7 @@ export function App() {
     setPreEdit(null);
     setPreAsk(null);
     setPreClear((n) => n + 1);
-    if (caps) setSettings(defaultSettings(caps));
+    if (caps) setSettings(defaultSettings(caps, prefs || undefined));
     choose(s);
   }
 
@@ -1309,6 +1314,29 @@ export function App() {
       onNewChat={phase === "session" ? askNewChat : undefined}
       showHistory={phase !== "home"}
       showChangelog={phase === "home"}
+      onSettings={phase === "home" ? undefined : () => setPrefsOpen(true)}
+    />
+  );
+  // 還沒進對話的話，上傳頁的設定跟著一起換，這張照片就照新的跑。對話中也當下生效：
+  // 後端每次回話都讀照片 plan 上的值，直接改照片的 plan 就好。不走
+  // run()：美化跑到一半也要能切，也不該把畫面鎖住。
+  const prefsEl = prefsOpen && prefs && (
+    <PrefsModal
+      prefs={prefs}
+      onChange={(p) => {
+        setPrefs(p);
+        savePrefs(p);
+        setSettings((s) => s && { ...s, ...p });
+        if (phase === "session" && session && p.detailed_explanation !== prefs.detailed_explanation) {
+          const id = session.session_id;
+          Promise.all(
+            session.photos
+              .filter((ph) => ph.status !== "failed")
+              .map((ph) => api.patchPhotoPlan(id, ph.photo_id, { detailed_explanation: p.detailed_explanation })),
+          ).catch((e) => setError(errorText(e)));
+        }
+      }}
+      onClose={() => setPrefsOpen(false)}
     />
   );
   const drawerEl = (
@@ -1372,7 +1400,7 @@ export function App() {
             </div>
           </section>
         </main>
-        {drawerEl}{confirmEl}{askEl}
+        {drawerEl}{prefsEl}{confirmEl}{askEl}
       </>
     );
   }
@@ -1406,7 +1434,7 @@ export function App() {
             onResolve={resolveProposal}
           />
         </main>
-        {drawerEl}
+        {drawerEl}{prefsEl}
         {samplesEl}
         {confirmEl}
         {askEl}
@@ -1566,7 +1594,7 @@ export function App() {
         </section>
         {hiddenInput}
       </main>
-      {drawerEl}
+      {drawerEl}{prefsEl}
       {samplesEl}
       {confirmEl}
       {askEl}
