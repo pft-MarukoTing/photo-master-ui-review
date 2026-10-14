@@ -3101,7 +3101,7 @@ function SessionView(props: {
       </AssistantMsg>
     );
     bar = ["先調整", "照原設定再美化"];
-  } else if ((photo.status === "analyzing" || reframing) && !renderQueued) {
+  } else if (photo.status === "analyzing" && !renderQueued) {
     // 只有一顆還按不下去的「美化」，說的是分析完接下來做什麼。這裡曾經還有一顆
     // 「取消分析」，但後端沒有取消 job 的 API，它做的其實是清掉整個 session 重來 --
     // 一顆說自己會停下分析、實際上是丟掉這張照片的按鈕，不如不要。
@@ -3110,45 +3110,31 @@ function SessionView(props: {
         <Chip label="美化" icon="spark" kind="primary" disabled />
       </QuickBar>
     );
-  } else if (photo.status !== "ready") {
-    quick = null;
-  } else if (adjusting) {
+  } else if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
+    // 分析過後「調整」一直在美化旁邊。這一輪本來就在調整，所以它換成「調整中」
+    // 的狀態字、不能按（再按一次會把這輪的起點重設掉）；項目在對話裡點。
+    // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
+    const label = fresh && !adjusting && !lastOpened ? "照建議直接美化" : "美化";
+    const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
     quick = (
-      <QuickBar
-        label={
-          dirtyCats.length ? (
-            <>
-              {/* 窄的時候只剩「還沒美化：」，改了哪幾項讓位給頭像。 */}
-              <span class="chat-quick-label-detail">改了{dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，</span>
-              還沒美化：
-            </>
-          ) : undefined
-        }
-      >
+      <QuickBar>
+        <Chip label="調整中" icon="pencil" kind="current" settled title="正在調整：點對話裡的項目就能改" />
         <Chip
-          label="美化"
+          label={label}
           icon="spark"
           kind="primary"
-          disabled={busy}
-          onClick={() => (unchanged ? setConfirmRerun(true) : renderRound("美化", "spark"))}
+          badge={pending}
+          disabled={busy || reframing}
+          onClick={() => (adjusting && unchanged ? setConfirmRerun(true) : renderRound(label, "spark"))}
         />
       </QuickBar>
     );
-    bar = ["美化"];
-  } else if (fresh) {
-    quick = (
-      <QuickBar label={lastOpened ? undefined : "或直接選："} cue>
-        {lastOpened ? (
-          <Chip label="美化" icon="spark" kind="primary" disabled={busy} onClick={() => renderRound("美化", "spark")} />
-        ) : (
-          <Chip label="照建議直接美化" icon="spark" kind="primary" disabled={busy} onClick={() => renderRound("照建議直接美化", "spark")} />
-        )}
-      </QuickBar>
-    );
-    bar = [lastOpened ? "美化" : "照建議直接美化"];
+    bar = ["調整中", label];
+  } else if (photo.status !== "ready") {
+    quick = null;
   } else if (versions.length && current) {
     quick = (
-      <QuickBar label="下一步：" cue>
+      <QuickBar>
         <Chip label="調整" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </QuickBar>

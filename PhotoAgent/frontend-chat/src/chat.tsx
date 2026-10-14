@@ -376,7 +376,7 @@ export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () 
 export function Chip(props: {
   label: string;
   icon?: string;
-  kind?: "primary" | "ghost" | "picked";
+  kind?: "primary" | "ghost" | "picked" | "current";
   disabled?: boolean;
   title?: string;
   onClick?: () => void;
@@ -385,33 +385,34 @@ export function Chip(props: {
   // no longer a control at all -- not a disabled one, which would read as
   // "temporarily unavailable" rather than as something already past.
   settled?: boolean;
+  // 有東西等著這顆鍵處理（例如改了還沒美化）：右上角一顆小圓點，跟選項裡「建議
+  // 調整」的點同一個意思。字放在 title 和 aria-label，滑過去或報讀時才說。
+  badge?: string;
 }) {
   const cls = `chat-chip${props.kind ? ` is-${props.kind}` : ""}${props.settled ? " is-static" : ""}`;
+  const title = props.badge || props.title;
+  const badge = props.badge && <span class="chat-chip-badge" role="img" aria-label={props.badge} />;
   if (props.settled) {
     return (
-      <span class={cls} title={props.title}>
+      <span class={cls} title={title}>
         {props.icon && <Icon name={props.icon} />}
         {props.label}
+        {badge}
       </span>
     );
   }
   return (
-    <button type="button" class={cls} disabled={props.disabled} title={props.title} onClick={props.onClick}>
+    <button type="button" class={cls} disabled={props.disabled} title={title} onClick={props.onClick}>
       {props.icon && <Icon name={props.icon} />}
       {props.label}
+      {badge}
     </button>
   );
 }
 
-// `cue`: the label only leads into the chips (下一步：), so a narrow strip can
-// drop it; a label that says something the chips do not stays.
-export function QuickBar({ label, cue, children }: { label?: ComponentChildren; cue?: boolean; children: ComponentChildren }) {
-  return (
-    <div class="chat-quick">
-      {label && <span class={cue ? "chat-quick-label is-cue" : "chat-quick-label"}>{label}</span>}
-      {children}
-    </div>
-  );
+// 下方那排只放按鈕，不放引導字：要按什麼由按鈕本身（選取狀態、小圓點）說。
+export function QuickBar({ children }: { children: ComponentChildren }) {
+  return <div class="chat-quick">{children}</div>;
 }
 
 // The quick replies and the subject picker used to be two stacked strips, each

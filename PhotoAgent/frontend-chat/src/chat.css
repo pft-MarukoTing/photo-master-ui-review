@@ -317,14 +317,6 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    flush against the rule, so the strip holds 52px as a floor: the chips get
    10px each side, and the strip keeps one height whether or not faces show. */
 .chat-footbar{min-height:52px}
-/* Phone width: 指定對象 + a face + 下一步： + two chips outgrow the strip, and
-   the faces -- the side that gives way -- got squeezed to a sliver. The
-   labels give way first: the cue goes, and the adjust label keeps only
-   還沒美化：. The chips name their own action, while 指定對象 is the only
-   thing saying what tapping a face does. 440 covers two faces plus the widest
-   pair (照建議直接美化) with its cue. */
-.chat-footbar{container-type:inline-size}
-@container (max-width:440px){.chat-quick-label.is-cue,.chat-quick-label-detail{display:none}}
 .chat-footbar+.chat-composer{border-top:0;padding-top:0}
 /* A fixed 20px rather than align-self:stretch -- the faces are half again as
    tall as the chips, and a full-height rule drew attention to that. */
@@ -339,9 +331,6 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    room. */
 .chat-quick{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;
   gap:var(--sp-2);flex:0 0 auto;max-width:100%;margin-left:auto}
-/* No longer width:100% -- in the merged strip the label is the first thing on
-   the line, not a caption above its own row. */
-.chat-quick-label{font-size:var(--chat-fs-sm);color:var(--n54)}
 /* min-height, not height: the touch block below needs to raise it, and 14px
    text must not clip. */
 .chat-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:32px;padding:var(--sp-1) var(--sp-3);border-radius:999px;
@@ -354,6 +343,14 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
      as a button. The demotion is carried by the muted text plus the group
      gutter in .chat-actions, which is enough next to a tonal pair. */
 .chat-chip[disabled]{opacity:.45;cursor:not-allowed}
+/* 改了還沒美化：美化鍵右上角的點，取代原本寫在旁邊的「改了…，還沒美化：」。
+   跟選項裡建議調整的 .chat-opt-dot 同色同意思，多一圈底色把它從 2px 的外框
+   切開；出現時擴散一次就停，不一直閃。 */
+.chat-chip{position:relative}
+.chat-chip-badge{position:absolute;top:-2px;right:-2px;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);box-shadow:0 0 0 2px var(--card);animation:chat-chip-badge-in .9s ease-out 1}
+@keyframes chat-chip-badge-in{0%{transform:scale(0);box-shadow:0 0 0 2px var(--card),0 0 0 0 rgba(var(--accent-rgb),.5)}
+  40%{transform:scale(1.15)}100%{transform:scale(1);box-shadow:0 0 0 2px var(--card),0 0 0 8px rgba(var(--accent-rgb),0)}}
 /* Status badge over a session tile -- the same chip the old UI puts on
    every history tile (.history-cube .rc-badge, index.html): a glass pill
    with a glyph, tinted by status. Bottom-left, which is where the old UI
@@ -437,6 +434,9 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    stays readable when scrolling back; the one that was not recedes. */
 .chat-chip.is-static{cursor:default;border-color:var(--n24);color:var(--n54);background:transparent}
 .chat-chip.is-static.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo)}
+/* 「調整中」：所在的狀態，不是一顆鍵。拿掉外框和底色——沒有框的字就不像按鈕，
+   旁邊有框的「美化」才是唯一能按的；字用主色，讀得出是現在進行中的那一步。 */
+.chat-chip.is-static.is-current{border-color:transparent;background:transparent;color:var(--accent-text);padding-left:var(--sp-1);padding-right:var(--sp-1)}
 /* ── 範例照片 dialog ──────────────────────────────────────────────────
    Same stacking band as the history drawer (backdrop 1000, panel 1001) and
    the same backdrop wash, because they are the same kind of thing: a panel
@@ -910,6 +910,7 @@ div.chat-proposal-row{cursor:default}
   .chat-opt-caret{transition:none}
   .chat-flow-dot{animation:none;opacity:.85}
   .chat-composer-field.is-hint{animation:none}
+  .chat-chip-badge{animation:none}
 }
 
 /* The options cards: one category (人像 / 美化建議 / 風格) per card */
