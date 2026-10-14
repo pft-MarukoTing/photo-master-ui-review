@@ -253,13 +253,13 @@ export function ConfirmModal(props: {
 }
 
 // Same order as 面板模式's header, so switching modes moves nothing:
-// 回到首頁 · 最近照片 · mode switch · 版本紀錄 · 主題 · 回報. 新對話 (chat only,
-// right after 回到首頁) opens the photo-picking page for another photo.
+// 回到首頁 · 最近照片 · 版本紀錄 · 主題 · 回報. 新對話 (chat only, right after
+// 回到首頁) opens the photo-picking page for another photo. The way over to
+// 面板模式 is not here: it is the 對話｜面板 switch on the conversation's head
+// (ChatPanel's panelMode), as 面板模式's way back is the same switch beside its
+// step indicator.
 // showChangelog: 版本紀錄 only on 首頁, as 面板模式 shows it only on its upload screen.
 // showHistory is off on 首頁, whose gallery has its own 最近對話 tab.
-// showOldUi likewise: 面板模式 only takes over a photo's analysis/result, so
-// the switch exists only once a session is open, and is held while the photo
-// is analyzing or rendering (the other mode would open on a half-done job).
 export function Header(props: {
   onHome: () => void;
   onHistory: () => void;
@@ -267,12 +267,6 @@ export function Header(props: {
   onNewChat?: () => void;
   showHistory?: boolean;
   showChangelog?: boolean;
-  showOldUi?: boolean;
-  oldUiBusy?: boolean;
-  // Right before leaving for 面板模式: hands this photo's adjustments over.
-  onOldUi?: () => void;
-  // The photo on screen, which 面板模式 then opens on.
-  caseId?: string | null;
   // The edit (or, before one, the analysis) on screen, which 回報 points at.
   jobId?: string | null;
 }) {
@@ -342,18 +336,6 @@ export function Header(props: {
               <span class="btn-label">最近照片</span>
             </button>
           )}
-          {props.showOldUi &&
-            (props.oldUiBusy ? (
-              <button class="btn btn-secondary btn-sm" type="button" disabled title="分析或美化完成後才能切換">
-                <Icon name="layout" size={14} />
-                <span class="btn-label">面板模式</span>
-              </button>
-            ) : (
-              <a class="btn btn-secondary btn-sm" href={urls.oldUi(props.caseId)} title="切換到面板模式" onClick={props.onOldUi}>
-                <Icon name="layout" size={14} />
-                <span class="btn-label">面板模式</span>
-              </a>
-            ))}
           {props.showChangelog && (
             <button id="chat-changelog-btn" class="btn btn-secondary btn-sm" type="button" onClick={() => setChangelog(true)}>
               <Icon name="changelog" size={14} />

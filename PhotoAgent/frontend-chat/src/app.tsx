@@ -28,6 +28,7 @@ import {
   useWorkLog,
   type Change,
   type FaceRef,
+  type PanelMode,
   type Proposal,
   type ProposalChoice,
 } from "./chat";
@@ -1265,9 +1266,13 @@ export function App() {
     />
   );
 
+  // Right before leaving for 面板模式 by the conversation's 對話｜面板 switch:
+  // hands this photo's adjustments over.
+  const toOldUi = () => {
+    if (caps && photo?.case_id) writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis);
+  };
   const header = (
     <Header
-      caseId={phase === "session" ? photo?.case_id : null}
       jobId={phase === "session" ? photo?.active_version?.job_id || photo?.analyze_job_id || null : null}
       onHome={async () => {
         if (await confirmLeave("回到首頁")) goHome();
@@ -1280,11 +1285,6 @@ export function App() {
       onNewChat={phase === "session" ? askNewChat : undefined}
       showHistory={phase !== "home"}
       showChangelog={phase === "home"}
-      showOldUi={phase === "session"}
-      onOldUi={() => {
-        if (caps && photo?.case_id) writeHandoff(photo.case_id, photo.plan, caps, analyses[photo.photo_id]?.analysis);
-      }}
-      oldUiBusy={!!photo && isBusy(photo)}
     />
   );
   const drawerEl = (
@@ -1377,6 +1377,7 @@ export function App() {
             onSavePrompt={savePrompt}
             onPost={postFromChat}
             onAnalyze={analyzePhoto}
+            panelMode={{ href: urls.oldUi(photo.case_id), busy: isBusy(photo), onLeave: toOldUi }}
             onResolve={resolveProposal}
           />
         </main>
@@ -2046,6 +2047,7 @@ function SessionView(props: {
   onSavePrompt: (text: string, screen?: Screen) => Promise<boolean>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
+  panelMode: PanelMode;
   onResolve: (
     proposal: Proposal,
     choice: ProposalChoice,
@@ -3137,11 +3139,13 @@ function SessionView(props: {
                 busy={busyCopy}
                 onSelect={props.onSelectVersion}
                 onViewer={() => setViewing(true)}
+                panelMode={props.panelMode}
               />
               <div class="results-analysis-slot" id="results-analysis-slot">
                 <SplitGrip />
                 <ChatPanel
                   sub={sub}
+                  panelMode={props.panelMode}
                   toBottom={toBottom}
                   toStart={lastDone}
                   onDropFile={busy ? undefined : props.onFile}

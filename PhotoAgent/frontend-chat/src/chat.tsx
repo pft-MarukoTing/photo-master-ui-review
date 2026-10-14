@@ -85,6 +85,34 @@ function typeMessages(msgs: HTMLElement[]): () => void {
   };
 }
 
+// The way between this page and 面板模式: 對話 is where you are, 面板 the link
+// over. busy: held while analyzing or rendering (the panel would open on a
+// half-done job); onLeave hands the photo's adjustments over right before.
+// Styles in styles.css (.mode-switch), shared with 面板模式's own copy.
+export type PanelMode = { href: string; busy: boolean; onLeave: () => void };
+
+export function ModeSwitch({ mode, class: cls }: { mode: PanelMode; class?: string }) {
+  return (
+    <nav class={`mode-switch${cls ? ` ${cls}` : ""}`} aria-label="檢視方式">
+      <span class="mode-switch-opt is-active" aria-current="page">
+        <Icon name="chat" size={14} />
+        對話
+      </span>
+      {mode.busy ? (
+        <span class="mode-switch-opt" aria-disabled="true" title="分析或美化完成後才能切換">
+          <Icon name="layout" size={14} />
+          面板
+        </span>
+      ) : (
+        <a class="mode-switch-opt" href={mode.href} title="切換到面板模式" onClick={mode.onLeave}>
+          <Icon name="layout" size={14} />
+          面板
+        </a>
+      )}
+    </nav>
+  );
+}
+
 export function ChatPanel(props: {
   sub: string;
   class?: string;
@@ -105,6 +133,11 @@ export function ChatPanel(props: {
   // always: the session page, where there is no such copy -- the bar stays up
   // from the start, titled with the version on screen.
   photo?: { src: string; onOpen: () => void; title?: string; note?: string; always?: boolean };
+  // The session page: the head's title becomes a 對話｜面板 switch, so the way
+  // over to 面板模式 sits on the conversation itself instead of among the
+  // header's buttons. On the phone the head is put away and the photo carries
+  // the same switch instead (ResultsCanvas).
+  panelMode?: PanelMode;
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -223,8 +256,14 @@ export function ChatPanel(props: {
       }
     >
       <div class="chat-panel-head">
-        <Icon name="chat" size={14} />
-        <span class="chat-panel-title">對話</span>
+        {props.panelMode ? (
+          <ModeSwitch mode={props.panelMode} />
+        ) : (
+          <>
+            <Icon name="chat" size={14} />
+            <span class="chat-panel-title">對話</span>
+          </>
+        )}
         <span class="chat-panel-sub">{props.sub}</span>
       </div>
       {props.photo && (

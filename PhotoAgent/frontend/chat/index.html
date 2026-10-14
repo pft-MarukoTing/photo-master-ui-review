@@ -460,6 +460,18 @@
     .step-indicator-slot {
       padding-top: 20px;
     }
+    /* 流程列右邊放「對話｜面板」切換（.mode-switch）。開關高 36px，比
+       30px 的步驟圓圈高，用負的上下 margin 吃掉多出來的 6px，讓這列總高
+       維持 --step-indicator-h 不變，開關跟圓圈也垂直置中對齊。 */
+    .step-indicator-slot:not([hidden]) {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+    .step-indicator-slot > .ap-step-indicator { flex: 1; min-width: 0; }
+    .step-indicator-slot > .mode-switch { margin: -3px 0 1px; }
+    /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
+    body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {
       display: flex;
       align-items: center;
@@ -550,6 +562,10 @@
       }
       .ap-step-name { font-size: 15px; }
       .ap-step-line { margin: 14px 14px 0; }
+      /* 窄螢幕步驟改直排，空間不多：開關收掉圖示、縮小左右留白。 */
+      .step-indicator-slot:not([hidden]) { gap: 12px; }
+      .step-indicator-slot > .mode-switch .mode-switch-opt { padding: 0 10px; }
+      .step-indicator-slot > .mode-switch svg { display: none; }
     }
 
     /* ── Shared collapsible-card shell for #ap-review-panel, the merged
@@ -4331,8 +4347,8 @@
     .ap-style-item.is-single-option > .ap-style-trigger::after { content: none; }
     body.is-opening-case > main { visibility: hidden; }
   </style>
-  <script type="module" crossorigin src="./static/index-BF-TnRvB.js"></script>
-  <link rel="stylesheet" crossorigin href="./static/index-Cc8syq7a.css">
+  <script type="module" crossorigin src="./static/index--l0wuTd7.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-D62HGnir.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
   <!-- The attributes above are caramel, the fallback, so the common first load

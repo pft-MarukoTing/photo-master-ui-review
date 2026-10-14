@@ -5452,6 +5452,44 @@ body[data-theme-mode="light"] .recipe-tags .portrait-check-toggle:hover {
 .btn:active { transform: scale(.97); opacity: .85; }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
 .btn:disabled:hover { transform: none; box-shadow: none; }
+
+/* 「對話｜面板」切換：兩套介面共用。對話頁放在對話框標頭（frontend-chat 的
+   ChatPanel），面板模式放在流程列右邊（#step-indicator-slot，index.html）。
+   樣子跟對話首頁照片分頁的 segmented control 同一套：目前所在那段用卡片底色
+   ＋主色字，另一段是連往另一種模式的連結。分析或美化進行中，連結那段帶
+   aria-disabled 變淡（舊版用 toggleAttribute，所以只看有沒有這個屬性）。 */
+.mode-switch {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 20px;
+  background: var(--n14);
+}
+.mode-switch-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.mode-switch-opt.is-active {
+  background: var(--card);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0,0,0,.1);
+}
+a.mode-switch-opt:hover { background: rgba(var(--accent-rgb), .08); color: var(--text); }
+a.mode-switch-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode-switch-opt[aria-disabled]:not([aria-disabled="false"]) { opacity: .45; cursor: not-allowed; }
+a.mode-switch-opt[aria-disabled]:not([aria-disabled="false"]):hover { background: transparent; color: var(--text-2); }
 /* A link button can't be :disabled -- #chat-ui-btn is held via aria-disabled. */
 a.btn[aria-disabled] { opacity: .35; cursor: not-allowed; }
 a.btn[aria-disabled]:hover { transform: none; box-shadow: none; }

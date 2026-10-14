@@ -457,6 +457,18 @@
     .step-indicator-slot {
       padding-top: 20px;
     }
+    /* 流程列右邊放「對話｜面板」切換（.mode-switch）。開關高 36px，比
+       30px 的步驟圓圈高，用負的上下 margin 吃掉多出來的 6px，讓這列總高
+       維持 --step-indicator-h 不變，開關跟圓圈也垂直置中對齊。 */
+    .step-indicator-slot:not([hidden]) {
+      display: flex;
+      align-items: flex-start;
+      gap: 24px;
+    }
+    .step-indicator-slot > .ap-step-indicator { flex: 1; min-width: 0; }
+    .step-indicator-slot > .mode-switch { margin: -3px 0 1px; }
+    /* 這列在的時候開關就是回對話的入口，header 不用再放一顆一樣的。 */
+    body:has(#step-indicator-slot:not([hidden])) #chat-ui-btn { display: none; }
     .ap-step {
       display: flex;
       align-items: center;
@@ -537,8 +549,10 @@
       /* Two-line steps here (circle stacked over name), so the slot is
          taller than the base 54px (measured: 73px box + the same 4px
          margin) -- kept in sync so the viewport-height screens subtract the
-         right amount at this breakpoint too. */
-      :root { --step-indicator-h: 77px; }
+         right amount at this breakpoint too.
+         「對話｜面板」在這裡另起一行放在步驟上面（見下面），所以再加上
+         它那行：padding-top 從 20 收到 12，+36 開關 +12 間距，共 117px。 */
+      :root { --step-indicator-h: 117px; }
       .ap-step-indicator { align-items: flex-start; }
       .ap-step {
         flex-direction: column;
@@ -547,6 +561,15 @@
       }
       .ap-step-name { font-size: 15px; }
       .ap-step-line { margin: 14px 14px 0; }
+      /* 步驟改直排後，開關跟它們擠在同一行會像第五個步驟。改成在步驟
+         上面自己一行、靠右，跟桌機一樣在右邊。 */
+      .step-indicator-slot:not([hidden]) {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding-top: 12px;
+      }
+      .step-indicator-slot > .mode-switch { order: -1; align-self: flex-end; margin: 0; }
     }
 
     /* ── Shared collapsible-card shell for #ap-review-panel, the merged
@@ -4648,6 +4671,29 @@
         <span class="ap-step-name">完成</span>
       </div>
     </div>
+    <!-- 「對話｜面板」：對話頁對話框標頭那顆的鏡像（樣式在 styles.css 的
+         .mode-switch），讓兩邊用同一個地方、同一個樣子互相切換。這裡是面板
+         模式，所以「面板」是目前那段，「對話」是連回去的連結；點擊、交接
+         照片、分析或美化中暫停都跟 #chat-ui-btn 走同一套（app.js）。
+         只在這列出現時才有它，上傳畫面沒有這列，就交給 header 的
+         #chat-ui-btn。 -->
+    <nav class="mode-switch" aria-label="檢視方式">
+      <a id="chat-mode-switch-link" class="mode-switch-opt" href="chat/" title="切換到對話模式">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+          <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        對話
+      </a>
+      <span class="mode-switch-opt is-active" aria-current="page">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="16" rx="3"/>
+          <path d="M9 4v16"/>
+        </svg>
+        面板
+      </span>
+    </nav>
   </div>
 
   <!-- ══════════════════════════════════

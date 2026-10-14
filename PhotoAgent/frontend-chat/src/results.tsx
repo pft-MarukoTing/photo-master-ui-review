@@ -8,6 +8,7 @@ import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
 import { downloadImage, executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
 import { Icon } from "./icons";
 import { ConfirmModal } from "./home";
+import { ModeSwitch, type PanelMode } from "./chat";
 import type { VNode } from "preact";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
@@ -132,6 +133,9 @@ interface CanvasProps {
   // 手機和直拿的平板：照片左上角那顆「第 N 版 ▾」，開大圖檢視切版本。桌機用不到，
   // 那邊有下面的美化紀錄；按鈕一直都在，只是桌機的 CSS 把它收起來。
   onViewer?: () => void;
+  // 手機和直拿的平板：照片左上、緊接在「第 N 版」旁邊的「對話｜面板」，對話那張就不用再放標頭。
+  // 桌機一樣由 CSS 收起來，那邊在對話框標頭上。
+  panelMode?: PanelMode;
 }
 
 // 下載後跟面板模式一樣：成功跳「已下載完成。」，失敗跳「下載失敗，請稍後再試。」。
@@ -145,7 +149,7 @@ function useDownload(): [(job: string, base: string) => void, VNode | null] {
   return [start, el];
 }
 
-export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer }: CanvasProps) {
+export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer, panelMode }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
   const [download, downloadNotice] = useDownload();
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
@@ -369,10 +373,10 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
               <div id="compare-hint" class="compare-hint" hidden={!!busy}>
                 {generated ? "After" : "Before"}
               </div>
+              {panelMode && <ModeSwitch mode={panelMode} class="canvas-mode-switch" />}
               {onViewer && (
                 <button type="button" class="canvas-version-btn" onClick={onViewer} aria-label="看大圖、切換版本">
                   {generated && current ? `第 ${current.ordinal} 版` : "原圖"}
-                  {versions.length > 0 && <small>共 {versions.length} 版</small>}
                   <Icon name="expand" size={14} />
                 </button>
               )}

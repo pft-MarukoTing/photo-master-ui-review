@@ -3468,14 +3468,17 @@
     if (!FLOW_STAGE_STEPS[stage]) return;
     flowStage = stage;
     renderStepIndicator();
-    // #chat-ui-btn (對話模式) is held while 分析/修圖 is running: the chat page
-    // would open the case on a half-done job. It's a link, so aria-disabled
-    // (styled like .btn:disabled, index.html) plus its click handler's guard.
-    const chatUiBtn = document.getElementById("chat-ui-btn");
-    if (chatUiBtn) {
-      const busy = stage === "analyzing" || stage === "editing";
-      chatUiBtn.toggleAttribute("aria-disabled", busy);
-      chatUiBtn.title = busy ? "分析或美化完成後才能切換" : "切換到對話模式";
+    // The ways to 對話模式 (#chat-ui-btn in the header, and the 對話 half of
+    // the step row's 對話｜面板 switch) are held while 分析/修圖 is running:
+    // the chat page would open the case on a half-done job. They're links, so
+    // aria-disabled (styled in index.html / styles.css) plus the click
+    // handler's guard.
+    const busy = stage === "analyzing" || stage === "editing";
+    for (const id of ["chat-ui-btn", "chat-mode-switch-link"]) {
+      const link = document.getElementById(id);
+      if (!link) continue;
+      link.toggleAttribute("aria-disabled", busy);
+      link.title = busy ? "分析或美化完成後才能切換" : "切換到對話模式";
     }
     // #page-scroll-hint gates on this stage (PAGE_SCROLL_HINT_STAGES), and
     // entering/leaving 修圖中 happens in place on the results page -- no
@@ -13501,11 +13504,16 @@
   // An open case goes along as #case=<image_key>: the chat page reopens it
   // in its conversation, or rebuilds one from history (routes/chat.py's
   // /sessions/from-case).
-  const chatUiBtn = document.getElementById("chat-ui-btn");
-  if (chatUiBtn) {
-    chatUiBtn.setAttribute("href", `chat/${location.search}`);
-    chatUiBtn.addEventListener("click", async (event) => {
-      if (chatUiBtn.hasAttribute("aria-disabled")) { event.preventDefault(); return; }
+  // Both ways there -- the header's #chat-ui-btn and the 對話 half of the
+  // step row's 對話｜面板 switch -- behave the same.
+  for (const chatUiLink of [
+    document.getElementById("chat-ui-btn"),
+    document.getElementById("chat-mode-switch-link"),
+  ]) {
+    if (!chatUiLink) continue;
+    chatUiLink.setAttribute("href", `chat/${location.search}`);
+    chatUiLink.addEventListener("click", async (event) => {
+      if (chatUiLink.hasAttribute("aria-disabled")) { event.preventDefault(); return; }
       // A new tab leaves this page as it is.
       if (event.metaKey || event.ctrlKey || event.shiftKey) return;
       event.preventDefault();
