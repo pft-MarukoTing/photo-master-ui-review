@@ -44,6 +44,7 @@ export interface ActiveVersion {
 }
 
 export interface Photo {
+  preview_conversation?: import("./preview-conversation").PreviewConversationResult;
   photo_id: string;
   filename?: string;
   case_id?: string;

@@ -29,9 +29,10 @@ class ChatJobError(RuntimeError):
     """The worker failed the job, or never answered in time."""
 
 
-def run(params):
+def run(params, *, wait_seconds=None):
     """The answer to one chat job (photo_agent.chat_jobs.run's), or raises
     ChatJobError."""
+    deadline = None if wait_seconds is None else time.monotonic() + wait_seconds
     engine_params = get_engine_params_template()
     engine_params["srcKeys"] = []
     engine_params["dstKeys"] = []
@@ -40,10 +41,14 @@ def run(params):
     redis = get_redis_conn()
     redis.expire(MSG_DETAIL_QUEUE.replace("{msg_id}", job_id), JOB_TTL_SECONDS)
 
-    deadline = time.monotonic() + WAIT_SECONDS
+    if deadline is None:
+        deadline = time.monotonic() + WAIT_SECONDS
     while True:
         info = get_job_info(job_id, keyToGet=["status", "error", "0_res0"]) or {}
         status = info.get("status")
+        if wait_seconds is not None and time.monotonic() >= deadline:
+            redis.zrem(CHAT_QUEUE, job_id)
+            raise ChatJobError("preview conversation deadline exceeded")
         if status == "success":
             result = info.get("0_res0")
             if isinstance(result, str):

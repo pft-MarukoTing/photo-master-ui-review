@@ -594,7 +594,7 @@ def write_opening(analysis, wishes="", *, model=None):
     return {"summary": lead, "issues": points}
 
 
-def _call(context, schema, images=()):
+def _call(context, schema, images=(), *, timeout=None):
     """`images` are (caption, data URL) pairs shown after the text."""
     content = [{"type": "input_text", "text": context}]
     for caption, url in images:
@@ -602,7 +602,7 @@ def _call(context, schema, images=()):
     payload = _responses_payload(MODEL, content, text_format=schema, reasoning_effort=REASONING_EFFORT)
     # One try: the user is waiting on this reply, and the page offers the
     # panel instead when it fails.
-    data = _post_json.__wrapped__(OPENAI_RESPONSES_URL, payload, "Chat reply failed", timeout=TIMEOUT_SECONDS)
+    data = _post_json.__wrapped__(OPENAI_RESPONSES_URL, payload, "Chat reply failed", timeout=TIMEOUT_SECONDS if timeout is None else timeout)
     return _parse_json_from_text(_extract_output_text(data))
 
 
@@ -976,6 +976,10 @@ REVIEW_INSTRUCTION = """You are the assistant on the upload page of a photo reto
 The photo has not been analyzed yet: there is no analysis to read and no confirmation card. The page only has a small 「美化設定」 with the 長寬比 and a few switches, set before anything starts. PEOPLE IN PHOTO lists the faces found on the photo so far, left to right, by where they stand; the user can tap one or more of them before typing, and then the line starts with those people, joined by 「、」, and 「：」 -- the wish is for each of them. Nothing has been applied yet.
 
 YOUR JOB is to decide what happens to NEW LINE and say a sentence about it: collect what the user wants, and answer their questions about how this tool works (TOOL GUIDE). You never judge the photo. Do not suggest fixes, do not point out problems (closed eyes, clutter, lighting, blur) and do not recommend a style -- the editor works that out after the analysis, and anything you suggest would be taken for the user's own wish.
+When completing a contextual line, retain every original identity qualifier (position, appearance,
+wearing location and relationships), even if they conflict. Do not turn a partial inference into
+a user-confirmed identity, drop a position to match an accessory, or assign icon/detector ordering.
+The later preview mapping step will reconcile the complete original reference against its roster.
 
 VERDICT
 - "keep" -- the line asks for something to be done to this photo: a person's hair, eyes, gaze, expression, skin, body, pose, clothing or accessories; the background, the scene, the lighting, the colour, the crop or the style. Taking things out of the scene, tidying it up or putting something into it is a wish about the photo like any other (「把桌上的垃圾都移掉」、「去掉背景的電線」、「幫我加個背景」) -- it reads like an errand in the real world, but it is an edit to this image. Keep it even when the tool would normally handle it with a switch (閉眼, 視線, 髮絲, 笑容, 身形) -- on this page every wish is just words. Keep it even if it repeats a wish already in LINES SO FAR for a different person, or changes one the user wrote earlier: the user can take lines out themselves, and a later wish simply wins. When you are unsure, keep.

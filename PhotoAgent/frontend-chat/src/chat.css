@@ -171,6 +171,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-panel-head:has(.mode-switch){align-items:center;padding-block:var(--sp-2)}
 .chat-timeline{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:var(--sp-5);padding:var(--sp-5)}
 .chat-timeline>:first-child{margin-top:auto}
+.note-turn,.settings-turn{display:flex;flex-direction:column;gap:var(--sp-5);flex-shrink:0}
 .chat-msg{display:flex;gap:var(--sp-3);align-items:flex-start}
 .chat-msg.is-user{justify-content:flex-end}
 /* 新進來的 AI 訊息一字一字打出來（ChatPanel 的 typeMessages）：還沒輪到的那幾則
@@ -1500,3 +1501,9 @@ div.chat-proposal-row{cursor:default}
   .results-canvas-row.showing-analysis .results-canvas-col{flex:1 1 0%;min-width:0}
   .results-canvas-row.showing-analysis .results-analysis-slot{flex:0 0 500px;width:500px}
 }
+
+/* Reserve person rows while their descriptions wait for their turn. */
+.subject-preview-person.is-typewriter-pending { visibility: hidden; }
+.subject-preview-person.is-typewriter-revealed .subject-preview-avatar { animation: preview-avatar-enter .16s ease-out; }
+@keyframes preview-avatar-enter { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .subject-preview-person.is-typewriter-revealed .subject-preview-avatar { animation: none; } }

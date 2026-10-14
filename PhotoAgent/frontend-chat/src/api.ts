@@ -69,6 +69,12 @@ export const api = {
   previewStatus(jobId: string): Promise<import("./subject-preview").PreviewStatus> {
     return request(`${CHAT}/previews/${encodeURIComponent(jobId)}${q()}`, { signal: AbortSignal.timeout(10000) });
   },
+  previewConversation: (id: string, body: Dict) =>
+    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-reply`, { ...json("POST", body), signal: AbortSignal.timeout(12000) }),
+  revisePreviewConversation: (id: string, body: Dict) =>
+    request<import("./preview-conversation").PreviewConversationResult & { changed: boolean; revision_mode?: string; affected_request_ids?: string[] }>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-revise`, json("POST", body)),
+  confirmPreviewConversation: (id: string, body: Dict) =>
+    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-confirm`, json("POST", body)),
   capabilities: () => request<Capabilities>(`${API}/capabilities`),
   config: () => request<Dict>(`${API}/config`).catch(() => ({} as Dict)),
   decryptUserId: (userId: string) =>
@@ -145,16 +151,21 @@ export const api = {
   getSession: (id: string, messagesLimit = 500) =>
     request<Session>(`${sid(id)}${q({ messages_limit: messagesLimit })}`),
   status: (id: string) => request<Dict>(`${sid(id)}/status${q()}`),
-  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string }) => {
+  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string; conversation_token?: string; conversation_wishes_digest?: string }, wishes?: import("./preview-conversation").PreviewWish[]) => {
     const form = new FormData();
     form.set("user", currentUser);
     form.append("image", file, filename);
     if (preview) {
       form.append("preview_job_id", preview.preview_job_id);
       form.append("source_sha256", preview.source_sha256);
+      if (preview.conversation_token) form.append("conversation_token", preview.conversation_token);
+      if (preview.conversation_wishes_digest) form.append("conversation_wishes_digest", preview.conversation_wishes_digest);
     }
+    if (wishes?.length) form.append("conversation_wishes", JSON.stringify(wishes));
     return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
   },
+  confirmPhotoConversation: (id: string, photoId: string, body: Dict) =>
+    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, json("POST", body)),
   analysis: (id: string, photoId: string) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analysis${q()}`),
   // A typed message about one photo; subjectIndices are the faces the user tapped.

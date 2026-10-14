@@ -14,7 +14,7 @@ minutes.
 import os
 
 from engine_result_code import RESULT_INVALID_PARAMETER
-from photo_agent import chat_assistant
+from photo_agent import chat_assistant, preview_conversation
 
 # Read by both sides, so the backend and the worker agree on it from the
 # shared .env.default alone: the job queue's name with ":chat" on the end,
@@ -33,12 +33,16 @@ STAGE_OPENING = "chat_opening"
 # chat_assistant.write_render_note. The backend sends the two images as
 # small data URLs, so this job needs no S3 either.
 STAGE_NOTE = "chat_note"
-STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE)
+STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, preview_conversation.STAGE)
 
 
 def run(params):
     """The model's answer for one chat job's params, or raises."""
     stage = params.get("stage")
+    if stage == preview_conversation.STAGE:
+        if params.get("mode") == "confirmation":
+            return preview_conversation.generate_confirmation(params)
+        return (preview_conversation.generate_revision(params) if params.get("mode") == "revision" else preview_conversation.generate(params))
     if stage == STAGE_ASK:
         return chat_assistant.ask(
             params.get("analysis"), params["plan"], params["status"], params["history"],

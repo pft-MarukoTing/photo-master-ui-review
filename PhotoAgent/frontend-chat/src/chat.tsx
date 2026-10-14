@@ -12,11 +12,18 @@ const TYPE_MS = 30;
 const TYPE_MAX_MS = 1600;
 const TYPE_GAP_MS = 200;
 
-// 只動 .chat-text 裡的文字節點，卡片、按鈕、圖片在那則出現時就整個顯示。
+// 逐字顯示正文及標記的人物描述；人物頭像隨所屬描述依序進場。
 // 文字是直接改 DOM 的：Preact 只在內容變了才重寫文字節點，所以每次寫入前先
 // 比對，被 Preact 改過的節點就不再碰。回傳的函式立刻全部顯示完。
+function finishMessage(message: HTMLElement) {
+  message.classList.remove("is-waiting");
+  message.querySelectorAll(".is-typewriter-pending").forEach(row => row.classList.remove("is-typewriter-pending"));
+  message.querySelectorAll(".is-typewriter-revealed").forEach(row => row.classList.remove("is-typewriter-revealed"));
+  if (message.isConnected) message.dispatchEvent(new CustomEvent("chat-typewriter-complete"));
+}
+
 function typeMessages(msgs: HTMLElement[]): () => void {
-  type Item = { node: Text; chars: string[]; shown: string };
+  type Item = { node: Text; chars: string[]; shown: string; row: HTMLElement | null };
   let i = 0;
   let items: Item[] = [];
   let k = 0;
@@ -24,6 +31,7 @@ function typeMessages(msgs: HTMLElement[]): () => void {
   let step = 1;
   let raf = 0;
   let next = 0;
+  let rowRevealUntil = 0;
   for (const m of msgs) m.classList.add("is-waiting");
   const start = () => {
     const m = msgs[i];
@@ -31,11 +39,13 @@ function typeMessages(msgs: HTMLElement[]): () => void {
     m.classList.add("is-entering");
     m.addEventListener("animationend", () => m.classList.remove("is-entering"), { once: true });
     items = [];
-    for (const p of Array.from(m.querySelectorAll(".chat-text"))) {
+    rowRevealUntil = 0;
+    m.querySelectorAll(".subject-preview-person").forEach(row => row.classList.add("is-typewriter-pending"));
+    for (const p of Array.from(m.querySelectorAll(".chat-text, [data-chat-typewriter-text]"))) {
       const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
       for (let t = walk.nextNode() as Text | null; t; t = walk.nextNode() as Text | null) {
         if (!t.data) continue;
-        items.push({ node: t, chars: Array.from(t.data), shown: "" });
+        items.push({ node: t, chars: Array.from(t.data), shown: "", row: p.closest<HTMLElement>(".subject-preview-person") });
         t.data = "";
       }
     }
@@ -50,6 +60,11 @@ function typeMessages(msgs: HTMLElement[]): () => void {
       let left = step;
       while (left > 0 && k < items.length) {
         const it = items[k];
+        if (it.row?.classList.contains("is-typewriter-pending")) {
+          it.row.classList.remove("is-typewriter-pending");
+          it.row.classList.add("is-typewriter-revealed");
+          rowRevealUntil = now + 160;
+        }
         if (it.node.data !== it.shown) {
           k++;
           n = 0;
@@ -63,7 +78,8 @@ function typeMessages(msgs: HTMLElement[]): () => void {
           n = 0;
         }
       }
-      if (k >= items.length) {
+      if (k >= items.length && now >= rowRevealUntil) {
+        finishMessage(msgs[i]);
         if (++i >= msgs.length) {
           raf = 0;
           return;
@@ -81,7 +97,7 @@ function typeMessages(msgs: HTMLElement[]): () => void {
     cancelAnimationFrame(raf);
     raf = 0;
     for (const it of items.slice(k)) if (it.node.data === it.shown) it.node.data = it.chars.join("");
-    for (const m of msgs.slice(i + 1)) m.classList.remove("is-waiting");
+    for (const m of msgs.slice(i)) finishMessage(m);
   };
 }
 
@@ -183,7 +199,7 @@ export function ChatPanel(props: {
       if (pinned.current) el.scrollTop = el.scrollHeight;
       return;
     }
-    const msgs = Array.from(el.querySelectorAll(":scope > .chat-msg"));
+    const msgs = Array.from(el.querySelectorAll(":scope > .chat-msg, :scope > .settings-turn > .chat-msg, :scope > .note-turn > .chat-msg"));
     const fresh = msgs.filter((m) => !seen.current.has(m));
     if (props.toStart !== lastStart.current) {
       lastStart.current = props.toStart;
@@ -206,8 +222,12 @@ export function ChatPanel(props: {
     if (fresh.length && fresh.length < msgs.length) {
       typing.current?.();
       typing.current = null;
-      const ai = fresh.filter((m) => !m.classList.contains("is-user")) as HTMLElement[];
+      const ai = fresh.filter((m) => !m.classList.contains("is-user") && (!m.hasAttribute("data-chat-atomic") || m.hasAttribute("data-chat-typewriter"))) as HTMLElement[];
       if (ai.length && !matchMedia("(prefers-reduced-motion: reduce)").matches) typing.current = typeMessages(ai);
+      else ai.forEach(finishMessage);
+    } else if (fresh.length) {
+      // Restored history has already happened; publish its controls without replay.
+      fresh.filter(m => !m.classList.contains("is-user")).forEach(m => finishMessage(m as HTMLElement));
     }
     for (const m of msgs) seen.current.add(m);
     if (anchor.current) align();
@@ -312,9 +332,18 @@ export function UserMsg({ meta, children }: { meta?: string; children: Component
   );
 }
 
-export function AssistantMsg({ children }: { children: ComponentChildren }) {
+export function AssistantMsg({ children, atomic, animate, onTypingComplete }: {
+  children: ComponentChildren; atomic?: boolean; animate?: boolean; onTypingComplete?: () => void;
+}) {
+  const element = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const message = element.current;
+    if (!message || !onTypingComplete) return;
+    message.addEventListener("chat-typewriter-complete", onTypingComplete);
+    return () => message.removeEventListener("chat-typewriter-complete", onTypingComplete);
+  }, [onTypingComplete]);
   return (
-    <div class="chat-msg">
+    <div ref={element} class="chat-msg" data-chat-atomic={atomic ? "true" : undefined} data-chat-typewriter={animate ? "true" : undefined}>
       <div class="chat-avatar">P</div>
       <div class="chat-body">{children}</div>
     </div>
