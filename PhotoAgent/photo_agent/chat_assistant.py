@@ -745,10 +745,6 @@ def describe_changes(before, after, analysis, debug=False):
 
 # --- applying without asking -------------------------------------------------
 
-# 一個設定換一個值，說的就是要的結果，不必再確認一次。
-PLAIN_SETTING_KEYS = ("style_options", "aspect_ratio")
-
-
 def _picked(history, analysis=None):
     """True when the last line is one of the answers the previous reply offered:
     the user already chose. A person offered as an answer is shown as their
@@ -764,22 +760,6 @@ def _picked(history, analysis=None):
     asked = last.get("card") or {}
     pointed = _pointed(person_names(analysis or {}), asked) if asked.get("type") == "ask" else []
     return text == "這位" and len(pointed) == 1 and pointed[0] in options
-
-
-def _only_adds_wishes(before, after, analysis):
-    """True when every wish already in 個人化需求 is still there word for word:
-    the change only adds, it does not merge anything away. Putting a person's
-    wishes under one name (_merge_prompt_wishes) drops the name from all but
-    the first, so a wish also counts as kept without it."""
-    heads = sorted(set(person_names(analysis).values()) | {"背景", "場景"}, key=len, reverse=True)
-
-    def kept(wish):
-        head = next((h for h in heads if wish.startswith(h)), None)
-        rest = wish[len(head):].lstrip("，、, ").lstrip("的") if head else ""
-        return wish in after or bool(rest) and rest in after
-
-    old = [w.strip() for w in re.split(r"[；;、]", before or "") if w.strip()]
-    return bool(after) and all(kept(w) for w in old)
 
 
 def _wish_items(text, analysis):
@@ -811,11 +791,6 @@ def _grouped_wishes(items):
     return [f"{head}{'、'.join(wishes)}" if head else "、".join(wishes) for head, wishes in groups.items()]
 
 
-def _added_targets(before, after, analysis):
-    """Who the wishes in `after` that `before` does not have are for."""
-    return {head for head, _ in _new_wishes(before, after, analysis)}
-
-
 # 回答「哪一位？」的那一句，模型常常只交出新的那一條，把原本的需求整串丟
 # 掉——那不是使用者要刪，是模型漏抄。舊的一條都沒留，就當成漏抄，把新的接
 # 回原本的後面。
@@ -845,32 +820,6 @@ def _only_drops_wishes(patch, plan, history, analysis):
             and bool(_dropped_wishes(before, after, analysis)))
 
 
-def _confirm_first(patch, changes, plan, history, analysis):
-    """Whether the change waits for 套用. It does not when the user already
-    picked it, when it only adds a wish, or when it sets one plain setting --
-    the card would ask what the user just said. Anything the AI had to judge
-    (dropping or rewording an earlier wish, a portrait fix, side changes)
-    still asks, and so does a wish added for someone the user did not point
-    at, or for several people when they pointed at no one: the model put
-    words there that this line did not say."""
-    if _only_drops_wishes(patch, plan, history, analysis):
-        # The user took a wish back in their own words (「帽子留著」): there is
-        # nothing the AI judged, only what they said to leave out.
-        return False
-    if "user_prompt" in patch and not _only_adds_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis):
-        # Even a picked answer: what it drops, the user did not say.
-        return True
-    if _picked(history, analysis):
-        return False
-    if set(patch) == {"user_prompt"}:
-        before, after = plan.get("user_prompt"), patch["user_prompt"]
-        targets = _added_targets(before, after, analysis) - {None}
-        card = (history[-1].get("card") or {}) if history else {}
-        pointed = set(_pointed(person_names(analysis), card)) if card.get("type") == "ask" else set()
-        return bool(targets - pointed) if pointed else len(targets) > 1
-    return not (len(patch) == 1 and next(iter(patch)) in PLAIN_SETTING_KEYS and len(changes) == 1)
-
-
 def _undo_patch(patch, plan):
     """The patch that puts back what `patch` changes in `plan`."""
     undo = {}
@@ -896,13 +845,26 @@ def _applied_reply(changes, screen, wishes=()):
     echo = "、".join(wishes)
     if only and only["field"] == "user_prompt" and echo and len(echo) <= APPLIED_WISH_MAX_LEN:
         said = f"好，記下了：{echo}。"
-    elif only and only["field"] == "user_prompt":
+    elif only and only["field"] == "user_prompt" and echo:
         said = "好，已加進個人化需求。"
+    elif only and only["field"] == "user_prompt":
+        # 沒有多出來的需求，是原本的被改寫了。
+        said = "好，個人化需求更新好了。"
     elif only:
         said = f"好，{only['label']}改成「{only['after']}」了。"
     else:
         said = "好，已經幫你改好了。"
     return said + _next_step(screen)
+
+
+def _judged_reply(reply, screen, prompt_only):
+    """What to say for a change the AI made up itself (its own pick, or the
+    panel's text tidied), applied without asking: the model's reason stays,
+    its 「確認後套用」 becomes that it is already done."""
+    reason = re.sub(r"[，,]?\s*確認後(再)?套用[。！!]?", "", reply).strip()
+    reason = reason + ("" if not reason or reason[-1] in "。！!？?" else "。")
+    done = "先幫你記進個人化需求了" if prompt_only else "先幫你套用了"
+    return reason + done + "，想改的話按「修改」。" + _next_step(screen)
 
 
 def _dropped_reply(dropped, screen):
@@ -950,13 +912,16 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     if wanted and proposal is None:
         # The reply offers a change the user would get no card for.
         reply = ALREADY_SET_REPLY if patch else UNMAPPED_REPLY
-    # What the AI chose for the user (「什麼顏色好？」) is shown with its
-    # reason and waits for 套用; only the user's own words go in directly.
-    picked_by_ai = result.get("your_pick") is True
-    if proposal and not picked_by_ai and not _confirm_first(patch, changes, plan, history, analysis or {}):
-        # Applied as it stands; the card shows what changed and can undo it.
+    # Every change goes in as it stands: whatever it touched can be changed
+    # back from 「修改」 or the topic buttons, so the card never waits for 套用.
+    # What the AI chose for the user (「什麼顏色好？」) or tidied for them keeps
+    # the model's reason in the reply.
+    judged = result.get("your_pick") is True or bool(history and history[-1].get("text") == PANEL_CHECK_ASK)
+    if proposal:
         proposal.update(direct=True, undo=_undo_patch(patch, plan))
-        if _only_drops_wishes(patch, plan, history, analysis or {}):
+        if judged and reply:
+            reply = _judged_reply(reply, screen, set(patch) == {"user_prompt"})
+        elif _only_drops_wishes(patch, plan, history, analysis or {}):
             reply = _dropped_reply(_dropped_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}), screen)
         else:
             added = _new_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}) if "user_prompt" in patch else []

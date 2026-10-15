@@ -1368,9 +1368,10 @@ export function ProposalCard(props: {
   // 只改一項、又不是針對某張臉時，標題直接寫那一項是什麼（例如「個人化需求」），
   // 底下那列就不必再把同一個詞念一次。
   const only = proposal.changes.length === 1 && proposal.changes[0].subject_index == null ? proposal.changes[0] : null;
-  // AI 直接記下的個人化需求就是一張記事：只給現在記著的內容，不畫刪掉的那段、
-  // 不寫「已套用」。「復原」換成「修改」，打開個人化需求面板自己調。
-  const noted = !!proposal.direct && resolved === "apply" && only?.field === TEXT_FIELD;
+  // AI 直接套用的調整就是一張記事：只給現在的值，不畫改掉的那段、不寫「已套用」。
+  // 「復原」換成「修改」，打開那一項的面板自己調；改了好幾項時每一列也都能點。
+  const noted = !!proposal.direct && resolved === "apply";
+  const editable = noted && !!props.undoable;
   return (
     <div class="chat-card chat-proposal">
       <p class="chat-proposal-title">{only ? only.label : "建議的調整"}</p>
@@ -1380,15 +1381,18 @@ export function ProposalCard(props: {
           // 可以就地改的那一列自己就是輸入框，不再是「點了跳到別處」的按鈕。
           const mine = c === typed;
           const after = props.edit?.field === c.field ? props.edit.value : c.after;
-          // Answered proposals are history: shown, no longer clickable.
-          const Row = live && !mine ? "button" : "div";
+          // Answered proposals are history: shown, no longer clickable -- except
+          // a several-item note that can still be changed.
+          const clickable = (live && !mine) || (editable && !only);
+          const Row = clickable ? "button" : "div";
           return (
             <li>
               <Row
-                type={live && !mine ? "button" : undefined}
+                type={clickable ? "button" : undefined}
                 class="chat-proposal-row"
-                title={live && !mine ? "在面板上顯示" : undefined}
-                onClick={live && !mine ? () => props.onShow(c) : undefined}
+                title={clickable ? "在面板上顯示" : undefined}
+                disabled={clickable && !live ? props.busy : undefined}
+                onClick={clickable ? () => props.onShow(c) : undefined}
               >
                 {face && <FaceChip face={face} small />}
                 {!only && (
@@ -1442,29 +1446,19 @@ export function ProposalCard(props: {
           ))}
         </div>
       ) : noted ? (
-        props.undoable && (
+        editable && (
           <div class="chat-choices">
             {/* 跟個人化需求面板裡那顆「修改」同一個樣子。 */}
-            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={props.busy} onClick={() => only && props.onShow(only)}>
+            <button
+              type="button"
+              class="chat-chip chat-opt-chip is-primary"
+              disabled={props.busy}
+              onClick={() => props.onShow(only ?? proposal.changes[0])}
+            >
               修改
             </button>
           </div>
         )
-      ) : proposal.direct && resolved === "apply" ? (
-        <>
-          <p class="chat-meta">已套用</p>
-          {props.undoable && (
-            <div class="chat-choices">
-              <Chip
-                label={PROPOSAL_CHOICES.undo.label}
-                icon={PROPOSAL_CHOICES.undo.icon}
-                kind="ghost"
-                disabled={props.busy}
-                onClick={() => props.onChoose("undo")}
-              />
-            </div>
-          )}
-        </>
       ) : (
         <p class="chat-meta">
           {resolved === "stale"

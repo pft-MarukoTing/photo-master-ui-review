@@ -167,16 +167,17 @@ class AskTest(unittest.TestCase):
                                     screen={"bar": ["美化"], "topics": ["人像", "風格"]})
         self.assertEqual(result["reply"], "好，個人化需求存好了。還想調整其他項目可以點下面的項目，或按「美化」我就開始。")
 
-    def test_changes_the_ai_judged_still_ask(self):
+    def test_any_change_is_applied_without_asking(self):
         cases = {
-            "two settings": {"style_options": {"lighting": "soft"}, "aspect_ratio": "original"},
-            "a portrait fix": {"face_issue_overrides": {"0:gaze_issue": {"allowed": True}}},
-            "a recipe step": {"recipe_checked": {"0": False}},
+            "two settings": ({"style_options": {"lighting": "soft"}, "aspect_ratio": "original"}, "好，已經幫你改好了。"),
+            "a portrait fix": ({"face_issue_overrides": {"0:gaze_issue": {"allowed": True}}}, "好，左邊女性・視線改成「修正」了。"),
+            "a recipe step": ({"recipe_checked": {"0": False}}, "好，提亮主體改成「不套用」了。"),
         }
-        for name, patch in cases.items():
+        for name, (patch, reply) in cases.items():
             with self.subTest(name):
-                proposal = ask(model_says("確認後套用", patch=patch))["proposal"]
-                self.assertNotIn("direct", proposal)
+                result = ask(model_says("確認後套用", patch=patch))
+                self.assertTrue(result["proposal"]["direct"])
+                self.assertEqual(result["reply"], reply)
 
     def test_a_wish_that_only_adds_is_applied(self):
         plan = default_plan()
@@ -187,20 +188,33 @@ class AskTest(unittest.TestCase):
         self.assertEqual(result["proposal"]["undo"], {"user_prompt": "左邊女性的外套改成藍色"})
         self.assertEqual(result["reply"], "好，記下了：左邊女性把眼鏡拿掉。")
 
+    def test_tidied_punctuation_is_not_a_rewording(self):
+        cases = {
+            "comma": ("外套改成藍色，眼鏡拿掉", "外套改成藍色、眼鏡拿掉、背景換成海邊"),
+            "full stop": ("背景換成海邊。", "背景換成海邊、加上夕陽"),
+            "space": ("外套改成藍色 背景換成海邊", "外套改成藍色、背景換成海邊、加上夕陽"),
+            "colon": ("左邊女性：外套改成藍色", "左邊女性的外套改成藍色、把眼鏡拿掉"),
+        }
+        for name, (before, after) in cases.items():
+            with self.subTest(name):
+                plan = default_plan()
+                plan["user_prompt"] = before
+                self.assertTrue(ask(model_says(patch={"user_prompt": after}), plan=plan)["proposal"].get("direct"))
+
     def test_a_long_wish_is_not_read_back(self):
         result = ask(model_says(patch={"user_prompt": "把背景換成傍晚的海邊，天空要有粉紫色的晚霞，海面反射夕陽的金光"}))
         self.assertEqual(result["reply"], "好，已加進個人化需求。")
 
-    def test_the_ais_own_pick_waits_for_the_card(self):
+    def test_the_ais_own_pick_is_written_down_with_its_reason(self):
         plan = default_plan()
         plan["user_prompt"] = "在照片上加上文字「盛夏」"
         reply = "白字配淡淡的深藍陰影最好，在藍色水面前也看得清楚，確認後套用。"
         result = ask(model_says(reply, patch={"user_prompt": "在照片上加上文字「盛夏」；文字用白色加淡深藍陰影"},
                                 your_pick=True), plan=plan)
-        self.assertNotIn("direct", result["proposal"])
-        self.assertEqual(result["reply"], reply)
+        self.assertTrue(result["proposal"]["direct"])
+        self.assertEqual(result["reply"], "白字配淡淡的深藍陰影最好，在藍色水面前也看得清楚。先幫你記進個人化需求了，想改的話按「修改」。")
 
-    def test_a_wish_for_someone_else_asks(self):
+    def test_a_wish_for_someone_else_is_still_written_down(self):
         two = analysis()
         two["_local_face_boxes"].append({"box": {"x": 0.6, "y": 0.1, "w": 0.2, "h": 0.2}})
         two["local_face_review"].append({"detection_index": 2, "matched_subject_index": 1})
@@ -216,12 +230,13 @@ class AskTest(unittest.TestCase):
         # Pointed at her, and the wish went to her: applied.
         self.assertTrue(run("上衣改成格紋", {"subject_indices": [0]},
                             "左邊女性的衣服換成白色、上衣改成格紋").get("direct"))
-        # Pointed at her, but the model gave it to him and brought back an old wish.
-        self.assertNotIn("direct", run("上衣改成格紋", {"subject_indices": [0]},
-                                       "左邊女性的衣服換成白色、頭髮染成金色；右邊男性的上衣改成格紋"))
+        # Pointed at her, but the model gave it to him and brought back an old
+        # wish: 個人化需求 still goes in, and 「修改」 is there to fix it.
+        self.assertTrue(run("上衣改成格紋", {"subject_indices": [0]},
+                                       "左邊女性的衣服換成白色、頭髮染成金色；右邊男性的上衣改成格紋").get("direct"))
         # Pointed at no one, and wishes for two people appeared.
-        self.assertNotIn("direct", run("上衣改成格紋", {},
-                                       "左邊女性的衣服換成白色、上衣改成格紋；右邊男性的上衣改成格紋"))
+        self.assertTrue(run("上衣改成格紋", {},
+                            "左邊女性的衣服換成白色、上衣改成格紋；右邊男性的上衣改成格紋").get("direct"))
         # Pointed at both: both get it.
         self.assertTrue(run("上衣改成格紋", {"subject_indices": [0, 1]},
                             "左邊女性的衣服換成白色、上衣改成格紋；右邊男性的上衣改成格紋").get("direct"))
@@ -241,15 +256,19 @@ class AskTest(unittest.TestCase):
         self.assertEqual(result["proposal"]["patch"]["user_prompt"],
                          "左邊女性的頭髮染成金色、衣服換成白色；背景換成海邊")
         self.assertTrue(result["proposal"]["direct"])
-        # One it kept and one it dropped: that was a choice, so it asks.
+        # One it kept and one it dropped: applied too, and 「修改」 can put it back.
         result = ask(model_says(patch={"user_prompt": "左邊女性的頭髮染成金色、衣服換成白色"}), plan=plan, history=history)
-        self.assertNotIn("direct", result["proposal"])
+        self.assertTrue(result["proposal"]["direct"])
 
-    def test_a_wish_that_replaces_one_asks(self):
+    def test_a_wish_that_replaces_one_is_applied(self):
         plan = default_plan()
         plan["user_prompt"] = "左邊女性的外套改成藍色"
         result = ask(model_says(patch={"user_prompt": "左邊女性的外套改成紅色"}), plan=plan)
-        self.assertNotIn("direct", result["proposal"])
+        self.assertTrue(result["proposal"]["direct"])
+        self.assertEqual(result["reply"], "好，記下了：左邊女性外套改成紅色。")
+        # Only reworded, nothing new: it says so, not 「已加進」.
+        result = ask(model_says(patch={"user_prompt": "左邊女性的外套換成藍色"}), plan=plan)
+        self.assertEqual(result["reply"], "好，記下了：左邊女性外套換成藍色。")
 
     def test_a_wish_taken_back_is_applied(self):
         plan = default_plan()
@@ -260,10 +279,12 @@ class AskTest(unittest.TestCase):
         self.assertTrue(result["proposal"]["direct"])
         self.assertEqual(result["proposal"]["undo"], {"user_prompt": plan["user_prompt"]})
         self.assertEqual(result["reply"], "好，左邊女性帽子拿掉就不做了。")
-        # The panel's own check tidies what the user wrote: what it drops still waits.
+        # The panel's own check tidies what the user wrote: applied, with its reason.
         checked = [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK, "card": {"type": "ask", "photo_id": "p1"}}]
-        result = ask(model_says(patch={"user_prompt": "左邊女性的外套改成藍色；背景換成海邊"}), plan=plan, history=checked)
-        self.assertNotIn("direct", result["proposal"])
+        result = ask(model_says("帽子那條跟後面重複，幫你拿掉了，確認後套用。",
+                                patch={"user_prompt": "左邊女性的外套改成藍色；背景換成海邊"}), plan=plan, history=checked)
+        self.assertTrue(result["proposal"]["direct"])
+        self.assertEqual(result["reply"], "帽子那條跟後面重複，幫你拿掉了。先幫你記進個人化需求了，想改的話按「修改」。")
 
     def test_a_picked_answer_is_applied(self):
         history = [
@@ -275,9 +296,9 @@ class AskTest(unittest.TestCase):
         result = ask(model_says(patch=patch), history=history)
         self.assertTrue(result["proposal"]["direct"])
         self.assertEqual(result["reply"], "好，已經幫你改好了。")
-        # Typed, not picked: asks.
+        # Typed, not picked: applied all the same.
         history[-1]["text"] = "柔光、維持原比例吧"
-        self.assertNotIn("direct", ask(model_says(patch=patch), history=history)["proposal"])
+        self.assertTrue(ask(model_says(patch=patch), history=history)["proposal"]["direct"])
 
     def test_undo_puts_the_plan_back(self):
         plan = default_plan()

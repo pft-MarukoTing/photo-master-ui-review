@@ -1224,7 +1224,7 @@ class ChatRoutesTest(unittest.TestCase):
             res = self.client.post(self.url(sid, f"/photos/{photo['photo_id']}/ask"), json={"user": USER, "text": text, **extra})
         return res, seen
 
-    def test_ask_reply_with_a_proposal_changes_nothing_yet(self):
+    def test_ask_reply_with_several_changes_is_applied(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)
         patch_json = '{"style_options":{"lighting":"soft"},"advanced_options":{"smile_adjustment":false}}'
@@ -1232,16 +1232,18 @@ class ChatRoutesTest(unittest.TestCase):
             "reply": "可以改成柔光、不調笑容，確認後套用。", "action": "none", "patch_json": patch_json})
         self.assertEqual(res.status_code, 200, res.get_json())
         messages = res.get_json()["messages"]
-        self.assertEqual([(m["role"], m["card"]["type"]) for m in messages], [("user", "ask"), ("assistant", "llm_reply")])
+        self.assertEqual([(m["role"], m["card"]["type"]) for m in messages],
+                         [("user", "ask"), ("assistant", "llm_reply"), ("user", "proposal_resolved")])
         self.assertEqual(messages[0]["text"], "光線柔和一點，笑容別動")
         proposal = messages[1]["card"]["proposal"]
         self.assertEqual(proposal["patch"]["style_options"], {"lighting": "soft"})
-        self.assertNotIn("direct", proposal)
+        self.assertTrue(proposal["direct"])
         self.assertTrue(proposal["id"])
+        self.assertEqual((messages[2]["card"]["choice"], messages[2]["card"]["auto"]), ("apply", True))
         self.assertIn("user: 光線柔和一點，笑容別動", seen[0])
         session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
-        self.assertEqual(session["photos"][0]["plan"]["style_options"], {})
-        self.assertEqual(session["messages"][-2:], messages)
+        self.assertEqual(session["photos"][0]["plan"]["style_options"], {"lighting": "soft"})
+        self.assertEqual(session["messages"][-3:], messages)
         self.assertEqual(self.enqueued[1:], [])
 
     def test_a_saved_prompt_is_checked_without_a_user_line(self):
