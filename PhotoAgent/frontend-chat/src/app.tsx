@@ -16,6 +16,9 @@ import {
   Composer,
   FaceChip,
   faceText,
+  fillNoteBox,
+  noteBoxKeys,
+  readNoteBox,
   FacePicker,
   FootBar,
   PROPOSAL_CHOICES,
@@ -1928,56 +1931,6 @@ type NoteSection = { key: string; line: string; text: string; persons: PrePerson
 
 const sectionShown = (sec: NoteSection) => (sec.key ? sec.line.slice(whoPrefix(sec.persons).length) : sec.line);
 
-function faceAtom(sec: NoteSection) {
-  const atom = document.createElement("span");
-  atom.className = "chat-face-chip is-small chat-notes-atom";
-  atom.contentEditable = "false";
-  atom.dataset.key = sec.key;
-  for (const p of sec.persons) {
-    const thumb = (p as FaceRef).thumb;
-    const img = document.createElement(thumb ? "img" : "span");
-    if (thumb) (img as HTMLImageElement).src = thumb;
-    else img.className = "chat-face-blank";
-    img.setAttribute("alt", "");
-    atom.appendChild(img);
-  }
-  return atom;
-}
-
-// 框裡的內容讀回每個對象的字。沒出現的對象是整段被刪掉，給空字串。
-function readSections(box: HTMLElement, sections: NoteSection[]) {
-  const parts: Record<string, string[]> = Object.fromEntries(sections.map((x) => [x.key, []]));
-  let key = "";
-  let buf = "";
-  const end = () => {
-    const t = buf.trim();
-    if (t) (parts[key] ??= []).push(t);
-    key = "";
-    buf = "";
-  };
-  const walk = (node: Node) => {
-    if (node instanceof HTMLElement && node.dataset.key !== undefined) {
-      if (buf.trim()) end();
-      key = node.dataset.key;
-      buf = "";
-      return;
-    }
-    if (node.nodeType === Node.TEXT_NODE) {
-      for (const ch of node.textContent || "") {
-        if (ch === "；" || ch === ";" || ch === "\n") end();
-        else buf += ch;
-      }
-      return;
-    }
-    if (node.nodeName === "BR") end();
-    node.childNodes.forEach(walk);
-    if (node !== box && (node.nodeName === "DIV" || node.nodeName === "P")) end();
-  };
-  walk(box);
-  end();
-  return Object.entries(parts).map(([k, ts]) => ({ key: k, text: ts.join(k ? "、" : "；") }));
-}
-
 function NotesEditor(props: {
   sections: NoteSection[];
   upTo: number;
@@ -1992,19 +1945,7 @@ function NotesEditor(props: {
   useEffect(() => {
     const el = box.current;
     if (!open || !el) return;
-    el.replaceChildren();
-    sections.forEach((sec, i) => {
-      if (i) el.appendChild(document.createTextNode("；"));
-      if (sec.key) el.appendChild(faceAtom(sec));
-      el.appendChild(document.createTextNode(sec.key ? sectionShown(sec) : sec.text));
-    });
-    el.focus();
-    const r = document.createRange();
-    r.selectNodeContents(el);
-    r.collapse(false);
-    const sel = window.getSelection();
-    sel?.removeAllRanges();
-    sel?.addRange(r);
+    fillNoteBox(el, sections.map((sec) => ({ key: sec.key, faces: sec.persons, text: sec.key ? sectionShown(sec) : sec.text })));
   }, [open]);
   if (!editing) {
     return (
@@ -2039,18 +1980,7 @@ function NotesEditor(props: {
         aria-label="個人化需求"
         contentEditable={!held}
         onInput={() => !editing.dirty && setEditing({ ...editing, dirty: true })}
-        onKeyDown={(e) => {
-          // 一段字，換行就是換對象，直接打成「；」。
-          if (e.key === "Enter" && !e.isComposing) {
-            e.preventDefault();
-            document.execCommand("insertText", false, "；");
-          }
-        }}
-        onPaste={(e) => {
-          e.preventDefault();
-          const t = e.clipboardData?.getData("text/plain") || "";
-          document.execCommand("insertText", false, t.replace(/\r?\n/g, "；"));
-        }}
+        {...noteBoxKeys}
       />
       <div class="chat-choices">
         <button
@@ -2058,7 +1988,7 @@ function NotesEditor(props: {
           class="chat-chip chat-opt-chip is-primary"
           disabled={held || !editing.dirty}
           onClick={() => {
-            const read = box.current ? readSections(box.current, sections) : [];
+            const read = box.current ? readNoteBox(box.current, sections.map((x) => x.key)) : [];
             const before = Object.fromEntries(sections.map((x) => [x.key, x.text]));
             const changed = read
               .filter((x) => x.text.length <= PROMPT_MAX && x.text !== before[x.key])

@@ -5,7 +5,7 @@
 // Every click is saved to the photo's plan right away as a patch.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
-import { type FaceRef } from "./chat";
+import { fillNoteBox, noteBoxKeys, promptFaces, promptSections, readPromptBox, type FaceRef } from "./chat";
 import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
 import { Icon } from "./icons";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
@@ -606,49 +606,55 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   );
 }
 
-function PromptOptions({ plan, busy, hot, onPatch, onSavePrompt }: Body) {
+function PromptOptions({ plan, faces, busy, hot, onPatch, onSavePrompt }: Body) {
   const saved = plan.user_prompt || "";
-  const [draft, setDraft] = useState(saved);
+  const sections = promptSections(saved, faces);
   // 已經寫過的需求先用看的，要改再打開輸入框 -- 一進來就停在一個沒改就按不下「儲存」
   // 的框裡，等於只剩「清除」這條路可以按，人會卡在那裡不知道該做什麼。
   const [editing, setEditing] = useState(!saved);
+  const [dirty, setDirty] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    setDraft(saved);
     setEditing(!saved);
+    setDirty(false);
   }, [saved]);
-  const changed = draft.trim() !== saved;
+  // 框裡的內容只在打開時建一次，之後交給使用者打字，Preact 不碰。還沒寫過東西時
+  // 框是自己開著的，不是人按了「修改」，不搶游標。
+  useEffect(() => {
+    if (editing && box.current) fillNoteBox(box.current, sections, !!saved);
+  }, [editing]);
+  const save = () => {
+    const text = box.current ? readPromptBox(box.current, sections).slice(0, PROMPT_MAX) : "";
+    // 清空等於清除，沒有東西好給 AI 看。
+    if (text === saved) setEditing(false);
+    else if (text) onSavePrompt(text);
+    else onPatch({ user_prompt: "" });
+  };
   return (
     <div class={`chat-opt-prompt${hot.has("user_prompt") ? " is-ai-hot" : ""}`}>
       {editing ? (
-        <textarea
-          rows={3}
-          maxLength={PROMPT_MAX}
-          value={draft}
-          placeholder="例如：讓背景更乾淨一點"
-          disabled={busy}
-          onInput={(e) => setDraft((e.target as HTMLTextAreaElement).value)}
+        <div
+          class="chat-notes-box"
+          ref={box}
+          role="textbox"
+          aria-multiline="true"
+          aria-label="個人化需求"
+          data-placeholder="例如：讓背景更乾淨一點"
+          contentEditable={!busy}
+          onInput={() => !dirty && setDirty(true)}
+          {...noteBoxKeys}
         />
       ) : (
-        <p class="chat-opt-prompt-text">{saved}</p>
+        <p class="chat-opt-prompt-text">{promptFaces(sections)}</p>
       )}
       <div class="chat-choices">
         {editing ? (
           <>
-            <button
-              type="button"
-              class="chat-chip chat-opt-chip is-primary"
-              disabled={busy || !changed}
-              onClick={() => {
-                const text = draft.trim();
-                // 清空等於清除，沒有東西好給 AI 看。
-                if (text) onSavePrompt(text);
-                else onPatch({ user_prompt: "" });
-              }}
-            >
+            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={busy || !dirty} onClick={save}>
               儲存
             </button>
             {!!saved && (
-              <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={busy} onClick={() => { setDraft(saved); setEditing(false); }}>
+              <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={busy} onClick={() => { setDirty(false); setEditing(false); }}>
                 取消
               </button>
             )}

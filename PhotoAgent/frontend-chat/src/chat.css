@@ -454,11 +454,12 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    同一套，整張一段字：不同對象用「；」隔開，指定了人的那段前面掛頭像。改的時候是同一段
    字變成可以打字的框，頭像還在字裡。 */
 .chat-notes{display:flex;flex-direction:column;gap:var(--sp-2)}
-.chat-notes .chat-face-chip{vertical-align:middle;margin:-2px 2px 0 0}
-.chat-notes .chat-face-chip.is-small{padding:0;min-height:0;gap:0}
+.chat-notes .chat-face-chip,.chat-opt-prompt .chat-face-chip{vertical-align:middle;margin:-2px 2px 0 0}
+.chat-notes .chat-face-chip.is-small,.chat-opt-prompt .chat-face-chip.is-small{padding:0;min-height:0;gap:0}
 .chat-notes-box{min-height:calc(var(--chat-fs-md)*1.5*2 + 2*var(--sp-2));padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
   font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
 .chat-notes-box:focus{outline:0;border-color:var(--accent)}
+.chat-notes-box:empty::before{content:attr(data-placeholder);color:var(--n34);pointer-events:none}
 .chat-notes-atom{user-select:all;cursor:default}
 
 /* ── Page-specific additions ─────────────────────────────────────────── */
@@ -742,8 +743,6 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-line-send:focus-visible,
 .chat-opt-style-none:focus-visible,
 .chat-opt-style-btn:focus-visible,
-.chat-opt-prompt textarea:focus-visible,
-.chat-proposal-edit:focus-visible,
 .chat-proposal-row:focus-visible,
 .history-drawer .chat-history-grid>.demo-image-tile:focus-visible{
   outline:2px solid rgba(var(--accent-rgb),.9);outline-offset:2px}
@@ -867,10 +866,10 @@ div.chat-proposal-row{cursor:default}
 .chat-proposal-diff.is-long{display:flex;flex-direction:column;align-items:stretch;gap:var(--sp-1);flex-basis:100%;width:100%}
 .chat-proposal-diff.is-long s,.chat-proposal-diff.is-long b{overflow-wrap:anywhere;white-space:normal}
 .chat-proposal-diff.is-long svg{align-self:flex-start;transform:rotate(90deg)}
-/* 建議裡那段個人化需求就地可改：長得像輸入框，位置還是 is-long 的那一欄。 */
-.chat-proposal-edit{width:100%;box-sizing:border-box;padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
-  font:inherit;font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);resize:vertical}
-.chat-proposal-edit:focus{outline:0;border-color:var(--accent)}
+/* 建議裡那段個人化需求就地可改：跟面板同一個框（.chat-notes-box），位置還是 is-long
+   的那一欄。前後兩段字裡的人也是頭像。 */
+.chat-proposal-edit{width:100%;box-sizing:border-box}
+.chat-proposal-diff .chat-face-chip.is-small{vertical-align:middle;margin:-2px 2px 0 0;padding:0;min-height:0;gap:0}
 /* 摘要那句是這張卡唯一的實色，問題清單退到 --n54：同一段話裡只留一個重音，
    清單讀起來像註腳而不是第二個開場白。 */
 .chat-brief-issues{margin:0;padding-left:20px;font-size:var(--chat-fs-md);line-height:1.6;color:var(--n54)}
@@ -969,9 +968,6 @@ div.chat-proposal-row{cursor:default}
 .chat-opt-dot{align-self:flex-start;flex-shrink:0;width:5px;height:5px;margin:2px -3px 0 -2px;border-radius:50%;background:var(--accent)}
 .chat-opt-value{font-weight:700;color:var(--accent-text)}
 .chat-opt-prompt{display:flex;flex-direction:column;gap:var(--sp-2)}
-.chat-opt-prompt textarea{width:100%;box-sizing:border-box;padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
-  font:inherit;font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);resize:vertical}
-.chat-opt-prompt textarea:focus{outline:0;border-color:var(--accent)}
 /* 還沒要改的時候，存下來的需求就是一段讀的內容，不是一個等著被打字的框。 */
 .chat-opt-prompt-text{margin:0;padding:var(--sp-2) var(--sp-3);border-radius:8px;background:var(--n04);
   font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;text-wrap:pretty}

@@ -159,6 +159,8 @@ BUILD user_prompt FROM SCRATCH BEFORE OUTPUT
 When changing user_prompt, patch_json.user_prompt must contain the complete new list, not a fragment. Never paste PLAN.user_prompt and append the user's sentence. The one-person-one-entry rule applies to the JSON value itself, even if the reply is correct.
 1. Read all wishes from PLAN.user_prompt into a temporary mental table: one row per person/background/scene; one slot per aspect (pose, expression, clothing, accessories, background, light). Combine repeated mentions of the same person in that row. A person can have several compatible accessory wishes, such as a cap and sunglasses.
 2. Apply the latest user message to its target's row. For the same target and aspect, replace the old value if the two cannot both be true. The user's latest explicit choice takes priority. If the old text says 「先黃色、再藍色」, blue is already the later choice. If the user says 「外套顏色要藍色」, use blue without asking again. Ask only if the target or choice truly remains unclear.
+   - A wish for everyone in the photo (「大家」「所有人」, or several faces pointed at) has no row of its own: write it into each of those people's rows, and in each one it replaces a value it cannot coexist with (「左側男性皮膚曬黑、瘦臉」 then 「所有人皮膚都美白」 -> 「左側男性瘦臉、皮膚都美白」). Only a wish about the background or the scene itself goes in the 背景 or 場景 row.
+   - When the latest message only takes an earlier wish back -- leave that thing as it is, do not do it after all (「帽子拿掉」 then 「帽子留著」 or 「帽子不用拿掉了」; 「瘦臉」 then 「臉不用瘦」) -- remove that wish from its row and write nothing in its place: leaving the photo as it was is what happens anyway once the wish is gone. A row left empty disappears with its name. When the message takes one wish back and also asks for something else (「帽子留著，衣服換成藍色」), remove the one and add the other. A wish that changes an earlier one into something else (「帽子換成紅色」) is a replacement, not a take-back. Keeping something as it is with no earlier wish about it (「帽子留著」 with no wish about the hat) is a wish of its own.
 3. Write a NEW list from the rows, preserving the order each target first appeared. Write each target's name exactly ONCE in the entire user_prompt. Put that target's compatible wishes after its name, joined with 「、」. Use 「；」 ONLY between different targets (people/background/scene), never between wishes for the same person. Do not leave a superseded wish with 「更正」、「改為」、「另」 or 「但」 attached.
 4. Before finalizing, inspect the literal patch_json.user_prompt string: if any person's name occurs twice, regroup and rewrite it. If a target-and-aspect has contradictory values, keep the latest one and rewrite it. The reply cannot substitute for this check. If the user only asked to check and PLAN.user_prompt already meets these rules, leave patch_json "".
 
@@ -175,6 +177,13 @@ Latest user message: 「右側男性戴上太陽眼鏡」
 Correct patch_json: {"user_prompt":"左側男性的外套改成藍色、眼鏡去掉；右側男性戴一頂鴨舌帽、太陽眼鏡"}
 Correct reply: 「可以幫你讓右側男性戴上太陽眼鏡，確認後套用。」
 Wrong patch_json: {"user_prompt":"左側男性的外套改成藍色；左側男性眼鏡去掉；右側男性戴一頂鴨舌帽；右側男性戴上太陽眼鏡"}
+
+EXAMPLE OF A WISH TAKEN BACK
+PLAN.user_prompt: 「左側男性的帽子拿掉、外套換成藍色；背景換成海邊」
+Latest user message: 「[pointing at 左側男性] 帽子留著好了」
+Correct patch_json: {"user_prompt":"左側男性的外套換成藍色；背景換成海邊"}
+Correct reply: 「好，左側男性的帽子就不拿掉了。」
+Wrong patch_json: {"user_prompt":"左側男性的外套換成藍色、帽子留著；背景換成海邊"}
 
 PANEL CHECK REQUEST
 「我改了個人化需求，幫我確認一下內容。」 is sent after the user edits that text by hand. Read PLAN.user_prompt as it now stands. Apply BUILD user_prompt FROM SCRATCH: one entry per person; where two wishes cannot both be true, the later wish wins. Propose the normalized full text and briefly say what was merged. If it is already normalized, say so and leave patch_json ""; end on that, without pointing at any button -- the page adds the next step itself.
@@ -819,6 +828,23 @@ def _keep_earlier_wishes(patch, plan, history, analysis):
     return {**patch, "user_prompt": _merge_prompt_wishes(f"{before}；{after}", analysis)}
 
 
+def _dropped_wishes(before, after, analysis):
+    """The wishes in `before` that `after` no longer has."""
+    return [(head, wish) for head, wish in _wish_items(before, analysis)
+            if not any(h == head and (wish in w or w in wish) for h, w in _wish_items(after, analysis))]
+
+
+def _only_drops_wishes(patch, plan, history, analysis):
+    """True when a line the user typed only takes wishes out of 個人化需求:
+    nothing added, nothing else changed. The panel's own check is not one --
+    there the AI tidies text the user wrote, and what it drops waits for 套用."""
+    if set(patch) != {"user_prompt"} or (history and history[-1].get("text") == PANEL_CHECK_ASK):
+        return False
+    before, after = plan.get("user_prompt"), patch["user_prompt"]
+    return (bool(before) and not _new_wishes(before, after, analysis)
+            and bool(_dropped_wishes(before, after, analysis)))
+
+
 def _confirm_first(patch, changes, plan, history, analysis):
     """Whether the change waits for 套用. It does not when the user already
     picked it, when it only adds a wish, or when it sets one plain setting --
@@ -827,6 +853,10 @@ def _confirm_first(patch, changes, plan, history, analysis):
     still asks, and so does a wish added for someone the user did not point
     at, or for several people when they pointed at no one: the model put
     words there that this line did not say."""
+    if _only_drops_wishes(patch, plan, history, analysis):
+        # The user took a wish back in their own words (「帽子留著」): there is
+        # nothing the AI judged, only what they said to leave out.
+        return False
     if "user_prompt" in patch and not _only_adds_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis):
         # Even a picked answer: what it drops, the user did not say.
         return True
@@ -875,6 +905,16 @@ def _applied_reply(changes, screen, wishes=()):
     return said + _next_step(screen)
 
 
+def _dropped_reply(dropped, screen):
+    """What to say for wishes the user took back, and what to press next."""
+    echo = "、".join(_grouped_wishes(dropped))
+    if echo and len(echo) <= APPLIED_WISH_MAX_LEN:
+        said = f"好，{echo}就不做了。"
+    else:
+        said = WITHDRAWN_REPLY if len(dropped) == 1 else "好，那些需求就不做了。"
+    return said + _next_step(screen)
+
+
 def _next_step(screen):
     """The sentence that sends the user on from a change made: to the render
     button below, and to the topics under the reply while adjusting. "" when
@@ -915,8 +955,11 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     if proposal and not picked_by_ai and not _confirm_first(patch, changes, plan, history, analysis or {}):
         # Applied as it stands; the card shows what changed and can undo it.
         proposal.update(direct=True, undo=_undo_patch(patch, plan))
-        added = _new_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}) if "user_prompt" in patch else []
-        reply = _applied_reply(changes, screen, _grouped_wishes(added))
+        if _only_drops_wishes(patch, plan, history, analysis or {}):
+            reply = _dropped_reply(_dropped_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}), screen)
+        else:
+            added = _new_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}) if "user_prompt" in patch else []
+            reply = _applied_reply(changes, screen, _grouped_wishes(added))
     # A change goes through its card first, even when the model also said render.
     render = result.get("action") == "render" and not wanted
     options = [] if proposal or render else _options(result.get("options"))

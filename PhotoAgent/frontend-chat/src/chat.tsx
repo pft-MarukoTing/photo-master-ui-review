@@ -868,6 +868,123 @@ export function FaceChip(props: {
   );
 }
 
+// 個人化需求的編輯框（上傳頁跟 session 面板同一個）：一段字，對象之間用「；」
+// 隔開，指定了人的那段前面嵌著那個人的頭像。頭像不能打字進去，只能整顆刪掉。
+export function noteAtom(key: string, faces: FaceRef[]) {
+  const atom = document.createElement("span");
+  atom.className = "chat-face-chip is-small chat-notes-atom";
+  atom.contentEditable = "false";
+  atom.dataset.key = key;
+  for (const f of faces) {
+    const img = document.createElement(f.thumb ? "img" : "span");
+    if (f.thumb) (img as HTMLImageElement).src = f.thumb;
+    else img.className = "chat-face-blank";
+    img.setAttribute("alt", "");
+    atom.appendChild(img);
+  }
+  return atom;
+}
+
+// 框裡的內容讀回每個對象的字：遇到頭像就開始那個人的段，遇到「；」或換行就結束
+// 目前這段，後面沒接頭像的字算沒指定對象（key ""）。`keys` 裡沒出現的對象是整段
+// 被刪掉，給空字串。
+export function readNoteBox(box: HTMLElement, keys: string[]) {
+  const parts: Record<string, string[]> = Object.fromEntries(keys.map((k) => [k, []]));
+  let key = "";
+  let buf = "";
+  const end = () => {
+    const t = buf.trim();
+    if (t) (parts[key] ??= []).push(t);
+    key = "";
+    buf = "";
+  };
+  const walk = (node: Node) => {
+    if (node instanceof HTMLElement && node.dataset.key !== undefined) {
+      if (buf.trim()) end();
+      key = node.dataset.key;
+      buf = "";
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      for (const ch of node.textContent || "") {
+        if (ch === "；" || ch === ";" || ch === "\n") end();
+        else buf += ch;
+      }
+      return;
+    }
+    if (node.nodeName === "BR") end();
+    node.childNodes.forEach(walk);
+    if (node !== box && (node.nodeName === "DIV" || node.nodeName === "P")) end();
+  };
+  walk(box);
+  end();
+  return Object.entries(parts).map(([k, ts]) => ({ key: k, text: ts.join(k ? "、" : "；") }));
+}
+
+// 框裡打 Enter 就是換對象，直接打成「；」；貼上的換行也一樣。
+export const noteBoxKeys = {
+  onKeyDown(e: KeyboardEvent) {
+    if (e.key === "Enter" && !e.isComposing) {
+      e.preventDefault();
+      document.execCommand("insertText", false, "；");
+    }
+  },
+  onPaste(e: ClipboardEvent) {
+    e.preventDefault();
+    const t = e.clipboardData?.getData("text/plain") || "";
+    document.execCommand("insertText", false, t.replace(/\r?\n/g, "；"));
+  },
+};
+
+// 打開時把框填好，游標放到最後。
+export function fillNoteBox(el: HTMLElement, sections: { key: string; faces: FaceRef[]; text: string }[], focus = true) {
+  el.replaceChildren();
+  sections.forEach((sec, i) => {
+    if (i) el.appendChild(document.createTextNode("；"));
+    if (sec.key) el.appendChild(noteAtom(sec.key, sec.faces));
+    el.appendChild(document.createTextNode(sec.text));
+  });
+  if (!focus) return;
+  el.focus();
+  const r = document.createRange();
+  r.selectNodeContents(el);
+  r.collapse(false);
+  const sel = window.getSelection();
+  sel?.removeAllRanges();
+  sel?.addRange(r);
+}
+
+// session 的個人化需求跟上傳頁同一個樣子：一段字，對象之間用「；」隔開，寫到某人的
+// 那段開頭的名字換成那個人的頭像。後端每段開頭就是名字（「左側男性頭髮染黑、瘦臉；
+// 背景換成海邊」），所以從開頭比對名字就拆得出來，長的名字先比。
+export type PromptSection = { key: string; faces: FaceRef[]; text: string };
+
+export function promptSections(text: string, faces: Record<number, FaceRef>): PromptSection[] {
+  const named = Object.values(faces).filter((f) => f.name).sort((a, b) => b.name.length - a.name.length);
+  return text
+    .split(/[；;\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const hit = named.find((f) => part.startsWith(f.name));
+      if (!hit) return { key: "", faces: [], text: part };
+      return { key: hit.name, faces: [hit], text: part.slice(hit.name.length).replace(/^[的：:、，,\s]+/, "") };
+    });
+}
+
+// 看的時候：一段字，名字換成頭像。
+export function promptFaces(sections: PromptSection[]) {
+  return sections.map((sec, i) => [i ? "；" : "", sec.faces.map((f) => <FaceChip face={f} small />), sec.text]);
+}
+
+// 框裡的內容組回「名字＋需求；…」。
+export function readPromptBox(box: HTMLElement, sections: PromptSection[]) {
+  return readNoteBox(box, sections.map((x) => x.key))
+    .filter((x) => x.text)
+    .map((x) => x.key + x.text)
+    .join("；");
+}
+
 type Placeholder = string | string[];
 
 // 輸入框的提示一行就要讀完，被切掉的半句比短句更難懂。給一串由長到短的說法，
@@ -1199,10 +1316,18 @@ export function ProposalCard(props: {
   const { proposal, resolved } = props;
   const live = resolved == null;
   const typed = live ? textChangeOf(proposal) : null;
-  const [draft, setDraft] = useState(textChangeOf(proposal)?.after ?? "");
+  // 個人化需求的前後都用頭像講人，就地改的框也跟面板同一個。
+  const sectionsOf = (text: string) => promptSections(text, props.faces);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (typed && box.current) fillNoteBox(box.current, sectionsOf(typed.after), false);
+  }, [!!typed]);
   // 只改一項、又不是針對某張臉時，標題直接寫那一項是什麼（例如「個人化需求」），
   // 底下那列就不必再把同一個詞念一次。
   const only = proposal.changes.length === 1 && proposal.changes[0].subject_index == null ? proposal.changes[0] : null;
+  // AI 直接記下的個人化需求就是一張記事：只給現在記著的內容，不畫刪掉的那段、
+  // 不寫「已套用」。「復原」換成「修改」，打開個人化需求面板自己調。
+  const noted = !!proposal.direct && resolved === "apply" && only?.field === TEXT_FIELD;
   return (
     <div class="chat-card chat-proposal">
       <p class="chat-proposal-title">{only ? only.label : "建議的調整"}</p>
@@ -1229,22 +1354,24 @@ export function ProposalCard(props: {
                   </span>
                 )}
                 <span class={`chat-proposal-diff${isLong(c) || mine ? " is-long" : ""}`}>
-                  {hadBefore(c) && (
+                  {hadBefore(c) && !noted && (
                     <>
-                      <s>{c.before}</s>
+                      <s>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(c.before)) : c.before}</s>
                       <Icon name="arrow" size={12} />
                     </>
                   )}
                   {mine ? (
-                    <textarea
-                      class="chat-proposal-edit"
-                      rows={3}
-                      value={draft}
-                      disabled={props.busy}
-                      onInput={(e) => setDraft((e.target as HTMLTextAreaElement).value)}
+                    <div
+                      class="chat-notes-box chat-proposal-edit"
+                      ref={box}
+                      role="textbox"
+                      aria-multiline="true"
+                      aria-label={c.label}
+                      contentEditable={!props.busy}
+                      {...noteBoxKeys}
                     />
                   ) : (
-                    <b>{after}</b>
+                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(after)) : after}</b>
                   )}
                 </span>
               </Row>
@@ -1260,10 +1387,26 @@ export function ProposalCard(props: {
               icon={PROPOSAL_CHOICES[k].icon}
               kind={k === "apply" ? "primary" : "ghost"}
               disabled={props.busy}
-              onClick={() => props.onChoose(k, typed && k === "apply" ? { field: typed.field, value: draft.trim() } : undefined)}
+              onClick={() =>
+                props.onChoose(
+                  k,
+                  typed && k === "apply" && box.current
+                    ? { field: typed.field, value: readPromptBox(box.current, sectionsOf(typed.after)) }
+                    : undefined,
+                )
+              }
             />
           ))}
         </div>
+      ) : noted ? (
+        props.undoable && (
+          <div class="chat-choices">
+            {/* 跟個人化需求面板裡那顆「修改」同一個樣子。 */}
+            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={props.busy} onClick={() => only && props.onShow(only)}>
+              修改
+            </button>
+          </div>
+        )
       ) : proposal.direct && resolved === "apply" ? (
         <>
           <p class="chat-meta">已套用</p>

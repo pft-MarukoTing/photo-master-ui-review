@@ -251,6 +251,20 @@ class AskTest(unittest.TestCase):
         result = ask(model_says(patch={"user_prompt": "左邊女性的外套改成紅色"}), plan=plan)
         self.assertNotIn("direct", result["proposal"])
 
+    def test_a_wish_taken_back_is_applied(self):
+        plan = default_plan()
+        plan["user_prompt"] = "左邊女性的帽子拿掉、外套改成藍色；背景換成海邊"
+        history = [{"role": "user", "text": "帽子留著好了", "card": {"type": "ask", "photo_id": "p1", "subject_indices": [0]}}]
+        result = ask(model_says("好，左邊女性的帽子就不拿掉了。確認後套用。",
+                                patch={"user_prompt": "左邊女性的外套改成藍色；背景換成海邊"}), plan=plan, history=history)
+        self.assertTrue(result["proposal"]["direct"])
+        self.assertEqual(result["proposal"]["undo"], {"user_prompt": plan["user_prompt"]})
+        self.assertEqual(result["reply"], "好，左邊女性帽子拿掉就不做了。")
+        # The panel's own check tidies what the user wrote: what it drops still waits.
+        checked = [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK, "card": {"type": "ask", "photo_id": "p1"}}]
+        result = ask(model_says(patch={"user_prompt": "左邊女性的外套改成藍色；背景換成海邊"}), plan=plan, history=checked)
+        self.assertNotIn("direct", result["proposal"])
+
     def test_a_picked_answer_is_applied(self):
         history = [
             {"role": "assistant", "text": "", "card": {"type": "llm_reply", "text": "想怎麼調？",
