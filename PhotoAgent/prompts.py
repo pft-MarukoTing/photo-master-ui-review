@@ -2636,28 +2636,30 @@ def smile_level(analysis):
 
 def resolve_smile_targets(analysis):
     """Per-person {label, box, current, target} for the faces
-    the chosen level actually moves -- empty when the switch is off, when no
-    face was read, or when every face that was read already sits at that
-    level.
+    the chosen level actually moves -- empty when the switch is off or when
+    every face already sits at its level.
 
-    Auto leaves faces marked adjust_safe=false unchanged. An explicit level is
-    a user override and targets every readable face, including a face the
-    analyzer conservatively marked unsafe; unreadable/unclear faces never
-    enter this list because _read_smile_states filters them out.
+    Auto moves only readable faces, and leaves faces marked adjust_safe=false
+    unchanged unless the user turned that person on. An explicit level is a
+    user override and targets every person, including one the analyzer marked
+    unsafe or could not read (current=None, e.g. a mouth hidden by hair the
+    same edit may clear).
     """
     level = smile_level(analysis)
     if level is None:
         return []
     disabled_indices = _disabled_issue_subject_indices(analysis, "smile_issue")
     targets = []
-    for item in _read_smile_states(analysis):
+    for item in _smile_states(analysis):
         if item["_subject_index"] in disabled_indices:
             continue
         item_level = item.get("user_level") or level
         item_level = item_level if item_level in SMILE_LEVEL_LABELS else level
-        if item_level == "auto" and item["adjust_safe"] is False and not item.get("user_forced"):
+        if item_level == "auto" and (
+            item["current"] is None or (item["adjust_safe"] is False and not item["user_forced"])
+        ):
             continue
-        target = _smile_target_state(item_level, item["current"])
+        target = item_level if item["current"] is None else _smile_target_state(item_level, item["current"])
         if not target:
             continue
         targets.append({**item, "target": target})
@@ -2665,42 +2667,45 @@ def resolve_smile_targets(analysis):
 
 
 def final_smile_by_subject(analysis):
-    """Each person's smile intensity after Step 5: the target it was asked for, else the captured reading.
-
-    Key None covers every person when no face was read but an explicit level was applied to the whole photo.
-    """
-    readings = _read_smile_states(analysis)
-    if not readings:
-        level = smile_level(analysis)
-        return {None: level} if level not in (None, "auto") else {}
-    final = {item["_subject_index"]: item["current"] for item in readings}
+    """Each person's smile intensity after Step 5: the target it was asked for, else the captured reading."""
+    final = {item["_subject_index"]: item["current"] for item in _read_smile_states(analysis)}
     final.update({t["_subject_index"]: t["target"] for t in resolve_smile_targets(analysis)})
     return final
 
 
-def _read_smile_states(analysis):
-    """Readable faces as {label, box, current, adjust_safe}.
+def _smile_states(analysis):
+    """Every person as {label, box, current, adjust_safe, ...}; current is None when no reading is usable.
 
     Legacy smile_state values are accepted so previously analyzed photos can
     use the new intensity controls without being analyzed again.
     """
-    read = []
-    for item in subject_issue_items(analysis, "smile_issue"):
-        current = _normalize_smile_intensity(
-            item.get("smile_intensity") or item.get("smile_state")
-        )
-        if not current:
+    states = []
+    for index, subject in enumerate(analysis.get("subjects") or []):
+        if not isinstance(subject, dict):
             continue
-        read.append({
-            "label": (item.get("subject_label") or "").strip() or "畫面中的人",
-            "box": item.get("box") or {},
+        issue = subject.get("smile_issue")
+        if not isinstance(issue, dict):
+            if not subject.get("is_person"):
+                continue
+            issue = {}
+        current = _normalize_smile_intensity(issue.get("smile_intensity") or issue.get("smile_state"))
+        if current is None and not subject.get("is_person"):
+            continue
+        states.append({
+            "label": (subject.get("label") or "").strip() or "畫面中的人",
+            "box": subject.get("box") or {},
             "current": current,
-            "adjust_safe": item.get("adjust_safe"),
-            "_subject_index": item.get("_subject_index"),
-            "user_level": item.get("_user_level"),
-            "user_forced": bool(item.get("_user_forced")),
+            "adjust_safe": issue.get("adjust_safe"),
+            "_subject_index": index,
+            "user_level": issue.get("_user_level"),
+            "user_forced": bool(issue.get("_user_forced")),
         })
-    return read
+    return states
+
+
+def _read_smile_states(analysis):
+    """The faces whose current smile intensity was read."""
+    return [item for item in _smile_states(analysis) if item["current"]]
 
 
 def smile_qa_expectation(analysis):
@@ -2708,19 +2713,11 @@ def smile_qa_expectation(analysis):
     when it asked for no change -- built from the same resolve_smile_targets
     the edit prompt uses, so QA is never sent looking for a change the edit
     prompt did not request."""
-    if not _has_person(analysis):
-        return ""
-    level = smile_level(analysis)
-    if level is None:
-        return ""
-    targets = resolve_smile_targets(analysis)
-    if targets:
-        return "; ".join(f'{t["label"]}: {t["current"]} -> {t["target"]}' for t in targets)
-    if _read_smile_states(analysis):
-        return ""
-    if level == "auto":
-        return "every person at neutral -> gentle; anyone already smiling is unchanged"
-    return f"every person whose expression is readable -> {level}"
+    return "; ".join(
+        f'{t["label"]}: {t["current"]} -> {t["target"]}' if t["current"]
+        else f'{t["label"]}: unreadable in the original -> {t["target"]} where the mouth is visible after the edit'
+        for t in resolve_smile_targets(analysis)
+    )
 
 
 def approved_blink_items(analysis):

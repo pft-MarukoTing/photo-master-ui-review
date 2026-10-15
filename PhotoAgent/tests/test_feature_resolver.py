@@ -148,9 +148,14 @@ class NestedIssueReading(unittest.TestCase):
         self.assertEqual(smile["source_state"], {})
         self.assertEqual(smile["endpoint"]["smile_level"], "laughing")
 
-    def test_explicit_smile_level_does_not_force_an_unreadable_face(self):
+    def test_explicit_smile_level_reaches_an_unreadable_face(self):
         analysis = interaction_analysis()
-        analysis["subjects"][0]["smile_issue"]["smile_intensity"] = "unclear"
+        analysis["subjects"][0]["smile_issue"].update({"smile_intensity": "unclear", "adjust_safe": False})
+        smile = next(item for item in build_feature_contracts(analysis) if item["feature"] == "smile")
+        self.assertEqual(smile["source_state"], {})
+        self.assertEqual(smile["endpoint"]["smile_level"], "laughing")
+
+        analysis["_advanced_options"]["smile_level"] = "auto"
         self.assertNotIn("smile", [item["feature"] for item in build_feature_contracts(analysis)])
 
     def test_per_person_smile_level_overrides_global_default(self):
