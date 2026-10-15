@@ -2189,7 +2189,10 @@
       handleUserAspectRatioPick(els.apImageAspectRatioSelect.value));
   }
 
-  let reframeInFlight = false;
+  // Owner (batch record or singleFlowState) -> the ratio it is being reframed for.
+  const reframesInFlight = new Map();
+  // Batch record -> ratio of a reframe that finished while another photo was shown.
+  const pendingReframeOffers = new Map();
 
   // A 長寬比 picked on the results page re-plans the composition for it
   // (pipeline.reframe_stage) once the user accepts the extra analysis call.
@@ -2213,7 +2216,7 @@
     }
 
     const restore = () => applyAspectRatioOption(findAspectRatioOption(previous), { fromUser: true });
-    if (reframeInFlight) {
+    if (reframesInFlight.has(owner)) {
       restore();
       return;
     }
@@ -2234,27 +2237,60 @@
       return;
     }
 
-    reframeInFlight = true;
-    setReframeBusy(true, value);
+    reframesInFlight.set(owner, value);
+    pendingReframeOffers.delete(owner);
+    syncReframeBusy();
     hideError();
-    let reframed = false;
+    let reframedOnScreen = false;
     try {
       const reframedAnalysis = await requestReframe({
         jobId, file, analysis, aspectRatio: value, path,
         analysisModel: owner.analysisModel || batchSettings?.analysisModel
       });
-      if ((currentDetailBatchRecord() || singleFlowState) !== owner || owner.analysis !== analysis) return;
-      adoptReframedAnalysis(owner, reframedAnalysis, reframedAnalysis._composition_by_ratio?.[value]);
-      applyAspectRatioChange(value);
-      reframed = true;
+      if (owner.analysis !== analysis) return;
+      if (reframeOwnerOnScreen() === owner) {
+        adoptReframedAnalysis(owner, reframedAnalysis, reframedAnalysis._composition_by_ratio?.[value]);
+        applyAspectRatioChange(value);
+        reframedOnScreen = true;
+      } else {
+        adoptReframedAnalysisOffScreen(owner, reframedAnalysis, value);
+        pendingReframeOffers.set(owner, value);
+      }
     } catch (error) {
       showError(`重新構圖失敗：${error.message || error}`);
-      restore();
+      if (reframeOwnerOnScreen() === owner) restore();
     } finally {
-      reframeInFlight = false;
-      setReframeBusy(false);
+      reframesInFlight.delete(owner);
+      syncReframeBusy();
     }
-    if (reframed) await offerEditAfterReframe(owner, value);
+    if (reframedOnScreen) await offerEditAfterReframe(owner, value);
+  }
+
+  function reframeOwnerOnScreen() {
+    return currentDetailBatchRecord() || singleFlowState;
+  }
+
+  // A batch photo the user switched away from mid-reframe: its panel is rebuilt
+  // from record.analysis/recipeChecked when reopened, so remap the saved checks
+  // by recipe text onto the new list (the reframing item may move or vanish).
+  function adoptReframedAnalysisOffScreen(record, analysis, pref) {
+    if (Array.isArray(record.recipeChecked) && record.analysis) {
+      const options = effectiveAdvancedOptions(record);
+      const oldRecipes = stripDisabledTopicItems(record.analysis, options).retouch_recipe || [];
+      const checkedByText = new Map(oldRecipes.map((text, i) => [text, record.recipeChecked[i]]));
+      const newRecipes = stripDisabledTopicItems(analysis, options).retouch_recipe || [];
+      record.recipeChecked = newRecipes.map((text) =>
+        /^重新構圖\s*[:：]/.test(text) ? true : checkedByText.get(text) !== false);
+    }
+    record.analysis = analysis;
+    record.aspectRatio = pref;
+  }
+
+  function offerPendingReframeEdit(record) {
+    const pref = pendingReframeOffers.get(record);
+    if (!pref) return;
+    pendingReframeOffers.delete(record);
+    offerEditAfterReframe(record, pref);
   }
 
   // Asks whether to run 美化 on the new composition now; 立即美化 presses the
@@ -2307,7 +2343,12 @@
     return `依 ${pref} 重新構圖中…`;
   }
 
-  function setReframeBusy(busy, pref = "") {
+  // Shows the reframing indicators only for the photo on screen; the batch-wide
+  // run button stays held while any photo is still being reframed.
+  function syncReframeBusy() {
+    const owner = reframeOwnerOnScreen();
+    const busy = !!owner && reframesInFlight.has(owner);
+    const pref = busy ? reframesInFlight.get(owner) : "";
     if (els.reframeLoading) els.reframeLoading.hidden = !busy;
     if (els.reframeLoadingText) els.reframeLoadingText.textContent = busy ? reframeLoadingMessage(pref) : "";
     els.apRecipeList?.querySelectorAll("li").forEach((li) => {
@@ -2322,10 +2363,13 @@
         li.querySelector("label")?.appendChild(note);
       }
     });
-    [els.inlineAnalysisContinueBtn, els.inlineAnalysisBatchRunBtn].forEach((btn) => {
+    [
+      [els.inlineAnalysisContinueBtn, busy],
+      [els.inlineAnalysisBatchRunBtn, reframesInFlight.size > 0]
+    ].forEach(([btn, hold]) => {
       if (!btn) return;
-      if (busy) {
-        btn.dataset.reframeHeld = btn.disabled ? "1" : "";
+      if (hold) {
+        if (!("reframeHeld" in btn.dataset)) btn.dataset.reframeHeld = btn.disabled ? "1" : "";
         btn.disabled = true;
       } else if ("reframeHeld" in btn.dataset) {
         btn.disabled = btn.dataset.reframeHeld === "1";
@@ -11063,6 +11107,8 @@
     setCurrentCaseTimes(record);
     updateApSubjectTags(record);
     updateBatchSidebarMaxHeight();
+    // A photo still being reframed gets its indicators once its panel reopens.
+    if (!reframesInFlight.has(record)) syncReframeBusy();
     // Only this record's OWN rotation (if it was the one actively showing)
     // ever gets the graceful finish -- switching the view to a record that
     // simply isn't loading, while some OTHER record's rotation is the one
@@ -12214,6 +12260,8 @@
     // version is on screen.
     if (els.apRunCountSelect) els.apRunCountSelect.value = String(batchRecordShownVersionRuns(record).length || 1);
     openInlineAnalysisPanel();
+    // After the panel open: it re-enables 美化, which a reframe in flight holds.
+    syncReframeBusy();
     // The "run with no changes just reproduces the same result" guard
     // (inlineReviseHasNoChanges) only makes sense when there's an existing
     // result to reproduce -- for "analyzed" (not yet edited) records this is
@@ -12227,7 +12275,7 @@
     }
     updateInlineAnalysisContinueBtnState();
 
-    const action = await waitForInlineAnalysisAction(
+    const actionPromise = waitForInlineAnalysisAction(
       () => effectiveModelQuality(record),
       // Only for an OLDER version stepped onto via the 美化紀錄 strip -- the
       // case this notice describes. A record's own current analysis keeps its
@@ -12236,6 +12284,9 @@
       () => (batchRecordOnOlderVersion(record) && record.analysis && !isCompatible(record.analysis)
         ? BATCH_ARCHIVED_VERSION_NOTICE : null)
     );
+    // After the wait is armed: 立即美化 presses the 美化 button it listens on.
+    offerPendingReframeEdit(record);
+    const action = await actionPromise;
     closeInlineAnalysisPanel();
     if (action === "cancel") {
       // Keep local review edits when the user closes the panel without
