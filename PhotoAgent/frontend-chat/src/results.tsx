@@ -76,7 +76,7 @@ const TAIL_EDGE_INSET = 18;
 
 // The four read-outs of what a version was made with, in the old row's order.
 // Each is a button that opens the bubble with its details; the icons are the
-// old review tabs' (人像檢查 / 美化建議 / 美化風格 / 個人化需求).
+// old review tabs' (人像檢查 / 畫面建議 / 美化風格 / 個人化需求).
 type Detail = "face" | "recipe" | "style" | "prompt";
 
 interface MadeWith {

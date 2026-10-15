@@ -1262,14 +1262,14 @@ class ChatRoutesTest(unittest.TestCase):
         photo = self.ready_photo(sid)
         res, _ = self.ask(sid, photo, "光線柔和一點", {
             "reply": "可以改成柔光，確認後套用。", "action": "none", "patch_json": '{"style_options":{"lighting":"soft"}}'},
-            screen={"bar": ["調整", "一鍵美化"], "topics": []})
+            screen={"bar": ["看分析結果", "一鍵美化"], "topics": []})
         messages = res.get_json()["messages"]
         self.assertEqual([(m["role"], m["card"]["type"]) for m in messages],
                          [("user", "ask"), ("assistant", "llm_reply"), ("user", "proposal_resolved")])
         reply, resolved = messages[1]["card"], messages[2]["card"]
         self.assertTrue(reply["proposal"]["direct"])
         self.assertEqual(reply["proposal"]["undo"], {"style_options": {"lighting": "default"}})
-        self.assertEqual(reply["text"], "好，光線改成「柔光」了。按下方的「一鍵美化」我就開始。")
+        self.assertEqual(reply["text"], "好，光線改成「柔光」了。按下面的「一鍵美化」我就開始。")
         self.assertEqual((resolved["choice"], resolved["auto"], resolved["proposal_id"]),
                          ("apply", True, reply["proposal"]["id"]))
         session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()

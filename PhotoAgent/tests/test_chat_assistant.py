@@ -64,10 +64,10 @@ class AskTest(unittest.TestCase):
         self.assertEqual(result["options"], ["笑容", "視線"])
 
     def test_the_screen_reaches_the_model(self):
-        model = model_says("可以按下方的「調整」。")
+        model = model_says("可以按下面的「看分析結果」。")
         chat_assistant.ask(analysis(), default_plan(), "ready", [{"role": "user", "text": "好", "card": {"type": "ask"}}],
-                           model=model, screen={"bar": ["調整", "再美化"], "topics": []})
-        self.assertIn('SCREEN: {"bar":["調整","再美化"],"topics":[]}', model.seen[0])
+                           model=model, screen={"bar": ["看分析結果", "再美化"], "topics": []})
+        self.assertIn('SCREEN: {"bar":["看分析結果","再美化"],"topics":[]}', model.seen[0])
 
     def test_a_render_has_no_options(self):
         self.assertEqual(ask(model_says("馬上幫你美化", action="render", options=["一鍵美化"]))["options"], [])
@@ -149,23 +149,23 @@ class AskTest(unittest.TestCase):
         model = model_says(patch={"style_options": {"lighting": "soft"}})
         result = chat_assistant.ask(analysis(), default_plan(), "ready",
                                     [{"role": "user", "text": "柔光", "card": {"type": "ask"}}],
-                                    model=model, screen={"bar": ["調整", "再美化"], "topics": []})
-        self.assertEqual(result["reply"], "好，光線改成「柔光」了。按下方的「美化」我就開始。")
+                                    model=model, screen={"bar": ["看分析結果", "再美化"], "topics": []})
+        self.assertEqual(result["reply"], "好，光線改成「柔光」了。按下面的「美化」我就開始。")
 
     def test_while_adjusting_the_reply_also_points_at_the_topics(self):
         model = model_says(patch={"user_prompt": "頭巾換成紫色"})
         result = chat_assistant.ask(analysis(), default_plan(), "ready",
                                     [{"role": "user", "text": "頭巾換成紫色", "card": {"type": "ask"}}],
-                                    model=model, screen={"bar": ["美化"], "topics": ["人像", "美化建議"]})
+                                    model=model, screen={"bar": ["美化"], "topics": ["人像", "畫面"]})
         self.assertTrue(result["proposal"]["direct"])
-        self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面，或按下方的「美化」我就開始。"))
+        self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面的項目，或按「美化」我就開始。"))
 
     def test_a_checked_prompt_points_at_the_topics(self):
         result = chat_assistant.ask(analysis(), default_plan(), "ready",
                                     [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK}],
                                     model=model_says("內容很清楚，目前沒有重複或衝突。"),
                                     screen={"bar": ["美化"], "topics": ["人像", "風格"]})
-        self.assertEqual(result["reply"], "好，個人化需求存好了。還想調整其他項目可以點下面，或按下方的「美化」我就開始。")
+        self.assertEqual(result["reply"], "好，個人化需求存好了。還想調整其他項目可以點下面的項目，或按「美化」我就開始。")
 
     def test_changes_the_ai_judged_still_ask(self):
         cases = {
@@ -368,7 +368,7 @@ class ReviewLineTest(unittest.TestCase):
             return {"verdict": "keep", "reply": "好，記下來了。還有別的嗎？", "line": "", "options": [], "later": False}
         self.assertEqual(chat_assistant.review_line("外套換成藍色", "", model=model)["reply"], "好，記下來了。還有別的嗎？")
 
-    # 上傳頁說了比例（「做成限動」），「美化設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
+    # 上傳頁說了比例（「做成限動」），「設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
     def ratio(self, verdict, value):
         return chat_assistant.review_line("做成限動", "", model=lambda context: {
             "verdict": verdict, "reply": "", "line": "", "options": [], "later": False, "aspect_ratio": value})
@@ -376,7 +376,7 @@ class ReviewLineTest(unittest.TestCase):
     def test_a_kept_wish_that_names_a_shape_sets_the_ratio(self):
         result = self.ratio("keep", "9:16")
         self.assertEqual(result["aspect_ratio"], "9:16")
-        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + "長寬比也幫你換成「9:16（限動）」了，在「美化設定」裡隨時可以改。"
+        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + "長寬比也幫你換成「9:16（限動）」了，在「設定」裡隨時可以改。"
                          + chat_assistant.KEPT_NEXT)
 
     def test_a_ratio_only_comes_with_a_kept_wish_the_panel_offers(self):

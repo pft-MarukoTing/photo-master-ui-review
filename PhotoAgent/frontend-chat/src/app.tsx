@@ -4,6 +4,7 @@ import { nextDisplayOrder } from "./display-order";
 // from the server's messages). Every action is one of the chat API calls;
 // typed messages go to /ask, whose replies may carry a plan change to confirm.
 import { useEffect, useRef, useState } from "preact/hooks";
+import type { ComponentChildren } from "preact";
 import { api, ApiError, setUser, urls, type ReviewTurn, type Screen } from "./api";
 import { isHeic, previewBlob } from "./heic";
 import {
@@ -19,7 +20,6 @@ import {
   FootBar,
   PROPOSAL_CHOICES,
   ProposalCard,
-  QuickBar,
   ModeSwitch,
   ResultCard,
   PhotoViewer,
@@ -50,6 +50,7 @@ import {
   categoryOf,
   OptionsCard,
   PROMPT_MAX,
+  termOf,
   topicLead,
   topicRecap,
   type Category,
@@ -132,7 +133,7 @@ type Note = {
   // (「褲子也是」→「把男孩的褲子也換成白色」).
   // `text` stays what was typed -- that is what the bubble shows.
   wish?: string;
-  // 這句說了比例（「做成限動」），「美化設定」的長寬比就照它改了。`ratioBack`：這句
+  // 這句說了比例（「做成限動」），「設定」的長寬比就照它改了。`ratioBack`：這句
   // 後來不在了，長寬比也已經改回 AI 建議。
   ratio?: string;
   ratioBack?: boolean;
@@ -301,7 +302,7 @@ function reviewHistory(ns: Note[], events: PreviewReplyEvent[] = []): ReviewTurn
   for (const t of conversation(ns, events)) {
     if ("previewReply" in t) {
       groups.push(t.previewReply.kind === "settings"
-        ? [{ role: "user", text: "美化設定" }, { role: "assistant", text: t.previewReply.text }]
+        ? [{ role: "user", text: "設定" }, { role: "assistant", text: t.previewReply.text }]
         : [{ role: t.previewReply.role || "assistant", text: t.previewReply.text }]);
     } else if ("gone" in t) {
       groups.push([{ role: "assistant", text: goneReply(t) }]);
@@ -343,7 +344,7 @@ function carriedLog(ns: Note[], photoId: string, later: Note | null, events: Pre
   const reply = (text: string) => out.push({ role: "assistant", card: { type: "llm_reply", photo_id: photoId, pre: true, text } });
   for (const t of conversation(ns, events)) {
     if ("previewReply" in t) {
-      if (t.previewReply.kind === "settings") out.push({ role: "user", text: "美化設定", card: { type: "ask", pre: true, photo_id: photoId } });
+      if (t.previewReply.kind === "settings") out.push({ role: "user", text: "設定", card: { type: "ask", pre: true, photo_id: photoId } });
       if (t.previewReply.role === "user") out.push({ role: "user", text: t.previewReply.text, card: { type: "ask", pre: true, photo_id: photoId } });
       else reply(t.previewReply.text);
       continue;
@@ -541,7 +542,7 @@ export function App() {
   sourceIdentity.current = selectionIdentity;
   const reviewedSource = useRef(preFull);
   // 長寬比是跟著說了比例的那句需求改的，那句不在個人化需求裡了（拿掉、清掉，或
-  // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「美化設定」自己改過的不動。
+  // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「設定」自己改過的不動。
   useEffect(() => {
     if (!caps) return;
     const prompt = notesPrompt(notes, preEdit);
@@ -1124,7 +1125,7 @@ export function App() {
         ...(r.accepted && r.aspect_ratio ? { ratio: r.aspect_ratio } : {}),
       };
       setNotes([...base, settled]);
-      // 「做成限動」這種說了比例的需求，同步改「美化設定」的長寬比
+      // 「做成限動」這種說了比例的需求，同步改「設定」的長寬比
       if (r.aspect_ratio) { const ratio = r.aspect_ratio; setSettings((s) => s && { ...s, aspect_ratio: ratio }); }
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
       if (r.start) startSession(r.start, laterNote(base), [...base, settled]);
@@ -1981,7 +1982,7 @@ function PreChat(props: {
           differ only in how far they go -- so they carry the same weight. */}
       {!asking && !went && (step === "picked" || step === "settings" || kept) && (
         <div class="chat-actions-aux">
-          {(step === "picked" || step === "settings") && <Chip label="美化設定" icon="tune" kind="ghost" disabled={held} onClick={props.onEdit} />}
+          {(step === "picked" || step === "settings") && <Chip label="設定" icon="tune" kind="ghost" disabled={held} onClick={props.onEdit} />}
           {/* 清掉的是需求，不是對話：上面那幾句連同 AI 的回覆都還在，只是不再算
               數。所以沒有需求可清時這顆就不該在——按下去畫面不會有任何變化。 */}
           {kept && (
@@ -2111,7 +2112,7 @@ function PreChat(props: {
         // 時也一樣：選項本身就是那兩顆鍵，再擺一次只是重複。
         const asking = "ask" in t && !!(t.ask.asked || t.ask.offered);
         if ("previewReply" in t && t.previewReply.kind === "settings") return <div key={t.previewReply.id} class="settings-turn">
-          <UserMsg><ClickBubble icon="tune" label="美化設定" /></UserMsg>
+          <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
           <AssistantMsg>
             <p class="chat-text">{t.previewReply.text}</p>
             {t.previewReply.id === activeSettingsId
@@ -2353,7 +2354,7 @@ function SessionView(props: {
   const roundStart = adjusting ? lastAdjust : readyIdx;
   // 麵包屑要等 adjusting 算出來才知道這張到底算不算做完了。
   const [stepN, stepHow] = stepState(photo, versions, adjusting);
-  // 美化設定 is offered while adjusting, and before the first render only
+  // 設定 is offered while adjusting, and before the first render only
   // once a typed request opened it.
   const baseCats = analysis ? categoriesFor(analysis, caps, photo.plan) : [];
   const opened: Category[] = [];
@@ -2377,7 +2378,7 @@ function SessionView(props: {
       }
     });
   }
-  // 只照需求改的那一版再調整：美化只看個人化需求，人像、美化建議、風格、設定
+  // 只照需求改的那一版再調整：美化只看個人化需求，人像、畫面、風格、設定
   // 都碰不到結果，所以只給這一項。看的是這一輪開的時候有沒有寫需求，中途清掉
   // 也不會突然冒出其他項目；「幫我分析」開的那輪會把 overwrite_prompt 關掉，
   // 回到完整清單。
@@ -2523,12 +2524,17 @@ function SessionView(props: {
     if (liveCat === cat) flash(cat, [field], true);
     else openCategory(cat).then((ok) => ok && flash(cat, [field], true));
   };
-  const catChips = (except?: Category | null) =>
-    cats
+  // 掛按鈕的那則訊息裡如果有項目按鈕，「美化」直接接在同一排最後，不另起一行。
+  const catChips = (except?: Category | null) => {
+    const chips = cats
       .filter((c) => c !== except)
       .map((c) => (
         <Chip label={CATEGORIES[c].label} icon={CATEGORIES[c].icon} disabled={busy} onClick={() => openCategory(c)} />
       ));
+    if (rendering !== endIdx || !endRow || placed) return chips;
+    placed = true;
+    return [...chips, actionChips];
+  };
   const skipTopic = (cat: Category) => {
     setHot({});
     // 不 merge：連著略過兩項要留下兩筆，不然就不知道已經走到哪一項了。
@@ -2556,13 +2562,13 @@ function SessionView(props: {
         </p>
         <div class="chat-choices">
           <Chip
-            label={`看${CATEGORIES[nextCat].label}`}
+            label={`看${termOf(nextCat)}`}
             icon={CATEGORIES[nextCat].icon}
             disabled={busy}
             onClick={() => openCategory(nextCat)}
           />
           <Chip
-            label={guideQueue[1] ? `略過，看${CATEGORIES[guideQueue[1]].label}` : "不用看了"}
+            label={guideQueue[1] ? `略過，看${termOf(guideQueue[1])}` : "不用看了"}
             icon="arrow"
             kind="ghost"
             disabled={busy}
@@ -2688,7 +2694,7 @@ function SessionView(props: {
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
         {c.proposal && idx + 1 === guideAt && messages[idx + 1].card?.auto && firstGuide()}
-        {/* 直接套用之後還是在調整中：跟一般回覆一樣把項目接在底下，不然只剩下方
+        {/* 直接套用之後還是在調整中：跟一般回覆一樣把項目接在底下，不然只剩最後
             那顆「美化」能按。後面跟著的只有套用自己寫進來的紀錄時，這則就是最後一句。 */}
         {c.proposal?.direct &&
           idx + 1 !== guideAt &&
@@ -2700,7 +2706,7 @@ function SessionView(props: {
           // 對話不停在一句「再跟我說」。AI 問回來的話，底下是它給的答案，點了就
           // 當成使用者打的下一句送出，指著誰問的就繼續指著誰；答過了定格成紀錄，
           // 點過的那顆標起來。沒問問題時，調整中就把能打開的項目接在底下（AI 的
-          // 話會指著它們講）；修完一版時要按的「調整／再美化」本來就在下方那排。
+          // 話會指著它們講）；修完一版時要按的「看分析結果／再美化」由 endActions 接在最後。
           const open = idx === messages.length - 1 && !props.pendingAsk;
           if (c.options?.length > 0) {
             const next = messages[idx + 1];
@@ -2804,7 +2810,79 @@ function SessionView(props: {
       ? messages.length - 1
       : -1;
 
+  // 一鍵美化 queues the render before analysis finishes.
+  const renderQueued = !!photo.queued_render && (photo.status === "analyzing" || reframing);
+
+  // 這一步能按的「看分析結果／美化」接在最新一則 AI 的話底下，不另外在輸入框上面擺
+  // 一排：話講到哪，按鈕就在哪。bar 是這幾顆上的字，問 AI 時一起送過去，它的
+  // 回覆才指得出現在能按什麼。
+  const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: snapshotOf(photo.plan) });
+  let bar: string[] = [];
+  let actionChips: ComponentChildren = null;
+  if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
+    // 調整中只放美化：項目在對話裡點，「看分析結果」再按一次會把這輪的起點重設掉。
+    // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
+    const label = fresh && !adjusting && !lastOpened ? "照建議直接美化" : "美化";
+    const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
+    actionChips = (
+      <Chip
+        label={label}
+        icon="spark"
+        kind="primary"
+        badge={pending}
+        disabled={busy || reframing}
+        onClick={() => (adjusting && unchanged ? setConfirmRerun(true) : renderRound(label, "spark"))}
+      />
+    );
+    bar = [label];
+  } else if (photo.status !== "ready") {
+    // 分析中、美化中：處理中那張卡已經講了接下來做什麼，不擺按不下去的鍵。
+  } else if (versions.length && current) {
+    actionChips = (
+      <>
+        <Chip label="看分析結果" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
+      </>
+    );
+    bar = ["看分析結果", "再美化"];
+  } else if (lastOutcome?.card?.type === "render_failed") {
+    actionChips = (
+      <>
+        <Chip label="看分析結果" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label="再試一次" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
+      </>
+    );
+    bar = ["看分析結果", "再試一次"];
+  }
+  // 掛在哪一則：最後一則畫得出來的 AI 訊息。直接套用自己寫進來的紀錄（auto）、
+  // 不顯示的摘要都跳過；回答接在分析摘要／成品裡的話，就掛在那則上。
+  let endIdx = messages.length - 1;
+  while (endIdx >= 0 && (messages[endIdx].card?.auto || SILENT.includes(messages[endIdx].card?.type || ""))) endIdx--;
+  const endReply = messages[endIdx]?.card;
+  if (endReply?.type === "llm_reply" && endReply.answers && HOSTS.includes(messages[step(endIdx, -1)]?.card?.type || ""))
+    endIdx = step(endIdx, -1);
+  // 視情況收起來：處理中、AI 正在回、正在問美化方式或要不要照原設定重跑，或
+  // AI 剛問了一句、底下已經有它給的答案（提案、選項）-- 先把那件事答完，下一則
+  // 話再把按鈕帶回來。
+  const endAsks =
+    endReply?.type === "llm_reply" &&
+    ((!!endReply.proposal && !resolvedChoice[endReply.proposal.id]) || endReply.options?.length > 0);
+  const endRow =
+    actionChips && !busy && !props.pendingAsk && photo.status === "ready" && !askMode && !confirmRerun && !endAsks ? (
+      <div class="chat-choices">{actionChips}</div>
+    ) : null;
+  // 每則 AI 訊息的最後都呼叫一次；只有掛的那則拿得到。quiet：那則自己正在問
+  // 別的事（例如要不要幫你分析），這次先不放。都沒掛上的話，列表後面補一則。
+  let placed = false;
+  let rendering = -1;
+  const endActions = (idx: number, quiet = false) => {
+    if (idx !== endIdx || !endRow || placed) return null;
+    placed = true;
+    return quiet ? null : endRow;
+  };
+
   const items = messages.map((m, idx) => {
+    rendering = idx;
     const c = m.card;
     switch (c?.type) {
       case "photos_added":
@@ -2819,9 +2897,9 @@ function SessionView(props: {
         // 沒分析的那次只是量完尺寸，沒什麼好報的，直接接著修。
         if (c.skipped) {
           const answer = answerIn(idx);
-          return answer ? <AssistantMsg>{answer}</AssistantMsg> : null;
+          return answer ? <AssistantMsg>{answer}{endActions(idx)}</AssistantMsg> : null;
         }
-        if (!analysis) return <AssistantMsg><p class="chat-text">分析完成。</p></AssistantMsg>;
+        if (!analysis) return <AssistantMsg><p class="chat-text">分析完成。</p>{endActions(idx)}</AssistantMsg>;
         return (
           <AssistantMsg>
             {skippedAnalysis ? null : brief ? (
@@ -2831,6 +2909,7 @@ function SessionView(props: {
             )}
             {answerIn(idx)}
             {fresh && !holding(idx) && !deferGuide && lastStepIdx < 0 && firstGuide()}
+            {endActions(idx)}
           </AssistantMsg>
         );
       }
@@ -2852,8 +2931,8 @@ function SessionView(props: {
         const lead = !answersApply
           ? introFor(cat, analysis, planAt(idx), messages.slice(0, idx).some((x) => /^render_/.test(x.card?.type || "")))
           : fromApply
-            ? `先看剛套用的${CATEGORIES[cat].label}，改動的地方已經標起來了。`
-            : `好，已套用。這是更新後的${CATEGORIES[cat].label}，改動的地方已經標起來了。`;
+            ? `先看剛套用的${termOf(cat)}，改動的地方已經標起來了。`
+            : `好，已套用。這是更新後的${termOf(cat)}，改動的地方已經標起來了。`;
         const recap = live ? "" : topicRecap(cat, analysis, caps, planAt(idx));
         return (
           <>
@@ -2884,7 +2963,7 @@ function SessionView(props: {
                     <>
                       <p class="chat-text">
                         {cats.length > 1 ? "調整好後，可以接著看其他項目，" : "調整好後，"}
-                        或按下方的「美化」我就開始
+                        或按下面的「美化」我就開始
                         {fromApply && renders ? "，之前的版本會留在美化紀錄" : ""}。
                       </p>
                       {cats.length > 1 && <div class="chat-choices">{catChips(cat)}</div>}
@@ -2902,7 +2981,7 @@ function SessionView(props: {
                   {editing && idx > roundStart && (
                     <div class="chat-choices">
                       <Chip
-                        label={`再看${CATEGORIES[cat].label}`}
+                        label={`再看${termOf(cat)}`}
                         icon={CATEGORIES[cat].icon}
                         kind="ghost"
                         disabled={busy}
@@ -2912,6 +2991,7 @@ function SessionView(props: {
                   )}
                 </>
               )}
+              {endActions(idx)}
             </AssistantMsg>
           </>
         );
@@ -2922,9 +3002,14 @@ function SessionView(props: {
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
-              <ClickBubble icon="arrow" label={`略過${CATEGORIES[cat].label}`} />
+              <ClickBubble icon="arrow" label={`略過${termOf(cat)}`} />
             </UserMsg>
-            {fresh && idx === lastStepIdx && <AssistantMsg>{guideTail({ lead: "好，" })}</AssistantMsg>}
+            {fresh && idx === lastStepIdx && (
+              <AssistantMsg>
+                {guideTail({ lead: "好，" })}
+                {endActions(idx)}
+              </AssistantMsg>
+            )}
           </>
         );
       }
@@ -2948,13 +3033,13 @@ function SessionView(props: {
               : "已套用，開始新的一輪調整。"
             : check
               ? "好，這是我分析整張照片的結果："
-              : "好，從上次的設定開始調整。";
+              : "好，回到分析結果，從上次的設定開始改。";
         return (
           <>
             {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
             {c.via !== "proposal" && !c.requested && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon={check ? "search" : "pencil"} label={check ? "幫我分析" : "調整"} />
+                <ClickBubble icon={check ? "search" : "pencil"} label={check ? "幫我分析" : "看分析結果"} />
               </UserMsg>
             )}
             <AssistantMsg>
@@ -2991,10 +3076,11 @@ function SessionView(props: {
                     </div>
                   )}
                   <p class="chat-text chat-muted">
-                    改好按下方的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
+                    改好按下面的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
                   </p>
                 </>
               )}
+              {endActions(idx)}
             </AssistantMsg>
           </>
         );
@@ -3007,6 +3093,7 @@ function SessionView(props: {
             </UserMsg>
             <AssistantMsg>
               <p class="chat-text">好，設定已還原成調整前的樣子。</p>
+              {endActions(idx)}
             </AssistantMsg>
           </>
         );
@@ -3030,6 +3117,7 @@ function SessionView(props: {
                   <Chip label="再試一次" icon="search" disabled={!ready} onClick={checkOriginal} />
                 </div>
               )}
+              {endActions(idx)}
             </AssistantMsg>
           );
         return (
@@ -3038,6 +3126,7 @@ function SessionView(props: {
               這張照片分析沒有成功：{jobErrorText(c.error, c.error_code).text}
               {c.queued_render_cancelled ? "。排定的美化也一併取消了。" : ""}
             </p>
+            {endActions(idx)}
           </AssistantMsg>
         );
       case "render_requested": {
@@ -3068,7 +3157,7 @@ function SessionView(props: {
               job={versionJob(v)}
               ordinal={v.ordinal}
               failed={(c.failed_job_ids || []).length}
-              next={idx === lastRender && !adjusting && !offerCheck}
+              next={idx === endIdx && !!endRow && !adjusting && !offerCheck}
               note={typeof c.note === "string" ? c.note : undefined}
               onOpen={() => openVersion(v)}
             />
@@ -3082,6 +3171,7 @@ function SessionView(props: {
                 </div>
               </>
             )}
+            {endActions(idx, offerCheck)}
           </AssistantMsg>
         );
       }
@@ -3099,6 +3189,7 @@ function SessionView(props: {
                   <Chip label="幫我分析" icon="search" disabled={!ready} onClick={checkOriginal} />
                 </div>
               )}
+              {endActions(idx)}
             </AssistantMsg>
           </>
         );
@@ -3110,8 +3201,9 @@ function SessionView(props: {
             <p class="chat-text chat-error">這次美化沒有成功：{err.text}。</p>
             {/* 被安全審查擋下的，同一張照片再試多半還是一樣。 */}
             {err.safety && idx === messages.length - 1 && !busy && (
-              <p class="chat-text">可以回到首頁換一張照片，或按「調整」換個方式再試。</p>
+              <p class="chat-text">可以回到首頁換一張照片，或按「看分析結果」換個方式再試。</p>
             )}
+            {endActions(idx)}
           </AssistantMsg>
         );
       }
@@ -3119,13 +3211,14 @@ function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text">
-              已{reframeBy(c.aspect_ratio)}重新構圖，美化建議裡的構圖也換成新的了。
+              已{reframeBy(c.aspect_ratio)}重新構圖，畫面建議裡的構圖也換成新的了。
               {idx === messages.length - 1 && !isBusy(photo)
                 ? editing
-                  ? "還想調整什麼就點上面的項目，改好按下方的「美化」我就開始。"
-                  : "按下方的按鈕就會用新構圖美化。"
+                  ? "還想調整什麼就點上面的項目，改好按下面的「美化」我就開始。"
+                  : "按下面的按鈕就會用新構圖美化。"
                 : ""}
             </p>
+            {endActions(idx)}
           </AssistantMsg>
         );
       case "reframe_failed":
@@ -3136,8 +3229,9 @@ function SessionView(props: {
               {c.queued_render_cancelled ? "，排定的美化也一併取消了" : ""}。
             </p>
             {idx === messages.length - 1 && !isBusy(photo) && (
-              <p class="chat-text">可以再選一次比例試試，或照現在的構圖按下方的按鈕美化。</p>
+              <p class="chat-text">可以再選一次比例試試，或照現在的構圖按下面的按鈕美化。</p>
             )}
+            {endActions(idx)}
           </AssistantMsg>
         );
       case "ask":
@@ -3150,11 +3244,17 @@ function SessionView(props: {
         );
       case "llm_reply":
         if (c.answers && HOSTS.includes(messages[step(idx, -1)]?.card?.type || "")) return null;
-        return <AssistantMsg>{replyBody(m, idx)}</AssistantMsg>;
+        return (
+          <AssistantMsg>
+            {replyBody(m, idx)}
+            {endActions(idx)}
+          </AssistantMsg>
+        );
       case "llm_error":
         return (
           <AssistantMsg>
             <p class="chat-text chat-muted">AI 暫時無法回覆，可以直接點選項調整。</p>
+            {endActions(idx)}
           </AssistantMsg>
         );
       case "proposal_resolved": {
@@ -3173,7 +3273,12 @@ function SessionView(props: {
             <UserMsg meta={clockLabel(m.created_at)}>
               <ClickBubble icon={l.icon} label={l.label} />
             </UserMsg>
-            {idx === guideAt && <AssistantMsg>{firstGuide(lead)}</AssistantMsg>}
+            {idx === guideAt && (
+              <AssistantMsg>
+                {firstGuide(lead)}
+                {endActions(idx)}
+              </AssistantMsg>
+            )}
             {dangling && idx !== guideAt && (
               <AssistantMsg>
                 <p class="chat-text">
@@ -3182,10 +3287,11 @@ function SessionView(props: {
                     : c.choice !== "apply"
                     ? "好，這次不套用。想怎麼改再告訴我。"
                     : editing && cats.length
-                      ? "好，已套用。想看改了什麼、或接著調整其他項目，點下面的項目；改好按下方的「美化」我就開始。"
-                      : "好，已套用。想再改什麼直接告訴我，或按下方的「美化」我就開始。"}
+                      ? "好，已套用。想看改了什麼、或接著調整其他項目，點下面的項目；改好按「美化」我就開始。"
+                      : "好，已套用。想再改什麼直接告訴我，或按下面的「美化」我就開始。"}
                 </p>
                 {c.choice === "apply" && editing && !!cats.length && <div class="chat-choices">{catChips()}</div>}
+                {endActions(idx)}
               </AssistantMsg>
             )}
           </>
@@ -3195,6 +3301,7 @@ function SessionView(props: {
         return null;
     }
   });
+  rendering = -1;
 
   // First words, before the server's own messages start.
   const intro = (
@@ -3202,9 +3309,6 @@ function SessionView(props: {
       <p class="chat-text">嗨！先選一張想美化的照片（一次一張）。</p>
     </AssistantMsg>
   );
-
-  // 一鍵美化 queues the render before analysis finishes.
-  const renderQueued = !!photo.queued_render && (photo.status === "analyzing" || reframing);
 
   // 處理中這一份文案兩邊分工：title 壓在左邊畫布的轉環底下講「在做什麼」，
   // lines 進聊天那張卡，一句句講細節、講過的留著。算在同一個地方，兩邊才不會各講各的。
@@ -3240,11 +3344,6 @@ function SessionView(props: {
     </AssistantMsg>
   ) : null;
 
-  // Quick replies for the current state; the render action is always last.
-  const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: snapshotOf(photo.plan) });
-  let quick = null;
-  // 下方那排按鈕上寫的字，問 AI 時一起送過去，它的回覆才指得出現在能按什麼。
-  let bar: string[] = [];
   if (askMode && photo.status === "ready" && editing) {
     // 跟上傳頁面那一題同一套字，兩邊才不會各講各的。
     working = (
@@ -3253,8 +3352,7 @@ function SessionView(props: {
         <p class="chat-text chat-muted">
           {WITH_ANALYSIS_LABEL}：照你的需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動你寫到的地方，其他保持原樣。
         </p>
-        {/* 問題的答案直接接在問題底下，不放下方那排：三顆加上指定對象的頭像，
-            手機寬度擠不下，會疊在一起。 */}
+        {/* 問題的答案直接接在問題底下。 */}
         <div class="chat-choices">
           <Chip label="先不美化" icon="x" disabled={busy} onClick={() => setAskMode(null)} />
           <Chip
@@ -3276,72 +3374,25 @@ function SessionView(props: {
   } else if (confirmRerun && photo.status === "ready" && adjusting) {
     working = (
       <AssistantMsg>
-        <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續調整？</p>
+        <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看分析結果？</p>
         <div class="chat-choices">
-          <Chip label="繼續調整" icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
+          <Chip label="繼續看" icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
           <Chip label="照原設定美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
         </div>
       </AssistantMsg>
     );
-    bar = ["繼續調整", "照原設定美化"];
+    bar = ["繼續看", "照原設定美化"];
   } else if (confirmRerun && photo.status === "ready" && !adjusting) {
     working = (
       <AssistantMsg>
-        <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先調整設定？</p>
+        <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看分析結果？</p>
         <div class="chat-choices">
-          <Chip label="先調整" icon="pencil" disabled={busy} onClick={enterAdjust} />
+          <Chip label="先看分析結果" icon="pencil" disabled={busy} onClick={enterAdjust} />
           <Chip label="照原設定再美化" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
         </div>
       </AssistantMsg>
     );
-    bar = ["先調整", "照原設定再美化"];
-  } else if (photo.status === "analyzing" && !renderQueued) {
-    // 只有一顆還按不下去的「美化」，說的是分析完接下來做什麼。這裡曾經還有一顆
-    // 「取消分析」，但後端沒有取消 job 的 API，它做的其實是清掉整個 session 重來 --
-    // 一顆說自己會停下分析、實際上是丟掉這張照片的按鈕，不如不要。
-    quick = (
-      <QuickBar>
-        <Chip label="美化" icon="spark" kind="primary" disabled />
-      </QuickBar>
-    );
-  } else if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
-    // 分析過後「調整」一直在美化旁邊。這一輪本來就在調整，所以它換成「調整中」
-    // 的狀態字、不能按（再按一次會把這輪的起點重設掉）；項目在對話裡點。
-    // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
-    const label = fresh && !adjusting && !lastOpened ? "照建議直接美化" : "美化";
-    const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
-    quick = (
-      <QuickBar>
-        <Chip label="調整中" icon="pencil" kind="current" settled title="正在調整：點對話裡的項目就能改" />
-        <Chip
-          label={label}
-          icon="spark"
-          kind="primary"
-          badge={pending}
-          disabled={busy || reframing}
-          onClick={() => (adjusting && unchanged ? setConfirmRerun(true) : renderRound(label, "spark"))}
-        />
-      </QuickBar>
-    );
-    bar = ["調整中", label];
-  } else if (photo.status !== "ready") {
-    quick = null;
-  } else if (versions.length && current) {
-    quick = (
-      <QuickBar>
-        <Chip label="調整" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
-        <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
-      </QuickBar>
-    );
-    bar = ["調整", "再美化"];
-  } else if (lastOutcome?.card?.type === "render_failed") {
-    quick = (
-      <QuickBar>
-        <Chip label="調整" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
-        <Chip label="再試一次" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
-      </QuickBar>
-    );
-    bar = ["調整", "再試一次"];
+    bar = ["先看分析結果", "照原設定再美化"];
   }
   const screen: Screen = {
     bar,
@@ -3389,7 +3440,6 @@ function SessionView(props: {
                   footer={
                     <>
                       <FootBar
-                        quick={quick}
                         faces={
                           (pickable.length > 1 || pendingPerson) && (<>
                             {pendingPerson && <p class="chat-text">{pendingPerson.text}</p>}
@@ -3420,6 +3470,7 @@ function SessionView(props: {
                 >
                   {intro}
                   {items}
+                  {!placed && endRow && <AssistantMsg>{endRow}</AssistantMsg>}
                   {props.pendingAsk && !(holding(step(messages.length, -1)) && HOSTS.includes(messages[step(messages.length, -1)]?.card?.type || "")) && (
                     <>
                       {props.pendingAsk.text && (
@@ -3452,7 +3503,7 @@ function SessionView(props: {
 }
 
 
-// AI 幫照片想的文案：跟美化建議一樣一列一句，點了就是選這句；最後一列留給自己寫。
+// AI 幫照片想的文案：跟畫面建議一樣一列一句，點了就是選這句；最後一列留給自己寫。
 // 一句文案動輒十幾個字，擠成一排藥丸會斷得七零八落，一列一句才讀得完整。選過之
 // 後定格成紀錄：選中的那列標起來，自己寫的就換成寫下的那句。
 const LINE_MAX = 40;

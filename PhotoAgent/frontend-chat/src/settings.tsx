@@ -157,7 +157,7 @@ export function PrefsModal(props: {
           </button>
         </div>
         {/* 跟面板 #ap-settings-modal 的開關列同一套 markup：全域設定兩邊長得一樣，
-            跟這張照片的「美化設定」（選單＋開關群組）一眼就分得出來。 */}
+            跟這張照片的「設定」（選單＋開關群組）一眼就分得出來。 */}
         <div class="settings-modal-body chat-prefs-body">
           <label class="option-row">
             <div class="option-text">

@@ -717,7 +717,7 @@ window.PhotoAgentResults = (() => {
 
     if (!followedEntries.length && !styleEntries.length && !rejectedEntries.length) {
       const li = document.createElement("li");
-      li.textContent = "尚未取得美化建議項目。";
+      li.textContent = "尚未取得修圖項目。";
       element.appendChild(li);
       return;
     }
@@ -3371,8 +3371,8 @@ window.PhotoAgentResults = (() => {
     const recipeAdherence = qa?.recipe_adherence || null;
     if (els.recipeScoreText) {
       els.recipeScoreText.textContent = recipeAdherence && Number.isFinite(Number(recipeAdherence.score))
-        ? joinParts([`美化建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
-        : "尚未取得美化建議達成度。";
+        ? joinParts([`畫面建議達成度：${recipeAdherence.score}/10。`, recipeAdherence.reason || ""])
+        : "尚未取得畫面建議達成度。";
     }
     fillRecipeAdherenceList(els.recipeScoreList, recipeAdherence?.items, recipeAdherence?.style_items, recipeAdherence?.rejected_items, analysis.retouch_recipe, analysis.style_options);
 
@@ -3439,7 +3439,7 @@ window.PhotoAgentResults = (() => {
     // A 「只照需求改」 case has only the stub analysis: nothing to summarize
     // or recommend, so #ap-skip-hint stands in for the 照片總覽 card (its
     // 幫我分析 is app.js's, beside 美化), the
-    // empty 美化建議 and 風格調整 tabs go, and the panel opens on 個人化需求 -- the
+    // empty 畫面建議 and 風格調整 tabs go, and the panel opens on 個人化需求 -- the
     // part that still applies. (人像檢查 hides itself: the stub has no faces.)
     const skipped = Boolean(analysis?._skipped_analysis);
     if (els.apSkipHint) els.apSkipHint.hidden = !skipped;
@@ -3505,7 +3505,7 @@ window.PhotoAgentResults = (() => {
       ]);
     }
 
-    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得美化建議。"]);
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得畫面建議。"]);
     renderFaceThumbnails(analysis);
 
     // Rebuild the style-option groups each run (defaults to "Default
@@ -3538,7 +3538,7 @@ window.PhotoAgentResults = (() => {
   // renderAnalysisPreview and disturbing whatever Pose/Angle/Lighting/Size
   // pick the user already made.
   function refreshRecipeList(analysis) {
-    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得美化建議。"]);
+    fillCheckList(els.apRecipeList, analysis.retouch_recipe, ["尚未取得畫面建議。"]);
   }
 
   return {

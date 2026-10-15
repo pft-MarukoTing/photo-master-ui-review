@@ -301,37 +301,17 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-result h4{margin:0;font-family:var(--chat-serif);font-size:var(--chat-fs-lg);font-weight:600;color:var(--n100)}
 .chat-verdict{display:inline-flex;align-items:center;gap:var(--sp-1);font-size:var(--chat-fs-sm);color:var(--n64)}
 .chat-verdict b{background:var(--success-bg);color:var(--success);border-radius:999px;padding:2px var(--sp-2);font-size:var(--chat-fs-xs)}
-/* One strip for both the subject picker and the quick replies: the rule, the
-   padding and the fill live here, and the two groups inside carry none of
-   their own. The faces take the leftover width -- so they are the side that
-   scrolls -- and the actions are flushed to the right edge at their natural
-   width, because the send button they lead to is on that edge too. */
+/* The subject picker's strip above the composer: the rule, the padding and the
+   fill live here, and the faces inside carry none of their own. The actions
+   that used to share it now hang off the latest reply in the transcript. */
 .chat-footbar{display:flex;align-items:center;gap:var(--sp-3);padding:0 var(--sp-4);
   border-top:1px solid var(--border);background:var(--n04)}
-/* No padding of its own above or below: the chips and the faces carry their own
-   height, and the strip adding more only pushed the transcript up. The two
-   rules below close the same gap from the other side -- stacked, the footbar
-   and the composer read as one block, so only the block's outer edges are
-   padded. A composer standing alone keeps its own top padding.
-   The faces row comes to 52px (40 avatar + 3px pad + 1px border, twice, + the
-   track's 2px). Without faces the 32px chips alone set the height and sit
-   flush against the rule, so the strip holds 52px as a floor: the chips get
-   10px each side, and the strip keeps one height whether or not faces show. */
-.chat-footbar{min-height:52px}
+/* No padding of its own above or below: the faces carry their own height, and
+   the strip adding more only pushed the transcript up. The rule below closes
+   the same gap from the other side -- stacked, the footbar and the composer
+   read as one block, so only the block's outer edges are padded. A composer
+   standing alone keeps its own top padding. */
 .chat-footbar+.chat-composer{border-top:0;padding-top:0}
-/* A fixed 20px rather than align-self:stretch -- the faces are half again as
-   tall as the chips, and a full-height rule drew attention to that. */
-.chat-footbar-sep{flex:0 0 auto;align-self:center;width:1px;height:20px;background:var(--border-2)}
-/* margin-left:auto, not only the faces' flex-grow: with no faces on screen the
-   actions still belong on the right edge. justify-content follows for the
-   narrow case, where the chips wrap onto a second line.
-   flex-shrink:0 so the faces are the side that gives way -- they already have
-   a scroller for exactly that, while the actions have nowhere to go but a
-   second line, and two chips stacked read as two separate decisions. They
-   still wrap when they alone outgrow the strip; by then there is genuinely no
-   room. */
-.chat-quick{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;
-  gap:var(--sp-2);flex:0 0 auto;max-width:100%;margin-left:auto}
 /* min-height, not height: the touch block below needs to raise it, and 14px
    text must not clip. */
 .chat-chip{display:inline-flex;align-items:center;gap:var(--sp-1);min-height:32px;padding:var(--sp-1) var(--sp-3);border-radius:999px;
@@ -435,9 +415,6 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    stays readable when scrolling back; the one that was not recedes. */
 .chat-chip.is-static{cursor:default;border-color:var(--n24);color:var(--n54);background:transparent}
 .chat-chip.is-static.is-picked{border-color:var(--accent);color:var(--accent-text);background:var(--tonal-lo)}
-/* 「調整中」：所在的狀態，不是一顆鍵。拿掉外框和底色——沒有框的字就不像按鈕，
-   旁邊有框的「美化」才是唯一能按的；字用主色，讀得出是現在進行中的那一步。 */
-.chat-chip.is-static.is-current{border-color:transparent;background:transparent;color:var(--accent-text);padding-left:var(--sp-1);padding-right:var(--sp-1)}
 /* ── 範例照片 dialog ──────────────────────────────────────────────────
    Same stacking band as the history drawer (backdrop 1000, panel 1001) and
    the same backdrop wash, because they are the same kind of thing: a panel
@@ -873,7 +850,7 @@ button.chat-face-chip.is-small:hover img{box-shadow:0 0 0 1.5px var(--card),0 0 
   font:inherit;font-size:var(--chat-fs-md);color:var(--n84);text-align:left;cursor:pointer}
 button.chat-proposal-row:hover{border-color:var(--n34)}
 div.chat-proposal-row{cursor:default}
-/* 短標籤（個人化需求、閉眼）照舊一行、不被擠斷；美化建議那種整句的標籤最多佔滿一列再換行，
+/* 短標籤（個人化需求、閉眼）照舊一行、不被擠斷；畫面建議那種整句的標籤最多佔滿一列再換行，
    不會撐出卡片。 */
 .chat-proposal-label{flex:1 0 auto;max-width:100%;overflow-wrap:anywhere}
 .chat-proposal-label b{color:var(--n100);margin-right:var(--sp-1)}
@@ -914,7 +891,7 @@ div.chat-proposal-row{cursor:default}
   .chat-chip-badge{animation:none}
 }
 
-/* The options cards: one category (人像 / 美化建議 / 風格) per card */
+/* The options cards: one category (人像 / 畫面 / 風格) per card */
 .chat-options{display:flex;flex-direction:column;gap:var(--sp-3)}
 .chat-opt-chip{min-height:30px;padding:var(--sp-1) var(--sp-3);font-size:var(--chat-fs-sm)}
 .chat-opt-chip svg{width:12px;height:12px}

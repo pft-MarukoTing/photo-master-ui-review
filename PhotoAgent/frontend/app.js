@@ -1667,7 +1667,7 @@
     if (ratio && ratio !== "auto") {
       parts.push(findAspectRatioOption(ratio)?.label || ratio);
     }
-    return parts.join(" · ") || "美化設定";
+    return parts.join(" · ") || "設定";
   }
 
   function updateApCaseSettingsTrigger() {
@@ -1695,8 +1695,8 @@
     // shown the values and left the user to work out which.
     const summary = apCaseSettingsSummaryText();
     const label = dirty
-      ? `開啟美化設定：${summary}（設定與目前結果不同）`
-      : `開啟美化設定：${summary}`;
+      ? `開啟設定：${summary}（設定與目前結果不同）`
+      : `開啟設定：${summary}`;
     btn.title = label;
     btn.setAttribute("aria-label", label);
   }
@@ -1962,7 +1962,7 @@
         return;
       }
       const confirmed = await showConfirmModal(
-        "換分析引擎必須重新分析這張照片，目前的分析結果與美化建議都會被取代。要繼續嗎？",
+        "換分析引擎必須重新分析這張照片，目前的分析結果和建議都會被取代。要繼續嗎？",
         { confirmLabel: "重新分析", danger: false, costSteps: [analysisPreflightStep()] }
       );
       if (!confirmed) {
@@ -2226,7 +2226,7 @@
       return;
     }
     const confirmed = await showConfirmModal(
-      "改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；其他美化建議維持不變。要繼續嗎？",
+      "改變長寬比需要依新比例重新構圖，會再呼叫一次分析模型並產生額外費用；畫面建議的其他項目維持不變。要繼續嗎？",
       { confirmLabel: "重新構圖", danger: false }
     );
     if (!confirmed) {
@@ -2344,7 +2344,7 @@
     const state = singleFlowState;
     if (!state?.analysis?._skipped_analysis || !state.analyzeJobId) return;
     const confirmed = await showConfirmModal(
-      "AI 會分析整張照片，整理出美化建議；你寫的個人化需求會保留。要繼續嗎？",
+      "AI 會分析整張照片，整理出修圖建議；你寫的個人化需求會保留。要繼續嗎？",
       { confirmLabel: "開始分析", danger: false, costSteps: [analysisPreflightStep()] }
     );
     if (!confirmed || singleFlowState !== state) return;
@@ -2450,7 +2450,7 @@
     updateInlineAnalysisContinueBtnState();
   }
 
-  const SKIP_HINT_TEXT = "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有美化建議。可以直接在下方修改個人化需求；需要 AI 的美化建議，請按「美化」左邊的「幫我分析」。";
+  const SKIP_HINT_TEXT = "這個版本只依照個人化需求修圖，沒有分析整張照片，所以沒有 AI 的修圖建議。可以直接在下方修改個人化需求；想要 AI 給建議的話，請按「美化」左邊的「幫我分析」。";
 
   function setSkipHintBusy(busy) {
     if (els.apSkipAnalyzeBtn) {
@@ -2459,7 +2459,7 @@
     }
     if (els.apSkipHintText) {
       els.apSkipHintText.textContent = busy
-        ? "正在分析整張照片，完成後美化建議會顯示在這裡。"
+        ? "正在分析整張照片，完成後建議會顯示在這裡。"
         : SKIP_HINT_TEXT;
     }
     const btn = els.inlineAnalysisContinueBtn;

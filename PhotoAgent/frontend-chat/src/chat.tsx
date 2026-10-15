@@ -405,7 +405,7 @@ export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () 
 export function Chip(props: {
   label: string;
   icon?: string;
-  kind?: "primary" | "ghost" | "picked" | "current";
+  kind?: "primary" | "ghost" | "picked";
   disabled?: boolean;
   title?: string;
   onClick?: () => void;
@@ -439,26 +439,11 @@ export function Chip(props: {
   );
 }
 
-// 下方那排只放按鈕，不放引導字：要按什麼由按鈕本身（選取狀態、小圓點）說。
-export function QuickBar({ children }: { children: ComponentChildren }) {
-  return <div class="chat-quick">{children}</div>;
-}
-
-// The quick replies and the subject picker used to be two stacked strips, each
-// with its own rule and padding -- ~95px of chrome above the composer for two
-// short rows. One strip instead, split by a rule. The faces lead on the left,
-// under the transcript they belong to and on the same edge as the composer's
-// attach button; the actions are flushed right, where the send button is and
-// where the eye already goes to commit.
-export function FootBar({ quick, faces }: { quick?: ComponentChildren; faces?: ComponentChildren }) {
-  if (!quick && !faces) return null;
-  return (
-    <div class="chat-footbar">
-      {faces}
-      {quick && faces && <span class="chat-footbar-sep" aria-hidden="true" />}
-      {quick}
-    </div>
-  );
+// 輸入框上面那條只剩主角挑選。「調整／美化」那些動作改掛在最新一則回話底下，
+// 跟其他選項一樣是對話的一部分，不再釘在這裡。
+export function FootBar({ faces }: { faces?: ComponentChildren }) {
+  if (!faces) return null;
+  return <div class="chat-footbar">{faces}</div>;
 }
 
 // The faces sit in a row while they fit. When they do not, the row folds into
@@ -731,7 +716,7 @@ export function WorkingCard({ done, now, since }: { done: string[]; now: string;
 
 const qaCache = new Map<string, { verdict: string; score: string; pass: boolean }>();
 
-// next：這是最新的一版、下方正擺著「調整」時才講下一步。舊的結果卡不講，不然
+// next：這是最新的一版、底下正掛著「看分析結果」時才講下一步。舊的結果卡不講，不然
 // 往上捲會看到每一版都在叫人去按一顆已經不在的按鈕。
 // note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。
 export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
@@ -795,7 +780,7 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
           <span class="chat-result-hint-wide">左側可比較 Before / After，也可從「美化紀錄」切換版本。</span>
           <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點左上的版本也能切換。</span>
         </p>
-        {next && <p class="chat-text">還想改哪裡的話，按下方的「調整」，或直接打字跟我說。</p>}
+        {next && <p class="chat-text">想回頭看分析結果或改項目，按「看分析結果」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
       </figcaption>
     </figure>
   );

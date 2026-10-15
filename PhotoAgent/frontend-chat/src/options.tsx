@@ -1,7 +1,7 @@
 // The adjustment options the chat offers, one category per card: the portrait
 // fixes person by person, the analyzer's retouch recipe, the style groups, and
 // the extra instruction (個人化需求) once there is one, and the render settings
-// (美化設定) while adjusting or once a typed request changed them.
+// (設定) while adjusting or once a typed request changed them.
 // Every click is saved to the photo's plan right away as a patch.
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
@@ -13,19 +13,26 @@ import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel
 
 export type Category = "face" | "recipe" | "style" | "prompt" | "settings";
 
-export const CATEGORIES: Record<Category, { label: string; icon: string; intro: string }> = {
+// term：放進句子或接在動詞後面時的叫法。「畫面」單獨當按鈕很清楚，但「看畫面」
+// 「這是更新後的畫面」會被讀成在講照片本身，所以句子裡說「畫面建議」。
+export const CATEGORIES: Record<Category, { label: string; icon: string; intro: string; term?: string }> = {
   face: { label: "人像", icon: "person", intro: "有小圓點的是看過原圖後建議調整的項目，點一下可以開或關。" },
-  recipe: { label: "美化建議", icon: "recipe", intro: "這是 AI 建議的美化項目，打勾的會套用，點一下可以開或關。" },
+  recipe: {
+    label: "畫面",
+    term: "畫面建議",
+    icon: "recipe",
+    intro: "這些是看過原圖後，針對光線、色調、構圖這些整張畫面的建議，打勾的會套用，點一下可以開或關。",
+  },
   style: { label: "風格", icon: "wand", intro: "想換一種氛圍的話，先挑想改的類別再選風格；不選就維持照片原本的樣子。" },
   prompt: { label: "個人化需求", icon: "note", intro: "這段個人化需求會在美化時一起套用，可以直接修改或清除。" },
-  settings: { label: "美化設定", icon: "tune", intro: "這張照片美化時用的引擎與輸出設定，可以直接修改。" },
+  settings: { label: "設定", icon: "tune", intro: "這張照片美化時用的引擎與輸出設定，可以直接修改。" },
 };
 
 // 美化過一版之後再打開面板，看到的已經不是剛分析完的預設，而是上一版的設定。
 // 開場白要把這件事講出來：建議還是看原圖給的，開著關著的則是上次留下來的。
 const AGAIN_INTRO: Record<Category, string> = {
   face: "開或關沿用上次美化的設定，有小圓點的是看過原圖後建議調整的項目，點一下可以改。",
-  recipe: "這些是看原圖分析出來的美化建議，打勾的狀態沿用上次美化，點一下可以開或關。",
+  recipe: "這些是看原圖分析出來、整張畫面的建議，打勾的狀態沿用上次美化，點一下可以開或關。",
   style: "這是上次選的風格，想換可以直接改；不選就維持照片原本的樣子。",
   prompt: "這是上次的個人化需求，可以直接修改或清除。",
   settings: "這是上次美化用的引擎與輸出設定，可以直接修改。",
@@ -50,6 +57,8 @@ export function introFor(cat: Category, a: Analysis, plan: Plan, again = false):
   return people > 1 ? `照片裡每個人都可以分開調整，${base}` : base;
 }
 
+export const termOf = (cat: Category) => CATEGORIES[cat].term || CATEGORIES[cat].label;
+
 // The categories this photo has anything to show in, in the order offered.
 export function categoriesFor(a: Analysis, caps: Capabilities, plan: Plan): Category[] {
   const out: Category[] = [];
@@ -63,7 +72,7 @@ export function categoriesFor(a: Analysis, caps: Capabilities, plan: Plan): Cate
 // 分析完成後，助理一次只談一個類別。這句是那一步的開場：說我們在這張照片上
 // 看到什麼、會怎麼處理，再問要不要看。能點名就點名真的偵測到的東西 --「人像有
 // 幾項要修」任何一張照片都講得出來，就等於沒看過這一張。只有名稱本身長到會蓋掉
-// 這句話的（美化建議），才退回用項目數帶過。
+// 這句話的（畫面建議），才退回用項目數帶過。
 const short = (s: string, n = 14) => (s.length > n ? `${s.slice(0, n)}…` : s);
 
 export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: Plan): string {
@@ -87,7 +96,7 @@ export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: 
     case "recipe":
       // 不點名：這裡的每一項本身就是一整句話，念兩項就把這句開場撐成一段，反而
       // 看不出在問什麼。項目數先帶過，細節等他點開面板再看。
-      return `整體的部分，我有 ${recipeItems(a).length} 項美化建議，預設都會套用。要看一下嗎？`;
+      return `畫面的部分（光線、色調、構圖這些），我有 ${recipeItems(a).length} 項建議，預設都會套用。要看一下嗎？`;
     case "style": {
       const names = styleGroups(a, caps).slice(0, 3).map((g) => g.label).join("、");
       return `最後是風格，${names}可以換一種氛圍，不選就維持照片原本的樣子。要看看嗎？`;
@@ -95,7 +104,7 @@ export function topicLead(cat: Category, a: Analysis, caps: Capabilities, plan: 
     case "prompt":
       return `你先前寫的「${short(plan.user_prompt?.trim() || "", 18)}」美化時會一起套用。要看一下嗎？`;
     default:
-      return "最後是美化設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？";
+      return "最後是設定，可以改美化時用的引擎和輸出尺寸。要看一下嗎？";
   }
 }
 
@@ -116,9 +125,9 @@ export function topicRecap(cat: Category, a: Analysis, caps: Capabilities, plan:
     }
     case "recipe": {
       // 只給數字：項目名稱本身都是一整句，列出來會把這一行撐成一段；要看細節
-      // 的路就在同一則訊息的「再看美化建議」。
+      // 的路就在同一則訊息的「再看畫面建議」。
       const n = recipeItems(a).filter((_, i) => (plan.recipe_checked || [])[i] !== false).length;
-      return n ? `美化建議會套用 ${n} 項。` : "美化建議目前都不套用。";
+      return n ? `畫面建議會套用 ${n} 項。` : "畫面建議目前都不套用。";
     }
     case "style": {
       const picked = styleGroups(a, caps)
@@ -358,7 +367,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
   const base = new Map<string, string>();
   for (const f of faceEntries(analysis, {})) for (const x of f.issues) base.set(x.key, `${x.allowed}:${x.level || ""}`);
   const changedOf = (f: FaceEntry) => f.issues.some((x) => base.get(x.key) !== `${x.allowed}:${x.level || ""}`);
-  // 這個人目前會修什麼。「不修」跟面板收起後那句結論用同一個說法。在「美化設定」
+  // 這個人目前會修什麼。「不修」跟面板收起後那句結論用同一個說法。在「設定」
   // 整項關掉的不算，那一項本來就不會跑。
   const summaryOf = (f: FaceEntry) =>
     f.issues
@@ -400,7 +409,7 @@ function FaceOptions({ analysis, plan, faces, busy, hot, onPatch }: Body) {
             suggested={issue.flagged}
             hot={hot.has(`face_issue_overrides.${issue.key}`)}
             disabled={busy || off}
-            title={off ? "這一項已在「美化設定」的人像修正關閉" : undefined}
+            title={off ? "這一項已在「設定」的人像修正關閉" : undefined}
             onClick={toggle}
           />
         );
@@ -648,7 +657,7 @@ function SettingsOptions({ plan, caps, busy, hot, onPatch }: Body) {
           </select>
         </label>
       </div>
-      <p class="chat-note">換長寬比會馬上依新的長寬比重新構圖，美化建議裡的構圖也會跟著換。</p>
+      <p class="chat-note">換長寬比會馬上依新的長寬比重新構圖，畫面建議裡的構圖也會跟著換。</p>
       {caps.advanced_options.length > 0 && (
         <div class="chat-settings-portrait">
           <span class="chat-meta">人像修正</span>
