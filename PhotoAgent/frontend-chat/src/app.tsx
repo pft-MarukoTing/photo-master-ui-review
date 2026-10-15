@@ -910,9 +910,12 @@ export function App() {
   }, [session?.session_id, polling]);
 
   // The analysis, once the server said it is ready. A ready or rendering photo
-  // has one even if that message is no longer in the log.
+  // has one even if that message is no longer in the log. 「幫我分析」補跑時
+  // 不算：略過分析那時就有一張 analysis_ready 了，分析中先抓會拿不到，等它
+  // 回到 ready 才會再抓一次，不然一直停在略過時的那份空分析。
   const analysisReady =
     !!photo &&
+    photo.status !== "analyzing" &&
     (photo.status === "ready" ||
       photo.status === "reframing" ||
       photo.status === "rendering" ||
