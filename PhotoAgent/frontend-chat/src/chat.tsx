@@ -40,6 +40,7 @@ function typeMessages(msgs: HTMLElement[]): () => void {
     m.addEventListener("animationend", () => m.classList.remove("is-entering"), { once: true });
     items = [];
     rowRevealUntil = 0;
+    m.querySelectorAll("[data-chat-typewriter-group]:has(.subject-preview-person)").forEach(group => group.classList.add("is-typewriter-pending"));
     m.querySelectorAll(".subject-preview-person").forEach(row => row.classList.add("is-typewriter-pending"));
     for (const p of Array.from(m.querySelectorAll(".chat-text, [data-chat-typewriter-text]"))) {
       const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
@@ -61,6 +62,7 @@ function typeMessages(msgs: HTMLElement[]): () => void {
       while (left > 0 && k < items.length) {
         const it = items[k];
         if (it.row?.classList.contains("is-typewriter-pending")) {
+          it.row.closest("[data-chat-typewriter-group]")?.classList.remove("is-typewriter-pending");
           it.row.classList.remove("is-typewriter-pending");
           it.row.classList.add("is-typewriter-revealed");
           rowRevealUntil = now + 160;

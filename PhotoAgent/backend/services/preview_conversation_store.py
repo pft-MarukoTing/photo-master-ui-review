@@ -98,16 +98,17 @@ def load_previous(user, token, binding):
     raise ValueError('conversation_revision_chain_too_long')
 
 
-def save(user, binding, state, people, revision, wishes_digest, *, previous=None):
+def save(user, binding, state, people, revision, wishes_digest, *, previous=None, presentation_requested=False):
     state = domain.wish_lifecycle.project(state, people)
     if state.get('lifecycle_changes'):
         state['reply'] = domain.wish_lifecycle.change_reply(state['lifecycle_changes'], domain.executable(state, people))
+    domain.refresh_presentation(state, people, presentation_requested)
     assert_current(user, binding, state.get('head'))
     token = 'pc_' + uuid.uuid4().hex
     data = {**copy.deepcopy(state), 'token': token, 'binding': binding, 'people': people,
             'revision': revision, 'wishes_digest': wishes_digest, 'supersedes': previous}
     for clause in data['clauses']:
-        if clause['status'] in ('matched','not_person') and not clause.get('edit_scope_pending'):
+        if clause['status'] in ('matched','not_person', domain.OUTSIDE_CONFIRMED) and not clause.get('edit_scope_pending') and domain.person_request.semantics(clause)['action_status'] == 'complete':
             clause['display_text'] = domain.executable({'clauses':[clause]}, people)
             clause['display_target_ids'] = clause.get('target_ids') or clause.get('protected_ids') or []
     data['question'] = domain.question(data, people)
@@ -129,29 +130,43 @@ def load(user, token, binding=None):
     if fields.get('superseded', fields.get(b'superseded')):
         raise ValueError('conversation_superseded')
     assert_current(user, data['binding'], data.get('head'))
+    if data.get('action_schema_version') != domain.person_request.VERSION:
+        data=domain.refresh_state(data)
     return data
 
 
-def confirm(user, token, binding, question_id, wish_ids, ids, revision, protection_scope=None, selected_wish=None, edit_scope=None):
+def confirm(user, token, binding, question_id, wish_ids, ids, revision, protection_scope=None, selected_wish=None, edit_scope=None, presentation_requested=False, target_selection="listed", description_text=None):
     state = load(user, token, binding)
     q = state['question']
+    outside = target_selection == 'outside_preview'
+    if target_selection not in ('listed', 'outside_preview') or (outside and (ids or not q or q.get('kind') not in (None, 'person'))):
+        raise ValueError('invalid_target_selection')
     known = {p['preview_person_id'] for p in state['people']}
     if (not q or q['question_id'] != question_id or q['wish_ids'] != wish_ids
-            or state['revision'] != revision or not isinstance(ids, list) or (not ids and q.get('kind') not in ('scope', 'wish', 'edit_scope'))
+            or type(revision) is not int or state['revision'] != revision or not isinstance(ids, list) or (not ids and not outside and q.get('kind') not in ('scope', 'wish', 'edit_scope', 'edit_description', 'action'))
             or any(not isinstance(i, str) or i not in known for i in ids)):
         raise ValueError('stale_or_invalid_confirmation')
     updated = copy.deepcopy(state)
+    if outside:
+        domain.confirm_outside_target(updated, wish_ids)
+    if q.get('kind') == 'action':
+        if ids: raise ValueError('invalid_action_target')
+        domain.complete_action(updated, wish_ids, description_text)
+    if q.get('kind') == 'edit_description':
+        domain.complete_outside_description(updated, wish_ids, description_text)
     if q.get('kind') == 'wish':
         if selected_wish not in q['wish_ids']:
             raise ValueError('invalid_correction_wish')
         updated.pop('revision_question', None)
         if q.get('lifecycle_text'):
             candidate=domain.confirm_revision_choice(updated,state['people'],selected_wish,q['lifecycle_text'])
-            new=save(user,binding,candidate,state['people'],revision,state['wishes_digest'],previous=token)
+            new=save(user,binding,candidate,state['people'],revision,state['wishes_digest'],previous=token, presentation_requested=presentation_requested)
             consume(user,state,new['token'])
             return new
         for c in updated['clauses']:
             if c['wish_id'] == selected_wish:
+                domain.clear_outside_target(c)
+                c.pop('display_text', None)
                 c.update(status='pending', target_ids=[], protected_ids=[])
     if q.get('kind') == 'scope':
         if protection_scope not in ('features', 'all'):
@@ -160,18 +175,23 @@ def confirm(user, token, binding, question_id, wish_ids, ids, revision, protecti
     for c in updated['clauses']:
         if c['wish_id'] in wish_ids and q.get('kind') == 'edit_scope':
             domain.confirm_edit_scope(c, edit_scope)
-        elif c['wish_id'] in wish_ids and q.get('kind') not in ('scope', 'wish'):
+        elif not outside and c['wish_id'] in wish_ids and q.get('kind') not in ('scope', 'wish', 'edit_description', 'action'):
+            domain.clear_outside_target(c)
+            c.pop('display_text', None)
             c.update(status='matched', candidate_ids=[], awaiting_confirmation=False, binding_source='user_confirmation',
                      target_ids=list(dict.fromkeys(ids)) if c['scope'] != 'protection' else [],
                      protected_ids=list(dict.fromkeys(ids)) if c['scope'] == 'protection' else [])
     updated['reply'] = domain.acknowledged_reply(updated['clauses'], updated['people'])
     if q.get('kind') == 'edit_scope' and edit_scope == 'cancel':
         updated['reply'] = '已取消這項髮絲整理需求。'
-    new = save(user, binding, updated, state['people'], revision, state['wishes_digest'], previous=token)
+    new = save(user, binding, updated, state['people'], revision, state['wishes_digest'], previous=token, presentation_requested=presentation_requested)
     # hsetnx is atomic: only one confirmation of the current question wins.
     consume(user, state, new['token'])
     return new
 
 
 def public(state):
-    return {k: state[k] for k in ('token', 'revision', 'wishes_digest', 'reply', 'clauses', 'question', 'effective_prompt')}
+    result = {k: state[k] for k in ('token', 'revision', 'wishes_digest', 'reply', 'clauses', 'question', 'effective_prompt')}
+    if state.get('presentation'):
+        result['presentation'] = copy.deepcopy(state['presentation'])
+    return result

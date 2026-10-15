@@ -1,33 +1,17 @@
 """Conservative operations on already bound people; never detect/rebind people."""
 import copy
 import re
-from photo_agent import person_reference
+from photo_agent import person_reference, person_request
 
-VERSION = 1
+VERSION = 2
 
 def operation(text):
-    t = text.translate(str.maketrans('张开镜发丝头视线调', '張開鏡髮絲頭視線調'))
-    # Effect constraints are not withdrawals.
-    if re.search(r'不要.*(?:過度|太直|太亮|太白|過頭)', t):
-        return None
-    if re.search(r'眼睛|張眼|睜眼|閉眼', t):
-        if re.search(r'不要.*(?:張開|睜開|張眼|睜眼)|(?:取消|撤回).*?(?:張眼|張開|睜)', t): return ('eyes', 'cancel', '張開眼睛')
-        if re.search(r'不要.*(?:閉眼|閉上)', t): return ('eyes', 'cancel', '閉上眼睛')
-        if re.search(r'張開|睜開|張眼|睜眼|修正閉眼|閉眼修正', t): return ('eyes', 'set', '張開眼睛')
-        if re.search(r'取消|撤回',t): return ('eyes','cancel',None)
-        if re.search(r'閉眼|閉上', t): return ('eyes', 'set', '閉上眼睛')
-    if re.search(r'視線|看鏡頭|看畫面|看左邊|看右邊', t):
-        if re.search(r'畫面左|看左', t): return ('gaze', 'set', '視線看畫面左邊')
-        if re.search(r'畫面右|看右', t): return ('gaze', 'set', '視線看畫面右邊')
-        if '鏡頭' in t: return ('gaze', 'set', '視線看鏡頭')
-    if re.search(r'髮絲|頭髮|張髮', t) and re.search(r'整理|保持原樣', t):
-        if re.search(r'不要.*整理|不整理|整理.*不要|保持原樣|取消|撤回', t): return ('hair', 'cancel', '髮絲整理')
-        return ('hair', 'set', '只整理露出的髮絲' if '露出' in t else '髮絲整理')
-    if re.search(r'笑|微笑', t):
-        if re.search(r'取消|撤回',t): return ('smile','cancel','平靜不微笑的表情' if re.search(r'不要笑|不微笑',t) else '自然笑容' if '自然' in t else None)
-        if re.search(r'不要笑|不微笑|平靜', t): return ('smile', 'set', '平靜不微笑的表情')
-        if re.search(r'自然', t): return ('smile', 'set', '自然笑容')
-    return None
+    return person_request.operation(text)
+
+
+def clause_operation(clause):
+    op=person_request.semantics(clause).get('operation')
+    return (op['feature'],op['intent'],op['action']) if op else None
 
 
 def project(state, people):
@@ -40,7 +24,39 @@ def project(state, people):
     clauses = []
     for source in out['clauses']:
         ids = source.get('target_ids', []) or source.get('protected_ids', [])
-        op = operation(source['text'])
+        person_request.annotate(source)
+        op_data = source.get('operation')
+        op = (op_data['feature'], op_data['intent'], op_data['action']) if op_data else None
+        if source.get('status') in ('matched','not_person','outside_confirmed') and source.get('action_status') == 'incomplete':
+            source.pop('display_text',None)
+            clauses.append(source)
+            continue
+        source['target_ref'] = ({'kind':'outside_preview','wish_id':source.get('outside_wish_ref',source['wish_id'])}
+            if source.get('status') == 'outside_confirmed' else {'kind':'listed','ids':list(ids)} if ids else {'kind':'image'})
+        if source.get('status') == 'outside_confirmed' and op and not source.get('edit_scope_pending'):
+            key=('outside',source.get('outside_wish_ref',source['wish_id']),op[0])
+            prior=slots.get(key)
+            source['display_text']=person_request.outside_text(source)
+            if prior:
+                prior['status']='cancelled' if op[1]=='cancel' else 'superseded'
+                changes.append({'mode':'cancel' if op[1]=='cancel' else 'replace','text':source['display_text']})
+            if op[1]=='cancel' and prior:
+                source['status']='cancelled';slots.pop(key,None)
+            else:slots[key]=source
+            clauses.append(source)
+            continue
+        if source.get('status') == 'matched' and source.get('action_constraint') and ids and not op:
+            feature = {'hair':'hair','mouth':'smile'}.get(source.get('part'))
+            previous = [slots.get((person,feature)) for person in ids]
+            if feature and all(previous):
+                for prior in previous:
+                    constraints=prior.setdefault('action_constraints',[])
+                    item={'wish_id':source['wish_id'],'text':source['action_constraint']}
+                    if item not in constraints:constraints.append(item)
+                    prior['display_text']=display(prior,labels)
+                source['status']='superseded'
+                clauses.append(source)
+                continue
         if source.get('status') != 'matched' or (source.get('scope') != 'edit' and not (op and op[1] == 'cancel' and source.get('scope') == 'protection')) or not ids or not op or source.get('edit_scope_pending'):
             clauses.append(source)
             continue
@@ -52,8 +68,9 @@ def project(state, people):
             if len(ids) > 1:
                 c['wish_id'] = source['wish_id'] + '-person-' + str(ids.index(person))
                 c['parent_wish_id'] = source.get('parent_wish_id', source['wish_id'])
-            c['operation'] = {'feature': feature, 'intent': intent, 'action': action}
+            c['operation'] = copy.deepcopy(op_data)
             c['display_text'] = display(c, labels)
+            c['display_version'] = VERSION
             c['display_target_ids'] = [person]
             prior = slots.get((person, feature))
             if intent == 'cancel':
@@ -72,6 +89,9 @@ def project(state, people):
                     c['target_ids'] = []
                     c['display_text'] = labels[person] + '：' + source['text']
             else:
+                if prior and prior.get('action_constraints'):
+                    c['action_constraints']=copy.deepcopy(prior['action_constraints'])
+                    c['display_text']=display(c,labels)
                 if prior:
                     prior['status'] = 'superseded'
                     changes.append({'mode':'replace','text':c['display_text']})
@@ -105,6 +125,7 @@ def project(state, people):
             c['wish_id'] = c.pop('parent_wish_id')
     out['clauses'] = grouped
     out['lifecycle_version'] = VERSION
+    out['action_schema_version'] = person_request.VERSION
     if changes:
         out['lifecycle_changes'] = changes
     return out
@@ -117,10 +138,38 @@ def change_reply(changes, remaining):
 
 
 def display(c, labels):
+    text = _display_base(c, labels)
+    constraints = []
+    for item in c.get('action_constraints', []):
+        value = item['text']
+        value = value[value.index('不要'):] if '不要' in value else value
+        if value not in constraints: constraints.append(value)
+    return text + ('（' + '，'.join(constraints) + '）' if constraints else '')
+
+
+def _display_base(c, labels):
     ids = c.get('target_ids') or c.get('protected_ids') or []
     who = '、'.join(labels[i] for i in ids)
     line = c['text']
-    if c.get('edit_scope') == 'visible_hair':
+    semantics = person_request.semantics(c)
+    op = semantics.get('operation')
+    if c.get('action_answer'):
+        if op and op['intent'] == 'set': return who + op['action']
+        part = {'eyes':'眼睛','hair':'頭髮','mouth':'笑容'}.get(semantics.get('part'),'')
+        return who + '：' + (part if part and part not in c['action_answer'] else '') + c['action_answer']
+    if op and op['feature'] == 'eyes' and op['intent'] == 'set':
+        source = semantics['action_evidence']
+        prefix = person_reference.identity_prefix(source)
+        actor = re.sub(r'改成|改為|請幫我|幫我|麻煩|請|把|先|再|的|[\s，。]','',prefix)
+        action=op['action']
+        original=re.search(r'张开眼睛|睁开眼睛|闭上眼睛',source)
+        if original:action=original.group()
+        return who + ('' if actor else '：') + action
+    if op and op['feature'] == 'smile' and op['intent'] == 'set' and op['action'] != '平靜不微笑的表情':
+        prefix=person_reference.identity_prefix(semantics['action_evidence'])
+        actor=re.sub(r'自然|微|改成|改為|請|把|先|再|的|[\s，。]','',prefix)
+        return who + ('' if actor else '：') + op['action']
+    if (op and op['feature'] == 'hair' and op['action'] == '只整理露出的髮絲') or c.get('edit_scope') == 'visible_hair':
         return who + '：只整理露出的髮絲'
     # Preserve the action/limits verbatim while replacing the whole validated
     # source descriptor, including verb-first hair requests.
@@ -139,12 +188,36 @@ def display(c, labels):
 
 def local_revision(state, people, text, selected=()):
     op = operation(text)
+    # Empty IDs are a scope, not a shared identity. Cancel by the exact wish
+    # or ask which request; never fold multiple outside subjects together.
+    external = [c for c in state['clauses'] if c.get('status') == 'outside_confirmed']
+    if external and not selected and re.search(r'取消|撤回|不做了|不用了|不要了', text):
+        available = [c for c in state['clauses'] if c.get('status') in ('matched', 'not_person', 'outside_confirmed') and c.get('scope') != 'query']
+        exact = [c for c in available if c['text'] in text]
+        if exact:
+            candidates = exact
+        elif generic_withdrawal(text, people, available):
+            candidates = available
+        elif op and op[1] == 'cancel':
+            candidates = [c for c in available if clause_operation(c) and clause_operation(c)[0] == op[0]]
+        else:
+            candidates = available
+        if len(candidates) != 1 or not (exact or generic_withdrawal(text, people, candidates)):
+            return clarify(state, people, text, candidates or available)
+        from photo_agent import preview_conversation as domain
+        return domain.revise(state, people, '取消這項需求',
+            dict(mode='cancel', wish_ids=[candidates[0]['wish_id']], target_ids=[], reply=''), confirmed_wish=True)
+    if external and not selected and op and op[1] == 'set' and re.search(r'改成|改為',text):
+        candidates=[c for c in state['clauses'] if c.get('status') in ('matched','outside_confirmed') and clause_operation(c) and clause_operation(c)[0]==op[0]]
+        return clarify(state,people,text,candidates)
+    if external and not selected and op and op[1] == 'cancel':
+        return clarify(state, people, text, [c for c in state['clauses'] if c.get('status') in ('matched', 'outside_confirmed') and clause_operation(c) and clause_operation(c)[0] == op[0]])
     if not op: return None
     feature, intent, action = op
     active = [c for c in state['clauses'] if c.get('status')=='matched' and c.get('scope')=='edit'
-              and operation(c['text']) and operation(c['text'])[0]==feature and (not c.get('edit_scope_pending') or intent=='cancel')]
+              and clause_operation(c) and clause_operation(c)[0]==feature and (not c.get('edit_scope_pending') or intent=='cancel')]
     if intent=='cancel' and selected and not any(set(c['target_ids']) & set(selected) for c in active):
-        cancelled = [c for c in state['clauses'] if c.get('status')=='cancelled' and operation(c['text']) and operation(c['text'])[0]==feature
+        cancelled = [c for c in state['clauses'] if c.get('status')=='cancelled' and clause_operation(c) and clause_operation(c)[0]==feature
                      and set(c.get('target_ids') or c.get('cancelled_from',{}).get('target_ids') or []) & set(selected)]
         if cancelled:
             out=copy.deepcopy(state)
@@ -173,7 +246,7 @@ def local_revision(state, people, text, selected=()):
             if len(candidates)==1: targets=list(candidates)
             else: return clarify(state, people, text, active)
     if intent=='set' and not re.search(r'改成|改為|改看|不要笑|不微笑', text): return None
-    affected = [c for c in active if set(c['target_ids']) & set(targets) and (intent!='cancel' or feature not in ('eyes','smile') or action is None or operation(c['text'])[2]==action)]
+    affected = [c for c in active if set(c['target_ids']) & set(targets) and (intent!='cancel' or feature not in ('eyes','smile') or action is None or clause_operation(c)[2]==action)]
     if not affected: return None
     updated = copy.deepcopy(state)
     if intent=='cancel':

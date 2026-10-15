@@ -5,6 +5,7 @@ are evidence, not complete inventories: a missing attribute means unknown.
 This guard complements the model's structured evidence; it does not detect faces.
 """
 import re
+from photo_agent.person_request import ACTION_BOUNDARY
 
 VERSION = 2
 GENERIC = {'女生','女孩','女性','男孩','男生','男人','男性','先生','小朋友','孩子','小孩'}
@@ -14,7 +15,7 @@ _FOLD = str.maketrans({'张':'張','开':'開','睁':'睜','带':'帶','镜':'�
 
 def identity_prefix(text):
     # Desired changes (hair colour, smile intensity, etc.) are not identity.
-    prefix = re.split(r'張開|睜開|眼睛|看向|看鏡頭|看著鏡頭|看畫面|看左邊|看右邊|視線|髮絲|頭髮|笑|整理', text.translate(_FOLD), maxsplit=1)[0]
+    prefix = re.split(ACTION_BOUNDARY, text.translate(_FOLD), maxsplit=1)[0]
     return text[:len(prefix)]
 
 

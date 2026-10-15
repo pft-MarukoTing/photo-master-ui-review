@@ -9,15 +9,20 @@ import type { PreviewStatus } from "./subject-preview";
 export type PreviewWish = { wish_id: string; text: string; source_text?: string; target_ids: string[]; revision?: number;
   selection_source?: "none" | "user_selection" | "model_suggestion" };
 export type PreviewClause = { wish_id: string; request_id: string; text: string; source_text: string;
-  status: "pending" | "matched" | "ambiguous" | "unmatched" | "not_person" | "cancelled" | "superseded";
-  display_text?: string; display_target_ids?: string[]; edit_scope_pending?: boolean; cancelled_from?: {text: string};
+  status: "pending" | "matched" | "ambiguous" | "unmatched" | "not_person" | "outside_confirmed" | "cancelled" | "superseded";
+  target_selection?: "outside_preview"; outside_reference?: string;
+  action_status?: "complete" | "incomplete"; part?: string | null; action_answer?: string;
+  operation?: {feature: string; part: string; kind: string; intent: string; action: string | null; value: string | null};
+  display_text?: string; display_target_ids?: string[]; edit_scope_pending?: boolean; edit_description_pending?: boolean; outside_description?: string; cancelled_from?: {text: string};
   scope: "edit" | "protection" | "query"; target_ids: string[]; protected_ids: string[]; referent: string };
+export type PreviewPresentation = { version: 1; opening: string; closing: string };
 export type PreviewConversationResult = { token: string; revision: number; wishes_digest: string; reply: string;
   clauses: PreviewClause[]; effective_prompt: string;
-  confirmation_handled?: boolean;
-  question: { question_id: string; wish_ids: string[]; text: string; kind?: "scope" | "wish" | "edit_scope"; wish_options?: {wish_id: string; text: string}[]; options?: string[] } | null };
+  presentation?: PreviewPresentation; confirmation_handled?: boolean;
+  question: { question_id: string; wish_ids: string[]; text: string; kind?: "person" | "scope" | "wish" | "edit_scope" | "edit_description" | "action"; wish_options?: {wish_id: string; text: string}[]; options?: string[] } | null };
 export type PreviewDisplayPerson = FaceRef & { previewRole?: string; preview_person_id?: string };
-export type PreviewReplyEvent = { id: string; after: number; text: string; showPeople: boolean; role?: "user" | "assistant"; order?: number; generation?: string | null; kind?: "settings"; settings?: Settings; people?: PreviewDisplayPerson[] };
+export type TargetQuestionSnapshot = NonNullable<PreviewConversationResult["question"]> & { token: string; revision: number; answered?: boolean; answer?: string };
+export type PreviewReplyEvent = { id: string; after: number; text: string; showPeople: boolean; role?: "user" | "assistant"; order?: number; generation?: string | null; kind?: "settings"; settings?: Settings; presentation?: PreviewPresentation; people?: PreviewDisplayPerson[]; questionSnapshot?: TargetQuestionSnapshot };
 
 type Input = { photoKey?: string; people?: PreviewDisplayPerson[]; identity: string | null; preview?: PreviewStatus; model: string; history: ReviewTurn[];
   historyWithEvents?: (events: PreviewReplyEvent[]) => ReviewTurn[]; wishes: PreviewWish[]; prompt: string; busy: boolean; blocked: boolean; turns: number; active: boolean };
@@ -31,8 +36,11 @@ export function usePreviewConversation(input: Input) {
   const photoKey = input.photoKey ?? key;
   const people = useRef(input.people || []);
   people.current = input.people || [];
-  const current = useRef({ key, context, active: input.active });
-  current.current = { key, context, active: input.active };
+  // Only a completed server roster proves zero people. Empty thumbnail slots
+  // or absent legacy metadata do not. Keep this current across in-flight replies.
+  const emptyRoster = !!input.preview?.reusable && Array.isArray(input.preview.people) && input.preview.people.length === 0;
+  const current = useRef({ key, context, active: input.active, emptyRoster });
+  current.current = { key, context, active: input.active, emptyRoster };
   useEffect(() => () => { current.current.active = false; }, []);
   const [state, setState] = useState<{ key: string | null; photoKey: string | null; context: string; wishesKey?: string; result?: PreviewConversationResult; events: PreviewReplyEvent[] }>({ key, photoKey, context, events: [] });
   const budget = useRef({ key, attempts: 0, revision: 0, completed: false, published: false, lastContext: "", lastWishes: "", flight: false });
@@ -49,12 +57,13 @@ export function usePreviewConversation(input: Input) {
     b.flight = true;
     if (!b.completed) b.attempts++;
     const revision = ++b.revision;
-    const initial = !b.published;
+    const initial = !b.published && !emptyRoster;
+    const silentZero = !b.completed;
     // Existing bindings belong to the same exact source clause, not a new
     // wish that happened to occupy its array position after an editor change.
     const previousToken = state.key === key ? state.result?.token : undefined;
     void api.previewConversation(preview.preview_job_id, {
-      generation: key, source_sha256: preview.source_sha256, analysis_model: input.model,
+      presentation_requested: initial, generation: key, source_sha256: preview.source_sha256, analysis_model: input.model,
       revision, wishes: input.wishes, history: (input.historyWithEvents?.(state.photoKey === photoKey ? state.events : []) || input.history), effective_prompt: input.prompt,
       previous_token: previousToken,
     }).then(result => {
@@ -62,11 +71,13 @@ export function usePreviewConversation(input: Input) {
       b.completed = true;
       setState(old => {
         const events = old.photoKey === photoKey ? old.events : [];
-        const text = (result.question?.text?.trim() || (initial ? result.reply?.trim() : "") || "");
+        const introduce = initial && !current.current.emptyRoster;
+        const text = current.current.emptyRoster && silentZero ? "" : ((introduce && result.presentation ? `${result.presentation.opening}\n\n${result.presentation.closing}` : "") || result.question?.text?.trim() || (initial ? result.reply?.trim() : "") || "");
         if (text) b.published = true;
         return { key, photoKey, context, wishesKey, result, events: text ? [...events, {
-          id: result.token, generation: key, order: nextDisplayOrder(), after: input.turns, text, showPeople: initial,
-          ...(initial ? { people: people.current.map(p => ({ ...p })) } : {}),
+          id: result.token, generation: key, order: nextDisplayOrder(), after: input.turns, text, showPeople: introduce,
+          ...(result.question ? { questionSnapshot: { ...result.question, token: result.token, revision: result.revision }, people: people.current.map(p => ({ ...p })) } : {}),
+          ...(introduce ? { presentation: result.presentation, people: people.current.map(p => ({ ...p })) } : {}),
         }] : events };
       });
     }).catch(() => {
@@ -102,27 +113,28 @@ export function usePreviewConversation(input: Input) {
   const live = state.key === key;
   const result = live && state.wishesKey === wishesKey ? state.result : undefined;
   const confirming = useRef(false);
-  async function confirm(ids: string[], text?: string, protection_scope?: "features" | "all", selected_wish?: string, edit_scope?: "visible_hair" | "cancel") {
+  async function confirm(ids: string[], text?: string, protection_scope?: "features" | "all", selected_wish?: string, edit_scope?: "visible_hair" | "cancel", target_selection?: "listed" | "outside_preview") {
     if (!result?.question || !input.preview || confirming.current) return false;
     confirming.current = true;
     const userOrder = nextDisplayOrder();
     try {
       const updated = await api.confirmPreviewConversation(input.preview.preview_job_id, {
-        source_sha256: input.preview.source_sha256, analysis_model: input.model,
+        presentation_requested: !budget.current.published && !emptyRoster, source_sha256: input.preview.source_sha256, analysis_model: input.model,
         token: result.token, revision: result.revision, question_id: result.question.question_id,
-        wish_ids: result.question.wish_ids, target_ids: ids, ...(text ? { text } : {}), ...(protection_scope ? { protection_scope } : {}), ...(selected_wish ? { selected_wish } : {}), ...(edit_scope ? { edit_scope } : {}),
+        wish_ids: result.question.wish_ids, target_ids: ids, target_selection, ...(text ? { text } : {}), ...(protection_scope ? { protection_scope } : {}), ...(selected_wish ? { selected_wish } : {}), ...(edit_scope ? { edit_scope } : {}),
       });
       if (current.current.key !== key || current.current.context !== context || !current.current.active) return false;
       if (updated.confirmation_handled === false) return false;
       budget.current.revision = Math.max(budget.current.revision, updated.revision);
-      const replyText = updated.question?.text?.trim() || updated.reply?.trim() || "";
-      const showPeople = !budget.current.published && !!replyText;
-      if (replyText) budget.current.published = true;
-      setState(old => ({ ...old, result: updated, events: [...old.events, { id: `${updated.token}-answer-${old.events.length}`, order: userOrder, after: input.turns,
+      const replyText = (!budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
+      const showPeople = !budget.current.published && !current.current.emptyRoster && !!replyText;
+      if (showPeople) budget.current.published = true;
+      setState(old => ({ ...old, result: updated, events: [...old.events.map(event => event.questionSnapshot?.token === result.token ? { ...event, questionSnapshot: { ...event.questionSnapshot, answered: true, answer: text || ids.map(id => people.current.find(p => p.preview_person_id === id)?.name || id).join("、") } } : event), { id: `${updated.token}-answer-${old.events.length}`, order: userOrder, after: input.turns,
         text: text || `指定：${ids.map(id => input.preview?.people?.find(p => p.preview_person_id === id)?.label || id).join("、")}`,
         showPeople: false, role: "user" }, ...(replyText ? [{
         id: `${updated.token}-${old.events.length}`, generation: key, order: nextDisplayOrder(), after: input.turns, text: replyText, showPeople,
-        ...(showPeople ? { people: people.current.map(p => ({ ...p })) } : {}),
+        ...(updated.question ? { questionSnapshot: { ...updated.question, token: updated.token, revision: updated.revision }, people: people.current.map(p => ({ ...p })) } : {}),
+        ...(showPeople ? { presentation: updated.presentation, people: people.current.map(p => ({ ...p })) } : {}),
       }] : [])] }));
       return true;
     } finally { confirming.current = false; }
@@ -133,27 +145,42 @@ export function usePreviewConversation(input: Input) {
     const nextRevision = ++budget.current.revision;
     const userOrder = nextDisplayOrder();
     const updated = await api.revisePreviewConversation(input.preview.preview_job_id, {
-      source_sha256: input.preview.source_sha256, analysis_model: input.model,
+      presentation_requested: !budget.current.published && !emptyRoster, source_sha256: input.preview.source_sha256, analysis_model: input.model,
       token: previous.token, revision: previous.revision, next_revision: nextRevision, generation: key, wishes: input.wishes, text, target_ids, selection_source: target_ids.length ? "user_selection" : "none",
     });
     if (current.current.key !== key || current.current.context !== context || !current.current.active) return undefined;
     if (budget.current.revision !== nextRevision) return updated.changed ? updated : undefined;
     if (!updated.changed) {
-      if (updated.token) setState(old => ({ ...old, context, wishesKey, result: updated }));
+      if (updated.token) setState(old => {
+        // Rebase may issue a new token without changing the question. Refresh
+        // its live authority without replacing text, people or past answers.
+        let currentQuestion = false;
+        const events = old.events.map(event => {
+          const q = event.questionSnapshot;
+          if (!q || q.answered || q.token !== previous.token || !updated.question || q.question_id !== updated.question.question_id || q.text !== updated.question.text || JSON.stringify(q.wish_ids) !== JSON.stringify(updated.question.wish_ids)) return event;
+          currentQuestion = true;
+          return { ...event, questionSnapshot: { ...q, token: updated.token, revision: updated.revision } };
+        });
+        if (updated.question && !currentQuestion) events.push({ id: updated.token, generation: key, order: nextDisplayOrder(), after: input.turns,
+          text: updated.question.text, showPeople: false, people: people.current.map(p => ({ ...p })),
+          questionSnapshot: { ...updated.question, token: updated.token, revision: updated.revision } });
+        return { ...old, context, wishesKey, result: updated, events };
+      });
       return undefined;
     }
     budget.current.revision = Math.max(budget.current.revision, updated.revision);
-    const replyText = updated.question?.text?.trim() || updated.reply?.trim() || "";
-    const showPeople = !budget.current.published && !!replyText;
-    if (replyText) budget.current.published = true;
+    const replyText = (!budget.current.published && !current.current.emptyRoster && updated.presentation ? `${updated.presentation.opening}\n\n${updated.presentation.closing}` : "") || updated.question?.text?.trim() || updated.reply?.trim() || "";
+    const showPeople = !budget.current.published && !current.current.emptyRoster && !!replyText;
+    if (showPeople) budget.current.published = true;
     setState(old => ({ ...old, context, wishesKey, result: updated, events: [...old.events,
       { id: `${updated.token}-user`, order: userOrder, after: input.turns, text, showPeople: false, role: "user" },
       ...(replyText ? [{ id: updated.token, generation: key, order: nextDisplayOrder(), after: input.turns, text: replyText, showPeople,
-        ...(showPeople ? { people: people.current.map(p => ({ ...p })) } : {}) }] : []),
+        ...(updated.question ? { questionSnapshot: { ...updated.question, token: updated.token, revision: updated.revision }, people: people.current.map(p => ({ ...p })) } : {}),
+        ...(showPeople ? { presentation: updated.presentation, people: people.current.map(p => ({ ...p })) } : {}) }] : []),
     ] }));
     return updated;
   }
-  const peoplePublished = live && state.photoKey === photoKey && state.events.some(event =>
+  const peoplePublished = !emptyRoster && live && state.photoKey === photoKey && state.events.some(event =>
     event.generation === key && event.showPeople && !!event.text.trim());
   return { peoplePublished, result, canRevise: live && !!state.result, events: state.photoKey === photoKey ? state.events : [], confirm, revise };
 }
