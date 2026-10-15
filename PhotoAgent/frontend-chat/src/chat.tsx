@@ -11,21 +11,43 @@ import { qaText } from "./util";
 const TYPE_MS = 30;
 const TYPE_MAX_MS = 1600;
 const TYPE_GAP_MS = 200;
+const TYPE_TEXT = ".chat-text, [data-chat-typewriter-text]";
 
-// 逐字顯示正文及標記的人物描述；人物頭像隨所屬描述依序進場。
+// 打字是給 AI 這次回的話用的，不是給舊紀錄。沒有傳 live 的面板（首頁預覽）
+// 用這個當備案：這一頁開起來之後使用者動過手（點、按鍵），之後冒出來的才算新的。
+let userActed = false;
+for (const type of ["pointerdown", "keydown"]) addEventListener(type, () => { userActed = true; }, { capture: true, once: true });
+
+// 逐字顯示正文及標記的人物描述；人物頭像隨所屬描述依序進場。同一則裡的卡片、
+// 按鈕等其他東西先佔位不顯示，字打到它們的位置才出來，不會字還在打、底下的
+// 按鈕已經能按。
 // 文字是直接改 DOM 的：Preact 只在內容變了才重寫文字節點，所以每次寫入前先
 // 比對，被 Preact 改過的節點就不再碰。回傳的函式立刻全部顯示完。
 function finishMessage(message: HTMLElement) {
   message.classList.remove("is-waiting");
   message.querySelectorAll(".is-typewriter-pending").forEach(row => row.classList.remove("is-typewriter-pending"));
   message.querySelectorAll(".is-typewriter-revealed").forEach(row => row.classList.remove("is-typewriter-revealed"));
+  message.querySelectorAll('[data-typewriter-hold=""]').forEach(block => block.removeAttribute("data-typewriter-hold"));
   if (message.isConnected) message.dispatchEvent(new CustomEvent("chat-typewriter-complete"));
+}
+
+// 訊息裡不是打字對象的區塊（卡片、按鈕列……），照畫面順序。含有要打的字的就
+// 往裡面找；人物清單有自己的進場方式，不算在內。
+function holdBlocks(parent: Element, out: HTMLElement[] = []): HTMLElement[] {
+  for (const child of Array.from(parent.children) as HTMLElement[]) {
+    if (child.matches(TYPE_TEXT) || child.matches("[data-chat-typewriter-group], .subject-preview-person")) continue;
+    if (child.querySelector(TYPE_TEXT)) holdBlocks(child, out);
+    else out.push(child);
+  }
+  return out;
 }
 
 function typeMessages(msgs: HTMLElement[]): () => void {
   type Item = { node: Text; chars: string[]; shown: string; row: HTMLElement | null };
   let i = 0;
   let items: Item[] = [];
+  let blocks: HTMLElement[] = [];
+  let b = 0;
   let k = 0;
   let n = 0;
   let step = 1;
@@ -42,7 +64,11 @@ function typeMessages(msgs: HTMLElement[]): () => void {
     rowRevealUntil = 0;
     m.querySelectorAll("[data-chat-typewriter-group]:has(.subject-preview-person)").forEach(group => group.classList.add("is-typewriter-pending"));
     m.querySelectorAll(".subject-preview-person").forEach(row => row.classList.add("is-typewriter-pending"));
-    for (const p of Array.from(m.querySelectorAll(".chat-text, [data-chat-typewriter-text]"))) {
+    const body = m.querySelector(".chat-body");
+    blocks = body ? holdBlocks(body) : [];
+    b = 0;
+    for (const block of blocks) block.setAttribute("data-typewriter-hold", "");
+    for (const p of Array.from(m.querySelectorAll(TYPE_TEXT))) {
       const walk = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
       for (let t = walk.nextNode() as Text | null; t; t = walk.nextNode() as Text | null) {
         if (!t.data) continue;
@@ -61,6 +87,16 @@ function typeMessages(msgs: HTMLElement[]): () => void {
       let left = step;
       while (left > 0 && k < items.length) {
         const it = items[k];
+        // 打到下一段字之前，夾在中間的卡片、按鈕先出來，停一下再接著打。
+        let shown = false;
+        while (b < blocks.length && blocks[b].compareDocumentPosition(it.node) & Node.DOCUMENT_POSITION_FOLLOWING) {
+          blocks[b++].setAttribute("data-typewriter-hold", "shown");
+          shown = true;
+        }
+        if (shown) {
+          next = now + TYPE_GAP_MS;
+          break;
+        }
         if (it.row?.classList.contains("is-typewriter-pending")) {
           it.row.closest("[data-chat-typewriter-group]")?.classList.remove("is-typewriter-pending");
           it.row.classList.remove("is-typewriter-pending");
@@ -81,6 +117,7 @@ function typeMessages(msgs: HTMLElement[]): () => void {
         }
       }
       if (k >= items.length && now >= rowRevealUntil) {
+        while (b < blocks.length) blocks[b++].setAttribute("data-typewriter-hold", "shown");
         finishMessage(msgs[i]);
         if (++i >= msgs.length) {
           raf = 0;
@@ -147,6 +184,9 @@ export function ChatPanel(props: {
   // 整串對話還沒畫完：有些訊息要等晚到的資料（照片的分析）才出得來。那時才冒
   // 出來的是舊紀錄，不是新的一輪 -- 等畫完再當成第一次載入，停在最底。
   settling?: boolean;
+  // 這串對話打開之後，AI 有沒有講了新的話。重新整理或從清單打開時整串是分好
+  // 幾次畫出來的（session、分析各自晚到），那段時間冒出來的都是舊紀錄，不打字。
+  live?: boolean;
   onDropFile?: (file: File) => void;
   // The photo being worked on, before the session starts. On a phone, once its
   // big copy in the timeline (UploadBubble with onOpen) scrolls off the top,
@@ -220,8 +260,9 @@ export function ChatPanel(props: {
     }
     // 新進來的 AI 訊息一字一字打出來（typeMessages）。只在對話進行中：第一次
     // 載入或換一串對話（fresh 等於全部）直接整串顯示。又有新訊息進來時，還沒
-    // 打完的先一口氣補完，再打新的。使用者自己的訊息不等。
-    if (fresh.length && fresh.length < msgs.length) {
+    // 打完的先一口氣補完，再打新的。使用者自己的訊息不等。打開之後陸續補上的
+    // 舊紀錄（live 還是 false）一樣直接顯示。
+    if (fresh.length && fresh.length < msgs.length && (props.live ?? userActed)) {
       typing.current?.();
       typing.current = null;
       const ai = fresh.filter((m) => !m.classList.contains("is-user") && (!m.hasAttribute("data-chat-atomic") || m.hasAttribute("data-chat-typewriter"))) as HTMLElement[];

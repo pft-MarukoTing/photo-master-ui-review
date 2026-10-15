@@ -2484,6 +2484,11 @@ function SessionView(props: {
   useEffect(() => setConfirmationIndices([]), [pendingPerson?.question_id]);
   const pid = photo.photo_id;
   const messages = (session.messages || []).filter((m) => !m.card?.photo_id || m.card.photo_id === pid);
+  // 打開這串對話時最新的那則；之後才有比它新的訊息，才是 AI 這次回的話（打字動畫）。
+  const newest = (session.messages || []).reduce((t, m) => Math.max(t, m.created_at), 0);
+  const openedAt = useRef<{ id: string; at: number } | null>(null);
+  if (openedAt.current?.id !== session.session_id) openedAt.current = { id: session.session_id, at: newest };
+  const live = newest > openedAt.current.at;
   const versions = versionsFromMessages(messages, pid);
   const current =
     versions.find((v) => v.version_id === props.selected) ||
@@ -3654,6 +3659,7 @@ function SessionView(props: {
                   toBottom={toBottom}
                   toStart={lastDone}
                   settling={props.analysisPending}
+                  live={live}
                   onDropFile={busy ? undefined : props.onFile}
                   footer={
                     <>

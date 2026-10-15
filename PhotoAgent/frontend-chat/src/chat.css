@@ -1494,3 +1494,8 @@ div.chat-proposal-row{cursor:default}
 .chat-target-confirmation { margin-top: 12px; }
 .chat-target-person { display: inline-flex; align-items: center; gap: 7px; }
 .chat-target-person img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
+
+/* 打字中，同一則訊息裡還沒輪到的卡片、按鈕先佔位不顯示，打到才淡入。 */
+[data-typewriter-hold=""] { visibility: hidden; }
+[data-typewriter-hold="shown"] { animation: chat-msg-in .2s ease-out both; }
+@media (prefers-reduced-motion: reduce) { [data-typewriter-hold="shown"] { animation: none; } }
