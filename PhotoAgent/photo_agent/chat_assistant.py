@@ -124,6 +124,7 @@ NEVER A DEAD END
 The user must always know what to press next. SCREEN lists what is on screen right now: "bar" is the action buttons shown right under your latest reply, "topics" are the option panels shown as buttons under your reply. "pending" (when present) names the panels this round changed that are not rendered yet.
 - Whenever your reply (other than a closing line for a user who is winding down) neither asks a question nor proposes a change nor starts a render -- a decline, a message you did not follow, a turned-down question, an acknowledgement, a greeting, an answer about the photo -- end it by pointing at those buttons, quoting their labels exactly in 「」. Read SCREEN on every turn; it changes as the user presses buttons, so never reuse the buttons an earlier reply named. If your previous reply already pointed at the same buttons, do not point at them again: end on your answer instead. When SCREEN topics is not empty: 「可以點下面的「人像」「風格」看看，或按「美化」。」 (「美化」 stands for the button in SCREEN bar, word for word). Only when topics is empty and bar is 「看美化項目」「再美化」: 「想調整美化項目，可以按下面的「看美化項目」；想用一樣的設定再產生一版，可以按「再美化」。」 「看美化項目」 and 「再美化」 exist only after a render; while topics are showing they are not on screen.
 - After a render, the result card above already names 「看美化項目」 and 「再美化」. So when topics is empty and bar is 「看美化項目」「再美化」, an answer about the photo or a suggestion ends on its own content or its 「要不要…？」 question, without the button sentence; keep the button sentence for a decline, a message you did not follow, or a bare acknowledgement -- and even then never say it again when an earlier reply since the last render already said it.
+- When SCREEN bar has 「幫我分析」, the latest version (or this round) follows only the user's own wishes, and the photo as a whole was not analyzed. Then every reply that does not ask a question also ends by naming 「幫我分析」 and what it is for, e.g. 「想看整張照片還有哪些地方可以修，也可以按「幫我分析」。」 -- after the button sentence when there is one (the decline and not-understood lines above included), and even where the rules above leave the button sentence out (an answer about the photo, a repeat). The other buttons follow the rules above; quote the rest of SCREEN bar as it is, not as 「看美化項目」「再美化」 alone.
 - Name only buttons listed in SCREEN, at most three. If SCREEN is empty, the photo is busy and there is nothing to press: name no button and do not mention buttons at all (never 「沒有可按的按鈕」); just invite the user to tell you what to change.
 - options: only when your reply asks a question, give two to four short answers to it, a few words each, written as the user's own reply (the people to choose from, the parts or choices you asked about: 「笑容」、「視線」、「髮色」, or the copy lines you offered, each under 20 characters). Tapping one sends it as if typed. In every other case options is [] -- the buttons on SCREEN are the next step.
 - lines: true only when options are words for the photo you wrote (titles, headlines, captions, copy); false for every other kind of answer.
@@ -877,6 +878,11 @@ def _dropped_reply(dropped, screen):
     return said + _next_step(screen)
 
 
+# 只照需求改（沒照分析修）時，回覆底下多出來的那顆。
+ANALYZE_BUTTON = "幫我分析"
+ANALYZE_NUDGE = "想看整張照片還有哪些地方可以修，也可以按「幫我分析」。"
+
+
 def _next_step(screen):
     """The sentence that sends the user on from a change made: to the render
     button below, and to the topics under the reply while adjusting. "" when
@@ -887,10 +893,13 @@ def _next_step(screen):
     if not bar:
         return ""
     label = "美化" if bar[0] == "再美化" else bar[0]
+    # 只照需求改的時候底下多一顆「幫我分析」：除了改需求、美化，也讓他知道
+    # 還可以請 AI 看整張照片。
+    analyze = ANALYZE_NUDGE if ANALYZE_BUTTON in (screen or {}).get("bar") or [] else ""
     # 調整中，回覆底下接著項目按鈕（人像、畫面…），一併指給他看。
     if (screen or {}).get("topics"):
-        return f"還想調整其他項目可以點下面的項目，或按「{label}」我就開始。"
-    return f"按下面的「{label}」我就開始。"
+        return f"還想調整其他項目可以點下面的項目，或按「{label}」我就開始。" + analyze
+    return f"按下面的「{label}」我就開始。" + analyze
 
 
 def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None):
@@ -937,6 +946,11 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     checked = history and history[-1].get("text") == PANEL_CHECK_ASK
     if checked and not (proposal or render or close or options):
         reply = PANEL_CHECK_OK + _next_step(screen)
+    # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
+    # 在問問題、開始美化或收尾的那則不插嘴。
+    if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and ANALYZE_BUTTON not in reply \
+            and not (render or close or options):
+        reply = (reply + ANALYZE_NUDGE) if reply else ANALYZE_NUDGE
     return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines}
 
 

@@ -3080,32 +3080,42 @@ function SessionView(props: {
   const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: snapshotOf(photo.plan) });
   let bar: string[] = [];
   let actionChips: ComponentChildren = null;
+  // 只照需求改的那一版（或這一輪）：除了改需求、美化，每一步都把「幫我分析」
+  // 擺著，讓人知道還可以看整張照片有哪些地方能修。
+  const offerAnalyze = editing ? promptOnlyRound : !!photo.plan.overwrite_prompt && !!promptNow;
+  const analyzeChip = offerAnalyze ? (
+    <Chip label="幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
+  ) : null;
   if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
     // 調整中只放美化：項目在對話裡點，「看美化項目」再按一次會把這輪的起點重設掉。
     // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
     const label = fresh && !adjusting && !lastOpened ? "照建議直接美化" : "美化";
     const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
     actionChips = (
-      <Chip
-        label={label}
-        icon="spark"
-        kind="primary"
-        badge={pending}
-        disabled={busy || reframing}
-        onClick={() => (adjusting && unchanged ? setConfirmRerun(true) : renderRound(label, "spark"))}
-      />
+      <>
+        {analyzeChip}
+        <Chip
+          label={label}
+          icon="spark"
+          kind="primary"
+          badge={pending}
+          disabled={busy || reframing}
+          onClick={() => (adjusting && unchanged ? setConfirmRerun(true) : renderRound(label, "spark"))}
+        />
+      </>
     );
-    bar = [label];
+    bar = offerAnalyze ? ["幫我分析", label] : [label];
   } else if (photo.status !== "ready") {
     // 分析中、美化中：處理中那張卡已經講了接下來做什麼，不擺按不下去的鍵。
   } else if (versions.length && current) {
     actionChips = (
       <>
         <Chip label="看美化項目" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        {analyzeChip}
         <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </>
     );
-    bar = ["看美化項目", "再美化"];
+    bar = offerAnalyze ? ["看美化項目", "幫我分析", "再美化"] : ["看美化項目", "再美化"];
   } else if (lastOutcome?.card?.type === "render_failed") {
     actionChips = (
       <>
@@ -3240,9 +3250,9 @@ function SessionView(props: {
                   ) : (
                     <>
                       <p class="chat-text">
-                        {cats.length > 1 ? "調整好後，可以接著看其他項目，" : "調整好後，"}
-                        或按下面的「美化」我就開始
+                        {cats.length > 1 ? "調整好後，可以接著看其他項目，或按下面的「美化」我就開始" : "改好後按下面的「美化」我就開始"}
                         {fromApply && renders ? "，之前的版本會留在美化紀錄" : ""}。
+                        {offerAnalyze && "想看整張照片還有哪些地方可以修，也可以按「幫我分析」。"}
                       </p>
                       {cats.length > 1 && <div class="chat-choices">{catChips(cat)}</div>}
                     </>
@@ -3348,9 +3358,6 @@ function SessionView(props: {
                   {showChips && (
                     <div class="chat-choices">
                       {catChips()}
-                      {promptOnlyRound && (
-                        <Chip label="幫我分析" icon="search" disabled={busy || !ready} onClick={checkOriginal} />
-                      )}
                     </div>
                   )}
                   <p class="chat-text chat-muted">

@@ -167,6 +167,28 @@ class AskTest(unittest.TestCase):
                                     screen={"bar": ["美化"], "topics": ["人像", "風格"]})
         self.assertEqual(result["reply"], "好，個人化需求存好了。還想調整其他項目可以點下面的項目，或按「美化」我就開始。")
 
+    def test_only_wishes_every_reply_also_offers_the_analysis(self):
+        # 只照需求改：底下有「幫我分析」，每則都要提，模型漏講就補上。
+        screen = {"bar": ["看美化項目", "幫我分析", "再美化"], "topics": []}
+        history = [{"role": "user", "text": "背景再亮一點好嗎", "card": {"type": "ask"}}]
+        applied = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                     model=model_says(patch={"style_options": {"lighting": "soft"}}), screen=screen)
+        self.assertEqual(applied["reply"], "好，光線改成「柔光」了。按下面的「美化」我就開始。" + chat_assistant.ANALYZE_NUDGE)
+        answered = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                      model=model_says("背景已經照你的需求換好了。"), screen=screen)
+        self.assertEqual(answered["reply"], "背景已經照你的需求換好了。" + chat_assistant.ANALYZE_NUDGE)
+        said = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                  model=model_says("也可以按「幫我分析」看看。"), screen=screen)
+        self.assertEqual(said["reply"], "也可以按「幫我分析」看看。")
+        asking = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                    model=lambda c: {"reply": "想換成什麼顏色？", "action": "none", "patch_json": "",
+                                                     "options": ["藍色", "白色"]}, screen=screen)
+        self.assertEqual(asking["reply"], "想換成什麼顏色？")
+        plain = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                   model=model_says("背景已經照你的需求換好了。"),
+                                   screen={"bar": ["看美化項目", "再美化"], "topics": []})
+        self.assertEqual(plain["reply"], "背景已經照你的需求換好了。")
+
     def test_any_change_is_applied_without_asking(self):
         cases = {
             "two settings": ({"style_options": {"lighting": "soft"}, "aspect_ratio": "original"}, "好，已經幫你改好了。"),
