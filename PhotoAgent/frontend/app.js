@@ -4022,7 +4022,18 @@
     const sameFaceIssues = sameFaceIssueOverrides(getFaceIssueOverrides(), inlineReviseSnapshot.faceIssueOverrides);
     const sameBodyReshape = getBodyReshapeReviewEnabled() === inlineReviseSnapshot.bodyReshapeEnabled;
     return sameOptions && sameRecipe && samePrompt && sameModelQuality && sameRunCount && sameAspectRatio
-      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape;
+      && sameAdvancedOptions && sameFaceIssues && sameBodyReshape && sameCompositionAsShownResult();
+  }
+
+  // Against the shown result rather than the snapshot: a reframe stays a change
+  // even after the panel is reopened (and re-snapshotted) on the new composition.
+  function sameCompositionAsShownResult() {
+    const record = currentDetailBatchRecord();
+    const resultAnalysis = record ? record.result?.analysis : lastResult?.resultText?.analysis;
+    const panelAnalysis = reframeOwnerOnScreen()?.analysis;
+    if (!resultAnalysis || !panelAnalysis) return true;
+    const plannedFor = (analysis) => String(analysis._aspect_ratio_pref_at_analysis || "auto").toLowerCase();
+    return plannedFor(panelAnalysis) === plannedFor(resultAnalysis);
   }
 
   // Keeps the Run button visually flagged whenever inlineReviseHasNoChanges()
