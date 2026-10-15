@@ -1310,8 +1310,11 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None)
     start = verdict if verdict in ("render", "analyze") else ""
     # One question per wish: a second one in a row is read as a keep, so the
     # user's answer is never left hanging behind another question.
-    ask = verdict == "clarify" and not answering
-    if verdict == "clarify" and answering:
+    # 問「哪一位」要靠底下的頭像回答，不到兩個人就沒有頭像列可點：「他」就是
+    # 照片裡那一位（或交給後面對照），直接收下。追問顏色那種有選項，不算。
+    who_without_faces = verdict == "clarify" and len(people) < 2 and not _options(result.get("options"))
+    ask = verdict == "clarify" and not answering and not who_without_faces
+    if verdict == "clarify" and (answering or who_without_faces):
         verdict, reply = "keep", ""
     options = _options(result.get("options"))
     asked = result.get("asked_ratio") if isinstance(result.get("asked_ratio"), str) else ""

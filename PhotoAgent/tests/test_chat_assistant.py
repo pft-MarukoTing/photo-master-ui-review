@@ -403,6 +403,31 @@ class ReviewLineTest(unittest.TestCase):
             return {"verdict": "keep", "reply": "好，記下來了。還有別的嗎？", "line": "", "options": [], "later": False}
         self.assertEqual(chat_assistant.review_line("外套換成藍色", "", model=model)["reply"], "好，記下來了。還有別的嗎？")
 
+    # 問「哪一位」要點頭像，不到兩個人就沒有頭像可點：直接收下，不留一個答不了的問題。
+    def test_asking_who_with_one_face_keeps_the_line(self):
+        def model(context):
+            return {"verdict": "clarify", "reply": "你說的是哪一位？點下面的頭像選人就好。", "line": "", "options": []}
+        for people in ([], ["照片中從左邊數來第 1 位"]):
+            result = chat_assistant.review_line("把他頭髮染黑", "", people=people, model=model)
+            self.assertTrue(result["kept"], people)
+            self.assertFalse(result["ask"], people)
+            self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + chat_assistant.KEPT_NEXT)
+
+    def test_asking_who_with_two_faces_still_asks(self):
+        def model(context):
+            return {"verdict": "clarify", "reply": "你說的是哪一位？點下面的頭像選人就好。", "line": "", "options": []}
+        result = chat_assistant.review_line("把他頭髮染黑", "", people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"],
+                                            model=model)
+        self.assertTrue(result["ask"])
+        self.assertFalse(result["kept"])
+
+    def test_asking_what_with_one_face_still_asks(self):
+        def model(context):
+            return {"verdict": "clarify", "reply": "想換成什麼顏色？", "line": "", "options": ["白色", "黑色"]}
+        result = chat_assistant.review_line("衣服換顏色", "", people=["照片中從左邊數來第 1 位"], model=model)
+        self.assertTrue(result["ask"])
+        self.assertEqual(result["options"], ["白色", "黑色"])
+
     # 後講的蓋掉先講的：同一件事不能兩個都做，衝突的那幾段由模型拿掉衝突部分，
     # 這句由頁面放進自己那段，回話講一聲。
     SECTIONS = [{"who": "照片中從左邊數來第 1 位", "text": "皮膚曬黑、瘦臉"},

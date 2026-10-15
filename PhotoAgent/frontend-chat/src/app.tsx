@@ -1778,7 +1778,7 @@ export function App() {
                       <>
                         <FootBar
                           faces={
-                            !bridgeQuestion && preDisplayPeople.length > 1 &&
+                            !bridgeQuestion && !preWhoAsk && preDisplayPeople.length > 1 &&
                               <FacePicker people={preDisplayPeople} pointed={prePointed} onPoint={setPrePointed} />
                           }
                         />
@@ -1821,7 +1821,7 @@ export function App() {
                                 ? openAsk(notes)!.asked!.options.length
                                   ? ["直接打字回答，或點上面的選項", "打字回答，或點上面的選項"]
                                   : preDisplayPeople.length > 1
-                                    ? ["點頭像選人（可以選好幾位），或直接打字回答", "點頭像選人，或直接打字回答", "點頭像選人或打字回答"]
+                                    ? ["點上面的頭像選人，或直接打字回答", "點上面的頭像，或打字回答", "點頭像或打字回答"]
                                     : "直接打字回答"
                                 : preDisplayPeople.length > 1
                                 ? ["想怎麼美化這張照片？點頭像可以指定要改誰", "想怎麼美化？點頭像可以指定人", "想怎麼美化這張照片？"]
@@ -1903,6 +1903,7 @@ export function App() {
                         renderAsk && startSession("render", renderAsk.later, renderAsk.log, overwrite)
                       }
                       onAnswer={(text) => void reviewNote(text, [], notes, false)}
+                      onWho={(where) => answerWho(prePickable.filter((p) => p.where === where).map((p) => p.subjectIndex))}
                     />
                   </ChatPanel>
                   </>
@@ -2080,6 +2081,8 @@ function PreChat(props: {
   onRenderMode: (overwrite: boolean) => void;
   // One of the options under the AI's question, tapped.
   onAnswer: (text: string) => void;
+  // 問「哪一位」時，對話裡那排頭像點了其中一位（`where` 是那位的位置）。
+  onWho?: (where: string) => void;
 }) {
   const { caps, step, via, source, busy, notes, pending, scanning, starting } = props;
   // 還沒分析，沒人有名字，AI 只能講站在哪裡（「從左邊數來第 2 位」）；那幾個字
@@ -2319,6 +2322,9 @@ function PreChat(props: {
         const options = t.ask.asked?.options || t.ask.offered?.options || [];
         const open = i === log.length - 1 && !pending;
         const next = notes[notes.indexOf(t.ask) + 1];
+        // 問「哪一位」：人就擺在問題底下，點一下就是回答，不用再到輸入框旁邊
+        // 選、再按送出。答過了跟選項一樣定格，點的那位維持選取的樣子。
+        const who = t.ask.asked && !options.length ? t.ask.replyPeople || [] : [];
         return (
           <div key={`note-${t.ask.order ?? notes.indexOf(t.ask)}-${t.part || "both"}`} class="note-turn">
             {t.part !== "reply" && <AskBubble text={t.ask.text} faces={t.ask.persons} />}
@@ -2336,6 +2342,19 @@ function PreChat(props: {
                         onClick={() => props.onAnswer(o)}
                       />
                     ))}
+                  </div>
+                )}
+                {who.length > 1 && (
+                  <div class="chat-choices">
+                    {who.map((person) => {
+                      const label = (person.name || person.where || "").replace(/^照片中/, "");
+                      const picked = !open && next?.selectionSource === "user_selection" && next.persons.some((p) => p.where === person.where);
+                      const body = <>{person.thumb ? <img src={person.thumb} alt="" /> : <span class="chat-face-blank" />}<span>{label}</span></>;
+                      const cls = `chat-chip chat-target-person${picked ? " is-picked" : ""}${open ? "" : " is-static"}`;
+                      return open
+                        ? <button type="button" class={cls} disabled={held} onClick={() => person.where && props.onWho?.(person.where)}>{body}</button>
+                        : <span class={cls}>{body}</span>;
+                    })}
                   </div>
                 )}
               </AssistantMsg>
@@ -2699,7 +2718,19 @@ function SessionView(props: {
   // 就換成那個人的頭像。
   const said = (text: string) => faceText(text, pickable.map((p) => ({ ref: p.name || p.where || "", face: p })));
   // An answer under the AI's question that is just someone's name.
-  const faceOption = (o: string) => pickable.find((p) => p.name === o.trim()) || null;
+  // 沒分析時頭像沒有名字，AI 拿位置當答案（「左邊那位」），一樣對得回去。
+  const faceOption = (o: string) => {
+    const want = o.trim().replace(/^照片中/, "");
+    return pickable.find((p) => (p.name && p.name === want) || (!!p.where && p.where.replace(/^照片中/, "") === want)) || null;
+  };
+  // AI 問「哪一位」卻沒附頭像當選項：照片裡有好幾個人時，對話裡就直接排出全部的
+  // 頭像給人點，不用再去點輸入框上面那排再按送出。
+  const asksWho = (card: Dict | null | undefined) =>
+    card?.type === "llm_reply" &&
+    !card.options?.length &&
+    /[？?]\s*$/.test(card.text || "") &&
+    /哪一?位|哪幾位|誰/.test(card.text || "") &&
+    pickable.length > 1;
 
   const liveCat: Category | null = lastOptionsIdx >= 0 ? messages[lastOptionsIdx].card?.category : null;
   const openCategory = (cat: Category) => {
@@ -2859,6 +2890,9 @@ function SessionView(props: {
   // AI 剛問完一句（沒給選項）時，點好頭像不打字直接送出，就是回答「這幾位」。
   const whoAsked =
     lastCard?.type === "llm_reply" && !lastCard.options?.length && /[？?]\s*$/.test(lastCard.text || "");
+  // 頭像已經排在 AI 那句底下可以直接點時，輸入框上面那排就先收起來，免得兩處都能選。
+  const facesInline =
+    !props.pendingAsk && (asksWho(lastCard) || (lastCard?.type === "llm_reply" && !lastCard.proposal && (lastCard.options || []).some((o: string) => !!faceOption(o))));
   async function send(text: string, si: number[]) {
     if (pendingPerson?.kind === "edit_description" || pendingPerson?.kind === "action") {
       const answer = await props.onConfirmPeople([], undefined, undefined, undefined, undefined, text);
@@ -2946,7 +2980,7 @@ function SessionView(props: {
                         face={face}
                         avatarOnly
                         picked={picked}
-                        title={`就是${face.name}`}
+                        title={face.name ? `就是${face.name}` : "就是這位"}
                         onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex])) : undefined}
                       />
                     );
@@ -2961,6 +2995,23 @@ function SessionView(props: {
                     />
                   );
                 })}
+              </div>
+            );
+          }
+          if (asksWho(c)) {
+            const next = messages[idx + 1];
+            const nextSi = next?.card?.type === "ask" ? askedIndices(next.card) : [];
+            return (
+              <div class="chat-choices">
+                {pickable.map((face) => (
+                  <FaceChip
+                    face={face}
+                    avatarOnly
+                    picked={!open && nextSi.length === 1 && nextSi[0] === face.subjectIndex}
+                    title={face.name ? `就是${face.name}` : "就是這位"}
+                    onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex])) : undefined}
+                  />
+                ))}
               </div>
             );
           }
@@ -3676,7 +3727,7 @@ function SessionView(props: {
                     <>
                       <FootBar
                         faces={
-                          !pendingPerson && pickable.length > 1 && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />
+                          !pendingPerson && !facesInline && pickable.length > 1 && <FacePicker people={pickable} pointed={pointed} onPoint={setPointed} />
                         }
                       />
                       <Composer
