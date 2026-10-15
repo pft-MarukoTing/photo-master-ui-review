@@ -11,7 +11,8 @@ export type PreviewWish = { wish_id: string; text: string; source_text?: string;
 export type PreviewClause = { wish_id: string; request_id: string; text: string; source_text: string;
   status: "pending" | "matched" | "ambiguous" | "unmatched" | "not_person" | "outside_confirmed" | "cancelled" | "superseded";
   target_selection?: "outside_preview"; outside_reference?: string;
-  action_status?: "complete" | "incomplete"; part?: string | null; action_answer?: string;
+  semantic_required?: boolean; semantic?: {version: number; source: string; target: string; action: string; complete: boolean};
+  action_status?: "complete" | "incomplete" | "pending"; part?: string | null; action_answer?: string;
   operation?: {feature: string; part: string; kind: string; intent: string; action: string | null; value: string | null};
   display_text?: string; display_target_ids?: string[]; edit_scope_pending?: boolean; edit_description_pending?: boolean; outside_description?: string; cancelled_from?: {text: string};
   scope: "edit" | "protection" | "query"; target_ids: string[]; protected_ids: string[]; referent: string };
@@ -19,7 +20,7 @@ export type PreviewPresentation = { version: 1; opening: string; closing: string
 export type PreviewConversationResult = { token: string; revision: number; wishes_digest: string; reply: string;
   clauses: PreviewClause[]; effective_prompt: string;
   presentation?: PreviewPresentation; confirmation_handled?: boolean;
-  question: { question_id: string; wish_ids: string[]; text: string; kind?: "person" | "scope" | "wish" | "edit_scope" | "edit_description" | "action"; wish_options?: {wish_id: string; text: string}[]; options?: string[] } | null };
+  question: { question_id: string; wish_ids: string[]; text: string; kind?: "person" | "scope" | "wish" | "edit_scope" | "edit_description" | "action" | "semantic"; wish_options?: {wish_id: string; text: string}[]; options?: string[] } | null };
 export type PreviewDisplayPerson = FaceRef & { previewRole?: string; preview_person_id?: string };
 export type TargetQuestionSnapshot = NonNullable<PreviewConversationResult["question"]> & { token: string; revision: number; answered?: boolean; answer?: string };
 export type PreviewReplyEvent = { id: string; after: number; text: string; showPeople: boolean; role?: "user" | "assistant"; order?: number; generation?: string | null; kind?: "settings"; settings?: Settings; presentation?: PreviewPresentation; people?: PreviewDisplayPerson[]; questionSnapshot?: TargetQuestionSnapshot };

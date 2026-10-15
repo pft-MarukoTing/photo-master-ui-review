@@ -450,6 +450,19 @@ class ReviewLineTest(unittest.TestCase):
         self.assertTrue(result["ask"])
         self.assertEqual(result["options"], ["白色", "黑色"])
 
+    def test_incomplete_action_still_asks_without_face_choices_or_after_an_answer(self):
+        value = dict(source="女性眼睛", target="女性", action="", complete=False,
+                     target_kind="person", owner_required=False, scope="edit", feature="eyes",
+                     part="eyes", intent="set", value="", constraints=[])
+        for people in ([], ["唯一人物"]):
+            for history in ([], [{"role": "assistant", "text": "想做什麼調整？", "question": True}]):
+                for verdict in ("keep", "clarify"):
+                    with self.subTest(people=people, history=history, verdict=verdict):
+                        result = chat_assistant.review_line("女性眼睛", "", history=history, people=people,
+                            model=lambda context: dict(verdict=verdict, reply="想怎麼調整眼睛？", options=[], semantics=[value]))
+                        self.assertTrue(result["ask"])
+                        self.assertFalse(result["kept"])
+
     # 後講的蓋掉先講的：同一件事不能兩個都做，衝突的那幾段由模型拿掉衝突部分，
     # 這句由頁面放進自己那段，回話講一聲。
     SECTIONS = [{"who": "照片中從左邊數來第 1 位", "text": "皮膚曬黑、瘦臉"},

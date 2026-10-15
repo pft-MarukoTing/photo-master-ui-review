@@ -120,6 +120,8 @@ export const api = {
     request<{
       accepted: boolean;
       reply: string;
+      semantic_pending?: boolean;
+      request_semantics?: { complete: boolean; source: string; target: string; action: string }[];
       ask?: boolean;
       offer?: boolean;
       // The offer is to analyze first and answer the line itself afterwards.
@@ -133,7 +135,7 @@ export const api = {
       withdrawn?: boolean;
     }>(
       `${CHAT}/prompt-review`,
-      json("POST", { text, prompt, history, people, sections }),
+      { ...json("POST", { text, prompt, history, people, sections }), signal: AbortSignal.timeout(15000) },
     ),
 
   createSession: () => request<Session>(`${CHAT}/sessions`, json("POST", {})),

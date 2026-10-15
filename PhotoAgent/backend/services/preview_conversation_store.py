@@ -135,7 +135,7 @@ def load(user, token, binding=None):
     return data
 
 
-def confirm(user, token, binding, question_id, wish_ids, ids, revision, protection_scope=None, selected_wish=None, edit_scope=None, presentation_requested=False, target_selection="listed", description_text=None):
+def confirm(user, token, binding, question_id, wish_ids, ids, revision, protection_scope=None, selected_wish=None, edit_scope=None, presentation_requested=False, target_selection="listed", description_text=None, semantic_answers=None, target_semantics=None):
     state = load(user, token, binding)
     q = state['question']
     outside = target_selection == 'outside_preview'
@@ -151,9 +151,9 @@ def confirm(user, token, binding, question_id, wish_ids, ids, revision, protecti
         domain.confirm_outside_target(updated, wish_ids)
     if q.get('kind') == 'action':
         if ids: raise ValueError('invalid_action_target')
-        domain.complete_action(updated, wish_ids, description_text)
+        domain.complete_action(updated, wish_ids, description_text, semantic_answers=semantic_answers)
     if q.get('kind') == 'edit_description':
-        domain.complete_outside_description(updated, wish_ids, description_text)
+        domain.complete_outside_description(updated, wish_ids, description_text, semantic_answers=semantic_answers)
     if q.get('kind') == 'wish':
         if selected_wish not in q['wish_ids']:
             raise ValueError('invalid_correction_wish')
@@ -176,6 +176,8 @@ def confirm(user, token, binding, question_id, wish_ids, ids, revision, protecti
         if c['wish_id'] in wish_ids and q.get('kind') == 'edit_scope':
             domain.confirm_edit_scope(c, edit_scope)
         elif not outside and c['wish_id'] in wish_ids and q.get('kind') not in ('scope', 'wish', 'edit_description', 'action'):
+            if target_semantics is not None and c['wish_id'] in target_semantics:
+                domain.request_semantics.confirm_target_action(c, target_semantics[c['wish_id']])
             domain.clear_outside_target(c)
             c.pop('display_text', None)
             c.update(status='matched', candidate_ids=[], awaiting_confirmation=False, binding_source='user_confirmation',

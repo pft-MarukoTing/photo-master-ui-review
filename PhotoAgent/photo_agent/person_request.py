@@ -6,8 +6,9 @@ operation. Identity remains owned by the preview conversation.
 """
 import copy
 import re
+from photo_agent import request_semantics
 
-VERSION = 1
+VERSION = request_semantics.VERSION
 FOLD = str.maketrans({'张':'張','开':'開','睁':'睜','头':'頭','发':'髮','丝':'絲','视':'視','线':'線','闭':'閉'})
 ACTION_BOUNDARY = r'不要(?:張開|打開|睜開|閉上|閉眼)|張開|打開|睜開|閉上|閉眼|張眼|睜眼|眼睛|看向|望向|看鏡頭|看著鏡頭|看畫面|看左邊|看右邊|視線|髮絲|頭髮|調整|笑|整理|撥開'
 PARTS = {'eyes': ('eyes','eye_state'), 'gaze': ('eyes','gaze_direction'),
@@ -74,6 +75,8 @@ def _part(text):
 
 def semantics(clause):
     """Derive action only from stored source evidence, never cached display."""
+    if clause.get('semantic_required') or clause.get('semantic'):
+        return request_semantics.project(clause)
     text=clause['text']
     source=clause.get('reference_text') or text
     answer=clause.get('action_answer') or clause.get('outside_description')
@@ -145,6 +148,8 @@ def answer_action(clause, text):
 
 def outside_text(clause):
     """A confirmed wish reference is not a synthetic person identity."""
+    if request_semantics.read(clause):
+        return request_semantics.display(clause, {})
     if clause.get('action_answer') and clause.get('operation'):
         source=clause.get('outside_reference') or clause['text']
         boundary=re.search(ACTION_BOUNDARY,source)

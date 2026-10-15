@@ -1,7 +1,7 @@
 """Conservative operations on already bound people; never detect/rebind people."""
 import copy
 import re
-from photo_agent import person_reference, person_request
+from photo_agent import person_reference, person_request, request_semantics
 
 VERSION = 2
 
@@ -27,7 +27,7 @@ def project(state, people):
         person_request.annotate(source)
         op_data = source.get('operation')
         op = (op_data['feature'], op_data['intent'], op_data['action']) if op_data else None
-        if source.get('status') in ('matched','not_person','outside_confirmed') and source.get('action_status') == 'incomplete':
+        if source.get('status') in ('matched','not_person','outside_confirmed') and source.get('action_status') in ('incomplete', 'pending'):
             source.pop('display_text',None)
             clauses.append(source)
             continue
@@ -74,7 +74,8 @@ def project(state, people):
             c['display_target_ids'] = [person]
             prior = slots.get((person, feature))
             if intent == 'cancel':
-                if prior and (feature not in ('eyes','smile') or action is None or prior['operation']['action']==action):
+                if prior and (feature not in ('eyes','smile') or action is None or prior['operation']['action']==action
+                              or (request_semantics.read(c) and prior['operation'].get('value') == op_data.get('value'))):
                     prior['status'] = 'cancelled'
                     changes.append({'mode':'cancel','text':prior['display_text']})
                     slots.pop((person, feature), None)
@@ -148,6 +149,8 @@ def display(c, labels):
 
 
 def _display_base(c, labels):
+    if request_semantics.read(c):
+        return request_semantics.display(c, labels)
     ids = c.get('target_ids') or c.get('protected_ids') or []
     who = '、'.join(labels[i] for i in ids)
     line = c['text']
@@ -187,6 +190,8 @@ def _display_base(c, labels):
 
 
 def local_revision(state, people, text, selected=()):
+    if any(c.get('semantic_required') for c in state['clauses']):
+        return None  # Current requests are interpreted by the chat model.
     op = operation(text)
     # Empty IDs are a scope, not a shared identity. Cancel by the exact wish
     # or ask which request; never fold multiple outside subjects together.
@@ -298,6 +303,8 @@ def bind_unambiguous(clauses, people):
     """
     out=copy.deepcopy(clauses)
     for c in out:
+        if c.get('semantic_required'):
+            continue
         if c['status'] not in ('pending','ambiguous','unmatched') or c.get('target_ids') or c.get('awaiting_confirmation'): continue
         facts=person_reference.constraints(c.get('reference_text',c['text']),people)
         if not facts: continue

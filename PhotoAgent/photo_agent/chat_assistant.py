@@ -20,7 +20,7 @@ import math
 import re
 
 from openai_client import OPENAI_RESPONSES_URL, _extract_output_text, _parse_json_from_text, _post_json, _responses_payload
-from photo_agent import capabilities
+from photo_agent import capabilities, request_semantics
 from photo_agent.chat_brief import face_people, person_names
 from photo_agent.chat_plan import apply_plan_patch
 
@@ -981,8 +981,9 @@ REVIEW_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "asked_ratio", "merged", "withdraw"],
+        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "asked_ratio", "merged", "withdraw", "semantics"],
         "properties": {
+            "semantics": {"type": "array", "items": request_semantics.SCHEMA},
             "verdict": {"type": "string", "enum": ["keep", "clarify", "drop", "render", "analyze", "offer", "answer"]},
             "reply": {"type": "string"},
             "line": {"type": "string"},
@@ -1318,17 +1319,24 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None)
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
         f"NEW LINE:\n{line}",
     ])
+    context += '\nSEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.'
     result = (model or call_review)(context)
+    semantic_values = None
+    if 'semantics' in result:
+        if not isinstance(result['semantics'], list) or len(result['semantics']) > 40:
+            raise ValueError('invalid_review_semantics')
+        semantic_values = [request_semantics.validate(value, line) for value in result['semantics']]
     verdict = result.get("verdict")
     reply = result.get("reply").strip() if isinstance(result.get("reply"), str) else ""
     start = verdict if verdict in ("render", "analyze") else ""
-    # One question per wish: a second one in a row is read as a keep, so the
-    # user's answer is never left hanging behind another question.
+    # Avoid repeating target questions, but never turn an explicitly incomplete
+    # action into an executable wish just because the user already answered once.
+    semantic_incomplete = bool(semantic_values) and any(not v["complete"] for v in semantic_values)
     # 問「哪一位」要靠底下的頭像回答，不到兩個人就沒有頭像列可點：「他」就是
     # 照片裡那一位（或交給後面對照），直接收下。追問顏色那種有選項，不算。
     who_without_faces = verdict == "clarify" and len(people) < 2 and not _options(result.get("options"))
-    ask = verdict == "clarify" and not answering and not who_without_faces
-    if verdict == "clarify" and (answering or who_without_faces):
+    ask = semantic_incomplete or (verdict == "clarify" and not answering and not who_without_faces)
+    if verdict == "clarify" and (answering or who_without_faces) and not semantic_incomplete:
         verdict, reply = "keep", ""
     options = _options(result.get("options"))
     asked = result.get("asked_ratio") if isinstance(result.get("asked_ratio"), str) else ""
@@ -1391,6 +1399,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None)
         # louder form -- the two fields are written one after the other and
         # can come back on opposite sides -- so it is read the same way: the
         # words the user is actually shown win, and the line stays.
+        **({"request_semantics": semantic_values} if semantic_values is not None else {}),
         "kept": kept,
         "start": start,
         "ask": ask,

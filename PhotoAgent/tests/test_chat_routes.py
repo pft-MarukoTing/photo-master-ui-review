@@ -146,7 +146,7 @@ class ChatRoutesTest(unittest.TestCase):
             patch.object(chat, "get_min_compatible_version", lambda: 3),
             # The worker's side of a chat job, run in place: only what survives
             # the trip through the job's info hash gets there.
-            patch.object(chat.chat_queue, "run", lambda params: chat.chat_jobs.run(json.loads(json.dumps(params)))),
+            patch.object(chat.chat_queue, "run", lambda params, **kwargs: chat.chat_jobs.run(json.loads(json.dumps(params)))),
             patch.object(api, "record_history", record_history),
             patch.object(chat, "get_history", lambda user, limit=50, offset=0: sorted(
                 self.cases.values(), key=lambda e: e["ts"], reverse=True)[offset:offset + limit]),
@@ -1601,7 +1601,8 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.get_json()["start"], "analyze")
         self.assertIn("assistant (offer): 要不要我先幫你分析？ [options: 幫我分析 / 一鍵美化]", seen[0])
         res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "你說的是哪一位？", "line": "",
-                                          "options": []}, history=history)
+                                          "options": []}, history=history,
+                             people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"])
         self.assertTrue(res.get_json()["ask"])
 
     # A question about the tool gets its answer and leaves the list alone, even
@@ -1626,7 +1627,9 @@ class ChatRoutesTest(unittest.TestCase):
     # The model is not a gate the user can be left standing behind.
     def test_a_model_failure_lets_the_line_through(self):
         res, _ = self.review("外套換成藍色", RuntimeError("timeout"))
-        self.assertEqual(res.get_json(), {"accepted": True, "reply": ""})
+        self.assertTrue(res.get_json()["accepted"])
+        self.assertTrue(res.get_json()["semantic_pending"])
+        self.assertIn("保留", res.get_json()["reply"])
 
     # The page sends what it has: the faces found so far and the conversation,
     # so a wish can be read against who is in the photo and what was asked.
@@ -1644,7 +1647,8 @@ class ChatRoutesTest(unittest.TestCase):
                                           "options": [" 棕色", "黑色", "棕色", "", "金色", "紅色", "灰色"]})
         self.assertEqual(res.get_json(), {"accepted": False, "reply": "想換成什麼顏色？", "ask": True,
                                           "options": ["棕色", "黑色", "金色", "紅色"]})
-        res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "", "line": "", "options": []})
+        res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "", "line": "", "options": []},
+                             people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"])
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.CLARIFY_REPLY,
                                           "ask": True, "options": []})
 

@@ -162,10 +162,14 @@ function clauseAction(c: PreviewClause, persons: PrePerson[]): string {
 function resolvedNotes(notes: Note[], result: PreviewConversationResult, who: (ids: string[]) => PrePerson[] = () => []): Note[] {
   return notes.map((note, index) => {
     const clauses = result.clauses.filter(c => c.request_id === `note-${index}`);
-    if (clauses.some(c => !["cancelled", "superseded"].includes(c.status) && c.action_status === "incomplete"))
+    const semantic = clauses.length > 0 && clauses.every(c => c.semantic_required);
+    const actionPending = clauses.some(c => !["cancelled", "superseded"].includes(c.status) &&
+      (c.action_status === "incomplete" || c.action_status === "pending" || (semantic &&
+        (c.edit_scope_pending || c.edit_description_pending || ["pending", "ambiguous", "unmatched"].includes(c.status)))));
+    const effective = clauses.filter(c => ["matched", "not_person", "outside_confirmed"].includes(c.status) && c.scope !== "query" && !c.edit_scope_pending && !c.edit_description_pending && c.action_status !== "incomplete" && c.action_status !== "pending");
+    if (actionPending && !effective.length)
       return note.actionPending && note.resolvedWish === "" ? note : { ...note, resolvedWish: "", actionPending: true };
-    if (!clauses.length || clauses.some(c => c.edit_scope_pending || c.edit_description_pending || ["pending", "ambiguous", "unmatched"].includes(c.status))) return note;
-    const effective = clauses.filter(c => ["matched", "not_person", "outside_confirmed"].includes(c.status) && c.scope !== "query" && !c.edit_scope_pending);
+    if (!clauses.length || (!semantic && clauses.some(c => c.edit_scope_pending || c.edit_description_pending || ["pending", "ambiguous", "unmatched"].includes(c.status)))) return note;
     const text = effective.map(c => c.display_text || c.text).join("；");
     const withdrawalText = text || Array.from(new Set(clauses.map(c => c.cancelled_from?.text || c.display_text).filter(Boolean))).join("；") || note.withdrawalText;
     const placed = effective.map(c => {
@@ -174,8 +178,8 @@ function resolvedNotes(notes: Note[], result: PreviewConversationResult, who: (i
       return persons.length === ids.length && ids.length ? { persons, text: clauseAction(c, persons) } : { persons: [], text: c.display_text || c.text };
     });
     const samePlaced = JSON.stringify(note.placed?.map(x => [x.persons.map(faceRef), x.text])) === JSON.stringify(placed.map(x => [x.persons.map(faceRef), x.text]));
-    if (note.resolvedWish === text && note.withdrawalText === withdrawalText && samePlaced && !note.actionPending) return note;
-    return { ...note, ...(note.actionPending ? { actionPending: false } : {}), resolvedWish: text, withdrawalText, placed };
+    if (note.resolvedWish === text && note.withdrawalText === withdrawalText && samePlaced && !!note.actionPending === actionPending) return note;
+    return { ...note, ...(actionPending ? { actionPending: true } : note.actionPending ? { actionPending: false } : {}), resolvedWish: text, withdrawalText, placed };
   });
 }
 
@@ -718,7 +722,7 @@ export function App() {
       const updated = projected.map((n, i) => {
         const clauses = mapped.clauses.filter(c => c.request_id === `note-${i}`);
         if (n.asked && !n.asked.options.length && !n.askedResolved && clauses.length &&
-            clauses.every(c => (c.status === "matched" || c.status === "not_person") && c.action_status !== "incomplete")) {
+            clauses.every(c => (c.status === "matched" || c.status === "not_person") && c.action_status !== "incomplete" && c.action_status !== "pending")) {
           changed = true;
           return { ...n, kept: true, askedResolved: true };
         }
@@ -1168,7 +1172,7 @@ export function App() {
         // 一句，照一般流程檢查，不把後端的錯誤代碼丟給使用者。
       } finally { setPreAsk(null); }
     }
-    if (!actionTried && bridgeQuestion && base === notes) {
+    if (!actionTried && bridgeQuestion && bridgeQuestion.kind !== "semantic" && base === notes) {
       const ids = preRefs(confirmationPointed).flatMap(p => p.preview_person_id ? [p.preview_person_id] : []);
       if (typed) setPreClear(n => n + 1);
       setPreAsk({ order: nextDisplayOrder(), text, persons: [] });
@@ -1215,6 +1219,7 @@ export function App() {
         replyPeople: prePickable.map(p => ({ ...p })),
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
+        ...(r.semantic_pending && preview.identity ? { actionPending: true, resolvedWish: "" } : {}),
         ...(r.ask ? { asked: { options: r.options || [] } } : {}),
         ...(r.offer ? { offered: { options: r.options || [], ...(r.later ? { later: true } : {}) } } : {}),
         ...(r.accepted && !r.withdrawn ? completed(r.line, r.persons) : {}),
@@ -1246,7 +1251,7 @@ export function App() {
       // 問不到就放行：一次模型失敗不該讓人卡在上傳頁面，而且進了 session，
       // 個人化需求面板按下確認時還會再過一次。
       if (!stillCurrent()) return null;
-      const kept = { ...note, ...completed(), replyOrder: nextDisplayOrder(),
+      const kept = { ...note, ...completed(), kept: true, ...(preview.identity ? { actionPending: true, resolvedWish: "" } : {}), replyOrder: nextDisplayOrder(),
         reply: "好，這些會當成個人化需求，美化時一起套用。",
         replyPeople: prePickable.map(p => ({ ...p })) };
       setNotes([...base, kept]);
@@ -2119,6 +2124,10 @@ function PreChat(props: {
           </button>)}
           <Chip label="確認這筆需求的對象" disabled={disabled || !ids.length} onClick={() => props.onTargetSelection?.(ids)} />
           <Chip label="不在已辨識的人物清單中" disabled={disabled} onClick={() => props.onTargetSelection?.([], "不在已辨識的人物清單中", undefined, undefined, undefined, "outside_preview")} />
+        </>}
+        {q.kind === "semantic" && <>
+          <Chip label="重新確認這項需求" disabled={disabled} onClick={() => props.onTargetSelection?.([], "重新確認這項需求")} />
+          <Chip label="分析" icon="search" disabled={disabled} onClick={() => props.onStart("analyze")} />
         </>}
         {q.kind === "wish" && q.wish_options?.map(option => <Chip label={option.text} disabled={disabled}
           onClick={() => props.onTargetSelection?.([], option.text, undefined, option.wish_id)} />)}
@@ -3159,6 +3168,7 @@ function SessionView(props: {
         <Chip label="確認這筆需求的對象" disabled={!active || busy || !confirmationIndices.length} onClick={() => void props.onConfirmPeople(confirmationIndices)} />
         <Chip label="不在已辨識的人物清單中" disabled={!active || busy} onClick={() => void props.onConfirmPeople([], undefined, undefined, undefined, "outside_preview")} />
       </>}
+      {question.kind === "semantic" && <Chip label="重新確認這項需求" disabled={!active || busy} onClick={() => void props.onConfirmPeople([])} />}
       {question.kind === "scope" && question.options?.map((label, i) => <Chip label={label} disabled={!active || busy}
         onClick={() => void props.onConfirmPeople([], i === 0 ? "features" : "all")} />)}
       {question.kind === "wish" && question.wish_options?.map(option => <Chip label={option.text} disabled={!active || busy}

@@ -8,7 +8,7 @@ import copy
 import json
 import re
 import time
-from photo_agent import chat_assistant, person_reference, wish_lifecycle, person_request
+from photo_agent import chat_assistant, person_reference, wish_lifecycle, person_request, request_semantics
 
 STAGE = 'chat_preview_conversation'
 # Only an owned, explicit user confirmation may create this status.
@@ -22,7 +22,10 @@ or claim edits are finished. You see text only, not the image. Do not assess hai
 For each clause identify its EXACT source substring referring to a person (referent), and map it only
 when uniquely supported by the roster descriptions or an explicit selected ID. Never guess by last mention.
 Keep already explicit targets unchanged. Include all requested people, not the first one.
-Scene/background/object clauses are not_person. Questions are not edit wishes. A pronoun without explicit
+Scene/background/independent-object clauses are not_person. An object worn or
+held by someone can require its owner's identity: use semantic.owner_required
+and ask for that person when missing, even with target_kind=object.
+Questions are not edit wishes. A pronoun without explicit
 selection or unique evidence is ambiguous. A bare ordinal has no ordering basis; ask, do not use detector order.
 An ordinal beyond the roster is unmatched. 'from the left' uses the supplied left_rank.
 A protection clause maps the protected person, it does not remove them from the roster.
@@ -79,11 +82,15 @@ _GROUPS = {'type': 'array', 'items': {'type': 'object', 'additionalProperties': 
     'qualifiers': {'type': 'array', 'items': {'type': 'object', 'additionalProperties': False,
         'required': ['text', 'candidate_ids'], 'properties': {'text': {'type': 'string'},
         'candidate_ids': {'type': 'array', 'items': {'type': 'string'}}}}}}}}
-_MODEL_FIELDS = {**_FIELDS, 'identity_groups': _GROUPS}
+_LEGACY_MODEL_FIELDS = {**_FIELDS, 'identity_groups': _GROUPS}
+_MODEL_FIELDS = {**_LEGACY_MODEL_FIELDS, 'semantic': request_semantics.SCHEMA}
 SCHEMA = {'type': 'json_schema', 'name': 'preview_conversation', 'strict': True, 'schema': {
-    'type': 'object', 'additionalProperties': False, 'required': ['opening_template', 'closing_template', 'resolutions'],
-    'properties': {'opening_template': {'type': 'string'}, 'closing_template': {'type': 'string'}, 'resolutions': {'type': 'array', 'items': {
+    'type': 'object', 'additionalProperties': False, 'required': ['semantic_version', 'opening_template', 'closing_template', 'resolutions'],
+    'properties': {'semantic_version': {'type': 'integer', 'enum': [request_semantics.VERSION]}, 'opening_template': {'type': 'string'}, 'closing_template': {'type': 'string'}, 'resolutions': {'type': 'array', 'items': {
         'type': 'object', 'additionalProperties': False, 'required': list(_MODEL_FIELDS), 'properties': _MODEL_FIELDS}}}}}
+
+
+INSTRUCTION += request_semantics.INSTRUCTION
 
 
 def source_referent(text):
@@ -96,7 +103,7 @@ def source_referent(text):
     return found.group(0) if found else ''
 
 
-def wishes(raw, roster):
+def wishes(raw, roster, *, semantic=False):
     if not isinstance(raw, list) or len(raw) > 100:
         raise ValueError('invalid_wishes')
     known = {p['preview_person_id'] for p in roster}
@@ -124,8 +131,8 @@ def wishes(raw, roster):
             targets = []
         # Only exact source fragments, never a model-written operation. Split
         # independently scoped clauses while retaining the original request.
-        text_parts = person_request.split_requests(text)
-        source_parts = person_request.split_requests(source)
+        text_parts = [text] if semantic else person_request.split_requests(text)
+        source_parts = [source] if semantic else person_request.split_requests(source)
         for index, clause in enumerate(text_parts):
             clause = clause.strip()
             if not clause:
@@ -142,6 +149,9 @@ def wishes(raw, roster):
                 'context_referent': source_referent(text) if len(set(re.findall(r'女孩|男孩|女性|男性', text))) == 1 else ''})
     if len(out) > 200 or sum(len(x['text']) for x in out) > 12000:
         raise ValueError('too_many_clauses')
+    if semantic:
+        for clause in out:
+            clause['semantic_required'] = True
     return out
 
 
@@ -160,11 +170,116 @@ def generate(params):
         raise TimeoutError('preview_conversation_expired')
     context = INSTRUCTION + '\nDATA:\n' + json.dumps({k: params[k] for k in
         ('people', 'wishes', 'history', 'effective_prompt')}, ensure_ascii=False)
-    return chat_assistant._call(context, SCHEMA, timeout=min(8, remaining))
+    raw = chat_assistant._call(context, SCHEMA, timeout=min(8, remaining))
+    if raw.get('semantic_version') != request_semantics.VERSION:
+        raise ValueError('missing_model_semantics')
+    return raw
+
+
+def _semantic_resolutions(clauses, raw):
+    if raw.get('semantic_version') != request_semantics.VERSION:
+        raise ValueError('invalid_semantic_version')
+    if set(raw) != {'semantic_version', 'opening_template', 'closing_template', 'resolutions'}:
+        raise ValueError('invalid_semantic_answer')
+    if not isinstance(raw['resolutions'], list) or len(raw['resolutions']) > 200:
+        raise ValueError('invalid_semantic_resolutions')
+    known = {c['wish_id']: c for c in clauses}
+    proposed = {}
+    for proposal in raw['resolutions']:
+        if not isinstance(proposal, dict) or set(proposal) != set(_MODEL_FIELDS):
+            raise ValueError('invalid_semantic_resolution')
+        wid = proposal['wish_id']
+        if not isinstance(wid, str) or wid not in known:
+            raise ValueError('unknown_semantic_wish')
+        if not isinstance(proposal['referent'], str) or proposal['status'] not in STATUSES:
+            raise ValueError('invalid_semantic_mapping')
+        for key in ('target_ids', 'candidate_ids'):
+            ids = proposal[key]
+            if not isinstance(ids, list) or any(not isinstance(i, str) for i in ids) or len(set(ids)) != len(ids):
+                raise ValueError('invalid_semantic_ids')
+        groups = proposal['identity_groups']
+        if not isinstance(groups, list) or any(not isinstance(g, dict) or set(g) != {'referent','qualifiers'} or not isinstance(g['referent'], str) or not isinstance(g['qualifiers'], list) for g in groups):
+            raise ValueError('invalid_semantic_groups')
+        proposed.setdefault(wid, []).append(proposal)
+    expanded, mappings = [], []
+    for old in clauses:
+        wid = old['wish_id']
+        options = proposed.get(wid, [])
+        if not options:
+            # Already immutable states can be echoed locally. An unparsed
+            # source must never be silently omitted.
+            if old['status'] in ('cancelled', 'superseded') or request_semantics.read(old):
+                expanded.append(copy.deepcopy(old))
+                continue
+            raise ValueError('missing_semantic_wish')
+        spans = []
+        for index, proposal in enumerate(options):
+            value = request_semantics.validate(proposal['semantic'], request_semantics.evidence(old))
+            start = request_semantics.evidence(old).find(value['source'])
+            end = start + len(value['source'])
+            if any(start < b and a < end for a, b in spans):
+                raise ValueError('overlapping_semantic_sources')
+            spans.append((start, end))
+            c = copy.deepcopy(old)
+            if len(options) > 1:
+                c['wish_id'] = wid + '-segment-' + str(index)
+                c['semantic_parent'] = wid
+                c['semantic_parent_text'] = old['text']
+                c['semantic_parent_reference'] = request_semantics.evidence(old)
+            c.update(semantic=value, semantic_required=True, scope=value['scope'])
+            c.pop('display_text', None)
+            c.pop('display_target_ids', None)
+            # Derived view uses the exact source segment, never normalized
+            # operation text as identity evidence. Raw source_text is retained.
+            c['text'] = value['source']
+            c['reference_text'] = request_semantics.evidence(old)
+            if value['target_kind'] in ('region', 'image') and proposal['target_ids']:
+                raise ValueError('invalid_nonperson_binding')
+            if value['target_kind'] == 'outside_person' and proposal['target_ids']:
+                raise ValueError('invalid_outside_binding')
+            if proposal['referent'] and proposal['referent'] not in value['target']:
+                raise ValueError('semantic_identity_outside_target')
+            for group in proposal['identity_groups']:
+                if group['referent'] not in value['target']:
+                    raise ValueError('semantic_group_outside_target')
+            mapping = {k: copy.deepcopy(v) for k, v in proposal.items() if k != 'semantic'}
+            mapping['wish_id'] = c['wish_id']
+            if value['owner_required'] and not mapping['target_ids']:
+                if mapping['status'] == 'not_person':
+                    mapping['status'] = 'ambiguous'
+            elif value['target_kind'] in ('object', 'region', 'image') and not mapping['target_ids']:
+                mapping.update(status='not_person', candidate_ids=[])
+            # Object edits can refer to an identified owner, without replacing
+            # the object itself by the owner's name in executable prose.
+            # Existing user confirmations own identity, but fresh semantics
+            # may complete a previously unparsed request without reassigning it.
+            if old.get('binding_source') in ('user_confirmation', 'user_correction') or old['status'] == OUTSIDE_CONFIRMED:
+                if len(options) != 1:
+                    raise ValueError('cannot_split_confirmed_identity')
+                ids = old.get('target_ids') or old.get('protected_ids') or []
+                if ids and proposal['target_ids'] != ids:
+                    raise ValueError('semantic_changed_confirmed_identity')
+            expanded.append(c)
+            mappings.append(mapping)
+        source = request_semantics.evidence(old)
+        uncovered = ''.join(char for pos, char in enumerate(source) if not any(a <= pos < b for a, b in spans))
+        if uncovered.strip(' \t\r\n，,；;。.!！?？、：:'):
+            raise ValueError('incomplete_semantic_source_coverage')
+    return expanded, {k: v for k, v in raw.items() if k != 'semantic_version'} | {'resolutions': mappings}
 
 
 def resolve(clauses, people, raw):
     """Validate all bindings atomically; invalid narration cannot discard valid bindings."""
+    semantic_answer = isinstance(raw, dict) and 'semantic_version' in raw
+    if semantic_answer:
+        clauses, raw = _semantic_resolutions(clauses, raw)
+    else:
+        # Historical protocol adapter for stored answers/offline replays.
+        # generate() enforces v2 for every current model call.
+        clauses = copy.deepcopy(clauses)
+        for clause in clauses:
+            if not clause.get('semantic'):
+                clause.pop('semantic_required', None)
     if not isinstance(raw, dict) or set(raw) not in ({'reply_template', 'resolutions'}, {'opening_template', 'closing_template', 'resolutions'}):
         raise ValueError('invalid_answer')
     structured = 'opening_template' in raw
@@ -193,7 +308,7 @@ def resolve(clauses, people, raw):
     known = {p['preview_person_id'] for p in people}
     seen, result = set(), []
     for proposal in proposals:
-        if not isinstance(proposal, dict) or set(proposal) not in (set(_FIELDS), set(_MODEL_FIELDS)):
+        if not isinstance(proposal, dict) or set(proposal) not in (set(_FIELDS), set(_LEGACY_MODEL_FIELDS)):
             raise ValueError('invalid_resolution')
         wid = proposal['wish_id']
         if not isinstance(wid, str) or wid not in by_id or wid in seen:
@@ -202,7 +317,10 @@ def resolve(clauses, people, raw):
         c = copy.deepcopy(by_id[wid])
         locked = c['status'] in ('matched', 'cancelled', 'superseded', OUTSIDE_CONFIRMED) or c.get('awaiting_confirmation', False)
         status, ref = proposal['status'], proposal['referent']
-        ref = _source_referent(ref, proposal.get('identity_groups'), c, people)
+        identity_text = request_semantics.read(c)['target'] if request_semantics.read(c) else c.get('reference_text', c['text'])
+        identity_clause = {**c, 'text': identity_text, 'reference_text': identity_text}
+        if not semantic_answer:
+            ref = _source_referent(ref, proposal.get('identity_groups'), c, people)
         if status not in STATUSES or not isinstance(ref, str) or (ref and ref not in c['text'] and ref not in c.get('reference_text', c['text'])):
             raise ValueError('invalid_referent')
         ids, candidates = proposal['target_ids'], proposal['candidate_ids']
@@ -216,23 +334,33 @@ def resolve(clauses, people, raw):
             raise ValueError('invalid_target_status')
         groups = proposal.get('identity_groups')
         if groups is not None:
-            groups = _source_groups(groups, ref, c, people)
-            _validate_groups(groups, c, known)
+            if not semantic_answer:
+                groups = _source_groups(groups, ref, c, people)
+                _validate_groups(groups, c, known)
         if c['target_ids'] and (status != 'matched' or ids != c['target_ids']):
             # Explicit user selection is never overwritten by the model.
             status, ids, candidates = 'ambiguous', [], list(c['target_ids'])
         if status == 'matched' and not c['target_ids'] and not ref and not c.get('context_referent'):
             raise ValueError('unsupported_binding')
-        if ref in ('他', '她', '這位', '他們', '她們') and not c['target_ids']:
+        if not semantic_answer and ref in ('他', '她', '這位', '他們', '她們') and not c['target_ids']:
             status, ids, candidates = 'ambiguous', [], list(known)
-        if re.search(r'第\s*[三3]\s*(個|位|人)', c['text']) and len(known) < 3:
+        if not semantic_answer and re.search(r'第\s*[三3]\s*(個|位|人)', c['text']) and len(known) < 3:
             status, ids, candidates = 'unmatched', [], []
-        if re.search(r'第\s*[二三四五2345]', c['text']) and not re.search(r'左|右|頭像|編號', c['text']) and status == 'matched':
+        if not semantic_answer and re.search(r'第\s*[二三四五2345]', c['text']) and not re.search(r'左|右|頭像|編號', c['text']) and status == 'matched':
             status, ids, candidates = 'ambiguous', [], list(known)
-        if status == 'matched' and not locked:
-            status, candidates, checks = person_reference.check(c.get('reference_text', c['text']), people, ids, groups, explicit=bool(c['target_ids']))
+        if semantic_answer and not locked:
+            value = request_semantics.read(c)
+            if status == 'matched':
+                status, candidates, checks = request_semantics.check_identity(value, groups, list(known), ids, explicit=bool(c['target_ids']))
+                c['identity_evidence'] = checks
+                if status != 'matched':
+                    ids = []
+            # Model ambiguity is preserved. Never reclassify desired appearance
+            # by running legacy regex over the original whole sentence.
+        elif status == 'matched' and not locked:
+            status, candidates, checks = person_reference.check(identity_text, people, ids, groups, explicit=bool(c['target_ids']))
             c['identity_evidence'] = checks
-            if c.get('reference_unaligned'):
+            if c.get('reference_unaligned') and not semantic_answer:
                 status, candidates = 'ambiguous', list(known)
             if groups == [] and not c['target_ids']:
                 status, candidates = 'ambiguous', list(known)
@@ -240,7 +368,7 @@ def resolve(clauses, people, raw):
                 candidates = list(dict.fromkeys(candidates + c['target_ids']))
                 ids = []
         elif status in ('ambiguous', 'unmatched') and not locked:
-            checked, partial, checks = person_reference.check(c.get('reference_text', c['text']), people, [], groups)
+            checked, partial, checks = person_reference.check(identity_text, people, [], groups)
             c['identity_evidence'] = checks
             if checked == 'unmatched':
                 status, candidates = 'unmatched', []
@@ -498,7 +626,7 @@ def confirm_outside_target(state, wish_ids):
         clause.update(status=OUTSIDE_CONFIRMED, target_selection='outside_preview',
                       outside_reference=clause['text'], outside_wish_ref=clause['wish_id'], binding_source='user_confirmation',
                       target_ids=[], protected_ids=[], candidate_ids=[], awaiting_confirmation=False)
-        clause['edit_description_pending'] = not has_edit_description(clause['text'])
+        clause['edit_description_pending'] = person_request.semantics(clause)['action_status'] != 'complete'
         clause.pop('display_text', None)
         clause.pop('display_target_ids', None)
 
@@ -507,22 +635,27 @@ def has_edit_description(text):
     return person_request.semantics({'text':text})['action_status'] == 'complete'
 
 
-def complete_action(state, wish_ids, text):
+def complete_action(state, wish_ids, text, *, semantic_answers=None):
     for index, clause in enumerate(state['clauses']):
         if clause['wish_id'] in wish_ids:
             if clause['status'] not in ('matched', OUTSIDE_CONFIRMED, 'not_person'):
                 raise ValueError('invalid_action_confirmation')
-            updated=person_request.answer_action(clause,text)
-            updated['edit_description_pending']=False
+            if clause.get('semantic_required'):
+                if not semantic_answers or clause['wish_id'] not in semantic_answers:
+                    raise ValueError('semantic_action_answer_required')
+                updated = semantic_answers[clause['wish_id']]
+            else:
+                updated=person_request.answer_action(clause,text)
+            updated['edit_description_pending']=person_request.semantics(updated)['action_status'] != 'complete'
             updated.pop('display_text',None)
             updated.pop('display_target_ids',None)
             state['clauses'][index]=updated
 
 
-def complete_outside_description(state, wish_ids, text):
+def complete_outside_description(state, wish_ids, text, *, semantic_answers=None):
     if any(c['status'] != OUTSIDE_CONFIRMED for c in state['clauses'] if c['wish_id'] in wish_ids):
         raise ValueError('invalid_edit_description')
-    complete_action(state,wish_ids,text)
+    complete_action(state,wish_ids,text,semantic_answers=semantic_answers)
 
 
 
@@ -535,6 +668,9 @@ def acknowledged_reply(clauses, people):
 def fallback(clauses, people):
     result = copy.deepcopy(clauses)
     for c in result:
+        if c.get('semantic_required') and not request_semantics.read(c):
+            c['status'] = 'pending'
+            continue
         if c['status'] in ('matched', 'cancelled', 'superseded', OUTSIDE_CONFIRMED):
             continue
         person_referent = re.search(r'女孩|男孩|女性|男性|女子|男子|父親|母親|人物|她|他|這位|第[一二三四五六七八九十0-9]|頭髮|髮絲|臉|身材|身形|笑容|眼睛|視線|衣服|上衣|褲子', c['text'])
@@ -565,7 +701,7 @@ def refresh_state(state):
 
 
 def pending(state):
-    return [c for c in state['clauses'] if c['status'] not in ('cancelled','superseded') and (c['status'] in ('pending', 'ambiguous', 'unmatched') or c.get('edit_scope_pending') or c.get('edit_description_pending') or person_request.semantics(c)['action_status'] == 'incomplete')]
+    return [c for c in state['clauses'] if c['status'] not in ('cancelled','superseded') and (c['status'] in ('pending', 'ambiguous', 'unmatched') or c.get('edit_scope_pending') or c.get('edit_description_pending') or person_request.semantics(c)['action_status'] in ('incomplete', 'pending'))]
 
 
 def question(state, people, *, with_cards=False):
@@ -582,8 +718,14 @@ def question(state, people, *, with_cards=False):
                     'options': ['保留人物特徵，允許調整光線', '人物與光線都保持原樣']}
         return None
     first = unresolved[0]
-    if first.get('status') in ('matched','outside_confirmed','not_person') and person_request.semantics(first)['action_status'] == 'incomplete':
-        part = {'eyes':'眼睛','hair':'頭髮','mouth':'笑容'}.get(person_request.semantics(first)['part'],'這位人物')
+    if person_request.semantics(first)['action_status'] == 'pending':
+        return {'question_id': first['wish_id'], 'wish_ids': [first['wish_id']], 'kind': 'semantic',
+                'text': f'關於「{first["text"]}」，這項需求還在確認中；你可以補充說明，或先按分析。'}
+    if first.get('status') in ('matched','outside_confirmed','not_person') and person_request.semantics(first)['action_status'] in ('incomplete', 'pending'):
+        value = request_semantics.read(first)
+        part = ((value['part'] if value and value['part'] not in ('eyes', 'hair', 'mouth') else None)
+                or {'eyes':'眼睛','hair':'頭髮','mouth':'笑容'}.get(person_request.semantics(first)['part'])
+                or (value['target'] if value and value['target_kind'] not in ('person', 'outside_person') else '這位人物') or '這個部分')
         return {'question_id': first['wish_id'], 'wish_ids': [first['wish_id']], 'kind': 'edit_description' if first['status'] == OUTSIDE_CONFIRMED else 'action',
                 'text': f'你想怎麼調整{part}呢？請再告訴我想做的動作。'}
     if first.get('edit_description_pending'):
@@ -619,7 +761,7 @@ def executable(state, people):
     labels = {p['preview_person_id']: p['label'] for p in people}
     lines = []
     for c in wish_lifecycle.project(state, people)['clauses']:
-        if c['scope'] == 'query' or c.get('edit_scope_pending') or c.get('edit_description_pending') or person_request.semantics(c)['action_status'] == 'incomplete' or c['status'] not in ('matched', 'not_person', OUTSIDE_CONFIRMED):
+        if c['scope'] == 'query' or c.get('edit_scope_pending') or c.get('edit_description_pending') or person_request.semantics(c)['action_status'] in ('incomplete', 'pending') or c['status'] not in ('matched', 'not_person', OUTSIDE_CONFIRMED):
             continue
         if c['status'] == OUTSIDE_CONFIRMED:
             lines.append(person_request.outside_text(c) + ('（包含人物的光線）' if c['scope'] == 'protection' and state.get('protection_scope') == 'all' else ''))
@@ -654,11 +796,11 @@ def retain_bindings(clauses, previous):
         and before.get('selection_source','none')==c.get('selection_source','none') for before in previous['clauses'])}
     expanded = []
     for c in clauses:
-        children = [x for x in previous['clauses'] if x.get('parent_wish_id') == c['wish_id'] and x['text'] == c['text'] and x.get('source_text') == c.get('source_text')]
+        children = [x for x in previous['clauses'] if ((x.get('parent_wish_id') == c['wish_id'] and x['text'] == c['text']) or (x.get('semantic_parent') == c['wish_id'] and x.get('semantic_parent_text') == c['text'] and x.get('semantic_parent_reference', 'semantic_answer') == c.get('reference_text'))) and x.get('source_text') == c.get('source_text')]
         expanded.extend(copy.deepcopy(children) if children else [c])
     clauses = expanded
     fields = ('target_ids', 'protected_ids', 'referent', 'status', 'binding_source',
-              'revision', 'versions', 'correction_text', 'candidate_ids', 'awaiting_confirmation', 'operation', 'display_text', 'display_target_ids', 'cancelled_from', 'parent_wish_id', 'target_selection', 'outside_reference', 'edit_description_pending', 'outside_description', 'action_answer', 'action_constraints', 'outside_wish_ref')
+              'revision', 'versions', 'correction_text', 'candidate_ids', 'awaiting_confirmation', 'operation', 'display_text', 'display_target_ids', 'cancelled_from', 'parent_wish_id', 'target_selection', 'outside_reference', 'edit_description_pending', 'outside_description', 'action_answer', 'action_constraints', 'outside_wish_ref', 'semantic', 'semantic_required', 'semantic_parent', 'semantic_parent_text', 'semantic_parent_reference', 'semantic_answer')
     for c in clauses:
         before = old.get(c['wish_id'])
         if (before and before['text'] == c['text']
@@ -669,11 +811,13 @@ def retain_bindings(clauses, previous):
                 # Re-evaluate them; explicit user confirmations still survive.
                 continue
             c.update({k: copy.deepcopy(before[k]) for k in fields if k in before})
+            if before.get('semantic_answer'):
+                c['reference_text'] = before['reference_text']
             for k in ('mapping_version', 'identity_evidence', 'edit_scope_pending', 'edit_scope'):
                 if k in before:
                     c[k] = copy.deepcopy(before[k])
             if before['status'] in ('pending', 'ambiguous', 'unmatched'):
-                c['awaiting_confirmation'] = True
+                c['awaiting_confirmation'] = not (c.get('semantic_required') and not request_semantics.read(c))
     roots = unchanged_origins
     for before in previous['clauses']:
         if before.get('lifecycle_revision') and before.get('origin_wish_id') in roots:
@@ -697,10 +841,11 @@ def retain_questions(state, previous):
 
 
 REVISION_SCHEMA = {'type': 'json_schema', 'name': 'preview_wish_revision', 'strict': True, 'schema': {
-    'type': 'object', 'additionalProperties': False, 'required': ['mode', 'wish_ids', 'target_ids', 'reply'],
+    'type': 'object', 'additionalProperties': False, 'required': ['mode', 'wish_ids', 'target_ids', 'reply', 'semantic', 'identity_groups'],
     'properties': {'mode': {'type': 'string', 'enum': ['rebind', 'cancel', 'ambiguous', 'no_change']},
         'wish_ids': {'type': 'array', 'items': {'type': 'string'}},
-        'target_ids': {'type': 'array', 'items': {'type': 'string'}}, 'reply': {'type': 'string'}}}}
+        'target_ids': {'type': 'array', 'items': {'type': 'string'}}, 'reply': {'type': 'string'},
+        'semantic': request_semantics.SCHEMA, 'identity_groups': _GROUPS}}}
 
 
 def generate_revision(params):
@@ -718,13 +863,18 @@ is not explicit, return ambiguous and list candidate wish_ids; do not change all
 Use valid target_ids only; use ambiguity if several people fit. Bare agreement isn't a correction.
 No new plans/actions or visual assessments. Reply in Traditional Chinese, briefly describe only the correction.
 '''
-    context = instruction + '\nDATA:\n' + json.dumps({k: params[k] for k in ('people', 'wishes', 'text')}, ensure_ascii=False)
+    context = instruction + request_semantics.INSTRUCTION + '\nFor revision use semantic for the NEW correction text, plus identity_groups for a new target. Keep existing actions on rebind; cancellation must name the same property as the selected old wish. no_change can use incomplete semantics. Return the revision schema, not resolutions.\nDATA:\n' + json.dumps({k: params[k] for k in ('people', 'wishes', 'text')}, ensure_ascii=False)
     return chat_assistant._call(context, REVISION_SCHEMA, timeout=min(8, remaining))
 
 
 def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
-    if not isinstance(raw, dict) or set(raw) != {'mode', 'wish_ids', 'target_ids', 'reply'}:
+    if not isinstance(raw, dict) or set(raw) not in ({'mode', 'wish_ids', 'target_ids', 'reply'}, {'mode', 'wish_ids', 'target_ids', 'reply', 'semantic', 'identity_groups'}):
         raise ValueError('invalid_revision')
+    semantic_revision = 'semantic' in raw
+    semantic_current = any(c.get('semantic_required') for c in state['clauses'])
+    if semantic_current and not semantic_revision:
+        raise ValueError('semantic_revision_required')
+    value = request_semantics.validate(raw['semantic'], text) if semantic_revision else None
     mode, ids, targets = raw['mode'], raw['wish_ids'], raw['target_ids']
     known = {p['preview_person_id'] for p in people}
     clauses = {c['wish_id']: c for c in state['clauses'] if c['status'] not in ('cancelled', 'superseded')}
@@ -739,7 +889,7 @@ def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
         # no_change (「把牆壁改成木頭牆」 next to the 紅磚牆 wish). The verdict
         # is still no_change; the ids change nothing, so they are ignored.
         return None
-    if mode == 'cancel':
+    if mode == 'cancel' and not semantic_revision:
         if selected:
             allowed = [c for c in clauses.values() if set(c.get('target_ids') or c.get('protected_ids') or []) & set(selected)]
             if any(not set(clauses[i].get('target_ids') or clauses[i].get('protected_ids') or []) & set(selected) for i in ids):
@@ -763,8 +913,17 @@ def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
         bound = list(dict.fromkeys(i for wid in ids for i in (clauses[wid].get('target_ids') or clauses[wid].get('protected_ids') or [])))
         if bound and person_reference.check(text,people,bound)[0] != 'matched':
             return wish_lifecycle.clarify(state,people,text,[clauses[i] for i in ids])
+    if semantic_revision:
+        if selected and any(not set(clauses[i].get('target_ids') or clauses[i].get('protected_ids') or []) & set(selected) for i in ids):
+            return wish_lifecycle.clarify(state, people, text, [clauses[i] for i in ids])
+        if mode == 'cancel' and (value['intent'] != 'cancel' or any((person_request.semantics(clauses[i]).get('operation') or {}).get('feature') != value['feature'] for i in ids)):
+            return None
     target_conflict = False
-    if mode == 'rebind':
+    if mode == 'rebind' and semantic_revision:
+        status, candidates, _ = request_semantics.check_identity(value, raw['identity_groups'], list(known), targets)
+        if status != 'matched':
+            mode, targets, target_conflict = 'ambiguous', [], True
+    elif mode == 'rebind':
         replacement = re.split(r'不是.*?(?:而?是|改成)|改成|改為', text)[-1]
         status, candidates, _ = person_reference.check(replacement, people, targets)
         if status != 'matched':
@@ -821,6 +980,42 @@ CONFIRMATION_SCHEMA = copy.deepcopy(SCHEMA)
 CONFIRMATION_SCHEMA['name'] = 'preview_conversation_confirmation'
 CONFIRMATION_SCHEMA['schema']['properties']['confirmation_intent'] = {'type': 'string', 'enum': ['answer', 'new_message']}
 CONFIRMATION_SCHEMA['schema']['required'].append('confirmation_intent')
+
+
+def generate_target_action(params):
+    remaining = params.get('deadline', 0) - time.time()
+    if remaining <= 0:
+        raise TimeoutError('preview_conversation_expired')
+    context = request_semantics.INSTRUCTION + '''
+The user has now explicitly selected the person for this EXISTING request.
+Re-evaluate only the original request's action. Missing person identity must
+NOT make an otherwise explicit action incomplete. For example 戴上戒指 is
+already a complete operation even without a person name. 女性眼睛 is still
+incomplete: selecting someone does not supply an action. Do not invent a verb.
+Ignore the old complete/action decision when re-evaluating. Keep source, target,
+scope, intent and constraints exactly as stored. Return one semantic object.
+The selected IDs are fixed by the server; do not change identity or add edits.
+''' + json.dumps({k: params[k] for k in ('clause', 'selected_people')}, ensure_ascii=False)
+    schema = {'type': 'json_schema', 'name': 'confirmed_target_action', 'strict': True,
+              'schema': request_semantics.SCHEMA}
+    return chat_assistant._call(context, schema, timeout=min(8, remaining))
+
+
+def generate_action_answer(params):
+    remaining = params.get('deadline', 0) - time.time()
+    if remaining <= 0:
+        raise TimeoutError('preview_conversation_expired')
+    context = request_semantics.INSTRUCTION + """
+This is an answer to one existing missing-action question. confirmation_intent
+is answer only if it answers that exact request without changing its target.
+A different person, cancellation of another wish, or unrelated new request is
+new_message. Keep semantic.target and target_kind exactly as the stored one.
+Parse the supplied combined_source. A short reply can omit a known part; use
+feature/part/value to express that meaning, but action stays an exact substring
+of the new answer. A still incomplete answer stays complete=false; do not
+borrow a verb from previous history. No new people or edits.
+""" + json.dumps({k: params[k] for k in ('clause', 'text', 'combined_source')}, ensure_ascii=False)
+    return chat_assistant._call(context, request_semantics.ACTION_SCHEMA, timeout=min(8, remaining))
 
 
 def generate_confirmation(params):

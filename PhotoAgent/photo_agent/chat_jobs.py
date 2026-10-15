@@ -40,6 +40,10 @@ def run(params):
     """The model's answer for one chat job's params, or raises."""
     stage = params.get("stage")
     if stage == preview_conversation.STAGE:
+        if params.get("mode") == "target_action":
+            return preview_conversation.generate_target_action(params)
+        if params.get("mode") == "action":
+            return preview_conversation.generate_action_answer(params)
         if params.get("mode") == "confirmation":
             return preview_conversation.generate_confirmation(params)
         return (preview_conversation.generate_revision(params) if params.get("mode") == "revision" else preview_conversation.generate(params))
