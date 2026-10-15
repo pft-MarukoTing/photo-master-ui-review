@@ -64,10 +64,10 @@ class AskTest(unittest.TestCase):
         self.assertEqual(result["options"], ["笑容", "視線"])
 
     def test_the_screen_reaches_the_model(self):
-        model = model_says("可以按下面的「看分析結果」。")
+        model = model_says("可以按下面的「看美化項目」。")
         chat_assistant.ask(analysis(), default_plan(), "ready", [{"role": "user", "text": "好", "card": {"type": "ask"}}],
-                           model=model, screen={"bar": ["看分析結果", "再美化"], "topics": []})
-        self.assertIn('SCREEN: {"bar":["看分析結果","再美化"],"topics":[]}', model.seen[0])
+                           model=model, screen={"bar": ["看美化項目", "再美化"], "topics": []})
+        self.assertIn('SCREEN: {"bar":["看美化項目","再美化"],"topics":[]}', model.seen[0])
 
     def test_a_render_has_no_options(self):
         self.assertEqual(ask(model_says("馬上幫你美化", action="render", options=["一鍵美化"]))["options"], [])
@@ -149,7 +149,7 @@ class AskTest(unittest.TestCase):
         model = model_says(patch={"style_options": {"lighting": "soft"}})
         result = chat_assistant.ask(analysis(), default_plan(), "ready",
                                     [{"role": "user", "text": "柔光", "card": {"type": "ask"}}],
-                                    model=model, screen={"bar": ["看分析結果", "再美化"], "topics": []})
+                                    model=model, screen={"bar": ["看美化項目", "再美化"], "topics": []})
         self.assertEqual(result["reply"], "好，光線改成「柔光」了。按下面的「美化」我就開始。")
 
     def test_while_adjusting_the_reply_also_points_at_the_topics(self):

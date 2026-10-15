@@ -88,7 +88,7 @@ interface MadeWith {
 
 const NO_DETAILS: MadeWith = { portraits: [], recipes: [], styles: [], hint: "" };
 
-const DETAIL_LABEL: Record<Detail, string> = { face: "人像調整", recipe: "美化項目", style: "美化風格", prompt: "個人化" };
+const DETAIL_LABEL: Record<Detail, string> = { face: "人像調整", recipe: "畫面調整", style: "美化風格", prompt: "個人化" };
 // The bubble's heading: 個人化 is the pill's short form of 個人化需求.
 const DETAIL_TITLE: Record<Detail, string> = { ...DETAIL_LABEL, prompt: "個人化需求" };
 
@@ -205,7 +205,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
     };
   }, [job]);
 
-  // What this version was rendered with: the 人像 fixes, 美化項目 and 修圖風格
+  // What this version was rendered with: the 人像 fixes, 畫面調整 and 修圖風格
   // picks that reached the Editor prompt, and its 個人化需求. They come
   // from the finish job's own stored result -- the photo's plan has usually
   // moved on by now (every adjust round rewrites it), and the message log
@@ -479,7 +479,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
 
             {/* What this version was actually made with, floating at the
                 bottom of the photo -- the old result row's buttons: 人像調整,
-                美化項目 and 美化風格 for what reached the Editor prompt, and
+                畫面調整 and 美化風格 for what reached the Editor prompt, and
                 個人化 for the request it carried. Each opens the bubble below
                 with its details. Hidden by styles.css while the Original is
                 showing, since all of them describe the result. */}
@@ -811,7 +811,7 @@ export function SplitGrip() {
   const drag = useRef<{ y: number; from: number; h: number } | null>(null);
   const row = () => ref.current?.closest<HTMLElement>(".results-canvas-row") || null;
 
-  // 照片縮到最小那段時，底部那排美化項目標籤先收起來（CSS 看 is-split-small）。
+  // 照片縮到最小那段時，底部那排畫面調整等標籤先收起來（CSS 看 is-split-small）。
   useLayoutEffect(() => {
     const r = row();
     r?.style.setProperty("--split", String(split));

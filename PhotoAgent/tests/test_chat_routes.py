@@ -1262,7 +1262,7 @@ class ChatRoutesTest(unittest.TestCase):
         photo = self.ready_photo(sid)
         res, _ = self.ask(sid, photo, "光線柔和一點", {
             "reply": "可以改成柔光，確認後套用。", "action": "none", "patch_json": '{"style_options":{"lighting":"soft"}}'},
-            screen={"bar": ["看分析結果", "一鍵美化"], "topics": []})
+            screen={"bar": ["看美化項目", "一鍵美化"], "topics": []})
         messages = res.get_json()["messages"]
         self.assertEqual([(m["role"], m["card"]["type"]) for m in messages],
                          [("user", "ask"), ("assistant", "llm_reply"), ("user", "proposal_resolved")])

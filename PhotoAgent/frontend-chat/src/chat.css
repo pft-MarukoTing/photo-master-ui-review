@@ -1406,7 +1406,7 @@ div.chat-proposal-row{cursor:default}
   .results-canvas-row.showing-analysis .canvas-tools :is(.canvas-version-btn,.canvas-btn):active{background-color:rgba(var(--accent-rgb),.12)}
   .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .photo-frame{cursor:zoom-in}
 
-  /* 美化項目那排標籤放在被對話蓋住的那段上面；照片縮到最小那段時先收起來。 */
+  /* 結果圖底部那排標籤放在被對話蓋住的那段上面；照片縮到最小那段時先收起來。 */
   .results-canvas-row.showing-analysis .compare-card:not(.is-fullscreen) .recipe-tags{bottom:calc(var(--split-overlap) + var(--sp-2))}
   .results-canvas-row.showing-analysis.is-split-small .recipe-tags{display:none}
   /* 照片底部有一段壓在對話那張底下，處理中那層的轉環要在看得到的那段裡置中。 */

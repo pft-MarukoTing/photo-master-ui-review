@@ -718,7 +718,7 @@ export function WorkingCard({ done, now, since }: { done: string[]; now: string;
 
 const qaCache = new Map<string, { verdict: string; score: string; pass: boolean }>();
 
-// next：這是最新的一版、底下正掛著「看分析結果」時才講下一步。舊的結果卡不講，不然
+// next：這是最新的一版、底下正掛著「看美化項目」時才講下一步。舊的結果卡不講，不然
 // 往上捲會看到每一版都在叫人去按一顆已經不在的按鈕。
 // note：開了「詳細解說」時，後端對照原圖與成品寫的點評；沒有就不顯示。
 export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
@@ -782,7 +782,7 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
           <span class="chat-result-hint-wide">左側可比較 Before / After，也可從「美化紀錄」切換版本。</span>
           <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點左上的版本也能切換。</span>
         </p>
-        {next && <p class="chat-text">想回頭看分析結果或改項目，按「看分析結果」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
+        {next && <p class="chat-text">想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
       </figcaption>
     </figure>
   );

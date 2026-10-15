@@ -2883,7 +2883,7 @@ function SessionView(props: {
           // 對話不停在一句「再跟我說」。AI 問回來的話，底下是它給的答案，點了就
           // 當成使用者打的下一句送出，指著誰問的就繼續指著誰；答過了定格成紀錄，
           // 點過的那顆標起來。沒問問題時，調整中就把能打開的項目接在底下（AI 的
-          // 話會指著它們講）；修完一版時要按的「看分析結果／再美化」由 endActions 接在最後。
+          // 話會指著它們講）；修完一版時要按的「看美化項目／再美化」由 endActions 接在最後。
           const open = idx === messages.length - 1 && !props.pendingAsk;
           if (c.options?.length > 0) {
             const next = messages[idx + 1];
@@ -2990,14 +2990,14 @@ function SessionView(props: {
   // 一鍵美化 queues the render before analysis finishes.
   const renderQueued = !!photo.queued_render && (photo.status === "analyzing" || reframing);
 
-  // 這一步能按的「看分析結果／美化」接在最新一則 AI 的話底下，不另外在輸入框上面擺
+  // 這一步能按的「看美化項目／美化」接在最新一則 AI 的話底下，不另外在輸入框上面擺
   // 一排：話講到哪，按鈕就在哪。bar 是這幾顆上的字，問 AI 時一起送過去，它的
   // 回覆才指得出現在能按什麼。
   const enterAdjust = () => props.onPost({ type: "adjust_opened", plan: snapshotOf(photo.plan) });
   let bar: string[] = [];
   let actionChips: ComponentChildren = null;
   if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
-    // 調整中只放美化：項目在對話裡點，「看分析結果」再按一次會把這輪的起點重設掉。
+    // 調整中只放美化：項目在對話裡點，「看美化項目」再按一次會把這輪的起點重設掉。
     // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
     const label = fresh && !adjusting && !lastOpened ? "照建議直接美化" : "美化";
     const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
@@ -3017,19 +3017,19 @@ function SessionView(props: {
   } else if (versions.length && current) {
     actionChips = (
       <>
-        <Chip label="看分析結果" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label="看美化項目" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label="再美化" icon="redo" kind="primary" disabled={busy} onClick={() => setConfirmRerun(true)} />
       </>
     );
-    bar = ["看分析結果", "再美化"];
+    bar = ["看美化項目", "再美化"];
   } else if (lastOutcome?.card?.type === "render_failed") {
     actionChips = (
       <>
-        <Chip label="看分析結果" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
+        <Chip label="看美化項目" icon="pencil" disabled={busy || !ready} onClick={enterAdjust} />
         <Chip label="再試一次" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再試一次", "redo")} />
       </>
     );
-    bar = ["看分析結果", "再試一次"];
+    bar = ["看美化項目", "再試一次"];
   }
   // 掛在哪一則：最後一則畫得出來的 AI 訊息。直接套用自己寫進來的紀錄（auto）、
   // 不顯示的摘要都跳過；回答接在分析摘要／成品裡的話，就掛在那則上。
@@ -3231,7 +3231,7 @@ function SessionView(props: {
             {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
             {c.via !== "proposal" && !c.requested && (
               <UserMsg meta={clockLabel(m.created_at)}>
-                <ClickBubble icon={check ? "search" : "pencil"} label={check ? "幫我分析" : "看分析結果"} />
+                <ClickBubble icon={check ? "search" : "pencil"} label={check ? "幫我分析" : "看美化項目"} />
               </UserMsg>
             )}
             <AssistantMsg>
@@ -3393,7 +3393,7 @@ function SessionView(props: {
             <p class="chat-text chat-error">這次美化沒有成功：{err.text}。</p>
             {/* 被安全審查擋下的，同一張照片再試多半還是一樣。 */}
             {err.safety && idx === messages.length - 1 && !busy && (
-              <p class="chat-text">可以回到首頁換一張照片，或按「看分析結果」換個方式再試。</p>
+              <p class="chat-text">可以回到首頁換一張照片，或按「看美化項目」換個方式再試。</p>
             )}
             {endActions(idx)}
           </AssistantMsg>
@@ -3567,7 +3567,7 @@ function SessionView(props: {
   } else if (confirmRerun && photo.status === "ready" && adjusting) {
     working = (
       <AssistantMsg>
-        <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看分析結果？</p>
+        <p class="chat-text">這一輪還沒改任何設定，美化會用和上一版相同的設定重新產生，結果可能差不多。要直接美化，還是繼續看美化項目？</p>
         <div class="chat-choices">
           <Chip label="繼續看" icon="pencil" disabled={busy} onClick={() => setConfirmRerun(false)} />
           <Chip label="照原設定美化" icon="spark" kind="primary" disabled={busy} onClick={() => props.onRender("美化", "spark")} />
@@ -3578,14 +3578,14 @@ function SessionView(props: {
   } else if (confirmRerun && photo.status === "ready" && !adjusting) {
     working = (
       <AssistantMsg>
-        <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看分析結果？</p>
+        <p class="chat-text">設定和上一版一樣，再美化一次會用相同的設定重新產生，結果可能和上一版差不多。要直接再美化，還是先看美化項目？</p>
         <div class="chat-choices">
-          <Chip label="先看分析結果" icon="pencil" disabled={busy} onClick={enterAdjust} />
+          <Chip label="先看美化項目" icon="pencil" disabled={busy} onClick={enterAdjust} />
           <Chip label="照原設定再美化" icon="redo" kind="primary" disabled={busy} onClick={() => props.onRender("再美化", "redo")} />
         </div>
       </AssistantMsg>
     );
-    bar = ["先看分析結果", "照原設定再美化"];
+    bar = ["先看美化項目", "照原設定再美化"];
   }
   const screen: Screen = {
     bar,

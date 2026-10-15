@@ -3231,7 +3231,7 @@ window.PhotoAgentResults = (() => {
         els.recipeTags.appendChild(button);
       };
       if (!pending && portraitEntries.length) addControl("人像調整", "ap-review-tab-face", portraitEntries);
-      if (recipeItems.length) addControl("美化項目", "ap-review-tab-recipe", recipeItems);
+      if (recipeItems.length) addControl("畫面調整", "ap-review-tab-recipe", recipeItems);
       if (styleItems.length) addControl("美化風格", "ap-review-tab-style", styleItems);
       if (!pending && personalization) addControl("個人化", "ap-review-tab-prompt", personalization);
       fitRecipeTagsRow(els.recipeTags);
