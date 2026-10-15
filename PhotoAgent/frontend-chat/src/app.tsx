@@ -3260,7 +3260,7 @@ function SessionView(props: {
               : "已套用，開始新的一輪調整。"
             : check
               ? "好，這是我分析整張照片的結果："
-              : "好，回到分析結果，從上次的設定開始改。";
+              : "好，下面是目前的美化設定。";
         return (
           <>
             {/* requested：補跑分析等出來的，按「幫我分析」那一下在 analysis_requested 卡上了。 */}
