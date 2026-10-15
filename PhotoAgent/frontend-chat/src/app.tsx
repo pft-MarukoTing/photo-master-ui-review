@@ -3106,6 +3106,8 @@ function SessionView(props: {
         onClick={() => void props.onConfirmPeople([], undefined, undefined, i === 0 ? "visible_hair" : "cancel")} />)}
     </div></div>
   );
+  // 開始美化那顆鍵上現在寫的字（「美化」或「照建議直接美化」），話裡照著念。
+  const goLabel = bar.find((b) => b.includes("美化") && !b.includes("項目")) || "美化";
   const items = messages.map((m, idx) => {
     rendering = idx;
     const c = m.card;
@@ -3436,13 +3438,19 @@ function SessionView(props: {
         return (
           <AssistantMsg>
             <p class="chat-text">
-              已{reframeBy(c.aspect_ratio)}重新構圖，畫面建議裡的構圖也換成新的了。
+              已{reframeBy(c.aspect_ratio)}重新構圖。
               {idx === messages.length - 1 && !isBusy(photo)
                 ? editing
-                  ? "還想調整什麼就點上面的項目，改好按下面的「美化」我就開始。"
+                  ? cats.length
+                    ? `還想調整其他項目可以點下面的項目，或按「${goLabel}」我就開始。`
+                    : `按下面的「${goLabel}」我就開始。`
                   : "按下面的按鈕就會用新構圖美化。"
                 : ""}
             </p>
+            {/* 調整中構圖好了：跟一般回覆一樣把項目接在底下，美化接在最後。 */}
+            {idx === messages.length - 1 && !isBusy(photo) && editing && cats.length > 0 && (
+              <div class="chat-choices">{catChips()}</div>
+            )}
             {endActions(idx)}
           </AssistantMsg>
         );

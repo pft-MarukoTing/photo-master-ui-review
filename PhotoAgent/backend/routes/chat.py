@@ -74,6 +74,11 @@ TERMINAL_STATUSES = ("success", "error")
 # Render bases. Only the original photo for now; rendering on top of an
 # earlier version is meant to be added here without changing the route.
 RENDER_BASES = ("original",)
+# The next-step sentence a reply applied without asking ends on
+# (chat_assistant._next_step), and what replaces it while a new 長寬比 is
+# being reframed: nothing can be pressed until reframe_done.
+NEXT_STEP_RE = re.compile(r"(?:還想調整其他項目可以點下面的項目，或按|按下面的)「[^」]+」我就開始。$")
+REFRAMING_NOTE = "正在照新比例重新構圖，好了就可以接著調整或美化。"
 # 「重新構圖：…」, the retouch_recipe item a reframe replaces (util.ts REFRAME_RE).
 REFRAME_ITEM_RE = re.compile(r"^重新構圖\s*[:：]")
 # A fixed W:H 長寬比 can only be had by reframing, so its 重新構圖 item stays on.
@@ -1732,7 +1737,10 @@ def _apply_directly(user, session_id, photo, reply):
             "plan": {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}}))
     store.save_photo_plan(user, session_id, photo_id, plan)
     photo["plan"] = plan
-    _reframe_if_needed(user, session_id, photo)
+    if _reframe_if_needed(user, session_id, photo):
+        # 改了比例就先重新構圖，這時底下沒有能按的鍵：先不指下一步，構圖好了
+        # 那則（reframe_done）再把項目和美化接上。
+        reply["card"]["text"] = NEXT_STEP_RE.sub("", reply["card"]["text"]) + REFRAMING_NOTE
     return messages
 
 
