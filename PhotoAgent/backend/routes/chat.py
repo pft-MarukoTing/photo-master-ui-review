@@ -1722,6 +1722,8 @@ PROMPT_REVIEW_DROPPED_REPLY = "不好意思，這個我幫不上忙。想怎麼�
 PROMPT_REVIEW_HISTORY_MAX = 20
 PROMPT_REVIEW_PEOPLE_MAX = 20
 PROMPT_REVIEW_LABEL_MAX_LEN = 40
+# 個人化需求一個人一段，加上沒指定對象的那段。
+PROMPT_REVIEW_SECTIONS_MAX = PROMPT_REVIEW_PEOPLE_MAX + 1
 
 
 @chat_bp.post("/prompt-review")
@@ -1759,9 +1761,16 @@ def prompt_review():
         raise _RequestError(
             f"people must be a list of at most {PROMPT_REVIEW_PEOPLE_MAX} non-empty strings "
             f"of at most {PROMPT_REVIEW_LABEL_MAX_LEN} characters")
+    sections = body.get("sections", [])
+    if (not isinstance(sections, list) or len(sections) > PROMPT_REVIEW_SECTIONS_MAX
+            or not all(isinstance(x, dict) and isinstance(x.get("who"), str) and isinstance(x.get("text"), str)
+                       and len(x["who"]) <= PROMPT_REVIEW_LABEL_MAX_LEN * PROMPT_REVIEW_PEOPLE_MAX
+                       and len(x["text"]) <= USER_PROMPT_MAX_LEN for x in sections)):
+        raise _RequestError(f"sections must be a list of at most {PROMPT_REVIEW_SECTIONS_MAX} {{who, text}} strings")
     try:
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_REVIEW, "line": text.strip(), "prompt": prompt,
+            "sections": [{"who": x["who"], "text": x["text"]} for x in sections],
             "history": history, "people": [p.strip() for p in people]})
     except Exception:
         current_app.logger.exception("chat prompt review failed")
@@ -1799,6 +1808,15 @@ def prompt_review():
         out["line"] = answer["line"][:USER_PROMPT_MAX_LEN]
         if answer["persons"]:
             out["persons"] = answer["persons"]
+    if accepted and answer.get("merged"):
+        # The sections this line took part of, with what is left of each
+        # (`section` is its index in the request's `sections`). The page puts
+        # the line in its own section; the reply already says so.
+        out["merged"] = [{"section": m["section"], "text": m["text"][:USER_PROMPT_MAX_LEN]} for m in answer["merged"]]
+        if answer.get("withdrawn"):
+            # The line only took an earlier wish back: the page leaves it out of
+            # the list, so the item is simply gone.
+            out["withdrawn"] = True
     if accepted and answer.get("aspect_ratio") in chat_assistant.REVIEW_RATIOS:
         # A wish that names a shape (「做成限動」) sets the page's 長寬比 to it,
         # so the analysis plans for that shape instead of picking its own.

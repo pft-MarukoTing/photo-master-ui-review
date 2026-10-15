@@ -958,7 +958,7 @@ REVIEW_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "asked_ratio"],
+        "required": ["verdict", "reply", "line", "options", "later", "aspect_ratio", "asked_ratio", "merged", "withdraw"],
         "properties": {
             "verdict": {"type": "string", "enum": ["keep", "clarify", "drop", "render", "analyze", "offer", "answer"]},
             "reply": {"type": "string"},
@@ -967,6 +967,10 @@ REVIEW_SCHEMA = {
             "later": {"type": "boolean"},
             "aspect_ratio": {"type": "string", "enum": ["", *REVIEW_RATIOS]},
             "asked_ratio": {"type": "string"},
+            "merged": {"type": "array", "items": {
+                "type": "object", "additionalProperties": False, "required": ["section", "text"],
+                "properties": {"section": {"type": "integer"}, "text": {"type": "string"}}}},
+            "withdraw": {"type": "boolean"},
         },
     },
 }
@@ -982,7 +986,7 @@ a user-confirmed identity, drop a position to match an accessory, or assign icon
 The later preview mapping step will reconcile the complete original reference against its roster.
 
 VERDICT
-- "keep" -- the line asks for something to be done to this photo: a person's hair, eyes, gaze, expression, skin, body, pose, clothing or accessories; the background, the scene, the lighting, the colour, the crop or the style. Taking things out of the scene, tidying it up or putting something into it is a wish about the photo like any other (「把桌上的垃圾都移掉」、「去掉背景的電線」、「幫我加個背景」) -- it reads like an errand in the real world, but it is an edit to this image. Keep it even when the tool would normally handle it with a switch (閉眼, 視線, 髮絲, 笑容, 身形) -- on this page every wish is just words. Keep it even if it repeats a wish already in LINES SO FAR for a different person, or changes one the user wrote earlier: the user can take lines out themselves, and a later wish simply wins. When you are unsure, keep.
+- "keep" -- the line asks for something to be done to this photo: a person's hair, eyes, gaze, expression, skin, body, pose, clothing or accessories; the background, the scene, the lighting, the colour, the crop or the style. Taking things out of the scene, tidying it up or putting something into it is a wish about the photo like any other (「把桌上的垃圾都移掉」、「去掉背景的電線」、「幫我加個背景」) -- it reads like an errand in the real world, but it is an edit to this image. Keep it even when the tool would normally handle it with a switch (閉眼, 視線, 髮絲, 笑容, 身形) -- on this page every wish is just words. Keep it even if it repeats a wish already in LINES SO FAR for a different person, or changes one the user wrote earlier: a later wish wins, and THE "merged" FIELD takes the earlier one out. When you are unsure, keep.
 - "clarify" -- the wish is about this photo, but the user's own words leave out something only they can say. Only two cases:
   (a) Who. PEOPLE IN PHOTO has more than one person, the line did not start with a person, and the line is about one person but the words cannot tell which: 「他」、「她」、「這個人」, or 「另一位」、「旁邊那個」 when there are three people or more. Words that describe the person (「男孩」、「媽媽」、「戴眼鏡的」、「左邊的」) say who -- the editor matches them to a face later, so they are never this case. Neither is a line that names nobody and carries on from the wish just before it (「眼睛也要張開」、「還有頭髮弄蓬」 right after 「把男孩的帽子拿掉」): it is the same person -- keep it and write the person into "line". A wish for everyone (「大家都要笑」) or about the scene is not this case either.
   (b) What. The line asks to change something into something else and says nothing at all about what it should become (「換個背景」、「頭髮換顏色」、「衣服換一件」). If the line says anything about the result -- a colour, a material, a style, a place, even one word (「換成白底」、「換成海邊」、「換深色的」) -- it is complete: keep it. Amounts and strength are never this case (「皮膚白一點」、「瘦一點」 are complete) -- the editor picks those.
@@ -1004,6 +1008,20 @@ Every wish in the list has to make sense on its own: the editor may read it apar
 - If the earlier wish starts with 「照片中從左邊數來第 N 位：」 tags (one, or several joined by 「、」) and NEW LINE is about the same people, start "line" with those same tags. Otherwise no tag.
 - If NEW LINE already stands on its own, or it is not kept, "line" is "".
 
+THE "merged" FIELD
+LINES SO FAR is the 個人化需求 as it stands, in numbered sections: one per person, headed by their 「照片中從左邊數來第 N 位」 tag (a wish for several people is written in each one's section), and one headed 「未指定對象」 for wishes with no one tapped. The user may have edited a section by hand -- read each one as text, not as separate lines. When the verdict is "keep" and NEW LINE (as written out in "line", if any) asks for something a section also asks for, about the same person or the same part of the scene, and the two cannot both be done, the user has changed their mind, and the list must never carry both. "merged" then lists each section that has to change: {"section": its number, "text": that section with every part NEW LINE takes over taken out}. Write "text" without the heading, and do not add NEW LINE to it -- the page puts NEW LINE in its own section.
+- Which sections: when NEW LINE (or "line") starts with 「照片中從左邊數來第 N 位」 tags, it is about those people only -- check only the section headed by exactly those tags. When it starts with no tag, it is about everyone in the photo or about the scene -- check every section, each person's included, and rewrite each one it conflicts with: [1] 照片中從左邊數來第 1 位：皮膚曬黑、瘦臉 then 「所有人皮膚都美白」 -> {"section": 1, "text": "瘦臉"}.
+- Take out only what NEW LINE takes over. Everything else in the section stays word for word, in its order: [2] 未指定對象：把門後的女生去掉；把牆壁改成紅磚牆；牆壁換成白牆 then 「把牆壁改成木頭牆」 -> {"section": 2, "text": "把門後的女生去掉"}. When only part of an entry is taken over, keep the rest of it and the words saying who it is about: 「左邊男生的外套換成黃色、戴帽子」 then 「左邊男生的外套換成藍色」 -> 「左邊男生戴帽子」. When everything in a section is taken over, its "text" is "".
+- Wishes about different people or different parts of the scene, and wishes that can both be done (「戴帽子」 and 「戴太陽眼鏡」), are not a conflict.
+- No conflict, or any other verdict: []. Never use "merged" to tidy, reorder or reword a section that has no conflict.
+
+THE "withdraw" FIELD
+Sometimes NEW LINE does not ask for anything new: it only takes back a wish in LINES SO FAR -- leave that thing as it is, do not do it after all (「帽子拿掉」 then 「帽子留著」 or 「帽子不用拿掉了」; 「瘦臉」 then 「臉不用瘦」). Leaving the photo as it was is what happens anyway once the earlier wish is gone, so the list must not carry NEW LINE either: "merged" takes the earlier wish out as above, and "withdraw" is true -- the item simply leaves the list. The reply then says which wish will not be done, e.g. 「好，帽子就不拿掉了。」.
+- When NEW LINE takes one wish back and also asks for something else (「帽子留著，衣服換成藍色」), "withdraw" is false and "line" is only the part that asks for something (「衣服換成藍色」), with its people.
+- A wish that changes an earlier one into something else (「帽子拿掉」 then 「帽子換成紅色」) asks for something new: "withdraw" is false.
+- A line that keeps something as it is with nothing in LINES SO FAR to take back (「帽子留著」 with no wish about the hat) is a wish of its own: "withdraw" is false.
+- Any other case: false.
+
 THE "later" FIELD
 Some questions can only be answered once the photo is analyzed: how to retouch this photo, what could be fixed or what would suit it (「這張要怎麼修？」、「適合什麼風格？」), words to go with this photo (a title, ad copy, a caption), and questions about what it shows that PEOPLE IN PHOTO cannot answer. When you offer 分析 for one of them, "later" is true: whichever of 分析 or 一鍵美化 the user then starts, NEW LINE goes along to the editor, and the editor answers it as soon as the photo is done -- after 分析, or after the retouch for 一鍵美化 -- so the user does not have to ask again. Word the promise so it holds for both: 「分析或美化好之後，我就…」, never 「分析完我就…」. Everything else is false: a line that only sounds ready to go (「這樣就好」、「然後呢？」) asks nothing, and an offer that leads with 一鍵美化 is for a user who is ready to go, with no question left to answer.
 
@@ -1017,7 +1035,7 @@ OPTIONS
 
 REPLY
 - Traditional Chinese (Taiwan), plain everyday words a Taiwanese user would say (「跟我說」, not 「打給我」 -- that sounds like a phone call), one short sentence, two at the most ("answer" may take three).
-- "keep": say you have taken it down, e.g. 「好，這個我記下來了。」, and nothing else -- the page adds the next step itself. Never 「確認後套用」, never mention a panel, a setting or a field, and do not read the line back to the user -- they can see it.
+- "keep": say you have taken it down, e.g. 「好，這個我記下來了。」, and nothing else -- also when "merged" lists a section: the page says the list was updated -- the page adds the next step itself. Never 「確認後套用」, never mention a panel, a setting or a field, and do not read the line back to the user -- they can see it.
 - "clarify": the question itself, short. For case (a) ask which person and say they can tap that person's 頭像 below and type it again, e.g. 「你說的是哪一位？點下面的頭像選人就好。」. For case (b) ask what it should become, e.g. 「想換成什麼顏色？」.
 - "render": say you are starting 一鍵美化 now, e.g. 「好，馬上幫你一鍵美化。」.
 - "analyze": say you are analyzing the photo now, e.g. 「好，我先幫你分析這張照片。」.
@@ -1209,8 +1227,20 @@ def _offer_question(reply, options):
     return body[:cut + 1] + offer + body[end + 1:]
 
 
-def review_line(line, prompt, history=(), people=(), *, model=None):
-    """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio} for one line typed on the upload page.
+MERGED_NOTE = "前面跟這句衝突的需求，已經照這句改掉了。"
+WITHDRAWN_REPLY = "好，前面那項需求就不做了。"
+
+
+UNASSIGNED = "未指定對象"
+
+
+def _sections_text(sections):
+    """LINES SO FAR as the model reads it: one numbered section per person."""
+    return "\n".join(f"[{i}] {s['who'] or UNASSIGNED}：{s['text']}" for i, s in enumerate(sections, 1))
+
+
+def review_line(line, prompt, history=(), people=(), *, sections=(), model=None):
+    """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio, merged} for one line typed on the upload page.
 
     `prompt` is the list as it stands -- the same string the page shows and
     will send as user_prompt -- so the model can tell a fresh wish from one
@@ -1228,12 +1258,22 @@ def review_line(line, prompt, history=(), people=(), *, model=None):
     with `options` to answer it; `later` that the offer is to analyze first
     and answer the line itself once that is done. `aspect_ratio` is the
     長寬比 a kept line asks for (a REVIEW_RATIOS value), for the page to set,
-    and "" otherwise."""
+    and "" otherwise.
+
+    `sections` is the list the way the page keeps it: [{who, text}], one per
+    person tapped (`who` their tags) and one with `who` "" for the wishes with
+    no one tapped; without it, `prompt` is read as that one section. `merged`
+    is [{section, text}] for each section a kept line takes part of (same
+    person or part of the scene, cannot both be done): `section` its index in
+    `sections`, `text` what is left of it -- the page puts the line itself in
+    its own section -- and [] otherwise."""
     chip = REVIEW_CHIP_STARTS.get(re.sub(r"[\s，。！？!?、.]+", "", line))
     if chip:
         return {"kept": False, "start": chip, "ask": False, "offer": False, "later": False,
                 "reply": "", "line": "", "persons": [], "options": [], "aspect_ratio": ""}
     history = list(history)
+    sections = [{"who": s["who"].strip(), "text": s["text"].strip()} for s in sections if s["text"].strip()] or (
+        [{"who": "", "text": prompt.strip()}] if prompt.strip() else [])
     # The tap carries the people the question was about; the option itself does not.
     tapped = _ratio_answer(_split_people(line.strip(), people)[1], history)
     if tapped:
@@ -1251,7 +1291,7 @@ def review_line(line, prompt, history=(), people=(), *, model=None):
         TOOL_GUIDE,
         "RATIOS:\n" + "\n".join(f"{v}: {label}" for v, label in REVIEW_RATIOS.items()),
         "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else "（沒有偵測到人臉）"),
-        f"LINES SO FAR:\n{prompt.strip() or '（還沒有）'}",
+        f"LINES SO FAR:\n{_sections_text(sections) or '（還沒有）'}",
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
         f"NEW LINE:\n{line}",
     ])
@@ -1295,10 +1335,24 @@ def review_line(line, prompt, history=(), people=(), *, model=None):
     # 說了比例的需求要跟著改「設定」的長寬比：不然 AI 建議照樣跑，分析還可能
     # 建議相反的裁切，需求跟設定互相打架。
     ratio = result.get("aspect_ratio") if kept and result.get("aspect_ratio") in REVIEW_RATIOS else ""
+    # 後講的蓋掉先講的：同一個人、同一件事不能兩個都做，模型把整段需求重寫一
+    # 次（手改過的那段字也一樣），頁面整段換掉，回話裡講一聲。跟原本一樣就不算。
+    merged = []
+    for m in (result.get("merged") if kept and verdict == "keep" and isinstance(result.get("merged"), list) else []):
+        i = m.get("section") if isinstance(m, dict) else None
+        if (type(i) is int and 1 <= i <= len(sections) and isinstance(m.get("text"), str)
+                and m["text"].strip() != sections[i - 1]["text"] and all(x["section"] != i - 1 for x in merged)):
+            merged.append({"section": i - 1, "text": m["text"].strip()})
+    # 只是把前面某項撤回（「帽子拿掉」→「帽子留著」）：前面那項拿掉就是照原樣，
+    # 這句也不用進清單，項目直接消失。前面沒東西可撤的話，這句就是一般的需求。
+    withdrawn = bool(merged) and result.get("withdraw") is True
+    replaced = MERGED_NOTE if merged and not withdrawn else ""
+    if withdrawn and not reply:
+        reply = WITHDRAWN_REPLY
     if kept and "？" not in reply and "?" not in reply:
-        reply = (reply or KEPT_REPLY) + _ratio_note(ratio) + KEPT_NEXT
-    elif ratio:
-        reply = _ratio_note(ratio) + reply
+        reply = (reply or KEPT_REPLY) + replaced + _ratio_note(ratio) + KEPT_NEXT
+    elif ratio or replaced:
+        reply = replaced + _ratio_note(ratio) + reply
     wish = result.get("line").strip() if kept and isinstance(result.get("line"), str) else ""
     persons, wish = _split_people(wish, people)
     if not persons and wish == _split_people(line.strip(), people)[1]:
@@ -1321,4 +1375,6 @@ def review_line(line, prompt, history=(), people=(), *, model=None):
         "persons": persons if wish else [],
         "options": options if ask or offer else [],
         "aspect_ratio": ratio,
+        "merged": merged,
+        "withdrawn": withdrawn,
     }

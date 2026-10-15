@@ -37,7 +37,7 @@ import {
 import { facePeople, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
 import { useSubjectPreview } from "./subject-preview";
 import { usePreviewConversation } from "./preview-conversation";
-import type { PreviewReplyEvent, PreviewWish, PreviewConversationResult } from "./preview-conversation";
+import type { PreviewClause, PreviewReplyEvent, PreviewWish, PreviewConversationResult } from "./preview-conversation";
 import { Icon } from "./icons";
 import { CASE_PREFIX, ConfirmModal, Gallery, Header, HistoryDrawer, HomeIntro, type GallerySelection, type GalleryTab } from "./home";
 import { handoffPatch, takeHandoff, writeHandoff } from "./handoff";
@@ -111,6 +111,9 @@ type Note = {
   // Freeze presentation references independently of executable person bindings.
   replyPeople?: FaceRef[];
   resolvedWish?: string;
+  // 沒點頭像的句子，preview 對完人之後，每一段動作各自落在哪幾位身上（沒有人
+  // 的就是空的）。字是去掉「左邊的女孩」這種指稱的動作本身，誰是誰由頭像表示。
+  placed?: { persons: PrePerson[]; text: string }[];
   withdrawalText?: string;
   text: string;
   persons: PrePerson[];
@@ -139,15 +142,31 @@ type Note = {
   ratioBack?: boolean;
 };
 
-function resolvedNotes(notes: Note[], result: PreviewConversationResult): Note[] {
+// 句子裡指人的那段拿掉，剩下要做的事：「把左側女孩的頭髮染成金髮」→「把頭髮染成金髮」。
+function clauseAction(c: PreviewClause): string {
+  const at = c.referent ? c.text.indexOf(c.referent) : -1;
+  if (at < 0) return c.text;
+  const before = c.text.slice(0, at), after = c.text.slice(at + c.referent.length).replace(/^的/, "");
+  // 指稱只抓到好幾位裡的第一位（後面還接著「、右邊那位」），切不乾淨就整句照原樣。
+  if (!after.trim() || /^[、，,和跟與及]/.test(after)) return c.text;
+  return /^(?:請|麻煩|幫我|請幫我)*把?$/.test(before) ? (before.endsWith("把") ? "把" : "") + after : before + after;
+}
+
+function resolvedNotes(notes: Note[], result: PreviewConversationResult, who: (ids: string[]) => PrePerson[]): Note[] {
   return notes.map((note, index) => {
     const clauses = result.clauses.filter(c => c.request_id === `note-${index}`);
     if (!clauses.length || clauses.some(c => c.edit_scope_pending || ["pending", "ambiguous", "unmatched"].includes(c.status))) return note;
     const effective = clauses.filter(c => ["matched", "not_person"].includes(c.status) && c.scope !== "query" && !c.edit_scope_pending);
     const text = effective.map(c => c.display_text || c.text).join("；");
     const withdrawalText = text || Array.from(new Set(clauses.map(c => c.cancelled_from?.text || c.display_text).filter(Boolean))).join("；") || note.withdrawalText;
-    if (note.resolvedWish === text && note.withdrawalText === withdrawalText) return note;
-    return { ...note, resolvedWish: text, withdrawalText };
+    const placed = effective.map(c => {
+      const ids = c.display_target_ids?.length ? c.display_target_ids : c.target_ids.length ? c.target_ids : c.protected_ids;
+      const persons = who(ids);
+      return persons.length === ids.length && ids.length ? { persons, text: clauseAction(c) } : { persons: [], text: c.display_text || c.text };
+    });
+    const samePlaced = JSON.stringify(note.placed?.map(x => [x.persons.map(faceRef), x.text])) === JSON.stringify(placed.map(x => [x.persons.map(faceRef), x.text]));
+    if (note.resolvedWish === text && note.withdrawalText === withdrawalText && samePlaced) return note;
+    return { ...note, resolvedWish: text, withdrawalText, placed };
   });
 }
 
@@ -168,6 +187,16 @@ function previewWish(n: Note, index: number): PreviewWish {
       ? n.persons.flatMap(p => p.preview_person_id ? [p.preview_person_id] : []) : [] };
 }
 
+// 一段直接指定給某幾位的需求交給 preview：手改或模型重寫過的那一段整段，或一句
+// 指了好幾位、其中有人的段已經改過，剩下那幾位的部分。人照樣指到那幾位，改字也
+// 不會把指定的人弄丟；沒有 preview 的人就把誰寫在字裡。
+function directWish(id: string, persons: PrePerson[], text: string): PreviewWish {
+  const ids = persons.flatMap(p => p.preview_person_id ? [p.preview_person_id] : []);
+  const line = ids.length && ids.length === persons.length ? text : whoPrefix(persons) + text;
+  return { wish_id: id, text: line, source_text: line,
+    selection_source: ids.length ? "user_selection" : "none", target_ids: ids };
+}
+
 const keptNotes = (ns: Note[]) => ns.filter((n) => n.kept !== false && !n.dropped && n.resolvedWish !== "");
 // Only a line that is actually in 個人化需求 can be taken out of it: 清除所有需求
 // sweeps the card, and the card never held the lines the AI turned away.
@@ -175,7 +204,8 @@ const dropNotes = (ns: Note[], gone: (n: Note) => boolean) => {
   const batch = ns.reduce((m, n) => (n.dropped ? Math.max(m, n.dropped.batch + 1) : m), 0);
   const order = nextDisplayOrder();
   return ns.map((n) =>
-    n.kept !== false && !n.dropped && n.resolvedWish !== "" && gone(n) ? { ...n, dropped: { after: ns.length, batch, order, text: n.withdrawalText || wishText(n) } } : n,
+    n.kept !== false && !n.dropped && n.resolvedWish !== "" && gone(n)
+      ? { ...n, dropped: { after: ns.length, batch, order, text: n.withdrawalText || wishText(n) } } : n,
   );
 };
 
@@ -256,43 +286,58 @@ function laterNote(ns: Note[]): Note | null {
   return last?.offered?.later ? last : null;
 }
 
-// 一個人一條：同一張臉講了三句就併成一條，照第一次提到的順序排。後端的
-// BUILD user_prompt FROM SCRATCH 要的就是這個形狀（一條裡面用「、」接，條跟條
-// 之間用「；」），上傳頁面自己先併好，模型、畫面、送出去的 user_prompt 看到的
-// 才是同一份。沒指定對象的句子各自成一條——它們講的不見得是同一件事。同時點了
-// 好幾位的句子，就是那一組人一條。
-type NoteGroup = { persons: PrePerson[]; notes: Note[] };
-
-function noteGroups(ns: Note[]): NoteGroup[] {
-  const out: NoteGroup[] = [];
-  const byRef = new Map<string, NoteGroup>();
-  for (const n of ns) {
-    const ref = n.persons.length ? facesRef(n.persons) : null;
-    const seen = ref ? byRef.get(ref) : undefined;
-    if (seen) {
-      seen.notes.push(n);
-      continue;
-    }
-    const group: NoteGroup = { persons: n.persons, notes: [n] };
-    if (ref) byRef.set(ref, group);
-    out.push(group);
-  }
-  return out;
-}
-
-const groupLine = (g: NoteGroup) => g.notes.every(n => n.resolvedWish !== undefined)
-  ? g.notes.map(wishText).join("；") : whoPrefix(g.persons) + g.notes.map(wishText).join("、");
-const promptText = (ns: Note[]) => noteGroups(ns).map(groupLine).join("；");
-
-// 上傳頁面的個人化需求跟 session 裡一樣是一整段字，使用者可以直接改。改過之後
-// 那段字就是準：`upTo` 之前的句子都已經寫在 `text` 裡（或被使用者刪掉了），之後
-// 才收下的句子接在後面。
+// 個人化需求分段：一個人一段，沒指定對象的全部一段，照第一次提到的順序排。一句
+// 指了好幾位（點了好幾個頭像，或「大家」被 preview 對到每一位），就拆進每個人
+// 自己那段，之後再針對其中一位改，才比得出衝突。段裡只寫動作，是誰由段首的頭像
+// 表示，不會「名字＋內容」一句一句疊上去。後端的 BUILD user_prompt FROM SCRATCH 要
+// 的就是這個形狀（一段裡面用「、」接，段跟段之間用「；」），上傳頁面自己先併好，
+// 模型、畫面、送出去的 user_prompt 看到的才是同一份。
+//
+// 每一段都可以整段改（使用者手改，或新的一句跟它衝突時模型重寫）。改過之後那段
+// 字就是準：`upTo` 之前屬於這段的句子都已經寫在 `text` 裡（或被刪掉了），之後才
+// 收下的句子接在後面。各段各改各的，指定的人跟著段走，不會因為改字就掉了。
 type PromptEdit = { text: string; upTo: number };
+type PromptEdits = Record<string, PromptEdit>;
+type Section = { key: string; persons: PrePerson[]; text: string; first: number };
+type NotePart = { key: string; persons: PrePerson[]; text: string };
 
-function notesPrompt(ns: Note[], edit: PromptEdit | null) {
-  if (!edit) return promptText(keptNotes(ns));
-  return [edit.text, promptText(keptNotes(ns.slice(edit.upTo)))].filter(Boolean).join("；");
+// 一句需求落在哪幾段、各段寫什麼。
+function noteParts(n: Note): NotePart[] {
+  const own = n.wish ?? n.text;
+  if (n.persons.length) return n.persons.map(p => ({ key: faceRef(p), persons: [p], text: own }));
+  if (n.placed?.length) return n.placed.flatMap(x => x.persons.length
+    ? x.persons.map(p => ({ key: faceRef(p), persons: [p], text: x.text })) : [{ key: "", persons: [], text: x.text }]);
+  return [{ key: "", persons: [], text: own }];
 }
+const liveNote = (n: Note) => n.kept !== false && !n.dropped && n.resolvedWish !== "";
+const coveredBy = (edits: PromptEdits, key: string, i: number) => !!edits[key] && i < edits[key].upTo;
+
+function promptSections(ns: Note[], edits: PromptEdits = {}): Section[] {
+  const out = new Map<string, { persons: PrePerson[]; first: number; parts: string[] }>();
+  ns.forEach((n, i) => {
+    const live = liveNote(n);
+    for (const part of noteParts(n)) {
+      const covered = coveredBy(edits, part.key, i);
+      if (!live && !covered) continue;
+      let sec = out.get(part.key);
+      if (!sec) out.set(part.key, sec = { persons: part.persons, first: i, parts: [] });
+      if (!covered && !sec.parts.includes(part.text)) sec.parts.push(part.text);
+    }
+  });
+  return [...out.entries()].flatMap(([key, sec]) => {
+    const parts = [edits[key]?.text.trim() || "", ...sec.parts].filter(Boolean);
+    const text = parts.join(key ? "、" : "；");
+    return text ? [{ key, persons: sec.persons, text, first: sec.first }] : [];
+  });
+}
+
+// 一段在 user_prompt 裡的樣子。指定了人的那段前面寫上是誰，段裡不能有「；」，
+// 不然後面那半句就不知道是在講誰。
+const sectionLine = (sec: Section) => sec.key
+  ? whoPrefix(sec.persons) + sec.text.replace(/；/g, "、") : sec.text;
+
+const notesPrompt = (ns: Note[], edits: PromptEdits = {}) =>
+  promptSections(ns, edits).map(sectionLine).join("；");
 
 // 上傳頁面的整段對話，給模型看的版本：它才分得出這句是在回答它剛問的，還是另一
 // 個新需求。使用者拿掉需求那一輪，模型看到的是 AI 回的那句。
@@ -375,7 +420,7 @@ function openAsk(ns: Note[]): Note | null {
 // and the analysis will have one; the box is what survives the handover, so the
 // pick travels alongside the prompt as plan.prompt_faces and the server settles
 // the name once it has an analysis.
-const groupFaces = (g: NoteGroup): PromptFace[] =>
+const groupFaces = (g: { persons: PrePerson[] }): PromptFace[] =>
   g.persons.map((p) => ({ box: p.box, ref: faceRef(p), where: p.where,
     ...(p.preview_person_id ? { preview_person_id: p.preview_person_id,
       preview_job_id: p.preview_job_id, source_sha256: p.source_sha256 } :
@@ -477,8 +522,8 @@ export function App() {
   // per message. Together they become the new photo's plan.user_prompt, so the
   // 個人化需求 card in the session opens with them.
   const [notes, setNotes] = useState<Note[]>([]);
-  // The user's own edit of the 個人化需求 text, once there is one.
-  const [preEdit, setPreEdit] = useState<PromptEdit | null>(null);
+  // The user's (or the model's) edit of each 個人化需求 section, by its key (faceRef, or "" for 未指定).
+  const [segEdits, setSegEdits] = useState<PromptEdits>({});
   const [samplesOpen, setSamplesOpen] = useState(false);
   // 看大圖：上傳頁對話裡那張照片，或手機上頂端的照片列。
   const [viewing, setViewing] = useState(false);
@@ -545,15 +590,15 @@ export function App() {
   // 編輯時刪掉），長寬比就回到 AI 建議。之後使用者在「設定」自己改過的不動。
   useEffect(() => {
     if (!caps) return;
-    const prompt = notesPrompt(notes, preEdit);
-    const live = (n: Note) => n.kept !== false && !n.dropped && !!wishText(n) && prompt.includes(wishText(n));
+    const prompt = notesPrompt(notes, segEdits);
+    const live = (n: Note) => liveNote(n) && noteParts(n).some((x) => !!x.text && prompt.includes(x.text));
     const gone = notes.filter((n) => n.ratio && !n.ratioBack && !live(n));
     if (!gone.length) return;
     const current = settings?.aspect_ratio;
     const back = gone.some((n) => n.ratio === current) && !notes.some((n) => n.ratio === current && live(n));
     setNotes((ns) => ns.map((n) => (!gone.includes(n) ? n : back && n.ratio === current ? { ...n, ratioBack: true } : { ...n, ratio: undefined })));
     if (back) setSettings((s) => s && { ...s, aspect_ratio: caps.render.defaults.aspect_ratio });
-  }, [notes, preEdit]);
+  }, [notes, segEdits]);
   useEffect(() => {
     const samePhoto = reviewedSource.current === preFull;
     reviewedSource.current = preFull;
@@ -561,10 +606,11 @@ export function App() {
     setPreAsk(null);
     // A model change keeps same-photo instructions as ordinary geometry;
     // leaving preview temporarily for submission must not clear any notes.
-    setNotes((n) => n.some((x) => x.persons.length) ? n.map((x) => ({
+    setNotes((n) => n.some((x) => x.persons.length || x.placed) ? n.map((x) => ({
       ...x, persons: samePhoto ? x.persons.map(withoutPreviewIdentity) : [],
+      placed: samePhoto ? x.placed?.map((y) => ({ ...y, persons: y.persons.map(withoutPreviewIdentity) })) : undefined,
     })) : n);
-    if (!samePhoto) setPreEdit(null);
+    if (!samePhoto) setSegEdits({});
   }, [selectionIdentity]);
   // Feature-off alone uses Flask detection. The successful preview path must
   // never issue a second /detect-faces request while creating the worker job.
@@ -613,16 +659,33 @@ export function App() {
           preview_job_id: preview.result.preview_job_id, source_sha256: preview.result.source_sha256 } : {}) }] : [];
     });
 
-  const previewWishes: PreviewWish[] = preEdit ? [
-    ...(preEdit.text ? [{ wish_id: "edited", text: preEdit.text, target_ids: [] }] : []),
-    ...notes.slice(preEdit.upTo).flatMap((n, i) => n.kept === true && !n.dropped && n.resolvedWish !== ""
-      ? [previewWish(n, i + preEdit.upTo)] : []),
-  ] : notes.flatMap((n, i) => (n.kept === true || n === openAsk(notes) && n.asked && !n.asked.options.length) && !n.dropped && n.resolvedWish !== ""
-    ? [previewWish(n, i)] : []);
+  const preSections = promptSections(notes, segEdits);
+  // 改過的段整段送一次（在那段第一句的位置）；一句有一部分落在改過的段，就只送
+  // 其他人的那部分，不然改掉的內容又會從原句跑回來。
+  const editedSent = new Set<string>();
+  const previewWishes: PreviewWish[] = notes.flatMap((n, i) => {
+    const parts = noteParts(n);
+    const out: PreviewWish[] = [];
+    for (const part of parts) {
+      const edit = segEdits[part.key];
+      if (!coveredBy(segEdits, part.key, i) || editedSent.has(part.key)) continue;
+      editedSent.add(part.key);
+      const sec = preSections.findIndex(x => x.key === part.key);
+      if (sec >= 0 && edit.text.trim()) out.push(part.key
+        ? directWish(`edited-${i}-${sec}`, part.persons, edit.text.trim())
+        : { wish_id: `edited-${i}-${sec}`, text: edit.text.trim(), source_text: edit.text.trim(), selection_source: "none", target_ids: [] });
+    }
+    const wanted = (n.kept === true || n === openAsk(notes) && n.asked && !n.asked.options.length) && !n.dropped && n.resolvedWish !== "";
+    if (!wanted) return out;
+    const rest = parts.filter(x => !coveredBy(segEdits, x.key, i));
+    if (rest.length === parts.length) return [...out, previewWish(n, i)];
+    return [...out, ...rest.map((x, k) => x.key ? directWish(`note-${i}-part-${k}`, x.persons, x.text)
+      : { wish_id: `note-${i}-part-${k}`, text: x.text, source_text: x.text, selection_source: "none" as const, target_ids: [] })];
+  });
   const bridge = usePreviewConversation({ identity: preview.identity ? `${preview.identity}#${sourceGeneration}` : null, preview: preview.result,
     photoKey: `${selectionIdentity}#${sourceGeneration}`, people: prePickable,
     model: settings?.analysis_model || "", history: reviewHistory(notes), historyWithEvents: events => reviewHistory(notes, [...events, ...settingsEvents]), wishes: previewWishes,
-    prompt: notesPrompt(notes, preEdit), turns: conversation(notes).length,
+    prompt: notesPrompt(notes, segEdits), turns: conversation(notes).length,
     busy: !!preAsk || busy, blocked: !!openAsk(notes)?.asked?.options.length || !!renderAsk,
     active: phase === "chat" && !submitting && previewEnabled });
   // A completed presentation opens the picker only for its exact preview generation.
@@ -638,7 +701,10 @@ export function App() {
     if (!mapped) return;
     setNotes(current => {
       let changed = false;
-      const projected = resolvedNotes(current, mapped);
+      const projected = resolvedNotes(current, mapped, ids => preRefs(ids.flatMap(id => {
+        const p = prePickable.find(q => q.preview_person_id === id);
+        return p ? [p.subjectIndex] : [];
+      })));
       if (projected.some((n,i) => n !== current[i])) changed = true;
       const updated = projected.map((n, i) => {
         const clauses = mapped.clauses.filter(c => c.request_id === `note-${i}`);
@@ -864,7 +930,7 @@ export function App() {
     setSource(null);
     setNotes([]);
     preDraft.current = "";
-    setPreEdit(null);
+    setSegEdits({});
     setPrePointed([]);
     setPreAsk(null);
     setRenderAsk(null);
@@ -969,7 +1035,7 @@ export function App() {
       return;
     }
     setSamplesOpen(false);
-    const typed = notes.length > 0 || !!preEdit || !!preAsk || !!preDraft.current.trim();
+    const typed = notes.length > 0 || Object.keys(segEdits).length > 0 || !!preAsk || !!preDraft.current.trim();
     const tuned = !!caps && !!settings && !sameSettings(settings, defaultSettings(caps, prefs || undefined));
     const ok = !(typed || tuned) || await new Promise<boolean>((resolve) =>
       setLeaveAsk({
@@ -987,7 +1053,7 @@ export function App() {
       return;
     }
     setNotes([]);
-    setPreEdit(null);
+    setSegEdits({});
     setPreAsk(null);
     setPreClear((n) => n + 1);
     if (caps) setSettings(defaultSettings(caps, prefs || undefined));
@@ -1071,9 +1137,9 @@ export function App() {
           if (typed) setPreClear(n => n + 1);
           return base;
         }
-      } catch (error) {
-        setError(errorText(error));
-        return null;
+      } catch {
+        // 這一步只是在判斷「是不是在改之前那句指定的人」。判斷不出來就當成新的
+        // 一句，照一般流程檢查，不把後端的錯誤代碼丟給使用者。
       } finally { setPreAsk(null); }
     }
     if (bridgeQuestion && base === notes) {
@@ -1098,19 +1164,22 @@ export function App() {
     const completed = (line?: string, wheres: string[] = []): Partial<Note> => {
       const carried = wheres.flatMap((w) => preOrder.filter((p) => preWhere(p.subjectIndex) === w));
       const persons = note.persons.length ? note.persons : preRefs(carried.map((p) => p.subjectIndex));
-      const wish = line || (asking ? `${wishText(asking)}，${text}` : undefined);
+      const wish = line || (asking ? `${asking.wish ?? asking.text}，${text}` : undefined);
       return { persons, selectionSource: note.selectionSource || (persons.length ? "model_suggestion" : undefined), ...(wish && wish !== text ? { wish } : {}) };
     };
     setPreAsk(note);
     // 又多講了一句，需求變了，剛才那個問題就不算數，等講完再按一次。
     setRenderAsk(null);
     if (typed) setPreClear((n) => n + 1);
+    // 分段送：哪一段有衝突，模型就只重寫那一段，指定的人跟著段留住。
+    const sent = promptSections(base, segEdits);
     try {
       const r = await api.promptReview(
         noteLine(note),
-        bridge.result?.effective_prompt ?? notesPrompt(base, preEdit),
+        bridge.result?.effective_prompt ?? notesPrompt(base, segEdits),
         reviewHistory(base, [...bridge.events, ...settingsEvents]),
         preOrder.map((p) => preWhere(p.subjectIndex)),
+        sent.map((x) => ({ who: x.key, text: x.text })),
       );
       if (!stillCurrent()) return null;
       const settled: Note = {
@@ -1118,13 +1187,30 @@ export function App() {
         replyOrder: nextDisplayOrder(),
         reply: r.reply || (r.accepted ? "好，這些會當成個人化需求，美化時一起套用。" : "好，那就先不加個人化需求。"),
         replyPeople: prePickable.map(p => ({ ...p })),
-        kept: r.accepted,
+        // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
+        kept: r.accepted && !r.withdrawn,
         ...(r.ask ? { asked: { options: r.options || [] } } : {}),
         ...(r.offer ? { offered: { options: r.options || [], ...(r.later ? { later: true } : {}) } } : {}),
-        ...(r.accepted ? completed(r.line, r.persons) : {}),
+        ...(r.accepted && !r.withdrawn ? completed(r.line, r.persons) : {}),
         ...(r.accepted && r.aspect_ratio ? { ratio: r.aspect_ratio } : {}),
       };
+      // 跟前面的需求衝突（同一個人、同一件事不能兩個都做）：模型把衝突的那幾段
+      // 拿掉被這句取代的部分，跟使用者手改那段字走同一條路；這句自己接在它那段
+      // 後面。指定了人的句子只動那個人的段；沒指定的句子講的是所有人或整個畫面，
+      // 每個人的段都可能要改。
       setNotes([...base, settled]);
+      if (r.accepted && r.merged?.length) {
+        const own = settled.persons.map(faceRef);
+        const merged = r.merged;
+        setSegEdits((e) => {
+          const next = { ...e };
+          for (const m of merged) {
+            const sec = sent[m.section];
+            if (sec && (!own.length || own.includes(sec.key))) next[sec.key] = { text: m.text, upTo: base.length };
+          }
+          return next;
+        });
+      }
       // 「做成限動」這種說了比例的需求，同步改「設定」的長寬比
       if (r.aspect_ratio) { const ratio = r.aspect_ratio; setSettings((s) => s && { ...s, aspect_ratio: ratio }); }
       // 「幫我美化」「幫我分析」就是底下那兩顆鍵，照按：已經收下的需求一起帶進去。
@@ -1157,7 +1243,7 @@ export function App() {
     const persons = preRefs(subjectIndices);
     if (!preWhoAsk || !persons.length) return;
     const text = persons.length > 1 ? "這幾位" : "這位";
-    setNotes([...notes, { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, wish: wishText(preWhoAsk), persons, selectionSource: "user_selection", reply: WHO_ANSWERED_REPLY, kept: true }]);
+    setNotes([...notes, { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, wish: preWhoAsk.wish ?? preWhoAsk.text, persons, selectionSource: "user_selection", reply: WHO_ANSWERED_REPLY, kept: true }]);
   }
 
   // `later` 是要帶進 session、照片好了再回答的那句；沒給就看最後一句是不是。
@@ -1170,7 +1256,7 @@ export function App() {
       setError("請先確認個人化需求指定的人物，再開始美化。");
       return;
     }
-    if (mode === "render" && overwrite === undefined && (bridge.result?.effective_prompt ?? notesPrompt(log, preEdit)).trim()) {
+    if (mode === "render" && overwrite === undefined && (bridge.result?.effective_prompt ?? notesPrompt(log, segEdits)).trim()) {
       setRenderAsk({ later, log });
       return;
     }
@@ -1195,11 +1281,11 @@ export function App() {
       if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
       const s = await api.createSession();
       const id = s.session_id;
-      const userPrompt = (previewIdentity && bridge.result ? bridge.result.effective_prompt : notesPrompt(submissionLog, preEdit)).slice(0, PROMPT_MAX);
+      const userPrompt = (previewIdentity && bridge.result ? bridge.result.effective_prompt : notesPrompt(submissionLog, segEdits)).slice(0, PROMPT_MAX);
       // Only the picks the prompt still spells out: one entry per person
       // already names each face once, and PROMPT_MAX can still cut the last
       // entry off.
-      const promptFaces = noteGroups(kept)
+      const promptFaces = promptSections(kept)
         .flatMap(groupFaces)
         .filter((f) => userPrompt.includes(f.ref));
       // The defaults a photo added next starts from, so the upload below picks
@@ -1735,7 +1821,7 @@ export function App() {
                       source={source}
                       settings={settings}
                       notes={notes}
-                      prompt={bridge.result?.effective_prompt ?? notesPrompt(notes, preEdit)}
+                      sections={preSections.map((x) => ({ key: x.key, line: sectionLine(x), text: x.text, persons: x.persons }))}
                       pending={preAsk}
                       scanning={preScanning}
                       previewActive={previewEnabled}
@@ -1754,16 +1840,20 @@ export function App() {
                       }}
                       onClear={() => {
                         setNotes(dropNotes(notes, () => true));
-                        setPreEdit(null);
+                        setSegEdits({});
                         setRenderAsk(null);
                       }}
-                      onPrompt={(text, upTo) => {
+                      onPrompt={(edits, upTo) => {
                         setRenderAsk(null);
-                        // 改成空的就是清掉，跟按「清除所有需求」同一件事。
-                        if (!text) {
-                          setNotes(dropNotes(notes, () => true));
-                          setPreEdit(null);
-                        } else setPreEdit({ text, upTo });
+                        // 整段刪光就是把這段的需求拿掉，跟按「清除所有需求」一樣算拿掉，
+                        // 只是只動這幾段。同一句也指了別人的，那幾位的部分還在，句子
+                        // 不拿掉，只把這段清空。
+                        const cleared = new Set(edits.filter((x) => !x.text).map((x) => x.key));
+                        if (cleared.size) {
+                          const gone = new Set(notes.slice(0, upTo).filter((n) => noteParts(n).every((x) => cleared.has(x.key))));
+                          setNotes(dropNotes(notes, (n) => gone.has(n)));
+                        }
+                        setSegEdits((e) => ({ ...e, ...Object.fromEntries(edits.map((x) => [x.key, { text: x.text, upTo }])) }));
                       }}
                       onEdit={() => {
                         const interaction = Math.max(0, ...bridge.events.map(e => e.order || 0), ...notes.map(n => Math.max(n.replyOrder || n.order || 0, n.dropped?.order || 0)));
@@ -1826,66 +1916,164 @@ function withFaces(text: string, faces: PrePerson[]) {
   return faceText(text, faces.map((f) => ({ ref: faceRef(f), face: f })), true);
 }
 
-// 跟 session 的個人化需求面板同一套：先用看的，要改再打開輸入框。`upTo` 是打開
-// 那一刻有幾句——改的期間又收下的句子不在框裡，存檔後會接在後面，不會被蓋掉。
+// 跟 session 的個人化需求面板同一套：先用看的，要改再打開輸入框。整張就是一段字，
+// 不同對象之間用「；」隔開，指定了人的那段前面掛著那個人的頭像：
+// 「(頭像)頭髮染黑；天空變藍；(頭像)頭髮紅」。
+//
+// 改的時候也是同一段，頭像嵌在字裡、不能打字進去（只能整顆刪掉），不會變回
+// 「從左邊數來第 2 位：」。存的時候從頭讀：遇到頭像就開始那個人的段，遇到「；」
+// 就結束目前這段，後面沒接頭像的字算沒指定對象。整段刪光的對象就是拿掉。
+// `upTo` 是打開那一刻有幾句——改的期間又收下的句子不在框裡，存檔後會接在後面。
+type NoteSection = { key: string; line: string; text: string; persons: PrePerson[] };
+
+const sectionShown = (sec: NoteSection) => (sec.key ? sec.line.slice(whoPrefix(sec.persons).length) : sec.line);
+
+function faceAtom(sec: NoteSection) {
+  const atom = document.createElement("span");
+  atom.className = "chat-face-chip is-small chat-notes-atom";
+  atom.contentEditable = "false";
+  atom.dataset.key = sec.key;
+  for (const p of sec.persons) {
+    const thumb = (p as FaceRef).thumb;
+    const img = document.createElement(thumb ? "img" : "span");
+    if (thumb) (img as HTMLImageElement).src = thumb;
+    else img.className = "chat-face-blank";
+    img.setAttribute("alt", "");
+    atom.appendChild(img);
+  }
+  return atom;
+}
+
+// 框裡的內容讀回每個對象的字。沒出現的對象是整段被刪掉，給空字串。
+function readSections(box: HTMLElement, sections: NoteSection[]) {
+  const parts: Record<string, string[]> = Object.fromEntries(sections.map((x) => [x.key, []]));
+  let key = "";
+  let buf = "";
+  const end = () => {
+    const t = buf.trim();
+    if (t) (parts[key] ??= []).push(t);
+    key = "";
+    buf = "";
+  };
+  const walk = (node: Node) => {
+    if (node instanceof HTMLElement && node.dataset.key !== undefined) {
+      if (buf.trim()) end();
+      key = node.dataset.key;
+      buf = "";
+      return;
+    }
+    if (node.nodeType === Node.TEXT_NODE) {
+      for (const ch of node.textContent || "") {
+        if (ch === "；" || ch === ";" || ch === "\n") end();
+        else buf += ch;
+      }
+      return;
+    }
+    if (node.nodeName === "BR") end();
+    node.childNodes.forEach(walk);
+    if (node !== box && (node.nodeName === "DIV" || node.nodeName === "P")) end();
+  };
+  walk(box);
+  end();
+  return Object.entries(parts).map(([k, ts]) => ({ key: k, text: ts.join(k ? "、" : "；") }));
+}
+
 function NotesEditor(props: {
-  prompt: string;
+  sections: NoteSection[];
   upTo: number;
-  faces: PrePerson[];
   held: boolean;
-  onSave: (text: string, upTo: number) => void;
+  onSave: (edits: { key: string; text: string }[], upTo: number) => void;
 }) {
-  const [editing, setEditing] = useState<{ draft: string; upTo: number } | null>(null);
-  const box = useRef<HTMLTextAreaElement>(null);
+  const { sections, held } = props;
+  const [editing, setEditing] = useState<{ upTo: number; dirty: boolean } | null>(null);
+  const box = useRef<HTMLDivElement>(null);
   const open = !!editing;
+  // 框裡的內容只在打開時建一次，之後交給使用者打字，Preact 不碰。
   useEffect(() => {
-    if (open) box.current?.focus();
+    const el = box.current;
+    if (!open || !el) return;
+    el.replaceChildren();
+    sections.forEach((sec, i) => {
+      if (i) el.appendChild(document.createTextNode("；"));
+      if (sec.key) el.appendChild(faceAtom(sec));
+      el.appendChild(document.createTextNode(sec.key ? sectionShown(sec) : sec.text));
+    });
+    el.focus();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(false);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(r);
   }, [open]);
   if (!editing) {
     return (
-      <div class="chat-opt-prompt">
-        <p class="chat-opt-prompt-text">{withFaces(props.prompt, props.faces)}</p>
+      <>
+        <p class="chat-opt-prompt-text">
+          {sections.map((sec, i) => [
+            i ? "；" : "",
+            sec.key ? withFaces(whoPrefix(sec.persons), sec.persons) : null,
+            sectionShown(sec),
+          ])}
+        </p>
         <div class="chat-choices">
           <button
             type="button"
             class="chat-chip chat-opt-chip is-primary"
-            disabled={props.held}
-            onClick={() => setEditing({ draft: props.prompt, upTo: props.upTo })}
+            disabled={held}
+            onClick={() => setEditing({ upTo: props.upTo, dirty: false })}
           >
             修改
           </button>
         </div>
-      </div>
+      </>
     );
   }
-  const draft = editing.draft;
   return (
-    <div class="chat-opt-prompt">
-      <textarea
-        rows={3}
-        maxLength={PROMPT_MAX}
-        value={draft}
-        disabled={props.held}
+    <>
+      <div
+        class="chat-notes-box"
         ref={box}
-        onInput={(e) => setEditing({ ...editing, draft: (e.target as HTMLTextAreaElement).value })}
+        role="textbox"
+        aria-multiline="true"
+        aria-label="個人化需求"
+        contentEditable={!held}
+        onInput={() => !editing.dirty && setEditing({ ...editing, dirty: true })}
+        onKeyDown={(e) => {
+          // 一段字，換行就是換對象，直接打成「；」。
+          if (e.key === "Enter" && !e.isComposing) {
+            e.preventDefault();
+            document.execCommand("insertText", false, "；");
+          }
+        }}
+        onPaste={(e) => {
+          e.preventDefault();
+          const t = e.clipboardData?.getData("text/plain") || "";
+          document.execCommand("insertText", false, t.replace(/\r?\n/g, "；"));
+        }}
       />
       <div class="chat-choices">
         <button
           type="button"
           class="chat-chip chat-opt-chip is-primary"
-          disabled={props.held || draft.trim() === props.prompt}
+          disabled={held || !editing.dirty}
           onClick={() => {
-            props.onSave(draft.trim(), editing.upTo);
+            const read = box.current ? readSections(box.current, sections) : [];
+            const before = Object.fromEntries(sections.map((x) => [x.key, x.text]));
+            const changed = read
+              .filter((x) => x.text.length <= PROMPT_MAX && x.text !== before[x.key])
+              .map((x) => ({ key: x.key, text: x.text }));
+            if (changed.length) props.onSave(changed, editing.upTo);
             setEditing(null);
           }}
         >
           儲存
         </button>
-        <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={props.held} onClick={() => setEditing(null)}>
+        <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={held} onClick={() => setEditing(null)}>
           取消
         </button>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1918,11 +2106,13 @@ function PreChat(props: {
   onView: () => void;
   onSamples: () => void;
   onSettings: (s: Settings) => void;
-  // The 個人化需求 as it will be sent: the kept lines, or the user's edit of them.
-  prompt: string;
+  // The 個人化需求, one section per person (or group tapped together) plus one
+  // for wishes with no one tapped: `line` as shown, `text` as edited.
+  sections: { key: string; line: string; text: string; persons: PrePerson[] }[];
   onClear: () => void;
-  // The text saved from the editor; it covers the first `upTo` notes.
-  onPrompt: (text: string, upTo: number) => void;
+  // The sections changed in one save of the editor; each covers the first
+  // `upTo` notes.
+  onPrompt: (edits: { key: string; text: string }[], upTo: number) => void;
   onEdit: () => void;
   onStart: (mode: "analyze" | "render") => void;
   // 一鍵美化前在問需求怎麼套用；`overwrite` 是已經選了的那個（上傳中）。
@@ -1960,20 +2150,14 @@ function PreChat(props: {
   // 卡夾在中間；這張只放真的會跟著進 session 的那段字，而且就擺在動作鍵正上方，
   // 要確認的東西跟要按下去的地方是同一處。跟 session 的個人化需求一樣是一整段，
   // 看到的就是送出去的 user_prompt；要刪要改直接改字。
-  const kept = !!props.prompt;
+  const kept = props.sections.length > 0;
   const asking = props.renderAsk;
   // 按下去就算選了：這排定格成紀錄，按的那顆維持選取的樣子；失敗了再解開。
   const went = !asking && starting ? starting.mode : null;
   const review = kept && (
     <div class="chat-card chat-notes">
       <span class="chat-meta">個人化需求</span>
-      <NotesEditor
-        prompt={props.prompt}
-        upTo={notes.length}
-        faces={notes.flatMap((n) => n.persons)}
-        held={held}
-        onSave={props.onPrompt}
-      />
+      <NotesEditor sections={props.sections} upTo={notes.length} held={held} onSave={props.onPrompt} />
     </div>
   );
   const startChips = (

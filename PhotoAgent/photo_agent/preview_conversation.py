@@ -519,8 +519,9 @@ def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
     if not isinstance(raw['reply'], str) or len(raw['reply']) > 1200:
         raise ValueError('invalid_revision_reply')
     if mode == 'no_change':
-        if ids or targets:
-            raise ValueError('invalid_no_change')
+        # The model sometimes lists the wish the line is "about" alongside
+        # no_change (「把牆壁改成木頭牆」 next to the 紅磚牆 wish). The verdict
+        # is still no_change; the ids change nothing, so they are ignored.
         return None
     if mode == 'cancel':
         if selected:

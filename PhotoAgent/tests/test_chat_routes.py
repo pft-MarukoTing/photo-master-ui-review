@@ -1471,8 +1471,16 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.status_code, 200, res.get_json())
         self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
         # The model is asked about one line, against the list as it stands.
-        self.assertIn("LINES SO FAR:\n左側男性的帽子拿掉", seen[0])
+        self.assertIn("LINES SO FAR:\n[1] 未指定對象：左側男性的帽子拿掉", seen[0])
         self.assertIn("NEW LINE:\n外套換成藍色", seen[0])
+
+    def test_a_line_that_takes_a_wish_back_is_withdrawn(self):
+        res, _ = self.review("帽子留著", {"verdict": "keep", "reply": "好，帽子就不拿掉了。", "line": "", "options": [],
+                                          "merged": [{"section": 1, "text": "瘦臉"}], "withdraw": True},
+                             sections=[{"who": "照片中從左邊數來第 1 位", "text": "帽子拿掉、瘦臉"}])
+        out = res.get_json()
+        self.assertEqual(out["merged"], [{"section": 0, "text": "瘦臉"}])
+        self.assertTrue(out["withdrawn"])
 
     def test_a_wish_that_names_a_shape_sets_the_ratio(self):
         res, _ = self.review("做成限動", {"verdict": "keep", "reply": "", "line": "", "options": [], "aspect_ratio": "9:16"})

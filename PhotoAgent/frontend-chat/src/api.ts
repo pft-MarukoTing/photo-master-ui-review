@@ -110,7 +110,12 @@ export const api = {
   // `start` means the line asked for 一鍵美化 or 分析 itself; `offer` means the
   // reply only asks whether to start one (「要不要我先幫你分析？」), with
   // `options` to answer it.
-  promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[]) =>
+  // `sections` 是個人化需求的分段：每個指定的人一段，沒指定對象的一段（`who`
+  // 是空字串）。`merged`：新的一句跟某幾段衝突時，那幾段拿掉衝突部分後的整段
+  // 文字（`section` 是在 `sections` 裡的索引）。`withdrawn`：這句只是把前面那
+  // 項撤回（「帽子拿掉」→「帽子留著」），照 `merged` 改完就好，這句不進清單。
+  promptReview: (text: string, prompt: string, history: ReviewTurn[], people: string[],
+    sections: { who: string; text: string }[] = []) =>
     request<{
       accepted: boolean;
       reply: string;
@@ -123,9 +128,11 @@ export const api = {
       persons?: string[];
       start?: "render" | "analyze";
       aspect_ratio?: string;
+      merged?: { section: number; text: string }[];
+      withdrawn?: boolean;
     }>(
       `${CHAT}/prompt-review`,
-      json("POST", { text, prompt, history, people }),
+      json("POST", { text, prompt, history, people, sections }),
     ),
 
   createSession: () => request<Session>(`${CHAT}/sessions`, json("POST", {})),

@@ -450,10 +450,16 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .sample-tile img{width:100%;height:auto;display:block}
 .sample-tile.is-picked{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.2)}
 
-/* 上傳頁面的個人化需求，接在動作鍵上面。裡面跟 session 的個人化需求面板
-   （.chat-opt-prompt）同一套：一整段字，要改再打開輸入框。 */
+/* 上傳頁面的個人化需求，接在動作鍵上面。跟 session 的個人化需求面板（.chat-opt-prompt）
+   同一套，整張一段字：不同對象用「；」隔開，指定了人的那段前面掛頭像。改的時候是同一段
+   字變成可以打字的框，頭像還在字裡。 */
 .chat-notes{display:flex;flex-direction:column;gap:var(--sp-2)}
-.chat-notes .chat-opt-prompt-text .chat-face-chip{vertical-align:middle;margin:-2px var(--sp-1) 0 0}
+.chat-notes .chat-face-chip{vertical-align:middle;margin:-2px 2px 0 0}
+.chat-notes .chat-face-chip.is-small{padding:0;min-height:0;gap:0}
+.chat-notes-box{min-height:calc(var(--chat-fs-md)*1.5*2 + 2*var(--sp-2));padding:var(--sp-2) var(--sp-3);border:1px solid var(--n24);border-radius:8px;background:var(--card);
+  font-size:var(--chat-fs-md);line-height:1.5;color:var(--n100);white-space:pre-wrap;overflow-wrap:anywhere;cursor:text}
+.chat-notes-box:focus{outline:0;border-color:var(--accent)}
+.chat-notes-atom{user-select:all;cursor:default}
 
 /* ── Page-specific additions ─────────────────────────────────────────── */
 .chat-msg{flex-shrink:0}

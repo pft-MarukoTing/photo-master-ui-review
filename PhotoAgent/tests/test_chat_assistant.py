@@ -368,6 +368,69 @@ class ReviewLineTest(unittest.TestCase):
             return {"verdict": "keep", "reply": "好，記下來了。還有別的嗎？", "line": "", "options": [], "later": False}
         self.assertEqual(chat_assistant.review_line("外套換成藍色", "", model=model)["reply"], "好，記下來了。還有別的嗎？")
 
+    # 後講的蓋掉先講的：同一件事不能兩個都做，衝突的那幾段由模型拿掉衝突部分，
+    # 這句由頁面放進自己那段，回話講一聲。
+    SECTIONS = [{"who": "照片中從左邊數來第 1 位", "text": "皮膚曬黑、瘦臉"},
+                {"who": "", "text": "把門後的女生去掉；把牆壁改成紅磚牆"}]
+
+    def merge(self, verdict, merged, sections=SECTIONS):
+        seen = {}
+
+        def model(context):
+            seen["context"] = context
+            return {"verdict": verdict, "reply": "好，這個我記下來了。", "line": "", "options": [],
+                    "later": False, "merged": merged}
+        result = chat_assistant.review_line("把牆壁改成木頭牆", "", sections=sections, model=model)
+        return result, seen["context"]
+
+    def test_a_conflicting_line_rewrites_the_sections_it_takes_over(self):
+        result, context = self.merge("keep", [{"section": 2, "text": "把門後的女生去掉"}])
+        self.assertIn("LINES SO FAR:\n[1] 照片中從左邊數來第 1 位：皮膚曬黑、瘦臉\n[2] 未指定對象：把門後的女生去掉；把牆壁改成紅磚牆", context)
+        self.assertTrue(result["kept"])
+        self.assertEqual(result["merged"], [{"section": 1, "text": "把門後的女生去掉"}])
+        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + chat_assistant.MERGED_NOTE + chat_assistant.KEPT_NEXT)
+
+    def test_a_section_can_be_emptied(self):
+        result = self.merge("keep", [{"section": 1, "text": ""}])[0]
+        self.assertEqual(result["merged"], [{"section": 0, "text": ""}])
+
+    def test_a_bare_prompt_is_one_unassigned_section(self):
+        def model(context):
+            self.assertIn("LINES SO FAR:\n[1] 未指定對象：把牆壁改成紅磚牆", context)
+            return {"verdict": "keep", "reply": "", "line": "", "options": [], "merged": [{"section": 1, "text": ""}]}
+        self.assertEqual(chat_assistant.review_line("把牆壁改成木頭牆", "把牆壁改成紅磚牆", model=model)["merged"],
+                         [{"section": 0, "text": ""}])
+
+    def withdraw(self, merged, reply=""):
+        def model(context):
+            return {"verdict": "keep", "reply": reply, "line": "", "options": [],
+                    "later": False, "merged": merged, "withdraw": True}
+        sections = [{"who": "照片中從左邊數來第 1 位", "text": "帽子拿掉、瘦臉"}]
+        return chat_assistant.review_line("照片中從左邊數來第 1 位：帽子留著", "", sections=sections, model=model)
+
+    def test_a_line_that_only_takes_a_wish_back_is_withdrawn(self):
+        result = self.withdraw([{"section": 1, "text": "瘦臉"}], "好，帽子就不拿掉了。")
+        self.assertTrue(result["withdrawn"])
+        self.assertEqual(result["merged"], [{"section": 0, "text": "瘦臉"}])
+        self.assertEqual(result["reply"], "好，帽子就不拿掉了。" + chat_assistant.KEPT_NEXT)
+
+    def test_a_withdraw_without_reply_says_the_earlier_wish_is_gone(self):
+        result = self.withdraw([{"section": 1, "text": "瘦臉"}])
+        self.assertEqual(result["reply"], chat_assistant.WITHDRAWN_REPLY + chat_assistant.KEPT_NEXT)
+
+    def test_nothing_to_take_back_is_an_ordinary_wish(self):
+        result = self.withdraw([])
+        self.assertTrue(result["kept"])
+        self.assertFalse(result["withdrawn"])
+
+    def test_merged_unchanged_unknown_or_not_kept_is_ignored(self):
+        self.assertEqual(self.merge("keep", [{"section": 1, "text": " 皮膚曬黑、瘦臉 "}])[0]["merged"], [])
+        self.assertEqual(self.merge("keep", [{"section": 3, "text": ""}, {"section": 0, "text": ""}])[0]["merged"], [])
+        self.assertEqual(self.merge("drop", [{"section": 2, "text": ""}])[0]["merged"], [])
+        result = self.merge("keep", [])[0]
+        self.assertEqual(result["merged"], [])
+        self.assertEqual(result["reply"], chat_assistant.KEPT_REPLY + chat_assistant.KEPT_NEXT)
+
     # 上傳頁說了比例（「做成限動」），「設定」的長寬比就跟著改，不讓 AI 建議跟需求打架。
     def ratio(self, verdict, value):
         return chat_assistant.review_line("做成限動", "", model=lambda context: {
