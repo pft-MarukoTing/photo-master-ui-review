@@ -1642,7 +1642,8 @@ export function App() {
                   around nothing, and it was what pushed the panel off centre. */}
               <div class={`upload-content-row${phase === "chat" ? " is-chat" : ""}`}>
                 {phase === "home" ? (
-                  <HomeIntro onStart={() => newChat()} />
+                  // 範例照片點了但沒按「使用所選照片」就直接開始對話，就拿點的那張。
+                  <HomeIntro onStart={() => newChat(selection?.kind === "demo" ? { kind: "demo", name: selection.name } : undefined)} />
                 ) : (
                   <>
                   {/* Nothing to stage until a photo is picked: before that the
