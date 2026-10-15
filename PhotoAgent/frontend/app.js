@@ -168,6 +168,19 @@
   // straight there. Everything both need in common lives here: the loading
   // overlay, locking the controls for the duration, and recomputing the
   // arrows for wherever we actually landed.
+  // Raises #run-switch-loading only once a switch outlasts the delay, so a fast
+  // image load doesn't flash it; returns the function that takes it down.
+  const RUN_SWITCH_LOADING_DELAY_MS = 250;
+  function showRunSwitchLoadingIfSlow() {
+    const timer = setTimeout(() => {
+      if (els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+    }, RUN_SWITCH_LOADING_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+      if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+    };
+  }
+
   async function selectRunAt(idx) {
     if (!currentRunList || currentRunOnSelect == null || currentRunIndex == null) return;
     if (idx < 0 || idx >= currentRunList.length || idx === currentRunIndex) return;
@@ -180,14 +193,14 @@
     // Any real switch (tile or arrow) leaves the 原圖 pick -- the run it
     // lands on renders on its After side (renderResult -> setCompareView).
     clearVersionStripOriginPick();
-    if (els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+    const hideSwitchLoading = showRunSwitchLoadingIfSlow();
     if (els.runSwitchPrev) els.runSwitchPrev.disabled = true;
     if (els.runSwitchNext) els.runSwitchNext.disabled = true;
     if (els.versionStrip) els.versionStrip.classList.add("is-busy");
     try {
       await currentRunOnSelect(idx);
     } finally {
-      if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+      hideSwitchLoading();
       if (els.versionStrip) els.versionStrip.classList.remove("is-busy");
       // Recomputes each arrow's real enabled/disabled state for the RUN we
       // landed on -- may differ from what we forced above, and must still
@@ -8372,12 +8385,12 @@
             if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
             li.classList.add("opening");
             const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
-            if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+            const hideSwitchLoading = showingCanvas ? showRunSwitchLoadingIfSlow() : () => {};
             try {
               await viewHistoryRecord(job);
             } finally {
               li.classList.remove("opening");
-              if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+              hideSwitchLoading();
             }
           });
         } else if (statuses.every((s) => s.status === "error")) {
@@ -10977,11 +10990,11 @@
     // other target view (analyzing/error/analyzed) replaces the whole
     // canvas outright regardless, so there's nothing to hover over there.
     const showingCanvas = els.resultsCanvasRow && !els.resultsCanvasRow.hidden;
-    if (showingCanvas && els.runSwitchLoading) els.runSwitchLoading.hidden = false;
+    const hideSwitchLoading = showingCanvas ? showRunSwitchLoadingIfSlow() : () => {};
     try {
       await renderBatchMain(record, true);
     } finally {
-      if (els.runSwitchLoading) els.runSwitchLoading.hidden = true;
+      hideSwitchLoading();
     }
     if (record.status === "error") openBatchError(record); // only on explicit click, never from a background refresh
     window.scrollTo({ top: 0, behavior: "instant" });
