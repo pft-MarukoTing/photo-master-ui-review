@@ -2430,7 +2430,7 @@ function closedAfter(messages: Message[], from: number): boolean {
 // request). 調整後再美化 keeps them, so 美化 can ask first when none changed.
 const ADJUSTABLE = [
   "recipe_checked", "face_issue_overrides", "style_options", "render_option", "aspect_ratio",
-  "advanced_options", "preset", "run_count", "user_prompt",
+  "advanced_options", "preset", "run_count", "user_prompt", "pose_face_changes",
 ] as const;
 
 // Key order and cleared (null) entries don't count as a change.

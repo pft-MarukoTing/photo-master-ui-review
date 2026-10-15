@@ -3,7 +3,7 @@
 // reshape, which stays off in Stage 1.
 import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
-import type { Analysis, Dict, FaceOverride } from "./types";
+import type { Analysis, Dict, FaceOverride, Plan, PoseFaceChanges } from "./types";
 import { executedPrompt } from "./util";
 
 // Named for what was found, not for the finding of it: by the time a chip is on
@@ -352,6 +352,105 @@ export function overridesFromEntries(entries: FaceEntry[]): Record<string, FaceO
     }
   }
   return out;
+}
+
+// ── What a 姿勢 pick sets on each person ────────────────────────────────────
+// Same rules as the panel (frontend/results.js syncFaceReviewPoseSuggestion,
+// reasons from frontend/app.js POSE_PERSON_SUGGESTIONS); keep the two in sync.
+interface PoseRule {
+  category: string;
+  values: { allowed?: boolean; level?: string };
+  onlyWhenAllowed?: boolean;
+  reason: string;
+}
+
+const BROAD_SMILE = { category: "smile_issue", values: { allowed: true, level: "broad" } };
+
+export const POSE_FACE_RULES: Record<string, PoseRule[]> = {
+  playful: [{ ...BROAD_SMILE, reason: "讓表情與活潑、輕鬆的姿勢一致" }],
+  candid: [{ category: "gaze_issue", values: { allowed: false }, reason: "保留自然、非擺拍的鏡頭外視線" }],
+  elegant: [{ category: "smile_issue", values: { allowed: true, level: "gentle" }, reason: "讓表情維持優雅、自然且不過度張揚" }],
+  dynamic: [
+    { category: "gaze_issue", values: { allowed: false }, reason: "讓視線配合自然的動態瞬間" },
+    { category: "hair_issue", values: { level: "dynamic" }, onlyWhenAllowed: true, reason: "保留人物移動時自然的髮絲方向" },
+  ],
+  cool: [{ category: "smile_issue", values: { allowed: true, level: "neutral" }, reason: "維持冷靜、俐落的姿態氛圍" }],
+  vsign: [{ ...BROAD_SMILE, reason: "讓表情與 V-Sign 的輕鬆、開朗氛圍一致" }],
+  cheer: [{ ...BROAD_SMILE, reason: "讓表情與開放、歡呼的姿勢一致" }],
+};
+
+function sameOverride(a?: FaceOverride | null, b?: FaceOverride | null) {
+  if (!a || !b) return (a ?? null) === (b ?? null);
+  return a.level === b.level;
+}
+
+const presentOverrides = (o: Record<string, FaceOverride | null>) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v != null)) as Record<string, FaceOverride>;
+
+function issueStates(a: Analysis, overrides: Record<string, FaceOverride>) {
+  const out = new Map<string, { category: string; state: string }>();
+  for (const f of faceEntries(a, overrides))
+    for (const x of f.issues) out.set(x.key, { category: x.category, state: `${x.allowed}:${x.level || ""}` });
+  return out;
+}
+
+export interface PoseFaceResult {
+  // face_issue_overrides + pose_face_changes, to send with the style_options.pose patch.
+  patch: Plan;
+  // Categories whose visible value changed: set by the new pose, or put back from the previous one.
+  applied: string[];
+  restored: string[];
+  previousPose: string | null;
+}
+
+// Switching pose first puts back what the previous pose set, except where the
+// user has since picked something else, then applies the new pose's rules.
+export function poseFacePatch(a: Analysis, plan: Plan, pose: string): PoseFaceResult {
+  const current = plan.face_issue_overrides || {};
+  const overrides: Record<string, FaceOverride | null> = { ...current };
+  // A round put back, or an AI proposal that changed the pose, leaves a record for a pose no longer picked.
+  const prev = plan.pose_face_changes && plan.style_options?.pose === plan.pose_face_changes.pose ? plan.pose_face_changes : null;
+  for (const [key, { before, after }] of Object.entries(prev?.changes || {})) {
+    if (sameOverride(current[key], after)) overrides[key] = before;
+  }
+  const changes: PoseFaceChanges["changes"] = {};
+  const touched = new Set<string>();
+  const entries = faceEntries(a, presentOverrides(overrides));
+  for (const rule of POSE_FACE_RULES[pose] || []) {
+    for (const f of entries) {
+      const issue = f.issues.find((x) => x.category === rule.category);
+      if (!issue || (rule.onlyWhenAllowed && !issue.allowed)) continue;
+      const allowed = rule.values.allowed ?? issue.allowed;
+      const level = rule.values.level ?? issue.level;
+      if (allowed === issue.allowed && level === issue.level) continue;
+      const after: FaceOverride = !allowed
+        ? false
+        : level && (rule.values.level || issue.levelUserTouched)
+          ? { allowed: true, level }
+          : { allowed: true };
+      changes[issue.key] = { before: overrides[issue.key] ?? null, after };
+      overrides[issue.key] = after;
+      touched.add(rule.category);
+    }
+  }
+  const was = issueStates(a, current);
+  const now = issueStates(a, presentOverrides(overrides));
+  const changed = new Set<string>();
+  now.forEach((x, key) => x.state !== was.get(key)?.state && changed.add(x.category));
+  const diff = Object.fromEntries(
+    [...new Set([...Object.keys(current), ...Object.keys(overrides)])]
+      .filter((k) => !sameOverride(current[k], overrides[k]))
+      .map((k) => [k, overrides[k] ?? null]),
+  ) as Record<string, FaceOverride>;
+  return {
+    patch: {
+      ...(Object.keys(diff).length ? { face_issue_overrides: diff } : {}),
+      pose_face_changes: Object.keys(changes).length ? { pose, changes } : null,
+    },
+    applied: [...changed].filter((c) => touched.has(c)),
+    restored: [...changed].filter((c) => !touched.has(c)),
+    previousPose: prev?.pose || null,
+  };
 }
 
 export function cropFaceThumbnail(img: HTMLImageElement, box: Box): string {

@@ -6,7 +6,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { urls } from "./api";
 import { type FaceRef } from "./chat";
-import { faceEntries, LEVEL_OPTIONS, type FaceEntry, type FaceIssue } from "./face";
+import { FACE_CATEGORIES, faceEntries, LEVEL_OPTIONS, POSE_FACE_RULES, poseFacePatch, type FaceEntry, type FaceIssue, type PoseFaceResult } from "./face";
 import { Icon } from "./icons";
 import type { Analysis, Capabilities, FaceOverride, Plan } from "./types";
 import { aspectLabel, FIXED_RATIO_RE, recipeItems, REFRAME_RE, renderOptionLabel } from "./util";
@@ -508,9 +508,30 @@ function RecipeOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   );
 }
 
+// 姿勢自動改了誰的人像設定、或把前一個姿勢改的還原，要講出來 -- 不然人像那張卡上
+// 的笑容、視線變了，使用者不知道是誰動的。
+function poseNotice(caps: Capabilities, pose: string, r: PoseFaceResult): string[] {
+  const choices = caps.style_options.find((g) => g.id === "pose")?.choices || [];
+  const name = (v: string | null) => (v && choices.find((c) => c.value === v)?.label) || v || "";
+  const label = (category: string) => FACE_CATEGORIES.find((c) => c.field === category)?.label || category;
+  const rules = (POSE_FACE_RULES[pose] || []).filter((x) => r.applied.includes(x.category));
+  if (!rules.length && !r.restored.length) return [];
+  const title = !rules.length && r.previousPose
+    ? pose === "default" ? `已取消「${name(r.previousPose)}」的自動調整` : `已切換為「${name(pose)}」`
+    : `已配合「${name(pose)}」自動調整人像設定`;
+  const lines = [title];
+  r.restored.forEach((c) => lines.push(`${label(c)}：已還原為原本設定`));
+  rules.forEach((x) => {
+    const level = x.values.level && LEVEL_OPTIONS[x.category]?.find((o) => o.value === x.values.level)?.label;
+    lines.push(`${label(x.category)}：${level || (x.values.allowed === false ? "關閉" : "開啟")}（${x.reason}）`);
+  });
+  return lines;
+}
+
 function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   const groups = styleGroups(analysis, caps);
   const [open, setOpen] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string[]>([]);
   // A group the chat points at opens by itself.
   useEffect(() => {
     const g = groups.find((x) => hot.has(`style_options.${x.id}`));
@@ -524,7 +545,11 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   // open: the person is mid-choice, not done.
   const pick = (value: string, close = true) => {
     if (!group) return;
-    onPatch({ style_options: { [group.id]: value } });
+    if (group.id === "pose") {
+      const r = poseFacePatch(analysis, plan, value);
+      onPatch({ style_options: { pose: value }, ...r.patch });
+      setNotice(poseNotice(caps, value, r));
+    } else onPatch({ style_options: { [group.id]: value } });
     if (close) setOpen(null);
   };
   return (
@@ -565,6 +590,17 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
               </button>
             ))}
         </div>
+      )}
+      {notice.length > 0 && (
+        <p class="chat-recap">
+          <strong>{notice[0]}</strong>
+          {notice.slice(1).map((line) => (
+            <>
+              <br />
+              {line}
+            </>
+          ))}
+        </p>
       )}
     </>
   );

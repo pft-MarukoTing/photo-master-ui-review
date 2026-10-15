@@ -1502,7 +1502,7 @@ def _ask_render(user, session_id, photo):
 
 # 調整一輪可以動到的 plan 欄位（跟 frontend-chat 的 ADJUSTABLE 同一份）。
 ROUND_KEYS = ("recipe_checked", "face_issue_overrides", "style_options", "render_option", "aspect_ratio",
-              "advanced_options", "preset", "run_count", "user_prompt")
+              "advanced_options", "preset", "run_count", "user_prompt", "pose_face_changes")
 
 
 def _end_round(user, session_id, photo, history):

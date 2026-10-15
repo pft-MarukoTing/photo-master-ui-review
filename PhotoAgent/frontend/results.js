@@ -2152,6 +2152,7 @@ window.PhotoAgentResults = (() => {
   // own hair item is already enabled. Returns only net-visible category
   // changes: a category restored and then immediately set to the same value
   // by the new Pose is omitted, which keeps the combined notice accurate.
+  // The chat mirrors these rules in frontend-chat/src/face.ts POSE_FACE_RULES.
   function syncFaceReviewPoseSuggestion(pose) {
     const valuesBeforeSwitch = new Map();
     faceThumbEntries.forEach((entry) => {

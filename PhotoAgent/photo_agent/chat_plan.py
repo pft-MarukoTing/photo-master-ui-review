@@ -25,7 +25,8 @@ from photo_agent.param_validation import normalize_advanced_options
 from photo_agent.selections import validate_selections
 
 USER_PROMPT_MAX_LEN = 2000
-PHOTO_ONLY_KEYS = ("recipe_checked", "face_issue_overrides", "body_reshape_enabled", "prompt_faces")
+PHOTO_ONLY_KEYS = ("recipe_checked", "face_issue_overrides", "body_reshape_enabled", "prompt_faces",
+                   "pose_face_changes")
 PROMPT_FACES_MAX = 8
 PROMPT_FACE_TEXT_MAX_LEN = 120
 
@@ -56,11 +57,24 @@ def default_plan(settings=None):
         "face_issue_overrides": {},
         "body_reshape_enabled": None,
         "prompt_faces": [],
+        "pose_face_changes": None,
     }
 
 
 def settings_of(plan):
     return {k: copy.deepcopy(v) for k, v in plan.items() if k not in PHOTO_ONLY_KEYS}
+
+
+def _validated_pose_face_changes(value):
+    """The per-person overrides the chat's 姿勢 pick wrote, {pose, changes:
+    {key: {before, after}}}, so the next pick can put the earlier values back."""
+    if value is None:
+        return None
+    if not isinstance(value, dict) or not isinstance(value.get("pose"), str) \
+            or not isinstance(value.get("changes"), dict) \
+            or not all(isinstance(c, dict) for c in value["changes"].values()):
+        raise ValueError("plan.pose_face_changes must be {pose, changes} or null")
+    return copy.deepcopy(value)
 
 
 def _validated_prompt_faces(value):
@@ -205,6 +219,8 @@ def apply_plan_patch(current, patch, *, debug=False, settings_only=False):
                     value = {k: v for k, v in merged.items() if v is not None}
                 elif key == "prompt_faces":
                     value = _validated_prompt_faces(value)
+                elif key == "pose_face_changes":
+                    value = _validated_pose_face_changes(value)
             else:
                 value = _apply_setting(plan, key, value, debug)
             plan[key] = value

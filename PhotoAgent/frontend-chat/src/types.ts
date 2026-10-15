@@ -2,6 +2,12 @@ export type Dict = Record<string, any>;
 
 export type FaceOverride = false | { allowed: true; level?: string };
 
+// The per-person overrides a 姿勢 pick wrote, each with the value it replaced.
+export interface PoseFaceChanges {
+  pose: string;
+  changes: Record<string, { before: FaceOverride | null; after: FaceOverride }>;
+}
+
 // A face the upload page let the user point at before there was an analysis
 // to name people by. `ref` is the exact text that pick wrote into
 // user_prompt; the box is what the server matches against the analysis once
@@ -32,6 +38,7 @@ export interface Plan {
   face_issue_overrides?: Record<string, FaceOverride>;
   body_reshape_enabled?: boolean | null;
   prompt_faces?: PromptFace[];
+  pose_face_changes?: PoseFaceChanges | null;
 }
 
 export interface ActiveVersion {
