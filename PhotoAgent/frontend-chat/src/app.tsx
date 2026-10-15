@@ -5,7 +5,7 @@ import { nextDisplayOrder } from "./display-order";
 // typed messages go to /ask, whose replies may carry a plan change to confirm.
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
-import { api, ApiError, setUser, urls, type ReviewTurn, type Screen } from "./api";
+import { api, ApiError, setUser, urls, type AskFace, type ReviewTurn, type Screen } from "./api";
 import { isHeic, previewBlob } from "./heic";
 import {
   AssistantMsg,
@@ -37,7 +37,7 @@ import {
   type Proposal,
   type ProposalChoice,
 } from "./chat";
-import { facePeople, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
+import { facePeople, seedDetectedFaces, useBoxThumbs, useDetectedFaces, useFaceThumbs, type Box } from "./face";
 import { useSubjectPreview } from "./subject-preview";
 import { usePreviewConversation } from "./preview-conversation";
 import type { PreviewClause, PreviewReplyEvent, PreviewWish, PreviewConversationResult, TargetQuestionSnapshot } from "./preview-conversation";
@@ -1340,6 +1340,8 @@ export function App() {
       if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
       if (sourceIdentity.current !== selectedSource) return;
       say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
+      // 上傳頁面已經偵測過這張的人臉，session 頁沒有分析時就直接用，不再偵測一次。
+      if (!previewEnabled && preScan.ready) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), preScan.people.map((p) => p.box));
       const uploadedSession = await api.getSession(id);
       if (sourceIdentity.current !== selectedSource) return;
       setSession(uploadedSession);
@@ -1389,14 +1391,14 @@ export function App() {
     });
   }
 
-  function askPhoto(text: string, subjectIndices: number[], screen?: Screen) {
+  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[]) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     setPendingAsk({ text, subjectIndices });
     return run(async () => {
       try {
-        await api.ask(id, pid, text, subjectIndices, screen);
+        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);
@@ -2461,7 +2463,8 @@ function SessionView(props: {
   onRender: (label: string, icon: string, patch?: Plan) => void;
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
-  onAsk: (text: string, subjectIndices: number[], screen?: Screen) => Promise<boolean>;
+  // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
+  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[]) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan) => Promise<boolean>;
   onSavePrompt: (text: string, screen?: Screen) => Promise<boolean>;
@@ -2630,8 +2633,31 @@ function SessionView(props: {
     props.onRender(label, icon, photo.plan.overwrite_prompt ? { overwrite_prompt: false } : undefined);
   };
 
-  const people = facePeople(analysis);
-  const thumbs = useFaceThumbs(analysis, source);
+  // 上傳頁面選了「只照需求改」：真的沒有分析，只量了尺寸，美化直接照需求修。
+  // 說要分析時（「幫我分析」）才補跑，結果落在 adjust_opened via check 那張卡。
+  const skippedAnalysis = analysis ? !!analysis._skipped_analysis : !!photo.analysis_skipped;
+  // 沒有分析就沒有 subjects 可指，頭像改跟上傳頁面一樣用本地偵測，從左數來
+  // 講位置；送出時帶框和位置（askFaces），不帶 subject_indices。人物預覽開著時
+  // 那條路另外處理，這裡不碰。
+  const localPick = skippedAnalysis && !caps.features?.subject_preview;
+  const scan = useDetectedFaces(localPick ? source : null, async () => {
+    const res = await fetch(source);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return { blob: await res.blob(), name: "source.jpg" };
+  });
+  const scanOrder = [...scan.people].sort((a, b) => a.box.x + a.box.w / 2 - (b.box.x + b.box.w / 2));
+  const scanWhere = (i: number) => `照片中從左邊數來第 ${scanOrder.findIndex((q) => q.subjectIndex === i) + 1} 位`;
+  const people = localPick ? scan.people : facePeople(analysis);
+  const analysisThumbs = useFaceThumbs(localPick ? null : analysis, source);
+  const scanThumbs = useBoxThumbs(scan.people.map((p) => p.box), source);
+  const thumbs = localPick ? scanThumbs : analysisThumbs;
+  const askFaces = (si: number[]) =>
+    localPick
+      ? si.flatMap((i) => {
+          const p = scan.people.find((q) => q.subjectIndex === i);
+          return p ? [{ box: p.box, where: scanWhere(i) }] : [];
+        })
+      : undefined;
   // 上傳頁面帶過來的句子，指的人當時還沒有名字：頭像照它帶來的框裁，名字留白，
   // 跟上傳頁面上那顆泡泡長得一樣。
   // 一句可以指好幾位（`faces`）；更早的訊息只帶一個 `box`/`where`。
@@ -2658,12 +2684,12 @@ function SessionView(props: {
   const pickable: (FaceRef & { subjectIndex: number })[] = [];
   people.forEach((p, i) => {
     if (p.subjectIndex < 0 || faces[p.subjectIndex]) return;
-    faces[p.subjectIndex] = { name: p.name, thumb: thumbs[i] || "" };
+    faces[p.subjectIndex] = { name: p.name, thumb: thumbs[i] || "", ...(localPick ? { where: scanWhere(p.subjectIndex) } : {}) };
     pickable.push({ ...faces[p.subjectIndex], subjectIndex: p.subjectIndex });
   });
   // 聊到人的時候用頭像講，不念名字：AI 的話、引導的那幾句裡寫到某人的名字，
   // 就換成那個人的頭像。
-  const said = (text: string) => faceText(text, pickable.map((p) => ({ ref: p.name, face: p })));
+  const said = (text: string) => faceText(text, pickable.map((p) => ({ ref: p.name || p.where || "", face: p })));
   // An answer under the AI's question that is just someone's name.
   const faceOption = (o: string) => pickable.find((p) => p.name === o.trim()) || null;
 
@@ -2784,9 +2810,6 @@ function SessionView(props: {
   }
   const lastProposalId = [...messages].reverse().find((m) => m.card?.type === "llm_reply" && m.card.proposal)?.card?.proposal.id;
   const brief: Dict | null = messages.find((m) => m.card?.type === "analysis_brief")?.card || null;
-  // 上傳頁面選了「只照需求改」：真的沒有分析，只量了尺寸，美化直接照需求修。
-  // 說要分析時（「幫我分析」）才補跑，結果落在 adjust_opened via check 那張卡。
-  const skippedAnalysis = analysis ? !!analysis._skipped_analysis : !!photo.analysis_skipped;
   // 只照需求改完、要看原圖問題：開一輪調整，同時回到整體美化，下一版才會照
   // 分析修。快照在 patch 之前拍，這一輪一開就算「改過」，不會被當成原設定重跑。
   // 上傳時就跳過分析的照片手上沒有分析，要先補跑（onAnalyze），出來後後端貼同一張 check 卡。
@@ -2837,7 +2860,7 @@ function SessionView(props: {
       await choose(pendingProposal, "apply");
       return true;
     }
-    return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen);
+    return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen, askFaces(si));
   }
 
   // 這張面板卡收起時的 plan。會收起它的那一步 -- 下一個開起來的面板，或下一輪
@@ -2889,6 +2912,8 @@ function SessionView(props: {
             const next = messages[idx + 1];
             const asked = messages[idx - 1]?.card;
             const si = asked?.type === "ask" ? askedIndices(asked) : [];
+            // 沒有分析時指的人是框加位置，回答一樣繼續指著那幾位。
+            const sf = localPick && asked?.type === "ask" && Array.isArray(asked.faces) ? asked.faces : undefined;
             if (c.lines)
               return (
                 <LinesCard
@@ -2896,7 +2921,7 @@ function SessionView(props: {
                   picked={next?.card?.type === "ask" ? next.text || "" : null}
                   open={open}
                   busy={busy}
-                  onPick={(t) => props.onAsk(t, si, screen)}
+                  onPick={(t) => props.onAsk(t, si, screen, sf)}
                 />
               );
             // 問的是哪一位時，答案就是那幾顆頭像：點一顆等於指著他說「這位」，
@@ -2914,7 +2939,7 @@ function SessionView(props: {
                         avatarOnly
                         picked={picked}
                         title={`就是${face.name}`}
-                        onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen) : undefined}
+                        onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex])) : undefined}
                       />
                     );
                   }
@@ -2924,7 +2949,7 @@ function SessionView(props: {
                       kind={!open && next?.card?.type === "ask" && next.text === o ? "picked" : undefined}
                       settled={!open}
                       disabled={busy}
-                      onClick={() => props.onAsk(o, si, screen)}
+                      onClick={() => props.onAsk(o, si, screen, sf)}
                     />
                   );
                 })}

@@ -54,6 +54,7 @@ from photo_agent.preview_context import (
     MAX_UPLOAD_BYTES, PREVIEW_CONTEXT_FIELD, source_sha256, preview_versions, validate_preview_binding, validate_preview_context,
 )
 from photo_agent.chat_brief import build_brief, resolve_prompt_faces
+from photo_agent.subject_preview import _valid_subject_box
 from photo_agent.chat_plan import (
     USER_PROMPT_MAX_LEN,
     apply_plan_patch,
@@ -1617,6 +1618,27 @@ def _subject_indices(body):
     return list(dict.fromkeys(raw))
 
 
+def _ask_faces(body):
+    """The tapped faces of a photo with no analysis (「只照需求改」): no
+    subjects to index, so each is the local detector's box and where it
+    stands, the same form an upload-page line carries."""
+    raw = body.get("faces")
+    if raw is None:
+        return []
+    error = f"faces must be a list of at most {PROMPT_REVIEW_PEOPLE_MAX} {{box, where}} objects"
+    if not isinstance(raw, list) or len(raw) > PROMPT_REVIEW_PEOPLE_MAX:
+        raise _RequestError(error)
+    out = []
+    for face in raw:
+        box = face.get("box") if isinstance(face, dict) else None
+        where = face.get("where") if isinstance(face, dict) else None
+        if (not _valid_subject_box(box) or not isinstance(where, str)
+                or not 0 < len(where) <= PROMPT_REVIEW_LABEL_MAX_LEN):
+            raise _RequestError(error)
+        out.append({"box": {k: float(box[k]) for k in ("x", "y", "w", "h")}, "where": where})
+    return out
+
+
 @chat_bp.post("/sessions/<session_id>/photos/<photo_id>/ask")
 def ask_photo(session_id, photo_id):
     """A typed message about one photo. The reply may carry a proposal -- a
@@ -1642,6 +1664,9 @@ def ask_photo(session_id, photo_id):
         raise _RequestError(f"text must be a non-empty string of at most {MESSAGE_TEXT_MAX_LEN} characters")
     # The faces the user tapped to say who the message is about.
     subject_indices = _subject_indices(body)
+    faces = _ask_faces(body)
+    if faces and subject_indices:
+        raise _RequestError("send subject_indices or faces, not both")
     if photo["status"] == "failed":
         raise _RequestError("this photo's analysis failed", 409)
     screen = _screen(body.get("screen"))
@@ -1649,6 +1674,8 @@ def ask_photo(session_id, photo_id):
     card = {"type": "ask", "photo_id": photo_id}
     if subject_indices:
         card["subject_indices"] = subject_indices
+    if faces:
+        card["faces"] = faces
     asked = store.make_message("user", text.strip(), card)
     history = [m for m in store.get_messages(user, session_id, limit=chat_assistant.HISTORY_LEN)
                if (m.get("card") or {}).get("photo_id") in (None, photo_id)] + [asked]

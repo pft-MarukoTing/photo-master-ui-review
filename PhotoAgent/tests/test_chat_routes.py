@@ -1388,6 +1388,19 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual(res.get_json()["messages"][0]["card"]["subject_indices"], [1, 0])
         self.assertIn("user: [pointing at right, left] 他們都笑一下", seen[0])
 
+    def test_ask_about_faces_of_a_photo_with_no_analysis(self):
+        # 「只照需求改」: no subjects, so a tap is the detector's box and where it is.
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        face = {"box": {"x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2}, "where": "照片中從左邊數來第 1 位"}
+        res, seen = self.ask(sid, photo, "眼睛睜開", {"reply": "好。", "action": "none"}, faces=[face])
+        self.assertEqual(res.get_json()["messages"][0]["card"]["faces"], [face])
+        self.assertIn("user: [pointing at 照片中從左邊數來第 1 位] 眼睛睜開", seen[0])
+        for bad in ({"box": face["box"]}, {"box": {"x": 0.9, "y": 0, "w": 0.2, "h": 0.2}, "where": "x"}, "face"):
+            with self.subTest(face=bad):
+                self.assertEqual(self.ask(sid, photo, "hi", {}, faces=[bad])[0].status_code, 400)
+        self.assertEqual(self.ask(sid, photo, "hi", {}, faces=[face], subject_indices=[0])[0].status_code, 400)
+
     def test_ask_model_failure_is_a_message_not_an_error(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)

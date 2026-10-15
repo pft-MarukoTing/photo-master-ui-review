@@ -14,6 +14,7 @@ export class ApiError extends Error {
 // One turn of the upload page's conversation, as the model reads it.
 // bar: the buttons under the chat; topics: the option panels that can be opened.
 export type Screen = { bar: string[]; topics: string[]; pending?: string[] };
+export type AskFace = { box: { x: number; y: number; w: number; h: number }; where: string };
 export type ReviewTurn = {
   role: "user" | "assistant";
   text: string;
@@ -177,10 +178,13 @@ export const api = {
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analysis${q()}`),
   // A typed message about one photo; subjectIndices are the faces the user tapped.
   // screen: the buttons the user can press right now, so the reply can point at them.
-  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen) =>
+  // faces: a photo with no analysis has no subjects to index, so the taps go
+  // as the local detector's boxes and where each stands, as on the upload page.
+  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[]) =>
     request<{ messages: Message[] }>(
       `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
-      json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}), ...(screen ? { screen } : {}) }),
+      json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}),
+        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}) }),
     ),
   // 使用者手動存了個人化需求，請 AI 整理。後端自己補問句，不會留下使用者訊息。
   reviewPrompt: (id: string, photoId: string, screen?: Screen) =>

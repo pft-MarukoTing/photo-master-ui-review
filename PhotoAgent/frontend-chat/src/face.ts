@@ -539,6 +539,13 @@ export function useBoxThumbs(boxes: Box[], sourceUrl: string): string[] {
 // (image_tools.detect_face_boxes).
 const detectCache = new Map<string, Box[]>();
 
+// What one page already found, handed to another URL of the same photo: the
+// upload page's boxes, under the session's source URL, so the first look at
+// the session does not detect the same photo again.
+export function seedDetectedFaces(key: string, boxes: Box[]) {
+  if (!detectCache.has(key)) detectCache.set(key, boxes);
+}
+
 // `ready` is false only while the detector is still out. No faces found and
 // still looking both read as an empty picker, and the upload page waits on this
 // to tell them apart: it holds the conversation until the people in the photo
