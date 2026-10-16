@@ -361,10 +361,10 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    itself against the tile it sits on rather than against the surface.
    The threshold sits between those two small sizes. */
 .demo-image-tile{container-type:inline-size}
-/* 好幾張的對話：磚裡拼前幾張（home.tsx 的 SessionMosaic）。格線是 2px 的縫，透出
+/* 好幾張的對話：磚裡拼前幾張（home.tsx 的 SessionMosaic）。格線是 1px 的縫，透出
    底下 Tile 自己那張模糊圖。格子裡的 img 會吃到舊頁面「磚裡的 img 絕對定位鋪滿」
    那條，所以格子本身要 relative，讓 img 鋪滿的是格子、不是整塊磚。 */
-.session-tile-mosaic{position:absolute;inset:0;z-index:1;display:grid;gap:2px;
+.session-tile-mosaic{position:absolute;inset:0;z-index:1;display:grid;gap:1px;
   grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:var(--card)}
 .session-tile-mosaic.is-2{grid-template-rows:1fr}
 .session-tile-mosaic.is-3 .session-tile-cell:first-child{grid-row:span 2}
@@ -1120,7 +1120,9 @@ div.chat-proposal-row{cursor:default}
    drawer's edges (negative margin, padding back) so the scrollbar sits at
    the edge and tile focus rings aren't clipped; flex 0 1 auto so it only
    shrinks when it overflows and 目前還沒有照片 stays under the header. No
-   logout button here, so the old 64px bottom room goes too. */
+   logout button here, so the old 64px bottom room goes too.
+   磚之間留 6px、磚裡的拼貼縫只有 1px（.session-tile-mosaic），哪幾張是同一組才分得出來；
+   有了間距就不再需要陰影把磚撐開。 */
 .history-drawer{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
 .history-drawer .history-header{flex:none}
 .history-drawer .history-list{flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
@@ -1129,9 +1131,9 @@ div.chat-proposal-row{cursor:default}
 .history-drawer .history-day-group+.history-day-group{margin-top:var(--sp-4)}
 .history-drawer .history-day-heading{margin:0 0 var(--sp-1);
   font:600 var(--chat-fs-sm)/1.4 Inter,'Noto Sans TC',system-ui,sans-serif;color:var(--n64);letter-spacing:.02em}
-.history-drawer .chat-history-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;grid-auto-flow:dense;gap:0}
+.history-drawer .chat-history-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-auto-rows:auto;grid-auto-flow:dense;gap:6px}
 .history-drawer .chat-history-grid>.demo-image-tile{display:block;width:100%;height:auto;min-height:0;aspect-ratio:1/1;margin:0;padding-top:0;
-  border:1px solid var(--border-2);border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  border:1px solid var(--border-2);border-radius:8px;box-shadow:none}
 .history-drawer .chat-history-grid>.demo-image-tile img:not(.demo-image-tile-bg){position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .history-drawer .chat-history-grid>.demo-image-tile:hover,.history-drawer .chat-history-grid>.demo-image-tile.is-selected{border-color:rgba(var(--accent-rgb),.72)}
 .history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
@@ -1144,6 +1146,9 @@ div.chat-proposal-row{cursor:default}
    The :nth-last-child guard is the old one's: a tile only doubles when four
    or more follow it, so a short day doesn't open a hole nothing can backfill. */
 @media (min-width:1201px){
+  /* 跟抽屜同一套間距：磚之間 6px，圓角 8px，不加陰影。範例照片那一格維持原樣。 */
+  #upload-section .upload-gallery-col .history-grid{gap:6px}
+  #upload-section .upload-gallery-col .history-grid>.demo-image-tile{border-radius:8px;box-shadow:none}
   #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
   #upload-section .upload-gallery-col .history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
 }
@@ -1176,8 +1181,13 @@ div.chat-proposal-row{cursor:default}
 /* 開在最近照片側欄上面時也要看得到。 */
 #chat-confirm-modal{z-index:2000}
 /* 最近照片每格右上角的 ×：樣子是舊頁面的 .history-cube-remove（建置時帶進來的那段 style）。
-   磚的勾勾也在右上角，有 × 的時候收起來；多選時沒有 ×，勾勾照常顯示。 */
-.demo-image-tile .chat-tile-remove{display:flex}
+   磚的勾勾也在右上角，有 × 的時候收起來；多選時沒有 ×，勾勾照常顯示。
+   × 平常藏起來，滑到或 focus 到那一格才出現，不然十幾格每格都掛一顆。觸控裝置沒有 hover，
+   就不顯示，刪除走 header 的多選。 */
+.demo-image-tile .chat-tile-remove{display:flex;opacity:0;transition:opacity .15s}
+.demo-image-tile:hover .chat-tile-remove,.demo-image-tile:focus-visible .chat-tile-remove,
+.demo-image-tile .chat-tile-remove:focus-visible{opacity:1}
+@media (hover:none){.demo-image-tile .chat-tile-remove{display:none}}
 .demo-image-tile:has(.chat-tile-remove) .demo-image-tile-check{display:none}
 /* 舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上（首頁範例照片選了要打勾）。 */
 .demo-image-tile.is-selected .demo-image-tile-check{opacity:1;background:var(--mv-grad);border-color:transparent}
