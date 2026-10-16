@@ -160,6 +160,14 @@ class AskTest(unittest.TestCase):
         self.assertTrue(result["proposal"]["direct"])
         self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面的項目，或按「美化」我就開始。"))
 
+    def test_after_a_change_the_first_round_button_is_just_render(self):
+        # 第一輪動過東西，底下那顆就從「照建議直接美化」變成「美化」。
+        model = model_says(patch={"user_prompt": "背景改成室外"})
+        result = chat_assistant.ask(analysis(), default_plan(), "ready",
+                                    [{"role": "user", "text": "背景改成室外", "card": {"type": "ask"}}],
+                                    model=model, screen={"bar": ["照建議直接美化"], "topics": ["人像", "畫面"]})
+        self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面的項目，或按「美化」我就開始。"))
+
     def test_a_checked_prompt_points_at_the_topics(self):
         result = chat_assistant.ask(analysis(), default_plan(), "ready",
                                     [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK}],

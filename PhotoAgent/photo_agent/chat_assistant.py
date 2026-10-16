@@ -890,12 +890,13 @@ def _next_step(screen):
     """The sentence that sends the user on from a change made: to the render
     button below, and to the topics under the reply while adjusting. "" when
     SCREEN has no render button to point at."""
-    # 美化過之後套用會開新一輪，回話底下那顆就變成「美化」。
+    # 這句跟在剛做的改動後面，回話底下那顆一定已經是「美化」：美化過之後套用會
+    # 開新一輪，第一輪動過任何東西也就不再是「照建議直接美化」。
     # 「看美化項目」字面有美化，但它是回頭看項目，不是開始美化。
     bar = [b for b in (screen or {}).get("bar") or [] if "美化" in b and "項目" not in b]
     if not bar:
         return ""
-    label = "美化" if bar[0] == "再美化" else bar[0]
+    label = "美化" if bar[0] in ("再美化", "照建議直接美化") else bar[0]
     # 只照需求改的時候底下多一顆「幫我分析」：除了改需求、美化，也讓他知道
     # 還可以請 AI 看整張照片。
     analyze = ANALYZE_NUDGE if ANALYZE_BUTTON in (screen or {}).get("bar") or [] else ""

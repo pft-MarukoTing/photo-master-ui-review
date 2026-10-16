@@ -3172,6 +3172,12 @@ function SessionView(props: {
     setAskMode(null);
   }, [pid, messages.length, messages[messages.length - 1]?.card?.category, unchanged]);
   const promptNow = (photo.plan.user_prompt || "").trim();
+  // 「照建議直接美化」只在什麼都還沒動時這樣叫：寫了需求、打開過項目、對話裡套用過
+  // 改動，按下去就不只是照建議了，鍵和話裡都改說「美化」。
+  const tookChange = messages
+    .slice(readyIdx + 1)
+    .some((m) => !!m.card?.proposal?.direct || (m.card?.type === "proposal_resolved" && m.card?.choice === "apply"));
+  const startLabel = fresh && !adjusting && !lastOpened && !promptNow && !tookChange ? "照建議直接美化" : "美化";
   const promptChanged =
     !!promptNow && (fresh || (adjusting && String(roundPlan?.user_prompt || "").trim() !== promptNow));
   // 美化（第一輪、調整後）都走這裡。需求是這一輪新寫的就先問；沒動需求、
@@ -3311,7 +3317,7 @@ function SessionView(props: {
   // 困住的地方。hint: null 用在開場，因為那則訊息自己有更完整的說明。
   const guideTail = (opts: { lead?: string; except?: Category; hint?: null } = {}) => {
     const pre = opts.lead || "";
-    const renderLabel = lastOpened ? "美化" : "照建議直接美化";
+    const renderLabel = startLabel;
     if (!analysis || !nextCat)
       return (
         <>
@@ -3358,7 +3364,7 @@ function SessionView(props: {
       {(baseCats.length > 0 || pickable.length > 1) && (
         <p class="chat-text chat-muted">
           {baseCats.length > 0
-            ? `不想一項一項看的話，按下面的「${lastOpened ? "美化" : "照建議直接美化"}」我就直接開始修；也可以打字告訴我想怎麼改。`
+            ? `不想一項一項看的話，按下面的「${startLabel}」我就直接開始修；也可以打字告訴我想怎麼改。`
             : "直接打字告訴我想怎麼改就可以。"}
           {pickable.length > 1 && "想只調整其中一位，點輸入框上方的頭像。"}
         </p>
@@ -3645,7 +3651,7 @@ function SessionView(props: {
   if (editing && (photo.status === "ready" || (reframing && !renderQueued))) {
     // 調整中只放美化：項目在對話裡點，「看美化項目」再按一次會把這輪的起點重設掉。
     // 改了還沒美化的提示掛在美化鍵上，不再另外寫一行字。
-    const label = fresh && !adjusting && !lastOpened ? "照建議直接美化" : "美化";
+    const label = startLabel;
     const pending = dirtyCats.length ? `改了${dirtyCats.map((c) => CATEGORIES[c].label).join("、")}，還沒美化` : undefined;
     actionChips = (
       <>
