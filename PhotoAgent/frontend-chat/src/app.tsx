@@ -1500,6 +1500,12 @@ export function App() {
       say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
       // 上傳頁面已經偵測過這張的人臉，session 頁沒有分析時就直接用，不再偵測一次。
       if (!previewEnabled && preScan.ready) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), preScan.people.map((p) => p.box));
+      // 上傳頁面聊過的接在照片後面。等著回答的那句也在裡面：分析一好，session
+      // 的 AI 就回答它，使用者不用再問一次。要在切到 session 頁之前搬好：頁面以
+      // 打開時最新的那則為界，之後進來的才打字，搬晚了舊對話會被當成新回覆重打一次。
+      const carried = carriedLog(submissionLog, added.photo_id, later, submittedEvents);
+      if (carried.length) await api.postMessages(id, carried);
+      if (sourceIdentity.current !== selectedSource) return;
       const uploadedSession = await api.getSession(id);
       if (sourceIdentity.current !== selectedSource) return;
       setSession(uploadedSession);
@@ -1510,10 +1516,6 @@ export function App() {
       // On the photo, not the session defaults: a second photo has its own
       // faces and must not inherit these.
       if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces });
-      // 上傳頁面聊過的接在照片後面。等著回答的那句也在裡面：分析一好，session
-      // 的 AI 就回答它，使用者不用再問一次。
-      const carried = carriedLog(submissionLog, added.photo_id, later, submittedEvents);
-      if (carried.length) await api.postMessages(id, carried);
       if (sourceIdentity.current !== selectedSource) return;
       if (mode === "render") {
         try {
