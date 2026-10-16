@@ -1600,7 +1600,7 @@ export function App() {
     });
   }
 
-  // 同一段對話裡的每一張一起一鍵美化，各自照自己目前的設定。
+  // 同一段對話裡還沒美化過的每一張一起一鍵美化，各自照自己目前的設定。
   function renderAll() {
     if (!session || !photo) return;
     const id = session.session_id;
@@ -2380,7 +2380,7 @@ function BatchChat(props: {
 // 同一段對話裡有好幾張時，最左邊那欄「我的照片」：點哪張就看哪張的對話和結果。
 // 跟舊版批次的 .batch-sidebar 同一套 class 和樣子；每張是歷史紀錄那種方塊（.history-cube），
 // 狀態疊在照片左下角。窄螢幕一樣收成從左邊拉出來的抽屜。
-// 上面那顆「全部一鍵美化」把每張照它自己目前的設定送出去，正在美化的不重送。
+// 上面那顆「全部一鍵美化」把還沒美化過的每張照它自己目前的設定送出去；全部都美化過就不出現。
 function BatchSidebar(props: {
   photos: Photo[];
   current: string;
@@ -2426,6 +2426,8 @@ function BatchSidebar(props: {
     if (top < box.scrollTop) box.scrollTop = top;
     else if (top + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top + on.offsetHeight - box.clientHeight;
   }, [current, open]);
+  // 有的美化過、有的還沒：只送還沒的，按鈕上直接寫會美化幾張。
+  const todo = photos.filter(canRenderInAll);
   const pick = (id: string) => {
     setOpen(false);
     if (id !== current) props.onPick(id);
@@ -2452,15 +2454,17 @@ function BatchSidebar(props: {
             <Icon name="down" size={14} />
           </button>
         </div>
-        <div class="batch-sidebar-all">
-          <Chip
-            label="全部一鍵美化"
-            icon="spark"
-            disabled={props.busy || !photos.some(canRenderInAll)}
-            title="每張照目前的設定美化，正在美化的那幾張不重送"
-            onClick={props.onRenderAll}
-          />
-        </div>
+        {todo.length ? (
+          <div class="batch-sidebar-all">
+            <Chip
+              label={todo.length === photos.length ? "全部一鍵美化" : `美化其餘 ${todo.length} 張`}
+              icon="spark"
+              disabled={props.busy}
+              title="還沒美化的每張照目前的設定美化，美化過的不重送"
+              onClick={props.onRenderAll}
+            />
+          </div>
+        ) : null}
         <div class="batch-sidebar-list" ref={list} role="tablist" aria-label="這段對話的照片">
           {photos.map((p, i) => {
             const v = p.active_version;
@@ -2504,9 +2508,10 @@ function BatchSidebar(props: {
   );
 }
 
-// 「全部一鍵美化」送得出去的：沒失敗、也不在美化中或排著等美化。還在分析的照送，
-// 後端會排著等分析好。
-const canRenderInAll = (p: Photo) => p.status !== "failed" && p.status !== "rendering" && !p.queued_render && !p.pending_render;
+// 「全部一鍵美化」送得出去的：還沒美化過、沒失敗、也不在美化中或排著等美化。還在
+// 分析的照送，後端會排著等分析好。
+const canRenderInAll = (p: Photo) =>
+  !p.active_version && p.status !== "failed" && p.status !== "rendering" && !p.queued_render && !p.pending_render;
 
 // ── Pre-session chat ────────────────────────────────────────────────────────
 // 文字裡寫著「照片中從左邊數來第 2 位：」的地方換回那個人的頭像，跟對話裡指定

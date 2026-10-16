@@ -283,6 +283,7 @@ window.PhotoAgentDom = (() => {
     stepIndicatorSlot: document.querySelector("#step-indicator-slot"),
     pageScrollHint: document.querySelector("#page-scroll-hint"),
     batchContinueAllBtn: document.querySelector("#batch-continue-all-btn"),
+    batchContinueAllLabel: document.querySelector("#batch-continue-all-label"),
     errorModal: document.querySelector("#error-modal"),
     errorModalBox: document.querySelector(".error-modal-box"),
     errorModalClose: document.querySelector("#error-modal-close"),

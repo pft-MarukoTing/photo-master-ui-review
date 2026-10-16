@@ -6863,9 +6863,15 @@
   // Shows/hides the bulk "Run all" button, based on whether there's at
   // least one record still awaiting its first edit -- live-updated as
   // analyses/edits complete, not just once at the end of a whole-batch phase.
+  // The label says how many will go when some are already edited, since
+  // only the not-yet-edited ones are sent.
   function updateBatchHeaderControls() {
-    const ready = analyzedBatchRecords().length > 0;
-    els.batchContinueAllBtn.hidden = !ready;
+    const pending = analyzedBatchRecords().length;
+    els.batchContinueAllBtn.hidden = !pending;
+    if (els.batchContinueAllLabel) {
+      els.batchContinueAllLabel.textContent =
+        pending === batchRecords.length ? "全部美化" : `美化其餘 ${pending} 張`;
+    }
   }
 
   // Effective per-image style options: each category just falls back to
