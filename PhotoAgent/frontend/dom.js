@@ -238,6 +238,7 @@ window.PhotoAgentDom = (() => {
     batchDrawerTrigger: document.querySelector("#batch-drawer-trigger"),
     batchDrawerTriggerCount: document.querySelector("#batch-drawer-trigger-count"),
     batchSidebarTitle: document.querySelector("#batch-sidebar-title"),
+    batchSidebarCount: document.querySelector("#batch-sidebar-count"),
     batchDownloadAllBtn: document.querySelector("#batch-download-all-btn"),
     batchSidebarList: document.querySelector("#batch-sidebar-list"),
     resultsDetail: document.querySelector("#results-detail"),

@@ -36,6 +36,9 @@
     getHistoryCase,
     deleteHistoryEntry,
     clearHistory,
+    listChatSessions,
+    getChatSession,
+    deleteChatSessions,
     getJobStatusOnce,
     reportJob,
     getReports,
@@ -5498,9 +5501,7 @@
     if (els.costBtn) els.costBtn.hidden = true;
     if (els.dzMulti) { els.dzMulti.hidden = true; els.dzMulti.innerHTML = ""; }
     if (els.batchSidebarList) els.batchSidebarList.innerHTML = "";
-    if (els.batchSidebar) els.batchSidebar.hidden = true;
-    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
-    closeBatchDrawer();
+    hideCaseGroupSidebar();
     // Undo whatever hideAllBatchMainViews left mid-batch, so a subsequent
     // single-image run (which never touches these) isn't left with the
     // canvas/run switcher hidden from a prior batch session.
@@ -6605,9 +6606,6 @@
     if (els.resultsBody) els.resultsBody.classList.add("batch-mode");
     currentBatchRecord = batchRecords[0] || null;
     userPickedBatchRecord = false;
-    // Before rendering: renderBatchMain measures the sidebar's real on-page
-    // position (updateBatchSidebarMaxHeight) to cap its height, which reads
-    // as all-zero while the section is still display:none.
     showSection("results");
     renderBatchSidebarList();
     renderBatchMain(currentBatchRecord); // shows record 1's "analyzing" placeholder immediately
@@ -7220,13 +7218,42 @@
     els.batchDownloadAllBtn.setAttribute("aria-label", hint);
   }
 
+  // 全部下載 for a batch listed from the chat page: same `image N/` layout as
+  // buildAllBatchResultsZip, with the photo's current version as its result.
+  async function buildCaseGroupZip(onProgress) {
+    const photos = caseGroupSidebarPhotos;
+    const total = photos.reduce((sum, p) => sum + (p.active_version?.job_id ? 2 : 1), 0);
+    let done = 0;
+    const tick = () => {
+      done += 1;
+      if (onProgress) onProgress(done, total);
+    };
+    const groups = await mapWithConcurrency(photos, 3, async (photo, i) => {
+      const v = photo.active_version;
+      const runs = v?.job_id ? [{ run: v.run || 1, jobId: v.job_id, status: "done" }] : [];
+      const { sourceBuf, runData } = await fetchImageDownloadData(
+        { sourceUrl: sourceImageUrl(photo.analyze_job_id), path: "local" }, runs, tick);
+      tick();
+      return buildFlatImageFiles({ prefix: `image ${i + 1}/` }, sourceBuf, runData);
+    });
+    return window.PhotoAgentZip.createZip(groups.flat());
+  }
+
   function handleDownloadAllBatchClick() {
+    if (caseGroupSidebarSession) {
+      if (caseGroupSidebarPhotos.length) downloadZip(buildCaseGroupZip, buildDownloadZipFilename());
+      return;
+    }
     if (!batchRecords.length) return;
     downloadZip(buildAllBatchResultsZip, buildDownloadZipFilename());
   }
 
   function renderBatchSidebarList() {
-    if (els.batchSidebarTitle) els.batchSidebarTitle.textContent = `我的照片（${batchRecords.length}）`;
+    // A batch uploaded here takes the sidebar over from one listed from the
+    // chat page (showCaseGroupSidebar).
+    ++caseGroupSidebarToken;
+    caseGroupSidebarSession = null;
+    if (els.batchSidebarCount) els.batchSidebarCount.textContent = `${batchRecords.length} 張`;
     if (els.batchDrawerTriggerCount) {
       els.batchDrawerTriggerCount.textContent = String(batchRecords.length);
       els.batchDrawerTriggerCount.hidden = batchRecords.length === 0;
@@ -7240,7 +7267,7 @@
   // whatever main-area view matches that record's current status.
   function buildBatchSidebarItem(record) {
     const item = document.createElement("div");
-    item.className = `batch-sidebar-item ${record.status}${record === currentBatchRecord ? " selected" : ""}`;
+    item.className = `history-cube batch-sidebar-item ${record.status}${record === currentBatchRecord ? " selected" : ""}`;
     item.dataset.id = record.localId;
 
     const media = document.createElement("div");
@@ -7263,30 +7290,23 @@
     badge.className = "rc-badge";
     badge.textContent = {
       analyzing: "分析中",
-      analyzed: "待美化",
+      analyzed: "已分析",
       processing: "美化中",
-      done: "美化完成",
+      done: "已美化",
       error: "失敗",
       archived: "可更新"
     }[record.status] || "";
     if (record.status !== "archived" && runs.length > 1) {
       const runsDone = runs.filter((x) => x.status === "done").length;
       if (runsRunning) badge.textContent = `美化中 (${runsDone}/${runs.length})`;
-      else if (runsDone) badge.textContent = `美化完成 (${runsDone}/${runs.length})`;
+      else if (runsDone) badge.textContent = `已美化 (${runsDone}/${runs.length})`;
     }
 
-    // Unlike the old grid (badge overlaid on a large square thumbnail), the
-    // sidebar's thumbnail is small -- the badge sits in its own column
-    // beside the thumbnail instead of inside it, where there's enough width
-    // for the text. No filename shown here (or in the upload-page multi-file
-    // thumbnail strip) -- the thumbnail image itself is enough to tell
-    // images apart.
-    const textCol = document.createElement("div");
-    textCol.className = "batch-sidebar-text";
-    textCol.appendChild(badge);
-
+    // A square .history-cube with the badge over its bottom-left corner,
+    // the same tile 對話模式's own 我的照片 column (BatchSidebar, app.tsx)
+    // shows. No filename -- the photo itself tells them apart.
     item.appendChild(media);
-    item.appendChild(textCol);
+    item.appendChild(badge);
     if (record.status === "error") item.title = record.error || "處理失敗";
     item.addEventListener("click", async () => {
       if (record !== currentBatchRecord && !(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
@@ -7298,6 +7318,183 @@
   function updateBatchSidebarItem(record) {
     const existing = els.batchSidebarList.querySelector(`[data-id="${record.localId}"]`);
     if (existing) existing.replaceWith(buildBatchSidebarItem(record));
+  }
+
+  // ── Batches uploaded in 對話模式 ──
+  // Several photos uploaded together on the chat page are one session
+  // there, but each is still its own history case -- which is all this page
+  // knows about. The session is what says they belong together, so it stays
+  // the one place that decides it: 最近照片 shows such a session as one tile
+  // (renderHistoryList) and opening any of its cases lists the rest in the
+  // batch sidebar, the same way a batch uploaded here does. Only sessions
+  // of more than one photo -- a single photo has nothing to group.
+  // Every live session and every case: the backend clamps it to its own max.
+  const CASE_GROUPS_LIMIT = 1000;
+  let caseGroupsByKey = new Map(); // case_id (= history image_key) -> session row
+  let caseGroupsLoad = null; // { user, promise }
+  let caseGroupSidebarToken = 0;
+  let caseGroupSidebarSession = null; // session_id the sidebar is listing, if any
+  let caseGroupSidebarPhotos = []; // that session's photos, for 全部下載
+
+  // Cached per user; refresh re-reads it (each fresh render of 最近照片), so a
+  // batch made on the chat page since is picked up there.
+  function loadCaseGroups({ refresh = false } = {}) {
+    const user = getCurrentUser();
+    if (!user) {
+      caseGroupsByKey = new Map();
+      return Promise.resolve(caseGroupsByKey);
+    }
+    if (!refresh && caseGroupsLoad?.user === user) return caseGroupsLoad.promise;
+    const promise = listChatSessions(user, { limit: CASE_GROUPS_LIMIT })
+      .then(({ sessions }) => {
+        const groups = new Map();
+        (sessions || []).forEach((row) => {
+          if (!row.session_id || !(row.photo_count > 1)) return;
+          (row.case_ids || []).forEach((caseId) => caseId && groups.set(caseId, row));
+        });
+        if (getCurrentUser() === user) caseGroupsByKey = groups;
+        return groups;
+      })
+      // Without them every case just lists on its own, as before.
+      .catch(() => caseGroupsByKey);
+    caseGroupsLoad = { user, promise };
+    return promise;
+  }
+
+  function forgetCaseGroup(sessionId) {
+    for (const [caseId, row] of caseGroupsByKey) {
+      if (row.session_id === sessionId) caseGroupsByKey.delete(caseId);
+    }
+    if (caseGroupSidebarSession === sessionId) hideCaseGroupSidebar();
+  }
+
+  function hideCaseGroupSidebar() {
+    ++caseGroupSidebarToken;
+    caseGroupSidebarSession = null;
+    if (els.batchSidebar) els.batchSidebar.hidden = true;
+    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
+    closeBatchDrawer();
+  }
+
+  // Called by every history view in place of just hiding the sidebar.
+  // Opening another case of the batch already listed keeps the list where
+  // it is and only moves the highlight, then refreshes the rows' states.
+  function showCaseGroupSidebar(caseKey) {
+    const listed = caseGroupSidebarSession
+      && caseKey
+      && caseGroupsByKey.get(caseKey)?.session_id === caseGroupSidebarSession;
+    if (listed) {
+      ++caseGroupSidebarToken;
+      els.batchSidebarList?.querySelectorAll(".batch-sidebar-item").forEach((item) => {
+        item.classList.toggle("selected", item.dataset.caseId === caseKey);
+      });
+    } else {
+      hideCaseGroupSidebar();
+    }
+    const user = getCurrentUser();
+    if (!caseKey || !user) return;
+    const token = caseGroupSidebarToken;
+    (async () => {
+      const group = (await loadCaseGroups()).get(caseKey);
+      if (token !== caseGroupSidebarToken) return;
+      if (!group) {
+        if (listed) hideCaseGroupSidebar();
+        return;
+      }
+      let session;
+      try {
+        session = await getChatSession(user, group.session_id);
+      } catch {
+        return; // expired, or a transient failure -- the photo still shows on its own
+      }
+      if (token !== caseGroupSidebarToken || getCurrentUser() !== user) return;
+      const photos = (session.photos || []).filter((p) => p.case_id);
+      if (photos.length < 2) return;
+      renderCaseGroupSidebar(group.session_id, photos, caseKey);
+    })();
+  }
+
+  function renderCaseGroupSidebar(sessionId, photos, caseKey) {
+    caseGroupSidebarSession = sessionId;
+    if (els.batchSidebarCount) els.batchSidebarCount.textContent = `${photos.length} 張`;
+    if (els.batchDrawerTriggerCount) {
+      els.batchDrawerTriggerCount.textContent = String(photos.length);
+      els.batchDrawerTriggerCount.hidden = false;
+    }
+    // 全部美化 acts on a batch uploaded on this page (batchRecords), not on
+    // one listed from the chat page. 全部下載 works for both -- here it zips
+    // each photo's source plus its current version (buildCaseGroupZip).
+    if (els.batchContinueAllBtn) els.batchContinueAllBtn.hidden = true;
+    caseGroupSidebarPhotos = photos;
+    if (els.batchDownloadAllBtn) {
+      const doneCount = photos.filter((p) => p.active_version?.job_id).length;
+      const hint = doneCount === 0
+        ? `下載所有原圖（${photos.length} 張）`
+        : doneCount === photos.length
+          ? `下載所有已完成的結果（${doneCount} 張）`
+          : `下載全部（已完成 ${doneCount} 張，其餘為原圖，共 ${photos.length} 張）`;
+      els.batchDownloadAllBtn.hidden = false;
+      els.batchDownloadAllBtn.title = hint;
+      els.batchDownloadAllBtn.setAttribute("aria-label", hint);
+    }
+    const list = els.batchSidebarList;
+    const keepScroll = list.scrollTop;
+    list.innerHTML = "";
+    photos.forEach((photo) => list.appendChild(buildCaseGroupSidebarItem(photo, caseKey)));
+    list.scrollTop = keepScroll;
+    els.batchSidebar.hidden = false;
+    if (els.resultsBody) els.resultsBody.classList.add("batch-mode");
+  }
+
+  // A chat-page photo's state in this sidebar's own vocabulary -- the same
+  // classes and badges buildBatchSidebarItem gives a record here.
+  function caseGroupPhotoState(photo) {
+    if (photo.status === "failed") return { key: "error", text: "失敗" };
+    if (photo.status === "rendering" || photo.queued_render || photo.pending_render) return { key: "processing", text: "美化中" };
+    if (photo.status === "analyzing" || photo.status === "reframing" || photo.pending_reframe) return { key: "analyzing", text: "分析中" };
+    if (photo.active_version?.job_id) return { key: "done", text: "已美化" };
+    return { key: "analyzed", text: "已分析" };
+  }
+
+  function buildCaseGroupSidebarItem(photo, caseKey) {
+    const state = caseGroupPhotoState(photo);
+    const item = document.createElement("div");
+    item.className = `history-cube batch-sidebar-item ${state.key}${photo.case_id === caseKey ? " selected" : ""}`;
+    item.dataset.caseId = photo.case_id;
+
+    const media = document.createElement("div");
+    media.className = "rc-media";
+    const img = document.createElement("img");
+    const version = photo.active_version;
+    img.src = version?.job_id
+      ? resultThumbnailUrl(version.job_id, { run: version.run || 1 })
+      : sourceThumbnailUrl(photo.analyze_job_id);
+    img.alt = "";
+    media.appendChild(img);
+    if (state.key === "processing" || state.key === "analyzing") {
+      const spinner = document.createElement("div");
+      spinner.className = "rc-spinner";
+      media.appendChild(spinner);
+    }
+    const badge = document.createElement("span");
+    badge.className = "rc-badge";
+    badge.textContent = state.text;
+
+    item.appendChild(media);
+    item.appendChild(badge);
+    if (state.key === "error" && photo.error) item.title = photo.error;
+    item.addEventListener("click", async () => {
+      if (item.classList.contains("selected") || item.classList.contains("opening")) return;
+      if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
+      closeBatchDrawer();
+      item.classList.add("opening");
+      try {
+        await openCaseByKey(photo.case_id);
+      } finally {
+        item.classList.remove("opening");
+      }
+    });
+    return item;
   }
 
   function openBatchError(record) {
@@ -8174,6 +8371,104 @@
     }
   }
 
+  // One tile per batch from 對話模式 (see loadCaseGroups), per list: the
+  // drawer's and the upload page's 最近照片 each keep their own, across the
+  // pages appended to them. container -> Map(session_id -> { group, li, keys }),
+  // keys being the batch's cases this list has received so far.
+  const historyGroupTiles = new Map();
+
+  function historyGroupThumbUrl(thumb) {
+    return thumb.run ? resultThumbnailUrl(thumb.job_id, { run: thumb.run }) : sourceThumbnailUrl(thumb.job_id);
+  }
+
+  // The session row's status (chat_session._summary) in this list's own
+  // classes and badges -- the ones renderTileStatus gives a single case.
+  function historyGroupState(group) {
+    switch (group.status) {
+      case "rendering": return { key: "processing", text: "美化中" };
+      case "analyzing": return { key: "analyzing", text: "分析中" };
+      case "failed": return { key: "error", text: "失敗" };
+      case "done": return {
+        key: "done",
+        text: group.rendered_count < group.photo_count ? `美化完成（${group.rendered_count}/${group.photo_count}）` : "美化完成"
+      };
+      default: return { key: "analyzed", text: "待美化" };
+    }
+  }
+
+  // Same cube as a single case, with its first few photos laid out in it the
+  // way the chat page's own list does (SessionMosaic, home.tsx): two side by
+  // side, three as one large and two small, four in a 2x2 grid, and "+N" over
+  // the last when there are more. The first photo stays underneath as the
+  // blurred backdrop the gaps show through.
+  function buildHistoryGroupTile(group, job) {
+    const state = historyGroupState(group);
+    const shots = (group.thumbnails || []).slice(0, 4);
+    const more = group.photo_count - shots.length;
+    const backdrop = shots[0] ? historyGroupThumbUrl(shots[0]) : "";
+    const cells = shots.map((thumb, i) => `
+      <span class="history-cube-cell"><img src="${historyGroupThumbUrl(thumb)}" alt="" loading="lazy">${more > 0 && i === shots.length - 1 ? `<b>+${more}</b>` : ""}</span>`).join("");
+    const busy = state.key === "processing" || state.key === "analyzing";
+    const li = document.createElement("li");
+    li.className = `history-cube history-cube-group batch-sidebar-item ${state.key}`;
+    li.dataset.sessionId = group.session_id;
+    li.innerHTML = `
+      <div class="rc-media">${historyMediaMarkup(backdrop)}${shots.length > 1 ? `<span class="history-cube-mosaic is-${shots.length}" aria-hidden="true">${cells}</span>` : ""}${busy ? '<div class="rc-spinner"></div>' : ""}</div>
+      <span class="history-cube-count">${group.photo_count} 張</span>
+      <span class="rc-badge">${state.text}</span>
+      <button type="button" class="history-cube-remove" aria-label="刪除這組紀錄">×</button>
+    `;
+    return li;
+  }
+
+  // Opens the batch's newest case (the one its tile took the place of); the
+  // batch sidebar then lists the rest. Not .selectable: 選取 downloads cases
+  // one by one, which a batch tile does not stand for.
+  function wireHistoryGroupTile(entry) {
+    const { group, job, li } = entry;
+    li.addEventListener("click", async () => {
+      if (historySelectMode || li.classList.contains("opening")) return;
+      if (!(await confirmDropReview(DROP_REVIEW_FOR_PHOTO))) return;
+      li.classList.add("opening");
+      try {
+        await openHistoryCase(job);
+      } catch (error) {
+        showNoticeModal(friendlyError(error));
+      } finally {
+        li.classList.remove("opening");
+      }
+    });
+    li.querySelector(".history-cube-remove")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      handleDeleteHistoryGroup(entry, group);
+    });
+  }
+
+  // The batch goes as a whole, the way the chat page's own × removes it:
+  // the session and the history cases of all its photos.
+  async function handleDeleteHistoryGroup(entry, group) {
+    const user = getCurrentUser();
+    if (!user) return;
+    const confirmed = await showConfirmModal(`確定要刪除這組 ${group.photo_count} 張照片的處理紀錄嗎？`);
+    if (!confirmed) return;
+    try {
+      const inDrawer = els.historyList?.contains(entry.li);
+      await deleteChatSessions(user, [group.session_id]);
+      removeHistoryCubeFromDom(entry.li);
+      historyGroupTiles.forEach((tiles) => tiles.delete(group.session_id));
+      // Same bookkeeping as handleDeleteHistoryEntry, once per case of the
+      // batch this list had already paged in.
+      if (inDrawer) historyDrawerOffset = Math.max(0, historyDrawerOffset - entry.keys.size);
+      forgetCaseGroup(group.session_id);
+      if (els.historyList && !els.historyList.children.length) {
+        closeHistoryDrawer();
+        resetApp();
+      }
+    } catch (err) {
+      showNoticeModal(err.message || "刪除紀錄失敗，請稍後再試。");
+    }
+  }
+
   async function renderHistoryList(jobs, { container = els.historyList, append = false } = {}) {
     if (!container) return;
     const isDrawer = container === els.historyList;
@@ -8185,8 +8480,11 @@
       // these over.
       historyJobsByKey.clear();
       historyTileElsByKey.clear();
+      historyGroupTiles.delete(container);
       container.innerHTML = "";
     }
+    if (!historyGroupTiles.has(container)) historyGroupTiles.set(container, new Map());
+    const groupTiles = historyGroupTiles.get(container);
     if (isDrawer && !append) {
       // jobs.length here is only this page's count -- on an append call an
       // empty (no-more) page doesn't mean the drawer itself is empty, so
@@ -8213,6 +8511,14 @@
       });
     }
     const rows = jobs.map((job) => {
+      // A case of a batch from 對話模式 whose tile is already up (its
+      // newest case came first, possibly on an earlier page) adds nothing.
+      const group = job.image_key ? caseGroupsByKey.get(job.image_key) : null;
+      const groupTile = group ? groupTiles.get(group.session_id) : null;
+      if (groupTile) {
+        groupTile.keys.add(job.image_key);
+        return null;
+      }
       const label = formatHistoryDayLabel(job.ts);
       if (label !== currentLabel) {
         currentLabel = label;
@@ -8230,6 +8536,14 @@
           container.appendChild(group);
           existingGrids.set(label, currentGrid);
         }
+      }
+
+      if (group) {
+        const entry = { group, job, li: buildHistoryGroupTile(group, job), keys: new Set([job.image_key]) };
+        groupTiles.set(group.session_id, entry);
+        currentGrid.appendChild(entry.li);
+        wireHistoryGroupTile(entry);
+        return null;
       }
 
       const li = document.createElement("li");
@@ -8454,7 +8768,7 @@
     // would otherwise keep saying 美化中 until the whole list is reloaded.
     // Watched as soon as its own status is in, not after the whole list's
     // (which can take seconds longer on a first render).
-    await Promise.all(rows.map(async (row) => {
+    await Promise.all(rows.filter(Boolean).map(async (row) => {
       await renderTileStatus(row);
       if (historyTileInProgress(row.li)) watchHistoryTile({ ...row, container, rerender: renderTileStatus });
     }));
@@ -8501,10 +8815,11 @@
     }
     historyDrawerLoading = true;
     try {
-      const page = await getHistory(user, {
-        limit: HISTORY_DRAWER_PAGE_SIZE,
-        offset: historyDrawerOffset
-      });
+      const [page] = await Promise.all([
+        getHistory(user, { limit: HISTORY_DRAWER_PAGE_SIZE, offset: historyDrawerOffset }),
+        // A fresh render re-reads which cases are batches from 對話模式.
+        loadCaseGroups({ refresh: historyDrawerOffset === 0 })
+      ]);
       if (token !== historyDrawerRequestToken || getCurrentUser() !== user) return;
       const jobs = Array.isArray(page.jobs) ? page.jobs : [];
       await renderHistoryList(jobs, { append: !reset && historyDrawerOffset > 0 });
@@ -9329,9 +9644,8 @@
     setCurrentCaseTimes(job);
     const analyzeJobId = Array.isArray(job.runs) && job.runs.length ? job.runs[0] : job.job_id;
     const previewUrl = sourceImageUrl(analyzeJobId);
-    if (els.batchSidebar) els.batchSidebar.hidden = true;
-    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
+    showCaseGroupSidebar(job.image_key);
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
     if (els.costBtn) els.costBtn.hidden = true;
     if (els.canvasLoading) els.canvasLoading.hidden = true;
@@ -9476,9 +9790,8 @@
     if (historyViewToken !== myToken) return; // navigated away while the thumbnail loaded
 
     showSection("results");
-    if (els.batchSidebar) els.batchSidebar.hidden = true;
-    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
     currentBatchRecord = null;
+    showCaseGroupSidebar(job.image_key);
     pendingResultsActive = false; // see viewHistoryRecord
     // No result -- and so no prompts -- yet for #show-prompt-btn to show.
     if (els.showPromptBtn) els.showPromptBtn.hidden = true;
@@ -9888,10 +10201,11 @@
 
     // A live batch (if one happened to be running in this same session) has
     // nothing to do with a historical record -- make sure its sidebar/
-    // batch-mode layout doesn't bleed into this single-photo view.
-    if (els.batchSidebar) els.batchSidebar.hidden = true;
-    if (els.resultsBody) els.resultsBody.classList.remove("batch-mode");
+    // batch-mode layout doesn't bleed into this single-photo view. A case
+    // that was uploaded together with others in 對話模式 lists that batch
+    // instead (showCaseGroupSidebar).
     currentBatchRecord = null;
+    showCaseGroupSidebar(job.image_key);
     // A 待美化 review this record replaced (opened from the drawer without
     // going Home) left this set, and handleDownloadClick checks it first --
     // 下載結果 on this finished record then saved the review's original
@@ -10068,10 +10382,10 @@
     }
     uploadHistoryLoading = true;
     try {
-      const page = await getHistory(user, {
-        limit: UPLOAD_HISTORY_PAGE_SIZE,
-        offset: uploadHistoryOffset
-      });
+      const [page] = await Promise.all([
+        getHistory(user, { limit: UPLOAD_HISTORY_PAGE_SIZE, offset: uploadHistoryOffset }),
+        loadCaseGroups({ refresh: uploadHistoryOffset === 0 })
+      ]);
       if (token !== uploadHistoryRequestToken || getCurrentUser() !== user) return;
       const returnedJobs = Array.isArray(page.jobs) ? page.jobs : [];
       // Keep the thumbnail cap effective even while an older backend is
@@ -11050,32 +11364,6 @@
     ] : []);
   }
 
-  // Sets .batch-sidebar's actual height (not just a cap) so align-items:stretch
-  // never grows it past the viewport (per this app's "avoid making the user
-  // scroll the window" policy), even when the main content column is
-  // naturally very tall. Measured from the sidebar's own actual (pre-scroll)
-  // rendered top -- a static CSS calc() can't know the fixed header's real
-  // height plus whatever else (results-body-actions, margins) pushes that
-  // starting position down. Deliberately NOT re-measured on scroll: this uses
-  // the sidebar's worst-case (unstuck, further down the page) position, which
-  // is the binding constraint -- once scrolled enough to actually stick higher
-  // up, capping to the same height just leaves a little unused room at the
-  // bottom rather than growing (which would require re-measuring mid-scroll).
-  // A plain height (not max-height) deliberately overrides align-items:stretch's
-  // own natural-content sizing -- this already runs on the very first
-  // "analyzing" placeholder render (renderBatchMain), so leaving it as a mere
-  // cap let the sidebar sit at whatever height that item count's row list
-  // happened to add up to until a later, taller main-content view (the
-  // compare-card + analysis panel) stretched it up to this same number --
-  // a visible resize on selection instead of one stable height throughout.
-  function updateBatchSidebarMaxHeight() {
-    if (!els.batchSidebar || els.batchSidebar.hidden) return;
-    const top = els.batchSidebar.getBoundingClientRect().top;
-    const maxHeight = Math.max(200, window.innerHeight - top - 24);
-    els.batchSidebar.style.maxHeight = `${maxHeight}px`;
-    els.batchSidebar.style.height = `${maxHeight}px`;
-  }
-  window.addEventListener("resize", updateBatchSidebarMaxHeight);
 
   // Narrow-viewport-only slide-in drawer for .batch-sidebar (see the
   // max-width:900px rules in index.html) -- .drawer-open is what the CSS
@@ -11097,7 +11385,7 @@
   }
 
   // Same "avoid making the user scroll the window" policy as
-  // updateBatchSidebarMaxHeight above -- caps #analysis-preview to the
+  // .batch-sidebar's fixed height (index.html) -- caps #analysis-preview to the
   // viewport (long recipe lists/style options scroll inside the panel
   // instead of pushing the whole page taller), whether it's shown mid-
   // processing (full width) or inline beside the results canvas.
@@ -11130,7 +11418,6 @@
     if (!record) return;
     setCurrentCaseTimes(record);
     updateApSubjectTags(record);
-    updateBatchSidebarMaxHeight();
     // A photo still being reframed gets its indicators once its panel reopens.
     if (!reframesInFlight.has(record)) syncReframeBusy();
     // Only this record's OWN rotation (if it was the one actively showing)

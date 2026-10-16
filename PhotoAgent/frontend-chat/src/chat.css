@@ -676,8 +676,9 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-upload-stack span{width:44px;height:56px;border-radius:8px;object-fit:cover;border:1px solid var(--n24);box-sizing:border-box}
 .chat-upload-stack span{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;
   color:var(--text-2);background:var(--n14)}
-/* session 裡好幾張照片時最左邊那欄（BatchSidebar）：卡片、標題、列表、狀態膠囊都是
-   舊版 .batch-sidebar（index.html）原封不動的樣式。舊版頁面會捲，所以它是 sticky、
+/* session 裡好幾張照片時最左邊那欄（BatchSidebar）：卡片、標題、張數、列表、方塊、
+   選中的框、桌機 170px、≤900 抽屜都跟面板模式共用舊版 index.html 那段「我的照片」樣式
+   （建置時帶進來），這裡只補這頁版面自己需要的。舊版頁面會捲，所以它是 sticky、
    上面空 44px；這裡那排照片／對話釘在視窗裡，欄位就跟著撐滿同一個高度，只有列表在裡面捲。 */
 #results-body.batch-mode>.batch-sidebar{position:relative;top:auto;margin:10px 0 20px;max-height:none;min-height:0}
 /* 高度釘死在右邊那排（#results-detail，styles.css 的 100vh − 標頭 − 步驟列）扣掉上下 margin，
@@ -686,21 +687,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 @media (min-width:901px){
   #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px) - 30px);box-sizing:border-box}
 }
-/* 列表捲動：細捲軸，捲到底也不帶動整頁。 */
-.batch-sidebar-list{scrollbar-width:thin;overscroll-behavior:contain;scroll-padding:4px 0}
-/* 桌機上這欄一直攤開，舊版的 200px 太搶眼，收到 170px；內距跟著從 20 縮到 14，
-   「全部一鍵美化」連圖示才放得進一行。抽屜（下面）另外設寬度，蓋掉這組。 */
-#results-body.batch-mode>#batch-sidebar{flex:0 0 170px;max-width:170px;padding:14px}
-.batch-sidebar-count{flex:none;font-size:12px;color:var(--text-2)}
 .batch-sidebar-all{margin:0 0 12px}
 .batch-sidebar-all .chat-chip{width:100%;justify-content:center}
-/* 每張是歷史紀錄的方塊（.history-cube，舊版 index.html）：照片撐滿、狀態疊在左下角。
-   flex:none 是因為列表是會捲的直排 flex，不然方塊會被壓扁。照片蓋住了 .selected 原本的
-   內框，所以選中的框改畫在照片上面那層。 */
-.batch-sidebar-list>button.history-cube{flex:none;width:100%;padding:0;border:0;font:inherit;color:inherit}
-.batch-sidebar-list>.history-cube .rc-media{display:block}
-.batch-sidebar-list>.history-cube.selected::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;
-  box-shadow:inset 0 0 0 3px var(--accent);pointer-events:none}
 /* 手機和直拿的平板：跟舊版 ≤900 一樣收成從左邊拉出來的抽屜，左上角那顆開。舊版那組只
    寫到 900，901–1200 直拿也是這套直排版面，所以這裡連那段一起重寫一次（上面那條桌機
    規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */

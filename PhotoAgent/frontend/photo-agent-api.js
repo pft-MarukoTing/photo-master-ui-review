@@ -603,6 +603,47 @@ window.PhotoAgentApi = (() => {
     return data;
   }
 
+  // The chat page's sessions (backend/routes/chat.py). 面板模式 reads them
+  // only to know which history cases were uploaded together as one batch
+  // there -- a session's case_ids -- so 最近照片 can show them as one tile
+  // and the results page can list them in the batch sidebar.
+  async function listChatSessions(user, { limit = 20 } = {}) {
+    const params = new URLSearchParams({ user, limit: String(limit) });
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/chat/sessions?${params}`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `取得對話紀錄失敗：HTTP ${response.status}`);
+    }
+    return data; // { sessions: [{ session_id, photo_count, thumbnails, status, rendered_count, case_ids, ... }] }
+  }
+
+  async function getChatSession(user, sessionId) {
+    const params = new URLSearchParams({ user, messages_limit: "1" });
+    const response = await fetchWithRetry(
+      `${BASE_URL}/api/photo-agent/chat/sessions/${encodeURIComponent(sessionId)}?${params}`
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `取得對話紀錄失敗：HTTP ${response.status}`);
+    }
+    return data; // { session_id, photos: [{ photo_id, case_id, analyze_job_id, status, active_version, ... }], ... }
+  }
+
+  // rows: session ids. A session goes together with the history cases of
+  // its photos (see delete_sessions in backend/routes/chat.py).
+  async function deleteChatSessions(user, rows) {
+    const response = await fetchWithRetry(`${BASE_URL}/api/photo-agent/chat/sessions/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user, rows })
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || `刪除紀錄失敗：HTTP ${response.status}`);
+    }
+    return data;
+  }
+
   // imageKey (job.image_key from getHistory) identifies which entry to
   // remove -- it's an S3 key path (contains "/"), so it's a query param
   // rather than a URL path segment.
@@ -770,6 +811,9 @@ window.PhotoAgentApi = (() => {
     getHistoryCase,
     deleteHistoryEntry,
     clearHistory,
+    listChatSessions,
+    getChatSession,
+    deleteChatSessions,
     getJobStatusOnce,
     reportJob,
     getReports,

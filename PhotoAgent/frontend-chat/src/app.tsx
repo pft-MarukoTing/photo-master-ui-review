@@ -89,6 +89,7 @@ import {
   analyzeSubMessages,
   timeLabel,
   versionsFromMessages,
+  downloadPhotosZip,
 } from "./util";
 
 type Phase = "home" | "chat" | "session";
@@ -2361,7 +2362,32 @@ function BatchSidebar(props: {
 }) {
   const { photos, current } = props;
   const [open, setOpen] = useState(false);
+  const [zipping, setZipping] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  // 提示字跟面板模式的全部下載一樣：看有幾張已經美化過，說清楚會拿到原圖還是結果。
+  const doneCount = photos.filter((p) => p.active_version).length;
+  const zipHint =
+    doneCount === 0
+      ? `下載所有原圖（${photos.length} 張）`
+      : doneCount === photos.length
+        ? `下載所有已完成的結果（${photos.length} 張）`
+        : `下載全部（已完成 ${doneCount} 張，其餘為原圖，共 ${photos.length} 張）`;
+  const downloadAll = async () => {
+    if (zipping) return;
+    setZipping(true);
+    const ok = await downloadPhotosZip(
+      photos.map((p) => {
+        const v = p.active_version;
+        return {
+          source: urls.sourceImage(p.analyze_job_id),
+          result: v ? { url: urls.resultImage(v.job_id, v.run), run: v.run || 1 } : null,
+        };
+      }),
+    );
+    setZipping(false);
+    setNotice(ok ? "已下載完成。" : "打包下載失敗，請稍後再試。");
+  };
   // 換到的那張不在列表看得到的範圍裡（例如從底下那排點進來、或一開就停在後面那張），
   // 就把列表捲到剛好露出它。只動列表自己的 scrollTop，不帶著整頁跑。
   useEffect(() => {
@@ -2386,6 +2412,17 @@ function BatchSidebar(props: {
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">我的照片</h2>
           <span class="batch-sidebar-count">{photos.length} 張</span>
+          <button
+            type="button"
+            class="batch-download-all-btn"
+            title={zipping ? "打包中…" : zipHint}
+            aria-label={zipping ? "打包中" : zipHint}
+            disabled={zipping}
+            aria-busy={zipping}
+            onClick={() => void downloadAll()}
+          >
+            <Icon name="down" size={14} />
+          </button>
         </div>
         <div class="batch-sidebar-all">
           <Chip
@@ -2434,6 +2471,7 @@ function BatchSidebar(props: {
         <Icon name="image" size={18} />
         <span class="batch-drawer-trigger-count">{photos.length}</span>
       </button>
+      {notice ? <ConfirmModal message={notice} confirmLabel="確定" onAnswer={() => setNotice(null)} /> : null}
     </>
   );
 }

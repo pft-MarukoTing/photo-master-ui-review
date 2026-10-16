@@ -376,6 +376,58 @@ function saveVia(href: string, name: string) {
   a.remove();
 }
 
+declare global {
+  interface Window {
+    PhotoAgentZip?: { createZip: (files: { name: string; data: Uint8Array }[]) => Blob };
+  }
+}
+
+// 「全部下載」：跟面板模式的批次全部下載（app.js buildAllBatchResultsZip）同一個 ZIP
+// 長相 -- 每張一個「image N/」資料夾，裡面放原圖，美化過的再加 result_<run>。
+// 一次只抓三張，跟面板模式一樣，一大批同時抓瀏覽器連線會撐不住。
+export type ZipPhoto = { source: string; result?: { url: string; run: number } | null };
+
+export async function downloadPhotosZip(photos: ZipPhoto[]): Promise<boolean> {
+  const zip = window.PhotoAgentZip;
+  if (!zip) return false;
+  const fetchBytes = async (url: string) => {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  };
+  const ext = (data: Uint8Array) => imageFormatOf(data.buffer as ArrayBuffer).ext;
+  const groups: { name: string; data: Uint8Array }[][] = new Array(photos.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < photos.length) {
+      const i = next++;
+      const p = photos[i];
+      const prefix = `image ${i + 1}/`;
+      const source = await fetchBytes(p.source);
+      const files = [{ name: `${prefix}source.${ext(source)}`, data: source }];
+      if (p.result) {
+        const result = await fetchBytes(p.result.url);
+        files.push({ name: `${prefix}result_${p.result.run}.${ext(result)}`, data: result });
+      }
+      groups[i] = files;
+    }
+  };
+  let blob: Blob;
+  try {
+    await Promise.all(Array.from({ length: Math.min(3, photos.length) }, worker));
+    blob = zip.createZip(groups.flat());
+  } catch {
+    return false;
+  }
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const d = new Date();
+  const name = `PhotoMaster-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.zip`;
+  const href = URL.createObjectURL(blob);
+  saveVia(href, name);
+  setTimeout(() => URL.revokeObjectURL(href), 10000);
+  return true;
+}
+
 export async function downloadImage(url: string, base: string): Promise<boolean> {
   let file: File;
   try {

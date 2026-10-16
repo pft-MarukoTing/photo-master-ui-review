@@ -11,6 +11,8 @@
        is the display face -- headline and panel titles only. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css">
+  <!-- 面板模式那支 ZIP 打包（window.PhotoAgentZip），「全部下載」直接共用，不另寫一份。 -->
+  <script src="../zip-tool.js"></script>
   <style>
     [hidden] { display: none !important; }
 
@@ -257,7 +259,7 @@
       animation: fadeUp .5s ease both;
       /* max-height is set from JS (updateAnalysisPreviewMaxHeight) -- same
          "avoid making the user scroll the window" policy as .batch-sidebar's
-         own max-height, capping to the viewport instead of pushing the page
+         own fixed height, capping to the viewport instead of pushing the page
          taller when the recipe/options content is long. */
       overflow-y: auto;
     }
@@ -2449,8 +2451,10 @@
     .results-body { display: flex; align-items: stretch; gap: 28px; }
     .batch-sidebar {
       flex: 0 0 280px; width: 280px;
-      position: sticky; top: calc(var(--header-h) + 24px);
-      margin-top: 44px;
+      /* 20px top/bottom -- the same inset the compare card sits at inside
+         #results-detail, so both cards' top and bottom edges line up. */
+      position: sticky; top: calc(var(--header-h) + 20px);
+      margin: 20px 0;
       padding: 20px;
       /* A self-contained card, same language as .options-card/.verdict-card
          elsewhere -- previously just a border-right hairline, which still
@@ -2469,13 +2473,11 @@
       /* Stretching to match a taller main content (below) is only for visual
          balance -- it must never itself grow past the viewport and force the
          whole window to scroll just because a batch has a lot of images (or
-         the main content is simply tall). max-height is set from JS
-         (updateBatchSidebarMaxHeight, app.js) instead of a static calc() here
-         -- a fixed formula can't account for the results-topbar's own actual
-         rendered height, which pushes the sidebar's real starting position
-         well below what "header height + a fixed offset" alone assumes.
-         Only the image list (not the title/bulk controls above it) scrolls
-         internally once content exceeds that cap. */
+         the main content is simply tall). A fixed formula (the desktop rule
+         below), not a JS measurement: the old getBoundingClientRect() read
+         depended on scroll position and layout timing, so the same page came
+         out a different height from one load to the next. Only the image
+         list (not the title/bulk controls above it) scrolls internally. */
       display: flex;
       flex-direction: column;
     }
@@ -4060,6 +4062,62 @@
        image explicitly sits at z-index:1, which otherwise paints over this
        absolutely-positioned spinner. */
     .history-cube .rc-media .rc-spinner { z-index: 2; }
+    /* A batch uploaded in 對話模式, as one cube (buildHistoryGroupTile,
+       app.js): the chat page's own .session-tile-mosaic (chat.css), laid
+       over the cube's usual backdrop. The cell selector outranks
+       .upload-gallery-col's contain-fit, which would letterbox each cell. */
+    .history-cube-mosaic {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      display: grid;
+      gap: 2px;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      background: var(--card-2);
+    }
+    .history-cube-mosaic.is-2 { grid-template-rows: 1fr; }
+    .history-cube-mosaic.is-3 .history-cube-cell:first-child { grid-row: span 2; }
+    .history-cube-cell {
+      position: relative;
+      overflow: hidden;
+      min-width: 0;
+      min-height: 0;
+    }
+    .history-cube .rc-media .history-cube-mosaic .history-cube-cell img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      background: transparent;
+    }
+    .history-cube-cell b {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(9,9,11,.45);
+      color: #fff;
+      font-weight: 600;
+    }
+    /* Top-left, clear of the badge (bottom-left) and × (top-right); same
+       fixed-dark chip as the badge, for the same reason. */
+    .history-cube-count {
+      position: absolute;
+      left: 6px;
+      top: 6px;
+      z-index: 3;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 12px;
+      color: #fff;
+      background: rgba(9,9,11,.65);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
     .history-empty { color: var(--text-3); font-size: 15px; }
     /* #reports-drawer's own list -- plain rows (not the day-grouped cube
        grid #history-list uses) since reports have no per-day grouping and
@@ -4290,12 +4348,9 @@
            widths; narrowed again so the backdrop clearly reads as the
            dominant surface with the drawer as a slim overlay panel. */
         width: min(220px, 68vw); flex-basis: auto;
-        /* Cancels updateBatchSidebarMaxHeight's own inline max-height AND
-           height (app.js) -- this drawer variant is already sized top:0
-           bottom:0 (fixed), so an inline height would otherwise override
-           that computed top-to-bottom span with whatever fixed pixel value
-           JS last measured against the desktop layout. */
-        max-height: none !important; height: auto !important; margin-top: 0;
+        /* Sized by top/bottom (fixed) instead -- no desktop height or
+           margins carried over into the drawer. */
+        max-height: none !important; height: auto !important; margin: 0;
         border-radius: 0; border-width: 0 1px 0 0;
         z-index: 1001;
         transform: translateX(-100%);
@@ -4325,7 +4380,56 @@
       .batch-sidebar-item:not(.history-cube) .rc-media { width: 40px; height: 40px; flex: 0 0 40px; }
     }
 
-    .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 18px; }
+    /* ── 我的照片 column -- the one look both UIs share ──
+       This block is also what 對話模式's BatchSidebar (app.tsx) renders
+       with: vite's oldInlineStyles plugin injects this sheet into the chat
+       page, so it is the single source for both. chat.css only adds what
+       that page's own layout needs (the column pinned to the viewport
+       height, its Chip, the 901-1200 portrait drawer).
+       Each photo is a full-width square .history-cube with its badge over
+       the corner; the column narrows to fit them, and the photo count sits
+       beside the title. */
+    .batch-sidebar-count { flex: none; font-size: 12px; color: var(--text-2); }
+    .batch-sidebar-count:empty { display: none; }
+    .batch-sidebar-list { scrollbar-width: thin; overscroll-behavior: contain; scroll-padding: 4px 0; }
+    /* flex:none -- the list is a scrolling flex column, which would
+       otherwise squash the squares. */
+    .batch-sidebar-list > .history-cube { flex: none; width: 100%; padding: 0; }
+    /* Chat renders each tile as a <button> (this page uses a <div>). */
+    .batch-sidebar-list > button.history-cube { border: 0; font: inherit; color: inherit; }
+    .batch-sidebar-list > .history-cube .rc-media { display: block; }
+    /* The photo covers .selected's own inset ring, so the ring is drawn
+       again on a layer above it. */
+    .batch-sidebar-list > .history-cube.selected::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      border-radius: inherit;
+      box-shadow: inset 0 0 0 3px var(--accent);
+      pointer-events: none;
+    }
+    @media (min-width: 901px) {
+      /* Beats styles.css's 200px (same selector, this sheet loads later). */
+      #results-body.batch-mode #batch-sidebar { flex: 0 0 170px; max-width: 170px; padding: 14px; }
+      /* Viewport minus header, step indicator and the 20px margins above
+         and below (.batch-sidebar) -- exactly the compare card's span. */
+      .batch-sidebar {
+        height: calc(100vh - var(--header-h) - var(--step-indicator-h, 54px) - 40px);
+        box-sizing: border-box;
+      }
+    }
+    @media (max-width: 900px) {
+      /* The drawer holds only squares now (no badge column beside them),
+         so it slims down the same way chat's does. */
+      #results-body.batch-mode #batch-sidebar { width: min(136px, 38vw); max-width: none; padding: 12px; }
+      .batch-sidebar-close-btn { top: 12px; right: 8px; }
+      /* No room for the count beside the title; the drawer's trigger
+         button already shows it. */
+      .batch-sidebar-count { display: none; }
+    }
+
+    .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 12px; }
     .batch-lock-toggle {
       display: flex;
       align-items: center;
@@ -4475,8 +4579,8 @@
     #photo-viewer .version-viewer-tile { position: relative; }
     #photo-viewer .version-tile-run { top: 2px; bottom: auto; right: 2px; }
   </style>
-  <script type="module" crossorigin src="./static/index-DT23P3bk.js"></script>
-  <link rel="stylesheet" crossorigin href="./static/index-t1pc5JsZ.css">
+  <script type="module" crossorigin src="./static/index-fFY0mWE5.js"></script>
+  <link rel="stylesheet" crossorigin href="./static/index-Cr-jay8K.css">
 </head>
 <body data-theme="caramel" data-theme-mode="light" class="side-panel-layout">
   <!-- The attributes above are caramel, the fallback, so the common first load
