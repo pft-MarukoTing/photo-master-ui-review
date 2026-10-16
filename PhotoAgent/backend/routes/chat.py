@@ -54,7 +54,7 @@ import config as agent_config
 from photo_agent.preview_context import (
     MAX_UPLOAD_BYTES, PREVIEW_CONTEXT_FIELD, source_sha256, preview_versions, validate_preview_binding, validate_preview_context,
 )
-from photo_agent.chat_brief import build_brief, resolve_prompt_faces
+from photo_agent.chat_brief import build_brief, person_names, resolve_prompt_faces
 from photo_agent.subject_preview import _valid_subject_box
 from photo_agent.chat_plan import (
     USER_PROMPT_MAX_LEN,
@@ -1667,6 +1667,8 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
     if not is_compatible(analysis, min_version=get_min_compatible_version()):
         return None, ("analysis_compatibility_version_outdated", "analysis_compatibility_version_outdated", 409)
     selections = build_selections(plan)
+    # Per-person facial requests the editor renders as that person's own final state.
+    face_requests = {}
     state = photo.get('preview_conversation')
     if state:
         people = state.get('people', [])
@@ -1707,6 +1709,15 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
         for clause in active_clauses:
             op=clause.get('operation') or {}
             if clause['status'] != 'matched' or op.get('intent') != 'set': continue
+            if op.get('feature') == 'face_symmetry':
+                active_text = conversation_domain.executable({'clauses': [clause]}, named)
+                if active_text and active_text not in params['user_prompt']:
+                    continue
+                for person_id in clause.get('target_ids', []):
+                    idx = next((p['subject_index'] for p in people if p['preview_person_id'] == person_id and p.get('identity_source') == 'formal_analysis'), bindings.get(person_id))
+                    if type(idx) is int:
+                        face_requests[idx] = active_text
+                continue
             category = ('blink_issue' if op.get('feature') == 'eyes' and op.get('value') == 'closed' else
                         'gaze_issue' if op.get('feature') == 'gaze' and op.get('value') not in ('camera', '視線看鏡頭') else None)
             if category:
@@ -1726,6 +1737,18 @@ def _prepare_render(photo, *, defer_unconfirmed=False):
     analysis, error = _apply_review_selections(analysis, selections)
     if error:
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
+    # A request marked in the session counts only while that person still has a wish in 個人化需求.
+    names = person_names(analysis)
+    for key in plan.get("face_requests") or {}:
+        index, _, kind = key.partition(":")
+        idx = int(index)
+        if kind == "face_symmetry" and names.get(idx) and names[idx] in params["user_prompt"]:
+            face_requests.setdefault(idx, "")
+    if face_requests:
+        analysis = {**analysis, "_user_face_requests": [
+            {"subject_index": idx, "kind": "face_symmetry", "text": text}
+            for idx, text in sorted(face_requests.items())
+        ]}
     run_limit = capabilities.MAX_RUN_COUNT if _debug() else capabilities.GENERAL_MAX_RUN_COUNT
     return {"params": {**params, "analysis": analysis}, "selections": selections,
             "run_count": min(plan["run_count"], run_limit),

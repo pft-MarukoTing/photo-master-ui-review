@@ -36,7 +36,9 @@ HISTORY_LEN = 20
 # one image per round. preset is not
 # adjustable at all, so the model never sees it and a patch for it is dropped.
 PATCHABLE_KEYS = ("aspect_ratio", "user_prompt", "style_options",
-                  "advanced_options", "recipe_checked", "face_issue_overrides")
+                  "advanced_options", "recipe_checked", "face_issue_overrides", "face_requests")
+# The per-person facial request the editor renders as that person's own final state.
+FACE_SYMMETRY_LABEL = "臉部左右平衡"
 # Analysis fields the model has no use for.
 DROPPED_ANALYSIS_KEYS = ("prompts", "local_face_review", "correction_plan", "correction_axes", "correction_inverse")
 
@@ -154,6 +156,7 @@ patch_json is either "" or a JSON object string containing only changed keys:
 - "style_options": {"<group>": "<choice>"}; "default" clears a group.
 - "advanced_options": {"<key>": true|false}; switches a portrait fix on/off for everyone.
 - "face_issue_overrides": {"<subject_index>:<category>": false | {"allowed": true} | {"allowed": true, "level": "<level>"} | null}. false means do not fix this person; {"allowed": true} means fix; null returns to the AI's own call. Copy the keys exactly from FACES. The category is one of the English category names in FACES. A request about someone's eyes (「眼睛」) changes both that person's blink_issue and gaze_issue keys.
+- "face_requests": {"<subject_index>:face_symmetry": true | null}. A wish that a person's face, or its two sides, look more even or symmetrical still goes into user_prompt as usual; also set true for that person here, so the editor treats it as that person's own requested change. Keep it in step with user_prompt: null when that wish is taken back or the person's row loses it. Copy the key from FACES.
 - "recipe_checked": {"<index>": true|false}; keep or skip one RECIPE item.
 - "user_prompt": extra editor instructions for wishes no other field covers, such as changing the background. Use the user's words; add only the target's name when a pronoun needs resolving, and turn a relative wish into its end result (see REPLY). Do not invent preservation clauses, reassurances, or visual details the user did not request. In particular, do not add 「保留身份」、「臉部特徵不變」、「服裝不變」、「自然比例」 or 「其他人與場景維持不變」. This text is the editor's top goal; an invented preservation clause can block the requested change. For 「自然站立」 about the man on the right, write 「將畫面右側男性改為自然站立姿勢」 and stop there. Use "" to clear all personal wishes.
 
@@ -220,8 +223,8 @@ def _faces_view(analysis):
     for person in face_people(analysis):
         index = person["subject_index"]
         mine = {k: v.split("・", 1)[1] for k, v in keys.items() if k.split(":", 1)[0] == str(index)}
-        if mine:
-            view.append({"panel": f"人物 {person['number']}", "name": person["name"], "keys": mine})
+        mine[f"{index}:face_symmetry"] = FACE_SYMMETRY_LABEL
+        view.append({"panel": f"人物 {person['number']}", "name": person["name"], "keys": mine})
     return view
 
 
@@ -693,6 +696,9 @@ def _normalize_patch(patch, plan, analysis):
     if isinstance(patch.get("face_issue_overrides"), dict):
         faces = _face_keys(analysis)
         patch["face_issue_overrides"] = {k: v for k, v in patch["face_issue_overrides"].items() if k in faces}
+    if isinstance(patch.get("face_requests"), dict):
+        people = {f"{index}:face_symmetry" for index in person_names(analysis)}
+        patch["face_requests"] = {k: v for k, v in patch["face_requests"].items() if k in people and v in (True, None)}
     if isinstance(patch.get("recipe_checked"), dict):
         size = len(_recipe(analysis))
         current = list(plan.get("recipe_checked") or [])

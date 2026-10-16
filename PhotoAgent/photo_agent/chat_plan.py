@@ -7,7 +7,8 @@ Every photo has its own plan, so changing one photo never changes another:
                   toggles -- the part that can also be changed for every
                   photo at once.
     photo-only    the 修圖建議 checkboxes, per-person 人像修正 overrides,
-                  the Body Reshape switch and the upload page's face picks.
+                  per-person facial requests from 個人化需求, the Body
+                  Reshape switch and the upload page's face picks.
                   These index into that photo's own analysis, so they are
                   only ever set one photo at a time.
 
@@ -25,8 +26,10 @@ from photo_agent.param_validation import normalize_advanced_options
 from photo_agent.selections import validate_selections
 
 USER_PROMPT_MAX_LEN = 2000
-PHOTO_ONLY_KEYS = ("recipe_checked", "face_issue_overrides", "body_reshape_enabled", "prompt_faces",
-                   "pose_face_changes")
+PHOTO_ONLY_KEYS = ("recipe_checked", "face_issue_overrides", "face_requests", "body_reshape_enabled",
+                   "prompt_faces", "pose_face_changes")
+# Per-person facial requests the chat model marks beside the wish it writes into user_prompt.
+FACE_REQUEST_KINDS = ("face_symmetry",)
 PROMPT_FACES_MAX = 8
 PROMPT_FACE_TEXT_MAX_LEN = 120
 
@@ -55,6 +58,7 @@ def default_plan(settings=None):
         **copy.deepcopy(settings or default_settings()),
         "recipe_checked": [],
         "face_issue_overrides": {},
+        "face_requests": {},
         "body_reshape_enabled": None,
         "prompt_faces": [],
         "pose_face_changes": None,
@@ -63,6 +67,19 @@ def default_plan(settings=None):
 
 def settings_of(plan):
     return {k: copy.deepcopy(v) for k, v in plan.items() if k not in PHOTO_ONLY_KEYS}
+
+
+def _validated_face_requests(current, value):
+    """{"<subject_index>:<kind>": true}, merged key by key; a null value removes that request."""
+    if not isinstance(value, dict):
+        raise ValueError("plan.face_requests must be a JSON object")
+    merged = {**(current or {}), **value}
+    for key, flag in merged.items():
+        index, _, kind = str(key).partition(":")
+        if not index.isdigit() or kind not in FACE_REQUEST_KINDS or flag not in (True, None):
+            raise ValueError(f"plan.face_requests keys must be '<subject_index>:<kind>' with kind in "
+                             f"{FACE_REQUEST_KINDS} and value true or null")
+    return {k: v for k, v in merged.items() if v is not None}
 
 
 def _validated_pose_face_changes(value):
@@ -198,8 +215,9 @@ def apply_plan_patch(current, patch, *, debug=False, settings_only=False):
     """Returns (new_plan, None) or (None, error_message); `current` is not
     modified.
 
-    style_options, advanced_options and face_issue_overrides merge key by key
-    (a null override removes that key, back to the analyzer's own verdict);
+    style_options, advanced_options, face_issue_overrides and face_requests
+    merge key by key (a null override removes that key, back to the
+    analyzer's own verdict);
     every other field is replaced. settings_only rejects the photo-only
     fields -- the batch edit, and the session defaults, have no analysis for
     them to index into.
@@ -217,6 +235,8 @@ def apply_plan_patch(current, patch, *, debug=False, settings_only=False):
                         raise ValueError("plan.face_issue_overrides must be a JSON object")
                     merged = {**plan["face_issue_overrides"], **value}
                     value = {k: v for k, v in merged.items() if v is not None}
+                elif key == "face_requests":
+                    value = _validated_face_requests(plan.get("face_requests"), value)
                 elif key == "prompt_faces":
                     value = _validated_prompt_faces(value)
                 elif key == "pose_face_changes":

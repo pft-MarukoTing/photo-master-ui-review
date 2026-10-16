@@ -444,8 +444,8 @@ class AskTest(unittest.TestCase):
         self.assertNotIn("SECRET PROMPT", context)
         self.assertNotIn("_advanced_options", context)
         self.assertIn("兩人在海邊合照", context)
-        self.assertIn('FACES: [{"panel":"人物 1","name":"左邊女性","keys":{"0:gaze_issue":"視線","0:smile_issue":"笑容"}}]',
-                      context)
+        self.assertIn('FACES: [{"panel":"人物 1","name":"左邊女性","keys":{"0:gaze_issue":"視線","0:smile_issue":"笑容",'
+                      '"0:face_symmetry":"臉部左右平衡"}}]', context)
         self.assertNotIn("1:gaze_issue", context)
         self.assertTrue(context.rstrip().endswith("user: 再亮一點"))
         self.assertIn("assistant: 可以改柔光 [proposed: 光線]", context)

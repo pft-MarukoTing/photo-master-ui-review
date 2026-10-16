@@ -56,6 +56,8 @@ Examples: 右邊男子戴上眼鏡 => target=右邊男子, action=戴上眼鏡, 
 while black glasses are the DESIRED RESULT, never a matching qualifier.
 semantic.feature is a stable property key shared by requests about the same
 property (eyes, gaze, hair, smile, eyewear, clothing, or another descriptive key).
+A request that a person's face, or its two sides, look more even or symmetrical
+is feature=face_symmetry, value=balanced.
 Use eyes value=open/closed, gaze value=camera/left/right when appropriate;
 otherwise use an open, precise value. Adding/removing eyewear changes eyewear,
 not the person's identity. A removal edit is set, not cancellation of a wish.
