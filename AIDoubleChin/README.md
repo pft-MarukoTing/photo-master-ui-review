@@ -9,7 +9,8 @@ Qwen-Image-Edit-2509 LoRA (trained with [ai-toolkit](https://github.com/ostris/a
 | `models/double_chin_lora_20261001_config.yaml` | ai-toolkit training config (paths relative to the ai-toolkit root) |
 | `workflows/doubleChin_workflow_20261001_api.json` | ComfyUI API workflow used for testing |
 | `workflows/doubleChin_faceCrop_workflow_20261006_api.json` | Production-style workflow (aiSmile graph): face detect -> crop incl. neck -> LoRA -> paste back (no detail restorer, see below); no face = `ERROR_NO_FACE` |
-| `custom_nodes/ComfyUI_AIDoubleChin_utils` | `AIDoubleChinFaceRegionCrop`: aiSmile's FaceRegionCrop with the face box extended below the chin (`neck_extend_ratio`, default 0.35) |
+| `workflows/doubleChin_faceCrop_workflow_20261014_api.json` | Same graph with `AIDoubleChinPasteBack` instead of `FaceRegionPasteBack`, so the source's full-resolution detail is kept (see 5.1) |
+| `custom_nodes/ComfyUI_AIDoubleChin_utils` | `AIDoubleChinFaceRegionCrop`: aiSmile's FaceRegionCrop with the face box extended below the chin (`neck_extend_ratio`, default 0.35); `AIDoubleChinPasteBack`: paste-back of only the edited area, the rest stays the source pixels (see 5.1) |
 | `custom_nodes/ComfyUI-FaceRestorer` | Copy of aiSmile's FaceRestorer (face crop + paste back + its ONNX models), unchanged; its detail restorer node is not used |
 | `benchmark/run_benchmark.py` | Scores checkpoints on the test split against ground truth (uses `comfy_client.py` + `eval_metrics.py` next to it) |
 | `benchmark/run_inference.py` | Runs any folder of images through checkpoints, no ground truth needed |
@@ -87,16 +88,16 @@ Results in `output_<input-dir-name>_<timestamp>/`:
 
 ## 5. Face-crop workflow
 
-`doubleChin_faceCrop_workflow_20261006_api.json` is the graph the engine ships: instead of padding the whole photo to 1024, it detects the face, crops a square around it (box extended downward by `neck_extend_ratio` x face height so the double chin/neck sit inside the crop, not on the paste-back feather), runs the LoRA on that ~1MP crop and pastes it back at full resolution. aiSmile's detail restorer is deliberately left out: in its eye zone it replaces texture to remove wrinkles (meant for generated smile lines), which flattened under-eye lines and crow's feet here while adding nothing elsewhere. It needs the node packs aiSmile uses (ComfyUI_facer, ComfyUI-KJNodes, comfyui-various) plus the two in `custom_nodes/`.
+`doubleChin_faceCrop_workflow_20261006_api.json` is the face-crop graph (the engine ships it with `AIDoubleChinPasteBack` as the paste-back, i.e. the 20261014 workflow, see 5.1): instead of padding the whole photo to 1024, it detects the face, crops a square around it (box extended downward by `neck_extend_ratio` x face height so the double chin/neck sit inside the crop, not on the paste-back feather), runs the LoRA on that ~1MP crop and pastes it back at full resolution. aiSmile's detail restorer is deliberately left out: in its eye zone it replaces texture to remove wrinkles (meant for generated smile lines), which flattened under-eye lines and crow's feet here while adding nothing elsewhere. It needs the node packs aiSmile uses (ComfyUI_facer, ComfyUI-KJNodes, comfyui-various) plus the two in `custom_nodes/`.
 
 ```bash
 python run_benchmark.py --benchmark-dir ../datasets/prepared/test \
-    --workflow ../workflows/doubleChin_faceCrop_workflow_20261006_api.json \
+    --workflow ../workflows/doubleChin_faceCrop_workflow_20261014_api.json \
     --checkpoint aiDoubleChin/double_chin_exp_20261001.safetensors \
     --face-onnx-dir <ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/ONNX
 
 python run_inference.py --input-dir /path/to/photos --no-pad \
-    --workflow ../workflows/doubleChin_faceCrop_workflow_20261006_api.json \
+    --workflow ../workflows/doubleChin_faceCrop_workflow_20261014_api.json \
     --checkpoint aiDoubleChin/double_chin_exp_20261001.safetensors \
     --face-onnx-dir <ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/ONNX
 ```
@@ -113,3 +114,23 @@ python run_stages.py --input-dir /path/to/photos \
 ```
 
 Results in `output_stages_<input-dir-name>_<timestamp>/<checkpoint>/`: `<stem>/1_source.jpg ... 4_output.jpg` at full resolution (5 stages with a restorer workflow) and `sheets/<stem>.jpg` (layout described at the top of `run_stages.py`).
+
+### 5.1 Keeping the source's resolution (`AIDoubleChinPasteBack`)
+
+The crop is resized to ~1MP, VAE-encoded, sampled in 4 steps and resized back, so with `FaceRegionPasteBack` everything inside it (eyelashes, pores, hair) comes back softer, more so for large inputs where the crop is shrunk 2-3x. `AIDoubleChinPasteBack` (20261014 workflow) has a `mode` input:
+
+| mode | what is pasted |
+|---|---|
+| `crop` | the whole crop, border-feathered (= `FaceRegionPasteBack`, baseline) |
+| `mask` (workflow default, shipped) | only where the LoRA changed the image: below the nose (landmarks from the crop node's `face_metadata`) and where the low-pass result differs from the source by more than `change_threshold`; the rest stays the source pixels |
+
+The edited chin/neck area itself is still the LoRA's upscaled result. Re-adding the source's texture inside it (low frequencies from the LoRA, high frequencies from the source) was tried and dropped: it risks tracing the removed fold back in.
+
+Comparison: one LoRA run per image, both modes pasted from the same result; `sheets/<stem>_modes.jpg` shows 1:1 windows of the upper face and the edit, and `<stem>/4_output_<mode>.jpg` the full-resolution results:
+
+```bash
+python run_stages.py --input-dir /path/to/photos \
+    --checkpoint aiDoubleChin/double_chin_exp_20261001.safetensors \
+    --face-onnx-dir <ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/ONNX \
+    --paste-modes crop mask
+```
