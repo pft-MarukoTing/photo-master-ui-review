@@ -198,7 +198,6 @@ interface Props {
   onPatch: (patch: Plan) => void;
   // 個人化需求：打了就靜靜存；改完離開框時請 AI 再看一次內容。
   onQuietPrompt: (text: string) => Promise<unknown>;
-  onReviewPrompt: () => void;
 }
 
 export function OptionsCard(props: Props) {
@@ -607,7 +606,7 @@ function StyleOptions({ analysis, plan, caps, busy, hot, onPatch }: Body) {
   );
 }
 
-function PromptOptions({ plan, faces, busy, hot, onPatch, onQuietPrompt, onReviewPrompt }: Body) {
+function PromptOptions({ plan, faces, busy, hot, onPatch, onQuietPrompt }: Body) {
   const saved = plan.user_prompt || "";
   // 不用「修改／儲存」：框一直開著，打了就存（見 PromptEditor）。
   return (
@@ -619,7 +618,6 @@ function PromptOptions({ plan, faces, busy, hot, onPatch, onQuietPrompt, onRevie
         label="個人化需求"
         placeholder="例如：讓背景更乾淨一點"
         onSave={onQuietPrompt}
-        onReview={onReviewPrompt}
         extra={
           !!saved && (
             <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={busy} onClick={() => onPatch({ user_prompt: "" })}>

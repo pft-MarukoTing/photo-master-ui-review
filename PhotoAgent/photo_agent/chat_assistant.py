@@ -866,8 +866,9 @@ def _judged_reply(reply, screen, prompt_only):
     its 「確認後套用」 becomes that it is already done."""
     reason = re.sub(r"[，,]?\s*確認後(再)?套用[。！!]?", "", reply).strip()
     reason = reason + ("" if not reason or reason[-1] in "。！!？?" else "。")
-    done = "先幫你記進個人化需求了" if prompt_only else "先幫你套用了"
-    return reason + done + "，想改的話按「修改」。" + _next_step(screen)
+    # 只動個人化需求的卡可以直接在卡上改，沒有「修改」鍵。
+    done = "先幫你記進個人化需求了，下面可以直接修改。" if prompt_only else "先幫你套用了，想改的話按「修改」。"
+    return reason + done + _next_step(screen)
 
 
 def _dropped_reply(dropped, screen):

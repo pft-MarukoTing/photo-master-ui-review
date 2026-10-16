@@ -1632,29 +1632,6 @@ export function App() {
     });
   }
 
-  // 個人化需求是手打的，一條一條往下加，同一個人身上很容易留著兩種說法。改完離開
-  // 輸入框時再問一次 AI，讓它把同一個人的事併成一句、矛盾的留後面那句，整理結果照常
-  // 走提案卡，要不要換還是使用者決定。
-  function reviewPrompt(screen?: Screen) {
-    // 別的動作還在跑就不整理了：run() 會拒絕，打字中的點點也不能留著。
-    if (!session || !photo || busy) return Promise.resolve(false);
-    const id = session.session_id;
-    const pid = photo.photo_id;
-    // 沒有使用者泡泡，只顯示 AI 正在回。
-    setPendingAsk({ photoId: pid, text: "", subjectIndices: [] });
-    return run(async () => {
-      try {
-        await api.reviewPrompt(id, pid, screen);
-        setSession(await api.getSession(id));
-      } finally {
-        setPendingAsk(null);
-      }
-    }).then((ok) => {
-      if (!ok) setPendingAsk(null);
-      return ok;
-    });
-  }
-
   // A chat step the server only records (options_opened, adjust_opened, ...),
   // after an optional plan patch. merge: when the newest message is the same
   // step for this photo, it is rewritten instead of adding another.
@@ -1994,7 +1971,6 @@ export function App() {
             onAnswerWaiting={answerWaiting}
             onPatch={patchFromChat}
             onQuietPrompt={quietPrompt}
-            onReviewPrompt={reviewPrompt}
             onPost={postFromChat}
             onAnalyze={analyzePhoto}
             panelMode={{ href: urls.oldUi(photo.case_id), busy: isBusy(photo), onLeave: toOldUi }}
@@ -3041,7 +3017,6 @@ function SessionView(props: {
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan) => Promise<boolean>;
   onQuietPrompt: (text: string) => Promise<unknown>;
-  onReviewPrompt: (screen?: Screen) => Promise<boolean>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
   panelMode: PanelMode;
@@ -3463,6 +3438,11 @@ function SessionView(props: {
     }
     return photo.plan;
   };
+  // 某則訊息所在那一輪開始時的設定（「看美化項目」那張卡上的快照）。
+  const roundPlanAt = (idx: number): Dict | undefined => {
+    for (let i = idx - 1; i >= 0; i--) if (messages[i].card?.type === "adjust_opened") return messages[i].card?.plan;
+    return undefined;
+  };
 
   // 離開某張卡時（下一個帶設定快照的訊息）的個人化需求；中間又有別張卡改過需求，
   // 那個快照講的就不是這張卡了，回 undefined。後面還沒有快照（例如剛按美化、
@@ -3496,7 +3476,6 @@ function SessionView(props: {
               c.proposal.id === lastProposalId && idx > lastRender ? photo.plan?.user_prompt || "" : promptWhenLeft(idx)
             }
             onQuietPrompt={props.onQuietPrompt}
-            onReviewPrompt={() => props.onReviewPrompt(screen)}
           />
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
@@ -3788,16 +3767,22 @@ function SessionView(props: {
         const roundLine = fromApply ? "已套用，開始新的一輪調整。" : "";
         // 「這是上次的…」只在這一項還是上一版美化時的樣子才說；這一輪已經改過
         // （對話裡、卡片上、面板裡都算），就照一般的說法介紹現在的內容。
-        const openedWith = (live ? photo.plan : { ...photo.plan, ...((c.plan as Plan) || {}) }) as Plan;
+        // 收起來的面板看的是離開它時的設定，跟它自己那一輪的起點比；不然下一輪
+        // 一開，舊面板的開場白就跟著換。
+        const shownWith = (live ? photo.plan : planAt(idx)) as Plan;
+        const startedWith = roundPlanAt(idx);
         const again =
           messages.slice(0, idx).some((x) => /^render_/.test(x.card?.type || "")) &&
-          !(roundPlan && changedCats(roundPlan, openedWith).has(cat));
+          !(startedWith && changedCats(startedWith, shownWith).has(cat));
         const lead = !answersApply
           ? introFor(cat, analysis, planAt(idx), again)
           : fromApply
             ? `先看剛套用的${termOf(cat)}，改動的地方已經標起來了。`
             : `好，已套用。這是更新後的${termOf(cat)}，改動的地方已經標起來了。`;
         const recap = live ? "" : topicRecap(cat, analysis, caps, planAt(idx));
+        // 後面的話跟著項目和「美化」鍵（回覆、提案、構圖好了都會帶），這張面板就
+        // 不再接一次，不然同一排按鈕會連著出現兩次。
+        const atEnd = messages.slice(idx + 1).every((x) => x.card?.auto);
         return (
           <>
             {!answersApply && (
@@ -3820,9 +3805,8 @@ function SessionView(props: {
                     hot={hot[cat] || null}
                     onPatch={(p) => props.onPatch(p)}
                     onQuietPrompt={props.onQuietPrompt}
-                    onReviewPrompt={() => props.onReviewPrompt(screen)}
                   />
-                  {fresh && !offGuide.has(idx) ? (
+                  {!atEnd ? null : fresh && !offGuide.has(idx) ? (
                     idx === lastStepIdx && guideTail({ except: cat })
                   ) : fresh ? (
                     idx === lastStepIdx && (
@@ -3941,14 +3925,15 @@ function SessionView(props: {
                         : `點下面的「${CATEGORIES[cats[0]].label}」就可以改。`}
                     </p>
                   )}
+                  {/* 「美化」跟著項目那排一起出來，這句要排在按鈕上面才對得上「下面」。 */}
+                  <p class="chat-text chat-muted">
+                    改好按下面的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
+                  </p>
                   {showChips && (
                     <div class="chat-choices">
                       {catChips()}
                     </div>
                   )}
-                  <p class="chat-text chat-muted">
-                    改好按下面的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
-                  </p>
                 </>
               )}
               {endActions(idx)}
@@ -4047,7 +4032,6 @@ function SessionView(props: {
         );
       }
       case "check_declined": {
-        const live = idx === messages.length - 1 && !busy;
         return (
           <>
             <UserMsg meta={clockLabel(m.created_at)}>
@@ -4055,11 +4039,7 @@ function SessionView(props: {
             </UserMsg>
             <AssistantMsg>
               <p class="chat-text">好。還有想改的地方，直接輸入告訴我就行；想讓我分析整張照片，也隨時跟我說。</p>
-              {live && (
-                <div class="chat-choices">
-                  <Chip label="幫我分析" icon="search" disabled={!ready} onClick={checkOriginal} />
-                </div>
-              )}
+              {/* 「幫我分析」在 endActions 那排裡（offerAnalyze），這裡不再放一顆。 */}
               {endActions(idx)}
             </AssistantMsg>
           </>

@@ -825,7 +825,7 @@ export function ResultCard({ job, ordinal, failed, next, note, onOpen }: {
         <p class="chat-text chat-muted">
           {failed > 0 && `有 ${failed} 張沒有成功，已略過。`}
           <span class="chat-result-hint-wide">左側可比較 Before / After，也可從「美化紀錄」切換版本。</span>
-          <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點左上的版本也能切換。</span>
+          <span class="chat-result-hint-narrow">上方照片可以跟原圖比，點右上的版本也能切換。</span>
         </p>
         {next && <p class="chat-text">想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」。也可以直接打字跟我說。</p>}
       </figcaption>
@@ -1034,11 +1034,9 @@ export function readPromptBox(box: HTMLElement, sections: PromptSection[]) {
 
 // 個人化需求不用按「儲存」：打字停一下、或離開輸入框，就存下來。還沒存的字在
 // 任何動作開始前（美化、開別的項目、送出訊息…）會先存好 -- App 的 run() 開頭
-// 呼叫 flushPromptDraft()。actionSeq 讓離開框時判斷後面是不是緊接著一個動作。
+// 呼叫 flushPromptDraft()。使用者手動改的字就照存，不再請 AI 整理。
 let promptDraft: { owner: object; flush: () => Promise<void> } | null = null;
-let actionSeq = 0;
 export function flushPromptDraft(): Promise<void> {
-  actionSeq++;
   return promptDraft ? promptDraft.flush() : Promise.resolve();
 }
 const PROMPT_SAVE_MS = 1200;
@@ -1052,8 +1050,6 @@ export function PromptEditor(props: {
   class?: string;
   // 靜靜地存，不請 AI 看。
   onSave: (text: string) => Promise<unknown>;
-  // 改過之後離開輸入框、後面沒有緊接著別的動作時，請 AI 整理一次。
-  onReview?: () => void;
   // 框下面跟「復原」排在一起的其他按鈕（例如「清除」）。
   extra?: ComponentChildren;
 }) {
@@ -1131,19 +1127,9 @@ export function PromptEditor(props: {
           clearTimeout(timer.current);
           timer.current = window.setTimeout(saveQuietly, PROMPT_SAVE_MS);
         }}
-        onBlur={(e) => {
+        onBlur={() => {
           focused.current = false;
-          const changed = pending.current != null && pending.current !== start.current;
           saveQuietly();
-          if (!changed || !props.onReview) return;
-          // 點的是按鈕、輸入框：接著就是那個動作，不另外請 AI 整理。
-          const to = (e as FocusEvent).relatedTarget as HTMLElement | null;
-          if (to?.closest("button, input, textarea, select, [contenteditable='true']")) return;
-          const seq = actionSeq;
-          window.setTimeout(() => {
-            // 沒存到就不整理：AI 會看到舊的需求。
-            if (actionSeq === seq) chain.current.then(() => actionSeq === seq && pending.current == null && props.onReview!());
-          }, 400);
         }}
         {...noteBoxKeys}
       />
@@ -1514,7 +1500,6 @@ export function ProposalCard(props: {
   // 跟面板同一條路（存下來再請 AI 整理）。沒給就照舊打開面板。
   prompt?: string;
   onQuietPrompt?: (text: string) => Promise<unknown>;
-  onReviewPrompt?: () => void;
 }) {
   const { proposal, resolved } = props;
   const live = resolved == null;
@@ -1587,7 +1572,6 @@ export function ProposalCard(props: {
                       busy={props.busy}
                       label={c.label}
                       onSave={props.onQuietPrompt!}
-                      onReview={props.onReviewPrompt}
                     />
                   ) : mine ? (
                     <div

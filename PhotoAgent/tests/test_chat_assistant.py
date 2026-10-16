@@ -243,7 +243,7 @@ class AskTest(unittest.TestCase):
         result = ask(model_says(reply, patch={"user_prompt": "在照片上加上文字「盛夏」；文字用白色加淡深藍陰影"},
                                 your_pick=True), plan=plan)
         self.assertTrue(result["proposal"]["direct"])
-        self.assertEqual(result["reply"], "白字配淡淡的深藍陰影最好，在藍色水面前也看得清楚。先幫你記進個人化需求了，想改的話按「修改」。")
+        self.assertEqual(result["reply"], "白字配淡淡的深藍陰影最好，在藍色水面前也看得清楚。先幫你記進個人化需求了，下面可以直接修改。")
 
     def test_a_wish_for_someone_else_is_still_written_down(self):
         two = analysis()
@@ -315,7 +315,7 @@ class AskTest(unittest.TestCase):
         result = ask(model_says("帽子那條跟後面重複，幫你拿掉了，確認後套用。",
                                 patch={"user_prompt": "左邊女性的外套改成藍色；背景換成海邊"}), plan=plan, history=checked)
         self.assertTrue(result["proposal"]["direct"])
-        self.assertEqual(result["reply"], "帽子那條跟後面重複，幫你拿掉了。先幫你記進個人化需求了，想改的話按「修改」。")
+        self.assertEqual(result["reply"], "帽子那條跟後面重複，幫你拿掉了。先幫你記進個人化需求了，下面可以直接修改。")
 
     def test_a_picked_answer_is_applied(self):
         history = [
