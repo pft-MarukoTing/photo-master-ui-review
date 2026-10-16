@@ -2575,12 +2575,17 @@ function SessionView(props: {
   const skipped: Category[] = [];
   let lastOptionsIdx = -1;
   let lastStepIdx = -1;
+  const offGuide = new Set<number>();
   if (editing) {
     messages.forEach((m, i) => {
       if (i <= roundStart) return;
       const cat = m.card?.category as Category;
       if (!CATEGORIES[cat]) return;
       if (m.card?.type === "options_opened") {
+        // 引導下一個要談的不是這項（自己點了別的項目、按「修改」、再看一次）：
+        // 這張面板是使用者自己要看的，後面不接引導的問句。
+        const expected = baseCats.find((c) => !opened.includes(c) && !skipped.includes(c));
+        if (cat !== expected) offGuide.add(i);
         opened.push(cat);
         lastOptionsIdx = i;
         lastStepIdx = i;
@@ -3260,8 +3265,17 @@ function SessionView(props: {
                     onPatch={(p) => props.onPatch(p)}
                     onSavePrompt={(t) => props.onSavePrompt(t, screen)}
                   />
-                  {fresh ? (
+                  {fresh && !offGuide.has(idx) ? (
                     idx === lastStepIdx && guideTail({ except: cat })
+                  ) : fresh ? (
+                    idx === lastStepIdx && (
+                      <>
+                        <p class="chat-text">
+                          {cats.length > 1 ? "調整好後，可以接著看其他項目，或按下面的「美化」我就開始。" : "改好後按下面的「美化」我就開始。"}
+                        </p>
+                        {cats.length > 1 && <div class="chat-choices">{catChips(cat)}</div>}
+                      </>
+                    )
                   ) : (
                     <>
                       <p class="chat-text">
