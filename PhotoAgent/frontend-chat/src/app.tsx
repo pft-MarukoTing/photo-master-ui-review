@@ -3929,6 +3929,10 @@ function SessionView(props: {
                       裡面的項目都是看原圖分析出來的，有小圓點的是建議調整的地方；哪些開著、哪些關著，則沿用上次美化的設定。
                     </p>
                   )}
+                  {/* 「美化」跟著項目那排一起出來，這句要排在按鈕上面才對得上「下面」；問句留在最後，緊接著按鈕。 */}
+                  <p class="chat-text chat-muted">
+                    改好按下面的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
+                  </p>
                   {showChips && c.via !== "proposal" && (
                     <p class="chat-text">
                       {cats.length > 1
@@ -3936,10 +3940,6 @@ function SessionView(props: {
                         : `點下面的「${CATEGORIES[cats[0]].label}」就可以改。`}
                     </p>
                   )}
-                  {/* 「美化」跟著項目那排一起出來，這句要排在按鈕上面才對得上「下面」。 */}
-                  <p class="chat-text chat-muted">
-                    改好按下面的「美化」我就開始{n ? "，之前的版本會留在美化紀錄" : ""}。
-                  </p>
                   {showChips && (
                     <div class="chat-choices">
                       {catChips()}
