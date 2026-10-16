@@ -472,6 +472,28 @@ class ReviewLineTest(unittest.TestCase):
                         self.assertTrue(result["ask"])
                         self.assertFalse(result["kept"])
 
+    def test_an_answer_is_parsed_as_the_line_written_out(self):
+        value = dict(source="背景換成森林", target="背景", action="換成森林", complete=True,
+                     target_kind="region", owner_required=False, scope="edit", feature="background",
+                     part="背景", intent="set", value="森林", constraints=[])
+        history = [{"role": "user", "text": "改背景"}, {"role": "assistant", "text": "想把背景換成什麼？", "question": True}]
+        result = chat_assistant.review_line("森林", "", history=history,
+            model=lambda context: dict(verdict="keep", reply="", line="背景換成森林", options=[], semantics=[value]))
+        self.assertTrue(result["kept"])
+        self.assertEqual(result["line"], "背景換成森林")
+        self.assertEqual(result["request_semantics"][0]["source"], "背景換成森林")
+        self.assertNotIn("semantic_pending", result)
+
+    def test_ungrounded_semantics_leave_the_review_standing(self):
+        value = dict(source="背景換成海邊", target="背景", action="換成海邊", complete=True,
+                     target_kind="region", owner_required=False, scope="edit", feature="background",
+                     part="背景", intent="set", value="海邊", constraints=[])
+        result = chat_assistant.review_line("森林", "", history=[],
+            model=lambda context: dict(verdict="keep", reply="", line="", options=[], semantics=[value]))
+        self.assertTrue(result["kept"])
+        self.assertTrue(result["semantic_pending"])
+        self.assertNotIn("request_semantics", result)
+
     # 後講的蓋掉先講的：同一件事不能兩個都做，衝突的那幾段由模型拿掉衝突部分，
     # 這句由頁面放進自己那段，回話講一聲。
     SECTIONS = [{"who": "照片中從左邊數來第 1 位", "text": "皮膚曬黑、瘦臉"},

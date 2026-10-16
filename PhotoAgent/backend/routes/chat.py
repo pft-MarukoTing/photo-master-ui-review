@@ -2053,6 +2053,8 @@ def prompt_review():
     out = {"accepted": accepted, "reply": reply}
     if "request_semantics" in answer:
         out["request_semantics"] = answer["request_semantics"]
+    if answer.get("semantic_pending"):
+        out["semantic_pending"] = True
     if answer["start"]:
         # 「幫我美化」「幫我分析」 are the page's two start buttons in words: the
         # page presses that button, with the lines already in the list.

@@ -1324,13 +1324,21 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None)
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
         f"NEW LINE:\n{line}",
     ])
-    context += '\nSEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.'
+    context += '\nSEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE as written out in "line", if any, and quote source/target/action from that text. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.'
     result = (model or call_review)(context)
     semantic_values = None
+    semantic_pending = False
     if 'semantics' in result:
-        if not isinstance(result['semantics'], list) or len(result['semantics']) > 40:
-            raise ValueError('invalid_review_semantics')
-        semantic_values = [request_semantics.validate(value, line) for value in result['semantics']]
+        # 回答追問的「森林」本身沒有「背景」：語意要對補完後的那句（"line"），
+        # 那才是會進清單的需求。對不上就只是語意先不算，回話和判斷照常 --
+        # 進了 session 會再解析一次。
+        written = result.get("line").strip() if isinstance(result.get("line"), str) else ""
+        try:
+            if not isinstance(result['semantics'], list) or len(result['semantics']) > 40:
+                raise ValueError('invalid_review_semantics')
+            semantic_values = [request_semantics.validate(value, written or line) for value in result['semantics']]
+        except ValueError:
+            semantic_pending = True
     verdict = result.get("verdict")
     reply = result.get("reply").strip() if isinstance(result.get("reply"), str) else ""
     start = verdict if verdict in ("render", "analyze") else ""
@@ -1405,6 +1413,7 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None)
         # can come back on opposite sides -- so it is read the same way: the
         # words the user is actually shown win, and the line stays.
         **({"request_semantics": semantic_values} if semantic_values is not None else {}),
+        **({"semantic_pending": True} if semantic_pending else {}),
         "kept": kept,
         "start": start,
         "ask": ask,
