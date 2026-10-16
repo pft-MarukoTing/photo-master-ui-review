@@ -83,7 +83,9 @@ How this tool works. These are the only facts you may state about the tool; if a
 # REQUEST below quotes it, so change both together.
 PANEL_CHECK_ASK = "我改了個人化需求，幫我確認一下內容。"
 # 內容不用整理時就這一句：使用者剛親手存的，不必再念回來給他聽。
-PANEL_CHECK_OK = "好，個人化需求存好了。"
+PANEL_CHECK_OK = "好，個人化需求更新好了。"
+# 個人化需求是自動存的，對話裡沒有留下改了什麼；短的話把現在的內容念一次。
+PANEL_CHECK_OK_SAID = "好，個人化需求更新為：{}。"
 
 INSTRUCTION = """You are the assistant in a photo retouching chat. The user is looking at one photo, its AI analysis, and the edit plan the next render (美化) will use. Reply to the user's latest message.
 
@@ -945,7 +947,9 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     # 冗又停在那裡；改成一句短的，接著指向下一步，跟直接套用的回覆講同一句。
     checked = history and history[-1].get("text") == PANEL_CHECK_ASK
     if checked and not (proposal or render or close or options):
-        reply = PANEL_CHECK_OK + _next_step(screen)
+        now = str(plan.get("user_prompt") or "").strip().rstrip("。")
+        said = PANEL_CHECK_OK_SAID.format(now) if now and len(now) <= APPLIED_WISH_MAX_LEN else PANEL_CHECK_OK
+        reply = said + _next_step(screen)
     # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
     # 在問問題、開始美化或收尾的那則不插嘴。
     if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and ANALYZE_BUTTON not in reply \

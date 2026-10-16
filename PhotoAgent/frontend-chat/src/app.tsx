@@ -2983,6 +2983,31 @@ function canonical(v: unknown): unknown {
   return v;
 }
 
+// 從 was（某一輪開始時的設定快照）到 plan，動到了哪些項目。
+function changedCats(was0: Dict, plan: Plan): Set<Category> {
+  const was = canonical(was0) as Dict;
+  const now = snapshotOf(plan);
+  const touched = new Set<Category>();
+  const sub = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Dict) : null);
+  for (const k of new Set([...Object.keys(was), ...Object.keys(now)])) {
+    if (JSON.stringify(was[k]) === JSON.stringify(now[k])) continue;
+    // 整個 key 被加上或清掉時，另一邊當成空物件，子欄位才還認得出屬於誰。
+    const a = sub(was[k]) || (sub(now[k]) ? {} : null);
+    const b = sub(now[k]) || (sub(was[k]) ? {} : null);
+    if (a && b) {
+      for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+        if (JSON.stringify(a[key]) === JSON.stringify(b[key])) continue;
+        const c = categoryOf(`${k}.${key}`);
+        if (c) touched.add(c);
+      }
+    } else {
+      const c = categoryOf(k);
+      if (c) touched.add(c);
+    }
+  }
+  return touched;
+}
+
 function snapshotOf(plan: Plan): Dict {
   const out: Dict = { user_prompt: plan.user_prompt || "" };
   for (const k of ADJUSTABLE) if (plan[k] !== undefined) out[k] = plan[k];
@@ -3134,26 +3159,7 @@ function SessionView(props: {
   // 什麼，而不是只看到一顆孤零零的「美化」。
   const dirtyCats: Category[] = [];
   if (adjusting && roundPlan && !unchanged) {
-    const was = canonical(roundPlan) as Dict;
-    const now = snapshotOf(photo.plan);
-    const touched = new Set<Category>();
-    const sub = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Dict) : null);
-    for (const k of new Set([...Object.keys(was), ...Object.keys(now)])) {
-      if (JSON.stringify(was[k]) === JSON.stringify(now[k])) continue;
-      // 整個 key 被加上或清掉時，另一邊當成空物件，子欄位才還認得出屬於誰。
-      const a = sub(was[k]) || (sub(now[k]) ? {} : null);
-      const b = sub(now[k]) || (sub(was[k]) ? {} : null);
-      if (a && b) {
-        for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
-          if (JSON.stringify(a[key]) === JSON.stringify(b[key])) continue;
-          const c = categoryOf(`${k}.${key}`);
-          if (c) touched.add(c);
-        }
-      } else {
-        const c = categoryOf(k);
-        if (c) touched.add(c);
-      }
-    }
+    const touched = changedCats(roundPlan, photo.plan);
     for (const c of cats) if (touched.has(c)) dirtyCats.push(c);
   }
 
@@ -3762,8 +3768,14 @@ function SessionView(props: {
         // 版號在右邊的美化紀錄裡看得到，話裡再數一次只是把人往回拉。這裡只說
         // 「又開了一輪」，以及舊的那版不會被蓋掉。
         const roundLine = fromApply ? "已套用，開始新的一輪調整。" : "";
+        // 「這是上次的…」只在這一項還是上一版美化時的樣子才說；這一輪已經改過
+        // （對話裡、卡片上、面板裡都算），就照一般的說法介紹現在的內容。
+        const openedWith = (live ? photo.plan : { ...photo.plan, ...((c.plan as Plan) || {}) }) as Plan;
+        const again =
+          messages.slice(0, idx).some((x) => /^render_/.test(x.card?.type || "")) &&
+          !(roundPlan && changedCats(roundPlan, openedWith).has(cat));
         const lead = !answersApply
-          ? introFor(cat, analysis, planAt(idx), messages.slice(0, idx).some((x) => /^render_/.test(x.card?.type || "")))
+          ? introFor(cat, analysis, planAt(idx), again)
           : fromApply
             ? `先看剛套用的${termOf(cat)}，改動的地方已經標起來了。`
             : `好，已套用。這是更新後的${termOf(cat)}，改動的地方已經標起來了。`;

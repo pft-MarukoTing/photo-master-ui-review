@@ -165,7 +165,16 @@ class AskTest(unittest.TestCase):
                                     [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK}],
                                     model=model_says("內容很清楚，目前沒有重複或衝突。"),
                                     screen={"bar": ["美化"], "topics": ["人像", "風格"]})
-        self.assertEqual(result["reply"], "好，個人化需求存好了。還想調整其他項目可以點下面的項目，或按「美化」我就開始。")
+        self.assertEqual(result["reply"], "好，個人化需求更新好了。還想調整其他項目可以點下面的項目，或按「美化」我就開始。")
+
+    def test_a_checked_short_prompt_is_read_back(self):
+        # 個人化需求是自動存的，對話裡看不出改成什麼；短的就念一次。
+        plan = {**default_plan(), "user_prompt": "背景換成海邊"}
+        result = chat_assistant.ask(analysis(), plan, "ready",
+                                    [{"role": "user", "text": chat_assistant.PANEL_CHECK_ASK}],
+                                    model=model_says("內容很清楚，目前沒有重複或衝突。"),
+                                    screen={"bar": ["美化"], "topics": []})
+        self.assertEqual(result["reply"], "好，個人化需求更新為：背景換成海邊。按下面的「美化」我就開始。")
 
     def test_only_wishes_every_reply_also_offers_the_analysis(self):
         # 只照需求改：底下有「幫我分析」，每則都要提，模型漏講就補上。

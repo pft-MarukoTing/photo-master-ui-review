@@ -1827,7 +1827,11 @@ def ask_photo(session_id, photo_id):
         raise _RequestError("this photo's analysis failed", 409)
     screen = _screen(body.get("screen"))
 
-    card = {"type": "ask", "photo_id": photo_id}
+    # The plan as the user left it when they spoke: a panel opened before this
+    # line is summed up (its recap) by what it held then, not by what the chat
+    # changed afterwards.
+    card = {"type": "ask", "photo_id": photo_id,
+            "plan": {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}}
     if subject_indices:
         card["subject_indices"] = subject_indices
     if faces:
