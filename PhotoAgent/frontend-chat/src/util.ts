@@ -287,6 +287,20 @@ export function personalizationText(a: Analysis | null | undefined): string {
   return typeof text === "string" ? text.trim() : "";
 }
 
+// 這則訊息是不是在講這張照片。大多數卡片帶一個 photo_id；好幾張共用的那幾種
+// 改列一串（photos_added 的 photo_ids、render_requested 的 renders 和 queued）；
+// 什麼都沒列的是整個對話的事。跟後端 routes/chat.py 的 _about 同一套。
+export function cardAbout(card: Dict | null | undefined, photoId: string): boolean {
+  if (!card) return true;
+  if (card.photo_id) return card.photo_id === photoId;
+  const ids: string[] = [
+    ...(card.photo_ids || []),
+    ...(card.queued || []),
+    ...((card.renders || []) as Dict[]).map((r) => r?.photo_id),
+  ];
+  return !ids.length || ids.includes(photoId);
+}
+
 // ── Versions (one per render_done message) ─────────────────────────────────
 export function versionsFromMessages(messages: Message[], photoId: string): Version[] {
   const out: Version[] = [];

@@ -115,6 +115,9 @@ export interface SessionSummary {
   thumbnail_job_id: string | null;
   // The newest result in the session, which is what the tile shows.
   thumbnail_result: { job_id: string; run: number } | null;
+  // A session of several photos: its first four, each its result (run) or
+  // else its original (run null). Empty for one photo.
+  thumbnails?: { job_id: string; run: number | null }[];
   status: SessionState;
   rendered_count: number;
 }

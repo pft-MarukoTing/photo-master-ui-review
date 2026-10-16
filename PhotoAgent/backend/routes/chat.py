@@ -1833,8 +1833,10 @@ def ask_photo(session_id, photo_id):
     if faces:
         card["faces"] = faces
     asked = store.make_message("user", text.strip(), card)
-    history = [m for m in store.get_messages(user, session_id, limit=chat_assistant.HISTORY_LEN)
-               if (m.get("card") or {}).get("photo_id") in (None, photo_id)] + [asked]
+    # Filtered before the limit: in a session of several photos the others'
+    # turns would otherwise use up this photo's history.
+    history = [m for m in store.get_messages(user, session_id, limit=1000)
+               if _about(m.get("card"), photo_id)][-chat_assistant.HISTORY_LEN:] + [asked]
     return _answer(user, session_id, photo, history, screen, [] if prompt_saved else [asked])
 
 
@@ -1848,8 +1850,8 @@ def _answer_waiting(user, session_id, photo, message_id, screen):
     # After 一鍵美化 it is answered with the result in hand.
     if photo["status"] == "rendering":
         raise _RequestError("this photo is still being retouched", 409)
-    history = [m for m in store.get_messages(user, session_id)
-               if (m.get("card") or {}).get("photo_id") in (None, photo["photo_id"])]
+    history = [m for m in store.get_messages(user, session_id, limit=1000)
+               if _about(m.get("card"), photo["photo_id"])]
     asked = next((m for m in history if m["id"] == message_id and m["role"] == "user"
                   and (m.get("card") or {}).get("type") == "ask" and m["card"].get("waiting")), None)
     if asked is None:
@@ -1895,6 +1897,19 @@ def _apply_directly(user, session_id, photo, reply):
     return messages
 
 
+def _about(card, photo_id):
+    """Whether a log card concerns this photo. Most carry one photo_id; the
+    ones a session of several photos shares name theirs in a list instead
+    (photos_added's photo_ids, render_requested's renders and queued), and a
+    card naming none is about the session as a whole."""
+    card = card or {}
+    if card.get("photo_id"):
+        return card["photo_id"] == photo_id
+    ids = list(card.get("photo_ids") or []) + list(card.get("queued") or [])
+    ids += [r.get("photo_id") for r in card.get("renders") or [] if isinstance(r, dict)]
+    return not ids or photo_id in ids
+
+
 def _round_to_open(log, photo_id):
     """True when the photo has been rendered and no round of adjusting is open
     since: the last render came after the last adjust_opened, or the user
@@ -1902,7 +1917,7 @@ def _round_to_open(log, photo_id):
     rendered = opened = False
     for m in log:
         card = m.get("card") or {}
-        if card.get("photo_id") not in (None, photo_id):
+        if not _about(card, photo_id):
             continue
         kind = card.get("type") or ""
         if kind.startswith("render_") or kind == "adjust_cancelled":

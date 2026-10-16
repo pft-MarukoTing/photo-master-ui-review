@@ -174,6 +174,14 @@ export const api = {
     if (wishes?.length) form.append("conversation_wishes", JSON.stringify(wishes));
     return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
   },
+  // 一次傳好幾張：同一個請求、同一張 photos_added，跟單張走同一個端點。多張時
+  // 不帶人物預覽，也沒有上傳頁的個人化需求。
+  uploadPhotos: (id: string, files: { blob: Blob; name: string }[]) => {
+    const form = new FormData();
+    form.set("user", currentUser);
+    for (const f of files) form.append("image", f.blob, f.name);
+    return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
+  },
   confirmPhotoConversation: (id: string, photoId: string, body: Dict) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, json("POST", body)),
   analysis: (id: string, photoId: string) =>

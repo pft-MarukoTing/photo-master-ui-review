@@ -188,6 +188,8 @@ export function ChatPanel(props: {
   // 幾次畫出來的（session、分析各自晚到），那段時間冒出來的都是舊紀錄，不打字。
   live?: boolean;
   onDropFile?: (file: File) => void;
+  // 有給就整批丟進來的檔案都交給它（上傳頁可以一次多張）；沒給就只取第一張。
+  onDropFiles?: (files: File[]) => void;
   // The photo being worked on, before the session starts. On a phone, once its
   // big copy in the timeline (UploadBubble with onOpen) scrolls off the top,
   // the head gives its place to a bar showing it; tapping either opens it.
@@ -301,7 +303,7 @@ export function ChatPanel(props: {
     };
   }, []);
 
-  const drop = props.onDropFile;
+  const drop = props.onDropFiles || props.onDropFile;
   return (
     <div
       class={`chat-panel${props.class ? ` ${props.class}` : ""}${dragging ? " is-dragging" : ""}${
@@ -320,8 +322,10 @@ export function ChatPanel(props: {
         ((e) => {
           e.preventDefault();
           setDragging(false);
-          const f = e.dataTransfer?.files?.[0];
-          if (f) drop(f);
+          const files = Array.from(e.dataTransfer?.files || []);
+          if (props.onDropFiles) {
+            if (files.length) props.onDropFiles(files);
+          } else if (files[0]) props.onDropFile?.(files[0]);
         })
       }
     >
@@ -1205,9 +1209,13 @@ let measureCtx: CanvasRenderingContext2D | null = null;
 
 export function Composer(props: {
   onFile?: (f: File) => void;
+  // 給了就可以一次選好幾張，全部交給它。
+  onFiles?: (fs: File[]) => void;
   // With it, the attach button is the way back to picking a photo rather than
   // a file-dialog shortcut, so it offers both routes instead of one.
   onSample?: () => void;
+  // 按鈕的提示字，預設依 onSample 是「換一張照片」或「上傳照片」。
+  attachTitle?: string;
   disabled?: boolean;
   // Without onSend the field is a placeholder (before a photo is picked).
   onSend?: (text: string, subjectIndices: number[]) => Promise<boolean>;
@@ -1307,7 +1315,7 @@ export function Composer(props: {
             <button
               type="button"
               class="chat-attach"
-              title={onSample ? "換一張照片" : "上傳照片"}
+              title={props.attachTitle || (onSample ? "換一張照片" : "上傳照片")}
               aria-haspopup={onSample ? "menu" : undefined}
               aria-expanded={onSample ? menu : undefined}
               disabled={disabled}
@@ -1345,11 +1353,14 @@ export function Composer(props: {
               ref={input}
               type="file"
               accept="image/*,.heic,.heif"
+              multiple={!!props.onFiles}
               hidden
               onChange={(e) => {
-                const f = e.currentTarget.files?.[0];
+                const fs = Array.from(e.currentTarget.files || []);
                 e.currentTarget.value = "";
-                if (f && onFile) onFile(f);
+                if (props.onFiles) {
+                  if (fs.length) props.onFiles(fs);
+                } else if (fs[0] && onFile) onFile(fs[0]);
               }}
             />
           </div>

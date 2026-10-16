@@ -137,6 +137,13 @@ def _summary(session_id, session):
             {"job_id": newest["active_version"]["job_id"], "run": newest["active_version"].get("run") or 1}
             if newest else None
         ),
+        # A session of several photos shows as one tile with its first few
+        # photos in it: each photo's current result, else its original.
+        "thumbnails": [
+            {"job_id": p["active_version"]["job_id"], "run": p["active_version"].get("run") or 1}
+            if p in rendered else {"job_id": p["analyze_job_id"], "run": None}
+            for p in photos[:4]
+        ] if len(photos) > 1 else [],
         "status": state,
         "rendered_count": len(rendered),
         # Which history cases this session already covers: the home page

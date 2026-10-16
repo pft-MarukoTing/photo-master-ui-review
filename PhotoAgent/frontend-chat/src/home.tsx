@@ -509,9 +509,7 @@ export function SessionTile(props: { s: SessionSummary; selected: boolean; onCli
     : s.thumbnail_job_id
       ? urls.sourceThumb(s.thumbnail_job_id)
       : "";
-  const label = s.status === "done" && s.photo_count > 1
-    ? `${SESSION_BADGES.done}（${s.rendered_count}/${s.photo_count}）`
-    : SESSION_BADGES[s.status];
+  const label = SESSION_BADGES[s.status];
   return (
     <Tile
       src={src}
@@ -520,11 +518,35 @@ export function SessionTile(props: { s: SessionSummary; selected: boolean; onCli
       onClick={props.onClick}
       onImgError={showResult ? () => setBrokenJob(result.job_id) : undefined}
     >
+      {s.photo_count > 1 && <SessionMosaic s={s} />}
       {label && <span class={`session-tile-badge is-${s.status}`}>{label}</span>}
       {props.onRemove && <RemoveMark onRemove={props.onRemove} />}
       {/* 只有手機首頁的那一排會顯示（chat.css）：那裡沒有日期標題，時間就寫在磚下面。 */}
       <span class="session-tile-when" aria-hidden="true">{timeLabel(s.updated_at)}</span>
     </Tile>
+  );
+}
+
+// 一段對話有好幾張時，磚裡拼前幾張，一眼看得出是一組：兩張左右對分，三張一大兩小，
+// 四張田字；超過四張，最後一格蓋上「+N」。角落再寫總共幾張。蓋在 Tile 自己那張圖上面，
+// 那張照樣當模糊底圖。
+function SessionMosaic({ s }: { s: SessionSummary }) {
+  const shots = (s.thumbnails || []).slice(0, 4);
+  const more = s.photo_count - shots.length;
+  return (
+    <>
+      {shots.length > 1 && (
+        <span class={`session-tile-mosaic is-${shots.length}`} aria-hidden="true">
+          {shots.map((t, i) => (
+            <span key={i} class="session-tile-cell">
+              <img src={t.run ? urls.resultThumb(t.job_id, t.run) : urls.sourceThumb(t.job_id)} alt="" loading="lazy" />
+              {more > 0 && i === shots.length - 1 && <b>+{more}</b>}
+            </span>
+          ))}
+        </span>
+      )}
+      <span class="session-tile-count">{s.photo_count} 張</span>
+    </>
   );
 }
 

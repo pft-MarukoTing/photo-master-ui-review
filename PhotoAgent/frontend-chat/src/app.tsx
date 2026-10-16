@@ -75,6 +75,7 @@ import type {
 } from "./types";
 import {
   aspectLabel,
+  cardAbout,
   clockLabel,
   rememberRenderLabel,
   renderLabelFor,
@@ -92,6 +93,8 @@ import {
 type Phase = "home" | "chat" | "session";
 type PreStep = "start" | "picked" | "settings";
 type Source = { kind: "file"; file: File; url: string } | { kind: "demo"; name: string };
+// 一次最多幾張，跟後端 MAX_PHOTOS_PER_SESSION 一樣。
+const MAX_BATCH = 20;
 // A face picked on the upload page: no name yet, so where it stands and its box.
 type PrePerson = FaceRef & { where: string; box: Box; thumbnail_box?: Box; preview_person_id?: string; detection_index?: number; preview_job_id?: string; source_sha256?: string };
 
@@ -527,6 +530,9 @@ export function App() {
   const lastSettingsClick = useRef(-1);
   const [via, setVia] = useState<"upload" | "sample" | null>(null);
   const [source, setSource] = useState<Source | null>(null);
+  // 一次選了好幾張：不偵測人臉、不收需求，只讓使用者挑「分析」或「一鍵美化」
+  // 套到全部。單張還是走 source 那條（有人物和需求）。
+  const [batch, setBatch] = useState<Source[] | null>(null);
   const [sourceGeneration, setSourceGeneration] = useState(0);
   const [settings, setSettings] = useState<Settings | null>(null);
   // header 設定裡的對話風格；settings 每次重來都從這裡起跳。
@@ -572,9 +578,11 @@ export function App() {
   // 先沿用舊的，面板才不會收起來又打開。
   const [analyses, setAnalyses] = useState<Record<string, { job: string; analysis: Analysis }>>({});
   const [selected, setSelected] = useState<string | null>(null);
-  const [pendingAsk, setPendingAsk] = useState<{ text: string; subjectIndices: number[] } | null>(null);
+  // session 裡正在看哪張；null 就照 activePhoto 挑。
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [pendingAsk, setPendingAsk] = useState<{ photoId: string; text: string; subjectIndices: number[] } | null>(null);
 
-  const [submitting, setSubmitting] = useState<{ source: Source; mode: "analyze" | "render"; since: number } | null>(null);
+  const [submitting, setSubmitting] = useState<{ sources: Source[]; mode: "analyze" | "render"; since: number } | null>(null);
   const submissionLock = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -840,7 +848,7 @@ export function App() {
   // 上傳頁挑好的照片、打的字、選的設定都只在這一頁，離開就沒了；開始對話後
   // 每個調整都存在後端，不用問。關分頁、重新整理用瀏覽器自己的離開提示（文字
   // 改不了），頁面裡換照片、回首頁用 confirmLeave。
-  const unsentHome = phase !== "session" && (!!source || notes.length > 0);
+  const unsentHome = phase !== "session" && (!!source || !!batch || notes.length > 0);
   function confirmLeave(where: string): Promise<boolean> {
     if (!unsentHome) return Promise.resolve(true);
     const what = notes.length ? "剛剛選的照片和打的需求" : "剛剛選的照片";
@@ -878,7 +886,9 @@ export function App() {
     return () => window.removeEventListener("beforeunload", warn);
   }, [unsentHome]);
 
-  const photo = activePhoto(session);
+  const photo = session?.photos.find((p) => p.photo_id === activeId) || activePhoto(session);
+  const sessionId = session?.session_id;
+  useEffect(() => setActiveId(null), [sessionId]);
   const messages = session?.messages || [];
   const polling = !!session && session.photos.some(isBusy);
   const sessionRef = useRef(session);
@@ -945,6 +955,7 @@ export function App() {
     lastSettingsClick.current = -1;
     setVia(null);
     setSource(null);
+    setBatch(null);
     setNotes([]);
     preDraft.current = "";
     setSegEdits({});
@@ -1033,6 +1044,7 @@ export function App() {
     ++lastPick.current; // a demo pick also supersedes an in-flight HEIC decode
     setSamplesOpen(false);
     setSource(s);
+    setBatch(null);
     // A new photo has its own people. (Swapping one on the upload page already
     // cleared what was typed in swapSource; this keeps the pointing clean.)
     setPrePointed([]);
@@ -1052,20 +1064,7 @@ export function App() {
       return;
     }
     setSamplesOpen(false);
-    const typed = notes.length > 0 || Object.keys(segEdits).length > 0 || !!preAsk || !!preDraft.current.trim();
-    const tuned = !!caps && !!settings && !sameSettings(settings, defaultSettings(caps, prefs || undefined));
-    const ok = !(typed || tuned) || await new Promise<boolean>((resolve) =>
-      setLeaveAsk({
-        message: "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？",
-        confirmLabel: "更換",
-        cancelLabel: "取消",
-        answer: (yes) => {
-          setLeaveAsk(null);
-          resolve(yes);
-        },
-      }),
-    );
-    if (!ok) {
+    if (!(await confirmSwap())) {
       if (s.kind === "file") URL.revokeObjectURL(s.url);
       return;
     }
@@ -1077,12 +1076,133 @@ export function App() {
     choose(s);
   }
 
+  // 換掉上傳頁上的照片前問一聲；沒打過字、沒改過設定就不用問。
+  function confirmSwap(): Promise<boolean> {
+    const typed = notes.length > 0 || Object.keys(segEdits).length > 0 || !!preAsk || !!preDraft.current.trim();
+    const tuned = !!caps && !!settings && !sameSettings(settings, defaultSettings(caps, prefs || undefined));
+    if (!(typed || tuned)) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) =>
+      setLeaveAsk({
+        message: "換成這張照片的話，剛剛打的需求和選的設定都會清掉。確定要換嗎？",
+        confirmLabel: "更換",
+        cancelLabel: "取消",
+        answer: (yes) => {
+          setLeaveAsk(null);
+          resolve(yes);
+        },
+      }),
+    );
+  }
+
+  // 一次選了好幾張。只有一張就照單張走（有人物、有需求）；兩張以上開一頁
+  // 多張的上傳頁，只問要分析還是一鍵美化。
+  async function pickFiles(files: File[]) {
+    const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
+    if (images.length <= 1) return pickFile(images[0] || files[0]);
+    const pick = ++lastPick.current;
+    const taken = images.slice(0, MAX_BATCH);
+    let previews: Blob[];
+    try {
+      previews = await Promise.all(taken.map((f) => previewBlob(f)));
+    } catch (e) {
+      if (pick === lastPick.current) setError(errorText(e));
+      return;
+    }
+    if (pick !== lastPick.current) return;
+    const sources: Source[] = taken.map((file, i) => ({ kind: "file", file, url: URL.createObjectURL(previews[i]) }));
+    if (phase === "chat" && !(await confirmSwap())) {
+      for (const s of sources) if (s.kind === "file") URL.revokeObjectURL(s.url);
+      return;
+    }
+    setSession(null);
+    setSessionHash(null);
+    resetPre();
+    setPreClear((n) => n + 1);
+    setPhase("chat");
+    setBatch(sources);
+    setError(
+      images.length > MAX_BATCH
+        ? notice(`一次最多只能選 ${MAX_BATCH} 張，先放前 ${MAX_BATCH} 張。`)
+        : images.length < files.length
+          ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
+          : "",
+    );
+    window.scrollTo(0, 0);
+  }
+
+  // 多張上傳頁上的 ×：拿掉一張。剩一張就回單張的流程（有人物、有需求）。
+  function removeFromBatch(i: number) {
+    if (!batch || busy || submitting) return;
+    const gone = batch[i];
+    const rest = batch.filter((_, j) => j !== i);
+    if (gone?.kind === "file") URL.revokeObjectURL(gone.url);
+    if (rest.length === 1) choose(rest[0]);
+    else setBatch(rest);
+    setError("");
+  }
+
+  // 多張上傳頁上的「全部清除」：先問一聲，清掉就回到還沒選照片的上傳頁。
+  function clearBatch() {
+    if (!batch || busy || submitting) return;
+    const n = batch.length;
+    setLeaveAsk({
+      message: `確定要清除這 ${n} 張照片嗎？`,
+      confirmLabel: "清除",
+      cancelLabel: "取消",
+      answer: (yes) => {
+        setLeaveAsk(null);
+        if (!yes) return;
+        for (const s of batch) if (s.kind === "file") URL.revokeObjectURL(s.url);
+        resetPre();
+        setError("");
+      },
+    });
+  }
+
+  // 多張上傳頁上的「新增照片」：接在原本那幾張後面，不取代。
+  const appendNext = useRef(false);
+  function addToBatch() {
+    appendNext.current = true;
+    fileInput.current?.click();
+  }
+  async function appendFiles(files: File[]) {
+    if (!batch) return pickFiles(files);
+    const images = files.filter((f) => f.type.startsWith("image/") || isHeic(f));
+    const room = MAX_BATCH - batch.length;
+    const taken = images.slice(0, Math.max(0, room));
+    const pick = ++lastPick.current;
+    let previews: Blob[];
+    try {
+      previews = await Promise.all(taken.map((f) => previewBlob(f)));
+    } catch (e) {
+      if (pick === lastPick.current) setError(errorText(e));
+      return;
+    }
+    const added: Source[] = taken.map((file, i) => ({ kind: "file", file, url: URL.createObjectURL(previews[i]) }));
+    if (pick !== lastPick.current) {
+      for (const s of added) if (s.kind === "file") URL.revokeObjectURL(s.url);
+      return;
+    }
+    setBatch((b) => (b ? [...b, ...added] : b));
+    setError(
+      images.length > taken.length
+        ? notice(
+            taken.length
+              ? `最多只能選 ${MAX_BATCH} 張，先加前 ${taken.length} 張。`
+              : `已經選滿 ${MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。`,
+          )
+        : images.length < files.length
+          ? notice(`有 ${files.length - images.length} 個檔案不是圖片，先略過。`)
+          : "",
+    );
+  }
+
   // HEIC has to be decoded before it can be shown, which takes a moment; a
   // second pick made meanwhile wins over the first.
   const lastPick = useRef(0);
   async function pickFile(file: File) {
     if (!file.type.startsWith("image/") && !isHeic(file)) {
-      setError("請選擇圖片檔。");
+      setError(notice("請選擇圖片檔。"));
       return;
     }
     const pick = ++lastPick.current;
@@ -1287,7 +1407,7 @@ export function App() {
   function startSession(mode: "analyze" | "render", later = laterNote(notes), log = notes, overwrite?: boolean) {
     if (!source || !caps || !settings || busy || submissionLock.current) return;
     if (mode === "render" && bridgeQuestion) {
-      setError("請先確認個人化需求指定的人物，再開始美化。");
+      setError(notice("請先確認個人化需求指定的人物，再開始美化。"));
       return;
     }
     if (mode === "render" && overwrite === undefined && (bridge.result?.effective_prompt ?? notesPrompt(log, segEdits)).trim()) {
@@ -1305,7 +1425,7 @@ export function App() {
     const since = Date.now();
     const say = (line: string) => setStarting((s) => s && { ...s, lines: [...s.lines, line] });
     setStarting({ mode, overwrite, since, lines: ["正在上傳照片…"] });
-    setSubmitting({ source, mode, since });
+    setSubmitting({ sources: [source], mode, since });
     void run(async () => {
       const previewIdentity = await previewDecision;
       const submissionLog = previewEnabled && !previewIdentity ? log.map((note) => ({
@@ -1389,6 +1509,47 @@ export function App() {
     });
   }
 
+  // 多張一起開始：不偵測人臉、沒有個人化需求，整批上傳到同一段對話，
+  // 一鍵美化就整批送出（還在分析的，後端會排著等分析好）。
+  function startBatch(mode: "analyze" | "render") {
+    if (!batch || !caps || !settings || busy || submissionLock.current) return;
+    submissionLock.current = true;
+    const sources = batch;
+    const since = Date.now();
+    const say = (line: string) => setStarting((s) => s && { ...s, lines: [...s.lines, line] });
+    setStarting({ mode, since, lines: [`正在上傳 ${sources.length} 張照片…`] });
+    setSubmitting({ sources, mode, since });
+    void run(async () => {
+      const s = await api.createSession();
+      const id = s.session_id;
+      if (!sameSettings(settings, defaultSettings(caps))) await api.patchPlan(id, { ...settings });
+      const up = await api.uploadPhotos(
+        id,
+        sources.flatMap((x) => (x.kind === "file" ? [{ blob: x.file as Blob, name: x.file.name }] : [])),
+      );
+      const added = up.photos || [];
+      if (!added.length) throw new Error(up.errors?.[0]?.error || "上傳失敗");
+      say(mode === "analyze" ? "照片傳好了，準備開始分析…" : "照片傳好了，準備開始美化…");
+      if (mode === "render") {
+        await api.render(id, added.map((p) => p.photo_id as string));
+        await afterRender(id, "一鍵美化", "spark", { ...settings });
+      } else {
+        setSession(await api.getSession(id));
+      }
+      setBatch(null);
+      setSelected(null);
+      setPhase("session");
+      setSessionHash(id);
+      refreshSessions();
+      const failed = sources.length - added.length;
+      if (failed) throw new Error(`有 ${failed} 張沒傳上去${up.errors?.[0]?.error ? `（${up.errors[0].error}）` : ""}，其他 ${added.length} 張照常處理。`);
+    }).finally(() => {
+      submissionLock.current = false;
+      setSubmitting(null);
+      setStarting(null);
+    });
+  }
+
   function renderPhoto(label: string, icon: string, patch?: Plan) {
     if (!session || !photo) return;
     const id = session.session_id;
@@ -1402,11 +1563,25 @@ export function App() {
     });
   }
 
+  // 同一段對話裡的每一張一起一鍵美化，各自照自己目前的設定。
+  function renderAll() {
+    if (!session || !photo) return;
+    const id = session.session_id;
+    const ids = session.photos.filter(canRenderInAll).map((p) => p.photo_id);
+    if (!ids.length) return;
+    const plan = photo.plan;
+    run(async () => {
+      await api.render(id, ids);
+      await afterRender(id, "全部一鍵美化", "spark", plan);
+      setSelected(null);
+    });
+  }
+
   function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[]) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
-    setPendingAsk({ text, subjectIndices });
+    setPendingAsk({ photoId: pid, text, subjectIndices });
     return run(async () => {
       try {
         await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces);
@@ -1423,7 +1598,7 @@ export function App() {
     if (!session || !photo) return;
     const id = session.session_id;
     const pid = photo.photo_id;
-    setPendingAsk({ text: "", subjectIndices: [] });
+    setPendingAsk({ photoId: pid, text: "", subjectIndices: [] });
     run(async () => {
       try {
         await api.answerWaiting(id, pid, messageId, screen);
@@ -1466,7 +1641,7 @@ export function App() {
     const id = session.session_id;
     const pid = photo.photo_id;
     // 沒有使用者泡泡，只顯示 AI 正在回。
-    setPendingAsk({ text: "", subjectIndices: [] });
+    setPendingAsk({ photoId: pid, text: "", subjectIndices: [] });
     return run(async () => {
       try {
         await api.reviewPrompt(id, pid, screen);
@@ -1585,11 +1760,14 @@ export function App() {
       ref={fileInput}
       type="file"
       accept="image/*,.heic,.heif"
+      multiple
       hidden
       onChange={(e) => {
-        const f = e.currentTarget.files?.[0];
+        const fs = Array.from(e.currentTarget.files || []);
         e.currentTarget.value = "";
-        if (f) pickFile(f);
+        const append = appendNext.current;
+        appendNext.current = false;
+        if (fs.length) (append ? appendFiles : pickFiles)(fs);
       }}
     />
   );
@@ -1676,6 +1854,66 @@ export function App() {
     />
   );
 
+  // 多張的上傳頁（選好了、或已經按下去正在上傳）。
+  const batchShown = submitting ? (submitting.sources.length > 1 ? submitting.sources : null) : phase === "chat" ? batch : null;
+  if (batchShown) {
+    const went = submitting?.mode || null;
+    return (
+      <>
+        {header}
+        <main>
+          <section id="upload-section" class="section visible">
+            <div class="container upload-container">
+              <div class="upload-grid">
+                <div class="upload-content-row is-chat">
+                  <BatchStage
+                    sources={batchShown}
+                    onRemove={busy || went ? undefined : removeFromBatch}
+                    onAdd={busy || went || batchShown.length >= MAX_BATCH ? undefined : addToBatch}
+                    onClear={busy || went ? undefined : clearBatch}
+                  />
+                  <ChatPanel
+                    class="home-chat has-photo"
+                    sub={went === "analyze" ? "分析" : went === "render" ? "一鍵美化" : "新對話"}
+                    onDropFiles={busy || went ? undefined : appendFiles}
+                    footer={
+                      went ? null : (
+                        // 這裡的上傳鈕跟拖進來的照片都是「再加幾張」，接在原本的後面；
+                        // 要整組換掉就先「全部清除」。
+                        <Composer
+                          onFile={(f) => appendFiles([f])}
+                          onFiles={appendFiles}
+                          attachTitle="新增照片"
+                          disabled={busy}
+                          placeholder={["多張照片先選分析或一鍵美化，進去後每張可以再各自調整", "先選分析或一鍵美化", "先選上面的選項"]}
+                        />
+                      )
+                    }
+                  >
+                    <BatchChat
+                      sources={batchShown}
+                      went={went}
+                      starting={starting}
+                      since={submitting?.since || 0}
+                      busy={busy}
+                      error={error}
+                      onStart={startBatch}
+                    />
+                  </ChatPanel>
+                </div>
+              </div>
+            </div>
+          </section>
+          {hiddenInput}
+        </main>
+        {drawerEl}{prefsEl}
+        {samplesEl}
+        {confirmEl}
+        {askEl}
+      </>
+    );
+  }
+
   if (submitting) {
     return (
       <>
@@ -1685,7 +1923,7 @@ export function App() {
             <div class="container upload-container">
               <div class="upload-grid">
               <div class="upload-content-row is-chat">
-                <PreStage source={submitting.source} />
+                <PreStage source={submitting.sources[0]} />
                 <ChatPanel class="home-chat has-photo" sub={submitting.mode === "analyze" ? "分析" : "一鍵美化"} footer={null}>
                   <AssistantMsg>
                     <p class="chat-text">{submitting.mode === "analyze" ? "正在準備分析照片" : "正在準備一鍵美化"}</p>
@@ -1710,6 +1948,21 @@ export function App() {
         {header}
         <main>
           <SessionView
+            key={photo.photo_id}
+            sidebar={
+              session.photos.length > 1 && (
+                <BatchSidebar
+                  photos={session.photos}
+                  current={photo.photo_id}
+                  onPick={(id) => {
+                    setActiveId(id);
+                    setSelected(null);
+                  }}
+                  busy={busy}
+                  onRenderAll={renderAll}
+                />
+              )
+            }
             caps={caps}
             debugUi={debugUi}
             session={session}
@@ -1717,7 +1970,7 @@ export function App() {
             analysis={analyses[photo.photo_id]?.analysis || null}
             analysisPending={analysisReady && !analyses[photo.photo_id]}
             selected={selected}
-            pendingAsk={pendingAsk}
+            pendingAsk={pendingAsk?.photoId === photo.photo_id ? pendingAsk : null}
             busy={busy}
             error={error}
             onSelectVersion={selectVersion}
@@ -1798,7 +2051,7 @@ export function App() {
                     class={`home-chat${source ? "" : " is-solo"}`}
                     sub="新對話"
                     photo={source ? { src: sourceSrc(source), onOpen: () => setViewing(true) } : undefined}
-                    onDropFile={busy ? undefined : pickFile}
+                    onDropFiles={busy ? undefined : pickFiles}
                     footer={
                       <>
                         <FootBar
@@ -1809,6 +2062,7 @@ export function App() {
                         />
                         <Composer
                           onFile={pickFile}
+                          onFiles={pickFiles}
                           // Only once there is a photo to replace; before that the
                           // greeting's two chips are the choice, right above.
                           onSample={source ? showSamples : undefined}
@@ -1884,7 +2138,10 @@ export function App() {
                       busy={busy}
                       starting={starting}
                       error={error}
-                      onUpload={() => fileInput.current?.click()}
+                      onUpload={() => {
+                        appendNext.current = false;
+                        fileInput.current?.click();
+                      }}
                       onView={() => setViewing(true)}
                       onSamples={showSamples}
                       onSettings={next => {
@@ -1963,6 +2220,232 @@ function PreStage({ source }: { source: Source }) {
     </div>
   );
 }
+
+// 多張的上傳頁：每張一律 1:1 的格子（照片 cover 進去），格子大小統一，張數不同
+// 看起來還是同一套。量台面的寬高，在每列 1～n 張之間挑出格子最大的排法，整組置中；
+// 連最大的排法格子都小於 BATCH_MIN_CELL，就改成固定欄寬、在格子裡往下捲。
+const BATCH_RATIO = 1;
+const BATCH_GAP = 16;
+const BATCH_MIN_CELL = 140;
+function batchFit(n: number, w: number, h: number) {
+  let best = { cols: 1, cell: 0 };
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols);
+    const cell = Math.min((w - (cols - 1) * BATCH_GAP) / cols, ((h - (rows - 1) * BATCH_GAP) / rows) * BATCH_RATIO);
+    if (cell > best.cell) best = { cols, cell };
+  }
+  return best;
+}
+// 捲動時捲軸佔掉的寬度，算欄數時先扣掉，免得最右邊那欄被擠下去。
+const BATCH_SCROLLBAR = 12;
+function batchScroll(w: number) {
+  const usable = w - BATCH_SCROLLBAR;
+  const cols = Math.max(1, Math.floor((usable + BATCH_GAP) / (BATCH_MIN_CELL + BATCH_GAP)));
+  return { cols, cell: (usable - (cols - 1) * BATCH_GAP) / cols };
+}
+// 還沒按分析／一鍵美化之前，每格右上角有 × 可以拿掉，最後多一格「新增照片」，
+// 上面一條可以全部清除（跟面板模式的上傳區一樣）；新增那格也算進排法裡，大小跟照片一致。
+function BatchStage(props: { sources: Source[]; onRemove?: (i: number) => void; onAdd?: () => void; onClear?: () => void }) {
+  const { sources, onRemove, onAdd, onClear } = props;
+  const area = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  useEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const best = box && batchFit(sources.length + (onAdd ? 1 : 0), box.w, box.h);
+  const scroll = !!best && best.cell < BATCH_MIN_CELL;
+  const fit = box && (scroll ? batchScroll(box.w) : best);
+  const cell = fit ? Math.max(0, Math.floor(fit.cell)) : 0;
+  return (
+    <div class="prechat-stage is-batch">
+      <div class="batch-bar">
+        <span class="batch-bar-count">{sources.length} 張照片</span>
+        {onClear && (
+          <button type="button" class="batch-clear" onClick={onClear}>
+            <Icon name="x" size={14} />
+            全部清除
+          </button>
+        )}
+      </div>
+      <div ref={area} class={`batch-area${scroll ? " is-scroll" : ""}`}>
+      <ul
+        class={`batch-grid${cell ? " is-fit" : ""}`}
+        style={cell ? { "--cell": `${cell}px`, width: `${fit!.cols * cell + (fit!.cols - 1) * BATCH_GAP}px` } : undefined}
+        aria-label={`選了 ${sources.length} 張照片`}
+      >
+        {sources.map((s, i) => (
+          <li key={sourceSrc(s)}>
+            <img src={sourceSrc(s)} alt={`第 ${i + 1} 張`} />
+            {onRemove && (
+              <button type="button" class="batch-remove" aria-label={`移除第 ${i + 1} 張`} title="移除" onClick={() => onRemove(i)}>
+                <Icon name="x" size={14} />
+              </button>
+            )}
+          </li>
+        ))}
+        {onAdd && (
+          <li class="batch-add-cell">
+            <button type="button" class="batch-add" onClick={onAdd}>
+              <Icon name="plus" size={26} />
+              <span>新增照片</span>
+            </button>
+          </li>
+        )}
+      </ul>
+      </div>
+    </div>
+  );
+}
+
+// 多張的上傳頁對話：只問要分析還是一鍵美化，套到每一張。手機上左邊那格收起來，
+// 對話裡這疊縮圖就是使用者看得到的照片。
+function BatchChat(props: {
+  sources: Source[];
+  went: "analyze" | "render" | null;
+  starting: StartProgress | null;
+  since: number;
+  busy: boolean;
+  error: string;
+  onStart: (mode: "analyze" | "render") => void;
+}) {
+  const { sources, went, starting } = props;
+  const shown = sources.slice(0, 4);
+  const more = sources.length - shown.length;
+  return (
+    <>
+      <UserMsg>
+        <div class="chat-upload is-batch">
+          <div class="chat-upload-stack" aria-hidden="true">
+            {shown.map((s, i) => <img key={i} src={sourceSrc(s)} alt="" />)}
+            {more > 0 && <span>+{more}</span>}
+          </div>
+          <div class="chat-bubble">上傳了 {sources.length} 張照片</div>
+        </div>
+      </UserMsg>
+      <AssistantMsg>
+        <p class="chat-text">收到 {sources.length} 張。要先看我對每張的分析，還是直接全部美化？</p>
+        <p class="chat-text chat-muted">多張一起開始時先不指定人物、也不用打需求；進去之後每張都能各自調整、再美化。</p>
+        <div class="chat-choices chat-actions">
+          <div class="chat-actions-main">
+            <Chip
+              label="分析"
+              icon="search"
+              kind={went === "analyze" ? "picked" : went ? undefined : "primary"}
+              settled={!!went}
+              disabled={props.busy}
+              onClick={() => props.onStart("analyze")}
+            />
+            <Chip
+              label="一鍵美化"
+              icon="spark"
+              kind={went === "render" ? "picked" : went ? undefined : "primary"}
+              settled={!!went}
+              disabled={props.busy}
+              onClick={() => props.onStart("render")}
+            />
+          </div>
+        </div>
+      </AssistantMsg>
+      {went && (
+        <AssistantMsg>
+          <WorkingCard
+            done={starting?.lines.slice(0, -1) || []}
+            now={starting?.lines[starting.lines.length - 1] || `正在上傳 ${sources.length} 張照片…`}
+            since={props.since}
+          />
+        </AssistantMsg>
+      )}
+      {props.error && <ErrorMsg text={props.error} />}
+    </>
+  );
+}
+
+// 同一段對話裡有好幾張時，最左邊那欄「我的照片」：點哪張就看哪張的對話和結果。
+// 跟舊版批次的 .batch-sidebar 同一套 class 和樣子；每張是歷史紀錄那種方塊（.history-cube），
+// 狀態疊在照片左下角。窄螢幕一樣收成從左邊拉出來的抽屜。
+// 上面那顆「全部一鍵美化」把每張照它自己目前的設定送出去，正在美化的不重送。
+function BatchSidebar(props: {
+  photos: Photo[];
+  current: string;
+  onPick: (id: string) => void;
+  busy: boolean;
+  onRenderAll: () => void;
+}) {
+  const { photos, current } = props;
+  const [open, setOpen] = useState(false);
+  const pick = (id: string) => {
+    setOpen(false);
+    if (id !== current) props.onPick(id);
+  };
+  return (
+    <>
+      <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={() => setOpen(false)} />
+      <aside class={`batch-sidebar${open ? " drawer-open" : ""}`} id="batch-sidebar">
+        <button type="button" class="batch-sidebar-close-btn" aria-label="收起照片列表" onClick={() => setOpen(false)}>
+          <Icon name="x" size={16} />
+        </button>
+        <div class="batch-sidebar-header">
+          <h2 class="batch-sidebar-title">我的照片</h2>
+          <span class="batch-sidebar-count">{photos.length} 張</span>
+        </div>
+        <div class="batch-sidebar-all">
+          <Chip
+            label="全部一鍵美化"
+            icon="spark"
+            disabled={props.busy || !photos.some(canRenderInAll)}
+            title="每張照目前的設定美化，正在美化的那幾張不重送"
+            onClick={props.onRenderAll}
+          />
+        </div>
+        <div class="batch-sidebar-list" role="tablist" aria-label="這段對話的照片">
+          {photos.map((p, i) => {
+            const v = p.active_version;
+            const state =
+              p.status === "failed"
+                ? { key: "error", text: "失敗" }
+                : p.status === "rendering" || p.queued_render || p.pending_render
+                  ? { key: "processing", text: "美化中" }
+                  : isBusy(p)
+                    ? { key: "analyzing", text: "分析中" }
+                    : v
+                      ? { key: "done", text: "已美化" }
+                      : { key: "analyzed", text: "已分析" };
+            const on = p.photo_id === current;
+            return (
+              <button
+                key={p.photo_id}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                aria-label={`第 ${i + 1} 張，${state.text}`}
+                class={`history-cube batch-sidebar-item ${state.key}${on ? " selected" : ""}`}
+                onClick={() => pick(p.photo_id)}
+              >
+                <span class="rc-media">
+                  <img src={v ? urls.resultThumb(v.job_id, v.run) : urls.sourceThumb(p.analyze_job_id)} alt="" />
+                  {state.key === "processing" || state.key === "analyzing" ? <span class="rc-spinner" /> : null}
+                </span>
+                <span class="rc-badge">{state.text}</span>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
+      <button type="button" class="batch-drawer-trigger" aria-label={`我的照片（${photos.length} 張）`} onClick={() => setOpen(true)}>
+        <Icon name="image" size={18} />
+        <span class="batch-drawer-trigger-count">{photos.length}</span>
+      </button>
+    </>
+  );
+}
+
+// 「全部一鍵美化」送得出去的：沒失敗、也不在美化中或排著等美化。還在分析的照送，
+// 後端會排著等分析好。
+const canRenderInAll = (p: Photo) => p.status !== "failed" && p.status !== "rendering" && !p.queued_render && !p.pending_render;
 
 // ── Pre-session chat ────────────────────────────────────────────────────────
 // 文字裡寫著「照片中從左邊數來第 2 位：」的地方換回那個人的頭像，跟對話裡指定
@@ -2447,10 +2930,22 @@ function PreChat(props: {
   );
 }
 
+// 有些話不是出錯，只是提醒（例如張數上限、選到不是圖片的檔案）。這些跟錯誤共用
+// 同一個 error 欄位，但用 notice() 標起來，顯示時就照一般的話講，不加「出了點問題」。
+const NOTICES = new Set<string>();
+function notice(text: string) {
+  NOTICES.add(text);
+  return text;
+}
+
 function ErrorMsg({ text }: { text: string }) {
   return (
     <AssistantMsg>
-      <p class="chat-text chat-error">出了點問題：{text}</p>
+      {NOTICES.has(text) ? (
+        <p class="chat-text">{text}</p>
+      ) : (
+        <p class="chat-text chat-error">出了點問題：{text}</p>
+      )}
     </AssistantMsg>
   );
 }
@@ -2508,6 +3003,8 @@ function SessionView(props: {
   analysisPending: boolean;
   selected: string | null;
   pendingAsk: { text: string; subjectIndices: number[] } | null;
+  // 同一段對話有好幾張時，最左邊那欄照片列表（BatchSidebar）。
+  sidebar?: ComponentChildren;
   busy: boolean;
   error: string;
   onSelectVersion: (v: Version) => void;
@@ -2535,7 +3032,7 @@ function SessionView(props: {
   const [confirmationIndices, setConfirmationIndices] = useState<number[]>([]);
   useEffect(() => setConfirmationIndices([]), [pendingPerson?.question_id]);
   const pid = photo.photo_id;
-  const messages = (session.messages || []).filter((m) => !m.card?.photo_id || m.card.photo_id === pid);
+  const messages = (session.messages || []).filter((m) => cardAbout(m.card, pid));
   // 打開這串對話時最新的那則；之後才有比它新的訊息，才是 AI 這次回的話（打字動畫）。
   const newest = (session.messages || []).reduce((t, m) => Math.max(t, m.created_at), 0);
   const openedAt = useRef<{ id: string; at: number } | null>(null);
@@ -3764,7 +4261,8 @@ function SessionView(props: {
     <>
       <StepIndicator step={stepN} state={stepHow} />
       <section id="results-section" class="section visible">
-        <div class="container results-body showing-analysis" id="results-body">
+        <div class={`container results-body showing-analysis${props.sidebar ? " batch-mode" : ""}`} id="results-body">
+          {props.sidebar}
           <div class="results-container" id="results-detail">
             <div class="results-canvas-row showing-analysis" id="results-canvas-row">
               <ResultsCanvas

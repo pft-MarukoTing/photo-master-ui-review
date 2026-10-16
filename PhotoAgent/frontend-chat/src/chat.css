@@ -361,6 +361,28 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    itself against the tile it sits on rather than against the surface.
    The threshold sits between those two small sizes. */
 .demo-image-tile{container-type:inline-size}
+/* 好幾張的對話：磚裡拼前幾張（home.tsx 的 SessionMosaic）。格線是 2px 的縫，透出
+   底下 Tile 自己那張模糊圖。格子裡的 img 會吃到舊頁面「磚裡的 img 絕對定位鋪滿」
+   那條，所以格子本身要 relative，讓 img 鋪滿的是格子、不是整塊磚。 */
+.session-tile-mosaic{position:absolute;inset:0;z-index:1;display:grid;gap:2px;
+  grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;background:var(--card)}
+.session-tile-mosaic.is-2{grid-template-rows:1fr}
+.session-tile-mosaic.is-3 .session-tile-cell:first-child{grid-row:span 2}
+/* 拼圖蓋在 Tile 的圖上，選取的色罩和多選的勾勾要再往上一層。 */
+.demo-image-tile:has(.session-tile-mosaic)::after{z-index:2}
+.demo-image-tile:has(.session-tile-mosaic) .demo-image-tile-check{z-index:3}
+.session-tile-cell{position:relative;overflow:hidden;min-width:0;min-height:0}
+.demo-image-tile .session-tile-mosaic .session-tile-cell img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.session-tile-cell b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  background:rgba(9,9,11,.45);color:#fff;font-size:var(--chat-fs-md);font-weight:600}
+/* 總共幾張：左上角，跟狀態那顆同一種玻璃膠囊，右上角留給刪除的 ×。 */
+.session-tile-count{position:absolute;left:6px;top:6px;z-index:3;padding:2px 8px;border-radius:20px;pointer-events:none;
+  font-size:var(--chat-fs-xs);line-height:1.3;color:#fff;background:rgba(9,9,11,.65);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+@container (max-width:110px){
+  .session-tile-count{left:4px;top:4px;padding:1px 6px;font-size:10px}
+  .session-tile-cell b{font-size:12px}
+}
 @container (max-width:110px){
   .session-tile-badge{left:4px;bottom:4px;max-width:calc(100% - 8px);padding:2px 7px;font-size:10px}
   .session-tile-badge::before{margin-right:4px;font-size:10px}
@@ -605,6 +627,92 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .prechat-shot{flex:1 1 auto;min-height:0;width:100%;display:flex;align-items:center;justify-content:center}
 .prechat-shot img{max-width:100%;max-height:100%;object-fit:contain;border-radius:var(--radius-lg);
   box-shadow:0 18px 44px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.05)}
+/* 多張：同一個台面，排成格子；張數多就在格子裡捲，不撐高頁面。 */
+.prechat-stage.is-batch{justify-content:flex-start;align-items:stretch}
+.batch-grid{list-style:none;margin:0;padding:var(--sp-2);width:100%;box-sizing:border-box;min-height:0;overflow-y:auto;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:var(--sp-3);align-content:start}
+.batch-grid li{aspect-ratio:1/1;border-radius:16px;overflow:hidden;background:var(--n14);
+  box-shadow:0 8px 20px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.05)}
+.batch-grid img{display:block;width:100%;height:100%;object-fit:cover}
+/* 移除鈕、新增格：跟面板模式上傳區的 .dz-thumb-remove／.dz-add-more 同一套。
+   能 hover 的裝置平常藏起來、滑到那格才出現；觸控沒有 hover，一直顯示。 */
+.batch-grid li{position:relative}
+.batch-remove{position:absolute;top:8px;right:8px;width:26px;height:26px;padding:0;border:0;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;background:rgba(0,0,0,.55);
+  -webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);transition:opacity .15s,background .15s,transform .15s}
+.batch-remove:hover{background:rgba(220,60,60,.85);transform:scale(1.08)}
+.batch-remove:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (hover:hover){
+  .batch-remove{opacity:0}
+  .batch-grid li:hover .batch-remove,.batch-remove:focus-visible{opacity:1}
+}
+.batch-grid li.batch-add-cell{background:none;box-shadow:none}
+.batch-add{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+  padding:0;font:inherit;font-size:13px;font-weight:600;color:var(--text-2);cursor:pointer;box-sizing:border-box;
+  border:1.5px dashed var(--n24);border-radius:inherit;background:var(--n14);transition:border-color .15s,color .15s}
+.batch-add:hover,.batch-add:focus-visible{border-color:var(--accent);color:var(--accent);outline:none}
+/* 台面上方一條：張數 + 全部清除。底下 .batch-area 是格子實際能用的空間，
+   BatchStage 量的是它。 */
+.batch-bar{flex:none;width:100%;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-2);
+  margin:0 0 var(--sp-3);min-height:32px}
+.batch-bar-count{font-size:13px;font-weight:600;color:var(--text-2)}
+.batch-clear{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:0;border-radius:999px;
+  font:inherit;font-size:13px;font-weight:600;color:var(--text-2);background:var(--n14);cursor:pointer;
+  transition:background .15s,color .15s}
+.batch-clear:hover,.batch-clear:focus-visible{color:#c43c3c;background:rgba(220,60,60,.1);outline:none}
+.batch-area{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.batch-area.is-scroll{justify-content:flex-start;overflow-y:auto}
+/* 量好之後（BatchStage 算出每格 --cell、整組寬度）：每格寬高都直接給定，不靠
+   aspect-ratio 撐，列與列之間的 gap 才不會被吃掉。排得下就整組置中；最後一列不滿
+   一律從左排起，維持格子的樣子（例如兩張 + 新增格是 2×2）；排不下就固定格子大小、在 .batch-area 裡往下捲。gap 跟 BATCH_GAP 同一個數。 */
+.batch-grid.is-fit{flex:none;display:flex;flex-wrap:wrap;justify-content:flex-start;align-content:flex-start;gap:16px;
+  padding:0;overflow:visible;max-width:100%}
+.batch-area.is-scroll .batch-grid.is-fit{padding:2px 0 var(--sp-3)}
+.batch-grid.is-fit li{flex:0 0 var(--cell);width:var(--cell);height:var(--cell);aspect-ratio:auto;border-radius:var(--radius-lg);
+  box-shadow:0 10px 28px rgba(0,0,0,.1),0 2px 6px rgba(0,0,0,.05)}
+/* 對話裡的多張上傳：幾張縮圖並排，多的寫 +N。 */
+.chat-upload-stack{display:flex;gap:4px;flex:none}
+.chat-upload.is-batch .chat-upload-stack img,
+.chat-upload-stack span{width:44px;height:56px;border-radius:8px;object-fit:cover;border:1px solid var(--n24);box-sizing:border-box}
+.chat-upload-stack span{display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;
+  color:var(--text-2);background:var(--n14)}
+/* session 裡好幾張照片時最左邊那欄（BatchSidebar）：卡片、標題、列表、狀態膠囊都是
+   舊版 .batch-sidebar（index.html）原封不動的樣式。舊版頁面會捲，所以它是 sticky、
+   上面空 44px；這裡那排照片／對話釘在視窗裡，欄位就跟著撐滿同一個高度，只有列表在裡面捲。 */
+#results-body.batch-mode>.batch-sidebar{position:relative;top:auto;margin:10px 0 20px;max-height:none;min-height:0}
+/* 桌機上這欄一直攤開，舊版的 200px 太搶眼，收到 170px；內距跟著從 20 縮到 14，
+   「全部一鍵美化」連圖示才放得進一行。抽屜（下面）另外設寬度，蓋掉這組。 */
+#results-body.batch-mode>#batch-sidebar{flex:0 0 170px;max-width:170px;padding:14px}
+.batch-sidebar-count{flex:none;font-size:12px;color:var(--text-2)}
+.batch-sidebar-all{margin:0 0 12px}
+.batch-sidebar-all .chat-chip{width:100%;justify-content:center}
+/* 每張是歷史紀錄的方塊（.history-cube，舊版 index.html）：照片撐滿、狀態疊在左下角。
+   flex:none 是因為列表是會捲的直排 flex，不然方塊會被壓扁。照片蓋住了 .selected 原本的
+   內框，所以選中的框改畫在照片上面那層。 */
+.batch-sidebar-list>button.history-cube{flex:none;width:100%;padding:0;border:0;font:inherit;color:inherit}
+.batch-sidebar-list>.history-cube .rc-media{display:block}
+.batch-sidebar-list>.history-cube.selected::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;
+  box-shadow:inset 0 0 0 3px var(--accent);pointer-events:none}
+/* 手機和直拿的平板：跟舊版 ≤900 一樣收成從左邊拉出來的抽屜，左上角那顆開。舊版那組只
+   寫到 900，901–1200 直拿也是這套直排版面，所以這裡連那段一起重寫一次（上面那條桌機
+   規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #results-body.batch-mode>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;
+    width:min(136px,38vw);max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-width:0 1px 0 0;z-index:1001;
+    transform:translateX(-100%);transition:transform .25s ease}
+  #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0)}
+  #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
+  /* 抽屜比舊版窄（舊版要放檔名，這裡只有方塊照片），內距跟著縮成 12，關閉鈕對齊同一條邊。 */
+  #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
+  /* 這麼窄放不下「我的照片」加張數：張數拉開抽屜的那顆鈕上已經有，這裡收起來；
+     「全部一鍵美化」字和左右內距縮一號才擠得進一行。 */
+  #results-body.batch-mode .batch-sidebar-count{display:none}
+  #results-body.batch-mode .batch-sidebar-all .chat-chip{padding:var(--sp-1) var(--sp-2);font-size:12px}
+  #results-body.batch-mode>.batch-sidebar-backdrop{top:var(--header-h)}
+  #results-body.batch-mode>.batch-sidebar-backdrop.drawer-open{display:block}
+  #results-body.batch-mode .batch-sidebar-header{padding-right:36px}
+}
+@media (prefers-reduced-motion:reduce){#results-body.batch-mode>.batch-sidebar{transition:none}}
 
 /* Session: the chat takes the analysis slot.
 
@@ -683,6 +791,8 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    above the chat and both heights have to fit one viewport together. */
 @media (max-width:1200px){
   .prechat-stage{flex:0 0 auto;width:min(100%,580px);height:auto;max-height:34dvh;min-height:0}
+  /* 多張要一個定高，格子才分得出每列多高。 */
+  .prechat-stage.is-batch{height:34dvh}
   .upload-content-row>.home-chat{max-width:none;height:56dvh;max-height:none;min-height:360px}
 }
 

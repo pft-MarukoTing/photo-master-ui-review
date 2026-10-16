@@ -286,6 +286,11 @@ class ChatRoutesTest(unittest.TestCase):
         self.assertEqual((row["status"], row["rendered_count"]), ("done", 1))
         self.assertEqual(row["thumbnail_result"], {"job_id": render["job_ids"][0], "run": 1})
         self.assertEqual(row["thumbnail_job_id"], first["analyze_job_id"])
+        # The tile's mosaic: each photo in order, its result if it has one.
+        self.assertEqual(row["thumbnails"], [
+            {"job_id": first["analyze_job_id"], "run": None},
+            {"job_id": render["job_ids"][0], "run": 1},
+        ])
 
         # The first photo renders afterwards, and the tile moves to that newer
         # result even though it comes earlier in the conversation.
