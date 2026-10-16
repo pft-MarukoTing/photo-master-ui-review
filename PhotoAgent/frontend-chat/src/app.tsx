@@ -1967,6 +1967,7 @@ export function App() {
               session.photos.length > 1 && (
                 <BatchSidebar
                   photos={session.photos}
+                  messages={session.messages || []}
                   current={photo.photo_id}
                   onPick={(id) => {
                     setActiveId(id);
@@ -2383,6 +2384,7 @@ function BatchChat(props: {
 // 上面那顆「全部一鍵美化」把還沒美化過的每張照它自己目前的設定送出去；全部都美化過就不出現。
 function BatchSidebar(props: {
   photos: Photo[];
+  messages: Message[];
   current: string;
   onPick: (id: string) => void;
   busy: boolean;
@@ -2393,25 +2395,27 @@ function BatchSidebar(props: {
   const [zipping, setZipping] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  // 每張美化過的照片要放進 ZIP 的所有版本。對話紀錄裡找不到版本（例如只在面板模式美化過）
+  // 就退回目前那張結果。
+  const resultsOf = (p: Photo) => {
+    const versions = versionsFromMessages(props.messages, p.photo_id);
+    if (versions.length) return versions.map((v) => ({ url: urls.resultImage(versionJob(v)), name: `result_v${v.ordinal}` }));
+    const v = p.active_version;
+    return v ? [{ url: urls.resultImage(v.job_id, v.run), name: `result_${v.run || 1}` }] : [];
+  };
   // 提示字跟面板模式的全部下載一樣：看有幾張已經美化過，說清楚會拿到原圖還是結果。
   const doneCount = photos.filter((p) => p.active_version).length;
   const zipHint =
     doneCount === 0
       ? `下載所有原圖（${photos.length} 張）`
       : doneCount === photos.length
-        ? `下載所有已完成的結果（${photos.length} 張）`
-        : `下載全部（已完成 ${doneCount} 張，其餘為原圖，共 ${photos.length} 張）`;
+        ? `下載所有已完成的結果，含每一版（${photos.length} 張）`
+        : `下載全部（已完成 ${doneCount} 張含每一版，其餘為原圖，共 ${photos.length} 張）`;
   const downloadAll = async () => {
     if (zipping) return;
     setZipping(true);
     const ok = await downloadPhotosZip(
-      photos.map((p) => {
-        const v = p.active_version;
-        return {
-          source: urls.sourceImage(p.analyze_job_id),
-          result: v ? { url: urls.resultImage(v.job_id, v.run), run: v.run || 1 } : null,
-        };
-      }),
+      photos.map((p) => ({ source: urls.sourceImage(p.analyze_job_id), results: resultsOf(p) })),
     );
     setZipping(false);
     setNotice(ok ? "已下載完成。" : "打包下載失敗，請稍後再試。");
