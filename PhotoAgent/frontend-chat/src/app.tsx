@@ -2353,6 +2353,17 @@ function BatchSidebar(props: {
 }) {
   const { photos, current } = props;
   const [open, setOpen] = useState(false);
+  const list = useRef<HTMLDivElement>(null);
+  // 換到的那張不在列表看得到的範圍裡（例如從底下那排點進來、或一開就停在後面那張），
+  // 就把列表捲到剛好露出它。只動列表自己的 scrollTop，不帶著整頁跑。
+  useEffect(() => {
+    const box = list.current;
+    const on = box?.querySelector<HTMLElement>(".batch-sidebar-item.selected");
+    if (!box || !on) return;
+    const top = on.offsetTop - box.offsetTop;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (top + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top + on.offsetHeight - box.clientHeight;
+  }, [current, open]);
   const pick = (id: string) => {
     setOpen(false);
     if (id !== current) props.onPick(id);
@@ -2377,7 +2388,7 @@ function BatchSidebar(props: {
             onClick={props.onRenderAll}
           />
         </div>
-        <div class="batch-sidebar-list" role="tablist" aria-label="這段對話的照片">
+        <div class="batch-sidebar-list" ref={list} role="tablist" aria-label="這段對話的照片">
           {photos.map((p, i) => {
             const v = p.active_version;
             const state =

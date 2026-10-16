@@ -680,6 +680,14 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    舊版 .batch-sidebar（index.html）原封不動的樣式。舊版頁面會捲，所以它是 sticky、
    上面空 44px；這裡那排照片／對話釘在視窗裡，欄位就跟著撐滿同一個高度，只有列表在裡面捲。 */
 #results-body.batch-mode>.batch-sidebar{position:relative;top:auto;margin:10px 0 20px;max-height:none;min-height:0}
+/* 高度釘死在右邊那排（#results-detail，styles.css 的 100vh − 標頭 − 步驟列）扣掉上下 margin，
+   不然張數一多，這欄會用 stretch 把整排撐高、整頁跟著捲。標題和「全部一鍵美化」固定，
+   只有照片列表在框裡捲。 */
+@media (min-width:901px){
+  #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px) - 30px);box-sizing:border-box}
+}
+/* 列表捲動：細捲軸，捲到底也不帶動整頁。 */
+.batch-sidebar-list{scrollbar-width:thin;overscroll-behavior:contain;scroll-padding:4px 0}
 /* 桌機上這欄一直攤開，舊版的 200px 太搶眼，收到 170px；內距跟著從 20 縮到 14，
    「全部一鍵美化」連圖示才放得進一行。抽屜（下面）另外設寬度，蓋掉這組。 */
 #results-body.batch-mode>#batch-sidebar{flex:0 0 170px;max-width:170px;padding:14px}
@@ -698,7 +706,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */
 @media (max-width:900px),(max-width:1200px) and (orientation:portrait){
   #results-body.batch-mode>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;
-    width:min(136px,38vw);max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-width:0 1px 0 0;z-index:1001;
+    width:min(136px,38vw);height:auto;max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-width:0 1px 0 0;z-index:1001;
     transform:translateX(-100%);transition:transform .25s ease}
   #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0)}
   #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
