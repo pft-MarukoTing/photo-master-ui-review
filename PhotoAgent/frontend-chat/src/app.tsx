@@ -18,6 +18,7 @@ import {
   faceText,
   fillNoteBox,
   noteBoxKeys,
+  flushPromptDraft,
   readNoteBox,
   FacePicker,
   FootBar,
@@ -1116,6 +1117,8 @@ export function App() {
     setBusy(true);
     setError("");
     try {
+      // 個人化需求框裡還沒存的字先存好，動作才用得到。
+      await flushPromptDraft();
       await fn();
       return true;
     } catch (e) {
@@ -1441,23 +1444,39 @@ export function App() {
     });
   }
 
-  // 個人化需求是手打的，一條一條往下加，同一個人身上很容易留著兩種說法。存下來之後
-  // 再問一次 AI，讓它把同一個人的事併成一句、矛盾的留後面那句，整理結果照常走提案卡，
-  // 要不要換還是使用者決定。
-  function savePrompt(text: string, screen?: Screen) {
-    if (!session || !photo) return Promise.resolve(false);
+  // 個人化需求打了就存：只改 plan，不留訊息、不問 AI。存不到就丟出錯誤，
+  // 讓輸入框留著那段字、下一個動作前再存一次。
+  function quietPrompt(text: string) {
+    if (!session || !photo) return Promise.resolve();
+    const id = session.session_id;
+    const pid = photo.photo_id;
+    return api.patchPhotoPlan(id, pid, { user_prompt: text }).then((r) => {
+      setSession((s) =>
+        s && s.session_id === id ? { ...s, photos: s.photos.map((p) => (p.photo_id === pid ? { ...p, plan: r.plan } : p)) } : s,
+      );
+    });
+  }
+
+  // 個人化需求是手打的，一條一條往下加，同一個人身上很容易留著兩種說法。改完離開
+  // 輸入框時再問一次 AI，讓它把同一個人的事併成一句、矛盾的留後面那句，整理結果照常
+  // 走提案卡，要不要換還是使用者決定。
+  function reviewPrompt(screen?: Screen) {
+    // 別的動作還在跑就不整理了：run() 會拒絕，打字中的點點也不能留著。
+    if (!session || !photo || busy) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     // 沒有使用者泡泡，只顯示 AI 正在回。
     setPendingAsk({ text: "", subjectIndices: [] });
     return run(async () => {
       try {
-        await api.patchPhotoPlan(id, pid, { user_prompt: text });
         await api.reviewPrompt(id, pid, screen);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);
       }
+    }).then((ok) => {
+      if (!ok) setPendingAsk(null);
+      return ok;
     });
   }
 
@@ -1721,7 +1740,8 @@ export function App() {
             onAsk={askPhoto}
             onAnswerWaiting={answerWaiting}
             onPatch={patchFromChat}
-            onSavePrompt={savePrompt}
+            onQuietPrompt={quietPrompt}
+            onReviewPrompt={reviewPrompt}
             onPost={postFromChat}
             onAnalyze={analyzePhoto}
             panelMode={{ href: urls.oldUi(photo.case_id), busy: isBusy(photo), onLeave: toOldUi }}
@@ -2498,7 +2518,8 @@ function SessionView(props: {
   onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[]) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan) => Promise<boolean>;
-  onSavePrompt: (text: string, screen?: Screen) => Promise<boolean>;
+  onQuietPrompt: (text: string) => Promise<unknown>;
+  onReviewPrompt: (screen?: Screen) => Promise<boolean>;
   onPost: (card: Dict, patch?: Plan, merge?: boolean) => Promise<boolean>;
   onAnalyze: () => Promise<boolean>;
   panelMode: PanelMode;
@@ -2780,9 +2801,12 @@ function SessionView(props: {
     else openCategory(cat).then((ok) => ok && flash(cat, [field], true));
   };
   // 掛按鈕的那則訊息裡如果有項目按鈕，「美化」直接接在同一排最後，不另起一行。
-  const catChips = (except?: Category | null) => {
+  // except：這則訊息裡已經有入口的項目（開著的那張面板、卡片上可以就地改的那一項），
+  // 底下這排就不再放同一項。
+  const catChips = (except?: Category | Category[] | null) => {
+    const skip = Array.isArray(except) ? except : except ? [except] : [];
     const chips = cats
-      .filter((c) => c !== except)
+      .filter((c) => !skip.includes(c))
       .map((c) => (
         <Chip label={CATEGORIES[c].label} icon={CATEGORIES[c].icon} disabled={busy} onClick={() => openCategory(c)} />
       ));
@@ -2950,7 +2974,8 @@ function SessionView(props: {
             onChoose={(choice, edit) => choose(c.proposal, choice, edit)}
             onShow={(ch: Change) => showOption(ch.field)}
             prompt={photo.plan?.user_prompt || ""}
-            onSavePrompt={(t) => props.onSavePrompt(t, screen)}
+            onQuietPrompt={props.onQuietPrompt}
+            onReviewPrompt={() => props.onReviewPrompt(screen)}
           />
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
@@ -2962,7 +2987,11 @@ function SessionView(props: {
           editing &&
           cats.length > 0 &&
           !props.pendingAsk &&
-          messages.slice(idx + 1).every((x) => x.card?.auto) && <div class="chat-choices">{catChips()}</div>}
+          messages.slice(idx + 1).every((x) => x.card?.auto) && (
+            <div class="chat-choices">
+              {catChips(c.proposal.changes.map((ch: Change) => categoryOf(ch.field)).filter((x: Category | null): x is Category => !!x))}
+            </div>
+          )}
         {!c.proposal && (() => {
           // 對話不停在一句「再跟我說」。AI 問回來的話，底下是它給的答案，點了就
           // 當成使用者打的下一句送出，指著誰問的就繼續指著誰；答過了定格成紀錄，
@@ -3263,7 +3292,8 @@ function SessionView(props: {
                     busy={busy}
                     hot={hot[cat] || null}
                     onPatch={(p) => props.onPatch(p)}
-                    onSavePrompt={(t) => props.onSavePrompt(t, screen)}
+                    onQuietPrompt={props.onQuietPrompt}
+                    onReviewPrompt={() => props.onReviewPrompt(screen)}
                   />
                   {fresh && !offGuide.has(idx) ? (
                     idx === lastStepIdx && guideTail({ except: cat })

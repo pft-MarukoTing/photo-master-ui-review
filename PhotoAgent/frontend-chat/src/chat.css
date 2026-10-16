@@ -1500,3 +1500,6 @@ div.chat-proposal-row{cursor:default}
 [data-typewriter-hold=""] { visibility: hidden; }
 [data-typewriter-hold="shown"] { animation: chat-msg-in .2s ease-out both; }
 @media (prefers-reduced-motion: reduce) { [data-typewriter-hold="shown"] { animation: none; } }
+/* 個人化需求框下面：復原、清除、儲存狀態排一排 */
+.chat-prompt-foot{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);margin-top:var(--sp-2)}
+.chat-prompt-foot:empty{display:none}

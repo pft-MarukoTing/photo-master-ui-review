@@ -1028,6 +1028,149 @@ export function readPromptBox(box: HTMLElement, sections: PromptSection[]) {
     .join("；");
 }
 
+// 個人化需求不用按「儲存」：打字停一下、或離開輸入框，就存下來。還沒存的字在
+// 任何動作開始前（美化、開別的項目、送出訊息…）會先存好 -- App 的 run() 開頭
+// 呼叫 flushPromptDraft()。actionSeq 讓離開框時判斷後面是不是緊接著一個動作。
+let promptDraft: { owner: object; flush: () => Promise<void> } | null = null;
+let actionSeq = 0;
+export function flushPromptDraft(): Promise<void> {
+  actionSeq++;
+  return promptDraft ? promptDraft.flush() : Promise.resolve();
+}
+const PROMPT_SAVE_MS = 1200;
+
+export function PromptEditor(props: {
+  value: string;
+  faces: Record<number, FaceRef>;
+  busy: boolean;
+  label: string;
+  placeholder?: string;
+  class?: string;
+  // 靜靜地存，不請 AI 看。
+  onSave: (text: string) => Promise<unknown>;
+  // 改過之後離開輸入框、後面沒有緊接著別的動作時，請 AI 整理一次。
+  onReview?: () => void;
+  // 框下面跟「復原」排在一起的其他按鈕（例如「清除」）。
+  extra?: ComponentChildren;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  const filled = useRef<PromptSection[]>([]);
+  const focused = useRef(false);
+  const start = useRef(props.value);
+  const pending = useRef<string | null>(null);
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  const timer = useRef<number>();
+  const [undoTo, setUndoTo] = useState<string | null>(null);
+  const [status, setStatus] = useState<"" | "saving" | "saved" | "failed">("");
+  const owner = useRef({}).current;
+  const live = useRef(true);
+  const saveRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const fill = (text: string) => {
+    if (!box.current) return;
+    filled.current = promptSections(text, props.faces);
+    fillNoteBox(box.current, filled.current, false);
+  };
+  // 外面換了內容（AI 整理過、別處改了）就跟著換，但正在打字時不動。
+  useEffect(() => {
+    if (!focused.current) fill(props.value);
+  }, [props.value]);
+  const read = () => (box.current ? readPromptBox(box.current, filled.current).slice(0, NOTE_MAX) : "");
+  // 回傳這次存檔本身：存不到會 reject，動作前的 flush 就會停下來報錯，不會拿舊的
+  // 需求去美化。沒存到的字留在 pending，下次再存。
+  const save = (): Promise<void> => {
+    clearTimeout(timer.current);
+    const text = pending.current;
+    if (text == null) return chain.current;
+    pending.current = null;
+    setStatus("saving");
+    const done = chain.current.then(() => props.onSave(text)).then(() => {
+      if (live.current) setStatus("saved");
+    });
+    chain.current = done.catch(() => {
+      if (pending.current == null) pending.current = text;
+      if (live.current) setStatus("failed");
+    });
+    return done;
+  };
+  const saveQuietly = () => {
+    save().catch(() => {});
+  };
+  saveRef.current = save;
+  // 收起來（例如開了別的項目）時，還沒存的字也存掉。
+  useEffect(
+    () => () => {
+      live.current = false;
+      saveRef.current().catch(() => {});
+      if (promptDraft?.owner === owner) promptDraft = null;
+    },
+    [],
+  );
+  return (
+    <div class={props.class}>
+      <div
+        class="chat-notes-box"
+        ref={box}
+        role="textbox"
+        aria-multiline="true"
+        aria-label={props.label}
+        data-placeholder={props.placeholder}
+        contentEditable={!props.busy}
+        onFocus={() => {
+          focused.current = true;
+          start.current = props.value;
+        }}
+        onInput={() => {
+          if (undoTo == null) setUndoTo(start.current);
+          pending.current = read();
+          promptDraft = { owner, flush: () => saveRef.current() };
+          setStatus("");
+          clearTimeout(timer.current);
+          timer.current = window.setTimeout(saveQuietly, PROMPT_SAVE_MS);
+        }}
+        onBlur={(e) => {
+          focused.current = false;
+          const changed = pending.current != null && pending.current !== start.current;
+          saveQuietly();
+          if (!changed || !props.onReview) return;
+          // 點的是按鈕、輸入框：接著就是那個動作，不另外請 AI 整理。
+          const to = (e as FocusEvent).relatedTarget as HTMLElement | null;
+          if (to?.closest("button, input, textarea, select, [contenteditable='true']")) return;
+          const seq = actionSeq;
+          window.setTimeout(() => {
+            // 沒存到就不整理：AI 會看到舊的需求。
+            if (actionSeq === seq) chain.current.then(() => actionSeq === seq && pending.current == null && props.onReview!());
+          }, 400);
+        }}
+        {...noteBoxKeys}
+      />
+      <div class="chat-prompt-foot">
+        {undoTo != null && undoTo !== props.value && (
+          <button
+            type="button"
+            class="chat-chip chat-opt-chip is-ghost"
+            disabled={props.busy}
+            onClick={() => {
+              const back = undoTo;
+              setUndoTo(null);
+              fill(back);
+              pending.current = back;
+              saveQuietly();
+            }}
+          >
+            復原
+          </button>
+        )}
+        {props.extra}
+        {status && (
+          <span class={`chat-meta${status === "failed" ? " chat-error" : ""}`}>
+            {status === "saving" ? "儲存中…" : status === "saved" ? "已儲存" : "儲存失敗，將自動重試"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 type Placeholder = string | string[];
 
 // 輸入框的提示一行就要讀完，被切掉的半句比短句更難懂。給一串由長到短的說法，
@@ -1359,7 +1502,8 @@ export function ProposalCard(props: {
   // 直接記下的個人化需求按「修改」就在這張卡上改：prompt 是現在的全文，存檔走
   // 跟面板同一條路（存下來再請 AI 整理）。沒給就照舊打開面板。
   prompt?: string;
-  onSavePrompt?: (text: string) => void;
+  onQuietPrompt?: (text: string) => Promise<unknown>;
+  onReviewPrompt?: () => void;
 }) {
   const { proposal, resolved } = props;
   const live = resolved == null;
@@ -1377,24 +1521,8 @@ export function ProposalCard(props: {
   // 「復原」換成「修改」，打開那一項的面板自己調；改了好幾項時每一列也都能點。
   const noted = !!proposal.direct && resolved === "apply";
   const editable = noted && !!props.undoable;
-  // 只記下一段個人化需求的卡：「修改」就地把那列換成輸入框。
-  const inline = editable && only?.field === TEXT_FIELD && !!props.onSavePrompt;
-  const [noteEditing, setNoteEditing] = useState(false);
-  const [noteDirty, setNoteDirty] = useState(false);
-  const [noteSaved, setNoteSaved] = useState<string | null>(null);
-  const noteText = noteSaved ?? props.prompt ?? only?.after ?? "";
-  const noteBox = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (noteEditing && noteBox.current) fillNoteBox(noteBox.current, sectionsOf(noteText), true);
-  }, [noteEditing]);
-  const saveNote = () => {
-    const text = noteBox.current ? readPromptBox(noteBox.current, sectionsOf(noteText)).slice(0, NOTE_MAX) : "";
-    setNoteEditing(false);
-    setNoteDirty(false);
-    if (!text || text === noteText) return;
-    setNoteSaved(text);
-    props.onSavePrompt!(text);
-  };
+  // 只記下一段個人化需求的卡：那列直接就是可以改的框，改了自己存。
+  const inline = editable && only?.field === TEXT_FIELD && !!props.onQuietPrompt;
   return (
     <div class="chat-card chat-proposal">
       <p class="chat-proposal-title">{only ? only.label : "建議的調整"}</p>
@@ -1423,23 +1551,22 @@ export function ProposalCard(props: {
                     {changeLabel(c, face)}
                   </span>
                 )}
-                <span class={`chat-proposal-diff${isLong(c) || mine || (inline && noteEditing) ? " is-long" : ""}`}>
+                <span class={`chat-proposal-diff${isLong(c) || mine || inline ? " is-long" : ""}`}>
                   {hadBefore(c) && !noted && (
                     <>
                       <s>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(c.before)) : c.before}</s>
                       <Icon name="arrow" size={12} />
                     </>
                   )}
-                  {inline && noteEditing ? (
-                    <div
-                      class="chat-notes-box chat-proposal-edit"
-                      ref={noteBox}
-                      role="textbox"
-                      aria-multiline="true"
-                      aria-label={c.label}
-                      contentEditable={!props.busy}
-                      onInput={() => !noteDirty && setNoteDirty(true)}
-                      {...noteBoxKeys}
+                  {inline ? (
+                    <PromptEditor
+                      class="chat-proposal-edit"
+                      value={props.prompt ?? c.after}
+                      faces={props.faces}
+                      busy={props.busy}
+                      label={c.label}
+                      onSave={props.onQuietPrompt!}
+                      onReview={props.onReviewPrompt}
                     />
                   ) : mine ? (
                     <div
@@ -1452,7 +1579,7 @@ export function ProposalCard(props: {
                       {...noteBoxKeys}
                     />
                   ) : (
-                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(inline ? noteText : after)) : after}</b>
+                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(after)) : after}</b>
                   )}
                 </span>
               </Row>
@@ -1480,30 +1607,7 @@ export function ProposalCard(props: {
           ))}
         </div>
       ) : noted ? (
-        inline && noteEditing ? (
-          <div class="chat-choices">
-            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={props.busy || !noteDirty} onClick={saveNote}>
-              儲存
-            </button>
-            <button
-              type="button"
-              class="chat-chip chat-opt-chip is-ghost"
-              disabled={props.busy}
-              onClick={() => {
-                setNoteDirty(false);
-                setNoteEditing(false);
-              }}
-            >
-              取消
-            </button>
-          </div>
-        ) : inline ? (
-          <div class="chat-choices">
-            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={props.busy} onClick={() => setNoteEditing(true)}>
-              修改
-            </button>
-          </div>
-        ) : editable && (
+        inline ? null : editable && (
           <div class="chat-choices">
             {/* 跟個人化需求面板裡那顆「修改」同一個樣子。 */}
             <button
