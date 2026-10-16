@@ -19,6 +19,7 @@ import {
   fillNoteBox,
   noteBoxKeys,
   flushPromptDraft,
+  PROMPT_SAVE_MS,
   readNoteBox,
   FacePicker,
   FootBar,
@@ -401,9 +402,16 @@ function reviewHistory(ns: Note[], events: PreviewReplyEvent[] = []): ReviewTurn
 // 上傳頁面的按鍵，到了 session 按不到。指過的人還沒有名字，帶著框跟位置過去，
 // 泡泡上的頭像從框裁，AI 讀的是位置。`later` 那句就是等著回答的問題本身，標成
 // waiting 放在它原本的位置，分析好了再回答。
+// 上傳頁的回覆會指著那頁的「分析」「一鍵美化」鍵（「沒有的話，可以從下面選…」），
+// 到了 session 沒有這兩顆，指著它們的那句（連同前面那句「還有其他想改的地方嗎？」）
+// 不跟過去；整則只剩那句就回一聲「好。」。
+const UPLOAD_BUTTONS_RE = /(還有其他想改的地方嗎？)?[^。！？!?]*(「分析」|「一鍵美化」|分析還是一鍵美化)[^。！？!?]*[。！？!?]?/g;
+const carriedReply = (text: string) => text.replace(UPLOAD_BUTTONS_RE, "").trim() || "好。";
+
 function carriedLog(ns: Note[], photoId: string, later: Note | null, events: PreviewReplyEvent[] = []) {
   const out: { role: "user" | "assistant"; text?: string; card: Dict }[] = [];
-  const reply = (text: string) => out.push({ role: "assistant", card: { type: "llm_reply", photo_id: photoId, pre: true, text } });
+  const reply = (text: string) =>
+    out.push({ role: "assistant", card: { type: "llm_reply", photo_id: photoId, pre: true, text: carriedReply(text) } });
   for (const t of conversation(ns, events)) {
     if ("previewReply" in t) {
       if (t.previewReply.kind === "settings") out.push({ role: "user", text: "設定", card: { type: "ask", pre: true, photo_id: photoId } });
@@ -2441,14 +2449,13 @@ function withFaces(text: string, faces: PrePerson[]) {
   return faceText(text, faces.map((f) => ({ ref: faceRef(f), face: f })), true);
 }
 
-// 跟 session 的個人化需求面板同一套：先用看的，要改再打開輸入框。整張就是一段字，
-// 不同對象之間用「；」隔開，指定了人的那段前面掛著那個人的頭像：
-// 「(頭像)頭髮染黑；天空變藍；(頭像)頭髮紅」。
+// 跟 session 的個人化需求同一套：框一直開著，直接改，打字停一下或離開框就存，
+// 不用按「修改」「儲存」。整張就是一段字，不同對象之間用「；」隔開，指定了人的
+// 那段前面掛著那個人的頭像：「(頭像)頭髮染黑；天空變藍；(頭像)頭髮紅」。
 //
-// 改的時候也是同一段，頭像嵌在字裡、不能打字進去（只能整顆刪掉），不會變回
-// 「從左邊數來第 2 位：」。存的時候從頭讀：遇到頭像就開始那個人的段，遇到「；」
-// 就結束目前這段，後面沒接頭像的字算沒指定對象。整段刪光的對象就是拿掉。
-// `upTo` 是打開那一刻有幾句——改的期間又收下的句子不在框裡，存檔後會接在後面。
+// 頭像嵌在字裡、不能打字進去（只能整顆刪掉），不會變回「從左邊數來第 2 位：」。
+// 存的時候從頭讀：遇到頭像就開始那個人的段，遇到「；」就結束目前這段，後面沒接
+// 頭像的字算沒指定對象。整段刪光的對象就是拿掉。
 type NoteSection = { key: string; line: string; text: string; persons: PrePerson[] };
 
 const sectionShown = (sec: NoteSection) => (sec.key ? sec.line.slice(whoPrefix(sec.persons).length) : sec.line);
@@ -2460,38 +2467,33 @@ function NotesEditor(props: {
   onSave: (edits: { key: string; text: string }[], upTo: number) => void;
 }) {
   const { sections, held } = props;
-  const [editing, setEditing] = useState<{ upTo: number; dirty: boolean } | null>(null);
   const box = useRef<HTMLDivElement>(null);
-  const open = !!editing;
-  // 框裡的內容只在打開時建一次，之後交給使用者打字，Preact 不碰。
+  const focused = useRef(false);
+  const timer = useRef<number>();
+  const [saved, setSaved] = useState(false);
+  const latest = useRef(props);
+  latest.current = props;
+  // 外面的需求變了（又收下一句、清除）就跟著換，但正在打字時不動。
+  const shown = sections.map((sec) => `${sec.key}\u0001${sec.text}`).join("\u0002");
   useEffect(() => {
     const el = box.current;
-    if (!open || !el) return;
-    fillNoteBox(el, sections.map((sec) => ({ key: sec.key, faces: sec.persons, text: sec.key ? sectionShown(sec) : sec.text })));
-  }, [open]);
-  if (!editing) {
-    return (
-      <>
-        <p class="chat-opt-prompt-text">
-          {sections.map((sec, i) => [
-            i ? "；" : "",
-            sec.key ? withFaces(whoPrefix(sec.persons), sec.persons) : null,
-            sectionShown(sec),
-          ])}
-        </p>
-        <div class="chat-choices">
-          <button
-            type="button"
-            class="chat-chip chat-opt-chip is-primary"
-            disabled={held}
-            onClick={() => setEditing({ upTo: props.upTo, dirty: false })}
-          >
-            修改
-          </button>
-        </div>
-      </>
-    );
-  }
+    if (!el || focused.current) return;
+    fillNoteBox(el, sections.map((sec) => ({ key: sec.key, faces: sec.persons, text: sec.key ? sectionShown(sec) : sec.text })), false);
+  }, [shown]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  // 整段刪光（拿掉那個人的需求）等離開框才算：打到一半刪光重打，不會先把那句拿掉。
+  const save = (leaving: boolean) => {
+    clearTimeout(timer.current);
+    const { sections: now, upTo, onSave } = latest.current;
+    if (!box.current) return;
+    const before = Object.fromEntries(now.map((x) => [x.key, x.text]));
+    const changed = readNoteBox(box.current, now.map((x) => x.key))
+      .filter((x) => x.text.length <= PROMPT_MAX && x.text !== before[x.key] && (leaving || x.text))
+      .map((x) => ({ key: x.key, text: x.text }));
+    if (!changed.length) return;
+    onSave(changed, upTo);
+    setSaved(true);
+  };
   return (
     <>
       <div
@@ -2501,30 +2503,25 @@ function NotesEditor(props: {
         aria-multiline="true"
         aria-label="個人化需求"
         contentEditable={!held}
-        onInput={() => !editing.dirty && setEditing({ ...editing, dirty: true })}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onInput={() => {
+          setSaved(false);
+          clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => save(false), PROMPT_SAVE_MS);
+        }}
+        onBlur={() => {
+          focused.current = false;
+          save(true);
+        }}
         {...noteBoxKeys}
       />
-      <div class="chat-choices">
-        <button
-          type="button"
-          class="chat-chip chat-opt-chip is-primary"
-          disabled={held || !editing.dirty}
-          onClick={() => {
-            const read = box.current ? readNoteBox(box.current, sections.map((x) => x.key)) : [];
-            const before = Object.fromEntries(sections.map((x) => [x.key, x.text]));
-            const changed = read
-              .filter((x) => x.text.length <= PROMPT_MAX && x.text !== before[x.key])
-              .map((x) => ({ key: x.key, text: x.text }));
-            if (changed.length) props.onSave(changed, editing.upTo);
-            setEditing(null);
-          }}
-        >
-          儲存
-        </button>
-        <button type="button" class="chat-chip chat-opt-chip is-ghost" disabled={held} onClick={() => setEditing(null)}>
-          取消
-        </button>
-      </div>
+      {saved && (
+        <div class="chat-prompt-foot">
+          <span class="chat-meta">已儲存</span>
+        </div>
+      )}
     </>
   );
 }

@@ -1039,7 +1039,7 @@ let promptDraft: { owner: object; flush: () => Promise<void> } | null = null;
 export function flushPromptDraft(): Promise<void> {
   return promptDraft ? promptDraft.flush() : Promise.resolve();
 }
-const PROMPT_SAVE_MS = 1200;
+export const PROMPT_SAVE_MS = 1200;
 
 export function PromptEditor(props: {
   value: string;
