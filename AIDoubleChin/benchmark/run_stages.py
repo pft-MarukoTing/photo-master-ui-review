@@ -8,9 +8,15 @@ workflow order:
     1 source         the sRGB input sent to ComfyUI
     2 crop           AIDoubleChinFaceRegionCrop output (face + neck, ~1MP)
     3 lora           LoRA result on the crop (VAEDecode)
-    4 output         FaceRegionPasteBack: crop result feathered back into the source
+    4 output         AIDoubleChinPasteBack (FaceRegionPasteBack in the 20261006
+                     workflow): crop result pasted back into the source
 If the workflow still has a FaceDetailRestorerwMetadata node (older/aiSmile-style
 graphs), the paste-back is saved as 4_pasted and the restorer result as 5_output.
+
+--paste-modes crop mask adds one AIDoubleChinPasteBack per
+mode on the same LoRA result (same sample, so only the paste-back differs) and
+saves 4_output_<mode>.jpg plus sheets/<stem>_modes.jpg: 1:1 windows of the
+upper face and the edit, source | each mode | |last mode - source| x3.
 
 Sheet per image (2 rows x 5 columns; diff maps: brighter = bigger change):
     row 1: source (red box = area the paste-back changed, yellow = zoom window
@@ -28,8 +34,8 @@ Output dir layout:
 Usage:
     python run_stages.py --input-dir ../datasets/images \\
         --checkpoint aiDoubleChin/double_chin_exp_20261001.safetensors \\
-        --face-onnx-dir <ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/LVOcclusionONNX \\
-        --comfyui-port 8190
+        --face-onnx-dir <ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/ONNX \\
+        --comfyui-port 8190 [--paste-modes crop mask]
 """
 
 import argparse
@@ -47,7 +53,7 @@ import comfy_client
 from run_benchmark import JPEG_QUALITY, PROJECT_ROOT, TZ_UTC8, patch_workflow, preflight
 from run_inference import list_inputs, to_srgb
 
-DEFAULT_WORKFLOW = PROJECT_ROOT / "workflows/doubleChin_faceCrop_workflow_20261006_api.json"
+DEFAULT_WORKFLOW = PROJECT_ROOT / "workflows/doubleChin_faceCrop_workflow_20261014_api.json"
 TILE = 512
 LABEL_H = 20
 # stage name -> class_type of the node whose first output is that stage
@@ -56,6 +62,7 @@ STAGE_NODES = {
     "lora": "VAEDecode",
     "pasted": "FaceRegionPasteBack",
 }
+PASTE_MODES = ["crop", "mask"]  # AIDoubleChinPasteBack's mode options
 
 
 def add_stage_savers(wf: dict, prefix: str) -> dict:
@@ -78,6 +85,24 @@ def add_stage_savers(wf: dict, prefix: str) -> dict:
     return savers
 
 
+def mode_tag(mode: str) -> str:
+    return mode.replace("+", "_")
+
+
+def add_mode_savers(wf: dict, prefix: str, modes: list, savers: dict):
+    """One extra AIDoubleChinPasteBack per mode, all fed by the same LoRA result."""
+    paste_id = comfy_client.find_node_by_class(wf, "AIDoubleChinPasteBack")
+    for mode in modes:
+        tag = mode_tag(mode)
+        wf[f"paste_{tag}"] = {**wf[paste_id], "inputs": {**wf[paste_id]["inputs"], "mode": mode}}
+        wf[f"stage_output_{tag}"] = {
+            "class_type": "SaveImage",
+            "_meta": {"title": f"Stage output {mode}"},
+            "inputs": {"images": [f"paste_{tag}", 0], "filename_prefix": f"{prefix}_output_{tag}"},
+        }
+        savers[f"output_{tag}"] = f"stage_output_{tag}"
+
+
 def run_stages(base_url, session, template, args, src_path, checkpoint, prefix) -> dict:
     comfy_name = comfy_client.upload_image(base_url, session, src_path)
     wf = patch_workflow(template, input_title=args.input_title, lora_title=args.lora_title,
@@ -87,6 +112,9 @@ def run_stages(base_url, session, template, args, src_path, checkpoint, prefix) 
         wf[comfy_client.find_node_by_class(wf, "AIDoubleChinFaceRegionCrop")]["inputs"]["neck_extend_ratio"] = \
             args.neck_extend_ratio
     savers = add_stage_savers(wf, prefix)
+    if args.paste_modes:
+        # "crop" always runs: its pasted area locates the upper-face window of the modes sheet
+        add_mode_savers(wf, prefix, ["crop"] + [m for m in args.paste_modes if m != "crop"], savers)
     prompt_id = comfy_client.submit_prompt(base_url, session, wf)
     outputs = comfy_client.poll_until_done(base_url, session, prompt_id, timeout=args.timeout)
     stages = {}
@@ -193,6 +221,42 @@ def build_sheet(path: Path, stages: dict, ratio_label: str):
     save_stage_sheet(path, rows)
 
 
+def window(img: Image.Image, cx: float, cy: float) -> Image.Image:
+    """TILE x TILE window at 1:1 around (cx, cy), shifted to stay inside the image."""
+    x = int(min(max(cx - TILE / 2, 0), max(0, img.width - TILE)))
+    y = int(min(max(cy - TILE / 2, 0), max(0, img.height - TILE)))
+    return img.crop((x, y, x + TILE, y + TILE))
+
+
+def build_mode_sheet(path: Path, stages: dict, modes: list):
+    src = stages["source"]
+    outs = [(m, stages[f"output_{mode_tag(m)}"]) for m in modes]
+    crop_box = changed_box(src, stages["output_crop"]) or (0, 0, src.width, src.height)
+    # eyes sit ~38% down the crop (the box is extended below the chin for the neck)
+    upper = ((crop_box[0] + crop_box[2]) / 2, crop_box[1] + 0.38 * (crop_box[3] - crop_box[1]))
+    # a mask mode only differs from the source where the LoRA edited ("crop" differs over the
+    # whole crop, strongest maybe at blurred highlights); change-weighted centre, so a thin
+    # stray change elsewhere can't pull the window off the chin the way it stretches a bbox
+    masked = [m for m in modes if "mask" in m]
+    small = (max(1, src.width // 8), max(1, src.height // 8))
+    d = np.abs(np.asarray(src.resize(small, Image.BOX), np.float32)
+               - np.asarray(stages[f"output_{mode_tag(masked[0] if masked else 'crop')}"].resize(small, Image.BOX),
+                            np.float32)).max(axis=2)
+    d[d < 0.5 * d.max()] = 0
+    if d.sum() > 0:
+        ys, xs = np.mgrid[:d.shape[0], :d.shape[1]]
+        chin = ((xs * d).sum() / d.sum() * 8 + 4, (ys * d).sum() / d.sum() * 8 + 4)
+    else:
+        chin = upper
+    last = outs[-1]
+    rows = []
+    for name, (cx, cy) in (("upper face", upper), ("edit", chin)):
+        rows.append([(f"source 1:1 ({name})", window(src, cx, cy))]
+                    + [(f"{m} 1:1", window(o, cx, cy)) for m, o in outs]
+                    + [(f"|{last[0]} - source| x3", window(diff_map(src, last[1], 3), cx, cy))])
+    save_stage_sheet(path, rows)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--input-dir", required=True, type=Path)
@@ -203,6 +267,9 @@ def main():
                         help="defaults to ./output_stages_<input-dir-name>; a _YYYYMMDD_hhmmss suffix is always appended")
     parser.add_argument("--neck-extend-ratio", type=float, default=None,
                         help="override AIDoubleChinFaceRegionCrop's neck_extend_ratio (default: the workflow's value)")
+    parser.add_argument("--paste-modes", nargs="+", choices=PASTE_MODES, default=None,
+                        help="also save AIDoubleChinPasteBack's result in each of these modes from the same LoRA run "
+                             "(ablation; needs a workflow with that node)")
     parser.add_argument("--comfyui-host", default="127.0.0.1")
     parser.add_argument("--comfyui-port", type=int, default=8188, help="matches ComfyUI's --port at launch")
     parser.add_argument("--seed", type=int, default=42)
@@ -211,7 +278,7 @@ def main():
     parser.add_argument("--lora-title", default="Double Chin LoRA Loader")
     parser.add_argument("--face-onnx-dir", default=None,
                         help="dir with the FaceRestorer ONNX models, e.g. "
-                             "<ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/LVOcclusionONNX; "
+                             "<ComfyUI>/custom_nodes/ComfyUI-FaceRestorer/core/ONNX; "
                              "defaults to the production path stored in the workflow")
     args = parser.parse_args()
     comfyui_url = f"http://{args.comfyui_host}:{args.comfyui_port}"
@@ -270,9 +337,14 @@ def main():
                     stages["source"] = im.convert("RGB")
                 for n, stage in enumerate([s for s in ("crop", "lora", "pasted", "output") if s in stages], 2):
                     stages[stage].save(stem_dir / f"{n}_{stage}.jpg", "JPEG", quality=JPEG_QUALITY)
+                for mode in args.paste_modes or []:
+                    stages[f"output_{mode_tag(mode)}"].save(stem_dir / f"4_output_{mode_tag(mode)}.jpg", "JPEG",
+                                                           quality=JPEG_QUALITY)
                 sheet_path = output_dir / ckpt_name / "sheets" / f"{src.stem}.jpg"
                 sheet_path.parent.mkdir(parents=True, exist_ok=True)
                 build_sheet(sheet_path, stages, ratio_label)
+                if args.paste_modes:
+                    build_mode_sheet(sheet_path.with_name(f"{src.stem}_modes.jpg"), stages, args.paste_modes)
                 print("ok")
 
     total = len(inputs) * len(args.checkpoint)
