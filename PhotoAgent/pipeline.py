@@ -41,6 +41,7 @@ from prompts import (
     with_reframing_proposal,
 )
 from photo_agent.analysis_skills import ANALYSIS_SKILLS
+from photo_agent.edit_prompt import overwrites_prompt
 from photo_agent import capabilities
 from photo_agent.editor_skills import EDITOR_SKILLS
 
@@ -485,9 +486,14 @@ def finish_stage(
     # stored analyzer geometry. Refit it for this run and rewrite the visible
     # review text from that resolved result. ``original`` controls only the
     # output shape; a meaningful same-ratio crop remains enabled.
+    # An overwrite prompt carries no crop instruction, so auto keeps the source frame.
+    # The stored geometry is untouched: a later full edit gets the analyzed ratio back.
+    edit_aspect_ratio = aspect_ratio
+    if aspect_ratio == "auto" and overwrites_prompt(user_instruction):
+        edit_aspect_ratio = "original"
     img_w, img_h = get_image_dimensions(image_bytes)
     analysis = apply_derived_aspect_ratio(
-        analysis, img_w, img_h, aspect_ratio_pref=aspect_ratio,
+        analysis, img_w, img_h, aspect_ratio_pref=edit_aspect_ratio,
     )
     analysis["_aspect_ratio_pref_at_edit"] = aspect_ratio
     # A body edit is active when at least one person's approved plan remains
@@ -529,7 +535,7 @@ def finish_stage(
             analysis,
             edit_quality,
             preset_key,
-            aspect_ratio=aspect_ratio,
+            aspect_ratio=edit_aspect_ratio,
             single_pass_edit=single_pass_edit,
         )
         prompts["image_edit"] = edit_prompt

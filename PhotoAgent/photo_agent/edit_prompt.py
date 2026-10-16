@@ -5,6 +5,13 @@ from photo_agent.feature_resolver import build_compact_editor_prompt
 from prompts import build_framing_sections
 
 
+def overwrites_prompt(user_instruction):
+    """True when the user's own text replaces the whole edit prompt."""
+    user_instruction = user_instruction or {}
+    return bool(user_instruction.get("overwrite_prompt")
+                and (user_instruction.get("normalized_user_direction") or "").strip())
+
+
 def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio, source_size,
                          single_pass_edit, revision_feedback=None):
     """Return (prompt_text, resolution_metadata, prompt_strategy) for one edit call.
@@ -14,7 +21,7 @@ def assemble_edit_prompt(framed_analysis, crop_plan, *, preset_key, aspect_ratio
     """
     user_instruction = framed_analysis.get("user_instruction") or {}
     user_direction = user_instruction.get("normalized_user_direction") or ""
-    if user_instruction.get("overwrite_prompt") and user_direction.strip():
+    if overwrites_prompt(user_instruction):
         return user_direction.strip(), None, "overwrite"
 
     sections = build_framing_sections(framed_analysis, crop_plan, aspect_ratio, source_size)
