@@ -277,7 +277,7 @@ def _semantic_resolutions(clauses, raw):
         uncovered = ''.join(char for pos, char in enumerate(source) if not any(a <= pos < b for a, b in spans))
         if uncovered.strip(' \t\r\n，,；;。.!！?？、：:'):
             raise ValueError('incomplete_semantic_source_coverage')
-    return expanded, {k: v for k, v in raw.items() if k != 'semantic_version'} | {'resolutions': mappings}
+    return expanded, {**{k: v for k, v in raw.items() if k != 'semantic_version'}, 'resolutions': mappings}
 
 
 def resolve(clauses, people, raw):
