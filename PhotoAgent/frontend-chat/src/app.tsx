@@ -2768,7 +2768,10 @@ function SessionView(props: {
   const showOption = (field: string) => {
     const cat = categoryOf(field);
     if (!cat || !editing) return;
-    if (liveCat === cat) flash(cat, [field], true);
+    // 那一項的面板還是對話的最後一則才就地閃；後面已經又聊過（例如再加了需求），
+    // 就跟點項目按鈕一樣在最底下開一張新的，不跳回上面舊的那張。
+    const atEnd = messages.slice(lastOptionsIdx + 1).every((m) => m.card?.auto);
+    if (liveCat === cat && atEnd) flash(cat, [field], true);
     else openCategory(cat).then((ok) => ok && flash(cat, [field], true));
   };
   // 掛按鈕的那則訊息裡如果有項目按鈕，「美化」直接接在同一排最後，不另起一行。
