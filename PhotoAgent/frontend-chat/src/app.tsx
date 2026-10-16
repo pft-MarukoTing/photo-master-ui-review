@@ -3461,6 +3461,17 @@ function SessionView(props: {
     return photo.plan;
   };
 
+  // 離開某張卡時（下一個帶設定快照的訊息）的個人化需求；中間又有別張卡改過需求，
+  // 那個快照講的就不是這張卡了，回 undefined。
+  const promptWhenLeft = (idx: number): string | undefined => {
+    for (let i = idx + 1; i < messages.length; i++) {
+      const card = messages[i].card;
+      if (card?.proposal?.changes?.some((ch: Change) => ch.field === "user_prompt")) return undefined;
+      if (card?.plan) return String(card.plan.user_prompt || "");
+    }
+    return undefined;
+  };
+
   function replyBody(m: (typeof messages)[number], idx: number) {
     const c = m.card!;
     return (
@@ -3476,7 +3487,9 @@ function SessionView(props: {
             busy={busy}
             onChoose={(choice, edit) => choose(c.proposal, choice, edit)}
             onShow={(ch: Change) => showOption(ch.field)}
-            prompt={photo.plan?.user_prompt || ""}
+            prompt={
+              c.proposal.id === lastProposalId && idx > lastRender ? photo.plan?.user_prompt || "" : promptWhenLeft(idx)
+            }
             onQuietPrompt={props.onQuietPrompt}
             onReviewPrompt={() => props.onReviewPrompt(screen)}
           />

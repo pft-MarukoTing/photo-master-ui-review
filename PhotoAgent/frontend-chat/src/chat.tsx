@@ -1534,9 +1534,19 @@ export function ProposalCard(props: {
   const editable = noted && !!props.undoable;
   // 只記下一段個人化需求的卡：那列直接就是可以改的框，改了自己存。
   const inline = editable && only?.field === TEXT_FIELD && !!props.onQuietPrompt;
+  // 已經不能改的那張：要是在卡上就地改過（對話裡沒有留下別的紀錄），顯示改完的
+  // 樣子並標明改過，後面的美化結果才對得上。prompt 是離開這張卡時的需求。
+  const settled = only?.field === TEXT_FIELD ? (props.edit?.value ?? only.after) : null;
+  const reedited =
+    noted && !inline && settled != null && props.prompt != null && props.prompt.trim() !== String(settled).trim()
+      ? props.prompt
+      : null;
   return (
     <div class="chat-card chat-proposal">
-      <p class="chat-proposal-title">{only ? only.label : "建議的調整"}</p>
+      <p class="chat-proposal-title">
+        {only ? only.label : "建議的調整"}
+        {reedited != null && "（已修改）"}
+      </p>
       <ul class="chat-proposal-list">
         {proposal.changes.map((c) => {
           const face = c.subject_index != null ? props.faces[c.subject_index] : undefined;
@@ -1590,7 +1600,7 @@ export function ProposalCard(props: {
                       {...noteBoxKeys}
                     />
                   ) : (
-                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(after)) : after}</b>
+                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(reedited ?? after)) : after}</b>
                   )}
                 </span>
               </Row>
