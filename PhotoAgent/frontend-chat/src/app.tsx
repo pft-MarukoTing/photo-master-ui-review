@@ -3453,23 +3453,28 @@ function SessionView(props: {
   // 的「調整後再美化」-- 身上都帶著當下的快照，所以往後找第一張帶 plan 的卡就
   // 是它。（略過不收面板，也就不帶 plan。）找不到就是還沒被任何一步收起來，用
   // 現在這份。舊 session 的卡沒有快照，退回同一條路，結果跟以前一樣。
+  // adjust_opened 帶的是這一輪開始時的設定（套用前的樣子），不是離開某張卡時的
+  // 樣子，往後找快照時跳過它。
+  const leftWith = (card: Dict | null | undefined) => (card?.type === "adjust_opened" ? undefined : card?.plan);
   const planAt = (idx: number): Plan => {
     for (let i = idx + 1; i < messages.length; i++) {
-      const snap = messages[i].card?.plan;
+      const snap = leftWith(messages[i].card);
       if (snap) return { ...photo.plan, ...(snap as Plan) };
     }
     return photo.plan;
   };
 
   // 離開某張卡時（下一個帶設定快照的訊息）的個人化需求；中間又有別張卡改過需求，
-  // 那個快照講的就不是這張卡了，回 undefined。
+  // 那個快照講的就不是這張卡了，回 undefined。後面還沒有快照（例如剛按美化、
+  // 美化還在跑，完成的那則才會帶設定）就是現在的設定。
   const promptWhenLeft = (idx: number): string | undefined => {
     for (let i = idx + 1; i < messages.length; i++) {
       const card = messages[i].card;
       if (card?.proposal?.changes?.some((ch: Change) => ch.field === "user_prompt")) return undefined;
-      if (card?.plan) return String(card.plan.user_prompt || "");
+      const snap = leftWith(card);
+      if (snap) return String(snap.user_prompt || "");
     }
-    return undefined;
+    return photo.plan?.user_prompt || "";
   };
 
   function replyBody(m: (typeof messages)[number], idx: number) {
