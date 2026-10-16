@@ -1333,6 +1333,7 @@ const hadBefore = (c: Change) => {
 // 就留在原地，要改的那句直接在這張卡裡改完再套用。其他欄位是開關或選項，沒有
 // 「自己的文字框」可以改，仍然交給面板。
 const TEXT_FIELD = "user_prompt";
+const NOTE_MAX = 2000; // options.PROMPT_MAX / chat_plan.USER_PROMPT_MAX_LEN
 const textChangeOf = (p: Proposal) =>
   p.changes.length === 1 && p.changes[0].field === TEXT_FIELD ? p.changes[0] : null;
 
@@ -1355,6 +1356,10 @@ export function ProposalCard(props: {
   busy: boolean;
   onChoose: (choice: ProposalChoice, edit?: { field: string; value: string }) => void;
   onShow: (change: Change) => void;
+  // 直接記下的個人化需求按「修改」就在這張卡上改：prompt 是現在的全文，存檔走
+  // 跟面板同一條路（存下來再請 AI 整理）。沒給就照舊打開面板。
+  prompt?: string;
+  onSavePrompt?: (text: string) => void;
 }) {
   const { proposal, resolved } = props;
   const live = resolved == null;
@@ -1372,6 +1377,24 @@ export function ProposalCard(props: {
   // 「復原」換成「修改」，打開那一項的面板自己調；改了好幾項時每一列也都能點。
   const noted = !!proposal.direct && resolved === "apply";
   const editable = noted && !!props.undoable;
+  // 只記下一段個人化需求的卡：「修改」就地把那列換成輸入框。
+  const inline = editable && only?.field === TEXT_FIELD && !!props.onSavePrompt;
+  const [noteEditing, setNoteEditing] = useState(false);
+  const [noteDirty, setNoteDirty] = useState(false);
+  const [noteSaved, setNoteSaved] = useState<string | null>(null);
+  const noteText = noteSaved ?? props.prompt ?? only?.after ?? "";
+  const noteBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (noteEditing && noteBox.current) fillNoteBox(noteBox.current, sectionsOf(noteText), true);
+  }, [noteEditing]);
+  const saveNote = () => {
+    const text = noteBox.current ? readPromptBox(noteBox.current, sectionsOf(noteText)).slice(0, NOTE_MAX) : "";
+    setNoteEditing(false);
+    setNoteDirty(false);
+    if (!text || text === noteText) return;
+    setNoteSaved(text);
+    props.onSavePrompt!(text);
+  };
   return (
     <div class="chat-card chat-proposal">
       <p class="chat-proposal-title">{only ? only.label : "建議的調整"}</p>
@@ -1400,14 +1423,25 @@ export function ProposalCard(props: {
                     {changeLabel(c, face)}
                   </span>
                 )}
-                <span class={`chat-proposal-diff${isLong(c) || mine ? " is-long" : ""}`}>
+                <span class={`chat-proposal-diff${isLong(c) || mine || (inline && noteEditing) ? " is-long" : ""}`}>
                   {hadBefore(c) && !noted && (
                     <>
                       <s>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(c.before)) : c.before}</s>
                       <Icon name="arrow" size={12} />
                     </>
                   )}
-                  {mine ? (
+                  {inline && noteEditing ? (
+                    <div
+                      class="chat-notes-box chat-proposal-edit"
+                      ref={noteBox}
+                      role="textbox"
+                      aria-multiline="true"
+                      aria-label={c.label}
+                      contentEditable={!props.busy}
+                      onInput={() => !noteDirty && setNoteDirty(true)}
+                      {...noteBoxKeys}
+                    />
+                  ) : mine ? (
                     <div
                       class="chat-notes-box chat-proposal-edit"
                       ref={box}
@@ -1418,7 +1452,7 @@ export function ProposalCard(props: {
                       {...noteBoxKeys}
                     />
                   ) : (
-                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(after)) : after}</b>
+                    <b>{c.field === TEXT_FIELD ? promptFaces(sectionsOf(inline ? noteText : after)) : after}</b>
                   )}
                 </span>
               </Row>
@@ -1446,7 +1480,30 @@ export function ProposalCard(props: {
           ))}
         </div>
       ) : noted ? (
-        editable && (
+        inline && noteEditing ? (
+          <div class="chat-choices">
+            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={props.busy || !noteDirty} onClick={saveNote}>
+              儲存
+            </button>
+            <button
+              type="button"
+              class="chat-chip chat-opt-chip is-ghost"
+              disabled={props.busy}
+              onClick={() => {
+                setNoteDirty(false);
+                setNoteEditing(false);
+              }}
+            >
+              取消
+            </button>
+          </div>
+        ) : inline ? (
+          <div class="chat-choices">
+            <button type="button" class="chat-chip chat-opt-chip is-primary" disabled={props.busy} onClick={() => setNoteEditing(true)}>
+              修改
+            </button>
+          </div>
+        ) : editable && (
           <div class="chat-choices">
             {/* 跟個人化需求面板裡那顆「修改」同一個樣子。 */}
             <button

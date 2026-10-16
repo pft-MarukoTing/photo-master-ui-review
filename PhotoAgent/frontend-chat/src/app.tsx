@@ -2944,6 +2944,8 @@ function SessionView(props: {
             busy={busy}
             onChoose={(choice, edit) => choose(c.proposal, choice, edit)}
             onShow={(ch: Change) => showOption(ch.field)}
+            prompt={photo.plan?.user_prompt || ""}
+            onSavePrompt={(t) => props.onSavePrompt(t, screen)}
           />
         )}
         {/* 直接套用的卡後面沒有使用者的那一下，引導就接在同一則話裡。 */}
