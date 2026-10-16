@@ -215,13 +215,11 @@ def analyze_preview_stage(image_bytes: bytes, *, analysis_model: str, binding: d
     return result
 
 
-def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"], *, precomputed_preview=None) -> dict:
+def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_options: dict = None, analysis_model: str = MODELS["analysis"], *, precomputed_preview=None, analysis_user_requests=None) -> dict:
     """Steps 1-2: read the photo and analyze it.
 
-    The user's instruction is passed through in finish_stage instead of here --
-    it's collected on the analyze-preview screen, shown to the user only
-    after this stage's result comes back, so there's nothing to review yet
-    at this point.
+    Chat may supply validated read-only intent before analysis; observations
+    remain factual and separate from the desired edit. Legacy callers omit it.
 
     advanced_options: the Advanced Settings toggles dict (e.g.
     {"eye_closed_detection": False}). These do not change the one-time
@@ -239,6 +237,12 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     t0 = time.time()
     logger.info("Step 2: analyzing photo (aspect_ratio=%s)", aspect_ratio)
     preview_args = {"precomputed_preview": precomputed_preview} if precomputed_preview is not None else {}
+    if analysis_user_requests is not None:
+        from photo_agent.chat_analysis import validate
+        import hashlib
+        analysis_user_requests = validate(analysis_user_requests,
+            source_sha256=hashlib.sha256(image_bytes).hexdigest(), analysis_model=analysis_model)
+        preview_args['analysis_user_requests'] = analysis_user_requests
     analysis, step2_usage = analyze_photo(image_bytes, aspect_ratio, advanced_options, analysis_model=analysis_model, **preview_args)
     analysis = sanitize_body_reshape_analysis(analysis)
     if not body_reshape_enabled():
@@ -276,6 +280,9 @@ def analyze_stage(image_bytes: bytes, aspect_ratio: str = "auto", advanced_optio
     }
     for skill in ANALYSIS_SKILLS:
         analysis_prompts.update(skill.prompt_records(analysis))
+    if analysis_user_requests:
+        from photo_agent.chat_analysis import context
+        analysis_prompts['chat_user_intent'] = context(analysis_user_requests)
     analysis["prompts"] = analysis_prompts
     analysis["timings"] = {
         "Step 2 - photo_analysis": step2_duration,
@@ -453,6 +460,10 @@ def finish_stage(
                                      # actually ran (see pre_edit_image_b64 below)
     }
     """
+    from photo_agent.chat_analysis import blocking
+    unresolved_requests = blocking(analysis)
+    if unresolved_requests:
+        raise ValueError(unresolved_requests[0]['question'])
     analysis = sanitize_body_reshape_analysis(analysis)
     if not body_reshape_enabled():
         # finish_stage may be called with a saved analysis created before the

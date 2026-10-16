@@ -22,6 +22,7 @@ waits until no photo is analyzing or rendering. Photos whose analysis failed
 never change again, so they are left out of both.
 """
 
+from photo_agent import chat_analysis
 import copy
 import json
 import re
@@ -631,7 +632,7 @@ def preview_conversation_reply(preview_id):
             try:
                 raw = chat_queue.run({'stage': conversation_domain.STAGE,
                     'people': conversation_domain.roster_text(people), 'wishes': clauses,
-                    'history': history, 'effective_prompt': prompt, 'deadline': time.time() + 10}, wait_seconds=10)
+                    'history': history, 'effective_prompt': prompt, 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
                 state = conversation_domain.resolve(clauses, people, raw)
             except Exception:
                 current_app.logger.warning('Preview conversation unavailable job=%s', preview_id)
@@ -697,7 +698,7 @@ def preview_conversation_revise(preview_id):
         if updated is None:
             raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'revision',
                 'people': conversation_domain.roster_text(people), 'wishes': state['clauses'],
-                'text': text, 'deadline': time.time() + 10}, wait_seconds=10)
+                'text': text, 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
             updated = conversation_domain.revise(state, people, text, raw, selected)
         elif updated.get('lifecycle_changes'):
             updated['reply'] = conversation_domain.wish_lifecycle.change_reply(updated['lifecycle_changes'], conversation_domain.executable(updated,people))
@@ -724,7 +725,7 @@ def _retry_request_semantics(state):
             'people': conversation_domain.roster_text(state.get('people', [])),
             'wishes': state['clauses'], 'history': [],
             'effective_prompt': state.get('effective_prompt', ''),
-            'deadline': time.time() + 10}, wait_seconds=10)
+            'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
         parsed = conversation_domain.resolve(state['clauses'], state.get('people', []), raw)
     except Exception:
         parsed = conversation_domain.fallback(state['clauses'], state.get('people', []))
@@ -754,7 +755,7 @@ def _confirmed_target_semantics(state, ids):
             raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'target_action',
                 'clause': copy.deepcopy(clause),
                 'selected_people': conversation_domain.roster_text([p for p in people if p['preview_person_id'] in ids]),
-                'deadline': time.time() + 10}, wait_seconds=10)
+                'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
             request_semantics.confirm_target_action(copy.deepcopy(clause), raw)
             replacements[clause['wish_id']] = raw
         except Exception:
@@ -779,7 +780,7 @@ def _semantic_action_answer(state, wish_ids, text):
             raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'action',
                 'clause': clause, 'text': text.strip(),
                 'combined_source': request_semantics.evidence(clause) + '；補充：' + text.strip(),
-                'deadline': time.time() + 10}, wait_seconds=10)
+                'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
         except Exception as exc:
             raise ValueError('這項修改還沒確認完成，請稍後再試一次。') from exc
         try:
@@ -840,7 +841,7 @@ def preview_conversation_confirm(preview_id):
                 raw = chat_queue.run({'stage': conversation_domain.STAGE, 'mode': 'confirmation',
                     'people': conversation_domain.roster_text(state['people']), 'wishes': [clarification],
                     'history': [{'role': 'assistant', 'text': q['text']}, {'role': 'user', 'text': text}],
-                    'effective_prompt': '', 'deadline': time.time() + 10}, wait_seconds=10)
+                    'effective_prompt': '', 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
                 if raw.get('confirmation_intent') == 'new_message':
                     return jsonify({**conversation_store.public(state), 'confirmation_handled': False})
                 if raw.get('confirmation_intent') != 'answer':
@@ -1051,9 +1052,20 @@ def add_photos(session_id):
                 if not preview_id or 'precomputed_preview' not in photo_params:
                     raise _RequestError('Conversation requires its completed preview', 409)
                 try:
-                    conversation_state = conversation_store.load(user, conversation_token, binding)
-                    if request.form.get('conversation_wishes_digest') != conversation_state['wishes_digest'] or (conversation_wishes and conversation_store.digest(raw_wishes) != conversation_state['wishes_digest']):
+                    previous = conversation_store.load_previous(user, conversation_token, binding)
+                    if request.form.get('conversation_wishes_digest') != previous['wishes_digest']:
                         raise ValueError('conversation_wishes_changed')
+                    if conversation_wishes:
+                        # Rebuild from this submission's exact source wishes;
+                        # only unchanged IDs/text inherit server-owned evidence.
+                        clauses = conversation_domain.retain_bindings(clauses, previous)
+                        conversation_state = conversation_domain.retain_questions(
+                            {**conversation_domain.fallback(clauses, people), 'people': people,
+                             'binding': binding, 'wishes_digest': conversation_store.digest(raw_wishes),
+                             'revision': previous['revision']}, previous)
+                        conversation_state = conversation_domain.refresh_state(conversation_state)
+                    else:
+                        conversation_state = previous
                 except ValueError as exc:
                     raise _RequestError(str(exc), 409)
                 photo_params['preview_wish_bindings'] = conversation_state
@@ -1061,6 +1073,16 @@ def add_photos(session_id):
                 # including API callers that did not first patch session defaults.
                 if conversation_state.get('effective_prompt') and not photo_params.get('user_prompt'):
                     photo_params['user_prompt'] = conversation_state['effective_prompt'][:USER_PROMPT_MAX_LEN]
+            if conversation_state is not None:
+                photo_params['preview_wish_bindings'] = conversation_state
+                photo_params['user_prompt'] = conversation_domain.executable(conversation_state, conversation_state.get('people', []))[:USER_PROMPT_MAX_LEN]
+            request_context = chat_analysis.project(conversation_state,
+                prompt=photo_params.get('user_prompt') or '', source_sha256=source_sha256(data),
+                analysis_model=photo_params['analysis_model'])
+            if request_context:
+                photo_params['analysis_user_requests'] = request_context
+                if getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) and chat_analysis.visual_subset(request_context):
+                    photo_params.pop('skip_analysis', None)
             # Only-wishes editing still needs analysis when a wish names or
             # protects a person. Keep overwrite_prompt; this pass establishes
             # identity without enabling automatic beautification.
@@ -1081,6 +1103,7 @@ def add_photos(session_id):
         photos.append({
             "photo_id": f"p_{uuid.uuid4().hex[:12]}",
             "filename": image.filename,
+            "source_sha256": source_sha256(data),
             "case_id": engine_params["srcKeys"][0],
             "src_keys": engine_params["srcKeys"],
             "analyze_job_id": job_id,
@@ -1121,6 +1144,18 @@ def _conversation_needs_identity(state):
                for clause in projected['clauses'])
 
 
+def _needs_request_validation(photo):
+    if not getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) or not photo['plan'].get('user_prompt'):
+        return False
+    state = photo.get('preview_conversation')
+    sha = photo.get('source_sha256') or ((state or {}).get('binding') or {}).get('source_sha256')
+    if not sha:
+        return True
+    payload = chat_analysis.project(state, prompt=photo['plan']['user_prompt'], source_sha256=sha,
+        analysis_model=photo['plan']['analysis_model'])
+    return bool(payload and chat_analysis.visual_subset(payload))
+
+
 def _needs_analysis(photo):
     """Skipped photos need analysis for person identities or automatic edits.
 
@@ -1129,6 +1164,7 @@ def _needs_analysis(photo):
     plan = photo["plan"]
     return bool(photo.get("analysis_skipped")
                 and (_conversation_needs_identity(photo.get('preview_conversation'))
+                     or _needs_request_validation(photo)
                      or not (plan.get("overwrite_prompt") and (plan.get("user_prompt") or "").strip())))
 
 
@@ -1155,6 +1191,21 @@ def _start_analysis(user, session_id, photo, why):
             if context['binding']['user'] != user:
                 raise _RequestError('人物預覽不屬於目前使用者。', 409)
             params['precomputed_preview'] = context
+    initial = get_job_info(photo['analyze_job_id'], keyToGet=['acts']) or {}
+    initial_acts = initial.get('acts') or []
+    if isinstance(initial_acts, str): initial_acts = json.loads(initial_acts)
+    initial_params = initial_acts[0]['params'] if initial_acts else {}
+    sha = photo.get('source_sha256') or ((state or {}).get('binding') or {}).get('source_sha256') or (initial_params.get('analysis_user_requests') or {}).get('source_sha256')
+    if not sha and getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False) and photo['plan'].get('user_prompt'):
+        data, error = download_bytes(photo['src_keys'][0], photo['analyze_job_id'])
+        if error or not data:
+            raise _RequestError('原圖暫時無法讀取，請稍後再試。', 409)
+        sha = source_sha256(data)
+        photo['source_sha256'] = sha
+    if sha:
+        requests = chat_analysis.project(state, prompt=photo['plan'].get('user_prompt') or '',
+            source_sha256=sha, analysis_model=params['analysis_model'])
+        if requests: params['analysis_user_requests'] = requests
     engine_params = get_engine_params_template()
     engine_params["srcKeys"] = list(photo["src_keys"])
     engine_params["acts"][0]["params"] = params
@@ -1390,8 +1441,12 @@ def _start_queued_render(user, session_id, photo, queued):
         photo["queued_render"] = queued
         store.save_photo_state(user, session_id, photo)
         return []
-    prepared, problem = _prepare_render(photo)
+    prepared, problem = _prepare_render(photo, defer_unconfirmed=queued.get('defer_unconfirmed', False))
     if problem:
+        if problem[0] in ('unresolved_people', 'unresolved_visual_target', 'protected_scope'):
+            photo['error'] = None
+            store.save_photo_state(user, session_id, photo)
+            return [_confirmation_notice(photo, problem)]
         photo["error"] = problem[1]
         store.save_photo_state(user, session_id, photo)
         return [store.make_message("assistant", card={
@@ -1402,8 +1457,45 @@ def _start_queued_render(user, session_id, photo, queued):
 
 # --- render ----------------------------------------------------------------
 
+def _adopt_request_checks(photo, analysis):
+    report = (analysis or {}).get('_chat_request_checks')
+    if not report:
+        # Switching off an optional new call is not permission to bypass an
+        # already recorded unresolved result from the same photo.
+        if photo.get('chat_request_checks'): _refresh_visual_question(photo)
+        return
+    photo['chat_request_checks'] = copy.deepcopy(report)
+    state = photo.get('preview_conversation')
+    if state is None:
+        rows = report['requests']['requests']
+        clauses = [dict(wish_id=r['wish_id'], request_id=r['wish_id'], text=r['text'],
+            source_text=r['source_text'], status=r['status'], scope=r['scope'],
+            target_ids=r['preview_person_ids'], protected_ids=[], referent='', revision=0) for r in rows]
+        state = dict(clauses=clauses, people=[], revision=0, reply='',
+                     binding={'source_sha256':report['requests']['source_sha256']},
+                     wishes_digest=report['requests']['wishes_digest'],
+                     effective_prompt=report['requests']['effective_prompt'])
+        photo['preview_conversation'] = state
+    _refresh_visual_question(photo)
+
+
+def _refresh_visual_question(photo):
+    state = photo.get('preview_conversation')
+    if not state: return
+    state['question'] = conversation_domain.question(state, state.get('people', []))
+    if state['question']: return
+    blocked = chat_analysis.blocking({'_chat_request_checks':photo.get('chat_request_checks')}, state)
+    if blocked:
+        row = blocked[0]
+        state['question'] = dict(kind='visual', question_id='visual_' + chat_analysis.fingerprint(row)[:16],
+            wish_ids=[row['wish_id']], text=row['question'])
+
+
 def _conversation_render_problem(photo):
     state = photo.get('preview_conversation')
+    blocked = chat_analysis.blocking({'_chat_request_checks':photo.get('chat_request_checks')}, state)
+    if blocked:
+        return ('unresolved_visual_target', blocked[0]['question'], 409)
     if state and conversation_domain.pending(state):
         return ('unresolved_people', '請先確認個人化需求指定的人物，再開始美化。', 409)
     if state and (state.get('question') or {}).get('kind') in ('scope', 'wish'):
@@ -1413,7 +1505,49 @@ def _conversation_render_problem(photo):
     return None
 
 
-def _prepare_render(photo):
+def _confirmation_notice(photo, problem):
+    """An expected clarification is a conversation turn, not a render failure."""
+    state = photo.get('preview_conversation') or {}
+    question = state.get('question')
+    return store.make_message('assistant', card={'type': 'llm_reply',
+        'photo_id': photo['photo_id'], 'text': question['text'] if question else problem[1],
+        **({'target_question': copy.deepcopy(question), 'question_revision': state['revision']}
+           if question else {})})
+
+
+def _confirmation_deferred_notice(photo):
+    return store.make_message('assistant', card={'type': 'llm_reply',
+        'photo_id': photo['photo_id'],
+        'text': '我會先照你的原句處理，完成後再和你確認需要調整的對象。'})
+
+
+def _render_without_guessed_targets(photo):
+    """Pass complete unresolved edits verbatim, without inferred person bindings."""
+    state = photo.get('preview_conversation')
+    pending = conversation_domain.pending(state) if state else []
+    # Unresolved protection must never be silently omitted.
+    if not pending or any(c['scope'] != 'edit' or
+            conversation_domain.person_request.semantics(c)['action_status'] != 'complete'
+            for c in pending):
+        return photo
+    snapshot = copy.deepcopy(photo)
+    state = snapshot['preview_conversation']
+    deferred = {c['wish_id'] for c in pending}
+    state['clauses'] = [c for c in state['clauses'] if c['wish_id'] not in deferred]
+    state.pop('revision_question', None)
+    state['question'] = conversation_domain.question(state, state.get('people', []))
+    state['effective_prompt'] = conversation_domain.executable(state, state.get('people', []))
+    raw = [c['text'] for c in pending]
+    snapshot['plan']['user_prompt'] = '；'.join(dict.fromkeys(
+        text for text in (state['effective_prompt'], *raw) if text))[:USER_PROMPT_MAX_LEN]
+    snapshot['plan']['prompt_faces'] = []
+    return snapshot
+
+
+def _prepare_render(photo, *, defer_unconfirmed=False):
+    original = photo
+    if defer_unconfirmed:
+        photo = _render_without_guessed_targets(photo)
     conversation_problem = _conversation_render_problem(photo)
     if conversation_problem:
         return None, conversation_problem
@@ -1428,6 +1562,18 @@ def _prepare_render(photo):
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
     params["stage"] = "finish"
     analysis, error = _load_analysis(_analysis_job_id(photo))
+    if analysis is not None:
+        blocked = chat_analysis.blocking(analysis, photo.get('preview_conversation'))
+        if blocked:
+            return None, ('unresolved_visual_target', blocked[0]['question'], 409)
+        if analysis.get('_chat_request_checks'):
+            analysis = copy.deepcopy(analysis)
+            # Keep passed evidence for active wishes. Only user-cancelled /
+            # removed wishes are excluded from this render's scoped checks.
+            state = photo.get('preview_conversation')
+            if state is not None:
+                active = {c['wish_id'] for c in state['clauses'] if c['status'] not in ('cancelled','superseded')}
+                analysis['_chat_request_checks']['results'] = [r for r in analysis['_chat_request_checks']['results'] if r['wish_id'] in active]
     if error:
         return None, ("analysis_unavailable", f"photo {photo['photo_id']}: {error}", 409)
     if not is_compatible(analysis, min_version=get_min_compatible_version()):
@@ -1494,7 +1640,8 @@ def _prepare_render(photo):
         return None, ("invalid_plan", f"photo {photo['photo_id']}: {error}", 400)
     run_limit = capabilities.MAX_RUN_COUNT if _debug() else capabilities.GENERAL_MAX_RUN_COUNT
     return {"params": {**params, "analysis": analysis}, "selections": selections,
-            "run_count": min(plan["run_count"], run_limit)}, None
+            "run_count": min(plan["run_count"], run_limit),
+            "deferred_confirmation": photo is not original}, None
 
 
 def _start_render(user, session_id, photo, prepared, base):
@@ -1521,7 +1668,14 @@ def _start_render(user, session_id, photo, prepared, base):
     # The plan rides along so the finished version's card can keep it: the
     # next version's note reads what changed from it.
     photo["pending_render"] = {"action_id": action_id, "job_ids": job_ids, "based_on": based_on, "base": base,
-                               "plan": copy.deepcopy(photo["plan"])}
+                               "plan": copy.deepcopy(photo["plan"]),
+                               "deferred_confirmation": prepared.get('deferred_confirmation', False)}
+    if prepared.get('deferred_confirmation'):
+        photo['pending_render']['plan']['user_prompt'] = prepared['params']['user_prompt']
+        photo['plan']['user_prompt'] = prepared['params']['user_prompt']
+        photo['deferred_request_texts'] = {c['wish_id']:c['text']
+            for c in conversation_domain.pending(photo['preview_conversation'])}
+        store.save_photo_plan(user, session_id, photo['photo_id'], photo['plan'])
     store.save_photo_state(user, session_id, photo)
     return {"photo_id": photo["photo_id"], "action_id": action_id, "job_ids": job_ids}
 
@@ -1538,6 +1692,9 @@ def render(session_id):
     base = body.get("base", "original")
     if base not in RENDER_BASES:
         raise _RequestError(f"base must be one of {RENDER_BASES}")
+    defer_unconfirmed = body.get('defer_unconfirmed', False)
+    if type(defer_unconfirmed) is not bool:
+        raise _RequestError('defer_unconfirmed must be a boolean')
 
     photo_ids = body.get("photo_ids")
     if photo_ids == "all":
@@ -1554,9 +1711,9 @@ def render(session_id):
 
     to_render, to_queue, to_analyze = [], [], []
     for photo in photos:
-        problem = _conversation_render_problem(photo)
+        problem = _conversation_render_problem(_render_without_guessed_targets(photo) if defer_unconfirmed else photo)
         if problem:
-            raise _RequestError(problem[1], problem[2])
+            return jsonify({'error': problem[1], 'reason': problem[0]}), problem[2]
         if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
             to_queue.append(photo)
             continue
@@ -1566,9 +1723,9 @@ def render(session_id):
         if photo["status"] != "ready":
             state = "queued" if photo["queued_render"] else photo["status"]
             raise _RequestError(f"photo {photo['photo_id']} is {state}, not ready to render", 409)
-        prepared, problem = _prepare_render(photo)
+        prepared, problem = _prepare_render(photo, defer_unconfirmed=defer_unconfirmed)
         if problem:
-            raise _RequestError(problem[1], problem[2])
+            return jsonify({'error': problem[1], 'reason': problem[0]}), problem[2]
         to_render.append((photo, prepared))
 
     renders = [_start_render(user, session_id, photo, prepared, base) for photo, prepared in to_render]
@@ -1576,11 +1733,22 @@ def render(session_id):
         _start_analysis(user, session_id, photo, "render")
     to_queue += to_analyze
     for photo in to_queue:
-        photo["queued_render"] = {"base": base}
+        if defer_unconfirmed:
+            snapshot = _render_without_guessed_targets(photo)
+            if snapshot is not photo:
+                photo['plan']['user_prompt'] = snapshot['plan']['user_prompt']
+                photo['deferred_request_texts'] = {c['wish_id']:c['text']
+                    for c in conversation_domain.pending(photo['preview_conversation'])}
+                store.save_photo_plan(user, session_id, photo['photo_id'], photo['plan'])
+        photo["queued_render"] = {"base": base, **({'defer_unconfirmed': True} if defer_unconfirmed else {})}
         store.save_photo_state(user, session_id, photo)
     queued = [p["photo_id"] for p in to_queue]
     store.append_messages(user, session_id, [store.make_message(
         "user", card={"type": "render_requested", "base": base, "renders": renders, "queued": queued})])
+    if defer_unconfirmed:
+        for photo in photos:
+            if _render_without_guessed_targets(photo) is not photo:
+                store.append_messages(user, session_id, [_confirmation_deferred_notice(photo)])
     return jsonify({"renders": renders, "queued": queued}), 202
 
 
@@ -1594,6 +1762,51 @@ def confirm_photo_conversation(session_id, photo_id):
     q = state.get('question') if state else None
     if not q or q['question_id'] != body.get('question_id') or q['wish_ids'] != body.get('wish_ids') or type(body.get('revision')) is not int or state['revision'] != body.get('revision'):
         raise _RequestError('人物確認已過時，請重新選擇。', 409)
+    if q.get('kind') == 'visual':
+        text = body.get('text')
+        if body.get('subject_indices') or body.get('target_ids') or not isinstance(text, str) or not text.strip() or len(text) > 1000:
+            raise _RequestError('請說明這筆需求要如何調整，或取消這筆需求。', 409)
+        if not any(c['wish_id'] in q['wish_ids'] for c in state['clauses']):
+            raise _RequestError('需求確認結果已過時，請重新分析。', 409)
+        retry = text == '重新分析這筆需求'
+        if retry and not getattr(agent_config, 'ENABLE_CHAT_REQUEST_FEASIBILITY', False):
+            raise _RequestError('需求影像確認目前未啟用；可以先取消這筆需求。', 409)
+        cancel = text == '取消這筆需求'
+        if not retry:
+            for c in state['clauses']:
+                if c['wish_id'] not in q['wish_ids']: continue
+                if cancel:
+                    c.update(status='cancelled', target_ids=[], protected_ids=[])
+                else:
+                    # New wording needs new semantic and visual evidence.
+                    c.update(text=text, source_text=text, reference_text=text,
+                        status=conversation_domain.OUTSIDE_CONFIRMED if c['status'] == conversation_domain.OUTSIDE_CONFIRMED else 'pending',
+                        semantic_required=True, revision=c.get('revision',0)+1)
+                    for key in ('semantic','operation','display_text','display_target_ids','semantic_answer','action_answer','outside_description'):
+                        c.pop(key, None)
+            if not cancel:
+                state = _retry_request_semantics(state)
+                answers = [c for c in state['clauses'] if c['wish_id'] in q['wish_ids'] or c.get('semantic_parent') in q['wish_ids']]
+                if answers and all(c['scope'] == 'query' for c in answers):
+                    # A question about the photo is not a withdrawal/rewrite.
+                    return jsonify({'confirmation_handled':False})
+        state['revision'] += 1
+        state = conversation_domain.refresh_state(state)
+        if not store.claim(user, session_id, f'visual:{photo_id}:{body["revision"]}:{q["question_id"]}'):
+            raise _RequestError('需求確認已過時，請重新整理。', 409)
+        photo['preview_conversation'] = state
+        existing = photo['plan'].get('user_prompt') or ''
+        remaining = existing.replace(previous_prompt, state['effective_prompt'], 1).strip('；') if previous_prompt and previous_prompt in existing else '；'.join(dict.fromkeys(x for x in (existing, state['effective_prompt']) if x))
+        photo['plan'] = {**photo['plan'], 'user_prompt':remaining[:USER_PROMPT_MAX_LEN]}
+        store.save_photo_plan(user, session_id, photo_id, photo['plan'])
+        _refresh_visual_question(photo)
+        store.save_photo_state(user, session_id, photo)
+        store.append_messages(user, session_id, [store.make_message('user', text, card={'type':'ask','photo_id':photo_id}),
+            store.make_message('assistant', card={'type':'llm_reply','photo_id':photo_id,
+                'text':'已取消這筆需求，其他需求保留。' if cancel else state['question']['text'] if state.get('question') and conversation_domain.pending(state) else '收到，我會重新確認修改目標。'})])
+        if retry or (not cancel and not conversation_domain.pending(state)):
+            _start_analysis(user, session_id, photo, 'check')
+        return jsonify({'conversation':photo['preview_conversation']})
     indices = _subject_indices(body)
     selection = body.get('target_selection', 'listed')
     outside = selection == 'outside_preview'
@@ -1670,7 +1883,13 @@ def confirm_photo_conversation(session_id, photo_id):
     if q.get('kind') == 'edit_scope' and body.get('edit_scope') == 'cancel':
         state['reply'] = '已取消這項髮絲整理需求。'
     photo['preview_conversation'] = state
+    _refresh_visual_question(photo)
     existing_prompt = photo['plan'].get('user_prompt') or ''
+    deferred_texts = photo.get('deferred_request_texts') or {}
+    replaced_texts = {deferred_texts[wid] for wid in q['wish_ids'] if wid in deferred_texts}
+    if replaced_texts:
+        existing_prompt = '；'.join(part for part in existing_prompt.split('；') if part not in replaced_texts)
+        photo['deferred_request_texts'] = {wid:text for wid,text in deferred_texts.items() if wid not in q['wish_ids']}
     if previous_prompt and previous_prompt in existing_prompt:
         merged_prompt = existing_prompt.replace(previous_prompt, state['effective_prompt'], 1).strip('；')
     else:
@@ -1693,8 +1912,7 @@ def _ask_render(user, session_id, photo):
     as the render route would. Returns the messages that follow the reply."""
     problem = _conversation_render_problem(photo)
     if problem:
-        return [store.make_message('assistant', card={'type': 'render_failed',
-            'photo_id': photo['photo_id'], 'reason': problem[0], 'error': problem[1]})]
+        return [_confirmation_notice(photo, problem)]
     if photo["status"] == "ready" and _needs_analysis(photo):
         _start_analysis(user, session_id, photo, "render")
     if photo["status"] in ("analyzing", "reframing") and not photo["queued_render"]:
@@ -2265,6 +2483,7 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
     messages = [store.make_message("assistant", card={
         "type": "analysis_ready", "photo_id": photo["photo_id"], **({"skipped": True} if skipped else {})})]
     if analysis is not None and not skipped:
+        _adopt_request_checks(photo, analysis)
         state = photo.get('preview_conversation')
         if state and not state.get('people'):
             refs = analysis.get('_local_face_boxes') or []
@@ -2272,9 +2491,16 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
                 'identity_source': 'formal_analysis', 'subject_index': i, 'label': subject.get('label') or f'人物 {i+1}',
                 'box': refs[i].get('box', {'x': 0, 'y': 0, 'w': 1, 'h': 1}) if i < len(refs) else {'x': 0, 'y': 0, 'w': 1, 'h': 1}}
                 for i, subject in enumerate(analysis.get('subjects') or []) if subject.get('is_person', True)]
-            state['question'] = conversation_domain.question(state, state['people'])
             photo['preview_conversation'] = state
-        if state and state.get('question'):
+            _refresh_visual_question(photo)
+        if state:
+            snapshot = _render_without_guessed_targets(photo)
+            if snapshot is not photo:
+                photo['plan']['user_prompt'] = snapshot['plan']['user_prompt']
+                photo['deferred_request_texts'] = {c['wish_id']:c['text']
+                    for c in conversation_domain.pending(state)}
+                store.save_photo_plan(user, session_id, photo['photo_id'], photo['plan'])
+        if state and state.get('question') and not (queued and queued.get('defer_unconfirmed')):
             messages.append(store.make_message('assistant', card={'type': 'llm_reply',
                 'photo_id': photo['photo_id'], 'text': state['question']['text'],
                 'target_question': copy.deepcopy(state['question']), 'question_revision': state['revision']}))
@@ -2330,6 +2556,7 @@ def _advance_reanalysis(user, session_id, photo, job):
         return [store.make_message("assistant", card={
             "type": "analysis_failed", "photo_id": photo_id, "error": photo["error"],
             "error_code": job.get("error_code"), "queued_render_cancelled": bool(queued), "reanalysis": True})]
+    _adopt_request_checks(photo, analysis)
     photo["analysis_skipped"] = False
     photo["planned_ratio"] = _planned_for(analysis)
     photo["error"] = None
@@ -2394,7 +2621,11 @@ def _advance_rendering(user, session_id, photo, statuses):
     store.save_photo_state(user, session_id, photo)
     # A 長寬比 changed while rendering is re-planned now.
     _reframe_if_needed(user, session_id, photo)
-    return [store.make_message("assistant", card=card)]
+    messages = [store.make_message("assistant", card=card)]
+    state = photo.get('preview_conversation')
+    if pending.get('deferred_confirmation') and state and state.get('question'):
+        messages.append(_confirmation_notice(photo, ('unresolved_people', state['question']['text'], 409)))
+    return messages
 
 
 @chat_bp.get("/sessions/<session_id>/status")

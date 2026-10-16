@@ -168,18 +168,31 @@ def display(clause, labels):
     if clause.get('referent') and clause['referent'] in target:
         target = clause['referent']
     if clause.get('semantic_answer'):
-        if value['target_kind'] == 'object':
-            object_target = value['target']
-            referent = clause.get('referent')
-            subject = object_target.replace(referent, who, 1) if referent and referent in object_target and who else (who + '：' if who else '') + object_target
-            return subject + '，' + action + ('（' + '，'.join(value['constraints']) + '）' if value['constraints'] else '')
+        # Person labels and edited parts occupy different roles. Never replace
+        # an object/part referent (e.g. 眼睛) with the selected owner's name.
+        part = value['part'] or (value['target'] if value['target_kind'] == 'object' else '')
         if value['feature'] == 'eyes' and value['value'] in ('open', 'closed'):
             action = '張開眼睛' if value['value'] == 'open' else '閉上眼睛'
-        return (who or target) + '：' + action + ('（' + '，'.join(value['constraints']) + '）' if value['constraints'] else '')
+        elif value['target_kind'] == 'object':
+            action = value['target'] + '，' + action
+        elif part and part not in action:
+            action = part + '：' + action
+        return (who + '：' if who else '') + action + ('（' + '，'.join(value['constraints']) + '）' if value['constraints'] else '')
     if not ids:
         return source
-    if value['target_kind'] == 'object' and not clause.get('referent'):
-        # An implicit owner must not replace the object (and lose "ring").
+    if value['target_kind'] == 'object':
+        # Selecting a wearer/owner does not turn the object into an identity
+        # span. A saved referent can itself be "眼鏡"; replacing it would
+        # delete WHAT to edit. Replace a separate owner span only when it
+        # has validated identity evidence; otherwise preserve the source.
+        ref = clause.get('referent')
+        owner_evidence = any(e.get('text') and e['text'] in ref and
+            set(e.get('candidate_ids', [])) & set(ids)
+            for e in clause.get('identity_evidence', [])) if ref else False
+        if ref and ref != value['target'] and ref in value['target'] and owner_evidence:
+            return source.replace(ref, who, 1)
+        if who in source:
+            return source
         return who + '：' + source
     # Whole-source replacement preserves verb-first requests and limits. If a
     # target is implicit (an explicit avatar pick), prefix its current label.

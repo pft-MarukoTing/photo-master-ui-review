@@ -138,6 +138,19 @@ def _validate_params(params: dict) -> dict:
     except ValueError as exc:
         raise RuntimeError(str(exc), RESULT_INVALID_PARAMETER) from exc
 
+    if normalized.get('analysis_user_requests') is not None:
+        from .chat_analysis import validate
+        try:
+            if normalized.get('stage') != 'analyze':
+                raise ValueError('analysis_requests_require_analyze_stage')
+            context = normalized.get('precomputed_preview')
+            normalized['analysis_user_requests'] = validate(normalized['analysis_user_requests'],
+                known_ids=[p['preview_person_id'] for p in context['preview_people']] if context else None,
+                source_sha256=context['binding']['source_sha256'] if context else None,
+                analysis_model=normalized.get('analysis_model', capabilities.DEFAULT_ANALYSIS_MODEL))
+        except ValueError as exc:
+            raise RuntimeError(str(exc), RESULT_INVALID_PARAMETER) from exc
+
     preset = normalized.get("preset", capabilities.DEFAULT_PRESET)
     if not isinstance(preset, str) or preset not in VALID_PRESETS:
         raise RuntimeError(

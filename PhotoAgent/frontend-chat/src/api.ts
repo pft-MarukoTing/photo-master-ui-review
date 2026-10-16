@@ -57,6 +57,9 @@ function json(method: string, body: Dict): RequestInit {
   };
 }
 
+// Allow the backend Chat wait (45s model + 15s queue allowance) to finish.
+const PREVIEW_CONVERSATION_TIMEOUT_MS = 65000;
+
 const sid = (id: string) => `${CHAT}/sessions/${encodeURIComponent(id)}`;
 
 export const api = {
@@ -71,11 +74,11 @@ export const api = {
     return request(`${CHAT}/previews/${encodeURIComponent(jobId)}${q()}`, { signal: AbortSignal.timeout(10000) });
   },
   previewConversation: (id: string, body: Dict) =>
-    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-reply`, { ...json("POST", body), signal: AbortSignal.timeout(12000) }),
+    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-reply`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   revisePreviewConversation: (id: string, body: Dict) =>
-    request<import("./preview-conversation").PreviewConversationResult & { changed: boolean; revision_mode?: string; affected_request_ids?: string[] }>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-revise`, json("POST", body)),
+    request<import("./preview-conversation").PreviewConversationResult & { changed: boolean; revision_mode?: string; affected_request_ids?: string[] }>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-revise`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   confirmPreviewConversation: (id: string, body: Dict) =>
-    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-confirm`, json("POST", body)),
+    request<import("./preview-conversation").PreviewConversationResult>(`${CHAT}/previews/${encodeURIComponent(id)}/conversation-confirm`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   capabilities: () => request<Capabilities>(`${API}/capabilities`),
   config: () => request<Dict>(`${API}/config`).catch(() => ({} as Dict)),
   decryptUserId: (userId: string) =>
@@ -121,7 +124,8 @@ export const api = {
       accepted: boolean;
       reply: string;
       semantic_pending?: boolean;
-      request_semantics?: { complete: boolean; source: string; target: string; action: string }[];
+      request_semantics?: { complete: boolean; source: string; target: string; action: string;
+        target_kind?: string; owner_required?: boolean; scope?: string; intent?: string }[];
       ask?: boolean;
       offer?: boolean;
       // The offer is to analyze first and answer the line itself afterwards.
@@ -183,7 +187,7 @@ export const api = {
     return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
   },
   confirmPhotoConversation: (id: string, photoId: string, body: Dict) =>
-    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, json("POST", body)),
+    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/conversation-confirm`, { ...json("POST", body), signal: AbortSignal.timeout(PREVIEW_CONVERSATION_TIMEOUT_MS) }),
   analysis: (id: string, photoId: string) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analysis${q()}`),
   // A typed message about one photo; subjectIndices are the faces the user tapped.
@@ -211,7 +215,7 @@ export const api = {
   render: (id: string, photoIds: string[]) =>
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,
-      json("POST", { photo_ids: photoIds, base: "original" }),
+      json("POST", { photo_ids: photoIds, base: "original", defer_unconfirmed: true }),
     ),
   setActiveVersion: (id: string, photoId: string, v: { version_id: string; job_id: string; run: number }) =>
     request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/active-version`, json("PUT", v)),

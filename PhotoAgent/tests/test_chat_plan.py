@@ -125,7 +125,7 @@ class BuildTest(unittest.TestCase):
         self.assertEqual((form["image_model"], form["image_quality"]), ("gpt-image-2.5-sunburst", "high"))
         self.assertEqual(form["run_count"], 1)
         self.assertEqual(form["user_prompt"], "warmer")
-        self.assertNotIn("user_prompt", build_render_form(plan, "analyze"))
+        self.assertEqual(build_render_form(plan, "analyze")["user_prompt"], "warmer")
 
 
 if __name__ == "__main__":

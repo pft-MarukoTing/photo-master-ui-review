@@ -247,6 +247,7 @@ class PhotoAgentJobProcessor:
                         advanced_options=params.get("advanced_options", {}),
                         analysis_model=params["analysis_model"],
                         **({"precomputed_preview": context} if context is not None else {}),
+                        **({"analysis_user_requests": params["analysis_user_requests"]} if params.get("analysis_user_requests") else {}),
                     )
 
                 analysis_path = os.path.join(work_dir, 'analysis.json')

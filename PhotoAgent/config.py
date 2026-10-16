@@ -13,6 +13,9 @@ ENABLE_BODY_RESHAPE = False
 
 # Internal rollout switch; disabling restores the Chat detector/upload path.
 ENABLE_CHAT_SUBJECT_PREVIEW = False
+# Optional extra visual pass for Chat requests. Enable during rollout to
+# clarify absent/uncertain edit targets; no extra call when disabled or empty.
+ENABLE_CHAT_REQUEST_FEASIBILITY = False
 SUBJECT_PREVIEW_TIMEOUT_SECONDS = 8.0
 SUBJECT_PREVIEW_MAX_DETECTIONS = 24
 SUBJECT_PREVIEW_MAX_ADDITIONAL_PEOPLE = 8

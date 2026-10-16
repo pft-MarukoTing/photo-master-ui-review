@@ -263,7 +263,7 @@ def build_render_form(plan, stage):
         "advanced_options": copy.deepcopy(plan["advanced_options"]),
         "run_count": 1,
     }
+    form["user_prompt"] = plan["user_prompt"]
     if stage == "finish":
-        form["user_prompt"] = plan["user_prompt"]
         form["overwrite_prompt"] = plan["overwrite_prompt"]
     return form

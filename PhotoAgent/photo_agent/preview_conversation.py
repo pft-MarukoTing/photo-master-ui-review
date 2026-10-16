@@ -170,7 +170,7 @@ def generate(params):
         raise TimeoutError('preview_conversation_expired')
     context = INSTRUCTION + '\nDATA:\n' + json.dumps({k: params[k] for k in
         ('people', 'wishes', 'history', 'effective_prompt')}, ensure_ascii=False)
-    raw = chat_assistant._call(context, SCHEMA, timeout=min(8, remaining))
+    raw = chat_assistant._call(context, SCHEMA, timeout=min(chat_assistant.TIMEOUT_SECONDS, remaining))
     if raw.get('semantic_version') != request_semantics.VERSION:
         raise ValueError('missing_model_semantics')
     return raw
@@ -205,6 +205,18 @@ def _semantic_resolutions(clauses, raw):
     for old in clauses:
         wid = old['wish_id']
         options = proposed.get(wid, [])
+        saved = request_semantics.read(old)
+        if old['status'] in ('cancelled', 'superseded') or (old['status'] in ('matched','not_person',OUTSIDE_CONFIRMED) and saved and saved['complete']):
+            # Normal follow-up resolution cannot rewrite a committed operation.
+            # Corrections use revise()/confirm(), with their own authority.
+            ids = old.get('target_ids') or old.get('protected_ids') or []
+            if options and (len(options) != 1 or options[0]['target_ids'] != ids):
+                raise ValueError('semantic_changed_confirmed_identity')
+            expanded.append(copy.deepcopy(old))
+            ids = old.get('target_ids') or old.get('protected_ids') or []
+            mappings.append(dict(wish_id=wid, status='matched' if ids else 'not_person',
+                referent=old.get('referent',''), target_ids=ids, candidate_ids=[]))
+            continue
         if not options:
             # Already immutable states can be echoed locally. An unparsed
             # source must never be silently omitted.
@@ -298,7 +310,7 @@ def resolve(clauses, people, raw):
     # bindings can be echoed locally; unresolved requests still must appear.
     supplied = {p.get('wish_id') for p in proposals if isinstance(p,dict)}
     for c in clauses:
-        if c['wish_id'] not in supplied and c['status'] in ('matched','cancelled','superseded', OUTSIDE_CONFIRMED):
+        if c['wish_id'] not in supplied and (c['status'] in ('matched','cancelled','superseded', OUTSIDE_CONFIRMED) or (c['status'] == 'not_person' and request_semantics.read(c))):
             ids = c.get('target_ids') or c.get('protected_ids') or []
             proposals = proposals + [{'wish_id':c['wish_id'],'status':'matched' if ids else 'not_person',
                                      'referent':c.get('referent',''),'target_ids':ids,'candidate_ids':[]}]
@@ -315,7 +327,7 @@ def resolve(clauses, people, raw):
             raise ValueError('unknown_or_repeated_wish')
         seen.add(wid)
         c = copy.deepcopy(by_id[wid])
-        locked = c['status'] in ('matched', 'cancelled', 'superseded', OUTSIDE_CONFIRMED) or c.get('awaiting_confirmation', False)
+        locked = c['status'] in ('matched', 'cancelled', 'superseded', OUTSIDE_CONFIRMED) or (c['status'] == 'not_person' and bool(request_semantics.read(c))) or c.get('awaiting_confirmation', False)
         status, ref = proposal['status'], proposal['referent']
         identity_text = request_semantics.read(c)['target'] if request_semantics.read(c) else c.get('reference_text', c['text'])
         identity_clause = {**c, 'text': identity_text, 'reference_text': identity_text}
@@ -668,6 +680,8 @@ def acknowledged_reply(clauses, people):
 def fallback(clauses, people):
     result = copy.deepcopy(clauses)
     for c in result:
+        if c['status'] in ('cancelled', 'superseded'):
+            continue
         if c.get('semantic_required') and not request_semantics.read(c):
             c['status'] = 'pending'
             continue
@@ -860,11 +874,14 @@ must NOT cancel a hair wish. Keeping the girl's hair unchanged can cancel her ha
 If the original requested operation differs from the new one, return no_change; normal review handles new wishes.
 For 'not the girl, the boy' identify the single active operation/question. If several wishes fit and the scope
 is not explicit, return ambiguous and list candidate wish_ids; do not change all of them.
+For cancel, wish_ids identify the old clauses. Leave target_ids empty for a whole-clause withdrawal.
+Only include target_ids for an explicit person subset already bound to those wishes; never supply new people.
+Pending wishes can be withdrawn by their original wish_id even without a parsed feature.
 Use valid target_ids only; use ambiguity if several people fit. Bare agreement isn't a correction.
 No new plans/actions or visual assessments. Reply in Traditional Chinese, briefly describe only the correction.
 '''
     context = instruction + request_semantics.INSTRUCTION + '\nFor revision use semantic for the NEW correction text, plus identity_groups for a new target. Keep existing actions on rebind; cancellation must name the same property as the selected old wish. no_change can use incomplete semantics. Return the revision schema, not resolutions.\nDATA:\n' + json.dumps({k: params[k] for k in ('people', 'wishes', 'text')}, ensure_ascii=False)
-    return chat_assistant._call(context, REVISION_SCHEMA, timeout=min(8, remaining))
+    return chat_assistant._call(context, REVISION_SCHEMA, timeout=min(chat_assistant.TIMEOUT_SECONDS, remaining))
 
 
 def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
@@ -916,8 +933,31 @@ def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
     if semantic_revision:
         if selected and any(not set(clauses[i].get('target_ids') or clauses[i].get('protected_ids') or []) & set(selected) for i in ids):
             return wish_lifecycle.clarify(state, people, text, [clauses[i] for i in ids])
-        if mode == 'cancel' and (value['intent'] != 'cancel' or any((person_request.semantics(clauses[i]).get('operation') or {}).get('feature') != value['feature'] for i in ids)):
-            return None
+        if mode == 'cancel':
+            if value['intent'] != 'cancel':
+                return None
+            # A timed-out wish has no parsed feature to compare. Its validated
+            # existing ID is the authority; ambiguous pending sets need a pick.
+            unresolved = [clauses[i] for i in ids if not request_semantics.read(clauses[i])]
+            anchors = [a for a in (value['target'], value['part']) if a]
+            if unresolved and not confirmed_wish and (len(ids) > 1 or not anchors or
+                    any(not any(a in c['text'] for a in anchors) for c in unresolved)):
+                return wish_lifecycle.clarify(state, people, text, [clauses[i] for i in ids])
+            if any(request_semantics.read(clauses[i]) and
+                   (person_request.semantics(clauses[i]).get('operation') or {}).get('feature') != value['feature'] for i in ids):
+                return None
+    if mode == 'cancel' and targets:
+        # Accept a redundant single-person scope, or an explicit user-picked
+        # subset. Model-only multi-person subsets must be clarified.
+        bound_sets = [set(clauses[i].get('target_ids') or clauses[i].get('protected_ids') or []) for i in ids]
+        if any(not set(targets) <= bound for bound in bound_sets):
+            return wish_lifecycle.clarify(state, people, text, [clauses[i] for i in ids])
+        if not selected and any(len(bound) > 1 for bound in bound_sets):
+            return wish_lifecycle.clarify(state, people, text, [clauses[i] for i in ids])
+        if selected and set(targets) != set(selected):
+            return wish_lifecycle.clarify(state, people, text, [clauses[i] for i in ids])
+        selected = targets
+        targets = []
     target_conflict = False
     if mode == 'rebind' and semantic_revision:
         status, candidates, _ = request_semantics.check_identity(value, raw['identity_groups'], list(known), targets)
@@ -953,7 +993,7 @@ def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
             target_key = 'target_ids' if c.get('target_ids') else 'protected_ids'
             targets_to_cancel = [i for i in before.get(target_key,[]) if not selected or i in selected]
             remaining = [i for i in before.get(target_key,[]) if i not in targets_to_cancel]
-            c['cancelled_from'] = {'target_ids':targets_to_cancel, 'text':executable({'clauses':[{**before,target_key:targets_to_cancel}]},people)}
+            c['cancelled_from'] = {'target_ids':targets_to_cancel, 'text':executable({'clauses':[{**before,target_key:targets_to_cancel}]},people) or before['text']}
             if remaining:
                 c.update(status='matched', **{target_key:remaining})
                 c.pop('display_text',None)
@@ -969,7 +1009,7 @@ def revise(state, people, text, raw, selected=(), *, confirmed_wish=False):
             c.update(status='ambiguous', target_ids=[], protected_ids=[])
     updated['reply'] = raw['reply']
     if mode == 'cancel':
-        changes = [{'mode':'cancel', 'text':executable({'clauses':[{**clauses[i], **({'target_ids':[p for p in clauses[i]['target_ids'] if p in selected]} if selected and clauses[i].get('target_ids') else {})}]}, people)} for i in ids]
+        changes = [{'mode':'cancel', 'text':executable({'clauses':[{**clauses[i], **({'target_ids':[p for p in clauses[i]['target_ids'] if p in selected]} if selected and clauses[i].get('target_ids') else {})}]}, people) or clauses[i]['text']} for i in ids]
         updated['reply'] = wish_lifecycle.change_reply(changes, executable(updated, people))
     updated['revision_mode'] = mode
     updated['affected_request_ids'] = list(dict.fromkeys(clauses[i]['request_id'] for i in ids))
@@ -998,7 +1038,7 @@ The selected IDs are fixed by the server; do not change identity or add edits.
 ''' + json.dumps({k: params[k] for k in ('clause', 'selected_people')}, ensure_ascii=False)
     schema = {'type': 'json_schema', 'name': 'confirmed_target_action', 'strict': True,
               'schema': request_semantics.SCHEMA}
-    return chat_assistant._call(context, schema, timeout=min(8, remaining))
+    return chat_assistant._call(context, schema, timeout=min(chat_assistant.TIMEOUT_SECONDS, remaining))
 
 
 def generate_action_answer(params):
@@ -1015,7 +1055,7 @@ feature/part/value to express that meaning, but action stays an exact substring
 of the new answer. A still incomplete answer stays complete=false; do not
 borrow a verb from previous history. No new people or edits.
 """ + json.dumps({k: params[k] for k in ('clause', 'text', 'combined_source')}, ensure_ascii=False)
-    return chat_assistant._call(context, request_semantics.ACTION_SCHEMA, timeout=min(8, remaining))
+    return chat_assistant._call(context, request_semantics.ACTION_SCHEMA, timeout=min(chat_assistant.TIMEOUT_SECONDS, remaining))
 
 
 def generate_confirmation(params):
@@ -1024,7 +1064,7 @@ def generate_confirmation(params):
         raise TimeoutError('preview_conversation_expired')
     instruction = INSTRUCTION + '\nThis is a reply to a specific target question. Set confirmation_intent=answer only when the user is clarifying THAT wish target. A new operation, unrelated request or inquiry is new_message: do not change the old wish. A vague yes leaves the target ambiguous.\n'
     context = instruction + json.dumps({k: params[k] for k in ('people', 'wishes', 'history', 'effective_prompt')}, ensure_ascii=False)
-    return chat_assistant._call(context, CONFIRMATION_SCHEMA, timeout=min(8, remaining))
+    return chat_assistant._call(context, CONFIRMATION_SCHEMA, timeout=min(chat_assistant.TIMEOUT_SECONDS, remaining))
 
 
 def confirm_revision_choice(state, people, wish_id, text):
