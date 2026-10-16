@@ -78,14 +78,6 @@ How this tool works. These are the only facts you may state about the tool; if a
 """
 
 
-# The line the page asks with after the user saves 個人化需求 by hand. It is the
-# model's cue only, never logged as something the user said; the PANEL CHECK
-# REQUEST below quotes it, so change both together.
-PANEL_CHECK_ASK = "我改了個人化需求，幫我確認一下內容。"
-# 內容不用整理時就這一句：使用者剛親手存的，不必再念回來給他聽。
-PANEL_CHECK_OK = "好，個人化需求更新好了。"
-# 個人化需求是自動存的，對話裡沒有留下改了什麼；短的話把現在的內容念一次。
-PANEL_CHECK_OK_SAID = "好，個人化需求更新為：{}。"
 
 INSTRUCTION = """You are the assistant in a photo retouching chat. The user is looking at one photo, its AI analysis, and the edit plan the next render (美化) will use. Reply to the user's latest message.
 
@@ -187,9 +179,6 @@ Latest user message: 「[pointing at 左側男性] 帽子留著好了」
 Correct patch_json: {"user_prompt":"左側男性的外套換成藍色；背景換成海邊"}
 Correct reply: 「好，左側男性的帽子就不拿掉了。」
 Wrong patch_json: {"user_prompt":"左側男性的外套換成藍色、帽子留著；背景換成海邊"}
-
-PANEL CHECK REQUEST
-「我改了個人化需求，幫我確認一下內容。」 is sent after the user edits that text by hand. Read PLAN.user_prompt as it now stands. Apply BUILD user_prompt FROM SCRATCH: one entry per person; where two wishes cannot both be true, the later wish wins. Propose the normalized full text and briefly say what was merged. If it is already normalized, say so and leave patch_json ""; end on that, without pointing at any button -- the page adds the next step itself.
 """
 
 def _dump(value):
@@ -812,11 +801,10 @@ def _dropped_wishes(before, after, analysis):
             if not any(h == head and (wish in w or w in wish) for h, w in _wish_items(after, analysis))]
 
 
-def _only_drops_wishes(patch, plan, history, analysis):
+def _only_drops_wishes(patch, plan, analysis):
     """True when a line the user typed only takes wishes out of 個人化需求:
-    nothing added, nothing else changed. The panel's own check is not one --
-    there the AI tidies text the user wrote, and what it drops waits for 套用."""
-    if set(patch) != {"user_prompt"} or (history and history[-1].get("text") == PANEL_CHECK_ASK):
+    nothing added, nothing else changed."""
+    if set(patch) != {"user_prompt"}:
         return False
     before, after = plan.get("user_prompt"), patch["user_prompt"]
     return (bool(before) and not _new_wishes(before, after, analysis)
@@ -861,9 +849,9 @@ def _applied_reply(changes, screen, wishes=()):
 
 
 def _judged_reply(reply, screen, prompt_only):
-    """What to say for a change the AI made up itself (its own pick, or the
-    panel's text tidied), applied without asking: the model's reason stays,
-    its 「確認後套用」 becomes that it is already done."""
+    """What to say for a change the AI made up itself (its own pick), applied
+    without asking: the model's reason stays, its 「確認後套用」 becomes that it
+    is already done."""
     reason = re.sub(r"[，,]?\s*確認後(再)?套用[。！!]?", "", reply).strip()
     reason = reason + ("" if not reason or reason[-1] in "。！!？?" else "。")
     # 只動個人化需求的卡可以直接在卡上改，沒有「修改」鍵。
@@ -927,14 +915,14 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
         reply = ALREADY_SET_REPLY if patch else UNMAPPED_REPLY
     # Every change goes in as it stands: whatever it touched can be changed
     # back from 「修改」 or the topic buttons, so the card never waits for 套用.
-    # What the AI chose for the user (「什麼顏色好？」) or tidied for them keeps
-    # the model's reason in the reply.
-    judged = result.get("your_pick") is True or bool(history and history[-1].get("text") == PANEL_CHECK_ASK)
+    # What the AI chose for the user (「什麼顏色好？」) keeps the model's reason in
+    # the reply.
+    judged = result.get("your_pick") is True
     if proposal:
         proposal.update(direct=True, undo=_undo_patch(patch, plan))
         if judged and reply:
             reply = _judged_reply(reply, screen, set(patch) == {"user_prompt"})
-        elif _only_drops_wishes(patch, plan, history, analysis or {}):
+        elif _only_drops_wishes(patch, plan, analysis or {}):
             reply = _dropped_reply(_dropped_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}), screen)
         else:
             added = _new_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}) if "user_prompt" in patch else []
@@ -945,13 +933,6 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     close = result.get("action") == "close" and not wanted
     options = [] if close else options
     lines = bool(options) and result.get("lines") is True
-    # 手動存完個人化需求、內容也不用整理時，模型會把需求念一遍再說沒有衝突，
-    # 冗又停在那裡；改成一句短的，接著指向下一步，跟直接套用的回覆講同一句。
-    checked = history and history[-1].get("text") == PANEL_CHECK_ASK
-    if checked and not (proposal or render or close or options):
-        now = str(plan.get("user_prompt") or "").strip().rstrip("。")
-        said = PANEL_CHECK_OK_SAID.format(now) if now and len(now) <= APPLIED_WISH_MAX_LEN else PANEL_CHECK_OK
-        reply = said + _next_step(screen)
     # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
     # 在問問題、開始美化或收尾的那則不插嘴。
     if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and ANALYZE_BUTTON not in reply \
