@@ -603,6 +603,49 @@ def _conversation_snapshot(user, preview_id, body):
     return binding, resolved[0]['preview_people']
 
 
+_PREVIEW_SOURCE_ERRORS = frozenset(('semantic_source_not_grounded', 'semantic_target_not_grounded',
+    'semantic_span_not_grounded', 'semantic_identity_outside_target', 'semantic_group_outside_target'))
+
+
+def _resolve_preview_wishes(user, binding, head, clauses, people, history, prompt):
+    """One source-only recovery within the existing request's total wait budget."""
+    started = time.monotonic()
+    end = started + chat_queue.WAIT_SECONDS
+    for attempt in range(2):
+        # A new user turn invalidates the old retry before another model call.
+        conversation_store.assert_current(user, binding, head)
+        remaining = chat_queue.WAIT_SECONDS if attempt == 0 else end - time.monotonic()
+        if remaining <= 0:
+            current_app.logger.warning('Preview conversation budget exhausted preview=%s revision=%s elapsed=%.3fs',
+                binding['preview_job_id'], (head or {}).get('revision'), time.monotonic() - started)
+            break
+        try:
+            raw = chat_queue.run({'stage': conversation_domain.STAGE,
+                'people': conversation_domain.roster_text(people), 'wishes': clauses,
+                'history': history if attempt == 0 else [], 'effective_prompt': prompt,
+                'deadline': time.time() + remaining}, wait_seconds=remaining)
+        except Exception as exc:
+            current_app.logger.warning('Preview conversation call failed preview=%s task_id=%s attempt=%s category=call error_type=%s elapsed=%.3fs',
+                binding['preview_job_id'], chat_queue.current_task_id(), attempt + 1,
+                type(exc).__name__, time.monotonic() - started)
+            break
+        try:
+            state = conversation_domain.resolve(clauses, people, raw)
+        except Exception as exc:
+            source_error = isinstance(exc, ValueError) and str(exc) in _PREVIEW_SOURCE_ERRORS
+            current_app.logger.warning('Preview conversation validation failed preview=%s task_id=%s attempt=%s category=%s reason=%s elapsed=%.3fs',
+                binding['preview_job_id'], chat_queue.current_task_id(), attempt + 1,
+                'source_validation' if source_error else 'validation',
+                str(exc) if isinstance(exc, ValueError) else type(exc).__name__, time.monotonic() - started)
+            if source_error and attempt == 0:
+                continue
+            break
+        current_app.logger.info('Preview conversation accepted preview=%s task_id=%s attempt=%s elapsed=%.3fs',
+            binding['preview_job_id'], chat_queue.current_task_id(), attempt + 1, time.monotonic() - started)
+        return state
+    return {**conversation_domain.fallback(clauses, people), 'semantic_parse_failed': True}
+
+
 @chat_bp.post('/previews/<preview_id>/conversation-reply')
 def preview_conversation_reply(preview_id):
     body = _body()
@@ -629,14 +672,7 @@ def preview_conversation_reply(preview_id):
         if not people and not clauses:
             state = {'reply': '', 'clauses': []}
         else:
-            try:
-                raw = chat_queue.run({'stage': conversation_domain.STAGE,
-                    'people': conversation_domain.roster_text(people), 'wishes': clauses,
-                    'history': history, 'effective_prompt': prompt, 'deadline': time.time() + chat_queue.WAIT_SECONDS}, wait_seconds=chat_queue.WAIT_SECONDS)
-                state = conversation_domain.resolve(clauses, people, raw)
-            except Exception:
-                current_app.logger.warning('Preview conversation unavailable job=%s', preview_id)
-                state = conversation_domain.fallback(clauses, people)
+            state = _resolve_preview_wishes(user, binding, head, clauses, people, history, prompt)
         if head:
             state['head'] = head
         if previous:

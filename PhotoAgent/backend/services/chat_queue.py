@@ -8,7 +8,9 @@ page -- see the same synchronous answer they always did.
 """
 
 import json
+import logging
 import time
+from contextvars import ContextVar
 
 from aiserver_utils.queue import get_job_info
 from backend.services.put_job import MSG_DETAIL_QUEUE, enqueue, get_redis_conn
@@ -23,6 +25,12 @@ POLL_SECONDS = 0.2
 # Nothing reads a chat job once its answer is in: the info hash goes away on
 # its own.
 JOB_TTL_SECONDS = 24 * 3600
+_current_task_id = ContextVar('chat_queue_task_id', default=None)
+logger = logging.getLogger(__name__)
+
+
+def current_task_id():
+    return _current_task_id.get()
 
 
 class ChatJobError(RuntimeError):
@@ -32,12 +40,18 @@ class ChatJobError(RuntimeError):
 def run(params, *, wait_seconds=None):
     """The answer to one chat job (photo_agent.chat_jobs.run's), or raises
     ChatJobError."""
-    deadline = None if wait_seconds is None else time.monotonic() + wait_seconds
+    _current_task_id.set(None)
+    started = time.monotonic()
+    deadline = None if wait_seconds is None else started + wait_seconds
     engine_params = get_engine_params_template()
     engine_params["srcKeys"] = []
     engine_params["dstKeys"] = []
     engine_params["acts"][0]["params"] = params
     job_id = enqueue(engine_params, queue=CHAT_QUEUE)
+    _current_task_id.set(job_id)
+    preview = params.get('stage') == 'chat_preview_conversation'
+    if preview:
+        logger.info('Preview conversation queued task_id=%s', job_id)
     redis = get_redis_conn()
     redis.expire(MSG_DETAIL_QUEUE.replace("{msg_id}", job_id), JOB_TTL_SECONDS)
 
@@ -53,6 +67,8 @@ def run(params, *, wait_seconds=None):
             result = info.get("0_res0")
             if isinstance(result, str):
                 result = json.loads(result)
+            if preview:
+                logger.info('Preview conversation result received task_id=%s elapsed=%.3fs', job_id, time.monotonic() - started)
             return (result or {}).get("answer")
         if status == "error":
             raise ChatJobError(f"chat job {job_id} failed: {info.get('error')}")

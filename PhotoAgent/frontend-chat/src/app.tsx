@@ -43,6 +43,7 @@ import { facePeople, seedDetectedFaces, useBoxThumbs, useDetectedFaces, useFaceT
 import { useSubjectPreview } from "./subject-preview";
 import { usePreviewConversation } from "./preview-conversation";
 import { routeReviewQuestion } from "./review-question-owner";
+import { appendNotesHistory, sectionsIdentity, type HistoricalSection } from "./personalized-history";
 import type { PreviewClause, PreviewReplyEvent, PreviewWish, PreviewConversationResult, TargetQuestionSnapshot } from "./preview-conversation";
 import { submissionPreviewEvents } from "./preview-conversation";
 import { Icon } from "./icons";
@@ -370,6 +371,7 @@ function reviewHistory(ns: Note[], events: PreviewReplyEvent[] = []): ReviewTurn
   const noteFor = new Map<ReviewTurn, Note>();
   for (const t of conversation(ns, events)) {
     if ("previewReply" in t) {
+      if (t.previewReply.kind === "notes") continue; // Display history is not another instruction.
       groups.push(t.previewReply.kind === "settings"
         ? [{ role: "user", text: "設定" }, { role: "assistant", text: t.previewReply.text }]
         : [{ role: t.previewReply.role || "assistant", text: t.previewReply.text }]);
@@ -420,6 +422,11 @@ function carriedLog(ns: Note[], photoId: string, later: Note | null, events: Pre
     out.push({ role: "assistant", card: { type: "llm_reply", photo_id: photoId, pre: true, text: carriedReply(text) } });
   for (const t of conversation(ns, events)) {
     if ("previewReply" in t) {
+      if (t.previewReply.kind === "notes") {
+        out.push({ role: "assistant", card: { type: "personalized_snapshot", photo_id: photoId,
+          pre: true, snapshot_id: t.previewReply.id, sections: t.previewReply.sections || [] } });
+        continue;
+      }
       if (t.previewReply.kind === "settings") out.push({ role: "user", text: "設定", card: { type: "ask", pre: true, photo_id: photoId } });
       if (t.previewReply.role === "user") out.push({ role: "user", text: t.previewReply.text, card: { type: "ask", pre: true, photo_id: photoId } });
       else reply(t.previewReply.text);
@@ -436,7 +443,7 @@ function carriedLog(ns: Note[], photoId: string, later: Note | null, events: Pre
     if (t.part !== "reply") out.push({ role: "user", text: n.text, card });
     if (t.part !== "user" && n.reply) reply(n.reply);
   }
-  return out.slice(-100);
+  return out;
 }
 
 // AI 問了還沒人回的那一句：只有對話的最後一輪是它的提問才算——中間拿掉過需求
@@ -547,6 +554,7 @@ export function App() {
   // Pre-session chat
   const [step, setStep] = useState<PreStep>("start");
   const [settingsEvents, setSettingsEvents] = useState<PreviewReplyEvent[]>([]);
+  const [notesHistory, setNotesHistory] = useState<PreviewReplyEvent[]>([]);
   const lastSettingsClick = useRef(-1);
   const [via, setVia] = useState<"upload" | "sample" | null>(null);
   const [source, setSource] = useState<Source | null>(null);
@@ -702,6 +710,12 @@ export function App() {
     });
 
   const preSections = promptSections(notes, segEdits);
+  const historySections = preSections.map(s => ({ key: s.key, line: sectionLine(s), text: s.text, persons: s.persons }));
+  const historySectionsKey = sectionsIdentity(historySections);
+  useEffect(() => {
+    if (phase !== "chat" || !source || preAsk) return;
+    setNotesHistory(events => appendNotesHistory(events, historySections, nextDisplayOrder(), conversation(notes).length));
+  }, [historySectionsKey, !!preAsk, phase]);
   // 改過的段整段送一次（在那段第一句的位置）；一句有一部分落在改過的段，就只送
   // 其他人的那部分，不然改掉的內容又會從原句跑回來。
   const editedSent = new Set<string>();
@@ -972,6 +986,7 @@ export function App() {
   function resetPre() {
     setStep("start");
     setSettingsEvents([]);
+    setNotesHistory([]);
     lastSettingsClick.current = -1;
     setVia(null);
     setSource(null);
@@ -1059,6 +1074,7 @@ export function App() {
 
   function choose(s: Source) {
     setSettingsEvents([]);
+    setNotesHistory([]);
     lastSettingsClick.current = -1;
     setSourceGeneration(n => n + 1);
     ++lastPick.current; // a demo pick also supersedes an in-flight HEIC decode
@@ -1289,7 +1305,6 @@ export function App() {
     typed = true,
   ): Promise<Note[] | null> {
     let actionTried = false;
-    let revisionUncommitted = false;
     // A short correction such as 改成張開 answers the active action question;
     // it must not revise another completed wish and leave this one unresolved.
     if ((bridgeQuestion?.kind === "action" || bridgeQuestion?.kind === "edit_description") && base === notes && !/取消|撤回|不做了|不用了|不要了/.test(text)) {
@@ -1311,9 +1326,7 @@ export function App() {
           if (typed) setPreClear(n => n + 1);
           return base;
         }
-        revisionUncommitted = true;
       } catch {
-        revisionUncommitted = true;
         // 這一步只是在判斷「是不是在改之前那句指定的人」。判斷不出來就當成新的
         // 一句，照一般流程檢查，不把後端的錯誤代碼丟給使用者。
       } finally { setPreAsk(null); }
@@ -1362,7 +1375,7 @@ export function App() {
       const settled: Note = {
         ...note,
         replyOrder: nextDisplayOrder(),
-        reply: revisionUncommitted ? "這筆變更還沒有完成確認，原需求先保留；你可以重新確認或清除需求。" : r.reply || (r.accepted ? "好，這些會當成個人化需求，美化時一起套用。" : "好，那就先不加個人化需求。"),
+        reply: r.reply || (r.accepted ? "好，這些會當成個人化需求，美化時一起套用。" : "好，那就先不加個人化需求。"),
         replyPeople: prePickable.map(p => ({ ...p })),
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
@@ -1445,7 +1458,8 @@ export function App() {
     submissionLock.current = true;
     const selectedSource = selectionIdentity;
     const submittedEvents = [...submissionPreviewEvents(bridge.events,
-      mode === "render" && overwrite === true && !prePeopleReady, previewPresentationKey), ...settingsEvents];
+      mode === "render" && overwrite === true && !prePeopleReady, previewPresentationKey), ...settingsEvents,
+      ...appendNotesHistory(notesHistory, historySections, nextDisplayOrder(), conversation(log).length)];
     // Call before leaving preview: this promise contains an already-frozen,
     // nonblocking decision and cannot adopt a result arriving during upload.
     const previewDecision = previewEnabled ? preview.forSubmission() : Promise.resolve(undefined);
@@ -1504,7 +1518,9 @@ export function App() {
       // 的 AI 就回答它，使用者不用再問一次。要在切到 session 頁之前搬好：頁面以
       // 打開時最新的那則為界，之後進來的才打字，搬晚了舊對話會被當成新回覆重打一次。
       const carried = carriedLog(submissionLog, added.photo_id, later, submittedEvents);
-      if (carried.length) await api.postMessages(id, carried);
+      for (let at = 0; at < carried.length; at += 100) {
+        await api.postMessages(id, carried.slice(at, at + 100));
+      }
       if (sourceIdentity.current !== selectedSource) return;
       const uploadedSession = await api.getSession(id);
       if (sourceIdentity.current !== selectedSource) return;
@@ -2127,7 +2143,7 @@ export function App() {
                     }
                   >
                     <PreChat
-                      previewEvents={[...bridge.events, ...settingsEvents]}
+                      previewEvents={[...bridge.events, ...settingsEvents, ...notesHistory]}
                       activeTargetQuestion={bridge.result?.question && bridge.events.some(e => e.questionSnapshot?.token === bridge.result?.token) ? { ...bridge.result.question, token: bridge.result.token, revision: bridge.result.revision } : null}
                       selectedTargetIds={preRefs(confirmationPointed).flatMap(p => p.preview_person_id ? [p.preview_person_id] : [])}
                       onTargetPoint={id => {
@@ -2535,6 +2551,15 @@ function withFaces(text: string, faces: PrePerson[]) {
 // 頭像的字算沒指定對象。整段刪光的對象就是拿掉。
 type NoteSection = { key: string; line: string; text: string; persons: PrePerson[] };
 
+function NotesSnapshot(props: { sections: HistoricalSection[] }) {
+  return <div class="chat-card chat-notes" data-notes-snapshot>
+    <span class="chat-meta">個人化需求（當時內容）</span>
+    <p class="chat-text">{props.sections.length ? props.sections.map((s, i) => <span>
+      {i ? "；" : ""}{s.key ? <>{s.persons.map(p => <FaceChip face={p} small />)}{s.text}</> : s.line}
+    </span>) : "目前沒有個人化需求。"}</p>
+  </div>;
+}
+
 const sectionShown = (sec: NoteSection) => (sec.key ? sec.line.slice(whoPrefix(sec.persons).length) : sec.line);
 
 function NotesEditor(props: {
@@ -2767,10 +2792,10 @@ function PreChat(props: {
       </div>
     </div>
   );
-  // 需求與操作鍵只在對話末尾呈現一次，不嵌入歷史訊息或設定面板。
+  // 歷史需求留在當輪；只有尚未建立快照時，編輯器才暫放在操作鍵前。
   const actions = (
     <>
-      {review}
+      {!displayEvents.some(e => e.kind === "notes") && review}
       {startChips}
     </>
   );
@@ -2851,6 +2876,12 @@ function PreChat(props: {
           句，它自己的回覆就說了為什麼；使用者自己拿掉的，底下接一句 AI 的回
           話。兩種都不動使用者打的字。 */}
       {log.map((t, i) => {
+        if ("previewReply" in t && t.previewReply.kind === "notes") {
+          const latest = displayEvents.filter(e => e.kind === "notes").slice(-1)[0];
+          const editable = t.previewReply.id === latest?.id && !pending && kept &&
+            sectionsIdentity(t.previewReply.sections || []) === sectionsIdentity(props.sections);
+          return <AssistantMsg key={t.previewReply.id}>{editable ? review : <NotesSnapshot sections={t.previewReply.sections || []} />}</AssistantMsg>;
+        }
         if ("ask" in t && t.ask === pending) return <div key={`note-${t.ask.order ?? notes.length}-user`} class="note-turn">
           <AskBubble text={pending.text} faces={pending.persons} />
           <AssistantMsg><div class="chat-typing" aria-label="AI 正在回覆"><span /><span /><span /></div></AssistantMsg>
@@ -3827,6 +3858,8 @@ function SessionView(props: {
     rendering = idx;
     const c = m.card;
     switch (c?.type) {
+      case "personalized_snapshot":
+        return <AssistantMsg><NotesSnapshot sections={c.sections || []} /></AssistantMsg>;
       case "photos_added":
         return (
           <>

@@ -320,6 +320,9 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
               for i, t in enumerate(_recipe(analysis))]
     plan_view = {k: plan.get(k) for k in PATCHABLE_KEYS if k != "recipe_checked"}
     names = person_names(analysis)
+    # Requirement snapshots are display records, not new conversational turns.
+    # Filter before the window so old cards cannot crowd out an actual answer.
+    history = [m for m in history if (m.get('card') or {}).get('type') != 'personalized_snapshot']
     lines = [_message_line(m, names) for m in history[-HISTORY_LEN:]]
     # What stays the same comes first, what changes turn to turn last, with a
     # CACHE_BREAK after each part that stays: the instructions (the same for

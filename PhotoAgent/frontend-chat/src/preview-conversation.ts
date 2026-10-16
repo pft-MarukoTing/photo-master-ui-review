@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import { api } from "./api";
 import type { ReviewTurn } from "./api";
 import type { PreviewStatus } from "./subject-preview";
+import type { HistoricalSection } from "./personalized-history";
 
 export type PreviewWish = { wish_id: string; text: string; source_text?: string; target_ids: string[]; revision?: number;
   selection_source?: "none" | "user_selection" | "model_suggestion" };
@@ -23,7 +24,7 @@ export type PreviewConversationResult = { token: string; revision: number; wishe
   question: { question_id: string; wish_ids: string[]; text: string; kind?: "person" | "scope" | "wish" | "edit_scope" | "edit_description" | "action" | "semantic" | "visual"; wish_options?: {wish_id: string; text: string}[]; options?: string[] } | null };
 export type PreviewDisplayPerson = FaceRef & { previewRole?: string; preview_person_id?: string };
 export type TargetQuestionSnapshot = NonNullable<PreviewConversationResult["question"]> & { token: string; revision: number; answered?: boolean; answer?: string };
-export type PreviewReplyEvent = { id: string; after: number; text: string; showPeople: boolean; role?: "user" | "assistant"; order?: number; generation?: string | null; kind?: "settings"; settings?: Settings; presentation?: PreviewPresentation; people?: PreviewDisplayPerson[]; questionSnapshot?: TargetQuestionSnapshot };
+export type PreviewReplyEvent = { id: string; after: number; text: string; showPeople: boolean; role?: "user" | "assistant"; order?: number; generation?: string | null; kind?: "settings" | "notes"; sections?: HistoricalSection[]; settings?: Settings; presentation?: PreviewPresentation; people?: PreviewDisplayPerson[]; questionSnapshot?: TargetQuestionSnapshot };
 
 export function submissionPreviewEvents(events: PreviewReplyEvent[], suppressIntroduction: boolean, generation?: string | null): PreviewReplyEvent[] {
   // Freeze display history at the click. Identity/token authority is separate.
