@@ -12,6 +12,7 @@ from prompts import AXIS_ALIASES
 # Prompt modes a skill can switch on; the editor prompt's own wording depends on them.
 MODE_HEAD_ALIGNED_GAZE = "head_aligned_gaze"
 MODE_HOLISTIC_BODY = "holistic_body"
+MODE_USER_FACE_GEOMETRY = "user_face_geometry"
 
 
 @dataclass(frozen=True)

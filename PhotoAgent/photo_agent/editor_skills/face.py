@@ -329,6 +329,18 @@ _IDENTITY_GEOMETRY_RULE = (
     "eye–nose–mouth layout, eye-globe size, eye centers and interocular distance, nose geometry, philtrum "
     "length, and ear shape."
 )
+_USER_STATE_IDENTITY_RULE = _IDENTITY_GEOMETRY_RULE.replace(
+    "- Fixed identity geometry:",
+    "- Fixed identity geometry, for everything a person's user-directed final state does not set:",
+)
+
+# Endpoint key of a user's request that one person's face read balanced left to right.
+FACE_SYMMETRY = "face_symmetry"
+
+
+def has_user_face_state(resolved):
+    """Whether any resolved person carries a user-directed facial-geometry final state."""
+    return any(item["final_state"].get(FACE_SYMMETRY) for item in resolved)
 
 
 _EYE_MAKEUP_CARRY_RULE = (
@@ -346,7 +358,8 @@ def render_shared_face_rules(skills, resolved, ctx):
     facial = _resolved_features(resolved) & set().union(*(skill.facial_features for skill in skills))
     rules = []
     if facial:
-        rules.append((0, _IDENTITY_GEOMETRY_RULE + "".join(skill.identity_scope(resolved, ctx) for skill in skills)))
+        identity_rule = _USER_STATE_IDENTITY_RULE if has_user_face_state(resolved) else _IDENTITY_GEOMETRY_RULE
+        rules.append((0, identity_rule + "".join(skill.identity_scope(resolved, ctx) for skill in skills)))
     for skill in skills:
         rules.extend(skill.face_rules(resolved, ctx))
     if facial:

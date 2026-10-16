@@ -26,10 +26,12 @@ from photo_agent.editor_skills import EDITOR_SKILLS, EditContext
 from photo_agent.editor_skills.base import (
     MODE_HEAD_ALIGNED_GAZE,
     MODE_HOLISTIC_BODY,
+    MODE_USER_FACE_GEOMETRY,
     _axis_set,
     _style_change_footprint,
 )
 from photo_agent.editor_skills.face import render_shared_face_rules, resolve_feature_contracts
+from photo_agent.editor_skills.symmetry import FACE_GEOMETRY_TASK_INTRO, face_geometry_guard
 
 _HIDDEN_PRESERVE = frozenset().union(*(skill.hidden_preserve for skill in EDITOR_SKILLS))
 
@@ -525,6 +527,9 @@ def build_compact_editor_prompt(
     modes = set().union(*(skill.prompt_modes(analysis, resolved, skill_ctx) for skill in EDITOR_SKILLS))
     body_reshape_active = MODE_HOLISTIC_BODY in modes
     has_head_aligned_gaze = MODE_HEAD_ALIGNED_GAZE in modes
+    # A user-directed facial final state (e.g. a balanced face) is an authorized change the generic
+    # proportion, pose and locality rules below must make way for.
+    user_face_geometry = MODE_USER_FACE_GEOMETRY in modes
     subject_style_footprint = set()
     if "pose" in style_options:
         subject_style_footprint.update({"body_pose", "head_pose"})
@@ -579,6 +584,11 @@ def build_compact_editor_prompt(
             "Preserve internal proportions, relative sizes",
         ).replace("Preserve tilt, relative placement", "Preserve relative placement")
     framing_change_active = framing_change_active or size_reframe_active or alignment_change_active
+    if user_face_geometry:
+        compact_crop_block = re.sub(
+            r"([Pp]reserve (?:all )?internal proportions[^.]*)\.", r"\1 outside user-directed final states.",
+            compact_crop_block,
+        )
     end_state_crop_active = compact_crop_block.startswith("The finished picture is") and not size_reframe_active
     compact_crop_guidance = ""
     if framing_change_active and not size_reframe_active:
@@ -723,6 +733,10 @@ def build_compact_editor_prompt(
         style_scope_text = "- Required framing owns the final frame edges, frame-relative subject scale, and visible extent; preserve the source pose and viewpoint."
     else:
         style_scope_text = "- Preserve the source pose, viewpoint, subject scale, visible extent, and framing."
+    if user_face_geometry and not style_footprint:
+        style_scope_text = (
+            style_scope_text[:-1] + ", apart from the small, natural head correction a user-directed final state uses."
+        )
     if "pose" in style_options:
         gaze_endpoint_text = (
             "plus the direct holistic body-reshape instruction"
@@ -738,6 +752,12 @@ def build_compact_editor_prompt(
             "- Apply facial edits locally. Only the resolved eyes-plus-head/face gaze endpoint may make its specified "
             "bounded head/face alignment. Apply the direct holistic body instruction with continuous, natural "
             "garment and adjacent-background follow-through; keep unlisted regions fixed."
+        )
+    elif has_head_aligned_gaze and user_face_geometry:
+        facial_locality = (
+            "- Apply facial edits locally. Only a resolved eyes-plus-head/face gaze endpoint, or a user-directed final "
+            "state within a small, natural head correction, may make its specified bounded head/face change; "
+            "keep the body and surrounding content fixed."
         )
     elif has_head_aligned_gaze:
         facial_locality = (
@@ -755,6 +775,11 @@ def build_compact_editor_prompt(
             if framing_change_active else
             "- Apply facial edits locally while keeping the head, body, and surrounding content source-matched."
         )
+        if user_face_geometry:
+            facial_locality = (
+                facial_locality[:-1]
+                + ", except the facial contour and the small, natural head correction a user-directed final state sets."
+            )
     if style_footprint and resolved:
         terms = [term for skill in EDITOR_SKILLS for term in skill.final_state_terms(analysis)]
         final_state_labels = ", ".join(terms[:-1]) + ", or " + terms[-1]
@@ -791,6 +816,8 @@ def build_compact_editor_prompt(
             "You are editing the supplied photograph with photographic realism, anatomically coherent local geometry, and faithful texture. "
             "Apply the holistic body instruction while preserving the same people, scene, and identity."
         )
+    elif user_face_geometry:
+        task_intro = FACE_GEOMETRY_TASK_INTRO
     else:
         task_intro = (
             "You are editing the supplied image, not creating a new image.\n"
@@ -803,13 +830,21 @@ def build_compact_editor_prompt(
     global_preservation = (
         "- Preserve the same identities, person count, scene identity, and photographic realism. Apply Body Reshape as one continuous overall-figure adjustment; the existing garment may follow the resulting geometry locally while retaining its identity and coverage. Keep every unlisted person and unrelated scene geometry unchanged. Keep face identity and facial anatomy unchanged except for separately approved smile, gaze, blink, or hair instructions, which remain active in their own contracts."
         if body_reshape_active else
-        "- Always preserve identities, underlying anatomy or object form, clothing, location, scene identity, and natural material texture. Do not transform or add people/objects, or erase them outside an approved local removal; authorized framing may place existing content outside the output frame."
+        "- Always preserve identities, "
+        + ("underlying anatomy outside a user-directed final state, object form" if user_face_geometry else "underlying anatomy or object form")
+        + ", clothing, location, scene identity, and natural material texture. Do not transform or add people/objects, or erase them outside an approved local removal; authorized framing may place existing content outside the output frame."
     )
     # Rules about faces and people are left out of a photo without people.
-    facial_identity_line = (
-        "\n- Preserve each person's anatomical facial proportions and profile identity. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint or selected style explicitly changes viewpoint; then change only the specified orientation and its natural projection, never the underlying anatomy."
-        if has_person else ""
-    )
+    if not has_person:
+        facial_identity_line = ""
+    elif user_face_geometry:
+        facial_identity_line = (
+            "\n- Preserve each person's anatomical facial proportions and profile identity, except what that person's user-directed final state sets. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint, a user-directed final state, or selected style explicitly changes them; then change only what it specifies."
+        )
+    else:
+        facial_identity_line = (
+            "\n- Preserve each person's anatomical facial proportions and profile identity. Keep head yaw/pitch and projected eye–nose–mouth geometry fixed unless a resolved eyes-plus-head/face gaze endpoint or selected style explicitly changes viewpoint; then change only the specified orientation and its natural projection, never the underlying anatomy."
+        )
     locality_lines = f"\n{facial_locality}\n{portrait_style_priority}" if has_person else ""
     texture_text = "natural skin and material texture" if has_person else "natural material texture"
     pose_completion_guard = (
@@ -859,7 +894,7 @@ Global preservation:
 - Preserve these unselected properties from the original: {spatial_preserve_text}.
 {style_scope_text}{locality_lines}
 - Preserve {texture_text}. Do not add text, logos, watermarks, people, props, or a different background.
-- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.{pose_completion_guard}{revision_text}
+- Every required final state above is mandatory. Do not restore a captured property that an authorized feature needs to change.{face_geometry_guard(resolved)}{pose_completion_guard}{revision_text}
 """
     metadata = {
         "strategy": "resolved_compact",

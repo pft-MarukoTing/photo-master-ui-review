@@ -23,12 +23,14 @@ from .base import (
 )
 from .expression import _smile_contracts
 from .face import (
+    FACE_SYMMETRY,
     _BASE_PRESERVE,
     _EYE_IDENTITY_PRESERVE,
     _EYE_MAKEUP_CARRY_RULE,
     _IDENTITY_GEOMETRY_RULE,
     _box,
     _resolved_features,
+    has_user_face_state,
     resolve_feature_contracts,
 )
 
@@ -420,7 +422,10 @@ def _eye_state_lines(state, *, subject_has_blink, style_options, include_gaze_me
             allow_pose_change="pose" in style_options,
         )
         if gaze_method == "eyes_only":
+            # A user-directed facial final state on this person owns the head angle.
             gaze_method_text = (
+                f"Use a {gaze_strength} eyes-only correction"
+                if state.get(FACE_SYMMETRY) else
                 f"Use a {gaze_strength} eyes-only correction and keep the original head/face angle fixed"
             )
         else:
@@ -540,7 +545,8 @@ class EyesSkill(EditorSkill):
         scope = _BLINK_IDENTITY_SCOPE if "blink" in _resolved_features(resolved) else ""
         if _has_head_aligned_gaze(resolved):
             scope += (
-                " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed."
+                " An authorized eyes-plus-head/face gaze endpoint may update viewpoint projection only through its specified bounded head orientation; anatomical proportions remain fixed"
+                + (" outside a user-directed final state." if has_user_face_state(resolved) else ".")
             )
         return scope
 
