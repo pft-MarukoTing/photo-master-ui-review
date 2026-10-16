@@ -1125,6 +1125,13 @@ div.chat-proposal-row{cursor:default}
    有了間距就不再需要陰影把磚撐開。 */
 .history-drawer{display:flex;flex-direction:column;overflow:hidden;padding-bottom:0}
 .history-drawer .history-header{flex:none}
+/* 「選取」和多選時的三顆都是有字的 28px 高按鈕，跟「取消」同一款。「刪除」舊頁面是 28px 見方的垃圾桶，
+   這裡改成文字：紅字、跟前面多隔一點，沒勾東西時淡掉但外框還看得到。 */
+#history-select-btn.btn,#history-select-all-btn.btn,#history-delete-selected-btn.btn{height:28px;width:auto;padding:0 10px;font-size:13px;flex-shrink:0}
+#history-select-btn.btn{gap:4px;padding:0 10px 0 8px}
+#history-delete-selected-btn.btn{margin-left:8px;color:var(--danger)}
+#history-delete-selected-btn.btn:hover:not(:disabled){color:var(--danger);background:var(--danger-bg);border-color:var(--danger)}
+#history-delete-selected-btn.btn:disabled{opacity:.45}
 .history-drawer .history-list{flex:0 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;
   margin:-4px -20px 0;padding:4px 20px 20px}
 .history-drawer .history-empty{margin:0 0 20px}
@@ -1135,7 +1142,10 @@ div.chat-proposal-row{cursor:default}
 .history-drawer .chat-history-grid>.demo-image-tile{display:block;width:100%;height:auto;min-height:0;aspect-ratio:1/1;margin:0;padding-top:0;
   border:1px solid var(--border-2);border-radius:8px;box-shadow:none}
 .history-drawer .chat-history-grid>.demo-image-tile img:not(.demo-image-tile-bg){position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.history-drawer .chat-history-grid>.demo-image-tile:hover,.history-drawer .chat-history-grid>.demo-image-tile.is-selected{border-color:rgba(var(--accent-rgb),.72)}
+/* 選取的框用不透明的主題色：半透明的 1px 線會跟照片邊緣的深色混在一起，看起來灰灰髒髒的。
+   框本身 1px，再由 ::after 在拼貼上面補 1px 內框，合起來 2px，不會被照片蓋掉。 */
+.history-drawer .chat-history-grid>.demo-image-tile:hover,.history-drawer .chat-history-grid>.demo-image-tile.is-selected{border-color:var(--accent)}
+.history-drawer .chat-history-grid>.demo-image-tile.is-selected{--tile-ring:1px}
 .history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+1):nth-last-child(n+4){grid-column:1/span 2;grid-row:span 2}
 .history-drawer .chat-history-grid>.demo-image-tile:nth-child(16n+9):nth-last-child(n+4){grid-column:2/span 2;grid-row:span 2}
 
@@ -1191,6 +1201,9 @@ div.chat-proposal-row{cursor:default}
 .demo-image-tile:has(.chat-tile-remove) .demo-image-tile-check{display:none}
 /* 舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上（首頁範例照片選了要打勾）。 */
 .demo-image-tile.is-selected .demo-image-tile-check{opacity:1;background:var(--mv-grad);border-color:transparent}
+/* 選取的那格：最上層一圈主題色內框（抽屜那邊框本身已經有 1px，所以只補 1px；首頁的磚沒有框，補 2px）。 */
+.demo-image-tile.is-selected::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;pointer-events:none;
+  box-shadow:inset 0 0 0 var(--tile-ring,2px) var(--accent)}
 /* 多選時跟面板模式（.history-cube-check）一樣：每格露出空的圓圈，勾起來的那格填色打勾。 */
 .history-list.chat-picking .demo-image-tile-check{opacity:1}
 .history-list.chat-picking .demo-image-tile-check svg{opacity:0;transition:opacity .15s}

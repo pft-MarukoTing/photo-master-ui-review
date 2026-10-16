@@ -714,29 +714,9 @@ export function Gallery(props: {
   );
 }
 
-// 跟面板模式的最近照片一樣：每格一顆 ×；標題旁「選取多筆」進入多選，勾好按「刪除所選」；
-// 「全部刪除」一次清空。按鈕的 id 沿用舊頁面的，樣式（舊頁面 index.html 的那段 style，
-// 建置時帶進來）就一模一樣。刪之前要不要確定、刪完怎麼辦，交給 app.tsx。
-const TRASH_ICON = (
-  <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
-    <path d="M4 7h16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" />
-    <path
-      d="M9 7V4.5A1.5 1.5 0 0 1 10.5 3h3A1.5 1.5 0 0 1 15 4.5V7"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-    <path
-      d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"
-      stroke="currentColor"
-      stroke-width="2.5"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-  </svg>
-);
-
+// 跟面板模式的最近照片一樣：每格一顆 ×；標題旁「選取」進入多選。多選時是「全選／取消／刪除」
+// 三顆文字按鈕，刪除放最後；要全部清掉就先全選再刪。按鈕的 id 沿用舊頁面的，樣式從舊頁面 index.html
+// 的那段 style 帶進來，「全選」「刪除」改成文字的部分在 chat.css。刪之前要不要確定、刪完怎麼辦，交給 app.tsx。
 export function HistoryDrawer(props: {
   open: boolean;
   sessions: SessionSummary[] | null;
@@ -745,7 +725,7 @@ export function HistoryDrawer(props: {
   onClose: () => void;
   // 刪掉這幾格；回傳真的刪了沒（取消或失敗是 false）。
   onRemove: (ids: string[]) => Promise<boolean>;
-  onClearAll: () => void;
+  onClearAll: () => Promise<boolean>;
 }) {
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -766,7 +746,9 @@ export function HistoryDrawer(props: {
     });
   const hasRows = !!props.sessions?.length;
   const count = picked.size;
-  const delHint = count ? `刪除所選（${count} 張）` : "刪除所選";
+  const allIds = (props.sessions || []).map(rowId);
+  const allPicked = hasRows && allIds.every((id) => picked.has(id));
+  const delHint = allPicked ? "全部刪除" : count ? `刪除所選（${count} 張）` : "刪除所選";
   return (
     <>
       <div class={`history-drawer-backdrop${props.open ? " drawer-open" : ""}`} onClick={props.onClose} />
@@ -790,20 +772,31 @@ export function HistoryDrawer(props: {
                 {picking ? (
                   <>
                     <button
+                      id="history-select-all-btn"
+                      class="btn btn-outline btn-sm"
+                      type="button"
+                      aria-pressed={allPicked}
+                      onClick={() => setPicked(allPicked ? new Set() : new Set(allIds))}
+                    >
+                      {allPicked ? "取消全選" : "全選"}
+                    </button>
+                    <button id="history-select-cancel-btn" class="btn btn-outline btn-sm" type="button" onClick={stopPicking}>
+                      取消
+                    </button>
+                    <button
                       id="history-delete-selected-btn"
                       class="btn btn-outline btn-sm"
                       type="button"
                       disabled={!count}
-                      aria-label={delHint}
                       title={delHint}
                       onClick={async () => {
-                        if (await props.onRemove([...picked])) stopPicking();
+                        // 全選時走「全部刪除」：確認文字講清楚是全部，也是一次清空的那支 API。
+                        if (allPicked) {
+                          if (await props.onClearAll()) stopPicking();
+                        } else if (await props.onRemove([...picked])) stopPicking();
                       }}
                     >
-                      {TRASH_ICON}
-                    </button>
-                    <button id="history-select-cancel-btn" class="btn btn-outline btn-sm" type="button" onClick={stopPicking}>
-                      取消
+                      刪除
                     </button>
                   </>
                 ) : (
@@ -812,24 +805,13 @@ export function HistoryDrawer(props: {
                       id="history-select-btn"
                       class="btn btn-outline btn-sm"
                       type="button"
-                      aria-label="選取多筆"
-                      title="選取多筆"
                       onClick={() => setPicking(true)}
                     >
-                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24">
+                      <svg width="14" height="14" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                         <rect x="3" y="3" width="18" height="18" rx="4" stroke="currentColor" stroke-width="2" />
                         <path d="M8 12.5l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
                       </svg>
-                    </button>
-                    <button
-                      id="history-clear-all-btn"
-                      class="btn btn-outline btn-sm"
-                      type="button"
-                      aria-label="全部刪除"
-                      title="全部刪除"
-                      onClick={props.onClearAll}
-                    >
-                      {TRASH_ICON}
+                      選取
                     </button>
                   </>
                 )}
