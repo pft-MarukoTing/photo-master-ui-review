@@ -1,5 +1,7 @@
 import json
+import types
 import unittest
+from unittest.mock import patch
 
 from photo_agent import chat_assistant
 from photo_agent.chat_plan import apply_plan_patch, default_plan
@@ -68,6 +70,36 @@ class AskTest(unittest.TestCase):
         chat_assistant.ask(analysis(), default_plan(), "ready", [{"role": "user", "text": "好", "card": {"type": "ask"}}],
                            model=model, screen={"bar": ["看美化項目", "再美化"], "topics": []})
         self.assertIn('SCREEN: {"bar":["看美化項目","再美化"],"topics":[]}', model.seen[0])
+
+    def test_what_stays_the_same_is_sent_as_cached_blocks(self):
+        sent = []
+        post = types.SimpleNamespace(__wrapped__=lambda url, payload, label, timeout=None: sent.append(payload) or {
+            "output_text": '{"reply":"好","action":"none","patch_json":""}'})
+        with patch.object(chat_assistant, "_post_json", post):
+            chat_assistant.call_model(chat_assistant.build_context(
+                analysis(), default_plan(), "ready", [{"role": "user", "text": "好", "card": {"type": "ask"}}]))
+            chat_assistant.call_review("x")
+        payload = sent[0]
+        self.assertEqual(payload["prompt_cache_options"], {"mode": "explicit"})
+        developer, user = payload["input"]
+        self.assertEqual(developer["role"], "developer")
+        self.assertTrue(developer["content"][0]["text"].startswith(chat_assistant.INSTRUCTION))
+        self.assertTrue(developer["content"][1]["text"].startswith("ANALYSIS:"))
+        self.assertTrue(all(b["prompt_cache_breakpoint"] == {"mode": "explicit"} for b in developer["content"]))
+        self.assertTrue(user["content"][0]["text"].startswith("PHOTO STATUS:"))
+        self.assertNotIn("cache-break", json.dumps(payload, ensure_ascii=False))
+        # A context with nothing marked goes as it always did, one message.
+        self.assertNotIn("prompt_cache_options", sent[1])
+        self.assertEqual([p["prompt_cache_key"] for p in sent],
+                         ["photoagent-chat_assistant_reply", "photoagent-chat_prompt_review"])
+
+    def test_the_review_keeps_its_instructions_ahead_of_the_line(self):
+        model = model_says()
+        chat_assistant.review_line("背景換成海邊", "", model=lambda context: model.seen.append(context) or {
+            "verdict": "keep", "reply": "", "line": "", "options": []})
+        stable, rest = model.seen[0].split(chat_assistant.CACHE_BREAK)
+        self.assertIn(chat_assistant.REVIEW_SEMANTIC_CONTRACT, stable)
+        self.assertTrue(rest.endswith("NEW LINE:\n背景換成海邊"))
 
     def test_a_render_has_no_options(self):
         self.assertEqual(ask(model_says("馬上幫你美化", action="render", options=["一鍵美化"]))["options"], [])

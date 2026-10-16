@@ -36,8 +36,31 @@ STAGE_NOTE = "chat_note"
 STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, preview_conversation.STAGE)
 
 
-def run(params):
-    """The model's answer for one chat job's params, or raises."""
+def cache_note(spent):
+    """「 cache 11868/12706 (+840 written)」: of the input tokens these calls
+    sent, how many the provider read from its prompt cache, and how many it
+    wrote there -- for the worker's log, to see the cache work."""
+    details = [(u.get("input_tokens") or 0, (u.get("input_tokens_details") or {}))
+               for u in (e.get("usage") for e in spent or []) if isinstance(u, dict)]
+    if not details:
+        return ""
+    total = sum(t for t, _ in details)
+    read = sum(d.get("cached_tokens") or 0 for _, d in details)
+    written = sum(d.get("cache_write_tokens") or 0 for _, d in details)
+    return f" cache {read}/{total}" + (f" (+{written} written)" if written else "")
+
+
+def run(params, spent=None):
+    """The model's answer for one chat job's params, or raises. `spent`, a
+    list, gets the {model, usage} of every model call the job made."""
+    token = chat_assistant.SPENT.set(spent)
+    try:
+        return _run(params)
+    finally:
+        chat_assistant.SPENT.reset(token)
+
+
+def _run(params):
     stage = params.get("stage")
     if stage == preview_conversation.STAGE:
         if params.get("mode") == "target_action":

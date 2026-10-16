@@ -74,6 +74,18 @@ class ChatJobsRunTest(unittest.TestCase):
                              {"kept": True})
         review.assert_called_once_with("瘦臉", "", [], ["左"], sections=[])
 
+    def test_the_model_calls_a_job_makes_are_handed_back_for_the_log(self):
+        def review(*args, **kwargs):
+            chat_jobs.chat_assistant.SPENT.get().append({"model": "m", "usage": {
+                "input_tokens": 100, "input_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 5}}})
+            return {"kept": True}
+        spent = []
+        with patch.object(chat_jobs.chat_assistant, "review_line", review):
+            chat_jobs.run({"stage": chat_jobs.STAGE_REVIEW, "line": "瘦臉"}, spent)
+        self.assertEqual(chat_jobs.cache_note(spent), " cache 80/100 (+5 written)")
+        self.assertEqual(chat_jobs.cache_note([]), "")
+        self.assertIsNone(chat_jobs.chat_assistant.SPENT.get())
+
     def test_an_unknown_stage_raises(self):
         with self.assertRaises(RuntimeError):
             chat_jobs.run({"stage": "nope"})

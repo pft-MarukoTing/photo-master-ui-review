@@ -295,10 +295,11 @@ def check_chat_queue():
             tsk_id = info.get('tskId')
             params = info['acts'][0]['params']
             logger.info(job_id, f"[ChatQueue] {params.get('stage')}")
-            answer = chat_jobs.run(params)
+            spent = []
+            answer = chat_jobs.run(params, spent)
             set_job_info(job_id=job_id, status="success", endTs=int(time.time() * 1000),
                          task_id=tsk_id, results={"0_res0": {"answer": answer}})
-            logger.info(job_id, f"[ChatQueue] {params.get('stage')} end")
+            logger.info(job_id, f"[ChatQueue] {params.get('stage')} end{chat_jobs.cache_note(spent)}")
         except Exception as e:
             error_code = e.args[1] if len(e.args) > 1 else RESULT_UNKNOWN_INTERNAL_ERROR
             logger.error(job_id, f'[ChatQueue] process with error: {e}')

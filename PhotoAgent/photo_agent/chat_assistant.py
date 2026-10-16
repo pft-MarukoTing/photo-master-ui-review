@@ -14,6 +14,7 @@ what the proposal card shows is what applying it will do, whatever the
 model said it would do.
 """
 
+import contextvars
 import copy
 import json
 import math
@@ -320,16 +321,21 @@ def build_context(analysis, plan, status, history, debug=False, screen=None):
     plan_view = {k: plan.get(k) for k in PATCHABLE_KEYS if k != "recipe_checked"}
     names = person_names(analysis)
     lines = [_message_line(m, names) for m in history[-HISTORY_LEN:]]
+    # What stays the same comes first, what changes turn to turn last, with a
+    # CACHE_BREAK after each part that stays: the instructions (the same for
+    # every photo), then the photo's analysis (the same for every turn).
     return "\n\n".join([
         INSTRUCTION,
         *([VOICE] if plan.get("detailed_explanation") else []),
         TOOL_GUIDE,
         f"PLAN FIELDS: {_dump(_fields(debug))}",
-        f"PHOTO STATUS: {status}",
-        f"SCREEN: {_dump(screen or {'bar': [], 'topics': []})}",
+    ]) + CACHE_BREAK + "\n\n".join([
         f"ANALYSIS: {_dump(trimmed) if trimmed else '(not available yet)'}",
         f"FACES: {_dump(_faces_view(analysis))}",
         f"RECIPE: {_dump(recipe)}",
+    ]) + CACHE_BREAK + "\n\n".join([
+        f"PHOTO STATUS: {status}",
+        f"SCREEN: {_dump(screen or {'bar': [], 'topics': []})}",
         f"PLAN: {_dump(plan_view)}",
         "CONVERSATION (oldest first, the last line is the message to answer):\n"
         + "\n".join(line for line in lines if line),
@@ -595,15 +601,40 @@ def write_opening(analysis, wishes="", *, model=None):
     return {"summary": lead, "issues": points}
 
 
+# Where the part of a context that stays the same from call to call ends: what
+# comes before it is sent as its own blocks, each an explicit prompt-cache
+# breakpoint, and read back from the provider's cache on the next call. (With
+# everything in one message, the provider's own breakpoint sits at its very
+# end, after the line that changes every time, so the next call never matches
+# it -- yet every call pays to write it.) At most three per context.
+CACHE_BREAK = "\n\n[[cache-break]]\n\n"
+
+# The usage of every model call a chat job made: chat_jobs.run sets a list here
+# for one job, so the worker can log how much of each prompt came from the cache.
+SPENT = contextvars.ContextVar("chat_spent", default=None)
+
+
 def _call(context, schema, images=(), *, timeout=None):
     """`images` are (caption, data URL) pairs shown after the text."""
+    *stable, context = context.split(CACHE_BREAK)
     content = [{"type": "input_text", "text": context}]
     for caption, url in images:
         content += [{"type": "input_text", "text": caption}, {"type": "input_image", "image_url": url}]
     payload = _responses_payload(MODEL, content, text_format=schema, reasoning_effort=REASONING_EFFORT)
+    if stable:
+        payload["input"] = [{"role": "developer", "content": [
+            {"type": "input_text", "text": text, "prompt_cache_breakpoint": {"mode": "explicit"}} for text in stable]},
+            *payload["input"]]
+        # Only the breakpoints are written: the part after them changes every call.
+        payload["prompt_cache_options"] = {"mode": "explicit"}
+    # One key per kind of call, kept apart in the provider's cache accounting.
+    payload["prompt_cache_key"] = f"photoagent-{schema.get('name', 'chat')}"
     # One try: the user is waiting on this reply, and the page offers the
     # panel instead when it fails.
     data = _post_json.__wrapped__(OPENAI_RESPONSES_URL, payload, "Chat reply failed", timeout=TIMEOUT_SECONDS if timeout is None else timeout)
+    spent = SPENT.get()
+    if spent is not None:
+        spent.append({"model": MODEL, "usage": data.get("usage")})
     return _parse_json_from_text(_extract_output_text(data))
 
 
@@ -1250,6 +1281,11 @@ def _sections_text(sections):
     return "\n".join(f"[{i}] {s['who'] or UNASSIGNED}：{s['text']}" for i, s in enumerate(sections, 1))
 
 
+# How the review reads a line's meaning (photo_agent.request_semantics). The same
+# for every line, so it sits with the instructions, ahead of the cache break.
+REVIEW_SEMANTIC_CONTRACT = ('SEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE as written out in "line", if any, and quote source/target/action from that text. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.')
+
+
 def review_line(line, prompt, history=(), people=(), *, sections=(), model=None):
     """{kept, start, ask, offer, later, reply, line, persons, options, aspect_ratio, merged} for one line typed on the upload page.
 
@@ -1301,12 +1337,13 @@ def review_line(line, prompt, history=(), people=(), *, sections=(), model=None)
         REVIEW_INSTRUCTION,
         TOOL_GUIDE,
         "RATIOS:\n" + "\n".join(f"{v}: {label}" for v, label in REVIEW_RATIOS.items()),
+        REVIEW_SEMANTIC_CONTRACT,
+    ]) + CACHE_BREAK + "\n\n".join([
         "PEOPLE IN PHOTO:\n" + ("\n".join(people) if people else "（沒有偵測到人臉）"),
         f"LINES SO FAR:\n{_sections_text(sections) or '（還沒有）'}",
         "CONVERSATION SO FAR:\n" + ("\n".join(_turn_line(t) for t in history) or "（還沒有）"),
         f"NEW LINE:\n{line}",
     ])
-    context += '\nSEMANTIC CONTRACT:\n' + request_semantics.INSTRUCTION + '\nFor this review use semantics array (not resolutions or semantic_version). Parse NEW LINE as written out in "line", if any, and quote source/target/action from that text. No invented IDs. Non-edit commands, unrelated chat or an analysis start can use []. Complete free-form edits are keep, not clarify merely because a verb is unusual. Clarify only missing information; preserve the operation when only the target is unknown.'
     result = (model or call_review)(context)
     semantic_values = None
     semantic_pending = False
