@@ -694,16 +694,12 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */
 @media (max-width:900px),(max-width:1200px) and (orientation:portrait){
   #results-body.batch-mode>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;
-    width:min(136px,38vw);height:auto;max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-width:0 1px 0 0;z-index:1001;
+    width:min(204px,64vw);height:auto;max-width:none;padding:12px;flex-basis:auto;border-radius:0;border-width:0 1px 0 0;z-index:1001;
     transform:translateX(-100%);transition:transform .25s ease}
   #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0)}
   #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
-  /* 抽屜比舊版窄（舊版要放檔名，這裡只有方塊照片），內距跟著縮成 12，關閉鈕對齊同一條邊。 */
+  /* 抽屜寬度跟舊版共用那段一樣，剛好放得下「我的照片」、張數和全部下載；內距 12，關閉鈕對齊同一條邊。 */
   #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
-  /* 這麼窄放不下「我的照片」加張數：張數拉開抽屜的那顆鈕上已經有，這裡收起來；
-     「全部一鍵美化」字和左右內距縮一號才擠得進一行。 */
-  #results-body.batch-mode .batch-sidebar-count{display:none}
-  #results-body.batch-mode .batch-sidebar-all .chat-chip{padding:var(--sp-1) var(--sp-2);font-size:12px}
   #results-body.batch-mode>.batch-sidebar-backdrop{top:var(--header-h)}
   #results-body.batch-mode>.batch-sidebar-backdrop.drawer-open{display:block}
   #results-body.batch-mode .batch-sidebar-header{padding-right:36px}

@@ -4417,12 +4417,11 @@
     }
     @media (max-width: 900px) {
       /* The drawer holds only squares now (no badge column beside them),
-         so it slims down the same way chat's does. */
-      #results-body.batch-mode #batch-sidebar { width: min(136px, 38vw); max-width: none; padding: 12px; }
+         so it is narrower than the old list -- but still wide enough for
+         the header row (title + count + 全部下載, plus the close button's
+         room) to show in full. Same width as chat's drawer. */
+      #results-body.batch-mode #batch-sidebar { width: min(204px, 64vw); max-width: none; padding: 12px; }
       .batch-sidebar-close-btn { top: 12px; right: 8px; }
-      /* No room for the count beside the title; the drawer's trigger
-         button already shows it. */
-      .batch-sidebar-count { display: none; }
     }
 
     .batch-continue-all-btn { width: 100%; justify-content: center; margin-bottom: 12px; }
