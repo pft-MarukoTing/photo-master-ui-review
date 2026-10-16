@@ -3232,6 +3232,9 @@ function SessionView(props: {
   // 這一輪寫了（或改了）個人化需求，美化前先問：只照需求改，還是順便整張美化。
   // 記著按的是哪顆美化，問完照那顆的字送出去。
   const [askMode, setAskMode] = useState<{ label: string; icon: string } | null>(null);
+  // 「幫我分析」開的那輪，開場先收起來只給「看美化項目／美化」；按了「看美化項目」
+  // 就在同一則展開項目（記的是那則的 id）。只是畫面上的展開，不開新的一輪。
+  const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
   // Bumped when an answer lands at the end of the talk and the timeline should
   // go there, even if the user had scrolled up.
   const [toBottom, setToBottom] = useState(0);
@@ -4003,8 +4006,37 @@ function SessionView(props: {
             <AssistantMsg>
               <p class="chat-text">{openLine}</p>
               {check && brief && <BriefCard brief={brief} />}
-              {check && live && <p class="chat-text chat-muted">你的需求會留著，這次美化會照分析一起修，再加上你的需求。</p>}
-              {live && (
+              {check && live && !!promptNow && <p class="chat-text chat-muted">你的需求會留著，這次會連同分析的建議一起美化。</p>}
+              {/* 「幫我分析」想知道的是還有哪裡能修，摘要已經回答了；下一步多半是照著美化，
+                  所以先只給「看美化項目／美化」，想細調再展開項目。後面已經接著別的話
+                  （打開項目、打字問 AI），下一步由那則帶，這裡就不掛了。 */}
+              {check && showChips && messages.slice(idx + 1).every((x) => x.card?.auto) &&
+                (expandedCheck === m.id ? (
+                  <>
+                    <p class="chat-text">
+                      {cats.length > 1
+                        ? `想調整哪一項點下面，改好按「${goLabel}」我就開始。`
+                        : cats.length
+                          ? `點下面的「${CATEGORIES[cats[0]].label}」就可以改，改好按「${goLabel}」我就開始。`
+                          : `按下面的「${goLabel}」我就開始。`}
+                    </p>
+                    <div class="chat-choices">{catChips()}</div>
+                  </>
+                ) : (
+                  <>
+                    {/* 跟成品卡「想調整美化項目，按「看美化項目」；想用一樣的設定再產生一版，按「再美化」」同一個說法。 */}
+                    {!!cats.length && (
+                      <p class="chat-text">想調整美化項目，按「看美化項目」；想直接開始美化，按「{goLabel}」。</p>
+                    )}
+                    <div class="chat-choices">
+                      {!!cats.length && (
+                        <Chip label="看美化項目" icon="pencil" disabled={busy} onClick={() => setExpandedCheck(m.id)} />
+                      )}
+                      {rendering === endIdx && endRow && !placed ? ((placed = true), actionChips) : null}
+                    </div>
+                  </>
+                ))}
+              {live && !check && (
                 <>
                   {/* 再進來的人最容易搞混兩件事：建議是對哪張照片講的、開關又是從哪來的。
                       建議永遠是看原圖分析的，不會因為已經修過一版就換；開關則是上一版的。 */}
