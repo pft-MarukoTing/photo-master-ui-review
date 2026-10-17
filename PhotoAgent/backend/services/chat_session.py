@@ -74,9 +74,13 @@ def new_id(prefix):
     return f"{prefix}_{uuid.uuid4().hex}"
 
 
-def create_session(user):
+def create_session(user, batch_id=None):
+    """`batch_id` ties together the sessions of one multi-photo upload --
+    each photo gets its own conversation, and the list shows them as one
+    row (routes/chat.py)."""
     session_id = new_id("s")
-    meta = {"session_id": session_id, "user": user, "created_at": time.time(), "photo_order": [], "active_photo_id": None}
+    meta = {"session_id": session_id, "user": user, "created_at": time.time(), "photo_order": [], "active_photo_id": None,
+            "batch_id": batch_id}
     _write(user, session_id, {"meta": meta, "defaults": default_settings()})
     return load_session(user, session_id)
 
@@ -149,6 +153,7 @@ def _summary(session_id, session):
         # Which history cases this session already covers: the home page
         # lists the rest of the user's history next to it (routes/chat.py).
         "case_ids": [p["case_id"] for p in photos],
+        "batch_id": session.get("batch_id"),
     }
 
 
@@ -220,7 +225,7 @@ def add_photos(user, session_id, meta, photos):
     """Append new photos (state dicts) to the session. `meta` is the session
     as loaded; its photo_order is extended here."""
     order = list(meta["photo_order"]) + [p["photo_id"] for p in photos]
-    new_meta = {k: meta[k] for k in ("session_id", "user", "created_at")}
+    new_meta = {k: meta.get(k) for k in ("session_id", "user", "created_at", "batch_id")}
     new_meta["photo_order"] = order
     new_meta["active_photo_id"] = meta.get("active_photo_id") or (order[0] if order else None)
     fields = {"meta": new_meta}

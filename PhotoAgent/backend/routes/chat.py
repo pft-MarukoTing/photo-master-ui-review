@@ -195,8 +195,12 @@ def _recipe_items(analysis):
 
 @chat_bp.post("/sessions")
 def create_session():
-    user = _user(_body().get("user"))
-    return jsonify(store.create_session(user)), 201
+    body = _body()
+    user = _user(body.get("user"))
+    batch_id = body.get("batch_id")
+    if batch_id is not None and not (isinstance(batch_id, str) and SESSION_ID_RE.match(batch_id)):
+        raise _RequestError("invalid batch_id")
+    return jsonify(store.create_session(user, batch_id=batch_id)), 201
 
 
 # Live sessions read to tell which history cases already have one.
@@ -218,12 +222,60 @@ def list_sessions():
     covered = {case_id for s in sessions for case_id in s["case_ids"]}
     cases = [_case_summary(e) for e in get_history(user, limit=HISTORY_MAX_LEN)
              if e["image_key"] not in covered and _opens_in_chat(e)]
-    rows = sorted(sessions + cases, key=lambda r: r["updated_at"] or 0, reverse=True)
+    rows = sorted(_batched(sessions) + cases, key=lambda r: r["updated_at"] or 0, reverse=True)
     return jsonify({"sessions": rows[:limit]})
 
 
 # A tile badge that only a running job keeps up (chat_session._summary).
 BUSY_SESSION_STATUSES = ("analyzing", "rendering")
+
+
+def _batched(sessions):
+    """The sessions of one multi-photo upload (same batch_id) as one row,
+    the way a session of several photos is one tile. Its session_id is the
+    one worked on last, which is what opening the tile shows; session_ids
+    lists them all in upload order, for the batch sidebar and for delete."""
+    groups, rows = {}, []
+    for s in sessions:
+        if s.get("batch_id"):
+            groups.setdefault(s["batch_id"], []).append(s)
+        else:
+            rows.append(s)
+    for members in groups.values():
+        rows.append(members[0] if len(members) == 1 else _batch_row(members))
+    return rows
+
+
+def _batch_status(statuses):
+    """As chat_session._summary ranks the photos of one session."""
+    for state in ("rendering", "analyzing"):
+        if state in statuses:
+            return state
+    if all(s == "failed" for s in statuses):
+        return "failed"
+    return "done" if "done" in statuses else "ready"
+
+
+def _batch_row(members):
+    members = sorted(members, key=lambda s: s["created_at"] or 0)
+    latest = max(members, key=lambda s: s["updated_at"] or 0)
+    shots = []
+    for s in members:
+        shots += s["thumbnails"] or [s["thumbnail_result"] or {"job_id": s["thumbnail_job_id"], "run": None}]
+    newest = next((s["thumbnail_result"] for s in sorted(members, key=lambda s: s["updated_at"] or 0, reverse=True)
+                   if s["thumbnail_result"]), None)
+    return {
+        **latest,
+        "session_ids": [s["session_id"] for s in members],
+        "created_at": members[0]["created_at"],
+        "photo_count": sum(s["photo_count"] for s in members),
+        "thumbnail_job_id": members[0]["thumbnail_job_id"],
+        "thumbnail_result": newest,
+        "thumbnails": [t for t in shots if t["job_id"]][:4],
+        "status": _batch_status([s["status"] for s in members]),
+        "rendered_count": sum(s["rendered_count"] for s in members),
+        "case_ids": [c for s in members for c in s["case_ids"]],
+    }
 
 
 def _landed(user, row):

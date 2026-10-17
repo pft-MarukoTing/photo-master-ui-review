@@ -1662,16 +1662,26 @@ export function BriefCard(props: {
 // with a photo already chosen had to drop that photo, collapsing the
 // two-column view. Over the page instead: what is behind stays put, and
 // nothing is recorded until a photo is actually taken.
+// 範例照片的彈窗。max 大於 1 時可以多選：點一下選、再點一下取消，選到的標上第幾張
+// （多張照這個順序排），選好了再按底下的鍵送出。max 是 1 就跟以前一樣點了就選。
 export function SamplePicker(props: {
   open: boolean;
   demos: string[] | null;
   picked: string | null;
-  onPick: (name: string) => void;
+  max?: number;
+  // 已經在多張頁上的範例照片：淡下去不能再選，同一張不會加兩次。
+  taken?: string[];
+  onPick: (names: string[]) => void;
   onClose: () => void;
 }) {
   const { open, onClose } = props;
+  const max = props.max ?? 1;
+  const multi = max > 1;
+  const [chosen, setChosen] = useState<string[]>([]);
   useEffect(() => {
     if (!open) return;
+    // 每次打開從目前這張起算，上次沒送出的不留著。
+    setChosen(props.picked ? [props.picked] : []);
     const esc = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
@@ -1681,6 +1691,13 @@ export function SamplePicker(props: {
 
   if (!open) return null;
   const demos = props.demos || [];
+  const full = chosen.length >= max;
+  const taken = props.taken || [];
+  const toggle = (name: string) => {
+    if (taken.includes(name)) return;
+    if (!multi) return props.onPick([name]);
+    setChosen((c) => (c.includes(name) ? c.filter((n) => n !== name) : c.length >= max ? c : [...c, name]));
+  };
   return (
     <>
       <div class="sample-modal-backdrop" onClick={onClose} />
@@ -1694,22 +1711,42 @@ export function SamplePicker(props: {
         <div class="sample-modal-body">
           {demos.length ? (
             <div class="sample-grid">
-              {demos.map((name) => (
-                <button
-                  type="button"
-                  key={name}
-                  class={`sample-tile${props.picked === name ? " is-picked" : ""}`}
-                  title={name}
-                  onClick={() => props.onPick(name)}
-                >
-                  <img src={urls.demoThumb(name)} alt={name} loading="lazy" />
-                </button>
-              ))}
+              {demos.map((name) => {
+                const at = multi ? chosen.indexOf(name) : props.picked === name ? 0 : -1;
+                const off = taken.includes(name) || (multi && full && at < 0);
+                return (
+                  <button
+                    type="button"
+                    key={name}
+                    class={`sample-tile${at >= 0 ? " is-picked" : ""}${off ? " is-full" : ""}`}
+                    title={taken.includes(name) ? `${name}（已經加入了）` : name}
+                    aria-pressed={multi ? at >= 0 : undefined}
+                    aria-disabled={off || undefined}
+                    onClick={() => toggle(name)}
+                  >
+                    <img src={urls.demoThumb(name)} alt={name} loading="lazy" />
+                    {multi && at >= 0 && <span class="sample-tile-order" aria-hidden="true">{at + 1}</span>}
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <p class="chat-text chat-muted">{props.demos ? "目前沒有可用的範例照片。" : "載入中…"}</p>
           )}
         </div>
+        {multi && !!demos.length && (
+          <div class="sample-modal-foot">
+            <span class="sample-modal-count" aria-live="polite">
+              {chosen.length ? (full ? `已選 ${chosen.length} 張（最多 ${max} 張）` : `已選 ${chosen.length} 張`) : `可以選多張，最多 ${max} 張`}
+            </span>
+            <div class="chat-choices">
+              <button type="button" class="chat-chip is-ghost" onClick={onClose}>取消</button>
+              <button type="button" class="chat-chip is-primary" disabled={!chosen.length} onClick={() => props.onPick(chosen)}>
+                選好了
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

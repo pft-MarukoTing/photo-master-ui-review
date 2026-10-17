@@ -471,6 +471,16 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   border:2px solid transparent;background:var(--n14);cursor:pointer}
 .sample-tile img{width:100%;height:auto;display:block}
 .sample-tile.is-picked{border-color:var(--accent);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.2)}
+/* 多選時選到的那張右上角標第幾張：多張照這個順序排，所以標數字不標勾。
+   選滿了，沒選的淡下去，看得出點了也不會加。 */
+.sample-tile{position:relative}
+.sample-tile-order{position:absolute;top:var(--sp-2);right:var(--sp-2);min-width:24px;height:24px;padding:0 6px;box-sizing:border-box;
+  display:flex;align-items:center;justify-content:center;border-radius:999px;background:var(--accent);color:#fff;
+  font:700 13px/1 Inter,'Noto Sans TC',system-ui,sans-serif;font-variant-numeric:tabular-nums;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.sample-tile.is-full{opacity:.45;cursor:not-allowed}
+.sample-modal-foot{flex:none;display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
+  padding:var(--sp-3) var(--sp-5);border-top:1px solid var(--border)}
+.sample-modal-count{font-size:var(--chat-fs-md);color:var(--n64);font-variant-numeric:tabular-nums}
 
 /* 上傳頁面的個人化需求，接在動作鍵上面。跟 session 的個人化需求面板（.chat-opt-prompt）
    同一套，整張一段字：不同對象用「；」隔開，指定了人的那段前面掛頭像。改的時候是同一段
@@ -501,7 +511,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-send:not([disabled]):hover{background:var(--tonal-hi)}
 .home-start-btn:not([disabled]):hover{filter:brightness(1.05)}
 /* The dialog's own hover feedback, in the same block as the rest. */
-.sample-tile:hover{border-color:rgba(var(--accent-rgb),.72)}
+.sample-tile:not(.is-full):hover{border-color:rgba(var(--accent-rgb),.72)}
 .sample-modal-close:hover{background:var(--tonal-lo);color:var(--n100)}
 .chat-attach[disabled]{opacity:.45;cursor:not-allowed}
 /* Once a photo is picked the attach button is the only forward way back to
@@ -521,6 +531,10 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .chat-attach-menu svg{width:16px;height:16px;flex-shrink:0}
 @keyframes chat-attach-menu-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.chat-attach-menu{animation:none}}
+/* 多張頁照片列標題上的 +：按鈕在頂端，選單往下開、跟按鈕置中對齊。
+   置中用 translate 不用 transform，進場動畫的 transform 才不會把它蓋掉。 */
+.batch-add-wrap{position:relative;display:flex}
+.chat-attach-menu.is-down{left:50%;right:auto;bottom:auto;top:calc(100% + var(--sp-1));translate:-50% 0;z-index:30}
 .chat-boot-error{padding:var(--sp-7) var(--sp-4);color:var(--danger)}
 
 /* Settings editor */
@@ -687,7 +701,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 @media (min-width:901px){
   #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px) - 30px);box-sizing:border-box}
 }
-.batch-sidebar-all{margin:0 0 12px}
+.batch-sidebar-all{margin:0 0 12px;display:flex;flex-direction:column;gap:6px}
 .batch-sidebar-all .chat-chip{width:100%;justify-content:center}
 /* 手機和直拿的平板：跟舊版 ≤900 一樣收成從左邊拉出來的抽屜，左上角那顆開。舊版那組只
    寫到 900，901–1200 直拿也是這套直排版面，所以這裡連那段一起重寫一次（上面那條桌機
@@ -705,6 +719,39 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #results-body.batch-mode .batch-sidebar-header{padding-right:36px}
 }
 @media (prefers-reduced-motion:reduce){#results-body.batch-mode>.batch-sidebar{transition:none}}
+/* 上傳頁也有同一欄「我的照片」（BatchPreSidebar）：桌機寬度和 session 那欄一樣 170px，
+   高度跟旁邊的對話框對齊（同一個 100dvh − 150px、760 上限），只有列表在裡面捲。
+   舊版那條高度公式是照 session 頁的標頭＋步驟列算的，這裡用不上，所以用選擇器蓋掉。 */
+#upload-section .upload-content-row>#batch-sidebar{flex:0 0 184px;max-width:184px;padding:14px;position:relative;top:auto;margin:0;
+  height:calc(100dvh - 150px);max-height:760px;min-height:480px;box-sizing:border-box;align-self:center}
+@media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
+  #upload-section .upload-content-row>#batch-sidebar{height:100%;max-height:none;min-height:0;align-self:stretch}
+}
+/* 手機和直拿的平板：照片台面藏起來、對話就是整頁，這欄跟 session 一樣收成左邊拉出來的抽屜。
+   align-self 要改回 stretch：fixed 的元素也吃 align-self，留著桌機的 center 會縮成內容高再置中，
+   照片一多就往上溢出、頂端那列被標頭蓋住。 */
+@media (max-width:900px),(max-width:1200px) and (orientation:portrait){
+  #upload-section .upload-content-row>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;align-self:stretch;
+    width:min(224px,68vw);height:auto;max-height:none;min-height:0;max-width:none;padding:12px;flex-basis:auto;
+    border-radius:0;border-width:0 1px 0 0;z-index:1001;transform:translateX(-100%);transition:transform .25s ease}
+  #upload-section .upload-content-row>#batch-sidebar.drawer-open{transform:translateX(0)}
+  #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
+  #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
+  #upload-section .upload-content-row>.batch-sidebar-backdrop{top:var(--header-h)}
+  #upload-section .upload-content-row>.batch-sidebar-backdrop.drawer-open{display:block}
+  #upload-section .upload-content-row .batch-sidebar-header{padding-right:36px}
+}
+@media (prefers-reduced-motion:reduce){#upload-section .upload-content-row>#batch-sidebar{transition:none}}
+/* 上傳頁的照片列表標題列多了「新增照片」，和「全部清除」一組靠右，縮成 26px 讓「我的照片」不被截斷。 */
+#upload-section .upload-content-row .batch-sidebar-header{gap:6px}
+#upload-section .upload-content-row .batch-sidebar-title{flex:0 1 auto}
+.batch-sidebar-actions{display:flex;gap:4px;margin-left:auto;flex:none}
+.batch-sidebar-actions:empty{display:none}
+#upload-section .upload-content-row .batch-sidebar-actions .batch-download-all-btn{width:26px;height:26px}
+/* 垃圾桶 hover 轉紅，跟舊版 #history-clear-all-btn 一樣的「會刪掉」提示。 */
+.batch-sidebar-actions .batch-download-all-btn[data-danger]:hover{color:#fff;background:rgba(178,42,42,.9);border-color:rgba(178,42,42,.9)}
+.batch-sidebar-actions .batch-download-all-btn:disabled{opacity:.45;cursor:not-allowed}
+.batch-sidebar-actions .batch-download-all-btn:disabled:hover{border-color:var(--border);color:var(--text-2)}
 
 /* Session: the chat takes the analysis slot.
 
@@ -803,6 +850,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
     width:calc(100vw - var(--sp-4));border-radius:18px}
   .sample-modal-head{padding:var(--sp-3) var(--sp-4)}
   .sample-modal-body{padding:var(--sp-4)}
+  .sample-modal-foot{padding:var(--sp-3) var(--sp-4)}
   .sample-grid{columns:108px;column-gap:var(--sp-2)}
   .sample-tile{margin-bottom:var(--sp-2)}
 }
@@ -1201,6 +1249,9 @@ div.chat-proposal-row{cursor:default}
 .demo-image-tile:has(.chat-tile-remove) .demo-image-tile-check{display:none}
 /* 舊頁面的勾勾看 .selected，這裡的磚是 .is-selected，所以在這裡接上（首頁範例照片選了要打勾）。 */
 .demo-image-tile.is-selected .demo-image-tile-check{opacity:1;background:var(--mv-grad);border-color:transparent}
+/* 範例照片勾了兩張以上，勾勾換成第幾張（多張頁照這個順序）。兩位數時圓圈往橫向撐開。 */
+.demo-image-tile-check.is-order{width:auto;min-width:20px;padding:0 5px;box-sizing:border-box;border-radius:999px;
+  font:700 11px/1 Inter,'Noto Sans TC',system-ui,sans-serif;font-variant-numeric:tabular-nums}
 /* 選取的那格：最上層一圈主題色內框（抽屜那邊框本身已經有 1px，所以只補 1px；首頁的磚沒有框，補 2px）。 */
 .demo-image-tile.is-selected::after{content:"";position:absolute;inset:0;z-index:2;border-radius:inherit;pointer-events:none;
   box-shadow:inset 0 0 0 var(--tile-ring,2px) var(--accent)}

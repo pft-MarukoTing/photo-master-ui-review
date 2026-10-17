@@ -36,6 +36,19 @@ export function submissionPreviewEvents(events: PreviewReplyEvent[], suppressInt
 type Input = { photoKey?: string; people?: PreviewDisplayPerson[]; identity: string | null; preview?: PreviewStatus; model: string; history: ReviewTurn[];
   historyWithEvents?: (events: PreviewReplyEvent[]) => ReviewTurn[]; wishes: PreviewWish[]; prompt: string; busy: boolean; blocked: boolean; turns: number; active: boolean };
 
+type State = { key: string | null; photoKey: string | null; context: string; wishesKey?: string; result?: PreviewConversationResult; events: PreviewReplyEvent[] };
+type Committed = { key: string | null; result?: PreviewConversationResult };
+type Budget = { key: string | null; attempts: number; revision: number; completed: boolean; published: boolean; lastContext: string; lastWishes: string; flight: boolean };
+const freshBudget = (key: string | null): Budget => ({ key, attempts: 0, revision: 0, completed: false, published: false, lastContext: "", lastWishes: "", flight: false });
+// 每張照片（key）離開時的對話狀態。上限跟 subject-preview 的 cache 一樣，多張最多 20 張夠用。
+const saved = new Map<string, { state?: State; committed: Committed; budget: Budget }>();
+const SAVED_MAX = 50;
+function remember(key: string, entry: { state?: State; committed: Committed; budget: Budget }) {
+  saved.delete(key);
+  saved.set(key, entry);
+  while (saved.size > SAVED_MAX) saved.delete(saved.keys().next().value!);
+}
+
 // A reply is accepted only against the exact source and complete conversation
 // revision that requested it. Draft typing and thumbnail loading are not revisions.
 export function usePreviewConversation(input: Input) {
@@ -51,12 +64,28 @@ export function usePreviewConversation(input: Input) {
   const current = useRef({ key, context, active: input.active, emptyRoster });
   current.current = { key, context, active: input.active, emptyRoster };
   useEffect(() => () => { current.current.active = false; }, []);
-  const [state, setState] = useState<{ key: string | null; photoKey: string | null; context: string; wishesKey?: string; result?: PreviewConversationResult; events: PreviewReplyEvent[] }>({ key, photoKey, context, events: [] });
-  const committed = useRef<{ key: string | null; result?: PreviewConversationResult }>({ key });
-  if (committed.current.key !== key) committed.current = { key };
-  const budget = useRef({ key, attempts: 0, revision: 0, completed: false, published: false, lastContext: "", lastWishes: "", flight: false });
+  const [kept, setState] = useState<State>({ key, photoKey, context, events: [] });
+  let state = kept;
+  const committed = useRef<Committed>({ key });
+  const budget = useRef<Budget>(freshBudget(key));
   const [tick, setTick] = useState(0);
-  if (budget.current.key !== key) budget.current = { key, attempts: 0, revision: 0, completed: false, published: false, lastContext: "", lastWishes: "", flight: false };
+  if (budget.current.key !== key) {
+    // 多張上傳頁切到別張再切回來，這張的對話要跟離開時一樣：離開時存一份，回來時拿回來。
+    const gone = budget.current;
+    if (gone.key) remember(gone.key, {
+      state: kept.key === gone.key ? kept : undefined,
+      committed: committed.current.key === gone.key ? committed.current : { key: gone.key },
+      // 離開時還在等的那次回覆會被丟掉（key 已經不對），回來要重問一次。
+      budget: gone.flight ? { ...gone, flight: false, lastContext: "", lastWishes: "", attempts: gone.completed ? gone.attempts : Math.max(0, gone.attempts - 1) } : { ...gone },
+    });
+    const back = key ? saved.get(key) : undefined;
+    committed.current = back ? back.committed : { key };
+    budget.current = back ? { ...back.budget } : freshBudget(key);
+    if (back?.state) {
+      state = back.state;
+      setState(back.state);
+    }
+  } else if (committed.current.key !== key) committed.current = { key };
   useEffect(() => {
     const b = budget.current;
     const preview = input.preview;

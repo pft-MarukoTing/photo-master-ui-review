@@ -440,6 +440,8 @@ function Tile(props: {
   src: string;
   title: string;
   selected: boolean;
+  // 多選時是第幾張，勾勾換成這個數字。
+  order?: number;
   onClick: () => void;
   onImgError?: () => void;
   children?: ComponentChildren;
@@ -453,7 +455,7 @@ function Tile(props: {
     >
       <img class="demo-image-tile-bg" src={props.src} alt="" loading="lazy" />
       <img src={props.src} alt={props.title} loading="lazy" onError={props.onImgError} />
-      {TILE_CHECK}
+      {props.order ? <span class="demo-image-tile-check is-order">{props.order}</span> : TILE_CHECK}
       {props.children}
     </button>
   );
@@ -595,7 +597,7 @@ function SessionDays(props: {
               <SessionTile
                 key={rowId(s)}
                 s={s}
-                selected={props.picked ? props.picked.has(rowId(s)) : rowId(s) === props.selectedId}
+                selected={props.picked ? props.picked.has(rowId(s)) : rowId(s) === props.selectedId || (!!props.selectedId && !!s.session_ids?.includes(props.selectedId))}
                 onClick={() => props.onPick(rowId(s))}
                 onRemove={props.onRemove && (() => props.onRemove!(rowId(s)))}
               />
@@ -608,7 +610,8 @@ function SessionDays(props: {
 }
 
 export type GalleryTab = "recent" | "sample";
-export type GallerySelection = { kind: "session"; id: string } | { kind: "demo"; name: string } | null;
+// 範例照片可以多選，names 照點的順序排（多張頁就照這個順序）。
+export type GallerySelection = { kind: "session"; id: string } | { kind: "demo"; names: string[] } | null;
 
 export function Gallery(props: {
   tab: GalleryTab;
@@ -618,6 +621,8 @@ export function Gallery(props: {
   selection: GallerySelection;
   onSelect: (s: GallerySelection) => void;
   onConfirm: () => void;
+  // 範例照片最多選幾張。
+  max?: number;
   onRemove?: (id: string) => void;
   // 手機上那一排只放得下幾張，「全部」打開完整的清單：最近照片開側欄，範例照片開範例視窗。
   onAll?: (t: GalleryTab) => void;
@@ -625,6 +630,13 @@ export function Gallery(props: {
   const { tab, selection } = props;
   const recent = tab === "recent";
   const list = recent ? props.sessions : props.demos;
+  const names = selection?.kind === "demo" ? selection.names : [];
+  // 點一下選、再點一下取消；選滿了再點沒選的不會加。
+  const toggle = (name: string) => {
+    const next = names.includes(name) ? names.filter((n) => n !== name)
+      : names.length >= (props.max ?? 1) ? names : [...names, name];
+    props.onSelect(next.length ? { kind: "demo", names: next } : null);
+  };
   return (
     <div class={`upload-gallery-col is-history${recent ? " showing-recent" : ""}`}>
       <div class="upload-gallery-heading">
@@ -690,8 +702,9 @@ export function Gallery(props: {
                 <Tile
                   src={urls.demoThumb(name)}
                   title={name}
-                  selected={selection?.kind === "demo" && selection.name === name}
-                  onClick={() => props.onSelect({ kind: "demo", name })}
+                  selected={names.includes(name)}
+                  order={names.length > 1 && names.includes(name) ? names.indexOf(name) + 1 : undefined}
+                  onClick={() => toggle(name)}
                 />
               ))}
         </div>
@@ -704,10 +717,10 @@ export function Gallery(props: {
           id="demo-images-confirm-btn"
           class="btn btn-secondary btn-sm"
           type="button"
-          disabled={selection?.kind !== "demo"}
+          disabled={!names.length}
           onClick={props.onConfirm}
         >
-          使用所選照片
+          {names.length > 1 ? `使用所選照片（${names.length} 張）` : "使用所選照片"}
         </button>
       )}
     </div>

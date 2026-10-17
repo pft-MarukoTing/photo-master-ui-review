@@ -92,6 +92,8 @@ export interface Session {
   updated_at: number;
   photo_order: string[];
   active_photo_id: string | null;
+  // 多張上傳的同一批：每張各自一個對話，靠這個認出是同一批。
+  batch_id?: string | null;
   defaults: Plan;
   photos: Photo[];
   messages?: Message[];
@@ -120,6 +122,9 @@ export interface SessionSummary {
   thumbnails?: { job_id: string; run: number | null }[];
   status: SessionState;
   rendered_count: number;
+  // 多張上傳的同一批合成一格：session_id 是最後動過的那張，這裡是整批（上傳順序）。
+  session_ids?: string[];
+  batch_id?: string | null;
 }
 
 export interface Choice {

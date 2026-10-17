@@ -253,6 +253,33 @@ class ChatRoutesTest(unittest.TestCase):
         sid = self.new_session()
         self.assertEqual(self.client.get(self.url(sid), query_string={"user": "other"}).status_code, 404)
 
+    def test_batch_sessions_list_as_one_row(self):
+        """The photos of one multi-photo upload each get their own session;
+        the list shows them as one tile, opened at the one worked on last."""
+        ids = []
+        for _ in range(3):
+            res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER, "batch_id": "b_1"})
+            self.assertEqual(res.status_code, 201)
+            ids.append(res.get_json()["session_id"])
+            self.ready_photo(ids[-1])
+        lone = self.new_session()
+        self.ready_photo(lone)
+        self.render(ids[0], chat_session.load_session(USER, ids[0])["photos"][0])
+        rows = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()["sessions"]
+        self.assertEqual(len(rows), 2)
+        batch = next(r for r in rows if r.get("session_ids"))
+        self.assertEqual(batch["session_ids"], ids)
+        self.assertEqual(batch["session_id"], ids[0])
+        self.assertEqual(batch["photo_count"], 3)
+        self.assertEqual(len(batch["thumbnails"]), 3)
+        self.assertEqual(batch["status"], "rendering")
+        self.assertEqual(len(batch["case_ids"]), 3)
+        self.assertEqual(chat_session.load_session(USER, ids[1])["batch_id"], "b_1")
+
+    def test_bad_batch_id(self):
+        res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER, "batch_id": "bad id!"})
+        self.assertEqual(res.status_code, 400)
+
     def test_expired_session_drops_out_of_the_list(self):
         sid = self.new_session()
         del self.redis.data[chat_session._session_key(USER, sid)]

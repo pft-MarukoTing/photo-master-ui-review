@@ -142,7 +142,9 @@ export const api = {
       { ...json("POST", { text, prompt, history, people, sections }), signal: AbortSignal.timeout(15000) },
     ),
 
-  createSession: () => request<Session>(`${CHAT}/sessions`, json("POST", {})),
+  // batchId：多張上傳的同一批，最近照片會把它們合成一格。
+  createSession: (batchId?: string) =>
+    request<Session>(`${CHAT}/sessions`, json("POST", batchId ? { batch_id: batchId } : {})),
   listSessions: (limit = 30) =>
     request<{ sessions: SessionSummary[] }>(`${CHAT}/sessions${q({ limit })}`),
   // 最近照片的刪除：幾格（對話的 id，或 `case:<case_id>`），或 "all" 全部。
