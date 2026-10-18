@@ -2052,13 +2052,16 @@ def _end_round(user, session_id, photo, history):
 
 
 def _screen(raw):
-    """The buttons the page shows right now, {bar, topics, pending}, each a few
-    short labels; pending names what this round changed and has not rendered."""
+    """The buttons the page shows right now, {bar, topics, pending, panels},
+    each a few short labels; pending names what this round changed and has not
+    rendered, panels the panels a reply may open (left out by older pages)."""
     raw = raw if raw is not None else {}
     if not isinstance(raw, dict):
         raise _RequestError("screen must be an object")
     out = {}
-    for key in ("bar", "topics", "pending"):
+    for key in ("bar", "topics", "pending", "panels"):
+        if key == "panels" and key not in raw:
+            continue
         labels = raw.get(key, [])
         if not isinstance(labels, list) or len(labels) > SCREEN_LABELS_MAX or not all(
                 isinstance(x, str) and 0 < len(x) <= PROMPT_REVIEW_LABEL_MAX_LEN for x in labels):
@@ -2203,6 +2206,26 @@ def _apply_directly(user, session_id, photo, reply):
     return messages
 
 
+def _open_panel(user, session_id, photo, category):
+    """Opens the panel a reply says it opened, the way pressing its button
+    does; after a render it first opens a round of adjusting, as 看美化項目
+    does. Both cards carry the plan as the page's snapshotOf would, so the
+    round starts out unchanged."""
+    photo_id = photo["photo_id"]
+    snapshot = {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}
+    if photo["plan"].get("overwrite_prompt"):
+        snapshot["overwrite_prompt"] = True
+    messages = []
+    if _round_to_open(store.get_messages(user, session_id), photo_id):
+        messages.append(store.make_message("assistant", card={
+            "type": "adjust_opened", "photo_id": photo_id, "via": "open", "auto": True, "plan": snapshot}))
+    # via reply: the reply above said it opens, so no tap bubble of the user's own.
+    messages.append(store.make_message("user", card={
+        "type": "options_opened", "photo_id": photo_id, "category": category, "via": "reply",
+        "plan": copy.deepcopy(snapshot)}))
+    return messages
+
+
 def _about(card, photo_id):
     """Whether a log card concerns this photo. Most carry one photo_id; the
     ones a session of several photos shares name theirs in a list instead
@@ -2268,6 +2291,8 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
             **({"close": True} if answer.get("close") else {}), **tag}))
     if proposal and proposal.get("direct"):
         messages += _apply_directly(user, session_id, photo, messages[-1])
+    if answer.get("open") and photo["status"] == "ready" and analysis:
+        messages += _open_panel(user, session_id, photo, answer["open"])
     if answer.get("close"):
         _end_round(user, session_id, photo, history)
     if answer["render"]:

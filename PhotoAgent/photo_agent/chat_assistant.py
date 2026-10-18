@@ -7,6 +7,7 @@ The model never changes anything itself. It returns
     action      "render" for a plain "make it better" (一鍵美化) with no
                 change, "close" when the user is winding down, else "none"
     patch_json  a plan patch as a JSON string ("" for none)
+    open        the panel to open under the reply (「設定」…), "" for none
 
 and ask() checks the patch the way PATCH .../plan would, drops what does
 not pass, and words the proposal from the actual before/after diff -- so
@@ -46,7 +47,7 @@ RESPONSE_SCHEMA = {
     "schema": {
         "type": "object",
         "additionalProperties": False,
-        "required": ["reply", "action", "patch_json", "options", "lines", "your_pick"],
+        "required": ["reply", "action", "patch_json", "options", "lines", "your_pick", "open"],
         "properties": {
             "reply": {"type": "string"},
             "action": {"type": "string", "enum": ["none", "render", "close"]},
@@ -54,9 +55,13 @@ RESPONSE_SCHEMA = {
             "options": {"type": "array", "items": {"type": "string"}},
             "lines": {"type": "boolean"},
             "your_pick": {"type": "boolean"},
+            "open": {"type": "string", "enum": ["", "人像", "畫面", "風格", "個人化需求", "設定"]},
         },
     },
 }
+
+# 回覆可以打開的面板（按鈕名稱 → 頁面的項目）。
+OPEN_PANELS = {"人像": "face", "畫面": "recipe", "風格": "style", "個人化需求": "prompt", "設定": "settings"}
 
 UNMAPPED_REPLY = "這個調整我沒辦法對應到可設定的項目，可以直接在面板上修改。"
 ALREADY_SET_REPLY = "目前的設定已經是這樣了，不需要再調整。"
@@ -85,6 +90,7 @@ INSTRUCTION = """You are the assistant in a photo retouching chat. The user is l
 SCOPE
 - You only handle this photo: what the analysis says about it, what the plan will do, and what this tool can change. That is the whole job.
 - Questions about how this tool works -- what a button, panel, setting or step does, what it can or cannot change, what to do next (「分析在做什麼？」「一鍵美化是什麼意思？」「再美化跟看美化項目差在哪？」) -- are in scope. Answer from TOOL GUIDE in one to three short sentences, then point at SCREEN (see NEVER A DEAD END) as a question offering it (「要不要…？」), not as an instruction to press it.
+- When the user wants to see or change a panel rather than learn what it is -- 「設定」 (美化引擎、長寬比、人像修正), 人像, 畫面, 風格 or 個人化需求 (「我要換美化引擎」「開啟設定」「幫我打開風格」) -- set open to that panel: the page opens it right under your reply, so there is nothing to press. Say in one short line where it is, e.g. 「美化引擎在「設定」裡，打開在下面了。」 Action "none", patch_json "", options []. Open only a panel SCREEN panels lists -- after a render that includes the ones folded into 「看美化項目」, and the page opens the round for it; a panel not listed is not on this photo or cannot change this version, so answer instead. A change you can make in PATCH (a 長寬比, a 風格 choice) goes in patch_json instead, and a question about what a panel does gets an answer with open "".
 - Before declining, ask yourself one thing: is this message about this photo? It is when it concerns what the photo shows, what it could be made into or used for (a poster, a magazine cover, an ad, a post), or words to go with it (a title, a headline, a caption, ad copy). Such a request is in scope even if the conversation never mentioned it, and even if it would be out of scope without the photo (「如果要做成海報，有什麼適合的標題？」「這張適合配什麼文案？」). Read it together with CONVERSATION and PLAN too: a short follow-up (「還有別的嗎？」「再給幾個」) continues what the user is making with this photo.
 - When they ask for words for the photo, give two or three short lines that fit what the photo shows and the look being made, as options with "lines" true. The page lays them out as a list to pick from, with a last row for writing their own, so the reply does not repeat the lines: it says they are below and asks which one to put on the photo, e.g. 「幫你想了幾句，想放哪一句到照片上？也可以自己寫一句。」. When they pick one, or write one of their own in reply, propose adding it to user_prompt (「海報標題放上「…」」). When they ask to make the photo into something (「做成海報」「做成雜誌封面」), propose it in user_prompt like any other wish.
 - When they ask how to retouch this photo, what could be fixed or what would suit it (「這張要怎麼修？」「哪裡可以修？」「適合什麼風格？」), answer from ANALYSIS and PLAN: name the two or three main things the analysis suggests, in plain words (「閉眼的那位可以把眼睛修開、背景的雜物可以去掉」), and say where on screen to look them over, using the panel names in SCREEN topics (「這些都列在「人像」「畫面」裡，可以點開看看要不要留」). Do not list every item, and do not propose a change: the suggestions are already in the panels for the user to switch on or off. Action "none", patch_json "", options []. When CONVERSATION already has an [analysis summary shown] line, those main things are already on screen: do not name them again. Give your judgement instead, in one or two sentences -- which one matters most for this photo and why, and that the rest can follow the suggestions (「這張最關鍵的是把逆光的臉提亮，表情才看得清楚；其他兩項照建議就好。」). When the photo has already been retouched (SCREEN bar is 「看美化項目」「再美化」, e.g. after 一鍵美化), that version is already on screen, so the question asks what to do next: do not restate what this version already did (RECIPE items kept, PLAN). Suggest one or two concrete next changes in a sentence or two, with the reason -- a RECIPE item left unchecked, something in ANALYSIS this version did not cover, or a direction GOAL supports -- and end with a question offering them (「要不要…？」), with options for it. When nothing is left, say this version already covers the main points and ask what they would like different. Only when they ask what this version changed (「這版改了什麼？」), name the two or three main things, from RECIPE items kept and PLAN.
@@ -116,7 +122,7 @@ REPLY
 - If PHOTO STATUS is not "ready", analysis may be missing; you may still accept a render request.
 
 NEVER A DEAD END
-The user must always know what to press next. SCREEN lists what is on screen right now: "bar" is the action buttons shown right under your latest reply, "topics" are the option panels shown as buttons under your reply. "pending" (when present) names the panels this round changed that are not rendered yet.
+The user must always know what to press next. SCREEN lists what is on screen right now: "bar" is the action buttons shown right under your latest reply, "topics" are the option panels shown as buttons under your reply. "pending" (when present) names the panels this round changed that are not rendered yet. "panels" (when present) names the panels you may open with open, shown or not.
 - Whenever your reply (other than a closing line for a user who is winding down) neither asks a question nor proposes a change nor starts a render -- a decline, a message you did not follow, a turned-down question, an acknowledgement, a greeting, an answer about the photo -- end it by pointing at those buttons, quoting their labels exactly in 「」. Read SCREEN on every turn; it changes as the user presses buttons, so never reuse the buttons an earlier reply named. If your previous reply already pointed at the same buttons, do not point at them again: end on your answer instead. When SCREEN topics is not empty: 「可以點下面的「人像」「風格」看看，或按「美化」。」 (「美化」 stands for the button in SCREEN bar, word for word). Only when topics is empty and bar is 「看美化項目」「再美化」: 「想調整美化項目，可以按下面的「看美化項目」；想用一樣的設定再產生一版，可以按「再美化」。」 「看美化項目」 and 「再美化」 exist only after a render; while topics are showing they are not on screen.
 - After a render, the result card above already names 「看美化項目」 and 「再美化」. So when topics is empty and bar is 「看美化項目」「再美化」, an answer about the photo or a suggestion ends on its own content or its 「要不要…？」 question, without the button sentence; keep the button sentence for a decline, a message you did not follow, or a bare acknowledgement -- and even then never say it again when an earlier reply since the last render already said it.
 - When SCREEN bar has 「幫我分析」, the latest version (or this round) follows only the user's own wishes, and the photo as a whole was not analyzed. Then every reply that does not ask a question also ends by naming 「幫我分析」 and what it is for, e.g. 「想看整張照片還有哪些地方可以修，也可以按「幫我分析」。」 -- after the button sentence when there is one (the decline and not-understood lines above included), and even where the rules above leave the button sentence out (an answer about the photo, a repeat). The other buttons follow the rules above; quote the rest of SCREEN bar as it is, not as 「看美化項目」「再美化」 alone.
@@ -966,6 +972,9 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     options = [] if proposal or render else _options(result.get("options"))
     close = result.get("action") == "close" and not wanted
     options = [] if close else options
+    # 回覆說打開的面板，頁面就接在底下打開；那句話已經交代完，不用再給選項。
+    opened = "" if proposal or render or close else _panel_to_open(result.get("open"), status, analysis, screen)
+    options = [] if opened else options
     # 回答選項只能把字送回來，按不出按鈕的效果。問句是在請人去按畫面上的某顆
     # （「要不要打開「設定」看看？」），或選項本身就是按鈕（「打開設定」）時整組拿掉：
     # 底下的項目和美化按鈕就是答案。只留下「先不調整」的話，它會把那排按鈕擠掉。
@@ -975,9 +984,23 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
     # 在問問題、開始美化或收尾的那則不插嘴。
     if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and ANALYZE_BUTTON not in reply \
-            and not (render or close or options or offers_button):
+            and not (render or close or options or offers_button or opened):
         reply = (reply + ANALYZE_NUDGE) if reply else ANALYZE_NUDGE
-    return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines}
+    return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines,
+            "open": opened}
+
+
+def _panel_to_open(label, status, analysis, screen):
+    """The page category for the panel the model opens, or "". SCREEN panels
+    lists the ones this photo has, shown or folded into 看美化項目; a page that
+    does not send it gets 設定 and 個人化需求, which every photo has, plus the
+    topics on screen. Nothing opens while the photo is busy, or before there
+    is an analysis to show the panel against."""
+    if status != "ready" or not analysis or label not in OPEN_PANELS:
+        return ""
+    screen = screen or {}
+    allowed = screen["panels"] if "panels" in screen else ["設定", "個人化需求", *(screen.get("topics") or [])]
+    return OPEN_PANELS[label] if label in allowed else ""
 
 
 # --- the upload page's gate --------------------------------------------------

@@ -53,7 +53,7 @@ class AskTest(unittest.TestCase):
 
     def test_plain_reply(self):
         result = ask(model_says("這是一張海邊合照。"))
-        self.assertEqual(result, {"reply": "這是一張海邊合照。", "render": False, "proposal": None, "options": [], "close": False, "lines": False})
+        self.assertEqual(result, {"reply": "這是一張海邊合照。", "render": False, "proposal": None, "options": [], "close": False, "lines": False, "open": ""})
 
     def test_words_for_the_photo_are_marked_as_lines(self):
         result = ask(model_says("幫你想了幾句，想放哪一句到照片上？", options=["乾杯剛好", "一起看球"], lines=True))
@@ -169,7 +169,7 @@ class AskTest(unittest.TestCase):
     def test_a_change_that_maps_to_nothing_is_not_claimed(self):
         result = ask(model_says("可以不動她的眼睛，確認後套用", action="render",
                                 patch={"face_issue_overrides": {"0:眼睛": False}}))
-        self.assertEqual(result, {"reply": chat_assistant.UNMAPPED_REPLY, "render": False, "proposal": None, "options": [], "close": False, "lines": False})
+        self.assertEqual(result, {"reply": chat_assistant.UNMAPPED_REPLY, "render": False, "proposal": None, "options": [], "close": False, "lines": False, "open": ""})
 
     def test_one_plain_setting_is_applied_without_asking(self):
         result = ask(model_says("可以改成柔光，確認後套用", patch={"style_options": {"lighting": "soft"}}))
@@ -225,6 +225,41 @@ class AskTest(unittest.TestCase):
                                ("要把「人像」的視線修正關掉嗎？", ["關掉", "保留"]),
                                ("可以在「設定」裡改。你說的是哪一位？", ["左邊女性", "右邊男性"])):
             self.assertEqual(said(reply, options)["options"], options, reply)
+
+    def test_a_reply_can_open_a_panel(self):
+        history = [{"role": "user", "text": "我要調整美化引擎", "card": {"type": "ask"}}]
+        first_round = {"bar": ["照建議直接美化"], "topics": ["畫面", "風格"]}
+        rendered = {"bar": ["看美化項目", "再美化"], "topics": []}
+
+        def said(label, screen, status="ready", a=None, **more):
+            answer = {"reply": "美化引擎在「設定」裡，打開在下面了。", "action": "none", "patch_json": "",
+                      "options": ["好"], "open": label, **more}
+            return chat_assistant.ask(analysis() if a is None else a, default_plan(), status, history,
+                                      model=lambda c: answer, screen=screen)
+
+        # 設定、個人化需求每張照片都有；第一輪、美化完都打得開，打開了就不給選項。
+        for screen in (first_round, rendered):
+            result = said("設定", screen)
+            self.assertEqual((result["open"], result["options"]), ("settings", []))
+            self.assertEqual(said("個人化需求", screen)["open"], "prompt")
+        # 頁面沒送 panels（舊頁面）：人像、畫面、風格要畫面上列著才開。
+        self.assertEqual(said("風格", first_round)["open"], "style")
+        self.assertEqual(said("人像", first_round)["open"], "")
+        self.assertEqual(said("風格", rendered)["open"], "")
+        # 有 panels：美化完收進「看美化項目」的也打得開；這張照片沒有的、只照需求改那版
+        # 下一輪不會列的，都不開。
+        folded = {**rendered, "panels": ["畫面", "風格", "設定"]}
+        self.assertEqual(said("風格", folded)["open"], "style")
+        self.assertEqual(said("人像", folded)["open"], "")
+        prompt_only = {**rendered, "panels": ["個人化需求", "設定"]}
+        self.assertEqual(said("風格", prompt_only)["open"], "")
+        self.assertEqual(said("設定", prompt_only)["open"], "settings")
+        # 照片忙著、還沒有分析、或同時提了改動、要開始美化，都不開。
+        self.assertEqual(said("設定", {"bar": [], "topics": []}, status="rendering")["open"], "")
+        self.assertEqual(said("設定", first_round, a={})["open"], "")
+        self.assertEqual(said("設定", first_round, patch_json='{"style_options":{"lighting":"soft"}}')["open"], "")
+        self.assertEqual(said("設定", first_round, action="render")["open"], "")
+        self.assertEqual(said("沒有這個", first_round)["open"], "")
 
     def test_only_wishes_every_reply_also_offers_the_analysis(self):
         # 只照需求改：底下有「幫我分析」，每則都要提，模型漏講就補上。

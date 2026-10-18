@@ -1315,6 +1315,47 @@ class ChatRoutesTest(unittest.TestCase):
             "reply": "", "action": "none", "patch_json": '{"style_options":{"lighting":"gold"}}'})
         self.assertEqual([m["card"]["type"] for m in res.get_json()["messages"]], ["ask", "llm_reply", "proposal_resolved"])
 
+    def test_a_reply_that_opens_settings_opens_the_panel(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        said = {"reply": "美化引擎在「設定」裡，打開在下面了。", "action": "none", "patch_json": "", "open": "設定"}
+        # 第一輪：直接接一張設定面板，不是使用者點的，所以標 via reply。
+        res, _ = self.ask(sid, photo, "我要調整美化引擎", said, screen={"bar": ["照建議直接美化"], "topics": ["畫面"]})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply", "options_opened"])
+        self.assertEqual((messages[2]["role"], messages[2]["card"]["category"], messages[2]["card"]["via"]),
+                         ("user", "settings", "reply"))
+        # 美化完：先開一輪調整（跟按「看美化項目」一樣），再打開面板。
+        render = self.render(sid, photo)
+        for job in render["job_ids"]:
+            self.jobs[job]["status"] = "success"
+        self.status(sid)
+        res, _ = self.ask(sid, photo, "I'd like to change the AI model", said,
+                          screen={"bar": ["看美化項目", "再美化"], "topics": []})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply", "adjust_opened", "options_opened"])
+        opened = messages[2]["card"]
+        self.assertEqual((opened["via"], opened["auto"]), ("open", True))
+        self.assertEqual(opened["plan"], messages[3]["card"]["plan"])
+        # 已經在調整中就不再開一輪。
+        res, _ = self.ask(sid, photo, "開啟設定", said, screen={"bar": ["美化"], "topics": ["畫面", "設定"]})
+        self.assertEqual([m["card"]["type"] for m in res.get_json()["messages"]], ["ask", "llm_reply", "options_opened"])
+
+    def test_screen_panels_reach_the_model_and_open_a_folded_panel(self):
+        sid = self.new_session()
+        photo = self.ready_photo(sid)
+        render = self.render(sid, photo)
+        for job in render["job_ids"]:
+            self.jobs[job]["status"] = "success"
+        self.status(sid)
+        res, seen = self.ask(sid, photo, "我想改風格", {
+            "reply": "風格打開在下面了。", "action": "none", "patch_json": "", "open": "風格"},
+            screen={"bar": ["看美化項目", "再美化"], "topics": [], "panels": ["畫面", "風格", "設定"]})
+        messages = res.get_json()["messages"]
+        self.assertEqual([m["card"]["type"] for m in messages], ["ask", "llm_reply", "adjust_opened", "options_opened"])
+        self.assertEqual(messages[3]["card"]["category"], "style")
+        self.assertIn('"panels":["畫面","風格","設定"]', seen[0])
+
     def test_a_picked_option_is_applied_without_asking(self):
         sid = self.new_session()
         photo = self.ready_photo(sid)

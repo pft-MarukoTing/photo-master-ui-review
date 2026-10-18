@@ -13,7 +13,7 @@ export class ApiError extends Error {
 
 // One turn of the upload page's conversation, as the model reads it.
 // bar: the buttons under the chat; topics: the option panels that can be opened.
-export type Screen = { bar: string[]; topics: string[]; pending?: string[] };
+export type Screen = { bar: string[]; topics: string[]; pending?: string[]; panels?: string[] };
 export type AskFace = { box: { x: number; y: number; w: number; h: number }; where: string };
 export type ReviewTurn = {
   role: "user" | "assistant";

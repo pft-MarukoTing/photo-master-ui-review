@@ -4455,7 +4455,8 @@ function SessionView(props: {
         const atEnd = messages.slice(idx + 1).every((x) => x.card?.auto);
         return (
           <>
-            {!answersApply && (
+            {/* via reply：AI 的回覆說了幫他打開，使用者沒按過，不畫他的點擊泡泡。 */}
+            {!answersApply && c.via !== "reply" && (
               <UserMsg meta={clockLabel(m.created_at)}>
                 <ClickBubble icon={CATEGORIES[cat].icon} label={CATEGORIES[cat].label} />
               </UserMsg>
@@ -4946,10 +4947,20 @@ function SessionView(props: {
     );
     bar = ["先看美化項目", "照原設定再美化"];
   }
+  // 回覆可以替使用者打開的面板：調整中就是列著的那些；美化完收進「看美化項目」時，
+  // 是下一輪會列出的那些 -- 只照需求改的那版下一輪只有個人化需求和設定。
+  const panels: Category[] = editing
+    ? cats
+    : !analysis
+      ? []
+      : photo.plan.overwrite_prompt && promptNow
+        ? ["prompt", "settings"]
+        : [...baseCats, "settings"];
   const screen: Screen = {
     bar: busy || props.pendingAsk || photo.status !== "ready" ? [] : bar,
     topics: editing ? cats.map((c) => CATEGORIES[c].label) : [],
     pending: [...(adjusting ? dirtyCats.map(c => CATEGORIES[c].label) : []), ...(pendingPerson ? [pendingPerson.text] : [])],
+    panels: panels.map((c) => CATEGORIES[c].label),
   };
 
   // 照片一好（分析完；一鍵美化的話是美化完）就回答那句問題，一句只問一次；後端也只回答一次。
