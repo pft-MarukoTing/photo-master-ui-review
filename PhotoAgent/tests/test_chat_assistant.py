@@ -200,6 +200,32 @@ class AskTest(unittest.TestCase):
                                     model=model, screen={"bar": ["照建議直接美化"], "topics": ["人像", "畫面"]})
         self.assertTrue(result["reply"].endswith("還想調整其他項目可以點下面的項目，或按「美化」我就開始。"))
 
+    def test_options_that_stand_for_a_button_on_screen_are_dropped(self):
+        # 選項只能把字送回來；「打開設定」點了也開不了面板，底下的按鈕才是答案。
+        screen = {"bar": ["照建議直接美化"], "topics": ["人像", "風格", "設定"]}
+        history = [{"role": "user", "text": "我要調整美化引擎", "card": {"type": "ask"}}]
+
+        def said(reply, options):
+            return chat_assistant.ask(analysis(), default_plan(), "ready", history, screen=screen,
+                                      model=lambda c: {"reply": reply, "action": "none", "patch_json": "", "options": options})
+
+        # 選項就是按鈕，不管問句怎麼寫。
+        for options in (["打開設定", "先不調整"], ["看看「風格」", "不用"], ["照建議直接美化", "再想想"]):
+            self.assertEqual(said("要先調整嗎？", options)["options"], [], options)
+        # 問句在請人按畫面上的按鈕，選項換了說法也一樣。
+        for reply in ("可以到「設定」裡調整。要不要打開「設定」看看可用的模型？",
+                      "品質越高細節越細。要不要在「設定」裡選擇合適的引擎？",
+                      "要不要先看看「風格」？",
+                      "品質越高細節越細。要不要到下面的「設定」選擇引擎？",
+                      "要不要按「照建議直接美化」？"):
+            result = said(reply, ["調高品質", "先看看選項"])
+            self.assertEqual((result["reply"], result["options"]), (reply, []), reply)
+        # 真正在問答案的保留：沒指向按鈕、是要改「人像」裡的東西、前面句子提到按鈕。
+        for reply, options in (("想換成什麼顏色？", ["藍色", "白色"]),
+                               ("要把「人像」的視線修正關掉嗎？", ["關掉", "保留"]),
+                               ("可以在「設定」裡改。你說的是哪一位？", ["左邊女性", "右邊男性"])):
+            self.assertEqual(said(reply, options)["options"], options, reply)
+
     def test_only_wishes_every_reply_also_offers_the_analysis(self):
         # 只照需求改：底下有「幫我分析」，每則都要提，模型漏講就補上。
         screen = {"bar": ["看美化項目", "幫我分析", "再美化"], "topics": []}
@@ -217,6 +243,11 @@ class AskTest(unittest.TestCase):
                                     model=lambda c: {"reply": "想換成什麼顏色？", "action": "none", "patch_json": "",
                                                      "options": ["藍色", "白色"]}, screen=screen)
         self.assertEqual(asking["reply"], "想換成什麼顏色？")
+        # 問的是要不要按「幫我分析」，選項拿掉了也不再補那句。
+        offering = chat_assistant.ask(analysis(), default_plan(), "ready", history,
+                                      model=lambda c: {"reply": "要不要先分析整張照片？", "action": "none", "patch_json": "",
+                                                       "options": ["幫我分析", "先不用"]}, screen=screen)
+        self.assertEqual((offering["reply"], offering["options"]), ("要不要先分析整張照片？", []))
         plain = chat_assistant.ask(analysis(), default_plan(), "ready", history,
                                    model=model_says("背景已經照你的需求換好了。"),
                                    screen={"bar": ["看美化項目", "再美化"], "topics": []})

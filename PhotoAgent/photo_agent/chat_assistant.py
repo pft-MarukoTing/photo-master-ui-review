@@ -121,7 +121,7 @@ The user must always know what to press next. SCREEN lists what is on screen rig
 - After a render, the result card above already names 「看美化項目」 and 「再美化」. So when topics is empty and bar is 「看美化項目」「再美化」, an answer about the photo or a suggestion ends on its own content or its 「要不要…？」 question, without the button sentence; keep the button sentence for a decline, a message you did not follow, or a bare acknowledgement -- and even then never say it again when an earlier reply since the last render already said it.
 - When SCREEN bar has 「幫我分析」, the latest version (or this round) follows only the user's own wishes, and the photo as a whole was not analyzed. Then every reply that does not ask a question also ends by naming 「幫我分析」 and what it is for, e.g. 「想看整張照片還有哪些地方可以修，也可以按「幫我分析」。」 -- after the button sentence when there is one (the decline and not-understood lines above included), and even where the rules above leave the button sentence out (an answer about the photo, a repeat). The other buttons follow the rules above; quote the rest of SCREEN bar as it is, not as 「看美化項目」「再美化」 alone.
 - Name only buttons listed in SCREEN, at most three. If SCREEN is empty, the photo is busy and there is nothing to press: name no button and do not mention buttons at all (never 「沒有可按的按鈕」); just invite the user to tell you what to change.
-- options: only when your reply asks a question, give two to four short answers to it, a few words each, written as the user's own reply (the people to choose from, the parts or choices you asked about: 「笑容」、「視線」、「髮色」, or the copy lines you offered, each under 20 characters). Tapping one sends it as if typed. In every other case options is [] -- the buttons on SCREEN are the next step.
+- options: only when your reply asks a question, give two to four short answers to it, a few words each, written as the user's own reply (the people to choose from, the parts or choices you asked about: 「笑容」、「視線」、「髮色」, or the copy lines you offered, each under 20 characters). Tapping one sends it as if typed. In every other case options is [] -- the buttons on SCREEN are the next step. A question that only offers a button on SCREEN (「要不要打開「設定」看看？」) also gets [] -- that button, shown under your reply, is the answer; a typed option cannot press it. Never write an option that stands for a button, or for a change you cannot make in PATCH: 美化引擎 and the number of images are changed only in 「設定」.
 - lines: true only when options are words for the photo you wrote (titles, headlines, captions, copy); false for every other kind of answer.
 - your_pick: true when patch_json holds a choice you made for the user rather than what they said -- they asked you to decide (a colour, a line, a place, a style) or left it open and you filled it in; false when the change is what they asked for in their own words, or there is no patch.
 
@@ -966,11 +966,16 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
     options = [] if proposal or render else _options(result.get("options"))
     close = result.get("action") == "close" and not wanted
     options = [] if close else options
+    # 回答選項只能把字送回來，按不出按鈕的效果。問句是在請人去按畫面上的某顆
+    # （「要不要打開「設定」看看？」），或選項本身就是按鈕（「打開設定」）時整組拿掉：
+    # 底下的項目和美化按鈕就是答案。只留下「先不調整」的話，它會把那排按鈕擠掉。
+    offers_button = bool(options) and _points_at_screen(reply, options, screen)
+    options = [] if offers_button else options
     lines = bool(options) and result.get("lines") is True
     # 只照需求改的時候，每一則都要讓他知道還可以分析；模型漏講就補上。
     # 在問問題、開始美化或收尾的那則不插嘴。
     if ANALYZE_BUTTON in ((screen or {}).get("bar") or []) and ANALYZE_BUTTON not in reply \
-            and not (render or close or options):
+            and not (render or close or options or offers_button):
         reply = (reply + ANALYZE_NUDGE) if reply else ANALYZE_NUDGE
     return {"reply": reply, "render": render, "proposal": proposal, "options": options, "close": close, "lines": lines}
 
@@ -1241,6 +1246,31 @@ def _options(raw):
         if o and len(o) <= OPTION_MAX_LEN and o not in out:
             out.append(o)
     return out[:OPTIONS_MAX]
+
+
+# 選項去掉這些字之後剛好是畫面上的按鈕名稱，就是在叫人按那顆（「打開設定」「看看風格」）。
+_BUTTON_VERBS = re.compile(r"^(?:幫我|我要|請)?(?:打開|開啟|點開|點|看一下|看看|看|按)?|(?:看看|看一下)$")
+# 問句裡按鈕名稱前後接著去按、去看的字，就是在請人按那顆；「把「人像」的視線關掉嗎」不算。
+_OFFER_BEFORE = ("打開", "開啟", "點開", "點", "按", "看看", "看", "到", "在", "進")
+_OFFER_AFTER = ("裡", "看看", "看一下")
+
+
+def _points_at_screen(reply, options, screen):
+    """True when the reply's closing question invites the user to press a
+    button already on SCREEN, or one of the options names such a button."""
+    labels = set((screen or {}).get("bar") or []) | set((screen or {}).get("topics") or [])
+    if not labels:
+        return False
+    plain = [o.replace("「", "").replace("」", "").strip() for o in options]
+    # 按鈕名稱本身也可能以這些字開頭（「幫我分析」「看美化項目」），所以原字也比一次。
+    if any(p in labels or _BUTTON_VERBS.sub("", p).strip() in labels for p in plain):
+        return True
+    # 選項回答的是最後那句問題；前面提到按鈕不算。
+    question = re.split(r"[。！!；;]", reply.strip())[-1].strip()
+    if not question.endswith(("？", "?")):
+        return False
+    return any(re.search(rf"(?:{'|'.join(_OFFER_BEFORE)})(?:下面的|底下的)?「{re.escape(label)}」|「{re.escape(label)}」(?:{'|'.join(_OFFER_AFTER)})", question)
+               for label in labels)
 
 
 # 回答完工具問題、底下掛著「幫我分析」之類的按鈕時，最後那句問的就得是這件事。
