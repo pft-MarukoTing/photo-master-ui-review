@@ -3737,8 +3737,6 @@ function SessionView(props: {
   const roundStart = adjusting ? lastAdjust : readyIdx;
   // 麵包屑要等 adjusting 算出來才知道這張到底算不算做完了。
   const [stepN, stepHow] = stepState(photo, versions, adjusting);
-  // 設定 is offered while adjusting, and before the first render only
-  // once a typed request opened it.
   const baseCats = analysis ? categoriesFor(analysis, caps, photo.plan) : [];
   const opened: Category[] = [];
   // 略過也是走過一步：跟開過的面板一起決定接下來還要談什麼，也讓重整後回到同
@@ -3766,21 +3764,19 @@ function SessionView(props: {
       }
     });
   }
-  // 只照需求改的那一版再調整：美化只看個人化需求，人像、畫面、風格、設定
-  // 都碰不到結果，所以只給這一項。看的是這一輪開的時候有沒有寫需求，中途清掉
-  // 也不會突然冒出其他項目；「幫我分析」開的那輪會把 overwrite_prompt 關掉，
-  // 回到完整清單。
+  // 只照需求改的那一版再調整：美化只看個人化需求，人像、畫面、風格都碰不到
+  // 結果，所以不給。看的是這一輪開的時候有沒有寫需求，中途清掉也不會突然冒出
+  // 其他項目；「幫我分析」開的那輪會把 overwrite_prompt 關掉，回到完整清單。
   const promptOnlyRound =
     adjusting && !!photo.plan.overwrite_prompt && !!String(roundPlan?.user_prompt || "").trim();
-  const cats: Category[] = promptOnlyRound
-    ? ["prompt"]
-    : adjusting || opened.includes("settings")
-      ? [...baseCats, "settings"]
-      : baseCats;
+  // 設定（美化引擎、比例、張數）每次美化都會用到，只照需求改的那一版也是，
+  // 所以能改的時候一律排在最後；不然第一輪想換引擎，連 AI 都找不到入口。
+  const cats: Category[] = [...(promptOnlyRound ? ["prompt" as const] : baseCats), "settings"];
   const lastOpened = opened.length ? opened[opened.length - 1] : null;
   // 分析後的第一輪用漸進引導：排在最前面、還沒看過也還沒略過的那一項，就是
-  // 下一句要談的。（調整後再美化那一輪維持原本的選單。）
-  const guideQueue = cats.filter((c) => !opened.includes(c) && !skipped.includes(c));
+  // 下一句要談的。（調整後再美化那一輪維持原本的選單。）設定不是分析找到的
+  // 項目，引導不談它，只留著按鈕。
+  const guideQueue = cats.filter((c) => c !== "settings" && !opened.includes(c) && !skipped.includes(c));
   const nextCat: Category | null = fresh ? guideQueue[0] || null : null;
   // 這一輪動過、但還沒美化的項目。roundPlan 是開這輪時的設定，photo.plan 是
   // 現在的；把差出來的欄位換成項目名稱，離開再回來時才看得出自己剛剛改了
