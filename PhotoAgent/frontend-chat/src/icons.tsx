@@ -46,6 +46,16 @@ const ICONS: Record<string, { sw: number; body: JSX.Element }> = {
       </>
     ),
   },
+  // 「我的照片」抽屜鈕：跟舊版 #batch-drawer-trigger 同一個疊兩張的圖。
+  photos: {
+    sw: 2,
+    body: (
+      <>
+        <path d="M8 8V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-3" />
+        <rect x="3" y="8" width="13" height="13" rx="2" />
+      </>
+    ),
+  },
   up: { sw: 2, body: <path d="M12 19V6M6 11l6-6 6 6" /> },
   "chevron-up": { sw: 2, body: <path d="M6 15l6-6 6 6" /> },
   search: {

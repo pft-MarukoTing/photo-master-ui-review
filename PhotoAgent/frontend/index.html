@@ -2488,22 +2488,27 @@
       /* Pinned to the true viewport edge (position:fixed ignores the
          .container/.results-container ancestors' own padding) instead of
          sitting inline in #results-detail's flow -- flush against the
-         window's left edge, directly under the sticky .site-header, with
-         no margin/padding of its own. Icon-only (see aria-label for the
-         accessible name) plus a small count badge -- "批次圖片（N）" as
-         visible text read as too dev-facing a label for this. */
-      position: fixed; top: var(--header-h); left: 0; z-index: 999;
-      width: 44px; height: 40px;
-      margin: 0; padding: 0; border-radius: 0;
-      border: 1px solid var(--border); border-left: none;
-      background: var(--card);
-      color: var(--text); cursor: pointer;
+         window's left edge, 10px below the sticky .site-header so the count
+         badge riding its top-right corner clears the header. Icon-only (see
+         aria-label for the accessible name); what keeps it from being missed
+         is the tonal tab itself -- an accent wash over the card, accent edge
+         and icon, never a solid fill. The chat page copies this block and
+         swaps in its own --tonal / --accent-text tokens (chat.css). */
+      position: fixed; top: calc(var(--header-h) + 10px); left: 0; z-index: 999;
+      width: 46px; height: 40px; margin: 0; padding: 0 2px 0 0;
+      border: 2px solid var(--accent); border-left: none; border-radius: 0 12px 12px 0;
+      background: linear-gradient(rgba(var(--accent-rgb), .1), rgba(var(--accent-rgb), .1)), var(--card);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
+      color: var(--accent); cursor: pointer;
     }
+    .batch-drawer-trigger:hover { background: linear-gradient(rgba(var(--accent-rgb), .16), rgba(var(--accent-rgb), .16)), var(--card); }
+    .batch-drawer-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .batch-drawer-trigger-count {
-      position: absolute; top: 4px; right: 4px;
-      min-width: 16px; height: 16px; padding: 0 4px;
+      position: absolute; top: -8px; right: -8px;
+      min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box;
       border-radius: 999px; background: var(--accent); color: #fff;
-      font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+      box-shadow: 0 0 0 2px var(--card);
+      font-size: 11px; font-weight: 700; line-height: 18px; text-align: center;
     }
     .batch-drawer-trigger-count[hidden] { display: none; }
     .batch-sidebar-close-btn {
@@ -5783,8 +5788,8 @@
            above the results, which used to push this content far down the
            page. Only ever shown while #results-body has "batch-mode" (see
            renderBatchSidebarList/openBatchDrawer in app.js). -->
-      <button id="batch-drawer-trigger" class="batch-drawer-trigger" type="button" aria-label="批次圖片">
-        <svg width="20" height="20" fill="none" viewBox="0 0 24 24">
+      <button id="batch-drawer-trigger" class="batch-drawer-trigger" type="button" aria-label="我的照片">
+        <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
           <path d="M8 8V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-3"
             stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
           <rect x="3" y="8" width="13" height="13" rx="2" stroke="currentColor" stroke-width="2"/>

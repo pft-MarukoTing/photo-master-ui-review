@@ -746,6 +746,10 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   66%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}
 }
 @media (prefers-reduced-motion:reduce){.batch-sidebar-all.is-nudge .chat-chip{animation:none!important}}
+/* 抽屜收起來時左上角那顆「我的照片」：版型、位置、張數都在舊版 index.html 那段（建置時複製進來），
+   這裡只把顏色換成對話頁的淡色強調 token，跟 .is-primary 同一組。 */
+.batch-drawer-trigger{background:var(--tonal);color:var(--accent-text)}
+.batch-drawer-trigger:hover{background:var(--tonal-hi)}
 /* 手機和直拿的平板：跟舊版 ≤900 一樣收成從左邊拉出來的抽屜，左上角那顆開。舊版那組只
    寫到 900，901–1200 直拿也是這套直排版面，所以這裡連那段一起重寫一次（上面那條桌機
    規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */
@@ -755,13 +759,18 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
     transform:translateX(-100%);transition:transform .25s ease}
   #results-body.batch-mode>#batch-sidebar.drawer-open{transform:translateX(0)}
   #results-body.batch-mode>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
+  /* 從最近照片打開一批時跟總覽一樣跳幾下（is-hop 由 App 控制，跳完就拿掉，同一批裡換張不會再跳）。 */
+  #results-body.batch-mode>.batch-drawer-trigger.is-hop{animation:drawer-hop 2.4s ease-in-out .4s both}
   /* 抽屜寬度跟舊版共用那段一樣，剛好放得下「我的照片」、張數和全部下載；內距 12，關閉鈕對齊同一條邊。 */
   #results-body.batch-mode .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
   #results-body.batch-mode>.batch-sidebar-backdrop{top:var(--header-h)}
   #results-body.batch-mode>.batch-sidebar-backdrop.drawer-open{display:block}
   #results-body.batch-mode .batch-sidebar-header{padding-right:36px}
 }
-@media (prefers-reduced-motion:reduce){#results-body.batch-mode>.batch-sidebar{transition:none}}
+@media (prefers-reduced-motion:reduce){
+  #results-body.batch-mode>.batch-sidebar{transition:none}
+  #results-body.batch-mode>.batch-drawer-trigger{animation:none!important}
+}
 /* 上傳頁也有同一欄「我的照片」（BatchPreSidebar）：桌機寬度和 session 那欄一樣 170px，
    高度跟旁邊的對話框對齊（同一個 100dvh − 150px、760 上限），只有列表在裡面捲。
    舊版那條高度公式是照 session 頁的標頭＋步驟列算的，這裡用不上，所以用選擇器蓋掉。 */
@@ -783,8 +792,29 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #upload-section .upload-content-row>.batch-sidebar-backdrop{top:var(--header-h)}
   #upload-section .upload-content-row>.batch-sidebar-backdrop.drawer-open{display:block}
   #upload-section .upload-content-row .batch-sidebar-header{padding-right:36px}
+  /* 上傳頁的對話卡就在標頭正下方，那顆會正好落在對話標頭那一列：不做成從邊緣拉出來的分頁，
+     改成標頭裡第一顆圓角小方塊（跟標頭的 chip 同高、不帶陰影），張數一樣掛在右上角；標頭（和選了
+     照片後換上來的照片列）左邊讓出它的寬度（16 起點＋40＋16 間距）。選了照片標頭變 64px，按鈕跟著往下移到垂直置中。 */
+  #upload-section .upload-content-row>.batch-drawer-trigger{left:var(--sp-4);top:calc(var(--header-h) + 9px);width:40px;height:32px;
+    padding:0;border:1px solid var(--accent);border-radius:10px;box-shadow:none}
+  #upload-section .upload-content-row>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-7px;right:-9px}
+  /* 進到總覽（還沒點進哪一張）時跳幾下，提示照片都收在這裡；點進單張再回來，選擇器重新套上就會再跳一次。 */
+  #upload-section .upload-content-row:not(:has(.chat-panel.has-photo))>.batch-drawer-trigger{animation:drawer-hop 2.4s ease-in-out .4s both}
+  #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-left:72px}
+  #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 16px)}
 }
-@media (prefers-reduced-motion:reduce){#upload-section .upload-content-row>#batch-sidebar{transition:none}}
+/* 跳四下、幅度慢慢收：內容多的時候眼睛還在讀對話，一兩下很容易錯過。 */
+@keyframes drawer-hop{
+  0%,22%,44%,64%,82%,100%{transform:none}
+  11%{transform:translateY(-7px)}
+  33%{transform:translateY(-6px)}
+  54%{transform:translateY(-4px)}
+  73%{transform:translateY(-2px)}
+}
+@media (prefers-reduced-motion:reduce){
+  #upload-section .upload-content-row>#batch-sidebar{transition:none}
+  #upload-section .upload-content-row>.batch-drawer-trigger{animation:none!important}
+}
 /* 上傳頁的照片列表標題列多了「新增照片」，和「全部清除」一組靠右，縮成 26px 讓「我的照片」不被截斷。 */
 #upload-section .upload-content-row .batch-sidebar-header{gap:6px}
 #upload-section .upload-content-row .batch-sidebar-title{flex:0 1 auto}

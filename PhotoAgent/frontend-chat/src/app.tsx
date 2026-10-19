@@ -723,6 +723,8 @@ export function App() {
   } | null>(null);
   // 刪除前的那一問（notice：刪不掉時只有「確定」的那句）。
   const [deleteAsk, setDeleteAsk] = useState<{ message: string; notice?: boolean; done: (ok: boolean) => void } | null>(null);
+  // 從最近照片打開一批時，左上角「我的照片」跳一下提示其他張在那裡；跳完就清掉，之後在同一批裡切換照片不再跳。
+  const [hopTrigger, setHopTrigger] = useState(false);
 
   // Pre-session chat
   const [step, setStep] = useState<PreStep>("start");
@@ -1040,6 +1042,9 @@ export function App() {
       setSelected(null);
       setPhase("session");
       setSessionHash(id);
+      setHopTrigger(true);
+      // 桌機那顆藏著、或系統設定減少動態時不會有 animationend，時間到一樣清掉。
+      window.setTimeout(() => setHopTrigger(false), 3500);
       window.scrollTo(0, 0);
       if (s.batch_id) void rejoinBatch(s);
     } catch (e) {
@@ -2940,7 +2945,7 @@ export function App() {
             <li><b>設定</b>：動手前先一起換引擎或長寬比。</li>
           </ul>
           <p class="chat-text">想怎麼修也可以直接打在下面，會套用在所有照片上。</p>
-          <p class="chat-text chat-muted">只想調整某一張，就從左邊「我的照片」點那張；之後想回來這裡，點最上面的「總覽」。</p>
+          <p class="chat-text chat-muted">只想調整某一張，就從{photosSpot()}「我的照片」點那張；之後想回來這裡，點最上面的「總覽」。</p>
         </AssistantMsg>
         {overview.map((t, i) => {
           const latest = i === overview.length - 1;
@@ -3168,12 +3173,16 @@ export function App() {
                   onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : backToBatch(s))}
                   onOverview={openOverview}
                   onStartAll={startAllBatch}
+                  hop={hopTrigger}
+                  onHopped={() => setHopTrigger(false)}
                 />
               ) : session.photos.length > 1 && (
                 <BatchSidebar
                   photos={session.photos}
                   messages={session.messages || []}
                   current={photo.photo_id}
+                  hop={hopTrigger}
+                  onHopped={() => setHopTrigger(false)}
                   onPick={(id) => {
                     setActiveId(id);
                     setSelected(null);
@@ -3302,6 +3311,13 @@ function PreStage({ source }: { source: Source }) {
   );
 }
 
+// 對話裡指「我的照片」在哪：手機和直拿的平板收成左上角那顆（跟 chat.css 的抽屜斷點同一組），
+// 桌機是左邊那一欄。
+const DRAWER_LAYOUT = "(max-width:900px),(max-width:1200px) and (orientation:portrait)";
+function photosSpot() {
+  return matchMedia(DRAWER_LAYOUT).matches ? "左上角" : "左邊";
+}
+
 // 多張上傳頁最左邊那欄「我的照片」：跟進了對話之後那欄同一套 class 和樣子，
 // 點一張就打開那張的對話。最上面兩顆把還沒開始的每張照它自己的需求和設定送出；
 // 標題列那顆 × 全部清除（有一張開始了就不出現），還沒開始的每張右上角也有 × 拿掉。
@@ -3332,6 +3348,9 @@ function BatchPreSidebar(props: {
   live?: Record<string, Photo>;
   // 最後一次美化沒有成功的那幾張。
   failed?: Record<string, boolean>;
+  // 抽屜收起來時那顆按鈕跳一下（從最近照片打開時），跳完呼叫 onHopped。
+  hop?: boolean;
+  onHopped?: () => void;
 }) {
   const { sources, runs, current, pending, live } = props;
   const [open, setOpen] = useState(false);
@@ -3425,7 +3444,7 @@ function BatchPreSidebar(props: {
                       props.onSamples!();
                     }}
                   >
-                    <Icon name="image" size={16} />
+                    <Icon name="photos" size={18} />
                     從範例照片挑選
                   </button>
                 </div>
@@ -3534,8 +3553,14 @@ function BatchPreSidebar(props: {
           })}
         </div>
       </aside>
-      <button type="button" class="batch-drawer-trigger" aria-label={`我的照片（${sources.length} 張）`} onClick={() => setOpen(true)}>
-        <Icon name="image" size={18} />
+      <button
+        type="button"
+        class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}`}
+        aria-label={`我的照片（${sources.length} 張）`}
+        onClick={() => setOpen(true)}
+        onAnimationEnd={() => props.onHopped?.()}
+      >
+        <Icon name="photos" size={18} />
         <span class="batch-drawer-trigger-count">{sources.length}</span>
       </button>
     </>
@@ -3591,6 +3616,8 @@ function BatchSidebar(props: {
   onPick: (id: string) => void;
   busy: boolean;
   onRenderAll: () => void;
+  hop?: boolean;
+  onHopped?: () => void;
 }) {
   const { photos, current } = props;
   const [open, setOpen] = useState(false);
@@ -3697,8 +3724,14 @@ function BatchSidebar(props: {
           })}
         </div>
       </aside>
-      <button type="button" class="batch-drawer-trigger" aria-label={`我的照片（${photos.length} 張）`} onClick={() => setOpen(true)}>
-        <Icon name="image" size={18} />
+      <button
+        type="button"
+        class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}`}
+        aria-label={`我的照片（${photos.length} 張）`}
+        onClick={() => setOpen(true)}
+        onAnimationEnd={() => props.onHopped?.()}
+      >
+        <Icon name="photos" size={18} />
         <span class="batch-drawer-trigger-count">{photos.length}</span>
       </button>
       {notice ? <ConfirmModal message={notice} confirmLabel="確定" onAnswer={() => setNotice(null)} /> : null}
@@ -4190,7 +4223,7 @@ function PreChat(props: {
           {props.batch?.done ? (
             <AssistantMsg>
               <p class="chat-text">
-                這張{starting.mode === "analyze" ? "開始分析了" : starting.overwrite ? "開始調整了" : "開始美化了"}，結果頁裡可以看進度。其他照片從左邊「我的照片」回來接著弄。
+                這張{starting.mode === "analyze" ? "開始分析了" : starting.overwrite ? "開始調整了" : "開始美化了"}，結果頁裡可以看進度。其他照片從{photosSpot()}「我的照片」回來接著弄。
               </p>
               <div class="chat-choices">
                 <Chip label="看結果" icon="image" onClick={props.batch.onOpen} />
