@@ -28,6 +28,7 @@ import json
 import re
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 from flask import Blueprint, Response, current_app, jsonify, request
 
@@ -72,6 +73,7 @@ MESSAGE_TEXT_MAX_LEN = 4000
 MESSAGES_POST_MAX = 100
 SCREEN_LABELS_MAX = 8
 TERMINAL_STATUSES = ("success", "error")
+_FACE_WISH_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="chat-face-wishes")
 # Render bases. Only the original photo for now; rendering on top of an
 # earlier version is meant to be added here without changing the route.
 RENDER_BASES = ("original",)
@@ -2515,6 +2517,69 @@ def _name_prompt_faces(user, session_id, photo, analysis):
     store.save_photo_plan(user, session_id, photo["photo_id"], photo["plan"])
 
 
+def _start_face_wishes(photo, analysis):
+    """The face-wish job for the 個人化需求 the analysis just met, already
+    running alongside the opening brief; None when there is nothing to find."""
+    plan = photo["plan"]
+    prompt = plan.get("user_prompt") or ""
+    if not prompt.strip() or plan.get("face_requests") or photo.get("preview_conversation"):
+        return None
+    return _FACE_WISH_POOL.submit(chat_queue.run, {"stage": chat_jobs.STAGE_FACE_WISHES, "prompt": prompt, "analysis": analysis})
+
+
+def _bind_face_wishes(user, session_id, photo, analysis, pending, *, ask=True, host=None):
+    """Give each face-symmetry wish `pending` (_start_face_wishes) found to
+    the one person it fits, and the reply that says who -- or, with `ask`,
+    asks which person when several fit. `host` is the analysis_ready message
+    the reply is shown inside."""
+    if pending is None:
+        return []
+    try:
+        found = pending.result()
+    except Exception:
+        current_app.logger.exception("chat face wishes failed")
+        return []
+    plan = photo["plan"]
+    prompt = plan.get("user_prompt") or ""
+    names = person_names(analysis)
+    requests, bound, unbound = {}, [], False
+    for item in found:
+        index = item["subject_index"]
+        if index not in names:
+            unbound = True
+            continue
+        name, wish, referent = names[index], item["wish"], item["referent"]
+        # The render keeps a face request only while its person's name is in user_prompt.
+        if name not in prompt:
+            if referent and referent in wish:
+                prompt = prompt.replace(wish, wish.replace(referent, name, 1), 1)
+            elif referent and prompt.count(referent) == 1:
+                prompt = prompt.replace(referent, name, 1)
+            else:
+                prompt = prompt.replace(wish, name + wish, 1)
+        requests[f"{index}:face_symmetry"] = True
+        if name not in bound:
+            bound.append(name)
+    label = chat_assistant.FACE_SYMMETRY_LABEL
+    text, options = "", []
+    if bound:
+        new_plan, error = apply_plan_patch(plan, {"user_prompt": prompt[:USER_PROMPT_MAX_LEN], "face_requests": requests})
+        if error:
+            current_app.logger.warning("chat face wishes not applied: %s", error)
+            return []
+        photo["plan"] = new_plan
+        store.save_photo_plan(user, session_id, photo["photo_id"], new_plan)
+        text = f"{label}會幫{'、'.join(bound)}調整。"
+    if unbound and ask:
+        text += f"{label}要幫哪一位調整？"
+        options = list(names.values())
+    if not text:
+        return []
+    return [store.make_message("assistant", card={
+        "type": "llm_reply", "photo_id": photo["photo_id"], "text": text, "proposal": None, "options": options,
+        **({"answers": host["id"]} if host else {})})]
+
+
 def _opening_brief(analysis, wishes=""):
     """With 詳細解說 on: the first note in a retoucher's voice, written
     by the worker, or None -- the caller then shows the analysis's own summary
@@ -2648,12 +2713,15 @@ def _advance_analyzing(user, session_id, photo, statuses, rebuilt=False):
                 "type": "render_failed", "photo_id": photo["photo_id"],
                 "reason": "unresolved_preview_person", "error": str(exc)}))
             return messages
+        face_wishes = _start_face_wishes(photo, analysis)
         detailed = photo["plan"].get("detailed_explanation") and not rebuilt
         brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
                  or build_brief(analysis))
         if brief:
             messages.append(store.make_message("assistant", card={
                 "type": "analysis_brief", "photo_id": photo["photo_id"], **brief}))
+        # A queued 一鍵美化 starts right away, so there is no one to ask.
+        messages += _bind_face_wishes(user, session_id, photo, analysis, face_wishes, ask=not queued, host=messages[0])
     # A 長寬比 changed while analyzing is re-planned first; a queued render
     # waits for it.
     photo["queued_render"] = queued
@@ -2694,12 +2762,15 @@ def _advance_reanalysis(user, session_id, photo, job):
     photo["error"] = None
     _name_prompt_faces(user, session_id, photo, analysis)
     store.save_photo_state(user, session_id, photo)
+    pending = _start_face_wishes(photo, analysis)
     # The brief the upload skipped: the check card below lists it.
     detailed = photo["plan"].get("detailed_explanation")
     brief = ((_opening_brief(analysis, photo["plan"].get("user_prompt") or "") if detailed else None)
              or build_brief(analysis))
     messages = [store.make_message("assistant", card={
         "type": "analysis_brief", "photo_id": photo_id, **brief})] if brief else []
+    # Before the round below snapshots the plan; said last, where its options can be tapped.
+    face_wishes = _bind_face_wishes(user, session_id, photo, analysis, pending, ask=not queued)
     if why == "check":
         plan = {k: copy.deepcopy(photo["plan"][k]) for k in ROUND_KEYS if k in photo["plan"]}
         # The round starts from 只照需求改 (as the page's snapshotOf), so
@@ -2707,6 +2778,7 @@ def _advance_reanalysis(user, session_id, photo, job):
         plan["overwrite_prompt"] = True
         messages.append(store.make_message("assistant", card={
             "type": "adjust_opened", "photo_id": photo_id, "via": "check", "requested": True, "plan": plan}))
+    messages += face_wishes
     # A 長寬比 changed while analyzing is re-planned first; a queued render
     # waits for it.
     photo["queued_render"] = queued

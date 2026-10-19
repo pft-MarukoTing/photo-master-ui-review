@@ -33,7 +33,10 @@ STAGE_OPENING = "chat_opening"
 # chat_assistant.write_render_note. The backend sends the two images as
 # small data URLs, so this job needs no S3 either.
 STAGE_NOTE = "chat_note"
-STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, preview_conversation.STAGE)
+# The face-symmetry wishes 個人化需求 got before the analysis named anyone:
+# chat_assistant.find_face_wishes.
+STAGE_FACE_WISHES = "chat_face_wishes"
+STAGES = (STAGE_ASK, STAGE_REVIEW, STAGE_OPENING, STAGE_NOTE, STAGE_FACE_WISHES, preview_conversation.STAGE)
 
 
 def cache_note(spent):
@@ -84,4 +87,6 @@ def _run(params):
         return chat_assistant.write_render_note(
             params.get("analysis"), params["plan"], before=params.get("before"), after=params.get("after"),
             previous_plan=params.get("previous_plan"), earlier_notes=params.get("earlier_notes") or ())
+    if stage == STAGE_FACE_WISHES:
+        return chat_assistant.find_face_wishes(params.get("prompt") or "", params.get("analysis"))
     raise RuntimeError(f"unknown chat stage: {stage}", RESULT_INVALID_PARAMETER)
