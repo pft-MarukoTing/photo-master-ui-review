@@ -3515,11 +3515,17 @@ function BatchPreSidebar(props: {
     props.onPick(s);
   };
   const renderable = props.renderable ?? pending;
-  // 總覽那列的第二行：各張到哪了，用跟總覽照片格同樣的字，照要處理的先後排。
-  const progressLine = GRID_GROUPS.map((g) => ({
-    g,
-    n: sources.filter((x) => batchProgress(runs[sourceSrc(x)], live?.[sourceSrc(x)] || null, !!props.failed?.[sourceSrc(x)]) === g.key).length,
-  })).filter((x) => x.n).map((x) => `${x.n} ${x.g.label}`).join(" · ");
+  // 總覽那格拼圖右邊：各張到哪了，跟總覽照片格上面的篩選同一種 pill、同樣的字，照要處理的先後排。
+  // 最前面固定一顆「全部」，跟外面那排一樣；點一顆只列那種狀態的照片，再點一次或點「全部」回來，
+  // 那種一張都不剩時自己回到全部。
+  const stage = (s: Source) => batchProgress(runs[sourceSrc(s)], live?.[sourceSrc(s)] || null, !!props.failed?.[sourceSrc(s)]);
+  const progress = GRID_GROUPS.map((g) => ({ g, n: sources.filter((x) => stage(x) === g.key).length })).filter((x) => x.n);
+  const [picked, setFilter] = useState<BatchProgress | "all">("all");
+  const filter = progress.some((x) => x.g.key === picked) ? picked : "all";
+  const goOverview = () => {
+    setOpen(false);
+    props.onOverview!();
+  };
   const startAll = (mode: "analyze" | "render") => {
     close();
     props.onStartAll(mode);
@@ -3548,26 +3554,52 @@ function BatchPreSidebar(props: {
             一看就知道是對整批的。 */}
         <div class={`batch-overview-card${props.overview ? " is-on" : ""}`}>
           {props.onOverview && (
-            <button
-              type="button"
-              aria-current={props.overview ? "page" : undefined}
-              title="回到總覽，全部一起分析、美化或調整設定"
-              class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
-              disabled={props.disabled && !props.overview}
-              onClick={() => {
-                setOpen(false);
-                props.onOverview!();
-              }}
-            >
-              <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
-                {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
-              </span>
-              <span class="batch-overview-text">
+            // 整格不是一顆按鈕：拼圖右邊的 pill 是篩選，不能包在回總覽的按鈕裡。
+            // 標題那行和拼圖都回總覽，拼圖只是放大點擊範圍，鍵盤和報讀只走標題那顆。
+            <div class={`batch-overview-entry${props.overview ? " is-on" : ""}`}>
+              <button
+                type="button"
+                aria-current={props.overview ? "page" : undefined}
+                title="回到總覽，全部一起分析、美化或調整設定"
+                class="batch-overview-title"
+                disabled={props.disabled && !props.overview}
+                onClick={goOverview}
+              >
                 <b>總覽 · {sources.length} 張</b>
-                {progressLine && <small>{progressLine}</small>}
+                <Icon name="next" size={14} />
+              </button>
+              <span class="batch-overview-body">
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`}
+                  style={{ "--pills": progress.length + 1 }}
+                  disabled={props.disabled && !props.overview}
+                  onClick={goOverview}
+                >
+                  {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
+                </button>
+                {progress.length > 0 && (
+                  <span class="batch-overview-pills" role="group" aria-label="依狀態篩選">
+                    <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
+                      全部 {sources.length}
+                    </button>
+                    {progress.map((x) => (
+                      <button
+                        key={x.g.key}
+                        type="button"
+                        class={`batch-grid-filter is-${x.g.key}${filter === x.g.key ? " is-on" : ""}`}
+                        aria-pressed={filter === x.g.key}
+                        onClick={() => setFilter(filter === x.g.key ? "all" : x.g.key)}
+                      >
+                        {x.g.label} {x.n}
+                      </button>
+                    ))}
+                  </span>
+                )}
               </span>
-              <Icon name="next" size={14} />
-            </button>
+            </div>
           )}
           {pending || renderable ? (
             // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
@@ -3599,6 +3631,7 @@ function BatchPreSidebar(props: {
           onScroll={(e) => (batchListScroll = { batch: batchKey, top: (e.currentTarget as HTMLDivElement).scrollTop })}
         >
           {sources.map((s, i) => {
+            if (filter !== "all" && stage(s) !== filter) return null;
             const key = sourceSrc(s);
             const r = runs[key];
             const p = live?.[key] || null;

@@ -722,11 +722,31 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .batch-overview-card{flex:none;margin:0 0 12px;border:1px solid var(--n24);border-radius:var(--radius);background:var(--n09);overflow:hidden}
 .batch-overview-card.is-on{background:var(--tonal);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
 .batch-overview-card .batch-overview-entry{margin:0;gap:10px;padding:10px;min-height:72px;border:0;border-radius:0;background:transparent;box-shadow:none}
-.batch-overview-card .batch-overview-entry:hover{background:var(--tonal-lo)}
-.batch-overview-card.is-on .batch-overview-entry:hover{background:transparent}
+/* 只有指到回總覽的那兩塊（標題、拼圖）才亮，指到篩選 pill 不算。 */
+.batch-overview-card .batch-overview-entry:has(.batch-overview-title:not(:disabled):hover,button.batch-overview-mosaic:not(:disabled):hover){background:var(--tonal-lo)}
+.batch-overview-card.is-on .batch-overview-entry:has(.batch-overview-title:hover,button.batch-overview-mosaic:hover){background:transparent}
 .batch-overview-card .batch-overview-mosaic{width:44px;height:44px;border-radius:9px}
-.batch-overview-card .batch-overview-text b{font-size:15px;white-space:nowrap}
-.batch-overview-card .batch-overview-text small{font-size:12px;margin-top:3px;white-space:normal}
+/* 上面一行「總覽 · N 張」和箭頭，下面是拼圖 +「全部」和各狀態一顆 pill（跟總覽照片格的篩選同一種），
+   pill 一顆一行往下排。拼圖跟 pill 那欄一樣高（每顆 18px、間隔 4px，最小 44px），pill 全部在它右側。 */
+.batch-overview-card .batch-overview-entry{flex-direction:column;align-items:stretch;gap:8px}
+.batch-overview-card .batch-overview-entry{cursor:default}
+.batch-overview-title{display:flex;align-items:center;gap:8px;min-width:0;width:100%;margin:0;padding:0;border:0;background:none;
+  font:inherit;color:inherit;text-align:left;cursor:pointer}
+.batch-overview-title:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.batch-overview-card button.batch-overview-mosaic{padding:0;border:0;cursor:pointer}
+.batch-overview-title:disabled,.batch-overview-card button.batch-overview-mosaic:disabled{cursor:default;opacity:.55}
+.batch-overview-title b{flex:1 1 auto;min-width:0;font-size:15px;font-weight:700;color:var(--n100);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.batch-overview-title>svg{flex:none;color:var(--n54)}
+.batch-overview-entry.is-on .batch-overview-title>svg{color:var(--accent)}
+.batch-overview-body{display:flex;align-items:flex-start;gap:10px;min-width:0}
+.batch-overview-card .batch-overview-mosaic{--pills:0;width:max(44px,calc(var(--pills) * 22px - 4px));height:auto;aspect-ratio:1/1}
+.batch-overview-pills{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.batch-overview-pills .batch-grid-filter{box-sizing:border-box;height:18px;display:inline-flex;align-items:center;padding:0 8px;
+  font-size:11px;line-height:1;white-space:nowrap}
+.batch-overview-pills .batch-grid-filter.is-running::before{width:8px;height:8px}
+/* 外面那排選中時拿掉框、靠 tonal 底色撐；這格在總覽時自己就是 tonal 底，選中那顆會跟底色混在一起，
+   所以這裡留框、改成 accent。 */
+.batch-overview-pills .batch-grid-filter.is-on{border-color:var(--accent)}
 .batch-overview-card .batch-sidebar-all{margin:0;padding:0 10px 10px}
 /* 對話裡的多張上傳：幾張縮圖並排，多的寫 +N。 */
 .chat-upload-stack{display:flex;gap:4px;flex:none}
@@ -826,13 +846,14 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #results-body.batch-mode>.batch-sidebar{transition:none}
   #results-body.batch-mode>.batch-drawer-trigger{animation:none!important}
 }
-/* 上傳頁也有同一欄「我的照片」（BatchPreSidebar）：桌機寬度和 session 那欄一樣 170px，
+/* 上傳頁也有同一欄「我的照片」（BatchPreSidebar）：桌機寬度和 session 那欄一樣 224px（總覽那格的拼圖右邊要排得下狀態 pill），
    高度跟旁邊的對話框對齊（同一個 100dvh − 150px、760 上限），只有列表在裡面捲。
    舊版那條高度公式是照 session 頁的標頭＋步驟列算的，這裡用不上，所以用選擇器蓋掉。 */
-#upload-section .upload-content-row>#batch-sidebar{flex:0 0 184px;max-width:184px;padding:14px;position:relative;top:auto;margin:0;
+#upload-section .upload-content-row>#batch-sidebar{flex:0 0 224px;max-width:224px;padding:14px;position:relative;top:auto;margin:0;
   height:calc(100dvh - 150px);max-height:760px;min-height:480px;box-sizing:border-box;align-self:center}
 @media (min-width:901px) and (max-width:1200px) and (orientation:landscape){
   #upload-section .upload-content-row>#batch-sidebar{height:100%;max-height:none;min-height:0;align-self:stretch}
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 224px;max-width:224px}
 }
 /* 手機和直拿的平板：照片台面藏起來、對話就是整頁，這欄跟 session 一樣收成左邊拉出來的抽屜。
    align-self 要改回 stretch：fixed 的元素也吃 align-self，留著桌機的 center 會縮成內容高再置中，
@@ -949,12 +970,12 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .results-analysis-slot>.chat-panel .chat-timeline{padding-left:0;padding-right:var(--sp-3)}
 
 /* 桌機上，同一批從上傳頁切進 session 時版面不要跳：以上傳頁為準，三樣對齊。
-   - 「我的照片」欄：上傳頁 184px（舊版 index.html 給 session 的是 170px）。
+   - 「我的照片」欄：上傳頁 224px（舊版 index.html 給 session 的是 170px）。
    - 欄距：上傳頁那排是 column-gap 40，session 這邊原本是側欄 28、照片和對話 24。
    - 對話區：上傳頁是卡片（.chat-panel 本身的底色、圓角、陰影），session 這邊收成只有
      一條分隔線的側欄；把上面那組蓋掉的東西還回去，時間軸內距也回到卡片的。 */
 @media (min-width:1201px){
-  body #results-body.batch-mode #batch-sidebar{flex:0 0 184px;max-width:184px;padding:14px}
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 224px;max-width:224px;padding:14px}
   #results-body.batch-mode{gap:40px}
   .results-canvas-row.showing-analysis{gap:40px}
   .results-analysis-slot>.chat-panel{background:var(--n09);border:0;border-radius:20px;padding-left:0;
