@@ -802,8 +802,10 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #upload-section .upload-content-row>.batch-drawer-trigger{left:var(--sp-4);top:calc(var(--header-h) + 9px);width:40px;height:32px;
     padding:0;border:1px solid var(--accent);border-radius:10px;box-shadow:none}
   #upload-section .upload-content-row>.batch-drawer-trigger>.batch-drawer-trigger-count{top:-7px;right:-9px}
-  /* 進到總覽（還沒點進哪一張）時跳幾下，提示照片都收在這裡；點進單張再回來，選擇器重新套上就會再跳一次。 */
-  #upload-section .upload-content-row:not(:has(.chat-panel.has-photo))>.batch-drawer-trigger{animation:drawer-hop 2.4s ease-in-out .4s both}
+  /* 進到總覽（還沒點進哪一張）時先跳四下，提示照片都收在這裡；之後在總覽一直待著就每 5 秒輕跳兩下，
+     不會停到被忘記，也不會一直搶眼。點進單張就停，再回來重新從四下開始。 */
+  #upload-section .upload-content-row:not(:has(.chat-panel.has-photo))>.batch-drawer-trigger{
+    animation:drawer-hop 2.4s ease-in-out .4s both,drawer-hop-idle 5s ease-in-out 2.8s infinite}
   #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-left:72px}
   #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 16px)}
 }
@@ -814,6 +816,12 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   33%{transform:translateY(-6px)}
   54%{transform:translateY(-4px)}
   73%{transform:translateY(-2px)}
+}
+/* 總覽上的常駐提醒：前 1 秒跳兩下，其餘時間停著。 */
+@keyframes drawer-hop-idle{
+  0%,10%,20%,100%{transform:none}
+  5%{transform:translateY(-5px)}
+  15%{transform:translateY(-3px)}
 }
 @media (prefers-reduced-motion:reduce){
   #upload-section .upload-content-row>#batch-sidebar{transition:none}
