@@ -8460,7 +8460,8 @@
     if (!confirmed) return;
     try {
       const inDrawer = els.historyList?.contains(entry.li);
-      await deleteChatSessions(user, [group.session_id]);
+      // A chat-page batch is one session per photo: the whole group goes.
+      await deleteChatSessions(user, group.session_ids?.length ? group.session_ids : [group.session_id]);
       removeHistoryCubeFromDom(entry.li);
       historyGroupTiles.forEach((tiles) => tiles.delete(group.session_id));
       // Same bookkeeping as handleDeleteHistoryEntry, once per case of the
