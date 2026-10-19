@@ -625,6 +625,9 @@ function errorText(e: unknown): string {
     return e.message;
   }
   if (e instanceof DOMException && e.name === "TimeoutError") return "系統回應逾時，請再試一次。";
+  // fetch 連不上時瀏覽器丟的 TypeError（Chrome／Firefox／Safari 各自的字樣），別把英文原文秀出去。
+  if (e instanceof TypeError && /Failed to fetch|NetworkError|Load failed/i.test(e.message))
+    return "連不上伺服器，請確認網路後再試一次。";
   return e instanceof Error ? e.message : String(e);
 }
 
