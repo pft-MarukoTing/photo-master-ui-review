@@ -19,7 +19,7 @@ from pipeline import analyze_stage, reframe_stage
 from backend.services.account import attach_case_analysis, create_account, clear_history, delete_history_entry, delete_version, get_history, get_history_entry, get_history_entry_for_job, HISTORY_MAX_LEN, normalize_username, record_history
 from backend.services.compatibility import get_current_version as get_current_compatibility_version, get_min_compatible_version
 from backend.services.decrypt_user_id import decrypt as decrypt_user_id
-from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, cache_thumbnail, upload_report_screenshot, lost_job_error
+from backend.services.put_job import enqueue, create_presigned_url, download_bytes, derive_thumbnail_key, derive_view_key, cache_thumbnail, upload_report_screenshot, lost_job_error
 from backend.services.report import delete_report, get_report_by_id, get_reported_job_info, get_reports, is_admin, record_report, update_report_status
 from backend.services.template_params import get_engine_params_template
 
@@ -826,6 +826,15 @@ def source_image(job_id):
     if not src_keys:
         return jsonify({"error": "no source image for this job"}), 404
 
+    # The JPEG below, as converted the first time this was asked for. A
+    # job's upload never changes, so neither does it: cached here and in
+    # the browser, the results page does not wait on the raw original
+    # (often 10MB+) and its re-encoding every time a photo is opened.
+    view_key = derive_view_key(src_keys[0])
+    view_bytes, view_error = download_bytes(view_key, job_id)
+    if not view_error and view_bytes is not None:
+        return _immutable_image_response(view_bytes, "image/jpeg")
+
     image_bytes, download_error = download_bytes(src_keys[0], job_id)
     if download_error or image_bytes is None:
         return jsonify({"error": f"failed to download source image: {download_error}"}), 502
@@ -841,7 +850,8 @@ def source_image(job_id):
     jpeg_bytes, error_response = _ensure_jpeg_bytes_or_error(image_bytes)
     if error_response:
         return error_response
-    return Response(jpeg_bytes, mimetype="image/jpeg")
+    cache_thumbnail(jpeg_bytes, view_key, job_id)
+    return _immutable_image_response(jpeg_bytes, "image/jpeg")
 
 
 @api_bp.get("/source/<job_id>/thumbnail")

@@ -84,6 +84,15 @@ def derive_thumbnail_key(key):
     return f"{root}_thumb.jpg"
 
 
+def derive_view_key(key):
+    """Sibling S3 key for the full-size JPEG /source/<job_id>/image serves,
+    e.g. ".../src.jpg" -> ".../src_view.jpg". The stored upload is the raw
+    original (often 10MB+, maybe HEIC); this is it re-encoded once, so the
+    results page downloads a ~1MB JPEG instead of re-encoding every time."""
+    root = os.path.splitext(key)[0]
+    return f"{root}_view.jpg"
+
+
 def cache_thumbnail(thumb_bytes, thumb_key, task_id):
     """Fire-and-forget cache write for a thumbnail. upload_buffer only
     enqueues the bytes onto S3AccessV2's persistent worker threads and
