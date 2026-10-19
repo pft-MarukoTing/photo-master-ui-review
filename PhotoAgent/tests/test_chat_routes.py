@@ -101,6 +101,17 @@ class FakeRedis:
         for key in keys:
             self.data.pop(key, None)
 
+    def set(self, key, value, nx=False, ex=None):
+        if nx and key in self.data:
+            return None
+        self.data[key] = value
+        if ex is not None:
+            self.ttl[key] = ex
+        return True
+
+    def get(self, key):
+        return self.data.get(key)
+
 
 USER = "tester"
 
@@ -279,6 +290,69 @@ class ChatRoutesTest(unittest.TestCase):
     def test_bad_batch_id(self):
         res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER, "batch_id": "bad id!"})
         self.assertEqual(res.status_code, 400)
+
+    # --- retried requests (client_key) ------------------------------------
+
+    def create_keyed(self, key):
+        res = self.client.post("/api/photo-agent/chat/sessions",
+                               json={"user": USER, "batch_id": "b1", "client_key": key})
+        self.assertEqual(res.status_code, 201)
+        return res.get_json()["session_id"]
+
+    def upload_keyed(self, sid, key):
+        data = {"user": USER, "client_key": key, "image": [(io.BytesIO(b"img"), "p0.jpg")]}
+        return self.client.post(self.url(sid, "/photos"), data=data, content_type="multipart/form-data")
+
+    def test_retried_create_gets_the_same_session(self):
+        sid = self.create_keyed("k1")
+        self.assertEqual(self.create_keyed("k1"), sid)
+        self.assertNotEqual(self.create_keyed("k2"), sid)
+        listed = self.client.get("/api/photo-agent/chat/sessions", query_string={"user": USER}).get_json()
+        self.assertEqual(len(listed["sessions"]), 1)  # one batch row
+        self.assertEqual(len(self.redis.data[chat_session._index_key(USER)]), 2)
+
+    def test_retried_create_after_the_session_is_gone_makes_a_new_one(self):
+        sid = self.create_keyed("k1")
+        chat_session.delete_session(USER, sid)
+        again = self.create_keyed("k1")
+        self.assertNotEqual(again, sid)
+        self.assertEqual(self.create_keyed("k1"), again)
+
+    def test_bad_client_key(self):
+        res = self.client.post("/api/photo-agent/chat/sessions", json={"user": USER, "client_key": "bad key!"})
+        self.assertEqual(res.status_code, 400)
+
+    def test_retried_upload_returns_the_photo_already_added(self):
+        sid = self.new_session()
+        first = self.upload_keyed(sid, "u1")
+        self.assertEqual(first.status_code, 202)
+        again = self.upload_keyed(sid, "u1")
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.get_json()["photos"][0]["photo_id"], first.get_json()["photos"][0]["photo_id"])
+        self.assertEqual(len(self.enqueued), 1)
+        session = self.client.get(self.url(sid), query_string={"user": USER}).get_json()
+        self.assertEqual(len(session["photos"]), 1)
+        # Released once done, and a different key is a different photo.
+        self.assertNotIn(chat_session._upload_claim_key(USER, sid, "u1"), self.redis.data)
+        self.assertEqual(self.upload_keyed(sid, "u2").status_code, 202)
+        self.assertEqual(len(self.enqueued), 2)
+
+    def test_upload_still_running_answers_409(self):
+        sid = self.new_session()
+        self.assertTrue(chat_session.claim_upload(USER, sid, "u1"))
+        res = self.upload_keyed(sid, "u1")
+        self.assertEqual(res.status_code, 409)
+        self.assertEqual(res.get_json()["error"], "upload_in_progress")
+        self.assertEqual(self.enqueued, [])
+
+    def test_failed_upload_releases_its_key(self):
+        sid = self.new_session()
+        with patch.object(chat, "enqueue", side_effect=RuntimeError("s3 down")):
+            res = self.upload_keyed(sid, "u1")
+        self.assertEqual(res.get_json()["photos"], [])
+        self.assertNotIn(chat_session._upload_claim_key(USER, sid, "u1"), self.redis.data)
+        self.assertEqual(self.upload_keyed(sid, "u1").status_code, 202)
+        self.assertEqual(len(self.enqueued), 1)
 
     def test_expired_session_drops_out_of_the_list(self):
         sid = self.new_session()

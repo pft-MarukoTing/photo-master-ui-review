@@ -63,6 +63,8 @@ export interface Photo {
   analysis_job_id?: string | null;
   // 上傳頁選「只照需求改」：沒有跑分析，只量了尺寸；「幫我分析」才補跑真的分析。
   analysis_skipped?: boolean;
+  // 上傳時帶的 client_key（api.uploadPhoto），重試時靠它認出已經傳上去的那張。
+  client_key?: string;
   // 補跑中的分析是為了什麼："check" 給使用者看，"render" 是排在它後面的美化。
   reanalysis?: "check" | "render" | null;
   planned_ratio?: string | null;

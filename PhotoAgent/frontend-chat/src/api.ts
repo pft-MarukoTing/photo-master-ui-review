@@ -143,8 +143,12 @@ export const api = {
     ),
 
   // batchId：多張上傳的同一批，最近照片會把它們合成一格。
-  createSession: (batchId?: string) =>
-    request<Session>(`${CHAT}/sessions`, json("POST", batchId ? { batch_id: batchId } : {})),
+  // clientKey: 重送同一個請求時帶同一把，後端已經建過就回那一個，不會多一段（多張排著傳時的自動重試）。
+  createSession: (batchId?: string, opts: { signal?: AbortSignal; clientKey?: string } = {}) =>
+    request<Session>(`${CHAT}/sessions`, {
+      ...json("POST", { ...(batchId ? { batch_id: batchId } : {}), ...(opts.clientKey ? { client_key: opts.clientKey } : {}) }),
+      signal: opts.signal,
+    }),
   listSessions: (limit = 30) =>
     request<{ sessions: SessionSummary[] }>(`${CHAT}/sessions${q({ limit })}`),
   // 最近照片的刪除：幾格（對話的 id，或 `case:<case_id>`），或 "all" 全部。
@@ -157,19 +161,21 @@ export const api = {
   postMessage: (id: string, card: Dict, text = "") =>
     request<Message>(`${sid(id)}/messages`, json("POST", { role: "user", card, ...(text ? { text } : {}) })),
   // Several at once, in order: the upload page's conversation, carried into the session it starts.
-  postMessages: (id: string, messages: { role: "user" | "assistant"; text?: string; card: Dict }[]) =>
-    request<{ messages: Message[] }>(`${sid(id)}/messages`, json("POST", { messages })),
+  postMessages: (id: string, messages: { role: "user" | "assistant"; text?: string; card: Dict }[], signal?: AbortSignal) =>
+    request<{ messages: Message[] }>(`${sid(id)}/messages`, { ...json("POST", { messages }), signal }),
   // Only the newest message, if the user posted it; 409 once anything came after.
   replaceMessage: (id: string, messageId: string, card: Dict) =>
     request<Message>(`${sid(id)}/messages/${encodeURIComponent(messageId)}`, json("PUT", { card })),
   // The whole log (the server keeps at most 500): the page reads the analysis,
   // versions and rounds from it, so a cut-off start breaks them.
-  getSession: (id: string, messagesLimit = 500) =>
-    request<Session>(`${sid(id)}${q({ messages_limit: messagesLimit })}`),
+  getSession: (id: string, messagesLimit = 500, signal?: AbortSignal) =>
+    request<Session>(`${sid(id)}${q({ messages_limit: messagesLimit })}`, { signal }),
   status: (id: string) => request<Dict>(`${sid(id)}/status${q()}`),
-  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string; conversation_token?: string; conversation_wishes_digest?: string }, wishes?: import("./preview-conversation").PreviewWish[]) => {
+  uploadPhoto: (id: string, file: Blob, filename: string, preview?: { preview_job_id: string; source_sha256: string; conversation_token?: string; conversation_wishes_digest?: string }, wishes?: import("./preview-conversation").PreviewWish[], opts: { signal?: AbortSignal; clientKey?: string } = {}) => {
     const form = new FormData();
     form.set("user", currentUser);
+    // 同 createSession：已經傳上去的回 200 帶那張；同一把還在傳的回 409 upload_in_progress。
+    if (opts.clientKey) form.set("client_key", opts.clientKey);
     form.append("image", file, filename);
     if (preview) {
       form.append("preview_job_id", preview.preview_job_id);
@@ -178,7 +184,7 @@ export const api = {
       if (preview.conversation_wishes_digest) form.append("conversation_wishes_digest", preview.conversation_wishes_digest);
     }
     if (wishes?.length) form.append("conversation_wishes", JSON.stringify(wishes));
-    return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form });
+    return request<{ photos: Dict[]; errors: Dict[] }>(`${sid(id)}/photos`, { method: "POST", body: form, signal: opts.signal });
   },
   // 一次傳好幾張：同一個請求、同一張 photos_added，跟單張走同一個端點。多張時
   // 不帶人物預覽，也沒有上傳頁的個人化需求。
@@ -208,16 +214,17 @@ export const api = {
       `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
       json("POST", { waiting: messageId, ...(screen ? { screen } : {}) }),
     ),
-  patchPlan: (id: string, plan: Plan) => request<Dict>(`${sid(id)}/plan`, json("PATCH", { plan })),
-  patchPhotoPlan: (id: string, photoId: string, plan: Plan) =>
-    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/plan`, json("PATCH", { plan })),
+  patchPlan: (id: string, plan: Plan, signal?: AbortSignal) =>
+    request<Dict>(`${sid(id)}/plan`, { ...json("PATCH", { plan }), signal }),
+  patchPhotoPlan: (id: string, photoId: string, plan: Plan, signal?: AbortSignal) =>
+    request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/plan`, { ...json("PATCH", { plan }), signal }),
   // 「幫我分析」 on a photo uploaded with 「只照需求改」, whose analysis was skipped.
   analyze: (id: string, photoId: string) =>
     request<Dict>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/analyze`, json("POST", {})),
-  render: (id: string, photoIds: string[]) =>
+  render: (id: string, photoIds: string[], signal?: AbortSignal) =>
     request<{ renders: Dict[]; queued: string[] }>(
       `${sid(id)}/render`,
-      json("POST", { photo_ids: photoIds, base: "original", defer_unconfirmed: true }),
+      { ...json("POST", { photo_ids: photoIds, base: "original", defer_unconfirmed: true }), signal },
     ),
   setActiveVersion: (id: string, photoId: string, v: { version_id: string; job_id: string; run: number }) =>
     request<Session>(`${sid(id)}/photos/${encodeURIComponent(photoId)}/active-version`, json("PUT", v)),

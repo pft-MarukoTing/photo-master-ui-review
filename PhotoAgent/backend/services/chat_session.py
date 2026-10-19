@@ -74,14 +74,43 @@ def new_id(prefix):
     return f"{prefix}_{uuid.uuid4().hex}"
 
 
-def create_session(user, batch_id=None):
+# A request the page retries carries the same client_key as the try whose
+# answer it gave up waiting for -- the server may well have finished that one.
+# The retry gets what that try made instead of making it a second time.
+CLIENT_KEY_TTL_SECONDS = 24 * 3600
+# How long an upload holds its client_key while it runs: longer than the
+# page waits for one, so a retry can't start a second copy alongside it, but
+# short, so an upload whose process died doesn't hold the key for long.
+UPLOAD_CLAIM_SECONDS = 300
+
+
+def _client_key(user, client_key):
+    return f"{_user_base(user)}:chat:client:{client_key}"
+
+
+def _upload_claim_key(user, session_id, client_key):
+    return f"{_session_key(user, session_id)}:upload:{client_key}"
+
+
+def create_session(user, batch_id=None, client_key=None):
     """`batch_id` ties together the sessions of one multi-photo upload --
     each photo gets its own conversation, and the list shows them as one
-    row (routes/chat.py)."""
+    row (routes/chat.py). A `client_key` seen before gets the session it
+    created back (see CLIENT_KEY_TTL_SECONDS)."""
     session_id = new_id("s")
     meta = {"session_id": session_id, "user": user, "created_at": time.time(), "photo_order": [], "active_photo_id": None,
             "batch_id": batch_id}
     _write(user, session_id, {"meta": meta, "defaults": default_settings()})
+    if client_key:
+        # Written before it is claimed, so whichever session a key names
+        # already exists; the one that loses the claim is dropped.
+        redis, key = _client(), _client_key(user, client_key)
+        if not redis.set(key, session_id, nx=True, ex=CLIENT_KEY_TTL_SECONDS):
+            earlier = load_session(user, _decode(redis.get(key)) or "")
+            if earlier is not None:
+                delete_session(user, session_id)
+                return earlier
+            redis.set(key, session_id, ex=CLIENT_KEY_TTL_SECONDS)
     return load_session(user, session_id)
 
 
@@ -233,6 +262,17 @@ def add_photos(user, session_id, meta, photos):
         fields[f"photo:{photo['photo_id']}"] = photo
         fields[f"photo:{photo['photo_id']}:plan"] = default_plan(meta["defaults"])
     _write(user, session_id, fields)
+
+
+def claim_upload(user, session_id, client_key):
+    """True if this upload may run: no other with the same client_key is
+    running (see UPLOAD_CLAIM_SECONDS). Released by release_upload."""
+    return bool(_client().set(_upload_claim_key(user, session_id, client_key), "1",
+                              nx=True, ex=UPLOAD_CLAIM_SECONDS))
+
+
+def release_upload(user, session_id, client_key):
+    _client().delete(_upload_claim_key(user, session_id, client_key))
 
 
 def claim(user, session_id, token):

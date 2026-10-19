@@ -202,7 +202,17 @@ def create_session():
     batch_id = body.get("batch_id")
     if batch_id is not None and not (isinstance(batch_id, str) and SESSION_ID_RE.match(batch_id)):
         raise _RequestError("invalid batch_id")
-    return jsonify(store.create_session(user, batch_id=batch_id)), 201
+    client_key = _client_key_param(body.get("client_key"))
+    return jsonify(store.create_session(user, batch_id=batch_id, client_key=client_key)), 201
+
+
+def _client_key_param(value):
+    """The optional key a retried request repeats (store.CLIENT_KEY_TTL_SECONDS)."""
+    if value in (None, ""):
+        return None
+    if not (isinstance(value, str) and SESSION_ID_RE.match(value)):
+        raise _RequestError("invalid client_key")
+    return value
 
 
 # Live sessions read to tell which history cases already have one.
@@ -1066,6 +1076,34 @@ def add_photos(session_id):
     images = [img for key in ("image", "image[]") for img in request.files.getlist(key) if img and img.filename]
     if not images:
         raise _RequestError("at least one image file is required")
+    client_key = _client_key_param(request.form.get("client_key"))
+    if client_key is None:
+        return _add_photos(user, session_id, session, images)
+    # A retry of an upload the page gave up waiting for: hand back what that
+    # try made, or say it's still going, rather than add the photo twice.
+    if len(images) != 1:
+        raise _RequestError("client_key goes with exactly one image")
+    done = _photo_with_client_key(session, client_key)
+    if done is not None:
+        return jsonify({"photos": [done], "errors": []}), 200
+    if not store.claim_upload(user, session_id, client_key):
+        raise _RequestError("upload_in_progress", 409)
+    try:
+        # The other try may have finished between the look above and the claim.
+        session = _session(user, session_id)
+        done = _photo_with_client_key(session, client_key)
+        if done is not None:
+            return jsonify({"photos": [done], "errors": []}), 200
+        return _add_photos(user, session_id, session, images, client_key)
+    finally:
+        store.release_upload(user, session_id, client_key)
+
+
+def _photo_with_client_key(session, client_key):
+    return next((p for p in session["photos"] if p.get("client_key") == client_key), None)
+
+
+def _add_photos(user, session_id, session, images, client_key=None):
     if len(session["photos"]) + len(images) > store.MAX_PHOTOS_PER_SESSION:
         raise _RequestError(f"a session holds at most {store.MAX_PHOTOS_PER_SESSION} photos")
 
@@ -1204,6 +1242,7 @@ def add_photos(session_id):
             "active_version": None,
             "analysis_skipped": bool(photo_params.get('skip_analysis')),
             "preview_conversation": conversation_state,
+            **({"client_key": client_key} if client_key else {}),
         })
 
     if photos:

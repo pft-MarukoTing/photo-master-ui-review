@@ -569,6 +569,54 @@ const GREETING = `嗨！先選想美化的照片，一次最多 ${MAX_BATCH} 張
 const ONLY_PROMPT_LABEL = "僅依需求修改";
 const WITH_ANALYSIS_LABEL = "整體美化";
 
+// 送出照片時每個請求的時限（單張的 start、多張的 startBatchPhoto）。上傳要等傳完原圖、存進
+// S3（後端一次只存一張，同時有別人在傳就得排），給得寬一點。
+const STEP_TIMEOUT_MS = 30000;
+const UPLOAD_TIMEOUT_MS = 120000;
+// 還沒傳上去就失敗、而且再送一次可能就好的（retriable），自動再試：每次等多久，試完還不行才算失敗。
+const UPLOAD_RETRY_DELAYS_MS = [5000, 15000];
+// 重試時上一次的上傳後端還在跑（409 upload_in_progress）：隔多久看一次傳好了沒、最多等多久。
+const UPLOAD_POLL_MS = 4000;
+const UPLOAD_WAIT_MS = 120000;
+
+// 一次送出（含它的自動重試、再按一次）建 session、傳照片都帶的同一把 client_key（api.createSession、
+// api.uploadPhoto）：上一次其實已經建好、傳好的，後端會認出來，不會多一段對話、多傳一張。
+const newClientKey = () => `k_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 後端收到了照片但沒能加進 session（回 200 卻沒有 photos，多半是存 S3 失敗）。
+class UploadFailed extends Error {}
+
+// 再送一次可能就好的錯：逾時、連不上、伺服器出錯、上一次還在傳。其他 4xx 是請求本身的問題，再送也一樣。
+function retriable(e: unknown): boolean {
+  if (e instanceof ApiError) return e.status >= 500 || e.body?.error === "upload_in_progress";
+  return e instanceof UploadFailed || e instanceof TypeError || (e instanceof DOMException && e.name === "TimeoutError");
+}
+
+type UploadArgs = Parameters<typeof api.uploadPhoto>;
+
+// 帶著 clientKey 傳一張，回後端加進 session 的那張。重試時上一次的還在傳，就等它傳好拿它那張；
+// 等太久當逾時，交給下一次重試。live() 變成 false 就不等了。
+async function uploadKeyed(id: string, blob: Blob, name: string, preview: UploadArgs[3], wishes: UploadArgs[4],
+  clientKey: string, live: () => boolean): Promise<{ photo_id: string; analyze_job_id: string }> {
+  try {
+    const up = await api.uploadPhoto(id, blob, name, preview, wishes, { signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS), clientKey });
+    const added = up.photos?.[0];
+    if (!added) throw new UploadFailed(up.errors?.[0]?.error || "上傳失敗");
+    return added as { photo_id: string; analyze_job_id: string };
+  } catch (e) {
+    if (!(e instanceof ApiError && e.body?.error === "upload_in_progress")) throw e;
+  }
+  const until = Date.now() + UPLOAD_WAIT_MS;
+  while (Date.now() < until && live()) {
+    await wait(UPLOAD_POLL_MS);
+    const s = await api.getSession(id, 1, AbortSignal.timeout(STEP_TIMEOUT_MS));
+    const found = s.photos.find((x) => x.client_key === clientKey);
+    if (found) return found;
+  }
+  throw new DOMException("upload still in progress", "TimeoutError");
+}
+
 function errorText(e: unknown): string {
   if (e instanceof ApiError) {
     if (e.status === 409 && ["unresolved_people", "unresolved_visual_target", "protected_scope"].includes(e.body?.reason))
@@ -576,6 +624,7 @@ function errorText(e: unknown): string {
     if (e.body?.error === "photos_not_ready") return "照片還在處理中，請稍候再試。";
     return e.message;
   }
+  if (e instanceof DOMException && e.name === "TimeoutError") return "系統回應逾時，請再試一次。";
   return e instanceof Error ? e.message : String(e);
 }
 
@@ -621,9 +670,9 @@ function fullSrc(s: Source) {
 }
 
 // 要上傳的檔案：自己選的直接用，範例和已經在伺服器上的去抓。
-async function sourceBlob(s: Source): Promise<{ blob: Blob; name: string }> {
+async function sourceBlob(s: Source, signal?: AbortSignal): Promise<{ blob: Blob; name: string }> {
   if (s.kind === "file") return { blob: s.file, name: s.file.name };
-  const res = await fetch(fullSrc(s));
+  const res = await fetch(fullSrc(s), { signal });
   if (!res.ok) throw new Error(`無法讀取範例照片（HTTP ${res.status}）`);
   return { blob: await res.blob(), name: s.kind === "demo" ? s.name : `${s.job}.jpg` };
 }
@@ -754,6 +803,10 @@ export function App() {
   const batchEpoch = useRef(0);
   // 這一批的 id：每張建自己的 session 時帶上，最近照片才會把它們合成一格。
   const batchId = useRef<string | null>(null);
+  // 每張照片的 client_key（newClientKey）：自動重試、再按一次都帶同一把。
+  // 單張的放 singleKey：同一張失敗後再按一次沿用，傳好了就清掉，之後再傳同一張是新的一段。
+  const batchKeys = useRef<Record<string, string>>({});
+  const singleKey = useRef<{ source: unknown; key: string } | null>(null);
   // 切照片時放回草稿：preFull 換了的那一次，不要把剛放回去的需求和人當成換照片清掉。
   const restoring = useRef<string | null>(null);
   const gen = useRef(0);
@@ -1022,6 +1075,7 @@ export function App() {
     if (sources.length < 2) return;
     drafts.current = {};
     batchQueue.current = Promise.resolve();
+    batchKeys.current = {};
     batchId.current = s.batch_id ?? null;
     follow.current = null;
     setBatch(sources);
@@ -1189,6 +1243,7 @@ export function App() {
     setOverview([]);
     keepOwn.current = new Set();
     batchQueue.current = Promise.resolve();
+    batchKeys.current = {};
     batchEpoch.current++;
     batchId.current = null;
     follow.current = null;
@@ -1620,6 +1675,8 @@ export function App() {
   };
   // 多張裡的一張開始：跟單張一樣建自己的 session、上傳、帶著對話和需求、分析或美化。
   // 一張一張排著傳（見 batchQueue）；傳好之後要不要跳到結果頁看 follow。
+  // 每個請求都有時限：排著傳的話，一個卡住的請求會讓後面每一張都送不出去。傳上去之前
+  // 逾時、斷線的，等一下排到最後再試（後面的照常接著傳），試完還不行才算失敗（可以再按一次）。
   function startBatchPhoto(p: BatchJob) {
     if (!caps) return;
     const c = caps;
@@ -1633,8 +1690,11 @@ export function App() {
     let uploaded = "";
     let id = "";
     const bid = batchId.current || undefined;
-    const job = batchQueue.current.then(async () => {
-      id = (await api.createSession(bid)).session_id;
+    const clientKey = (batchKeys.current[p.key] ||= newClientKey());
+    const step = () => AbortSignal.timeout(STEP_TIMEOUT_MS);
+    const once = async () => {
+      // 重試時沿用上一次拿到的 session；上一次建了卻沒等到回應的，後端認得 clientKey，回同一個。
+      if (!id) id = (await api.createSession(bid, { signal: step(), clientKey })).session_id;
       const previewIdentity = await p.identity;
       const log = previewEnabled && !previewIdentity
         ? p.log.map((note) => ({ ...note, persons: note.persons.map(withoutPreviewIdentity) })) : p.log;
@@ -1642,37 +1702,48 @@ export function App() {
       const userPrompt = (previewIdentity && p.effective !== undefined ? p.effective : notesPrompt(log, p.segEdits)).slice(0, PROMPT_MAX);
       const promptFaces = promptSections(kept).flatMap(groupFaces).filter((f) => userPrompt.includes(f.ref));
       // 跟單張一樣：照片從 session 的預設起跳，先換成它自己的需求和設定再傳。
-      await api.patchPlan(id, { ...p.settings, user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt });
-      const { blob, name } = await sourceBlob(p.source);
-      const up = await api.uploadPhoto(id, blob, name, previewIdentity && {
+      await api.patchPlan(id, { ...p.settings, user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt }, step());
+      const { blob, name } = await sourceBlob(p.source, step());
+      const added = await uploadKeyed(id, blob, name, previewIdentity && {
         ...previewIdentity, ...(p.mapping ? { conversation_token: p.mapping.token,
           conversation_wishes_digest: p.mapping.wishes_digest } : {}),
-      }, previewEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined);
-      const added = up.photos?.[0];
-      if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
-      const pid = added.photo_id as string;
+      }, previewEnabled ? (previewIdentity ? p.wishes : p.wishes.map((w) => ({ ...w, target_ids: [] }))) : undefined,
+      clientKey, live);
+      const pid = added.photo_id;
       uploaded = pid;
       say(p.mode === "analyze" ? "照片傳好了，準備開始分析…" : p.overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
       if (p.faces) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), p.faces);
       const carried = carriedLog(log, pid, p.later, p.events);
-      if (carried.length) await api.postMessages(id, carried);
-      if (promptFaces.length) await api.patchPhotoPlan(id, pid, { prompt_faces: promptFaces });
+      if (carried.length) await api.postMessages(id, carried, step());
+      if (promptFaces.length) await api.patchPhotoPlan(id, pid, { prompt_faces: promptFaces }, step());
       if (p.mode === "render") {
         try {
-          await api.render(id, [pid]);
+          await api.render(id, [pid], step());
         } catch (e) {
           // 跟單張一樣：缺人物確認是預期的，需求留著，進對話後分析好了再問。
           if (!(e instanceof ApiError) || e.status !== 409 ||
               !["unresolved_people", "unresolved_visual_target", "protected_scope"].includes(e.body?.reason)) throw e;
           return pid;
         }
-        const full = await api.getSession(id);
+        const full = await api.getSession(id, undefined, step());
         const last = [...(full.messages || [])].reverse().find((m) => m.card?.type === "render_requested" && m.card.photo_id === pid);
         if (last) rememberRenderLabel([last.id], { label: p.overwrite ? ONLY_PROMPT_LABEL : "一鍵美化", icon: "spark", meta: renderMeta(c, { ...p.settings }) });
       }
       return pid;
-    });
-    batchQueue.current = job.catch(() => {});
+    };
+    // 每一次都排到佇列最後：等著重試的這張不擋後面的。
+    const attempt = (n: number): Promise<string> => {
+      const run = batchQueue.current.then(once);
+      batchQueue.current = run.catch(() => {});
+      return run.catch(async (e) => {
+        if (uploaded || n >= UPLOAD_RETRY_DELAYS_MS.length || !retriable(e) || !live()) throw e;
+        if (n === 0) say("連線不穩，重新上傳中…");
+        await wait(UPLOAD_RETRY_DELAYS_MS[n]);
+        if (!live()) throw e;
+        return attempt(n + 1);
+      });
+    };
+    const job = attempt(0);
     // 上傳中按了全部一鍵美化的那張，傳好就接著在它自己的對話裡美化。
     const thenRender = (pid: string) => {
       if (renderWhenUploaded.current.delete(p.key) && live()) void renderStarted(p.key, id, pid, { ...p.settings });
@@ -2023,8 +2094,8 @@ export function App() {
 
   // After a render POST: reload and label the new render_requested card with
   // the chip the user clicked (the server does not know it).
-  async function afterRender(id: string, label: string, icon: string, plan: Plan) {
-    const full = await api.getSession(id);
+  async function afterRender(id: string, label: string, icon: string, plan: Plan, signal?: AbortSignal) {
+    const full = await api.getSession(id, undefined, signal);
     const last = [...(full.messages || [])].reverse().find((m) => m.card?.type === "render_requested");
     if (last && caps) rememberRenderLabel([last.id], { label, icon, meta: renderMeta(caps, plan) });
     setSession(full);
@@ -2218,9 +2289,6 @@ export function App() {
         ...note, persons: note.persons.map(withoutPreviewIdentity),
       })) : log;
       const kept = keptNotes(submissionLog);
-      if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
-      const s = await api.createSession();
-      const id = s.session_id;
       const userPrompt = (previewIdentity && bridge.result ? bridge.result.effective_prompt : notesPrompt(submissionLog, segEdits)).slice(0, PROMPT_MAX);
       // Only the picks the prompt still spells out: one entry per person
       // already names each face once, and PROMPT_MAX can still cut the last
@@ -2228,24 +2296,44 @@ export function App() {
       const promptFaces = promptSections(kept)
         .flatMap(groupFaces)
         .filter((f) => userPrompt.includes(f.ref));
-      // The defaults a photo added next starts from, so the upload below picks
-      // the 個人化需求 up without a second patch.
-      if (userPrompt || !sameSettings(settings, defaultSettings(caps))) {
-        await api.patchPlan(id, {
-          ...settings,
-          ...(userPrompt ? { user_prompt: userPrompt, overwrite_prompt: !!overwrite } : {}),
-        });
+      // 跟多張一樣：每個請求都有時限，傳上去之前逾時、斷線的原地等一下再試（同一把 clientKey，
+      // 不會多建一段、多傳一張），試完還不行才算失敗。換了照片就不再試。
+      const same = () => sourceIdentity.current === selectedSource;
+      const changed = () => new Error("照片已更換，請重新選擇分析或一鍵美化。");
+      const step = () => AbortSignal.timeout(STEP_TIMEOUT_MS);
+      if (singleKey.current?.source !== selectedSource) singleKey.current = { source: selectedSource, key: newClientKey() };
+      const clientKey = singleKey.current.key;
+      let id = "";
+      let added: { photo_id: string; analyze_job_id: string };
+      for (let n = 0; ; n++) {
+        try {
+          if (!same()) throw changed();
+          if (!id) id = (await api.createSession(undefined, { signal: step(), clientKey })).session_id;
+          // The defaults a photo added next starts from, so the upload below picks
+          // the 個人化需求 up without a second patch.
+          if (userPrompt || !sameSettings(settings, defaultSettings(caps))) {
+            await api.patchPlan(id, {
+              ...settings,
+              ...(userPrompt ? { user_prompt: userPrompt, overwrite_prompt: !!overwrite } : {}),
+            }, step());
+          }
+          const { blob, name } = await sourceBlob(source, step());
+          if (!same()) throw changed();
+          const mapping = bridge.result || bridge.committedResult;
+          added = await uploadKeyed(id, blob, name, previewIdentity && {
+            ...previewIdentity, ...(mapping ? { conversation_token: mapping.token,
+              conversation_wishes_digest: mapping.wishes_digest } : {}),
+          }, previewEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined,
+          clientKey, same);
+          singleKey.current = null;
+          break;
+        } catch (e) {
+          if (n >= UPLOAD_RETRY_DELAYS_MS.length || !retriable(e) || !same()) throw e;
+          if (n === 0) say("連線不穩，重新上傳中…");
+          await wait(UPLOAD_RETRY_DELAYS_MS[n]);
+        }
       }
-      const { blob, name } = await sourceBlob(source);
-      if (sourceIdentity.current !== selectedSource) throw new Error("照片已更換，請重新選擇分析或一鍵美化。");
-      const mapping = bridge.result || bridge.committedResult;
-      const up = await api.uploadPhoto(id, blob, name, previewIdentity && {
-        ...previewIdentity, ...(mapping ? { conversation_token: mapping.token,
-          conversation_wishes_digest: mapping.wishes_digest } : {}),
-      }, previewEnabled ? (previewIdentity ? previewWishes : previewWishes.map(w => ({ ...w, target_ids: [] }))) : undefined);
-      const added = up.photos?.[0];
-      if (!added) throw new Error(up.errors?.[0]?.error || "上傳失敗");
-      if (sourceIdentity.current !== selectedSource) return;
+      if (!same()) return;
       say(mode === "analyze" ? "照片傳好了，準備開始分析…" : overwrite ? "照片傳好了，準備開始調整…" : "照片傳好了，準備開始美化…");
       // 上傳頁面已經偵測過這張的人臉，session 頁沒有分析時就直接用，不再偵測一次。
       if (!previewEnabled && preScan.ready) seedDetectedFaces(urls.sourceImage(added.analyze_job_id), preScan.people.map((p) => p.box));
@@ -2253,11 +2341,19 @@ export function App() {
       // 的 AI 就回答它，使用者不用再問一次。要在切到 session 頁之前搬好：頁面以
       // 打開時最新的那則為界，之後進來的才打字，搬晚了舊對話會被當成新回覆重打一次。
       const carried = carriedLog(submissionLog, added.photo_id, later, submittedEvents);
-      for (let at = 0; at < carried.length; at += 100) {
-        await api.postMessages(id, carried.slice(at, at + 100));
+      let uploadedSession: Session;
+      try {
+        for (let at = 0; at < carried.length; at += 100) {
+          await api.postMessages(id, carried.slice(at, at + 100), step());
+        }
+        if (sourceIdentity.current !== selectedSource) return;
+        uploadedSession = await api.getSession(id, undefined, step());
+      } catch {
+        // 照片已經進了 session：跟多張一樣不重傳，直接打開它的結果頁再弄（美化在那裡按）。
+        // 沒搬完的上傳頁對話就算了。
+        if (sourceIdentity.current === selectedSource) await openSession(id);
+        return;
       }
-      if (sourceIdentity.current !== selectedSource) return;
-      const uploadedSession = await api.getSession(id);
       if (sourceIdentity.current !== selectedSource) return;
       setSession(uploadedSession);
       setSelected(null);
@@ -2266,24 +2362,24 @@ export function App() {
       setSubmitting(null);
       // On the photo, not the session defaults: a second photo has its own
       // faces and must not inherit these.
-      if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces });
+      if (promptFaces.length) await api.patchPhotoPlan(id, added.photo_id, { prompt_faces: promptFaces }, step());
       if (sourceIdentity.current !== selectedSource) return;
       if (mode === "render") {
         try {
-          await api.render(id, [added.photo_id]);
+          await api.render(id, [added.photo_id], step());
         } catch (e) {
           // Upload already started analysis. Missing identity is expected:
           // keep the wish and let the formal conversation ask after analysis.
           if (!(e instanceof ApiError) || e.status !== 409 ||
               !["unresolved_people", "unresolved_visual_target", "protected_scope"].includes(e.body?.reason)) throw e;
-          const awaitingConfirmation = await api.getSession(id);
+          const awaitingConfirmation = await api.getSession(id, undefined, step());
           if (sourceIdentity.current === selectedSource) setSession(awaitingConfirmation);
           return;
         }
         if (sourceIdentity.current !== selectedSource) return;
-        await afterRender(id, overwrite ? ONLY_PROMPT_LABEL : "一鍵美化", "spark", { ...settings });
+        await afterRender(id, overwrite ? ONLY_PROMPT_LABEL : "一鍵美化", "spark", { ...settings }, step());
       } else {
-        const completedSession = await api.getSession(id);
+        const completedSession = await api.getSession(id, undefined, step());
         if (sourceIdentity.current !== selectedSource) return;
         setSession(completedSession);
       }
