@@ -432,10 +432,12 @@ export function BatchUploadBubble({ srcs, text }: { srcs: string[]; text: string
   const more = srcs.length - shown.length;
   return (
     <div class="chat-upload is-batch">
-      <div class="chat-upload-stack" aria-hidden="true">
-        {shown.map((s) => <img key={s} src={s} alt="" />)}
-        {more > 0 && <span>+{more}</span>}
-      </div>
+      {shown.length > 0 && (
+        <div class="chat-upload-stack" aria-hidden="true">
+          {shown.map((s) => <img key={s} src={s} alt="" />)}
+          {more > 0 && <span>+{more}</span>}
+        </div>
+      )}
       <div class="chat-bubble">{text}</div>
     </div>
   );

@@ -503,9 +503,14 @@ type BatchDraft = {
   peopleReady: boolean;
 };
 
-// 多張上傳的總覽頁對話，一輪一筆：一起送的需求、開過的設定、一鍵美化時問的那句、
-// 一起開始的紀錄。需求本身收進每張自己的草稿，這裡只留畫面上那句話。
+// 多張上傳的總覽頁對話，一輪一筆，照發生的順序記：每次上傳／新增／移除的照片、一起送的需求、
+// 開過的設定、一鍵美化時問的那句、一起開始的紀錄、跑完的那一刻。需求本身收進每張自己的草稿，
+// 這裡只留畫面上那句話。
 type OverviewTurn =
+  | { id: number; kind: "upload"; srcs: string[] }
+  | { id: number; kind: "remove"; count: number; left: number }
+  | { id: number; kind: "running"; keys: string[]; verb: string }
+  | { id: number; kind: "done"; rendered: number; analyzed: number; failed: number }
   | { id: number; kind: "wish"; text: string; count: number; skipped: number }
   | { id: number; kind: "settings"; settings?: Settings }
   | { id: number; kind: "ask"; overwrite?: boolean }
@@ -514,9 +519,9 @@ type OverviewTurn =
 const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
 
 // 「我的照片」每張的狀態：開始了照 session 裡真的跑到哪，還沒開始的看有沒有講過需求。
-function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolean): { key: string; text: string } {
+function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolean, failed = false): { key: string; text: string } {
   return p
-    ? photoState(p)
+    ? photoState(p, failed)
     : r?.error
       ? { key: "error", text: "失敗" }
       : r?.done
@@ -526,6 +531,16 @@ function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolea
           : wished
             ? { key: "", text: "有需求" }
             : { key: "", text: "未開始" };
+}
+
+// 總覽算進度用的：還沒開始、還在跑（上傳、分析、美化）、分析好、美化好、失敗。
+type BatchProgress = "todo" | "running" | "analyzed" | "done" | "error";
+function batchProgress(r: BatchRun | undefined, p: Photo | null, failed = false): BatchProgress {
+  if (!r) return "todo";
+  if (r.error) return "error";
+  if (!r.done || !p) return "running";
+  const k = photoState(p, failed).key;
+  return k === "processing" || k === "analyzing" ? "running" : k === "error" ? "error" : k === "done" ? "done" : "analyzed";
 }
 
 // The same words, for the server to find and replace. A position is not a name
@@ -600,6 +615,14 @@ async function sourceBlob(s: Source): Promise<{ blob: Blob; name: string }> {
 function activePhoto(s: Session | null): Photo | null {
   if (!s || !s.photos.length) return null;
   return s.photos.find((p) => p.photo_id === s.active_photo_id) || s.photos[0];
+}
+
+// 這張最後一次美化沒有成功：失敗只記在對話裡（render_failed），照片本身還是 ready，
+// 跟結果頁一樣看最後一則美化結果。
+function renderFailedIn(s: Session, photoId: string): boolean {
+  const last = [...(s.messages || [])].reverse().find((m) =>
+    (m.card?.type === "render_done" || m.card?.type === "render_failed") && (!m.card.photo_id || m.card.photo_id === photoId));
+  return last?.card?.type === "render_failed";
 }
 
 const isBusy = (p: Photo) => p.status === "analyzing" || p.status === "reframing" || p.status === "rendering";
@@ -707,6 +730,8 @@ export function App() {
   const [batchRuns, setBatchRuns] = useState<Record<string, BatchRun>>({});
   // 已經開始的那幾張在背景跑到哪：結果頁只盯著正在看的那張，其他張另外定時問。
   const [batchLive, setBatchLive] = useState<Record<string, Photo>>({});
+  // 每張最後一次美化有沒有失敗，跟 batchLive 一起從 session 抓回來時更新。
+  const [batchFailed, setBatchFailed] = useState<Record<string, boolean>>({});
   // 一張一張排著傳，全部一起按時不會同時塞好幾張給後端。每張各自一段 session。
   const batchQueue = useRef<Promise<unknown>>(Promise.resolve());
   // 每次重來（清掉、換一批、離開）加一，舊的那批還在跑的回呼就不再動畫面。
@@ -964,6 +989,7 @@ export function App() {
     const sources: Source[] = [];
     const nextRuns: Record<string, BatchRun> = {};
     const live: Record<string, Photo> = {};
+    const failed: Record<string, boolean> = {};
     for (const x of all) {
       const p = x && activePhoto(x);
       if (!x || !p) continue;
@@ -972,6 +998,7 @@ export function App() {
       sources.push(src);
       nextRuns[key] = { mode: p.active_version ? "render" : "analyze", since: 0, lines: [], sessionId: x.session_id, photoId: p.photo_id, done: true };
       live[key] = p;
+      failed[key] = renderFailedIn(x, p.photo_id);
     }
     if (sources.length < 2) return;
     drafts.current = {};
@@ -981,6 +1008,7 @@ export function App() {
     setBatch(sources);
     setBatchRuns(nextRuns);
     setBatchLive(live);
+    setBatchFailed(failed);
   }
 
   // 從面板模式切過來時，把那邊還沒美化的調整寫進這張照片的 plan（handoff.ts）。
@@ -1137,6 +1165,7 @@ export function App() {
     drafts.current = {};
     setBatchRuns({});
     setBatchLive({});
+    setBatchFailed({});
     setAllSettings(null);
     setOverview([]);
     keepOwn.current = new Set();
@@ -1319,7 +1348,10 @@ export function App() {
     const have = new Set(batch.map(sourceSrc));
     const added: Source[] = names.map((name): Source => ({ kind: "demo", name }))
       .filter((s) => !have.has(sourceSrc(s))).slice(0, Math.max(0, MAX_BATCH - batch.length));
-    if (added.length) setBatch((b) => (b ? [...b, ...added] : b));
+    if (added.length) {
+      setBatch((b) => (b ? [...b, ...added] : b));
+      logUpload(added);
+    }
     setError(batch.length >= MAX_BATCH && names.length
       ? notice(`已經選滿 ${MAX_BATCH} 張了。想新增照片的話，建議先移除幾張，或按「全部清除」重新選，再新增其他照片。`) : "");
   }
@@ -1344,7 +1376,7 @@ export function App() {
       applyDraft(null, null);
       setSettings(base);
     }
-    setOverview([]);
+    setOverview([{ id: nextDisplayOrder(), kind: "upload", srcs: sources.map(sourceSrc) }]);
     keepOwn.current = new Set();
     setError(message);
     window.scrollTo(0, 0);
@@ -1373,8 +1405,20 @@ export function App() {
       // 拿掉的是畫面上這張，就回總覽。
       if (key === batchKey) applyDraft(null, null);
       setBatch(rest);
+      // 連著移除好幾張併成一句。
+      setOverview((t) => {
+        const last = t[t.length - 1];
+        return last?.kind === "remove"
+          ? [...t.slice(0, -1), { ...last, count: last.count + 1, left: rest.length }]
+          : [...t, { id: nextDisplayOrder(), kind: "remove", count: 1, left: rest.length }];
+      });
     }
     setError("");
+  }
+
+  // 總覽記一筆新增的照片，一次加的算一輪，不去改最早那次上傳的張數。
+  function logUpload(added: Source[]) {
+    if (added.length) setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "upload", srcs: added.map(sourceSrc) }]);
   }
 
   // 多張上傳頁上的「全部清除」：先問一聲，清掉就回到還沒選照片的上傳頁。
@@ -1415,6 +1459,7 @@ export function App() {
       return;
     }
     setBatch((b) => (b ? [...b, ...added] : b));
+    logUpload(added);
     setError(
       images.length > taken.length
         ? notice(
@@ -1437,13 +1482,43 @@ export function App() {
   };
   // 開始過、照片已經進了 session、還能一鍵美化的那張（分析好的、還在分析的都算；正在看的那張
   // 用結果頁上的，其他張用背景問到的）。
-  const renderableLive = (key: string): Photo | null => {
+  const livePhoto = (key: string): Photo | null => {
     const r = batchRuns[key];
     if (!r?.done || !r.sessionId || !r.photoId) return null;
-    const p = r.sessionId === session?.session_id
+    return r.sessionId === session?.session_id
       ? session.photos.find((x) => x.photo_id === r.photoId) || null : batchLive[key] || null;
+  };
+  const renderableLive = (key: string): Photo | null => {
+    const p = livePhoto(key);
     return p && canRenderInAll(p) ? p : null;
   };
+  // 每張現在跑到哪，總覽的提示和「跑完了」那句照這個算。
+  const progress = batch ? batch.map((s) => batchProgress(batchRuns[sourceSrc(s)], livePhoto(sourceSrc(s)), batchFailed[sourceSrc(s)])) : [];
+  const runningCount = progress.filter((x) => x === "running").length;
+  // 總覽照時序記進度：有照片開始跑（在總覽按的已經有那句「開始了」，不再記），跑的從有變成沒有就記一句
+  // 跑完了；換了一批不算。
+  const runningKeys = batch ? batch.map(sourceSrc).filter((_, i) => progress[i] === "running") : [];
+  const runningSig = runningKeys.join("\n");
+  const wasRunning = useRef({ keys: [] as string[], epoch: 0 });
+  useEffect(() => {
+    const was = wasRunning.current;
+    wasRunning.current = { keys: runningKeys, epoch: batchEpoch.current };
+    if (!batch) return;
+    // 換了一批（或剛建好這批）就從零算起，這次才開始跑的照樣記。
+    const same = was.epoch === batchEpoch.current;
+    const fresh = runningKeys.filter((k) => !same || !was.keys.includes(k));
+    if (fresh.length) {
+      const verbs = new Set(fresh.map((k) => {
+        const p = livePhoto(k);
+        return (p ? photoState(p).key === "processing" : batchRuns[k]?.mode === "render") ? "美化" : "分析";
+      }));
+      const verb = verbs.size > 1 ? "處理" : [...verbs][0];
+      setOverview((t) => (t[t.length - 1]?.kind === "start" ? t : [...t, { id: nextDisplayOrder(), kind: "running", keys: fresh, verb }]));
+    }
+    if (!same || !was.keys.length || runningKeys.length) return;
+    const count = (k: BatchProgress) => progress.filter((x) => x === k).length;
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "done", rendered: count("done"), analyzed: count("analyzed"), failed: count("error") }]);
+  }, [runningSig]);
   // 照片還在上傳、送的是「分析」：等它進了 session 再補美化。
   const uploadingForAnalyze = (key: string) => {
     const r = batchRuns[key];
@@ -1683,6 +1758,7 @@ export function App() {
     else {
       const np = full.photos.find((x) => x.photo_id === pid);
       if (np) setBatchLive((m) => ({ ...m, [key]: np }));
+      setBatchFailed((m) => ({ ...m, [key]: renderFailedIn(full, pid) }));
     }
   }
 
@@ -1696,6 +1772,10 @@ export function App() {
     const key = Object.keys(batchRuns).find((k) => batchRuns[k].sessionId === session.session_id);
     const np = key && session.photos.find((x) => x.photo_id === batchRuns[key].photoId);
     if (key && np && batchLive[key] !== np) setBatchLive((m) => ({ ...m, [key]: np }));
+    if (key && np) {
+      const f = renderFailedIn(session, np.photo_id);
+      if (!!batchFailed[key] !== f) setBatchFailed((m) => ({ ...m, [key]: f }));
+    }
   }, [session, batchRuns]);
   // 還在跑的就隔幾秒再問一次，跑完（或失敗）就不再問。正在看的那張由結果頁自己更新。
   const viewingId = phase === "session" ? session?.session_id : undefined;
@@ -1711,13 +1791,18 @@ export function App() {
         due.map(async ([k, r]) => {
           const s = await api.getSession(r.sessionId!).catch(() => null);
           const p = s && (s.photos.find((x) => x.photo_id === r.photoId) || activePhoto(s));
-          return p ? ([k, p] as const) : null;
+          return s && p ? ([k, p, renderFailedIn(s, p.photo_id)] as const) : null;
         }),
       );
       if (epoch !== batchEpoch.current) return;
       setBatchLive((m) => {
         const next = { ...m };
         for (const g of got) if (g) next[g[0]] = g[1];
+        return next;
+      });
+      setBatchFailed((m) => {
+        const next = { ...m };
+        for (const g of got) if (g) next[g[0]] = g[2];
         return next;
       });
     }, Object.keys(batchLive).length ? 4000 : 800);
@@ -2622,12 +2707,54 @@ export function App() {
   if (phase === "chat" && batch && batch.length > 1) {
     const anyRun = Object.keys(batchRuns).length > 0;
     const pending = batch.filter((x) => unstarted(sourceSrc(x))).length;
-    const renderable = batch.filter((x) => needsRender(sourceSrc(x))).length;
+    // 總覽的對話裡，每張都送出去了、還有在跑的，就等它們跑完再給「全部一鍵美化」，讓對話照著
+    // 一輪一輪走；還有沒開始的照片就照常給。左邊「我的照片」上那顆一律照常給。
+    const renderableAll = batch.filter((x) => needsRender(sourceSrc(x))).length;
+    const renderable = runningCount && !pending ? 0 : renderableAll;
     const pickBatch = (s: Source) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : openBatchPhoto(s));
     const lastTurn = overview[overview.length - 1];
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
     const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
     const overviewHeld = busy || !!preAsk;
+    // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。移除掉的不再畫縮圖。
+    const first = overview[0];
+    const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
+    const have = new Set(batch.map(sourceSrc));
+    const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s));
+    // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
+    // 但還沒做完的是哪幾張。剛上傳什麼都還沒做時，開場白已經講過，不再重複。
+    // 只講張數，不列是哪幾張：一批可能很多張，要看哪張在左邊「我的照片」看得到。
+    const count = (k: BatchProgress) => progress.filter((x) => x === k).length;
+    const [running, todo, analyzed, failed] = (["running", "todo", "analyzed", "error"] as const).map(count);
+    const notYet = todo + failed;
+    const untouched = progress.every((x) => x === "todo");
+    let statusHint = "";
+    if (running) {
+      statusHint = notYet
+        ? `還有 ${notYet} 張沒開始，可以按「全部分析」先看我打算怎麼修，或按「全部一鍵美化」直接美化，也可以到「我的照片」點一張個別調整。`
+        // 剛說完「開始了」，那句已經講過跑完會說、去哪看進度，不再重複一次。
+        : lastTurn?.kind === "running" || lastTurn?.kind === "start"
+          ? ""
+          : `還有 ${running} 張在跑，好了我會在這裡說；想看哪張的進度，到「我的照片」點那張。`;
+    } else if (!untouched) {
+      // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
+      const afterDone = lastTurn?.kind === "done";
+      const next = notYet
+        ? "按「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按「全部分析」。"
+        : "要接著美化，按「全部一鍵美化」。";
+      if (afterDone) {
+        statusHint = !todo && !analyzed && !failed ? "" : `${todo ? `另外還有 ${todo} 張還沒分析。` : ""}${next}`;
+      } else {
+        const left = [
+          todo && `${todo} 張還沒分析`,
+          analyzed && `${analyzed} 張分析好了，還沒美化`,
+          failed && `${failed} 張沒有成功，可以再送一次`,
+        ].filter(Boolean);
+        statusHint = left.length ? `目前${left.join("；")}。${next}` : "每張都美化好了，到「我的照片」點一張就能看結果。";
+      }
+    } else if (overview.length > 1) {
+      statusHint = "可以按「全部分析」先看我打算怎麼修，或按「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。";
+    }
     const settingsLine = (x?: Settings) => x && (
       <div class="chat-card chat-settings-history"><span class="chat-meta">當時的設定</span>
         <p>{x.analysis_model} · {x.render_option} · {x.aspect_ratio}</p>
@@ -2654,17 +2781,17 @@ export function App() {
                 return true;
               }}
               clearKey={preClear}
-              placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"] : "每張都開始了，點左邊照片看結果"}
+              placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"] : "每張都開始了，到「我的照片」點一張看結果"}
             />
         }
       >
         <UserMsg>
-          <BatchUploadBubble srcs={batch.map(sourceSrc)} text={`上傳了 ${batch.length} 張照片`} />
+          <BatchUploadBubble srcs={uploadThumbs(firstUpload)} text={`上傳了 ${firstUpload.length} 張照片`} />
         </UserMsg>
         {/* 先說收到幾張、這頁是什麼，再說這裡能做的三件事各是什麼，最後才講「只改一張」
             和怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
         <AssistantMsg>
-          <p class="chat-text">收到你上傳的 {batch.length} 張照片了。</p>
+          <p class="chat-text">收到你上傳的 {firstUpload.length} 張照片了。</p>
           <p class="chat-text">這裡是這批照片的總覽，在這裡做的事會一次套用到每一張，不用一張一張來：</p>
           <ul class="chat-list">
             <li><b>全部分析</b>：每張先看過，讓你看我打算各修什麼。</li>
@@ -2676,13 +2803,49 @@ export function App() {
         </AssistantMsg>
         {overview.map((t, i) => {
           const latest = i === overview.length - 1;
+          if (t === overview[0] && t.kind === "upload") return null;
+          if (t.kind === "upload") return (
+            <div key={t.id}>
+              <UserMsg><BatchUploadBubble srcs={uploadThumbs(t.srcs)} text={`新增了 ${t.srcs.length} 張照片`} /></UserMsg>
+              <AssistantMsg>
+                <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}排在「我的照片」最後面。`}</p>
+              </AssistantMsg>
+            </div>
+          );
+          if (t.kind === "remove") return (
+            <AssistantMsg key={t.id}>
+              <p class="chat-text chat-muted">{`移除了 ${t.count} 張，現在一共 ${t.left} 張。`}</p>
+            </AssistantMsg>
+          );
+          if (t.kind === "running") {
+            const n = t.keys.filter((k) => have.has(k)).length;
+            return n ? (
+              <AssistantMsg key={t.id}>
+                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，跑完我會在這裡說；想看哪張的進度，到「我的照片」點那張。`}</p>
+              </AssistantMsg>
+            ) : null;
+          }
+          if (t.kind === "done") {
+            const parts = [
+              t.rendered && `${t.rendered} 張美化好了`,
+              t.analyzed && `${t.analyzed} 張分析好了`,
+              t.failed && `${t.failed} 張沒有成功`,
+            ].filter(Boolean);
+            return (
+              <AssistantMsg key={t.id}>
+                <p class="chat-text">{`剛剛送出的都跑完了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${t.failed
+                  ? "沒成功的在「我的照片」會標「失敗」，點那張可以看原因。"
+                  : "想看哪張的結果，到「我的照片」點那張。"}`}</p>
+              </AssistantMsg>
+            );
+          }
           if (t.kind === "wish") return (
             <div key={t.id} class="note-turn">
               <AskBubble text={t.text} />
               <AssistantMsg>
                 <p class="chat-text">
                   {t.count
-                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，點左邊那張調整就好。`
+                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，到「我的照片」點那張調整。`
                     : "每張都已經開始了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
                 </p>
               </AssistantMsg>
@@ -2731,12 +2894,16 @@ export function App() {
               {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : "spark"} label={t.mode === "analyze" ? "全部分析" : "全部一鍵美化"} /></UserMsg>}
               <AssistantMsg>
                 <p class="chat-text">
-                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，每張的進度看左邊「我的照片」，點那張可以看結果。`}
+                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，都跑完我會在這裡說；想看哪張的進度，到「我的照片」點那張。`}
                 </p>
               </AssistantMsg>
             </div>
           );
         })}
+        {/* 換一句就換一個節點，才會跟新進來的訊息一樣接在後面打字，不會原地換字。 */}
+        {!askOpen && statusHint && (
+          <AssistantMsg key={statusHint}><p class="chat-text">{statusHint}</p></AssistantMsg>
+        )}
         {!askOpen && (
           pending || renderable ? (
             <div class="prechat-actions">
@@ -2750,9 +2917,7 @@ export function App() {
                 </div>
               </div>
             </div>
-          ) : (
-            <AssistantMsg><p class="chat-text">每張都開始了，點左邊的照片可以看結果。</p></AssistantMsg>
-          )
+          ) : null
         )}
         {error && <ErrorMsg text={error} />}
       </ChatPanel>
@@ -2772,8 +2937,9 @@ export function App() {
                     wished={batchWished}
                     current={batchKey}
                     live={batchLive}
+                    failed={batchFailed}
                     pending={pending}
-                    renderable={renderable}
+                    renderable={renderableAll}
                     disabled={!!preAsk || busy}
                     onPick={pickBatch}
                     overview={!source}
@@ -2854,6 +3020,7 @@ export function App() {
                   wished={batchWished}
                   current={batchHere}
                   live={{ ...batchLive, [batchHere]: photo }}
+                  failed={batchFailed}
                   pending={batch.filter((x) => unstarted(sourceSrc(x))).length}
                   renderable={batch.filter((x) => needsRender(sourceSrc(x))).length}
                   disabled={busy}
@@ -3017,6 +3184,8 @@ function BatchPreSidebar(props: {
   onSamples?: () => void;
   // 結果頁上正在看的那張，狀態照它在 session 裡真的跑到哪。
   live?: Record<string, Photo>;
+  // 最後一次美化沒有成功的那幾張。
+  failed?: Record<string, boolean>;
 }) {
   const { sources, runs, current, pending, live } = props;
   const [open, setOpen] = useState(false);
@@ -3173,7 +3342,7 @@ function BatchPreSidebar(props: {
             const key = sourceSrc(s);
             const r = runs[key];
             const p = live?.[key] || null;
-            const state = batchItemState(r, p, props.wished(key));
+            const state = batchItemState(r, p, props.wished(key), !!props.failed?.[key]);
             const on = key === current;
             return (
               <button
@@ -3206,14 +3375,16 @@ function BatchPreSidebar(props: {
 }
 
 // 「我的照片」方塊左下角的狀態。
-function photoState(p: Photo): { key: string; text: string } {
+function photoState(p: Photo, renderFailed = false): { key: string; text: string } {
   return p.status === "failed"
     ? { key: "error", text: "失敗" }
     : p.status === "rendering" || p.queued_render || p.pending_render
       ? { key: "processing", text: "美化中" }
       : isBusy(p)
         ? { key: "analyzing", text: "分析中" }
-        : p.active_version
+        : renderFailed
+          ? { key: "error", text: "失敗" }
+          : p.active_version
           ? { key: "done", text: "已美化" }
           : { key: "analyzed", text: "已分析" };
 }
