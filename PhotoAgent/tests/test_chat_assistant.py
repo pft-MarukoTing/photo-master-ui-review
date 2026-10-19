@@ -401,6 +401,22 @@ class AskTest(unittest.TestCase):
         self.assertEqual(result["proposal"]["undo"], {"user_prompt": plan["user_prompt"]})
         self.assertEqual(result["reply"], "好，左邊女性帽子拿掉就不做了。")
 
+    def test_a_reworded_wish_is_not_taken_back(self):
+        plan = default_plan()
+        plan["user_prompt"] = "將這枚腕錶做成抽象風格、在照片中放上「相對論」"
+        # The model joins the wishes with 「，」 and rewords the first one in place.
+        result = ask(model_says(patch={"user_prompt": "將這枚腕錶做成融入流逝感的抽象風格，在照片中放上「相對論」"}), plan=plan)
+        self.assertTrue(result["proposal"]["direct"])
+        self.assertEqual(result["reply"], "好，記下了：將這枚腕錶做成融入流逝感的抽象風格。")
+        # One taken out while the other is joined with 「，」: still taken back.
+        plan["user_prompt"] = "背景調暗，在照片中放上「相對論」"
+        result = ask(model_says(patch={"user_prompt": "在照片中放上「相對論」"}), plan=plan)
+        self.assertEqual(result["reply"], "好，背景調暗就不做了。")
+
+    def test_a_quoted_text_keeps_its_own_commas(self):
+        items = chat_assistant._wish_items("在照片中放上「時間，空間、相對論」，背景調暗", {})
+        self.assertEqual(items, [(None, "在照片中放上「時間，空間、相對論」"), (None, "背景調暗")])
+
     def test_a_picked_answer_is_applied(self):
         history = [
             {"role": "assistant", "text": "", "card": {"type": "llm_reply", "text": "想怎麼調？",
@@ -755,6 +771,16 @@ class RenderNoteTest(unittest.TestCase):
         # Only the wish this round added, not the whole 個人化需求 again.
         self.assertIn('THIS ROUND: [{"label":"個人化需求","added":["加上標題「台北」"]}]', seen[0])
         self.assertIn("EARLIER NOTES:\n- 裁成 4:5 了。", seen[0])
+
+    def test_a_reworded_wish_is_not_told_as_taken_out(self):
+        seen = []
+        before, after = default_plan(), default_plan()
+        before["user_prompt"] = "將這枚腕錶做成抽象風格、在照片中放上「相對論」"
+        after["user_prompt"] = "將這枚腕錶做成融入流逝感的抽象風格，在照片中放上「相對論」"
+        chat_assistant.write_render_note(analysis(), after, previous_plan=before,
+                                         model=lambda c, i: seen.append(c) or {"note": "x"})
+        self.assertIn('THIS ROUND: [{"label":"個人化需求","revised":[{"from":"將這枚腕錶做成抽象風格",'
+                      '"to":"將這枚腕錶做成融入流逝感的抽象風格"}]}]', seen[0])
 
     def test_a_wishes_only_version_talks_about_the_wishes_alone(self):
         seen = []

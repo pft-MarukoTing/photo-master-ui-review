@@ -17,6 +17,7 @@ model said it would do.
 
 import contextvars
 import copy
+import difflib
 import json
 import logging
 import math
@@ -433,7 +434,7 @@ You are a senior photo retoucher handing over a finished version. Compare BEFORE
 Write in Traditional Chinese (Taiwan), plain everyday words, two or three short sentences:
 - What changed, as you can see it in AFTER against BEFORE: the two or three most noticeable improvements, each named concretely -- where in the photo and how it looks now (「天空的偏黃收掉了，雪地回到乾淨的白」「中間媽媽的臉亮了，表情看得清楚」). On a first version, the user's own wishes in PLAN.user_prompt come first when there are any.
 - THIS ROUND lists what the user changed since the version this one was made from. When it lists anything, this version exists because of it: open with how that change shows in AFTER, named the way the user asked for it (「金色光調讓整張蒙上一層傍晚的暖光」). Do not recap earlier work that THIS ROUND did not touch -- no 「相較原圖…」 round-up of the edits every version has, and the framing only if THIS ROUND changed it: the note is about this round, plus at most one problem.
-- When THIS ROUND switches a fix off or takes a wish out, say in one plain clause what stays as in the original (「這一版保留了他原本的視線」). Do not invent a reason for it, and do not describe the original state beyond what you can tell for sure. If that is all this round changed, a one-sentence note is enough; do not pad it.
+- When THIS ROUND switches a fix off or takes a wish out, say in one plain clause what stays as in the original (「這一版保留了他原本的視線」). Do not invent a reason for it, and do not describe the original state beyond what you can tell for sure. If that is all this round changed, a one-sentence note is enough; do not pad it. A wish under "revised" was reworded, not taken out: it is still in this version, so speak of how its new wording ("to") shows.
 - EARLIER NOTES are what you already said under earlier versions. Do not say it again: no repeated wording, no repeated list of earlier changes, and pick a different place worth a closer look, or none.
 - What the user asked for themselves -- a change in THIS ROUND, or a wish in PLAN.user_prompt -- gets one clause of recognition: tie it to the feeling or story they were after, as it shows in AFTER (「你想要的暖色調，讓這碗麵看起來像剛起鍋」「『日常裡的美味瞬間』剛好接住他低頭吃飯的那一刻」). Name the wish in a few words of your own; never quote the whole wish back (not 「你要的『將夜間城市街景改成白天的樣子』」). Only what the user actually said counts: when this version holds no wish of theirs, call nothing 「你想要的」, and never present the analysis's own suggestions as the user's wish. Praise the effect on the photo, never the user (no 「很有眼光」「好棒的想法」), and no 「太棒了」「超讚」 or strings of exclamation marks. If it did not fully come out, still back the direction, then offer the next step as the end result it would bring, without naming what is off (see Offers).
 - If the framing changed -- a new aspect ratio, a 重新構圖 item in RECIPE, or AFTER simply covering a different part of the scene than BEFORE -- say how, and what it does for the photo, as one of those changes (see COMPOSITION).
@@ -479,7 +480,7 @@ If exact printed text was requested, do not claim it was completed unless the su
 Write in Traditional Chinese (Taiwan), plain everyday words, one or two short sentences:
 - First, what this version set out to do: the two or three most visible things PLAN applies -- the user's own wishes in PLAN.user_prompt first when there are any, then portrait fixes, a chosen style, kept RECIPE items (「這一版重點放在把色溫收回、臉部暗部提亮，也照你說的換成了夏天的草地」).
 - THIS ROUND lists what the user changed since the version this one was made from. When it lists anything, this version exists because of it: open with how that change shows in AFTER, named the way the user asked for it (「金色光調讓整張蒙上一層傍晚的暖光」). Do not recap earlier work that THIS ROUND did not touch -- no 「相較原圖…」 round-up of the edits every version has, and the framing only if THIS ROUND changed it: the note is about this round, plus at most one problem.
-- When THIS ROUND switches a fix off or takes a wish out, say in one plain clause what stays as in the original (「這一版保留了他原本的視線」). Do not invent a reason for it, and do not describe the original state beyond what you can tell for sure. If that is all this round changed, a one-sentence note is enough; do not pad it.
+- When THIS ROUND switches a fix off or takes a wish out, say in one plain clause what stays as in the original (「這一版保留了他原本的視線」). Do not invent a reason for it, and do not describe the original state beyond what you can tell for sure. If that is all this round changed, a one-sentence note is enough; do not pad it. A wish under "revised" was reworded, not taken out: it is still in this version, so speak of how its new wording ("to") shows.
 - EARLIER NOTES are what you already said under earlier versions. Do not say it again: no repeated wording, no repeated list of earlier changes, and pick a different place worth a closer look, or none.
 - What the user asked for themselves -- a change in THIS ROUND, or a wish in PLAN.user_prompt -- gets one clause of recognition: tie it to the feeling or story they were after, as it shows in AFTER (「你想要的暖色調，讓這碗麵看起來像剛起鍋」「『日常裡的美味瞬間』剛好接住他低頭吃飯的那一刻」). Name the wish in a few words of your own; never quote the whole wish back (not 「你要的『將夜間城市街景改成白天的樣子』」). Only what the user actually said counts: when this version holds no wish of theirs, call nothing 「你想要的」, and never present the analysis's own suggestions as the user's wish. Praise the effect on the photo, never the user (no 「很有眼光」「好棒的想法」), and no 「太棒了」「超讚」 or strings of exclamation marks.
 - On a first version, then one specific place to look when comparing with the original (「可以特別看中間媽媽的臉」). On a later version, only when THIS ROUND made something new to look at; otherwise leave it out.
@@ -563,13 +564,15 @@ def write_render_note(analysis, plan, *, before=None, after=None, previous_plan=
                 continue
             # 個人化需求 is one long string: the whole before/after would read
             # as if every wish in it were new this round. Only the wishes this
-            # round added or took out are.
+            # round added, took out or reworded are.
             old, new = previous_plan.get("user_prompt") or "", plan.get("user_prompt") or ""
-            added = _grouped_wishes(_new_wishes(old, new, analysis))
-            removed = _grouped_wishes(_new_wishes(new, old, analysis))
-            if added or removed:
+            added, dropped, revised = _wish_changes(old, new, analysis)
+            added, removed = _grouped_wishes(added), _grouped_wishes(dropped)
+            revised = [{"from": f"{head or ''}{was}", "to": f"{head or ''}{now}"} for head, was, now in revised]
+            if added or removed or revised:
                 rows.append({"label": change["label"], **({"added": added} if added else {}),
-                             **({"removed": removed} if removed else {})})
+                             **({"removed": removed} if removed else {}),
+                             **({"revised": revised} if revised else {})})
         this_round = _dump(rows) if rows else "(same plan as before: a new take)"
     notes = [n.strip() for n in earlier_notes if isinstance(n, str) and n.strip()]
     only_wishes = bool(plan.get("overwrite_prompt")) and bool((plan.get("user_prompt") or "").strip())
@@ -885,15 +888,30 @@ def _picked(history, analysis=None):
     return text == "這位" and len(pointed) == 1 and pointed[0] in options
 
 
+def _split_wishes(text):
+    """`text` cut at every 「、」 or 「，」 that is not inside 「」: the model
+    joins wishes with either, and a quoted text to print keeps its own."""
+    parts, depth, start = [], 0, 0
+    for i, ch in enumerate(text):
+        if ch == "「":
+            depth += 1
+        elif ch == "」":
+            depth = max(0, depth - 1)
+        elif ch in "、，" and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+    return [p.strip() for p in parts + [text[start:]] if p.strip()]
+
+
 def _wish_items(text, analysis):
-    """[(name, wish)] for every wish in 個人化需求, one per 「、」; name is
-    None for a wish that names no one."""
+    """[(name, wish)] for every wish in 個人化需求, one per 「、」 or 「，」;
+    name is None for a wish that names no one."""
     heads = sorted(set(person_names(analysis).values()), key=len, reverse=True)
     out = []
     for part in re.split(r"[；;]", text or ""):
         head = next((h for h in heads if part.strip().startswith(h)), None)
         rest = part.strip()[len(head):].lstrip("，、, ").lstrip("的") if head else part.strip()
-        out += [(head, w.strip()) for w in rest.split("、") if w.strip()]
+        out += [(head, w) for w in _split_wishes(rest)]
     return out
 
 
@@ -902,6 +920,35 @@ def _new_wishes(before, after, analysis):
     old = _wish_items(before, analysis)
     return [(head, wish) for head, wish in _wish_items(after, analysis)
             if not any(h == head and (wish in w or w in wish) for h, w in old)]
+
+
+# 改寫過的需求（「做成抽象風格」→「做成融入流逝感的抽象風格」）不是拿掉一條、
+# 加一條：兩邊夠像就算同一條改了說法。
+REVISED_WISH_RATIO = 0.6
+
+
+def _is_revision(old, new):
+    """True when wish `new` reads as `old` reworded."""
+    def in_order(short, long):
+        chars = iter(long)
+        return all(c in chars for c in short)
+    return (in_order(old, new) or in_order(new, old)
+            or difflib.SequenceMatcher(None, old, new).ratio() >= REVISED_WISH_RATIO)
+
+
+def _wish_changes(before, after, analysis):
+    """(added, dropped, revised) between two 個人化需求: added and dropped are
+    [(name, wish)]; revised is [(name, old, new)] for a wish that is still
+    there, reworded."""
+    added, dropped = _new_wishes(before, after, analysis), _dropped_wishes(before, after, analysis)
+    revised = []
+    for head, old in list(dropped):
+        new = next((w for h, w in added if h == head and _is_revision(old, w)), None)
+        if new is not None:
+            revised.append((head, old, new))
+            dropped.remove((head, old))
+            added.remove((head, new))
+    return added, dropped, revised
 
 
 def _grouped_wishes(items):
@@ -938,8 +985,10 @@ def _only_drops_wishes(patch, plan, analysis):
     if set(patch) != {"user_prompt"}:
         return False
     before, after = plan.get("user_prompt"), patch["user_prompt"]
-    return (bool(before) and not _new_wishes(before, after, analysis)
-            and bool(_dropped_wishes(before, after, analysis)))
+    if not before:
+        return False
+    added, dropped, revised = _wish_changes(before, after, analysis)
+    return not added and not revised and bool(dropped)
 
 
 def _undo_patch(patch, plan):
@@ -966,7 +1015,8 @@ APPLIED_WISH_MAX_LEN = 30
 
 def _applied_reply(changes, screen, wishes=()):
     """What to say for a change applied without asking, and what to press next.
-    `wishes` are the wishes it added to 個人化需求, as the user would read them."""
+    `wishes` are the wishes it added to 個人化需求 or reworded there, as the
+    user would read them now."""
     only = changes[0] if len(changes) == 1 else None
     echo = "、".join(wishes)
     if only and only["field"] == "user_prompt" and echo and len(echo) <= APPLIED_WISH_MAX_LEN:
@@ -1087,8 +1137,10 @@ def ask(analysis, plan, status, history, *, debug=False, model=None, screen=None
         elif _only_drops_wishes({k:v for k,v in patch.items() if k != "literal_texts"}, plan, analysis or {}):
             reply = _dropped_reply(_dropped_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}), screen)
         else:
-            added = _new_wishes(plan.get("user_prompt"), patch["user_prompt"], analysis or {}) if "user_prompt" in patch else []
-            reply = _applied_reply(changes, screen, _grouped_wishes(added))
+            added, _, revised = (_wish_changes(plan.get("user_prompt"), patch["user_prompt"], analysis or {})
+                                 if "user_prompt" in patch else ([], [], []))
+            # A reworded wish is read back like a new one: what it says now.
+            reply = _applied_reply(changes, screen, _grouped_wishes(added + [(head, new) for head, _, new in revised]))
     # A change goes through its card first, even when the model also said render.
     render = result.get("action") == "render" and not wanted
     options = [] if proposal or render else _options(result.get("options"))
