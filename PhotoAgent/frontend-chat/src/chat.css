@@ -535,6 +535,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    置中用 translate 不用 transform，進場動畫的 transform 才不會把它蓋掉。 */
 .batch-add-wrap{position:relative;display:flex}
 .chat-attach-menu.is-down{left:50%;right:auto;bottom:auto;top:calc(100% + var(--sp-1));translate:-50% 0;z-index:30}
+.chat-attach-menu.is-down.is-end{left:auto;right:0;translate:none}
 .chat-boot-error{padding:var(--sp-7) var(--sp-4);color:var(--danger)}
 
 /* Settings editor */
@@ -757,6 +758,10 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 /* 「顯示全部」的照片面板：沿用範例照片的對話框，格子依寬度自己排欄。 */
 .batch-grid-cells.is-all{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
 .batch-grid-filters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+/* 篩選靠左、新增和全部清除靠右，同一列；篩選太多換行時那兩顆留在第一列右邊。 */
+.batch-grid-head{display:flex;align-items:flex-start;gap:8px;margin:0 0 10px}
+.batch-grid-head>.batch-grid-filters{flex:1 1 auto;min-width:0;margin:0}
+.batch-grid-tools .batch-download-all-btn{width:28px;height:28px}
 .batch-grid-filter{font:inherit;font-size:12.5px;padding:3px 11px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
 /* 「處理中」前面一個轉著的小圈，看得出還在做；系統設定減少動態時只留不動的圈。 */
 .batch-grid-filter.is-running{display:inline-flex;align-items:center;gap:6px}
@@ -770,11 +775,19 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .batch-grid-cell img{width:100%;height:100%;object-fit:cover;display:block}
 .batch-grid-cell:disabled{cursor:default}
 .batch-grid-cell .rc-spinner{position:absolute;inset:0;margin:auto}
-/* 編號跟「最近照片」磚上的張數同一種深色毛玻璃。狀態那顆直接用 .session-tile-badge。 */
-.batch-grid-no{position:absolute;top:4px;right:4px;z-index:3;font-size:11px;line-height:1.2;padding:2px 6px;border-radius:20px;
+/* 右上角的 ×：跟「最近照片」磚上的張數同一種深色毛玻璃，18px 圓。狀態那顆直接用 .session-tile-badge。 */
+.batch-grid-cell .history-cube-remove{position:absolute;top:4px;right:4px;left:auto;z-index:3;box-sizing:border-box;width:18px;height:18px;padding:0;
+  display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1;border-radius:50%;border:0;transform:none;
   color:#fff;background:rgba(9,9,11,.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.batch-grid-cell .history-cube-remove:hover{background:rgba(220,60,60,.85);transform:none}
 .batch-grid-more{border-style:dashed;display:flex;align-items:center;justify-content:center;text-align:center;font:inherit;font-size:12.5px;font-weight:700;color:var(--accent-text);line-height:1.4}
 .batch-grid-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+/* 手機：縮圖改成方的，一排塞得下比較多張；設定和兩顆「全部…」排成同一排，不換行。 */
+@media (max-width:900px){
+  .batch-grid-cell,.batch-grid-more{aspect-ratio:1/1}
+  .batch-grid-actions{flex-wrap:nowrap}
+  .batch-grid-actions .chat-chip{flex:1 1 auto;min-width:0;justify-content:center;white-space:nowrap;padding-inline:var(--sp-2)}
+}
 .batch-sidebar-all .chat-chip{width:100%;justify-content:center}
 /* 進到總覽時那兩顆輕輕跳兩下、外圈亮一下，告訴使用者「從這裡一次處理全部」。
    只跳一輪就停，不一直動；系統設定減少動態就不跳。 */
@@ -827,8 +840,16 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 @media (max-width:900px),(max-width:1200px) and (orientation:portrait){
   #upload-section .upload-content-row>#batch-sidebar{position:fixed;top:var(--header-h);left:0;bottom:0;margin:0;align-self:stretch;
     width:min(224px,68vw);height:auto;max-height:none;min-height:0;max-width:none;padding:12px;flex-basis:auto;
-    border-radius:0;border-width:0 1px 0 0;z-index:1001;transform:translateX(-100%);transition:transform .25s ease}
-  #upload-section .upload-content-row>#batch-sidebar.drawer-open{transform:translateX(0)}
+    border-radius:0;border-width:0 1px 0 0;z-index:1001;
+    /* 從左上角那顆展開、收回那顆：關著的時候剪成那顆按鈕的位置和圓角（16 起點、標頭下 9px、40×32），
+       打開時剪裁放到整片。先長大再淡出，收起時看得到它縮回哪裡。關著時連點擊都不吃，不會擋到那顆。 */
+    --drawer-from:inset(9px calc(100% - 56px) calc(100% - 41px) 16px round 10px);
+    transform:none;clip-path:var(--drawer-from);opacity:0;visibility:hidden;pointer-events:none;
+    transition:clip-path .3s cubic-bezier(.4,0,.2,1),opacity .14s ease .16s,visibility 0s linear .3s}
+  #upload-section .upload-content-row>#batch-sidebar.drawer-open{transform:none;clip-path:inset(0 round 0);opacity:1;visibility:visible;pointer-events:auto;
+    transition:clip-path .38s cubic-bezier(.2,.8,.2,1),opacity .12s ease,visibility 0s}
+  /* 選了照片那顆往下移到 16px，展開的起點跟著。 */
+  #upload-section .upload-content-row:has(.chat-panel.has-photo)>#batch-sidebar{--drawer-from:inset(16px calc(100% - 56px) calc(100% - 48px) 16px round 10px)}
   #upload-section .upload-content-row>.batch-drawer-trigger{display:inline-flex;border-radius:0 12px 12px 0}
   #upload-section .upload-content-row .batch-sidebar-close-btn{display:flex;top:12px;right:8px}
   #upload-section .upload-content-row>.batch-sidebar-backdrop{top:var(--header-h)}
@@ -846,6 +867,12 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
     animation:drawer-hop 2.4s ease-in-out .4s both,drawer-hop-idle 5s ease-in-out 2.8s infinite}
   #upload-section .upload-content-row:has(>.batch-drawer-trigger) .chat-panel>:is(.chat-panel-head,.chat-panel-photo){padding-left:72px}
   #upload-section .upload-content-row:has(.chat-panel.has-photo)>.batch-drawer-trigger{top:calc(var(--header-h) + 16px)}
+  /* 總覽按「顯示全部」：那顆先放大、外圈亮一下，接著抽屜才滑出來，看得出是從這顆打開的。
+     收起來時再跳幾下、外圈擴散一次，告訴使用者照片收回這裡了；之後接回每 5 秒輕跳，不從頭再跳四下
+     （is-home 留著不拿，拿掉會讓上面那組動畫整個重播）。選擇器要比上面常駐那條重才蓋得掉。 */
+  #upload-section .upload-content-row:not(:has(.chat-panel.has-photo))>.batch-drawer-trigger.is-ping{animation:drawer-ping .28s ease-out both}
+  #upload-section .upload-content-row>.batch-drawer-trigger.is-home{animation:drawer-home 1.4s ease-in-out .2s both}
+  #upload-section .upload-content-row:not(:has(.chat-panel.has-photo))>.batch-drawer-trigger.is-home{animation:drawer-home 1.4s ease-in-out .2s both,drawer-hop-idle 5s ease-in-out 6.6s infinite}
 }
 /* 跳四下、幅度慢慢收：內容多的時候眼睛還在讀對話，一兩下很容易錯過。 */
 @keyframes drawer-hop{
@@ -855,6 +882,20 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   54%{transform:translateY(-4px)}
   73%{transform:translateY(-2px)}
 }
+@keyframes drawer-ping{
+  0%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),.4)}
+  45%{transform:scale(1.14)}
+  100%{transform:none;box-shadow:0 0 0 12px rgba(var(--accent-rgb),0)}
+}
+@keyframes drawer-home{
+  0%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),.4)}
+  15%{transform:translateY(-7px)}
+  30%{transform:none}
+  45%{transform:translateY(-4px)}
+  60%{transform:none;box-shadow:0 0 0 12px rgba(var(--accent-rgb),0)}
+  75%{transform:translateY(-2px)}
+  90%,100%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}
+}
 /* 總覽上的常駐提醒：前 1 秒跳兩下，其餘時間停著。 */
 @keyframes drawer-hop-idle{
   0%,10%,20%,100%{transform:none}
@@ -862,7 +903,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   15%{transform:translateY(-3px)}
 }
 @media (prefers-reduced-motion:reduce){
-  #upload-section .upload-content-row>#batch-sidebar{transition:none}
+  #upload-section .upload-content-row>#batch-sidebar,#upload-section .upload-content-row>#batch-sidebar.drawer-open{transition:none}
   #upload-section .upload-content-row>.batch-drawer-trigger{animation:none!important}
 }
 /* 上傳頁的照片列表標題列多了「新增照片」，和「全部清除」一組靠右，縮成 26px 讓「我的照片」不被截斷。 */

@@ -733,6 +733,7 @@ export function App() {
   const [deleteAsk, setDeleteAsk] = useState<{ message: string; notice?: boolean; done: (ok: boolean) => void } | null>(null);
   // 從最近照片打開一批時，左上角「我的照片」跳一下提示其他張在那裡；跳完就清掉，之後在同一批裡切換照片不再跳。
   const [hopTrigger, setHopTrigger] = useState(false);
+  const [revealDrawer, setRevealDrawer] = useState(0);
 
   // Pre-session chat
   const [step, setStep] = useState<PreStep>("start");
@@ -3014,6 +3015,11 @@ export function App() {
             onPick={pickBatch}
             onStartAll={overviewStart}
             onSettings={overviewEditSettings}
+            onMore={() => setRevealDrawer((n) => n + 1)}
+            onAdd={busy || loadingPhotos ? undefined : appendFiles}
+            onSamples={busy || loadingPhotos ? undefined : showSamples}
+            onClear={busy || anyRun || loadingPhotos ? undefined : clearBatch}
+            onRemove={busy || loadingPhotos ? undefined : removeFromBatch}
           />
         }
         onDropFiles={overviewHeld ? undefined : appendFiles}
@@ -3188,6 +3194,7 @@ export function App() {
                     onClear={busy || anyRun || loadingPhotos ? undefined : clearBatch}
                     onAdd={busy || loadingPhotos ? undefined : appendFiles}
                     onSamples={busy || loadingPhotos ? undefined : showSamples}
+                    reveal={revealDrawer}
                   />
                   {source ? (
                     <>
@@ -3457,10 +3464,35 @@ function BatchPreSidebar(props: {
   // 抽屜收起來時那顆按鈕跳一下（從最近照片打開時），跳完呼叫 onHopped。
   hop?: boolean;
   onHopped?: () => void;
+  // 每加一就從外面把抽屜打開一次（總覽照片格的「顯示全部」）：那顆先亮一下再從它展開，
+  // 收起來時那顆再跳幾下，讓人知道照片收在這裡、之後從這顆開闔。
+  reveal?: number;
 }) {
   const { sources, runs, current, pending, live } = props;
   const [open, setOpen] = useState(false);
-  const addInput = useRef<HTMLInputElement>(null);
+  const [ping, setPing] = useState(false);
+  const [home, setHome] = useState(false);
+  const revealed = useRef(false);
+  // 重掛時（例如從結果頁回來）不要因為帶著舊的數字又自己打開。
+  const seenReveal = useRef(props.reveal);
+  useEffect(() => {
+    if (props.reveal === seenReveal.current) return;
+    seenReveal.current = props.reveal;
+    revealed.current = true;
+    setHome(false);
+    setPing(true);
+    const t = setTimeout(() => {
+      setPing(false);
+      setOpen(true);
+    }, matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 220);
+    return () => clearTimeout(t);
+  }, [props.reveal]);
+  const close = () => {
+    setOpen(false);
+    if (!revealed.current) return;
+    revealed.current = false;
+    setHome(true);
+  };
   const list = useRef<HTMLDivElement>(null);
   const batchKey = sources.length ? sourceSrc(sources[0]) : "";
   // 重掛時在畫出來之前捲回原本的位置，不會先閃一下最上面。
@@ -3477,25 +3509,9 @@ function BatchPreSidebar(props: {
     if (top < box.scrollTop) box.scrollTop = top;
     else if (top + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top + on.offsetHeight - box.clientHeight;
   }, [current, open]);
-  // +：跟輸入框那顆一樣先問要自行上傳還是挑範例照片。
-  const addWrap = useRef<HTMLDivElement>(null);
-  const [addMenu, setAddMenu] = useState(false);
-  useEffect(() => {
-    if (!addMenu) return;
-    const away = (e: MouseEvent) => {
-      if (!addWrap.current?.contains(e.target as Node)) setAddMenu(false);
-    };
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAddMenu(false);
-    document.addEventListener("mousedown", away);
-    document.addEventListener("keydown", esc);
-    return () => {
-      document.removeEventListener("mousedown", away);
-      document.removeEventListener("keydown", esc);
-    };
-  }, [addMenu]);
   const full = sources.length >= MAX_BATCH;
   const pick = (s: Source) => {
-    setOpen(false);
+    close();
     props.onPick(s);
   };
   const renderable = props.renderable ?? pending;
@@ -3505,79 +3521,21 @@ function BatchPreSidebar(props: {
     n: sources.filter((x) => batchProgress(runs[sourceSrc(x)], live?.[sourceSrc(x)] || null, !!props.failed?.[sourceSrc(x)]) === g.key).length,
   })).filter((x) => x.n).map((x) => `${x.n} ${x.g.label}`).join(" · ");
   const startAll = (mode: "analyze" | "render") => {
-    setOpen(false);
+    close();
     props.onStartAll(mode);
   };
   return (
     <>
-      <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={() => setOpen(false)} />
+      <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={close} />
       <aside class={`batch-sidebar${open ? " drawer-open" : ""}${props.overview ? " is-overview" : ""}`} id="batch-sidebar">
-        <button type="button" class="batch-sidebar-close-btn" aria-label="收起照片列表" onClick={() => setOpen(false)}>
+        <button type="button" class="batch-sidebar-close-btn" aria-label="收起照片列表" onClick={close}>
           <Icon name="x" size={16} />
         </button>
         <div class="batch-sidebar-header">
           <h2 class="batch-sidebar-title">我的照片</h2>
           <span class="batch-sidebar-count">{sources.length} 張</span>
           <div class="batch-sidebar-actions">
-          {props.onAdd && (
-            <div class="batch-add-wrap" ref={addWrap}>
-              <button
-                type="button"
-                class="batch-download-all-btn"
-                title={full ? `已經選滿 ${MAX_BATCH} 張了` : "新增照片"}
-                aria-label="新增照片"
-                aria-haspopup={props.onSamples ? "menu" : undefined}
-                aria-expanded={props.onSamples ? addMenu : undefined}
-                disabled={full}
-                onClick={() => (props.onSamples ? setAddMenu((v) => !v) : addInput.current?.click())}
-              >
-                <Icon name="plus" size={14} />
-              </button>
-              {addMenu && props.onSamples && (
-                <div class="chat-attach-menu is-down" role="menu">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setAddMenu(false);
-                      addInput.current?.click();
-                    }}
-                  >
-                    <Icon name="up" size={16} />
-                    自行上傳照片
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setAddMenu(false);
-                      setOpen(false);
-                      props.onSamples!();
-                    }}
-                  >
-                    <Icon name="photos" size={18} />
-                    從範例照片挑選
-                  </button>
-                </div>
-              )}
-              <input
-                ref={addInput}
-                type="file"
-                accept="image/*,.heic,.heif"
-                multiple
-                hidden
-                onChange={(e) => {
-                  const el = e.currentTarget;
-                  const fs = Array.from(el.files || []);
-                  el.value = "";
-                  if (fs.length) {
-                    setOpen(false);
-                    props.onAdd!(fs);
-                  }
-                }}
-              />
-            </div>
-          )}
+          {props.onAdd && <BatchAddButton full={full} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} />}
           {props.onClear && (
             <button type="button" class="batch-download-all-btn" title="全部清除" aria-label="全部清除" data-danger onClick={props.onClear}>
               <Icon name="trash" size={14} />
@@ -3670,7 +3628,7 @@ function BatchPreSidebar(props: {
       </aside>
       <button
         type="button"
-        class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}`}
+        class={`batch-drawer-trigger${props.hop ? " is-hop" : ""}${ping ? " is-ping" : ""}${home ? " is-home" : ""}`}
         aria-label={`我的照片（${sources.length} 張）`}
         onClick={() => setOpen(true)}
         onAnimationEnd={() => props.onHopped?.()}
@@ -3719,6 +3677,8 @@ const GRID_SHORT = 900;
 const GRID_MIN_CELL = 72;
 const GRID_MIN_CELL_WIDE = 104;
 const GRID_GAP = 8;
+// 「我的照片」收成左邊抽屜的寬度，跟 chat.css 那兩段 @media 同一條。
+const DRAWER_MEDIA = "(max-width: 900px), (max-width: 1200px) and (orientation: portrait)";
 
 function BatchOverviewGrid(props: {
   sources: Source[];
@@ -3733,6 +3693,13 @@ function BatchOverviewGrid(props: {
   onPick: (s: Source) => void;
   onStartAll: (mode: "analyze" | "render") => void;
   onSettings: () => void;
+  // 手機上「我的照片」是抽屜：「顯示全部」改成打開抽屜，不另外開一個面板。
+  onMore?: () => void;
+  // 跟「我的照片」標題列那幾顆一樣：新增、全部清除、每格的 ×。不給就不出現（例如正在跑）。
+  onAdd?: (files: File[]) => void;
+  onSamples?: () => void;
+  onClear?: () => void;
+  onRemove?: (i: number) => void;
 }) {
   const [picked, setFilter] = useState<BatchProgress | "all">("all");
   const [open, setOpen] = useState(false);
@@ -3778,6 +3745,16 @@ function BatchOverviewGrid(props: {
     addEventListener("keydown", esc);
     return () => removeEventListener("keydown", esc);
   }, [open]);
+  const tools = (props.onAdd || props.onClear) && (
+    <div class="batch-sidebar-actions batch-grid-tools">
+      {props.onAdd && <BatchAddButton full={items.length >= MAX_BATCH} onAdd={props.onAdd} onSamples={props.onSamples} onBefore={() => setOpen(false)} end />}
+      {props.onClear && (
+        <button type="button" class="batch-download-all-btn" title="全部清除" aria-label="全部清除" data-danger onClick={props.onClear}>
+          <Icon name="trash" size={14} />
+        </button>
+      )}
+    </div>
+  );
   const filters = (
     <div class="batch-grid-filters" role="group" aria-label="依狀態篩選">
       <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
@@ -3819,18 +3796,21 @@ function BatchOverviewGrid(props: {
           onError={result ? () => setBroken((b) => new Set(b).add(x.key)) : undefined}
         />
         {x.progress === "running" ? <span class="rc-spinner" /> : null}
-        <span class="batch-grid-no">{x.no}</span>
+        {props.onRemove && !props.runs[x.key] && <SidebarRemove index={x.no - 1} onRemove={props.onRemove} />}
         <span class={`session-tile-badge${badge.cls ? ` ${badge.cls}` : ""}`}>{badge.text}</span>
       </button>
     );
   };
   return (
     <section class="batch-grid" aria-label="這批照片">
-      {filters}
+      <div class="batch-grid-head">
+        {filters}
+        {tools}
+      </div>
       <div class="batch-grid-cells" ref={grid} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {shown.map(cell)}
         {folded ? (
-          <button type="button" class="batch-grid-more" onClick={() => setOpen(true)}>
+          <button type="button" class="batch-grid-more" onClick={() => (props.onMore && matchMedia(DRAWER_MEDIA).matches ? props.onMore() : setOpen(true))}>
             +{listed.length - shown.length} 張<br />顯示全部
           </button>
         ) : null}
@@ -3859,12 +3839,12 @@ function BatchOverviewGrid(props: {
             <Chip label="設定" icon="tune" kind="ghost" disabled={props.actionsHeld} onClick={props.onSettings} />
           ) : null}
           {props.pending ? (
-            <Chip label={`全部分析（${props.pending} 張）`} icon="search" kind="primary" disabled={props.actionsHeld}
+            <Chip label="全部分析" icon="search" kind="primary" disabled={props.actionsHeld}
               title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
               onClick={() => props.onStartAll("analyze")} />
           ) : null}
           {props.renderable ? (
-            <Chip label={`全部一鍵美化（${props.renderable} 張）`} icon="spark" kind="primary" disabled={props.actionsHeld}
+            <Chip label="全部一鍵美化" icon="spark" kind="primary" disabled={props.actionsHeld}
               title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
               onClick={() => props.onStartAll("render")} />
           ) : null}
@@ -3891,6 +3871,87 @@ function photoState(p: Photo, renderFailed = false): { key: string; text: string
 
 // 方塊右上角的 ×，跟首頁磚上那顆同一個做法（home.tsx 的 RemoveMark）：方塊本身是
 // <button>，裡面不能再放按鈕，所以用 span 當按鈕，點了不往外傳。
+// 「我的照片」的 +：跟輸入框那顆一樣先問要自行上傳還是挑範例照片。抽屜標題列和總覽照片格上面共用。
+// onBefore 在真的要加照片前呼叫（抽屜那邊先收起來）；end 是貼在右邊時選單往左對齊，不跑出畫面。
+function BatchAddButton(props: { full: boolean; onAdd: (files: File[]) => void; onSamples?: () => void; onBefore?: () => void; end?: boolean }) {
+  const { full } = props;
+  const addInput = useRef<HTMLInputElement>(null);
+  const addWrap = useRef<HTMLDivElement>(null);
+  const [addMenu, setAddMenu] = useState(false);
+  useEffect(() => {
+    if (!addMenu) return;
+    const away = (e: MouseEvent) => {
+      if (!addWrap.current?.contains(e.target as Node)) setAddMenu(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAddMenu(false);
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [addMenu]);
+  return (
+      <div class="batch-add-wrap" ref={addWrap}>
+        <button
+          type="button"
+          class="batch-download-all-btn"
+          title={full ? `已經選滿 ${MAX_BATCH} 張了` : "新增照片"}
+          aria-label="新增照片"
+          aria-haspopup={props.onSamples ? "menu" : undefined}
+          aria-expanded={props.onSamples ? addMenu : undefined}
+          disabled={full}
+          onClick={() => (props.onSamples ? setAddMenu((v) => !v) : addInput.current?.click())}
+        >
+          <Icon name="plus" size={14} />
+        </button>
+        {addMenu && props.onSamples && (
+          <div class={`chat-attach-menu is-down${props.end ? " is-end" : ""}`} role="menu">
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setAddMenu(false);
+                addInput.current?.click();
+              }}
+            >
+              <Icon name="up" size={16} />
+              自行上傳照片
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setAddMenu(false);
+                props.onBefore?.();
+                props.onSamples!();
+              }}
+            >
+              <Icon name="photos" size={18} />
+              從範例照片挑選
+            </button>
+          </div>
+        )}
+        <input
+          ref={addInput}
+          type="file"
+          accept="image/*,.heic,.heif"
+          multiple
+          hidden
+          onChange={(e) => {
+            const el = e.currentTarget;
+            const fs = Array.from(el.files || []);
+            el.value = "";
+            if (fs.length) {
+              props.onBefore?.();
+              props.onAdd(fs);
+            }
+          }}
+        />
+      </div>
+  );
+}
+
 function SidebarRemove({ index, onRemove }: { index: number; onRemove: (i: number) => void }) {
   const go = (e: Event) => {
     e.stopPropagation();
