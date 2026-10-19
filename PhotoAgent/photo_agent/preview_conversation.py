@@ -46,8 +46,11 @@ use {person_count}, never a model-written number. For no prior wishes, a natural
 explain you are confirming people to avoid editing the wrong person. If identity evidence conflicts,
 say you are not sure which person they mean. If the person is already matched, acknowledge that person
 and wish instead of asking them to select again. Do not use「我們一起看看」as a mandatory report introduction. The UI inserts person icons/descriptions BETWEEN the paragraphs.
-Closing: invite continued conversation and explain that pressing「分析」provides detailed person analysis
-and suggestions. If identity is uncertain, ask for clarification instead of claiming a confirmed target.
+Closing: guide the user to「分析」first for fuller person analysis and editing suggestions,
+or「一鍵美化」to proceed directly. Explain that they can review the analysis before adding wishes.
+Prefer「建議先按「分析」，看看更完整的人物分析與修圖建議，再補充想調整的地方；也可以直接「一鍵美化」，交給我處理。」
+Do not lead with an invitation to keep typing wishes before analysis.
+If identity is uncertain, ask for clarification instead of claiming a confirmed target.
 Use varied, warm conversational wording grounded in the latest discussion, like a helpful photo-edit partner.
 Acknowledge one or two already validated requests naturally; avoid bureaucratic instruction echoes such as
 「你想調整的是…」or「請提供要處理的內容」. Light「好呀」「一起看看」is welcome, not obligatory.
@@ -60,7 +63,8 @@ Keep punctuation inside each label unchanged. With more candidates, invite selec
 Never turn an empty candidate set into a claim that everyone matches the user's description.
 Zero roster: do not introduce people or invite person analysis; the server suppresses the automatic introduction while retaining wishes and questions.
 Do not promise to preserve unspecified features. Never claim to have seen visual problems or finished edits.
-One person: invite instructions about this person, not choosing amongst people. No fixed completion announcement.
+One person: do not ask to choose amongst people; use the same analysis-first next-step guidance.
+No fixed completion announcement.
 Use reference_text/source_text as the original identity evidence, not only a normalized wish or partial referent.
 Every identity_groups entry must contain the COMPLETE source person description, including position,
 appearance, wearing location and relationships. Split explicit plural people into separate groups.
@@ -242,6 +246,10 @@ def _semantic_resolutions(clauses, raw):
             c = copy.deepcopy(old)
             if len(options) > 1:
                 c['wish_id'] = wid + '-segment-' + str(index)
+            if len(options) > 1 or value['source'] != old['text']:
+                # A review may prepend a display-only person label to text.
+                # Preserve its input provenance even for a single source span,
+                # so the next unchanged request can retain a user confirmation.
                 c['semantic_parent'] = wid
                 c['semantic_parent_text'] = old['text']
                 c['semantic_parent_reference'] = request_semantics.evidence(old)
@@ -360,7 +368,16 @@ def resolve(clauses, people, raw):
             # Explicit user selection is never overwritten by the model.
             status, ids, candidates = 'ambiguous', [], list(c['target_ids'])
         if status == 'matched' and not c['target_ids'] and not ref and not c.get('context_referent'):
-            raise ValueError('unsupported_binding')
+            if semantic_answer and not locked and groups == []:
+                # The source/action already passed semantic validation. Missing
+                # owner evidence is an ordinary person question, not a failed
+                # interpretation of the whole wish. Never adopt the model's
+                # guessed ID or exclude other known people from the picker.
+                status, ids, candidates = 'ambiguous', [], sorted(known)
+            else:
+                # Historical protocol and committed identities retain their
+                # existing validation behavior.
+                raise ValueError('unsupported_binding')
         if not semantic_answer and ref in ('他', '她', '這位', '他們', '她們') and not c['target_ids']:
             status, ids, candidates = 'ambiguous', [], list(known)
         if not semantic_answer and re.search(r'第\s*[三3]\s*(個|位|人)', c['text']) and len(known) < 3:
@@ -501,7 +518,7 @@ def present(state, people, raw=None):
         opening = state['reply'] + opening
     elif effective:
         opening = f'好呀，「{effective}」先記下來！' + opening
-    closing = '還有想調整的地方，接著聊就好！想多看看人物細節與修圖建議，也可以按「分析」喔。'
+    closing = '建議先按「分析」，看看更完整的人物分析與修圖建議，再補充想調整的地方；也可以直接「一鍵美化」，交給我處理。'
     if raw and not state.get('lifecycle_changes'):
         if _safe_presentation_part(raw.get('opening_template'), state, people, opening=True):
             opening = raw['opening_template']
@@ -819,7 +836,24 @@ def retain_bindings(clauses, previous):
         and before.get('selection_source','none')==c.get('selection_source','none') for before in previous['clauses'])}
     expanded = []
     for c in clauses:
-        children = [x for x in previous['clauses'] if ((x.get('parent_wish_id') == c['wish_id'] and x['text'] == c['text']) or (x.get('semantic_parent') == c['wish_id'] and x.get('semantic_parent_text') == c['text'] and x.get('semantic_parent_reference', 'semantic_answer') == c.get('reference_text'))) and x.get('source_text') == c.get('source_text')]
+        children = []
+        for x in previous['clauses']:
+            same_parent = x.get('parent_wish_id') == c['wish_id'] and x['text'] == c['text']
+            same_semantic_input = (x.get('semantic_parent') == c['wish_id']
+                and x.get('semantic_parent_text') == c['text']
+                and x.get('semantic_parent_reference', 'semantic_answer') == c.get('reference_text'))
+            if not (same_parent or same_semantic_input) or x.get('source_text') != c.get('source_text'):
+                continue
+            if x.get('selection_source','none') != c.get('selection_source','none'):
+                continue
+            # A normalized single clause must not overwrite a newly picked ID.
+            # Shared lifecycle children may intentionally retain only a subset
+            # of the original selection after cancelling one person's edit.
+            if (same_semantic_input and x['wish_id'] == c['wish_id']
+                    and c.get('selection_source') == 'user_selection'
+                    and (x.get('target_ids') or x.get('protected_ids') or []) != c['target_ids']):
+                continue
+            children.append(x)
         expanded.extend(copy.deepcopy(children) if children else [c])
     clauses = expanded
     fields = ('target_ids', 'protected_ids', 'referent', 'status', 'binding_source',
