@@ -737,6 +737,29 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px) - 30px);box-sizing:border-box}
 }
 .batch-sidebar-all{margin:0 0 12px;display:flex;flex-direction:column;gap:6px}
+/* 「全部…」那兩顆在總覽上由照片格底下那排負責，抽屜裡也不再放。 */
+.batch-sidebar.is-overview .batch-sidebar-all{display:none}
+/* 總覽頁：成果格在對話最上面，左邊（不是抽屜時）就只留「我的照片」的標題和「總覽」入口。 */
+@media (min-width:1201px),(min-width:901px) and (orientation:landscape){
+  .batch-sidebar.is-overview .batch-sidebar-list{display:none}
+}
+.chat-panel-top{flex:0 0 auto;display:block;padding:12px 16px 0;border-bottom:1px solid var(--border)}
+.batch-grid{display:block;margin:0 0 12px}
+/* 「顯示全部」的照片面板：沿用範例照片的對話框，格子依寬度自己排欄。 */
+.batch-grid-cells.is-all{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+.batch-grid-filters{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.batch-grid-filter{font:inherit;font-size:12.5px;padding:3px 11px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer}
+.batch-grid-filter.is-on{background:var(--tonal);color:var(--accent-text);border-color:transparent;font-weight:700}
+.batch-grid-cells{display:grid;gap:8px}
+.batch-grid-cell,.batch-grid-more{position:relative;container-type:inline-size;aspect-ratio:4/5;border-radius:10px;overflow:hidden;border:1px solid var(--border);padding:0;background:var(--card,#fff);cursor:pointer}
+.batch-grid-cell img{width:100%;height:100%;object-fit:cover;display:block}
+.batch-grid-cell:disabled{cursor:default}
+.batch-grid-cell .rc-spinner{position:absolute;inset:0;margin:auto}
+/* 編號跟「最近照片」磚上的張數同一種深色毛玻璃。狀態那顆直接用 .session-tile-badge。 */
+.batch-grid-no{position:absolute;top:4px;right:4px;z-index:3;font-size:11px;line-height:1.2;padding:2px 6px;border-radius:20px;
+  color:#fff;background:rgba(9,9,11,.65);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.batch-grid-more{border-style:dashed;display:flex;align-items:center;justify-content:center;text-align:center;font:inherit;font-size:12.5px;font-weight:700;color:var(--accent-text);line-height:1.4}
+.batch-grid-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
 .batch-sidebar-all .chat-chip{width:100%;justify-content:center}
 /* 進到總覽時那兩顆輕輕跳兩下、外圈亮一下，告訴使用者「從這裡一次處理全部」。
    只跳一輪就停，不一直動；系統設定減少動態就不跳。 */

@@ -201,6 +201,9 @@ export function ChatPanel(props: {
   // header's buttons. On the phone the head is put away and the photo carries
   // the same switch instead (ResultsCanvas).
   panelMode?: PanelMode;
+  // Above the conversation and outside its scroll: stays in view while the
+  // timeline follows its newest message (the batch overview's photo grid).
+  top?: ComponentChildren;
 }) {
   const timeline = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -350,6 +353,7 @@ export function ChatPanel(props: {
           <Icon name="expand" size={16} />
         </button>
       )}
+      {props.top && <div class="chat-panel-top">{props.top}</div>}
       <div
         class="chat-timeline"
         ref={timeline}

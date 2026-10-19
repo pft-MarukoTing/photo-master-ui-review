@@ -30,7 +30,6 @@ import {
   PhotoViewer,
   SamplePicker,
   UploadBubble,
-  BatchUploadBubble,
   UserMsg,
   WorkingCard,
   useWorkLog,
@@ -2914,12 +2913,10 @@ export function App() {
     // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
     const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
     const overviewHeld = busy || !!preAsk || loadingPhotos;
-    // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。移除掉的不再畫縮圖。
+    // 最早那次上傳；從結果頁接回來的一批沒有這筆，就拿現在這幾張當開頭。
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
     const have = new Set(batch.map(sourceSrc));
-    const thumbOf = new Map(batch.map((s) => [sourceSrc(s), thumbSrc(s)]));
-    const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => thumbOf.get(s) || s);
     // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
     // 但還沒做完的是哪幾張。剛上傳什麼都還沒做時，開場白已經講過，不再重複。
     // 只講張數，不列是哪幾張：一批可能很多張，要看哪張在左邊「我的照片」看得到。
@@ -2930,20 +2927,20 @@ export function App() {
     let statusHint = "";
     if (running) {
       statusHint = notYet
-        ? `還有 ${notYet} 張沒開始，可以按「全部分析」先看我打算怎麼修，或按「全部一鍵美化」直接美化，也可以到「我的照片」點一張個別調整。`
+        ? `還有 ${notYet} 張沒開始，可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化，也可以點上面的照片個別調整。`
         // 在跑的以外，分析好還沒美化的也給下一步，不用等前面那幾張跑完。
         : analyzed
-          ? `另外 ${analyzed} 張分析好了，還沒美化，按「全部一鍵美化」就會接著美化，也可以到「我的照片」點一張個別調整。`
+          ? `另外 ${analyzed} 張分析好了，還沒美化，按上面的「全部一鍵美化」就會接著美化，也可以點上面的照片個別調整。`
         // 剛說完「開始了」，那句已經講過跑完會說、去哪看進度，不再重複一次。
         : lastTurn?.kind === "running" || lastTurn?.kind === "start"
           ? ""
-          : `還有 ${running} 張在跑，好了我會在這裡說；想看哪張的進度，到「我的照片」點那張。`;
+          : `還有 ${running} 張處理中，完成後我會在這裡說；想看哪張的進度，點上面那張。`;
     } else if (!untouched) {
       // 剛報完「跑完了」，分析好、失敗幾張那句已經講過，這裡只補它沒提到的、還沒開始的那幾張。
       const afterDone = lastTurn?.kind === "done";
       const next = notYet
-        ? "按「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按「全部分析」。"
-        : "要接著美化，按「全部一鍵美化」。";
+        ? "按上面的「全部一鍵美化」會把還沒美化的都美化好；只想先看分析，按上面的「全部分析」。"
+        : "要接著美化，按上面的「全部一鍵美化」。";
       if (afterDone) {
         statusHint = !todo && !analyzed && !failed ? "" : `${todo ? `另外還有 ${todo} 張還沒分析。` : ""}${next}`;
       } else {
@@ -2952,10 +2949,10 @@ export function App() {
           analyzed && `${analyzed} 張分析好了，還沒美化`,
           failed && `${failed} 張沒有成功，可以再送一次`,
         ].filter(Boolean);
-        statusHint = left.length ? `目前${left.join("；")}。${next}` : "每張都美化好了，到「我的照片」點一張就能看結果。";
+        statusHint = left.length ? `目前${left.join("；")}。${next}` : "每張都美化好了，點上面的照片就能看結果。";
       }
     } else if (overview.length > 1) {
-      statusHint = "可以按「全部分析」先看我打算怎麼修，或按「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。";
+      statusHint = "可以按上面的「全部分析」先看我打算怎麼修，或按上面的「全部一鍵美化」直接美化；想怎麼修也可以打在下面，會套用到每一張。";
     }
     // 最後一則是「開始了」或「跑完了」時，下一步接在同一句後面講，不另起一則。
     const hintInTurn = !!statusHint && (lastTurn?.kind === "running" || lastTurn?.kind === "done");
@@ -2974,6 +2971,24 @@ export function App() {
       <ChatPanel
         class="home-chat is-overview"
         sub="總覽"
+        top={
+          <BatchOverviewGrid
+            key={sourceSrc(batch[0])}
+            sources={batch}
+            runs={batchRuns}
+            live={batchLive}
+            failed={batchFailed}
+            wished={batchWished}
+            pending={pending}
+            renderable={renderableAll}
+            disabled={overviewHeld}
+            // 一鍵美化正在問怎麼套用：先回答那一題，「全部…」那排等一下。
+            actionsHeld={overviewHeld || askOpen}
+            onPick={pickBatch}
+            onStartAll={overviewStart}
+            onSettings={overviewEditSettings}
+          />
+        }
         onDropFiles={overviewHeld ? undefined : appendFiles}
         footer={
           <Composer
@@ -2989,38 +3004,33 @@ export function App() {
               }}
               clearKey={preClear}
               placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"]
-                : renderable ? "要美化分析好的，按「全部一鍵美化」；想個別調整，到「我的照片」點那張"
-                : "每張都開始了，到「我的照片」點一張看結果"}
+                : renderable ? "要接著美化，按上面的「全部一鍵美化」"
+                : "每張都開始了，點上面的照片看結果"}
             />
         }
       >
         <UserMsg>
-          <BatchUploadBubble
-            srcs={uploadThumbs(firstUpload)}
-            text={`上傳了 ${photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length} 張照片`}
-          />
+          {/* 照片都在上面的格子裡，這裡只說上傳了幾張，不再排一次縮圖。 */}
+          <div class="chat-bubble">{`上傳了 ${photoLoad && first && photoLoad.entry === first.id ? photoLoad.total : firstUpload.length} 張照片`}</div>
         </UserMsg>
-        {/* 先說收到幾張、這頁是什麼，再說這裡能做的三件事各是什麼，最後才講「只改一張」
-            和怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
+        {/* 先說收到幾張、這頁是什麼：一次處理全部的按鈕在上面的照片格底下，這裡只指過去，
+            再講怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
         {photoLoad && first && photoLoad.entry === first.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
           <p class="chat-text">收到你上傳的 {firstUpload.length} 張照片了。</p>
-          <p class="chat-text">這裡是這批照片的總覽，在這裡做的事會一次套用到每一張，不用一張一張來：</p>
-          <ul class="chat-list">
-            <li><b>全部分析</b>：每張先看過，讓你看我打算各修什麼。</li>
-            <li><b>全部一鍵美化</b>：不用等分析，直接把每張美化好。</li>
-            <li><b>設定</b>：動手前先一起換引擎或長寬比。</li>
-          </ul>
-          <p class="chat-text">想怎麼修也可以直接打在下面，會套用在所有照片上。</p>
-          <p class="chat-text chat-muted">只想調整某一張，就從{photosSpot()}「我的照片」點那張；之後想回來這裡，點最上面的「總覽」。</p>
+          {/* 「設定」只在還有沒開始的照片時才在上面出現，就只在那時候提。 */}
+          <p class="chat-text">{pending
+            ? "這裡是這批照片的總覽：上面可以一次分析或美化全部，也可以先按「設定」統一換引擎或長寬比；只想改某一張，點那張就好。想怎麼修也可以直接打在下面，會套用到還沒開始的每一張。"
+            : "這裡是這批照片的總覽：上面可以一次處理全部，也可以點某一張個別調整。"}</p>
+          <p class="chat-text chat-muted">之後想回來這裡，點{photosSpot()}「我的照片」最上面的「總覽」。</p>
         </AssistantMsg>}
         {overview.map((t, i) => {
           const latest = i === overview.length - 1;
           if (t === overview[0] && t.kind === "upload") return null;
           if (t.kind === "upload") return (
             <div key={t.id}>
-              <UserMsg><BatchUploadBubble srcs={uploadThumbs(t.srcs)} text={`新增了 ${photoLoad?.entry === t.id ? photoLoad.total : t.srcs.length} 張照片`} /></UserMsg>
+              <UserMsg><div class="chat-bubble">{`新增了 ${photoLoad?.entry === t.id ? photoLoad.total : t.srcs.length} 張照片`}</div></UserMsg>
               {photoLoad?.entry === t.id ? <PhotoLoadMsg {...photoLoad} /> : <AssistantMsg>
-                <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}排在「我的照片」最後面。`}</p>
+                <p class="chat-text">{`好，加進來了，${t.srcs.length > 1 ? "這幾張" : "這張"}加到上面的照片裡了。`}</p>
               </AssistantMsg>}
             </div>
           );
@@ -3033,7 +3043,7 @@ export function App() {
             const n = t.keys.filter((k) => have.has(k)).length;
             return n ? (
               <AssistantMsg key={t.id}>
-                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，跑完我會在這裡說；想看哪張的進度，到「我的照片」點那張。${hintFor(t, latest)}`}</p>
+                <p class="chat-text">{`有 ${n} 張開始${t.verb}了，完成後我會在這裡說；想看哪張的進度，點上面那張。${hintFor(t, latest)}`}</p>
               </AssistantMsg>
             ) : null;
           }
@@ -3045,9 +3055,9 @@ export function App() {
             ].filter(Boolean);
             return (
               <AssistantMsg key={t.id}>
-                <p class="chat-text">{`剛剛送出的都跑完了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${hintFor(t, latest).replace(/。$/, "；")}${t.failed
-                  ? "沒成功的在「我的照片」會標「失敗」，點那張可以看原因。"
-                  : "想看哪張的結果，到「我的照片」點那張。"}`}</p>
+                <p class="chat-text">{`剛剛送出的都處理完成了${parts.length ? `，目前 ${parts.join("、")}` : ""}。${hintFor(t, latest).replace(/。$/, "；")}${t.failed
+                  ? "沒成功的在上面會標「失敗」，點那張可以看原因。"
+                  : "想看哪張的結果，點上面那張。"}`}</p>
               </AssistantMsg>
             );
           }
@@ -3057,7 +3067,7 @@ export function App() {
               <AssistantMsg>
                 <p class="chat-text">
                   {t.count
-                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，到「我的照片」點那張調整。`
+                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，點上面那張調整。`
                     : "每張都已經開始了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
                 </p>
               </AssistantMsg>
@@ -3106,7 +3116,7 @@ export function App() {
               {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : "spark"} label={t.mode === "analyze" ? "全部分析" : "全部一鍵美化"} /></UserMsg>}
               <AssistantMsg>
                 <p class="chat-text">
-                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，都跑完我會在這裡說；想看哪張的進度，到「我的照片」點那張。`}
+                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，全部完成後我會在這裡說；想看哪張的進度，點上面那張。`}
                 </p>
               </AssistantMsg>
             </div>
@@ -3119,21 +3129,6 @@ export function App() {
         {/* 有照片還在跑，對話最底下就一直點點點，讓人知道還在做事；全部跑完、報完「跑完了」就收掉。 */}
         {running > 0 && (
           <AssistantMsg atomic><div class="chat-typing" role="status" aria-label={`還有 ${running} 張在處理`}><span /><span /><span /></div></AssistantMsg>
-        )}
-        {!askOpen && (
-          pending || renderable ? (
-            <div class="prechat-actions">
-              <div class="chat-choices chat-actions">
-                <div class="chat-actions-aux">
-                  {pending ? <Chip label="設定" icon="tune" kind="ghost" disabled={overviewHeld} onClick={overviewEditSettings} /> : null}
-                </div>
-                <div class="chat-actions-main">
-                  {pending ? <Chip label="全部分析" icon="search" kind="primary" disabled={overviewHeld} onClick={() => overviewStart("analyze")} /> : null}
-                  {renderable ? <Chip label="全部一鍵美化" icon="spark" kind="primary" disabled={overviewHeld} onClick={() => overviewStart("render")} /> : null}
-                </div>
-              </div>
-            </div>
-          ) : null
         )}
         {error && <ErrorMsg text={error} />}
       </ChatPanel>
@@ -3484,7 +3479,7 @@ function BatchPreSidebar(props: {
   return (
     <>
       <div class={`batch-sidebar-backdrop${open ? " drawer-open" : ""}`} onClick={() => setOpen(false)} />
-      <aside class={`batch-sidebar${open ? " drawer-open" : ""}`} id="batch-sidebar">
+      <aside class={`batch-sidebar${open ? " drawer-open" : ""}${props.overview ? " is-overview" : ""}`} id="batch-sidebar">
         <button type="button" class="batch-sidebar-close-btn" aria-label="收起照片列表" onClick={() => setOpen(false)}>
           <Icon name="x" size={16} />
         </button>
@@ -3648,6 +3643,198 @@ function BatchPreSidebar(props: {
         <span class="batch-drawer-trigger-count">{sources.length}</span>
       </button>
     </>
+  );
+}
+
+// 總覽最上面的成果格：每張現在的樣子（美化過的放目前版本）和狀態，點了到那張。
+// 要處理的排前面（失敗、分析好還沒美化、處理中、還沒開始），美化好的最後；上面的
+// 篩選只看某一種。格子固定只佔一兩列，對話的高度才不會被擠掉：放不下的由
+// 「顯示全部」打開一個蓋住整頁的照片面板，在那裡挑。
+// 用詞跟「最近照片」的磚一樣（home.tsx 的 SESSION_BADGES）：分析好還沒美化的叫待美化。
+const GRID_GROUPS: { key: BatchProgress; label: string }[] = [
+  { key: "error", label: "失敗" },
+  { key: "analyzed", label: "待美化" },
+  { key: "running", label: "處理中" },
+  { key: "todo", label: "未開始" },
+  { key: "done", label: "美化完成" },
+];
+
+// 每格左下的狀態：跟「最近照片」同一顆（.session-tile-badge），同樣的字、符號和顏色。
+// 處理中照實際在做的說分析中、美化中或上傳中；還沒開始的沒有對應的磚，用不帶顏色的那顆。
+function gridBadge(progress: BatchProgress, state: { key: string; text: string }): { cls: string; text: string } {
+  switch (progress) {
+    case "error": return { cls: "is-failed", text: "失敗" };
+    case "analyzed": return { cls: "is-ready", text: "待美化" };
+    case "done": return { cls: "is-done", text: "美化完成" };
+    case "running":
+      return state.key === "processing" ? { cls: "is-rendering", text: "美化中" }
+        : state.key === "uploading" ? { cls: "is-analyzing", text: "上傳中" }
+        : { cls: "is-analyzing", text: "分析中" };
+    default: return { cls: "", text: "未開始" };
+  }
+}
+
+// 收起時顯示幾列：手機上或矮的畫面一列，對話才留得下位置。
+const GRID_ROWS = 2;
+const GRID_ROWS_NARROW = 1;
+const GRID_NARROW = 600;
+const GRID_SHORT = 900;
+// 格子最小寬度：手機上小一點排得下四欄，寬畫面放大一點，不會擠成一長排小格。
+const GRID_MIN_CELL = 72;
+const GRID_MIN_CELL_WIDE = 104;
+const GRID_GAP = 8;
+
+function BatchOverviewGrid(props: {
+  sources: Source[];
+  runs: Record<string, BatchRun>;
+  live: Record<string, Photo>;
+  failed: Record<string, boolean>;
+  wished: (key: string) => boolean;
+  pending: number;
+  renderable: number;
+  disabled: boolean;
+  actionsHeld: boolean;
+  onPick: (s: Source) => void;
+  onStartAll: (mode: "analyze" | "render") => void;
+  onSettings: () => void;
+}) {
+  const [picked, setFilter] = useState<BatchProgress | "all">("all");
+  const [open, setOpen] = useState(false);
+  const [cols, setCols] = useState(6);
+  // 成品縮圖載不出來的那幾張（job 的檔案可能比對話先過期）改放原圖，跟最近照片的磚一樣。
+  const [broken, setBroken] = useState<Set<string>>(() => new Set());
+  const [rows, setRows] = useState(GRID_ROWS);
+  const grid = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = grid.current;
+    if (!el) return;
+    const fit = () => {
+      const narrow = el.clientWidth < GRID_NARROW;
+      const cell = narrow ? GRID_MIN_CELL : GRID_MIN_CELL_WIDE;
+      setCols(Math.max(3, Math.floor((el.clientWidth + GRID_GAP) / (cell + GRID_GAP))));
+      setRows(narrow || window.innerHeight < GRID_SHORT ? GRID_ROWS_NARROW : GRID_ROWS);
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const items = props.sources.map((s, i) => {
+    const key = sourceSrc(s);
+    const r = props.runs[key];
+    const p = props.live[key] || null;
+    const failed = !!props.failed[key];
+    return { s, key, no: i + 1, p, progress: batchProgress(r, p, failed), state: batchItemState(r, p, props.wished(key), failed) };
+  });
+  const count = (k: BatchProgress) => items.filter((x) => x.progress === k).length;
+  // 選的那種一張都不剩了（例如失敗的重送了），就回到全部，不留一個空的格子。
+  const filter = picked === "all" || count(picked) ? picked : "all";
+  const rank = (k: BatchProgress) => GRID_GROUPS.findIndex((g) => g.key === k);
+  const listed = items
+    .filter((x) => filter === "all" || x.progress === filter)
+    .sort((a, b) => rank(a.progress) - rank(b.progress) || a.no - b.no);
+  const cap = cols * rows;
+  const folded = listed.length > cap;
+  const shown = folded ? listed.slice(0, cap - 1) : listed;
+  useEffect(() => {
+    if (!open) return;
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [open]);
+  const filters = (
+    <div class="batch-grid-filters" role="group" aria-label="依狀態篩選">
+      <button type="button" class={`batch-grid-filter${filter === "all" ? " is-on" : ""}`} aria-pressed={filter === "all"} onClick={() => setFilter("all")}>
+        全部 {items.length}
+      </button>
+      {GRID_GROUPS.filter((g) => count(g.key)).map((g) => (
+        <button
+          key={g.key}
+          type="button"
+          class={`batch-grid-filter is-${g.key}${filter === g.key ? " is-on" : ""}`}
+          aria-pressed={filter === g.key}
+          onClick={() => setFilter(filter === g.key ? "all" : g.key)}
+        >
+          {g.label} {count(g.key)}
+        </button>
+      ))}
+    </div>
+  );
+  const cell = (x: (typeof items)[number]) => {
+    const badge = gridBadge(x.progress, x.state);
+    const v = x.p?.active_version;
+    const result = v && !broken.has(x.key) ? urls.resultThumb(v.job_id, v.run) : null;
+    return (
+      <button
+        key={x.key}
+        type="button"
+        class={`batch-grid-cell is-${x.progress}`}
+        aria-label={`第 ${x.no} 張，${badge.text}`}
+        disabled={props.disabled}
+        onClick={() => {
+          setOpen(false);
+          props.onPick(x.s);
+        }}
+      >
+        <img
+          src={result || thumbSrc(x.s)}
+          alt=""
+          loading="lazy"
+          onError={result ? () => setBroken((b) => new Set(b).add(x.key)) : undefined}
+        />
+        {x.progress === "running" ? <span class="rc-spinner" /> : null}
+        <span class="batch-grid-no">{x.no}</span>
+        <span class={`session-tile-badge${badge.cls ? ` ${badge.cls}` : ""}`}>{badge.text}</span>
+      </button>
+    );
+  };
+  return (
+    <section class="batch-grid" aria-label="這批照片">
+      {filters}
+      <div class="batch-grid-cells" ref={grid} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+        {shown.map(cell)}
+        {folded ? (
+          <button type="button" class="batch-grid-more" onClick={() => setOpen(true)}>
+            +{listed.length - shown.length} 張<br />顯示全部
+          </button>
+        ) : null}
+      </div>
+      {open && (
+        <>
+          <div class="sample-modal-backdrop" onClick={() => setOpen(false)} />
+          <div class="sample-modal batch-grid-sheet" role="dialog" aria-modal="true" aria-label="這批照片">
+            <div class="sample-modal-head">
+              <h2>這批照片 · {items.length} 張</h2>
+              <button type="button" class="sample-modal-close" aria-label="關閉" onClick={() => setOpen(false)}>
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div class="sample-modal-body">
+              {filters}
+              <div class="batch-grid-cells is-all">{listed.map(cell)}</div>
+            </div>
+          </div>
+        </>
+      )}
+      {props.pending || props.renderable ? (
+        // 總覽上一次處理全部的按鈕只放這裡：固定在對話上面，不會被新訊息捲走。
+        <div class="batch-grid-actions">
+          {props.pending ? (
+            <Chip label="設定" icon="tune" kind="ghost" disabled={props.actionsHeld} onClick={props.onSettings} />
+          ) : null}
+          {props.pending ? (
+            <Chip label={`全部分析（${props.pending} 張）`} icon="search" kind="primary" disabled={props.actionsHeld}
+              title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
+              onClick={() => props.onStartAll("analyze")} />
+          ) : null}
+          {props.renderable ? (
+            <Chip label={`全部一鍵美化（${props.renderable} 張）`} icon="spark" kind="primary" disabled={props.actionsHeld}
+              title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
+              onClick={() => props.onStartAll("render")} />
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
