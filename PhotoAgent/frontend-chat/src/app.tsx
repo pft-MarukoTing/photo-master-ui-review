@@ -6,7 +6,7 @@ import { nextDisplayOrder } from "./display-order";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { ComponentChildren } from "preact";
 import { api, ApiError, setUser, urls, type AskFace, type ReviewTurn, type Screen } from "./api";
-import { isHeic, previewBlob } from "./heic";
+import { isHeic, previewBlob, previewBlobs } from "./heic";
 import {
   AssistantMsg,
   BriefCard,
@@ -100,7 +100,8 @@ type Phase = "home" | "chat" | "session";
 type PreStep = "start" | "picked" | "settings";
 // remote：已經傳上去的照片（它那批的另一個對話）。重新整理後從最近照片接回整批時用，
 // 檔案本身已經不在瀏覽器裡了。
-type Source = { kind: "file"; file: File; url: string } | { kind: "demo"; name: string } | { kind: "remote"; job: string };
+// url 是這張的識別（drafts、batchRuns 都拿它當 key），也是大圖和裁人臉用的那張；thumb 是格子用的小圖。
+type Source = { kind: "file"; file: File; url: string; thumb?: string } | { kind: "demo"; name: string } | { kind: "remote"; job: string };
 // 一次最多幾張，跟後端 MAX_PHOTOS_PER_SESSION 一樣。
 const MAX_BATCH = 20;
 // A face picked on the upload page: no name yet, so where it stands and its box.
@@ -598,6 +599,21 @@ function setSessionHash(id: string | null) {
 
 function sourceSrc(s: Source) {
   return s.kind === "file" ? s.url : s.kind === "remote" ? urls.sourceThumb(s.job) : urls.demoThumb(s.name);
+}
+
+// 縮圖格子、上傳泡泡這些小圖用的：<img> 不管畫多小都會解成原尺寸，多張時不能每格都放原圖。
+function thumbSrc(s: Source) {
+  return s.kind === "file" ? s.thumb || s.url : sourceSrc(s);
+}
+
+function fileSource(file: File, preview: { full: Blob; thumb: Blob | null }): Source {
+  return { kind: "file", file, url: URL.createObjectURL(preview.full), thumb: preview.thumb ? URL.createObjectURL(preview.thumb) : undefined };
+}
+
+function dropSource(s: Source) {
+  if (s.kind !== "file") return;
+  URL.revokeObjectURL(s.url);
+  if (s.thumb) URL.revokeObjectURL(s.thumb);
 }
 
 function fullSrc(s: Source) {
@@ -1280,7 +1296,7 @@ export function App() {
     }
     setSamplesOpen(false);
     if (!(await confirmSwap())) {
-      if (s.kind === "file") URL.revokeObjectURL(s.url);
+      dropSource(s);
       return;
     }
     setNotes([]);
@@ -1316,15 +1332,19 @@ export function App() {
     if (images.length <= 1) return pickFile(images[0] || files[0]);
     const pick = ++lastPick.current;
     const taken = images.slice(0, MAX_BATCH);
-    let previews: Blob[];
+    let previews: { full: Blob; thumb: Blob | null }[];
     try {
-      previews = await Promise.all(taken.map((f) => previewBlob(f)));
+      previews = [];
+      for (const f of taken) {
+        if (pick !== lastPick.current) return;
+        previews.push(await previewBlobs(f));
+      }
     } catch (e) {
       if (pick === lastPick.current) setError(errorText(e));
       return;
     }
     if (pick !== lastPick.current) return;
-    const sources: Source[] = taken.map((file, i) => ({ kind: "file", file, url: URL.createObjectURL(previews[i]) }));
+    const sources: Source[] = taken.map((file, i) => fileSource(file, previews[i]));
     await startBatch(
       sources,
       images.length > MAX_BATCH
@@ -1362,7 +1382,7 @@ export function App() {
   // 開多張的上傳頁，上傳多張和範例照片多選共用。message 是開好之後要提醒的話。
   async function startBatch(sources: Source[], message: string) {
     if (phase === "chat" && !(await confirmSwap())) {
-      for (const s of sources) if (s.kind === "file") URL.revokeObjectURL(s.url);
+      for (const s of sources) dropSource(s);
       return;
     }
     setSession(null);
@@ -1395,7 +1415,7 @@ export function App() {
     if (batchRuns[key]) return;
     const rest = batch.filter((_, j) => j !== i);
     delete drafts.current[key];
-    if (gone.kind === "file") URL.revokeObjectURL(gone.url);
+    dropSource(gone);
     if (rest.length === 1 && !Object.keys(batchRuns).length) {
       // 剩一張就回單張：它在多張頁上講過的話留著。
       const restKey = sourceSrc(rest[0]);
@@ -1435,7 +1455,7 @@ export function App() {
       answer: (yes) => {
         setLeaveAsk(null);
         if (!yes) return;
-        for (const s of batch) if (s.kind === "file") URL.revokeObjectURL(s.url);
+        for (const s of batch) dropSource(s);
         resetPre();
         setError("");
       },
@@ -1449,16 +1469,20 @@ export function App() {
     const room = MAX_BATCH - batch.length;
     const taken = images.slice(0, Math.max(0, room));
     const pick = ++lastPick.current;
-    let previews: Blob[];
+    let previews: { full: Blob; thumb: Blob | null }[];
     try {
-      previews = await Promise.all(taken.map((f) => previewBlob(f)));
+      previews = [];
+      for (const f of taken) {
+        if (pick !== lastPick.current) return;
+        previews.push(await previewBlobs(f));
+      }
     } catch (e) {
       if (pick === lastPick.current) setError(errorText(e));
       return;
     }
-    const added: Source[] = taken.map((file, i) => ({ kind: "file", file, url: URL.createObjectURL(previews[i]) }));
+    const added: Source[] = taken.map((file, i) => fileSource(file, previews[i]));
     if (pick !== lastPick.current) {
-      for (const s of added) if (s.kind === "file") URL.revokeObjectURL(s.url);
+      for (const s of added) dropSource(s);
       return;
     }
     setBatch((b) => (b ? [...b, ...added] : b));
@@ -2568,7 +2592,7 @@ export function App() {
       key={batch ? preFull : undefined}
       class={`home-chat${source ? "" : " is-solo"}`}
       sub={batchIndex >= 0 ? `第 ${batchIndex + 1} 張` : "新對話"}
-      photo={source ? { src: sourceSrc(source), onOpen: () => setViewing(true) } : undefined}
+      photo={source ? { src: thumbSrc(source), onOpen: () => setViewing(true) } : undefined}
       onDropFiles={busy ? undefined : batch ? appendFiles : pickFiles}
       footer={
         <>
@@ -2727,7 +2751,8 @@ export function App() {
     const first = overview[0];
     const firstUpload = first?.kind === "upload" ? first.srcs : batch.map(sourceSrc);
     const have = new Set(batch.map(sourceSrc));
-    const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s));
+    const thumbOf = new Map(batch.map((s) => [sourceSrc(s), thumbSrc(s)]));
+    const uploadThumbs = (srcs: string[]) => srcs.filter((s) => have.has(s)).map((s) => thumbOf.get(s) || s);
     // 最底下那句跟著現在的進度，點出接下來能做什麼：還在跑的等它們、沒開始的按哪顆、開始過一些
     // 但還沒做完的是哪幾張。剛上傳什麼都還沒做時，開場白已經講過，不再重複。
     // 只講張數，不列是哪幾張：一批可能很多張，要看哪張在左邊「我的照片」看得到。
@@ -3346,7 +3371,7 @@ function BatchPreSidebar(props: {
             }}
           >
             <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
-              {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={sourceSrc(s)} alt="" />)}
+              {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
             </span>
             <span class="batch-overview-text">
               <b>總覽</b>
@@ -3400,7 +3425,7 @@ function BatchPreSidebar(props: {
                 onClick={() => pick(s)}
               >
                 <span class="rc-media">
-                  <img src={p?.active_version ? urls.resultThumb(p.active_version.job_id, p.active_version.run) : key} alt="" />
+                  <img src={p?.active_version ? urls.resultThumb(p.active_version.job_id, p.active_version.run) : thumbSrc(s)} alt="" />
                   {state.key === "uploading" || state.key === "processing" || state.key === "analyzing" ? <span class="rc-spinner" /> : null}
                 </span>
                 <span class="rc-badge">{state.text}</span>
@@ -3903,7 +3928,7 @@ function PreChat(props: {
         <>
           <UserMsg>
             <UploadBubble
-              src={sourceSrc(source)}
+              src={thumbSrc(source)}
               text={props.batch ? `第 ${props.batch.index + 1} 張` : source.kind === "file" ? "上傳了這張" : "選了這張"}
               onOpen={props.onView}
             />
