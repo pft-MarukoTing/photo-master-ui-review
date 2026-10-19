@@ -3499,6 +3499,11 @@ function BatchPreSidebar(props: {
     props.onPick(s);
   };
   const renderable = props.renderable ?? pending;
+  // 總覽那列的第二行：各張到哪了，用跟總覽照片格同樣的字，照要處理的先後排。
+  const progressLine = GRID_GROUPS.map((g) => ({
+    g,
+    n: sources.filter((x) => batchProgress(runs[sourceSrc(x)], live?.[sourceSrc(x)] || null, !!props.failed?.[sourceSrc(x)]) === g.key).length,
+  })).filter((x) => x.n).map((x) => `${x.n} ${x.g.label}`).join(" · ");
   const startAll = (mode: "analyze" | "render") => {
     setOpen(false);
     props.onStartAll(mode);
@@ -3580,50 +3585,54 @@ function BatchPreSidebar(props: {
           )}
           </div>
         </div>
-        {/* 「總覽」不是一張照片，所以不做成方塊混在照片裡：一條橫的，放在照片列表上面、
-            跟「全部…」那兩顆同一區，一看就知道是整批的入口。 */}
-        {props.onOverview && (
-          <button
-            type="button"
-            aria-current={props.overview ? "page" : undefined}
-            title="回到總覽，全部一起分析、美化或調整設定"
-            class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
-            disabled={props.disabled && !props.overview}
-            onClick={() => {
-              setOpen(false);
-              props.onOverview!();
-            }}
-          >
-            <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
-              {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
-            </span>
-            <span class="batch-overview-text">
-              <b>總覽</b>
-            </span>
-            <Icon name="next" size={14} />
-          </button>
-        )}
-        {pending || renderable ? (
-          // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
-          <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !props.disabled ? " is-nudge" : ""}`}>
-            {pending ? <Chip
-              label="全部分析"
-              icon="search"
-              kind="primary"
-              disabled={props.disabled}
-              title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
-              onClick={() => startAll("analyze")}
-            /> : null}
-            {renderable ? <Chip
-              label="全部一鍵美化"
-              icon="spark"
-              kind="primary"
-              disabled={props.disabled}
-              title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
-              onClick={() => startAll("render")}
-            /> : null}
-          </div>
-        ) : null}
+        {/* 「總覽」不是一張照片，所以不做成方塊混在照片裡：一格橫的，放在照片列表上面。
+            整批的東西都收在這格裡：上面那列回總覽、寫著各張到哪了，下面是「全部…」那兩顆，
+            一看就知道是對整批的。 */}
+        <div class={`batch-overview-card${props.overview ? " is-on" : ""}`}>
+          {props.onOverview && (
+            <button
+              type="button"
+              aria-current={props.overview ? "page" : undefined}
+              title="回到總覽，全部一起分析、美化或調整設定"
+              class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
+              disabled={props.disabled && !props.overview}
+              onClick={() => {
+                setOpen(false);
+                props.onOverview!();
+              }}
+            >
+              <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
+                {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={thumbSrc(s)} alt="" />)}
+              </span>
+              <span class="batch-overview-text">
+                <b>總覽 · {sources.length} 張</b>
+                {progressLine && <small>{progressLine}</small>}
+              </span>
+              <Icon name="next" size={14} />
+            </button>
+          )}
+          {pending || renderable ? (
+            // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
+            <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !props.disabled ? " is-nudge" : ""}`}>
+              {pending ? <Chip
+                label="全部分析"
+                icon="search"
+                kind="primary"
+                disabled={props.disabled}
+                title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
+                onClick={() => startAll("analyze")}
+              /> : null}
+              {renderable ? <Chip
+                label="全部一鍵美化"
+                icon="spark"
+                kind="primary"
+                disabled={props.disabled}
+                title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
+                onClick={() => startAll("render")}
+              /> : null}
+            </div>
+          ) : null}
+        </div>
         <div
           class="batch-sidebar-list"
           ref={list}

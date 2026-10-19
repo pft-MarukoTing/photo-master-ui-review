@@ -716,6 +716,17 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .batch-overview-mosaic.is-1{grid-template-columns:1fr;grid-template-rows:1fr}
 .batch-overview-mosaic.is-2{grid-template-rows:1fr}
 .batch-overview-mosaic.is-3 img:first-child{grid-row:span 2}
+/* 總覽那格：外框在這層，上面是回總覽那列（高一點、兩行字、拼圖大一號），下面是
+   「全部…」那兩顆。 */
+.batch-overview-card{flex:none;margin:0 0 12px;border:1px solid var(--n24);border-radius:var(--radius);background:var(--n09);overflow:hidden}
+.batch-overview-card.is-on{background:var(--tonal);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.batch-overview-card .batch-overview-entry{margin:0;gap:10px;padding:10px;min-height:72px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.batch-overview-card .batch-overview-entry:hover{background:var(--tonal-lo)}
+.batch-overview-card.is-on .batch-overview-entry:hover{background:transparent}
+.batch-overview-card .batch-overview-mosaic{width:44px;height:44px;border-radius:9px}
+.batch-overview-card .batch-overview-text b{font-size:15px;white-space:nowrap}
+.batch-overview-card .batch-overview-text small{font-size:12px;margin-top:3px;white-space:normal}
+.batch-overview-card .batch-sidebar-all{margin:0;padding:0 10px 10px}
 /* 對話裡的多張上傳：幾張縮圖並排，多的寫 +N。 */
 .chat-upload-stack{display:flex;gap:4px;flex:none}
 .chat-upload.is-batch .chat-upload-stack img,
@@ -737,9 +748,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   #results-body.batch-mode>#batch-sidebar{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px) - 30px);box-sizing:border-box}
 }
 .batch-sidebar-all{margin:0 0 12px;display:flex;flex-direction:column;gap:6px}
-/* 「全部…」那兩顆在總覽上由照片格底下那排負責，抽屜裡也不再放。 */
-.batch-sidebar.is-overview .batch-sidebar-all{display:none}
-/* 總覽頁：成果格在對話最上面，左邊（不是抽屜時）就只留「我的照片」的標題和「總覽」入口。 */
+/* 總覽頁：成果格在對話最上面，左邊（不是抽屜時）就只留「我的照片」的標題和總覽那格。 */
 @media (min-width:1201px),(min-width:901px) and (orientation:landscape){
   .batch-sidebar.is-overview .batch-sidebar-list{display:none}
 }
