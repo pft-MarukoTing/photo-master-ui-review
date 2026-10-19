@@ -3116,6 +3116,10 @@ export function App() {
         {!askOpen && statusHint && !hintInTurn && (
           <AssistantMsg key={statusHint}><p class="chat-text">{statusHint}</p></AssistantMsg>
         )}
+        {/* 有照片還在跑，對話最底下就一直點點點，讓人知道還在做事；全部跑完、報完「跑完了」就收掉。 */}
+        {running > 0 && (
+          <AssistantMsg atomic><div class="chat-typing" role="status" aria-label={`還有 ${running} 張在處理`}><span /><span /><span /></div></AssistantMsg>
+        )}
         {!askOpen && (
           pending || renderable ? (
             <div class="prechat-actions">
