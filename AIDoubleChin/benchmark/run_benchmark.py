@@ -46,13 +46,27 @@ from PIL import Image, ImageDraw
 import comfy_client
 import eval_metrics
 
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()  # Image.open reads .heic/.heif from here on, also in the scripts importing this one
+except ImportError:
+    register_heif_opener = None
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TZ_UTC8 = timezone(timedelta(hours=8))
-IMG_EXTS = (".jpg", ".jpeg", ".png")
+HEIF_EXTS = (".heic", ".heif")
+IMG_EXTS = (".jpg", ".jpeg", ".png") + HEIF_EXTS
 DEFAULT_WORKFLOW = PROJECT_ROOT / "workflows/doubleChin_workflow_20261001_api.json"
 JPEG_QUALITY = 95
 SHEET_TILE = 512
 METRICS = ["psnr", "ssim", "edit_psnr", "edit_ssim", "background_psnr", "background_ssim"]
+
+
+def require_heif(paths) -> None:
+    """Exits with an install hint if any input is HEIC/HEIF and pillow-heif is missing."""
+    if register_heif_opener is None and any(Path(p).suffix.lower() in HEIF_EXTS for p in paths):
+        print("[error] HEIC/HEIF inputs need pillow-heif: pip install pillow-heif", file=sys.stderr)
+        sys.exit(1)
 
 
 def png_bytes_to_jpeg(raw: bytes) -> bytes:
@@ -239,6 +253,7 @@ def main():
     if not pairs:
         print("[error] no matched (control, target) pairs found", file=sys.stderr)
         sys.exit(1)
+    require_heif(p for pair in pairs for p in pair[1:])
     print(f"[info] {len(pairs)} pair(s) x {len(args.checkpoint)} checkpoint(s), "
           f"run_id={run_id}, output_dir={output_dir}")
 
@@ -266,13 +281,18 @@ def main():
                 "input_edit_psnr": eval_metrics.edit_psnr(control_arr, target_arr, mask),
                 "checkpoints": {},
             }
+            upload_path = control_path
+            if control_path.suffix.lower() in HEIF_EXTS:  # ComfyUI's LoadImage may not read HEIC
+                upload_path = output_dir / "inputs" / f"{stem}.jpg"
+                upload_path.parent.mkdir(parents=True, exist_ok=True)
+                Image.fromarray(control_arr).save(upload_path, "JPEG", quality=JPEG_QUALITY)
             columns = [("input", control_path)]
             for ckpt in args.checkpoint:
                 ckpt_name = Path(ckpt).stem
                 print(f"[{i}/{len(pairs)}] {stem} @ {ckpt_name} ...", end=" ", flush=True)
                 row = {"generated_path": None, "error": None}
                 try:
-                    raw = run_one(comfyui_url, session, template, args, control_path, ckpt,
+                    raw = run_one(comfyui_url, session, template, args, upload_path, ckpt,
                                   f"double_chin_benchmark/{run_id}/{ckpt_name}/{stem}")
                     generated_path = output_dir / "generated" / ckpt_name / f"{stem}.jpg"
                     generated_path.parent.mkdir(parents=True, exist_ok=True)

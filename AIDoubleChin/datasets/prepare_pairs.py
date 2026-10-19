@@ -9,7 +9,14 @@ try:
 except ImportError:  # Pillow built without littlecms
     ImageCms = None
 
-SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"}
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()  # lets Image.open read iPhone .heic/.heif
+except ImportError:
+    register_heif_opener = None
+
+HEIF_EXTS = {".heic", ".heif"}
+SUPPORTED_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tiff"} | HEIF_EXTS
 
 
 def list_images(folder):
@@ -82,6 +89,10 @@ def main():
 
     before = list_images(args.before_dir)
     after = list_images(args.after_dir)
+    if register_heif_opener is None and any(os.path.splitext(p)[1].lower() in HEIF_EXTS
+                                            for p in list(before.values()) + list(after.values())):
+        print("HEIC/HEIF inputs need pillow-heif: pip install pillow-heif")
+        return
 
     for stem in sorted(before.keys() - after.keys()):
         print(f"[MISS] no after image for {before[stem]}")

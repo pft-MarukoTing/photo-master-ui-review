@@ -4,7 +4,7 @@ run_inference.py -- run every image in a folder through one or more
 AIDoubleChin checkpoints on a running ComfyUI server. No ground truth
 needed, no scoring -- just the generated images.
 
-Each input (any size/aspect, EXIF orientation applied, ICC profile such as
+Each input (any size/aspect, HEIC too with pillow-heif, EXIF orientation applied, ICC profile such as
 iPhone Display P3 converted to sRGB) is resized + padded to
 --size x --size exactly like datasets/prepare_pairs.py does for training, sent
 through the workflow, then the padding is cropped off the result and it is
@@ -41,7 +41,7 @@ from pathlib import Path
 import requests
 from PIL import Image, ImageOps
 
-from run_benchmark import DEFAULT_WORKFLOW, JPEG_QUALITY, TZ_UTC8, preflight, run_one, save_sheet
+from run_benchmark import DEFAULT_WORKFLOW, HEIF_EXTS, JPEG_QUALITY, TZ_UTC8, preflight, require_heif, run_one, save_sheet
 
 try:
     from PIL import ImageCms
@@ -49,7 +49,7 @@ try:
 except ImportError:  # Pillow built without littlecms
     ImageCms = None
 
-IMG_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff")
+IMG_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff") + HEIF_EXTS
 
 
 def to_srgb(img: Image.Image, name: str = "") -> Image.Image:
@@ -83,6 +83,7 @@ def list_inputs(input_dir: Path) -> list:
             continue
         seen[p.stem] = p
         inputs.append(p)
+    require_heif(inputs)
     return inputs
 
 
