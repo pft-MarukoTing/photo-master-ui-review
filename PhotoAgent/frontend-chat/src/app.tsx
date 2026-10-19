@@ -1117,9 +1117,10 @@ export function App() {
   // 上傳頁挑好的照片、打的字、選的設定都只在這一頁，離開就沒了；開始對話後
   // 每個調整都存在後端，不用問。關分頁、重新整理用瀏覽器自己的離開提示（文字
   // 改不了），頁面裡換照片、回首頁用 confirmLeave。
-  // 多張上傳裡已經開始的照片各有自己的對話；在結果頁時，那批裡還沒開始的才會掉。
-  const parkedLeft = phase === "session" && batch ? batch.filter((s) => !batchRuns[sourceSrc(s)]).length : 0;
-  const unsentHome = phase !== "session" ? !!source || !!batch || notes.length > 0 : parkedLeft > 0;
+  // 多張上傳裡已經開始的照片各有自己的對話；不管在總覽還是結果頁，那批裡還沒開始的才會掉。
+  const parkedLeft = batch ? batch.filter((s) => !batchRuns[sourceSrc(s)]).length : 0;
+  const unsentHome =
+    phase === "session" ? parkedLeft > 0 : batch ? parkedLeft > 0 || notes.length > 0 : !!source || notes.length > 0;
   function confirmLeave(where: string): Promise<boolean> {
     if (!unsentHome) return Promise.resolve(true);
     const what = parkedLeft
