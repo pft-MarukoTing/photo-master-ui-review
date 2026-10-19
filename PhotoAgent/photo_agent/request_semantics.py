@@ -21,6 +21,7 @@ _FIELDS = {
     'part': {'type': 'string'},
     'intent': {'type': 'string', 'enum': ['set', 'cancel', 'constraint', 'query']},
     'value': {'type': 'string'},
+    'literal_text': {'type': 'string'},
     'constraints': {'type': 'array', 'items': {'type': 'string'}},
 }
 SCHEMA = {'type': 'object', 'additionalProperties': False,
@@ -61,6 +62,11 @@ is feature=face_symmetry, value=balanced.
 Use eyes value=open/closed, gaze value=camera/left/right when appropriate;
 otherwise use an open, precise value. Adding/removing eyewear changes eyewear,
 not the person's identity. A removal edit is set, not cancellation of a wish.
+For adding specific printed text use feature=text_overlay and literal_text as
+the exact string to print, preserving case, digits, punctuation and x versus ×.
+Quote that literal text in the completed source. Never interpret it as canvas
+dimensions or arithmetic. A generic "加入圖片文字" without content is incomplete.
+For other edits literal_text is "". Each literal_text must occur in source.
 intent=cancel only withdraws an existing operation, constraint modifies a limit.
 Preservation is scope=protection. Query is not an executable edit.
 Only CURRENT identity evidence belongs in referent and identity_groups. These
@@ -75,8 +81,8 @@ the person; an action answer changes only the requested action of that wish.
 def validate(raw, source):
     # Existing version-2 snapshots predate owner_required. New model schemas
     # require it, while historical snapshots keep their previous interpretation.
-    if isinstance(raw, dict) and set(raw) == set(_FIELDS) - {'owner_required'}:
-        raw = {**raw, 'owner_required': False}
+    if isinstance(raw, dict) and set(raw) <= set(_FIELDS):
+        raw = {'owner_required': False, 'literal_text': '', **raw}
     if not isinstance(raw, dict) or set(raw) != set(_FIELDS):
         raise ValueError('invalid_request_semantics')
     for key in _FIELDS.keys() - {'complete', 'constraints', 'owner_required'}:
@@ -102,6 +108,10 @@ def validate(raw, source):
         raise ValueError('semantic_span_not_grounded')
     if raw['complete'] and raw['scope'] != 'query' and not raw['action'].strip():
         raise ValueError('semantic_action_missing')
+    if raw['literal_text'] and raw['literal_text'] not in fragment:
+        raise ValueError('literal_text_not_grounded')
+    if raw['complete'] and raw['feature'] == 'text_overlay' and not raw['literal_text'].strip():
+        raise ValueError('literal_text_missing')
     limits = raw['constraints']
     if not isinstance(limits, list) or len(limits) > 20 or any(not isinstance(s, str) or not s or s not in fragment for s in limits):
         raise ValueError('invalid_semantic_constraints')
@@ -122,7 +132,7 @@ def read(clause):
         return None
     # Revalidate saved evidence; client fields never reach this function via wishes().
     try:
-        return validate({k: value.get(k, False) if k == 'owner_required' else value[k] for k in _FIELDS}, source)
+        return validate({k: value.get(k, False) if k == 'owner_required' else value.get(k, '') if k == 'literal_text' else value[k] for k in _FIELDS}, source)
     except (ValueError, KeyError):
         return None
 

@@ -29,7 +29,7 @@ def project(state=None, *, prompt='', source_sha256='', analysis_model=''):
                 feature=op.get('feature') or '', part=op.get('part') or '', action=op.get('action') or '',
                 intent=op.get('intent') or 'set', source_text=c.get('source_text') or c['text'],
                 text=text, constraints=list(semantic.get('constraints') or []),
-                requires_visual=c['scope'] != 'protection' and semantic.get('target_kind') not in ('image','region')))
+                requires_visual=not c.get('verbatim') and c['scope'] != 'protection' and semantic.get('target_kind') not in ('image','region')))
         prompt = conversation.executable(state, people)
     elif prompt.strip():
         # No usable preview: preserve the server-validated plan verbatim, but

@@ -673,6 +673,9 @@ _PREVIEW_SOURCE_ERRORS = frozenset(('semantic_source_not_grounded', 'semantic_ta
 
 def _resolve_preview_wishes(user, binding, head, clauses, people, history, prompt):
     """One source-only recovery within the existing request's total wait budget."""
+    if clauses and all(c.get('verbatim') for c in clauses):
+        conversation_store.assert_current(user, binding, head)
+        return conversation_domain.fallback(clauses, people)
     started = time.monotonic()
     end = started + chat_queue.WAIT_SECONDS
     for attempt in range(2):
@@ -2208,8 +2211,16 @@ def ask_photo(session_id, photo_id):
     asked = store.make_message("user", text.strip(), card)
     # Filtered before the limit: in a session of several photos the others'
     # turns would otherwise use up this photo's history.
-    history = [m for m in store.get_messages(user, session_id, limit=1000)
-               if _about(m.get("card"), photo_id)][-chat_assistant.HISTORY_LEN:] + [asked]
+    prior = [m for m in store.get_messages(user, session_id, limit=1000)
+             if _about(m.get("card"), photo_id)]
+    answer_to = body.get("answer_to")
+    if answer_to is not None:
+        actionable = [m for m in prior if (m.get("card") or {}).get("type") != "personalized_snapshot"]
+        previous = actionable[-1] if actionable else {}
+        if not isinstance(answer_to, str) or previous.get("id") != answer_to or previous.get("role") != "assistant" or (previous.get("card") or {}).get("type") != "llm_reply" or not (previous.get("card") or {}).get("question_kind"):
+            raise _RequestError("this clarification is no longer current", 409)
+        asked["card"]["answers_question_id"] = answer_to
+    history = prior[-chat_assistant.HISTORY_LEN:] + [asked]
     return _answer(user, session_id, photo, history, screen, [asked])
 
 
@@ -2333,10 +2344,12 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
             current_app.logger.warning("chat ask without analysis for %s: %s", photo_id, error)
             analysis = None
     tag = {"answers": answers} if answers else {}
+    base_plan = copy.deepcopy(photo["plan"])
     try:
         answer = chat_queue.run({
             "stage": chat_jobs.STAGE_ASK, "analysis": analysis, "plan": photo["plan"],
-            "status": photo["status"], "history": history, "debug": _debug(), "screen": screen})
+            "status": photo["status"], "history": history, "debug": _debug(), "screen": screen,
+            "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS})
     except Exception:
         current_app.logger.exception("chat ask failed for %s", photo_id)
         messages = messages + [store.make_message("assistant", card={"type": "llm_error", "photo_id": photo_id, **tag})]
@@ -2345,13 +2358,24 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
 
     messages = list(messages)
     proposal = answer["proposal"]
+    if proposal and answer.get("request_validated"):
+        current_photo = _photo(_session(user, session_id), photo_id)
+        if current_photo["plan"] != base_plan:
+            proposal = None
+            answer = {**answer, "render": False, "close": False, "open": "", "options": [],
+                "reply": "設定已在這段時間更新，這次需求尚未套用，請依最新設定再送出。"}
+        else:
+            photo = current_photo
     if proposal:
         proposal = {"id": uuid.uuid4().hex[:12], **proposal}
     if answer["reply"] or proposal or not answer["render"]:
         messages.append(store.make_message("assistant", card={
             "type": "llm_reply", "photo_id": photo_id,
             "text": answer["reply"] or "我不太確定要怎麼調整，可以直接在面板上修改。", "proposal": proposal,
-            "options": answer["options"], **({"lines": True} if answer.get("lines") else {}),
+            "options": answer["options"],
+            **({"question_kind": answer["question_kind"], "answer_mode": answer.get("answer_mode"),
+                "clarification": answer.get("clarification")} if answer.get("question_kind") else {}),
+            **({"lines": True} if answer.get("lines") else {}),
             **({"close": True} if answer.get("close") else {}), **tag}))
     if proposal and proposal.get("direct"):
         messages += _apply_directly(user, session_id, photo, messages[-1])
@@ -2370,16 +2394,15 @@ def _answer(user, session_id, photo, history, screen, messages, answers=None):
 
 # A typed 一鍵美化 or 分析: the page starts it, so the reply says it is starting.
 PROMPT_REVIEW_START_REPLIES = {"render": "好，馬上幫你一鍵美化。", "analyze": "好，我先幫你分析這張照片。"}
-# Both outcomes need words of their own for the times the model returns none.
+# A missing review sentence must not silently discard the user's input.
 PROMPT_REVIEW_KEPT_REPLY = chat_assistant.KEPT_REPLY + chat_assistant.KEPT_NEXT
-PROMPT_REVIEW_DROPPED_REPLY = "不好意思，這個我幫不上忙。想怎麼修這張照片，再跟我說說看喔！"
 # What the page sends along with the line.
 PROMPT_REVIEW_HISTORY_MAX = 20
 PROMPT_REVIEW_PEOPLE_MAX = 20
 PROMPT_REVIEW_LABEL_MAX_LEN = 40
 # 個人化需求一個人一段，加上沒指定對象的那段。
 PROMPT_REVIEW_SECTIONS_MAX = PROMPT_REVIEW_PEOPLE_MAX + 1
-PROMPT_REVIEW_WAIT_SECONDS = 12
+PROMPT_REVIEW_WAIT_SECONDS = chat_queue.WAIT_SECONDS
 
 
 @chat_bp.post("/prompt-review")
@@ -2425,11 +2448,15 @@ def prompt_review():
         raise _RequestError(f"sections must be a list of at most {PROMPT_REVIEW_SECTIONS_MAX} {{who, text}} strings")
     try:
         answer = chat_queue.run({
-            "stage": chat_jobs.STAGE_REVIEW, "line": text.strip(), "prompt": prompt,
+            "stage": chat_jobs.STAGE_REVIEW, "line": text, "prompt": prompt,
             "sections": [{"who": x["who"], "text": x["text"]} for x in sections],
-            "history": history, "people": [p.strip() for p in people]}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
+            "history": history, "people": [p.strip() for p in people],
+            "deadline": time.time() + chat_assistant.TIMEOUT_SECONDS}, wait_seconds=PROMPT_REVIEW_WAIT_SECONDS)
     except Exception:
         current_app.logger.exception("chat prompt review failed")
+        if history and history[-1].get('question') and not history[-1].get('offer'):
+            return jsonify({'accepted': False, 'ask': True, 'options': [],
+                'reply': chat_assistant.INTERPRETATION_CLARIFY_REPLY, 'question_kind': 'meaning'})
         # The model is not a gate the user can be left standing behind: the
         # line goes in, and the session checks it again with an analysis in
         # hand.
@@ -2439,9 +2466,16 @@ def prompt_review():
     # model said to keep.
     accepted = answer["kept"]
     reply = PROMPT_REVIEW_START_REPLIES.get(answer["start"]) or answer["reply"]
+    if not reply and not accepted and not any(answer[k] for k in ('start', 'ask', 'offer')):
+        answer = {**answer, 'ask': True, 'options': []}
+        reply = chat_assistant.INTERPRETATION_CLARIFY_REPLY
     if not reply:
-        reply = PROMPT_REVIEW_KEPT_REPLY if accepted else PROMPT_REVIEW_DROPPED_REPLY
+        reply = PROMPT_REVIEW_KEPT_REPLY if accepted else chat_assistant.CLARIFY_REPLY
     out = {"accepted": accepted, "reply": reply}
+    if accepted and answer.get('interpreted') is True:
+        out['interpreted'] = True
+    if answer.get('verbatim') is True:
+        out.update(verbatim=True, line=text)
     if "request_semantics" in answer:
         out["request_semantics"] = answer["request_semantics"]
     if answer.get("semantic_pending"):
@@ -2454,6 +2488,7 @@ def prompt_review():
         # A question back, not a decision: nothing goes in the list until the
         # user answers it.
         out["ask"] = True
+        out["question_kind"] = answer.get("question_kind") if answer.get("question_kind") in ("person", "meaning", "content") else "meaning"
         out["options"] = answer["options"]
     elif answer["offer"]:
         # 「要不要我先幫你分析？」: the user only seemed to want it, so nothing
@@ -2464,7 +2499,7 @@ def prompt_review():
             # A question only the analysis can answer: once the user says yes,
             # the page carries it into the session to be answered there.
             out["later"] = True
-    if accepted and answer["line"]:
+    if accepted and answer["line"] and not answer.get('verbatim'):
         out["line"] = answer["line"][:USER_PROMPT_MAX_LEN]
         if answer["persons"]:
             out["persons"] = answer["persons"]
@@ -2498,7 +2533,10 @@ def _review_history(history):
         text, options = t.get("text"), t.get("options", [])
         if not isinstance(text, str) or len(text) > MESSAGE_TEXT_MAX_LEN:
             raise _RequestError(f"history text must be a string of at most {MESSAGE_TEXT_MAX_LEN} characters")
-        if not isinstance(options, list) or not all(isinstance(o, str) and len(o) <= PROMPT_REVIEW_LABEL_MAX_LEN for o in options):
+        from photo_agent.clarification_choices import is_literal_choice
+        if not isinstance(options, list) or not all(isinstance(o, str) and (
+                len(o) <= PROMPT_REVIEW_LABEL_MAX_LEN or
+                is_literal_choice(o) and len(o) <= MESSAGE_TEXT_MAX_LEN) for o in options):
             raise _RequestError("history options must be a list of short strings")
         turns.append({"role": t["role"], "text": text.strip(), "question": t.get("question") is True,
                       "offer": t.get("offer") is True, "options": options[:4]})

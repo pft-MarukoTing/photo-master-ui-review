@@ -268,6 +268,7 @@ class PhotoAgentJobProcessor:
                     image_bytes=image_bytes,
                     analysis=params["analysis"],
                     user_prompt=params["user_prompt"],
+                    **({'literal_texts': params['literal_texts']} if 'literal_texts' in params else {}),
                     preset_key=params["preset"],
                     quality=params["image_quality"],
                     ai_photo_editing=params["ai_photo_editing"],
@@ -341,6 +342,7 @@ class PhotoAgentJobProcessor:
                     overwrite_prompt=params.get("overwrite_prompt", False),
                     single_pass_edit=params.get("single_pass_edit", True),
                     review=review,
+                    **({'literal_texts': params['literal_texts']} if 'literal_texts' in params else {}),
                 )
 
                 run_dst_keys = derive_run_dst_keys(request["dst_key"], run_index, include_pre_edit=bool(result.get("pre_edit_image")))

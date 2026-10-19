@@ -950,9 +950,16 @@ def _quality_check_schema(analysis):
 
     Body Reshape is a single natural-language instruction, so QA deliberately
     uses the same general checks as other edits.  There is no endpoint list or
-    numeric body measurement to add to the response schema.
+    numeric body measurement to add to the response schema. Explicit printed
+    strings add a separate exact-character verification report.
     """
-    return QUALITY_CHECK_SCHEMA
+    from photo_agent.text_overlay import expected_texts, TEXT_ADHERENCE_SCHEMA
+    if not expected_texts(analysis):
+        return QUALITY_CHECK_SCHEMA
+    schema = copy.deepcopy(QUALITY_CHECK_SCHEMA)
+    schema['schema']['properties']['text_adherence'] = copy.deepcopy(TEXT_ADHERENCE_SCHEMA)
+    schema['schema']['required'].append('text_adherence')
+    return schema
 
 
 def _relabel_style_items(result: dict, analysis: dict) -> None:
@@ -987,6 +994,8 @@ def quality_check_photo(image_bytes: bytes, output_b64: str, analysis: dict, ana
     data = _post_json(OPENAI_RESPONSES_URL, payload, "Quality check failed", timeout=120)
     result = _parse_json_from_text(_extract_output_text(data))
     _relabel_style_items(result, analysis)
+    from photo_agent.text_overlay import enforce_text_qa
+    result = enforce_text_qa(result, analysis)
     return result, qa_prompt, {
         "model": analysis_model,
         "usage": data.get("usage"),

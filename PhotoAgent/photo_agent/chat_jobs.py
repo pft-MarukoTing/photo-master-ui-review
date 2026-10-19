@@ -76,11 +76,11 @@ def _run(params):
     if stage == STAGE_ASK:
         return chat_assistant.ask(
             params.get("analysis"), params["plan"], params["status"], params["history"],
-            debug=bool(params.get("debug")), screen=params.get("screen"))
+            debug=bool(params.get("debug")), screen=params.get("screen"), deadline=params.get("deadline"))
     if stage == STAGE_REVIEW:
         return chat_assistant.review_line(
             params["line"], params.get("prompt", ""), params.get("history", []), params.get("people", []),
-            sections=params.get("sections", []))
+            sections=params.get("sections", []), deadline=params.get('deadline'))
     if stage == STAGE_OPENING:
         return chat_assistant.write_opening(params.get("analysis"), params.get("wishes") or "")
     if stage == STAGE_NOTE:

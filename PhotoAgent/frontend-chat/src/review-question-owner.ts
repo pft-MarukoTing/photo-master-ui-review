@@ -4,6 +4,7 @@
  */
 type ReviewSemantic = {
   target_kind?: string;
+  complete?: boolean;
   owner_required?: boolean;
   scope?: string;
   intent?: string;
@@ -12,6 +13,7 @@ type Review = {
   accepted: boolean;
   reply: string;
   ask?: boolean;
+  question_kind?: "person" | "meaning" | "content";
   options?: string[];
   offer?: boolean;
   start?: string;
@@ -22,9 +24,9 @@ type Review = {
 
 export function routeReviewQuestion<T extends Review>(review: T, previewEnabled: boolean): T {
   const semantics = review.request_semantics;
-  if (!previewEnabled || !review.ask || review.options?.length || review.offer || review.start || review.withdrawn ||
+  if (!previewEnabled || !review.ask || review.question_kind !== "person" || review.options?.length || review.offer || review.start || review.withdrawn ||
       !semantics?.length ||
-      !semantics.every(s => (s.scope === "edit" || s.scope === "protection") && (s.intent === "set" || s.intent === "constraint")) ||
+      !semantics.every(s => s.complete === true && (s.scope === "edit" || s.scope === "protection") && (s.intent === "set" || s.intent === "constraint")) ||
       !semantics.some(s => s.owner_required === true || s.target_kind === "person" || s.target_kind === "outside_person")) return review;
 
   // Accepted for clarification, not approved for editing. The Note stays

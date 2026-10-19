@@ -121,6 +121,9 @@ type PrePerson = FaceRef & { where: string; box: Box; thumbnail_box?: Box; previ
 // groups the lines one click took out, so 清除所有需求 is answered once and not
 // once per line.
 type Note = {
+  verbatim?: boolean;
+  interpreted?: boolean;
+  literalTexts?: string[];
   order?: number;
   replyOrder?: number;
   // Freeze presentation references independently of executable person bindings.
@@ -139,7 +142,7 @@ type Note = {
   dropped?: { after: number; batch: number; order?: number; text?: string };
   // The AI's reply was a question back instead of a decision; `options` are
   // the short answers it offered to tap.
-  asked?: { options: string[] };
+  asked?: { options: string[]; kind?: "person" | "meaning" | "content" };
   askedResolved?: boolean;
   // The AI asked whether to start 分析／一鍵美化 for them instead of starting
   // it. Not a question about the line: the answer is a line of its own.
@@ -209,7 +212,8 @@ const WHO_ANSWERED_REPLY = "好，這個我記下來了。還有其他想改的�
 // What a note asks for, as the list shows it and the prompt carries it.
 const wishText = (n: Note) => n.resolvedWish ?? n.wish ?? n.text;
 function previewWish(n: Note, index: number): PreviewWish {
-  return { wish_id: `note-${index}`, text: n.wish ?? n.text, source_text: n.text,
+  return { wish_id: `note-${index}`, text: n.wish ?? n.text, source_text: n.interpreted ? n.wish ?? n.text : n.text,
+    ...(n.verbatim ? { verbatim: true } : {}),
     selection_source: n.selectionSource || "none",
     target_ids: n.selectionSource === "user_selection"
       ? n.persons.flatMap(p => p.preview_person_id ? [p.preview_person_id] : []) : [] };
@@ -367,6 +371,10 @@ const sectionLine = (sec: Section) => sec.key
 const notesPrompt = (ns: Note[], edits: PromptEdits = {}) =>
   promptSections(ns, edits).map(sectionLine).join("；");
 
+function noteLiteralTexts(ns: Note[], prompt: string): string[] {
+  return [...new Set(ns.filter(liveNote).flatMap(n => n.literalTexts || []))].filter(text => prompt.includes(text));
+}
+
 // 上傳頁面的整段對話，給模型看的版本：它才分得出這句是在回答它剛問的，還是另一
 // 個新需求。使用者拿掉需求那一輪，模型看到的是 AI 回的那句。
 function reviewHistory(ns: Note[], events: PreviewReplyEvent[] = []): ReviewTurn[] {
@@ -474,7 +482,7 @@ function wishesFor(notes: Note[], segEdits: PromptEdits): PreviewWish[] {
         ? directWish(`edited-${i}-${sec}`, part.persons, edit.text.trim())
         : { wish_id: `edited-${i}-${sec}`, text: edit.text.trim(), source_text: edit.text.trim(), selection_source: "none", target_ids: [] });
     }
-    const wanted = (n.kept === true || n === openAsk(notes) && n.asked && !n.asked.options.length) && !n.dropped && (n.resolvedWish !== "" || n.actionPending);
+    const wanted = (n.kept === true || n === openAsk(notes) && n.asked?.kind === "person" && !n.asked.options.length) && !n.dropped && (n.resolvedWish !== "" || n.actionPending);
     if (!wanted) return out;
     const rest = parts.filter(x => !coveredBy(segEdits, x.key, i));
     if (rest.length === parts.length) return [...out, previewWish(n, i)];
@@ -964,7 +972,7 @@ export function App() {
       if (projected.some((n,i) => n !== current[i])) changed = true;
       const updated = projected.map((n, i) => {
         const clauses = mapped.clauses.filter(c => c.request_id === `note-${i}`);
-        if (n.asked && !n.asked.options.length && !n.askedResolved && clauses.length &&
+        if (n.asked?.kind === "person" && !n.asked.options.length && !n.askedResolved && clauses.length &&
             clauses.every(c => (c.status === "matched" || c.status === "not_person") && c.action_status !== "incomplete" && c.action_status !== "pending")) {
           changed = true;
           return { ...n, kept: true, askedResolved: true };
@@ -1772,7 +1780,8 @@ export function App() {
       const userPrompt = (previewIdentity && p.effective !== undefined ? p.effective : notesPrompt(log, p.segEdits)).slice(0, PROMPT_MAX);
       const promptFaces = promptSections(kept).flatMap(groupFaces).filter((f) => userPrompt.includes(f.ref));
       // 跟單張一樣：照片從 session 的預設起跳，先換成它自己的需求和設定再傳。
-      await api.patchPlan(id, { ...p.settings, user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt }, step());
+      await api.patchPlan(id, { ...p.settings, user_prompt: userPrompt, overwrite_prompt: !!p.overwrite && !!userPrompt,
+        literal_texts: noteLiteralTexts(log, userPrompt) }, step());
       const { blob, name } = await sourceBlob(p.source, step());
       const added = await uploadKeyed(id, blob, name, previewIdentity && {
         ...previewIdentity, ...(p.mapping ? { conversation_token: p.mapping.token,
@@ -2226,11 +2235,11 @@ export function App() {
       selectionSource: picked.length ? "user_selection" : asking?.selectionSource };
     // 要靠前一句才看得懂的話（回答追問的「棕色」、接著講的「褲子也是」），模型
     // 會補成完整的一句，連同它接過來的人；清單裡每一句才能單獨讀、單獨刪。回答
-    // 追問時模型沒拼回來（或根本沒問到），就自己接上：至少看得出是在講哪件事。
+    // 追問回答必須由後端補成完整需求；未補全時繼續追問，不在前端拼接。
     const completed = (line?: string, wheres: string[] = []): Partial<Note> => {
       const carried = wheres.flatMap((w) => preOrder.filter((p) => preWhere(p.subjectIndex) === w));
       const persons = note.persons.length ? note.persons : preRefs(carried.map((p) => p.subjectIndex));
-      const wish = line || (asking ? `${asking.wish ?? asking.text}，${text}` : undefined);
+      const wish = line;
       return { persons, selectionSource: note.selectionSource || (persons.length ? "model_suggestion" : undefined), ...(wish && wish !== text ? { wish } : {}) };
     };
     setPreAsk(note);
@@ -2248,7 +2257,11 @@ export function App() {
         sent.map((x) => ({ who: x.key, text: x.text })),
       );
       if (!stillCurrent()) return null;
-      const r = routeReviewQuestion(reviewed, previewEnabled);
+      let r = routeReviewQuestion(reviewed, previewEnabled);
+      if (asking && r.accepted && !r.withdrawn && !r.line && !r.verbatim) {
+        r = { ...r, accepted: false, ask: true, options: [],
+          reply: "這項需求還沒整理完整，請再說明想調整的效果。" };
+      }
       const settled: Note = {
         ...note,
         replyOrder: nextDisplayOrder(),
@@ -2257,9 +2270,17 @@ export function App() {
         // 只是撤回前面那項的一句不進清單：前面那項拿掉，就是照原樣了。
         kept: r.accepted && !r.withdrawn,
         ...(r.semantic_pending && (previewEnabled || preview.identity) ? { actionPending: true, resolvedWish: "" } : {}),
-        ...(r.ask ? { asked: { options: r.options || [] } } : {}),
+        ...(r.ask ? { asked: { options: r.options || [], kind: r.question_kind || "meaning" } } : {}),
         ...(r.offer ? { offered: { options: r.options || [], ...(r.later ? { later: true } : {}) } } : {}),
         ...(r.accepted && !r.withdrawn ? completed(r.line, r.persons) : {}),
+        ...(r.accepted && !r.withdrawn ? { literalTexts: r.request_semantics?.flatMap(s => s.literal_text ? [s.literal_text] : []) || [] } : {}),
+        ...(r.verbatim ? { verbatim: true, wish: note.text, persons: [], selectionSource: undefined } : {}),
+        ...(r.interpreted ? { interpreted: true,
+          // A reviewed scene-wide revision is already complete. Forward that
+          // revised text unchanged even if preview has not arrived. Person or
+          // worn-object edits still need the regular identity bridge.
+          verbatim: !!r.request_semantics?.length && r.request_semantics.every(s =>
+            (s.target_kind === "image" || s.target_kind === "region" || s.feature === "text_overlay") && !s.owner_required) } : {}),
         ...(r.accepted && r.aspect_ratio ? { ratio: r.aspect_ratio } : {}),
       };
       // 跟前面的需求衝突（同一個人、同一件事不能兩個都做）：模型把衝突的那幾段
@@ -2288,6 +2309,11 @@ export function App() {
       // 問不到就放行：一次模型失敗不該讓人卡在上傳頁面，而且進了 session，
       // 個人化需求面板按下確認時還會再過一次。
       if (!stillCurrent()) return null;
+      if (asking) {
+        setNotes([...base, { ...note, kept: false, asked: { options: [], kind: "meaning" }, replyOrder: nextDisplayOrder(),
+          reply: "這項需求還沒整理完整，請再說明想調整的效果。" }]);
+        return null;
+      }
       const kept = { ...note, ...completed(), kept: true, ...(preview.identity ? { actionPending: true, resolvedWish: "" } : {}), replyOrder: nextDisplayOrder(),
         reply: "好，這些會當成個人化需求，美化時一起套用。",
         replyPeople: prePickable.map(p => ({ ...p })) };
@@ -2298,11 +2324,11 @@ export function App() {
     }
   }
 
-  // AI 問「你說的是哪一位？」（沒給選項）的那一句：點頭像先選人，可以選好幾位，
+  // 只有後端明確標為 person 的無選項追問可點頭像選人，可以選好幾位，
   // 選好什麼都不打直接送出就是回答。
   const preWhoAsk = (() => {
     const asking = openAsk(notes);
-    return asking && !asking.asked!.options.length ? asking : null;
+    return asking?.asked?.kind === "person" && !asking.asked.options.length ? asking : null;
   })();
 
   // 選好人直接送出：那句需求接到這幾位身上收下來，不用重打一次，也不用再問模型
@@ -2384,7 +2410,8 @@ export function App() {
           if (userPrompt || !sameSettings(settings, defaultSettings(caps))) {
             await api.patchPlan(id, {
               ...settings,
-              ...(userPrompt ? { user_prompt: userPrompt, overwrite_prompt: !!overwrite } : {}),
+              ...(userPrompt ? { user_prompt: userPrompt, overwrite_prompt: !!overwrite,
+                literal_texts: noteLiteralTexts(submissionLog, userPrompt) } : {}),
             }, step());
           }
           const { blob, name } = await sourceBlob(source, step());
@@ -2492,14 +2519,14 @@ export function App() {
     });
   }
 
-  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[]) {
+  function askPhoto(text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string) {
     if (!session || !photo) return Promise.resolve(false);
     const id = session.session_id;
     const pid = photo.photo_id;
     setPendingAsk({ photoId: pid, text, subjectIndices });
     return run(async () => {
       try {
-        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces);
+        await api.ask(id, pid, text, faces ? [] : subjectIndices, screen, faces, answerTo);
         setSession(await api.getSession(id));
       } finally {
         setPendingAsk(null);
@@ -2810,7 +2837,7 @@ export function App() {
                 : openAsk(notes)
                   ? openAsk(notes)!.asked!.options.length
                     ? ["直接打字回答，或點上面的選項", "打字回答，或點上面的選項"]
-                    : preDisplayPeople.length > 1
+                    : preWhoAsk && preDisplayPeople.length > 1
                       ? ["點上面的頭像選人，或直接打字回答", "點上面的頭像，或打字回答", "點頭像或打字回答"]
                       : "直接打字回答"
                   : preDisplayPeople.length > 1
@@ -4411,7 +4438,7 @@ function PreChat(props: {
         const next = notes[notes.indexOf(t.ask) + 1];
         // 問「哪一位」：人就擺在問題底下，點一下就是回答，不用再到輸入框旁邊
         // 選、再按送出。答過了跟選項一樣定格，點的那位維持選取的樣子。
-        const who = t.ask.asked && !options.length ? t.ask.replyPeople || [] : [];
+        const who = t.ask.asked?.kind === "person" && !options.length ? t.ask.replyPeople || [] : [];
         return (
           <div key={`note-${t.ask.order ?? notes.indexOf(t.ask)}-${t.part || "both"}`} class="note-turn">
             {t.part !== "reply" && <AskBubble text={t.ask.text} faces={t.ask.persons} />}
@@ -4623,7 +4650,7 @@ function SessionView(props: {
   // 只剩拖放進畫布這條路會用到 -- 丟一張新的照片進來等於開一個新對話。
   onFile: (f: File) => void;
   // faces 只在沒有分析時用：指的人是本地偵測的框和位置，取代 subjectIndices 送出。
-  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[]) => Promise<boolean>;
+  onAsk: (text: string, subjectIndices: number[], screen?: Screen, faces?: AskFace[], answerTo?: string) => Promise<boolean>;
   onAnswerWaiting: (messageId: string, screen: Screen) => void;
   onPatch: (patch: Plan) => Promise<boolean>;
   onQuietPrompt: (text: string) => Promise<unknown>;
@@ -4855,9 +4882,8 @@ function SessionView(props: {
   // 頭像給人點，不用再去點輸入框上面那排再按送出。
   const asksWho = (card: Dict | null | undefined) =>
     card?.type === "llm_reply" &&
+    card.question_kind === "person" &&
     !card.options?.length &&
-    /[？?]\s*$/.test(card.text || "") &&
-    /哪一?位|哪幾位|誰/.test(card.text || "") &&
     pickable.length > 1;
 
   const liveCat: Category | null = lastOptionsIdx >= 0 ? messages[lastOptionsIdx].card?.category : null;
@@ -5023,10 +5049,10 @@ function SessionView(props: {
     lastCard?.type === "llm_reply" && lastCard.proposal && !resolvedChoice[lastCard.proposal.id] ? lastCard.proposal : null;
   // AI 剛問完一句（沒給選項）時，點好頭像不打字直接送出，就是回答「這幾位」。
   const whoAsked =
-    lastCard?.type === "llm_reply" && !lastCard.options?.length && /[？?]\s*$/.test(lastCard.text || "");
+    lastCard?.type === "llm_reply" && lastCard.question_kind === "person" && !lastCard.options?.length;
   // 頭像已經排在 AI 那句底下可以直接點時，輸入框上面那排就先收起來，免得兩處都能選。
   const facesInline =
-    !props.pendingAsk && (asksWho(lastCard) || (lastCard?.type === "llm_reply" && !lastCard.proposal && (lastCard.options || []).some((o: string) => !!faceOption(o))));
+    !props.pendingAsk && (asksWho(lastCard) || (lastCard?.type === "llm_reply" && lastCard.question_kind === "person" && !lastCard.proposal && (lastCard.options || []).some((o: string) => !!faceOption(o))));
   async function send(text: string, si: number[]) {
     if (pendingPerson?.kind === "edit_description" || pendingPerson?.kind === "action" || pendingPerson?.kind === "visual") {
       const answer = await props.onConfirmPeople([], undefined, undefined, undefined, undefined, text);
@@ -5036,7 +5062,8 @@ function SessionView(props: {
       await choose(pendingProposal, "apply");
       return true;
     }
-    return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen, askFaces(si));
+    return props.onAsk(text || (si.length > 1 ? "這幾位" : "這位"), si, screen, askFaces(si),
+      lastCard?.question_kind ? messages[messages.length - 1].id : undefined);
   }
 
   // 這張面板卡收起時的 plan。會收起它的那一步 -- 下一個開起來的面板，或下一輪
@@ -5126,7 +5153,7 @@ function SessionView(props: {
                   picked={next?.card?.type === "ask" ? next.text || "" : null}
                   open={open}
                   busy={busy}
-                  onPick={(t) => props.onAsk(t, si, screen, sf)}
+                  onPick={(t) => props.onAsk(t, si, screen, sf, c.question_kind ? messages[idx].id : undefined)}
                 />
               );
             // 問的是哪一位時，答案就是那幾顆頭像：點一顆等於指著他說「這位」，
@@ -5135,7 +5162,7 @@ function SessionView(props: {
             return (
               <div class="chat-choices">
                 {(c.options as string[]).map((o) => {
-                  const face = faceOption(o);
+                  const face = c.question_kind === "person" ? faceOption(o) : null;
                   if (face) {
                     const picked = !open && nextSi.length === 1 && nextSi[0] === face.subjectIndex;
                     return (
@@ -5144,7 +5171,7 @@ function SessionView(props: {
                         avatarOnly
                         picked={picked}
                         title={face.name ? `就是${face.name}` : "就是這位"}
-                        onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex])) : undefined}
+                        onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
                       />
                     );
                   }
@@ -5154,7 +5181,7 @@ function SessionView(props: {
                       kind={!open && next?.card?.type === "ask" && next.text === o ? "picked" : undefined}
                       settled={!open}
                       disabled={busy}
-                      onClick={() => props.onAsk(o, si, screen, sf)}
+                      onClick={() => props.onAsk(o, si, screen, sf, c.question_kind ? messages[idx].id : undefined)}
                     />
                   );
                 })}
@@ -5172,7 +5199,7 @@ function SessionView(props: {
                     avatarOnly
                     picked={!open && nextSi.length === 1 && nextSi[0] === face.subjectIndex}
                     title={face.name ? `就是${face.name}` : "就是這位"}
-                    onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex])) : undefined}
+                    onClick={open && !busy ? () => props.onAsk("這位", [face.subjectIndex], screen, askFaces([face.subjectIndex]), c.question_kind ? messages[idx].id : undefined) : undefined}
                   />
                 ))}
               </div>

@@ -115,6 +115,15 @@ def _parse_and_validate_params(form):
     user_prompt = form.get("user_prompt")
     if user_prompt:
         params["user_prompt"] = user_prompt
+    if form.get('literal_texts') is not None:
+        from photo_agent.text_overlay import validate_texts
+        try:
+            value = form.get('literal_texts')
+            if isinstance(value, str):
+                value = json.loads(value)
+            params['literal_texts'] = validate_texts(value, user_prompt or '')
+        except (ValueError, TypeError) as exc:
+            return None, str(exc)
     # Advanced Settings toggles (Eyes category, and whatever joins it later),
     # bundled as one JSON field instead of one form field per toggle -- see
     # normalize_advanced_options for why. Normalized here (not left as the

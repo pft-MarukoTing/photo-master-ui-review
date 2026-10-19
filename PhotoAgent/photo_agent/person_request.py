@@ -75,6 +75,9 @@ def _part(text):
 
 def semantics(clause):
     """Derive action only from stored source evidence, never cached display."""
+    if clause.get('verbatim'):
+        return dict(action_version=VERSION, action_status='complete', part=None,
+                    action_evidence=clause['text'])
     if clause.get('semantic_required') or clause.get('semantic'):
         return request_semantics.project(clause)
     text=clause['text']

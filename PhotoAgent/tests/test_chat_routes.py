@@ -1320,7 +1320,7 @@ class ChatRoutesTest(unittest.TestCase):
     def ask(self, sid, photo, text, answer, **extra):
         seen = []
 
-        def model(context):
+        def model(context, **kwargs):
             seen.append(context)
             if isinstance(answer, Exception):
                 raise answer
@@ -1604,7 +1604,7 @@ class ChatRoutesTest(unittest.TestCase):
     def review(self, text, answer, **extra):
         seen = []
 
-        def model(context):
+        def model(context, **kwargs):
             seen.append(context)
             if isinstance(answer, Exception):
                 raise answer
@@ -1648,15 +1648,17 @@ class ChatRoutesTest(unittest.TestCase):
     # The same two sources disagreeing out loud: the verdict threw the line
     # away while the sentence told the user it had been taken down. The user
     # only ever sees the sentence, so the sentence is the one that holds.
-    def test_a_drop_that_says_it_was_taken_down_keeps_the_line(self):
+    def test_a_drop_acknowledgement_without_an_interpretation_asks_first(self):
         res, _ = self.review("把桌上的垃圾都移掉", {"verdict": "drop", "reply": "好，這個我記下來了。"})
-        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.INTERPRETATION_CLARIFY_REPLY,
+            "ask": True, "options": ['把「把桌上的垃圾都移掉」放到照片中'], "question_kind": "meaning"})
 
-    def test_something_that_is_not_about_the_photo_is_turned_away(self):
+    def test_unrelated_text_without_a_supported_interpretation_asks_first(self):
         res, _ = self.review("幫我翻譯這段英文", {
             "verdict": "drop", "reply": "這個我沒辦法回答，我只能幫你處理這張照片的修圖。"})
         self.assertEqual(res.get_json(), {
-            "accepted": False, "reply": "這個我沒辦法回答，我只能幫你處理這張照片的修圖。"})
+            "accepted": False, "reply": chat.chat_assistant.INTERPRETATION_CLARIFY_REPLY,
+            "ask": True, "options": ['把「幫我翻譯這段英文」放到照片中'], "question_kind": "meaning"})
 
     # The two start buttons in words: the page presses the one asked for.
     def test_a_typed_start_starts_it(self):
@@ -1756,7 +1758,8 @@ class ChatRoutesTest(unittest.TestCase):
         res, _ = self.review("外套換成藍色", {"verdict": "keep", "reply": ""})
         self.assertEqual(res.get_json(), {"accepted": True, "reply": chat.PROMPT_REVIEW_KEPT_REPLY})
         res, _ = self.review("??", {"verdict": "drop", "reply": ""})
-        self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.PROMPT_REVIEW_DROPPED_REPLY})
+        self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.INTERPRETATION_CLARIFY_REPLY,
+            "ask": True, "options": ['把「??」放到照片中'], "question_kind": "meaning"})
 
     # The model is not a gate the user can be left standing behind.
     def test_a_model_failure_lets_the_line_through(self):
@@ -1778,30 +1781,37 @@ class ChatRoutesTest(unittest.TestCase):
     # A wish with a gap only the user can fill is asked about, not kept yet.
     def test_an_unfinished_wish_is_asked_about(self):
         res, _ = self.review("頭髮換顏色", {"verdict": "clarify", "reply": "想換成什麼顏色？", "line": "",
-                                          "options": [" 棕色", "黑色", "棕色", "", "金色", "紅色", "灰色"]})
+                                          "options": [" 棕色", "黑色", "棕色", "", "金色", "紅色", "灰色"], "question_kind": "content"})
         self.assertEqual(res.get_json(), {"accepted": False, "reply": "想換成什麼顏色？", "ask": True,
-                                          "options": ["棕色", "黑色", "金色", "紅色"]})
+                                          "options": ["棕色", "黑色", "金色", "紅色"], "question_kind": "content"})
         res, _ = self.review("他的眼睛放大", {"verdict": "clarify", "reply": "", "line": "", "options": []},
                              people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"])
         self.assertEqual(res.get_json(), {"accepted": False, "reply": chat.chat_assistant.CLARIFY_REPLY,
-                                          "ask": True, "options": []})
+                                          "ask": True, "options": ['把「他的眼睛放大」放到照片中'], "question_kind": "meaning"})
 
     # The answer comes back as the whole wish, with the person split off for
     # the page to attach.
     def test_an_answer_completes_the_wish(self):
-        history = [{"role": "user", "text": "照片中從左邊數來第 1 位：頭髮換顏色"},
-                   {"role": "assistant", "text": "想換成什麼顏色？", "question": True, "options": ["棕色", "黑色"]}]
+        history = [{"role": "user", "text": "頭髮換顏色"},
+                   {"role": "assistant", "text": "想換成什麼顏色？", "question": True,
+                    "options": ["棕色", "黑色"]}]
+        semantic = dict(source="頭髮換成棕色", target="頭髮", action="換成棕色", complete=True,
+                        target_kind="object", owner_required=True, scope="edit", feature="hair_color",
+                        part="頭髮", intent="set", value="棕色", literal_text="", constraints=[])
         res, seen = self.review("棕色", {"verdict": "keep", "reply": "好，這個我記下來了。",
-                                       "line": "照片中從左邊數來第 1 位：頭髮換成棕色", "options": []},
-                                history=history, people=["照片中從左邊數來第 1 位"])
-        self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT, "line": "頭髮換成棕色",
-                                          "persons": ["照片中從左邊數來第 1 位"]})
+                                       "line": "頭髮換成棕色", "semantics": [semantic], "options": []},
+                                history=history)
+        answer = res.get_json()
+        self.assertTrue(answer["accepted"])
+        self.assertTrue(answer["interpreted"])
+        self.assertEqual(answer["line"], "頭髮換成棕色")
+        self.assertEqual(answer["request_semantics"][0]["value"], "棕色")
         self.assertIn("assistant (question): 想換成什麼顏色？ [options: 棕色 / 黑色]", seen[0])
-        # One question per wish: a second one in a row is taken as a keep.
-        res, _ = self.review("隨便", {"verdict": "clarify", "reply": "哪一種棕色？", "line": "頭髮換成棕色",
+        # A second incomplete reply must not be silently saved as a complete wish.
+        res, _ = self.review("隨便", {"verdict": "clarify", "reply": "哪一種棕色？", "line": "",
                                     "options": ["深棕", "淺棕"]}, history=history)
-        self.assertEqual(res.get_json(), {"accepted": True, "reply": chat.PROMPT_REVIEW_KEPT_REPLY,
-                                          "line": "頭髮換成棕色"})
+        self.assertFalse(res.get_json()["accepted"])
+        self.assertTrue(res.get_json()["ask"])
 
     # Outside an answer, the line is what was typed.
     def test_a_line_carrying_on_comes_back_written_out(self):
@@ -1825,10 +1835,12 @@ class ChatRoutesTest(unittest.TestCase):
                                           "line": "外套換成藍色", "options": ["x"]})
         self.assertEqual(res.get_json(), {"accepted": True, "reply": KEPT})
 
-    def test_a_dropped_line_is_not_written_out(self):
+    def test_a_dropped_line_requires_validated_interpretation_before_saving(self):
         res, _ = self.review("今天天氣如何", {"verdict": "drop", "reply": "這個我沒辦法幫忙。",
-                                          "line": "今天天氣如何", "options": []})
-        self.assertNotIn("line", res.get_json())
+                                          "line": "模型改寫的內容", "options": []})
+        self.assertNotIn('line', res.get_json())
+        self.assertFalse(res.get_json()['accepted'])
+        self.assertTrue(res.get_json()['ask'])
 
     def test_prompt_review_rejects_bad_requests(self):
         answer = {"verdict": "keep", "reply": "x"}

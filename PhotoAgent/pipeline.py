@@ -428,6 +428,7 @@ def finish_stage(
     overwrite_prompt: bool = False,
     single_pass_edit: bool = True,
     review: dict = None,
+    literal_texts: list = None,
 ) -> dict:
     """Steps 3, 5-6: pass user instruction through, then AI edit + QA (or local enhancement).
 
@@ -484,6 +485,10 @@ def finish_stage(
         overwrite_prompt=overwrite_prompt, analysis_model=analysis_model,
     )
     user_instruction = review["user_instruction"]
+    if literal_texts is not None:
+        from photo_agent.text_overlay import validate_texts
+        user_instruction = {**(user_instruction or {}),
+            'literal_texts': validate_texts(literal_texts, user_prompt or '')}
     if (user_prompt or "").strip():
         user_instruction = dict(user_instruction or {})
         user_instruction["original_user_direction"] = user_prompt.strip()
@@ -591,6 +596,8 @@ def finish_stage(
             try:
                 qa, qa_prompt, qa_usage = quality_check_photo(image_bytes, image_b64, analysis, analysis_model=analysis_model)
                 qa = _normalize_quality_check_result(qa)
+                from photo_agent.text_overlay import enforce_text_qa
+                qa = enforce_text_qa(qa, analysis)
                 prompts["quality_check"] = qa_prompt
                 usage["Step 6 - quality_check"] = qa_usage
                 timings["Step 6 - quality_check"] = time.time() - t0

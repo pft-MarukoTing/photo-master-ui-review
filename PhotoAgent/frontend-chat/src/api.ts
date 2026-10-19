@@ -123,10 +123,14 @@ export const api = {
     request<{
       accepted: boolean;
       reply: string;
+      verbatim?: boolean;
+      interpreted?: boolean;
       semantic_pending?: boolean;
       request_semantics?: { complete: boolean; source: string; target: string; action: string;
-        target_kind?: string; owner_required?: boolean; scope?: string; intent?: string }[];
+        target_kind?: string; owner_required?: boolean; scope?: string; intent?: string;
+        literal_text?: string; feature?: string }[];
       ask?: boolean;
+      question_kind?: "person" | "meaning" | "content";
       offer?: boolean;
       // The offer is to analyze first and answer the line itself afterwards.
       later?: boolean;
@@ -139,7 +143,7 @@ export const api = {
       withdrawn?: boolean;
     }>(
       `${CHAT}/prompt-review`,
-      { ...json("POST", { text, prompt, history, people, sections }), signal: AbortSignal.timeout(15000) },
+      { ...json("POST", { text, prompt, history, people, sections }), signal: AbortSignal.timeout(65000) },
     ),
 
   // batchId：多張上傳的同一批，最近照片會把它們合成一格。
@@ -202,11 +206,12 @@ export const api = {
   // screen: the buttons the user can press right now, so the reply can point at them.
   // faces: a photo with no analysis has no subjects to index, so the taps go
   // as the local detector's boxes and where each stands, as on the upload page.
-  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[]) =>
+  ask: (id: string, photoId: string, text: string, subjectIndices: number[] = [], screen?: Screen, faces?: AskFace[], answerTo?: string) =>
     request<{ messages: Message[] }>(
       `${sid(id)}/photos/${encodeURIComponent(photoId)}/ask`,
-      json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}),
-        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}) }),
+      { ...json("POST", { text, ...(subjectIndices.length ? { subject_indices: subjectIndices } : {}),
+        ...(faces?.length ? { faces } : {}), ...(screen ? { screen } : {}), ...(answerTo ? { answer_to: answerTo } : {}) }),
+        signal: AbortSignal.timeout(65000) },
     ),
   // Answers a question that was posted as a waiting ask, once the photo is analyzed.
   answerWaiting: (id: string, photoId: string, messageId: string, screen?: Screen) =>

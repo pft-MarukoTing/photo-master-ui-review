@@ -4,6 +4,7 @@ import json
 
 from photo_agent.editor_skills import EDITOR_SKILLS
 from prompts import style_option_entries
+from photo_agent.text_overlay import qa_instruction
 
 
 def _render_skill_qa(analysis):
@@ -200,4 +201,4 @@ Return only valid JSON. User-visible values must be Traditional Chinese.
     ]
   }
 }"""
-    return head + schema
+    return head + schema + qa_instruction(analysis)

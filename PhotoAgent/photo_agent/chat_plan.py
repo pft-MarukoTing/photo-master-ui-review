@@ -24,6 +24,7 @@ import math
 from photo_agent import capabilities
 from photo_agent.param_validation import normalize_advanced_options
 from photo_agent.selections import validate_selections
+from photo_agent.text_overlay import validate_texts
 
 USER_PROMPT_MAX_LEN = 2000
 PHOTO_ONLY_KEYS = ("recipe_checked", "face_issue_overrides", "face_requests", "body_reshape_enabled",
@@ -188,6 +189,8 @@ def _apply_setting(plan, key, value, debug):
     elif key == "user_prompt":
         if not isinstance(value, str) or len(value) > USER_PROMPT_MAX_LEN:
             raise ValueError(f"plan.user_prompt must be a string of at most {USER_PROMPT_MAX_LEN} characters")
+    elif key == 'literal_texts':
+        value = validate_texts(value)
     elif key in ("overwrite_prompt", "detailed_explanation"):
         if not isinstance(value, bool):
             raise ValueError(f"plan.{key} must be a boolean")
@@ -246,6 +249,14 @@ def apply_plan_patch(current, patch, *, debug=False, settings_only=False):
             plan[key] = value
     except ValueError as exc:
         return None, str(exc)
+    if 'literal_texts' in plan:
+        try:
+            if 'literal_texts' in patch:
+                plan['literal_texts'] = validate_texts(plan['literal_texts'], plan.get('user_prompt', ''))
+            else:
+                plan['literal_texts'] = [s for s in plan['literal_texts'] if s in plan.get('user_prompt', '')]
+        except ValueError as exc:
+            return None, str(exc)
     if not settings_only:
         error = validate_selections(build_selections(plan))
         if error:
@@ -284,6 +295,8 @@ def build_render_form(plan, stage):
         "run_count": 1,
     }
     form["user_prompt"] = plan["user_prompt"]
+    if plan.get('literal_texts'):
+        form['literal_texts'] = validate_texts(plan['literal_texts'], plan['user_prompt'])
     if stage == "finish":
         form["overwrite_prompt"] = plan["overwrite_prompt"]
     return form

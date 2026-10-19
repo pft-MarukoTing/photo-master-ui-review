@@ -8,11 +8,12 @@ import type { PreviewStatus } from "./subject-preview";
 import type { HistoricalSection } from "./personalized-history";
 
 export type PreviewWish = { wish_id: string; text: string; source_text?: string; target_ids: string[]; revision?: number;
+  verbatim?: boolean;
   selection_source?: "none" | "user_selection" | "model_suggestion" };
 export type PreviewClause = { wish_id: string; request_id: string; text: string; source_text: string;
   status: "pending" | "matched" | "ambiguous" | "unmatched" | "not_person" | "outside_confirmed" | "cancelled" | "superseded";
   target_selection?: "outside_preview"; outside_reference?: string;
-  semantic_required?: boolean; semantic?: {version: number; source: string; target: string; action: string; complete: boolean; target_kind?: string};
+  semantic_required?: boolean; semantic?: {version: number; source: string; target: string; action: string; complete: boolean; target_kind?: string; literal_text?: string};
   action_status?: "complete" | "incomplete" | "pending"; part?: string | null; action_answer?: string;
   operation?: {feature: string; part: string; kind: string; intent: string; action: string | null; value: string | null};
   display_text?: string; display_target_ids?: string[]; edit_scope_pending?: boolean; edit_description_pending?: boolean; outside_description?: string; cancelled_from?: {text: string};

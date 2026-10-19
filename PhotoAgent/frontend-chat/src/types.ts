@@ -29,6 +29,7 @@ export interface Plan {
   aspect_ratio?: string;
   run_count?: number;
   user_prompt?: string;
+  literal_texts?: string[];
   overwrite_prompt?: boolean;
   // 設定 → 詳細解說: how the assistant's replies sound.
   detailed_explanation?: boolean;

@@ -72,7 +72,7 @@ class ChatJobsRunTest(unittest.TestCase):
         with patch.object(chat_jobs.chat_assistant, "review_line", return_value={"kept": True}) as review:
             self.assertEqual(chat_jobs.run({"stage": chat_jobs.STAGE_REVIEW, "line": "瘦臉", "people": ["左"]}),
                              {"kept": True})
-        review.assert_called_once_with("瘦臉", "", [], ["左"], sections=[])
+        review.assert_called_once_with("瘦臉", "", [], ["左"], sections=[], deadline=None)
 
     def test_the_model_calls_a_job_makes_are_handed_back_for_the_log(self):
         def review(*args, **kwargs):

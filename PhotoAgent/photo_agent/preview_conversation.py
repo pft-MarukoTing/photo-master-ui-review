@@ -127,11 +127,21 @@ def wishes(raw, roster, *, semantic=False):
             raise ValueError('invalid_wish_id')
         if not isinstance(text, str) or not text.strip() or len(text) > 2000:
             raise ValueError('invalid_wish_text')
+        if 'verbatim' in request and type(request['verbatim']) is not bool:
+            raise ValueError('invalid_verbatim_wish')
         source = request.get('source_text', text)
         revision = request.get('revision', 0)
         if not isinstance(source, str) or len(source) > 2000 or type(revision) is not int or revision < 0:
             raise ValueError('invalid_wish_source_or_revision')
         seen.add(wid)
+        if request.get('verbatim'):
+            # Forward exact prompt text (legacy raw input or a reviewed scene
+            # revision), without deriving an operation or person identity.
+            out.append(dict(wish_id=wid+'-0', request_id=wid, text=text, source_text=text,
+                reference_text=text, verbatim=True, status='not_person', scope='edit',
+                target_ids=[], protected_ids=[], candidate_ids=[], referent='',
+                revision=revision, selection_source='none'))
+            continue
         targets = request.get('target_ids', [])
         if not isinstance(targets, list) or any(not isinstance(i, str) or i not in known for i in targets):
             raise ValueError('invalid_explicit_target')
@@ -162,7 +172,8 @@ def wishes(raw, roster, *, semantic=False):
         raise ValueError('too_many_clauses')
     if semantic:
         for clause in out:
-            clause['semantic_required'] = True
+            if not clause.get('verbatim'):
+                clause['semantic_required'] = True
     return out
 
 
@@ -179,6 +190,10 @@ def generate(params):
     remaining = params.get('deadline', 0) - time.time()
     if remaining <= 0:
         raise TimeoutError('preview_conversation_expired')
+    literal_only = bool(params['wishes']) and all(c.get('verbatim') for c in params['wishes'])
+    params = {**params, 'wishes': [c for c in params['wishes'] if not c.get('verbatim')]}
+    if literal_only:
+        return dict(semantic_version=request_semantics.VERSION, opening_template='', closing_template='', resolutions=[])
     context = INSTRUCTION + '\nDATA:\n' + json.dumps({k: params[k] for k in
         ('people', 'wishes', 'history', 'effective_prompt')}, ensure_ascii=False)
     raw = chat_assistant._call(context, SCHEMA, timeout=min(chat_assistant.TIMEOUT_SECONDS, remaining))
@@ -297,6 +312,14 @@ def _semantic_resolutions(clauses, raw):
 
 def resolve(clauses, people, raw):
     """Validate all bindings atomically; invalid narration cannot discard valid bindings."""
+    literal = [copy.deepcopy(c) for c in clauses if c.get('verbatim')]
+    if literal:
+        parsed = [c for c in clauses if not c.get('verbatim')]
+        state = resolve(parsed, people, raw) if parsed else dict(reply='', clauses=[])
+        order = {c['request_id']: i for i, c in enumerate(clauses)}
+        state['clauses'] = sorted(state['clauses'] + literal, key=lambda c: order[c['request_id']])
+        state = wish_lifecycle.project(state, people)
+        return present(state, people)
     semantic_answer = isinstance(raw, dict) and 'semantic_version' in raw
     if semantic_answer:
         clauses, raw = _semantic_resolutions(clauses, raw)
@@ -705,6 +728,8 @@ def fallback(clauses, people):
     result = copy.deepcopy(clauses)
     for c in result:
         if c['status'] in ('cancelled', 'superseded'):
+            continue
+        if c.get('verbatim'):
             continue
         if c.get('semantic_required') and not request_semantics.read(c):
             c['status'] = 'pending'

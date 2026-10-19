@@ -521,7 +521,10 @@ class ReviewLineTest(unittest.TestCase):
     # 問「哪一位」要點頭像，不到兩個人就沒有頭像可點：直接收下，不留一個答不了的問題。
     def test_asking_who_with_one_face_keeps_the_line(self):
         def model(context):
-            return {"verdict": "clarify", "reply": "你說的是哪一位？點下面的頭像選人就好。", "line": "", "options": []}
+            return {"verdict": "clarify", "reply": "你說的是哪一位？點下面的頭像選人就好。", "line": "", "options": [], "question_kind": "person", "semantics": [dict(
+                source="把他頭髮染黑", target="他", action="頭髮染黑", complete=True,
+                target_kind="person", owner_required=True, scope="edit", feature="hair_color", part="頭髮",
+                intent="set", value="黑", literal_text="", constraints=[])]}
         for people in ([], ["照片中從左邊數來第 1 位"]):
             result = chat_assistant.review_line("把他頭髮染黑", "", people=people, model=model)
             self.assertTrue(result["kept"], people)
@@ -530,7 +533,10 @@ class ReviewLineTest(unittest.TestCase):
 
     def test_asking_who_with_two_faces_still_asks(self):
         def model(context):
-            return {"verdict": "clarify", "reply": "你說的是哪一位？點下面的頭像選人就好。", "line": "", "options": []}
+            return {"verdict": "clarify", "reply": "你說的是哪一位？點下面的頭像選人就好。", "line": "", "options": [], "question_kind": "person", "semantics": [dict(
+                source="把他頭髮染黑", target="他", action="頭髮染黑", complete=True,
+                target_kind="person", owner_required=True, scope="edit", feature="hair_color", part="頭髮",
+                intent="set", value="黑", literal_text="", constraints=[])]}
         result = chat_assistant.review_line("把他頭髮染黑", "", people=["照片中從左邊數來第 1 位", "照片中從左邊數來第 2 位"],
                                             model=model)
         self.assertTrue(result["ask"])
@@ -538,7 +544,7 @@ class ReviewLineTest(unittest.TestCase):
 
     def test_asking_what_with_one_face_still_asks(self):
         def model(context):
-            return {"verdict": "clarify", "reply": "想換成什麼顏色？", "line": "", "options": ["白色", "黑色"]}
+            return {"verdict": "clarify", "reply": "想換成什麼顏色？", "line": "", "options": ["白色", "黑色"], "question_kind": "content"}
         result = chat_assistant.review_line("衣服換顏色", "", people=["照片中從左邊數來第 1 位"], model=model)
         self.assertTrue(result["ask"])
         self.assertEqual(result["options"], ["白色", "黑色"])

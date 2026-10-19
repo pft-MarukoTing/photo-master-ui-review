@@ -196,6 +196,12 @@ def _validate_params(params: dict) -> dict:
     normalized["aspect_ratio"] = aspect_ratio
 
     normalized["user_prompt"] = optional_text(normalized.get("user_prompt"), "user_prompt")
+    if 'literal_texts' in normalized:
+        from photo_agent.text_overlay import validate_texts
+        try:
+            normalized['literal_texts'] = validate_texts(normalized['literal_texts'], normalized['user_prompt'] or '')
+        except ValueError as exc:
+            raise RuntimeError(str(exc), RESULT_INVALID_PARAMETER) from exc
 
     # "取代最終送給編輯模型的完整指令" checkbox (index.html, beside 補充指令) --
     # when true, user_prompt replaces the whole templated edit/QA prompt
