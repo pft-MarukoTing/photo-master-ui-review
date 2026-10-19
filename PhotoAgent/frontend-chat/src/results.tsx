@@ -30,9 +30,11 @@ export function stepState(photo: Photo, versions: Version[], adjusting = false):
 // connector rails: on this page the photo is the subject, and the flow is
 // orientation, not a control. The busy dot keeps the one signal the old
 // spinner carried -- this step is still running.
-export function StepIndicator({ step, state }: { step: number; state: StepState }) {
+// pre：上傳頁（還沒進 session）也掛同一列，桌機上下面那排才會跟 session 一樣高；
+// 窄螢幕上傳頁的版面另有一套，那邊不出現（chat.css）。
+export function StepIndicator({ step, state, pre }: { step: number; state: StepState; pre?: boolean }) {
   return (
-    <div class="container chat-flow-slot" id="step-indicator-slot">
+    <div class={`container chat-flow-slot${pre ? " is-pre" : ""}`} id="step-indicator-slot">
       <nav class="chat-flow" aria-label="美化流程">
         <ol>
           {STEP_NAMES.map((name, i) => {

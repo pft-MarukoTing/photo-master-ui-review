@@ -694,6 +694,9 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
    選中的框、桌機 170px、≤900 抽屜都跟面板模式共用舊版 index.html 那段「我的照片」樣式
    （建置時帶進來），這裡只補這頁版面自己需要的。舊版頁面會捲，所以它是 sticky、
    上面空 44px；這裡那排照片／對話釘在視窗裡，欄位就跟著撐滿同一個高度，只有列表在裡面捲。 */
+/* 舊版 .container 上限 1500，上傳頁（.upload-container）和標頭都是 1720。同一批從上傳頁
+   切進 session，左右邊界會突然內縮一截，所以 session 這排和上面的步驟列跟著放到 1720。 */
+#results-body,#step-indicator-slot{max-width:1720px}
 #results-body.batch-mode>.batch-sidebar{position:relative;top:auto;margin:10px 0 20px;max-height:none;min-height:0}
 /* 高度釘死在右邊那排（#results-detail，styles.css 的 100vh − 標頭 − 步驟列）扣掉上下 margin，
    不然張數一多，這欄會用 stretch 把整排撐高、整頁跟著捲。標題和「全部一鍵美化」固定，
@@ -783,6 +786,40 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .results-analysis-slot>.chat-panel .chat-footbar,
 .results-analysis-slot>.chat-panel .chat-composer{background:transparent}
 .results-analysis-slot>.chat-panel .chat-timeline{padding-left:0;padding-right:var(--sp-3)}
+
+/* 桌機上，同一批從上傳頁切進 session 時版面不要跳：以上傳頁為準，三樣對齊。
+   - 「我的照片」欄：上傳頁 184px（舊版 index.html 給 session 的是 170px）。
+   - 欄距：上傳頁那排是 column-gap 40，session 這邊原本是側欄 28、照片和對話 24。
+   - 對話區：上傳頁是卡片（.chat-panel 本身的底色、圓角、陰影），session 這邊收成只有
+     一條分隔線的側欄；把上面那組蓋掉的東西還回去，時間軸內距也回到卡片的。 */
+@media (min-width:1201px){
+  body #results-body.batch-mode #batch-sidebar{flex:0 0 184px;max-width:184px;padding:14px}
+  #results-body.batch-mode{gap:40px}
+  .results-canvas-row.showing-analysis{gap:40px}
+  .results-analysis-slot>.chat-panel{background:var(--n09);border:0;border-radius:20px;padding-left:0;
+    box-shadow:0 10px 30px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04)}
+  .results-analysis-slot>.chat-panel .chat-panel-head{background:var(--n04)}
+  .results-analysis-slot>.chat-panel .chat-timeline{padding:var(--sp-5)}
+  /* 上傳頁那張照片也放進 session 同一種相框（.compare-card 的底、邊框、陰影），撐滿整欄、
+     照片在框裡置中。不然照片照比例縮在欄位中間，跟左欄之間空一大截，按下開始後換成
+     session 的相框又整個貼過去。多張的格子不套。 */
+  .prechat-stage:not(.is-batch){padding:var(--sp-3);box-sizing:border-box;border:1px solid var(--border);border-radius:var(--radius-lg);
+    background:
+      var(--card-sheen),
+      radial-gradient(ellipse 700px 420px at 50% 0%, rgba(var(--accent-rgb),.16) 0%, transparent 60%),
+      radial-gradient(ellipse 700px 320px at 50% 100%, rgba(var(--accent-2-rgb),.09) 0%, transparent 60%),
+      var(--card-2);
+    box-shadow:0 18px 44px rgba(0,0,0,.12),0 2px 6px rgba(0,0,0,.05)}
+  .prechat-stage:not(.is-batch) .prechat-shot img{border-radius:calc(var(--radius-lg) - var(--sp-3));box-shadow:none}
+  /* 上傳頁有照片時上面也掛步驟列（has-flow），下面那排就照 session 的算法：視窗扣掉標頭和
+     步驟列，上 10、下 20（.results-container 的內距、#batch-sidebar 的 margin），三欄撐滿，
+     不再用 100dvh − 150 置中、760 封頂。這樣左欄、照片、對話的上下緣跟 session 同一條線。 */
+  #upload-section .upload-container.has-flow{height:calc(100vh - var(--header-h) - var(--step-indicator-h,54px));padding-top:10px;padding-bottom:20px}
+  #upload-section .upload-container.has-flow .upload-content-row{align-items:stretch}
+  #upload-section .upload-container.has-flow .upload-content-row>:is(#batch-sidebar,.prechat-stage,.home-chat){
+    height:auto;max-height:none;min-height:0;align-self:stretch}
+}
+@media (max-width:1200px){.chat-flow-slot.is-pre{display:none}}
 
 /* The photo's frame was a dashed accent border laid over two accent radial
    washes -- decoration competing with the one thing it was there to frame. The

@@ -1403,14 +1403,24 @@ export function App() {
     const r = batchRunsRef.current[key];
     return !r || !!r.error;
   };
-  // 開始過、分析完、還沒美化的那張照片（正在看的那張用結果頁上的，其他張用背景問到的）。
-  const analyzedOnly = (key: string): Photo | null => {
+  // 開始過、照片已經進了 session、還能一鍵美化的那張（分析好的、還在分析的都算；正在看的那張
+  // 用結果頁上的，其他張用背景問到的）。
+  const renderableLive = (key: string): Photo | null => {
     const r = batchRuns[key];
     if (!r?.done || !r.sessionId || !r.photoId) return null;
     const p = r.sessionId === session?.session_id
       ? session.photos.find((x) => x.photo_id === r.photoId) || null : batchLive[key] || null;
-    return p && photoState(p).key === "analyzed" ? p : null;
+    return p && canRenderInAll(p) ? p : null;
   };
+  // 照片還在上傳、送的是「分析」：等它進了 session 再補美化。
+  const uploadingForAnalyze = (key: string) => {
+    const r = batchRuns[key];
+    return !!r && !r.done && !r.error && r.mode === "analyze";
+  };
+  // 「全部一鍵美化」會送到的：沒開始的、分析中或分析好還沒美化的，美化過或正在美化的不算。
+  const needsRender = (key: string) => unstarted(key) || uploadingForAnalyze(key) || !!renderableLive(key);
+  // 按了全部一鍵美化時還在上傳的那幾張，傳好就接著美化。
+  const renderWhenUploaded = useRef(new Set<string>());
 
   // 畫面上這張的對話收進 drafts。
   function snapshotDraft() {
@@ -1530,12 +1540,24 @@ export function App() {
       return pid;
     });
     batchQueue.current = job.catch(() => {});
+    // 上傳中按了全部一鍵美化的那張，傳好就接著在它自己的對話裡美化。
+    const thenRender = (pid: string) => {
+      if (renderWhenUploaded.current.delete(p.key) && live()) void renderStarted(p.key, id, pid, { ...p.settings });
+    };
     job.then(
-      (pid) => patchRun((r) => ({ ...r, done: true, sessionId: id, photoId: pid })),
+      (pid) => {
+        patchRun((r) => ({ ...r, done: true, sessionId: id, photoId: pid }));
+        thenRender(pid);
+      },
       (e) => {
         // 照片已經進了 session，後面哪一步沒成功就到結果頁再弄，不重傳一次。
-        if (uploaded) patchRun((r) => ({ ...r, done: true, sessionId: id, photoId: uploaded }));
-        else patchRun((r) => ({ ...r, error: errorText(e) }));
+        if (uploaded) {
+          patchRun((r) => ({ ...r, done: true, sessionId: id, photoId: uploaded }));
+          thenRender(uploaded);
+        } else {
+          renderWhenUploaded.current.delete(p.key);
+          patchRun((r) => ({ ...r, error: errorText(e) }));
+        }
       },
     );
   }
@@ -1559,9 +1581,11 @@ export function App() {
     const base = allSettings || settings;
     if (!base) return;
     const pending = batch.map((s, i) => ({ s, i, key: sourceSrc(s) })).filter((x) => unstarted(x.key));
-    // 一鍵美化也帶上已經分析好、還沒美化的那幾張，直接在它們各自的對話裡美化。
-    const analyzed = mode === "render" ? batch.map(sourceSrc).filter((k) => analyzedOnly(k)) : [];
-    if (!pending.length && !analyzed.length) return;
+    // 一鍵美化也帶上開始過、還沒美化的那幾張（分析好的、分析中的），直接在它們各自的對話裡美化；
+    // 還在上傳的等傳好再接著送。
+    const started = mode === "render" ? batch.map(sourceSrc).filter((k) => renderableLive(k)) : [];
+    const uploading = mode === "render" ? batch.map(sourceSrc).filter(uploadingForAnalyze) : [];
+    if (!pending.length && !started.length && !uploading.length) return;
     // 在結果頁按的：上傳頁那張已經收進草稿，每張都照草稿送，人留在目前的結果頁。
     const onPage = phase === "chat" ? batchKey : null;
     if (mode === "render" && !confirmed) {
@@ -1584,7 +1608,12 @@ export function App() {
     }
     setError("");
     // 跳到第一張的結果頁，其他張在背景照排傳完。
-    for (const key of analyzed) void renderAnalyzed(key);
+    for (const key of started) {
+      const r = batchRuns[key];
+      const p = renderableLive(key);
+      if (r?.sessionId && p) void renderStarted(key, r.sessionId, p.photo_id, p.plan);
+    }
+    for (const key of uploading) renderWhenUploaded.current.add(key);
     follow.current = onPage !== null && pending.length ? pending[0].key : null;
     for (const x of pending) {
       if (x.key === onPage) {
@@ -1607,24 +1636,20 @@ export function App() {
     }
   }
 
-  async function renderAnalyzed(key: string) {
-    const r = batchRuns[key];
-    const p = analyzedOnly(key);
-    if (!r?.sessionId || !p) return;
-    const id = r.sessionId;
+  async function renderStarted(key: string, id: string, pid: string, plan: Parameters<typeof renderMeta>[1]) {
     try {
-      await api.render(id, [p.photo_id]);
+      await api.render(id, [pid]);
     } catch (e) {
       // 缺人物確認跟單張一樣是預期的，進那張的結果頁再問。
       if (!(e instanceof ApiError) || e.status !== 409) setError(notice(errorText(e)));
     }
     const full = await api.getSession(id).catch(() => null);
     if (!full) return;
-    const last = [...(full.messages || [])].reverse().find((m) => m.card?.type === "render_requested" && m.card.photo_id === p.photo_id);
-    if (last && caps) rememberRenderLabel([last.id], { label: "一鍵美化", icon: "spark", meta: renderMeta(caps, p.plan) });
+    const last = [...(full.messages || [])].reverse().find((m) => m.card?.type === "render_requested" && m.card.photo_id === pid);
+    if (last && caps) rememberRenderLabel([last.id], { label: "一鍵美化", icon: "spark", meta: renderMeta(caps, plan) });
     if (session?.session_id === id) setSession(full);
     else {
-      const np = full.photos.find((x) => x.photo_id === p.photo_id);
+      const np = full.photos.find((x) => x.photo_id === pid);
       if (np) setBatchLive((m) => ({ ...m, [key]: np }));
     }
   }
@@ -2475,8 +2500,9 @@ export function App() {
       <>
         {header}
         <main>
+          <StepIndicator step={1} state="done" pre />
           <section id="upload-section" class="section visible">
-            <div class="container upload-container">
+            <div class="container upload-container has-flow">
               <div class="upload-grid">
                 <div class="upload-content-row is-chat">
                   <BatchPreSidebar
@@ -2486,7 +2512,7 @@ export function App() {
                     current={batchKey}
                     live={batchLive}
                     pending={pending}
-                    renderable={batch.filter((x) => unstarted(sourceSrc(x)) || !!analyzedOnly(sourceSrc(x))).length}
+                    renderable={batch.filter((x) => needsRender(sourceSrc(x))).length}
                     disabled={!!preAsk || busy}
                     onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : openBatchPhoto(s))}
                     onStartAll={startAllBatch}
@@ -2521,8 +2547,9 @@ export function App() {
       <>
         {header}
         <main>
+          <StepIndicator step={1} state="busy" pre />
           <section id="upload-section" class="section visible">
-            <div class="container upload-container">
+            <div class="container upload-container has-flow">
               <div class="upload-grid">
               <div class="upload-content-row is-chat">
                 <PreStage source={submitting.sources[0]} />
@@ -2562,7 +2589,7 @@ export function App() {
                   current={batchHere}
                   live={{ ...batchLive, [batchHere]: photo }}
                   pending={batch.filter((x) => unstarted(sourceSrc(x))).length}
-                  renderable={batch.filter((x) => unstarted(sourceSrc(x)) || !!analyzedOnly(sourceSrc(x))).length}
+                  renderable={batch.filter((x) => needsRender(sourceSrc(x))).length}
                   disabled={busy}
                   onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : backToBatch(s))}
                   onStartAll={startAllBatch}
@@ -2649,8 +2676,9 @@ export function App() {
     <>
       {header}
       <main>
+        {phase === "chat" && source && <StepIndicator step={1} state="done" pre />}
         <section id="upload-section" class="section visible">
-          <div class="container upload-container">
+          <div class={`container upload-container${phase === "chat" && source ? " has-flow" : ""}`}>
             <div class="upload-grid">
               {/* is-chat drops the 360px styles.css reserves on the right for the
                   fixed gallery rail -- with the rail unmounted it is padding
@@ -2745,7 +2773,6 @@ function BatchPreSidebar(props: {
     props.onPick(s);
   };
   const renderable = props.renderable ?? pending;
-  const all = pending === sources.length;
   const startAll = (mode: "analyze" | "render") => {
     setOpen(false);
     props.onStartAll(mode);
@@ -2830,17 +2857,17 @@ function BatchPreSidebar(props: {
         {pending || renderable ? (
           <div class="batch-sidebar-all">
             {pending ? <Chip
-              label={all ? "全部分析" : `分析其餘 ${pending} 張`}
+              label="全部分析"
               icon="search"
               disabled={props.disabled}
-              title="還沒開始的每張照它自己的需求和設定分析，開始過的不重送"
+              title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
               onClick={() => startAll("analyze")}
             /> : null}
             {renderable ? <Chip
-              label={renderable === sources.length ? "全部一鍵美化" : `美化其餘 ${renderable} 張`}
+              label="全部一鍵美化"
               icon="spark"
               disabled={props.disabled}
-              title="還沒開始的照它自己的需求和設定美化，已經分析好的直接美化，美化過的不重送"
+              title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
               onClick={() => startAll("render")}
             /> : null}
           </div>
@@ -2980,7 +3007,7 @@ function BatchSidebar(props: {
     if (top < box.scrollTop) box.scrollTop = top;
     else if (top + on.offsetHeight > box.scrollTop + box.clientHeight) box.scrollTop = top + on.offsetHeight - box.clientHeight;
   }, [current, open]);
-  // 有的美化過、有的還沒：只送還沒的，按鈕上直接寫會美化幾張。
+  // 有的美化過、有的還沒：只送還沒的。
   const todo = photos.filter(canRenderInAll);
   const pick = (id: string) => {
     setOpen(false);
@@ -3011,7 +3038,7 @@ function BatchSidebar(props: {
         {todo.length ? (
           <div class="batch-sidebar-all">
             <Chip
-              label={todo.length === photos.length ? "全部一鍵美化" : `美化其餘 ${todo.length} 張`}
+              label="全部一鍵美化"
               icon="spark"
               disabled={props.busy}
               title="還沒美化的每張照目前的設定美化，美化過的不重送"
