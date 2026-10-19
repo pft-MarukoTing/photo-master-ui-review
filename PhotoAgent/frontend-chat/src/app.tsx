@@ -5016,6 +5016,7 @@ function SessionView(props: {
                 busy={busyCopy}
                 onSelect={props.onSelectVersion}
                 onViewer={() => setViewing(true)}
+                debugUi={props.debugUi}
               />
               <div class="results-analysis-slot" id="results-analysis-slot">
                 <SplitGrip />

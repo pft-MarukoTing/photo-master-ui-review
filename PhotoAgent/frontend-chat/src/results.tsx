@@ -8,6 +8,7 @@ import { useBoxThumbs, executedPortraits, type PortraitDone } from "./face";
 import { downloadImage, executedRecipeItems, executedStyleLabels, personalizationText } from "./util";
 import { Icon } from "./icons";
 import { ConfirmModal } from "./home";
+import { PromptsModal } from "./prompts-modal";
 import type { VNode } from "preact";
 
 const STEP_NAMES = ["上傳", "分析", "美化", "完成"];
@@ -137,6 +138,8 @@ interface CanvasProps {
   // 手機和直拿的平板：右上角那顆「第 N 版 ⌄」和點照片本身，都開大圖檢視切版本。桌機用不到，
   // 那邊有下面的美化紀錄；按鈕一直都在，只是桌機的 CSS 把它收起來。
   onViewer?: () => void;
+  // 面板的 debug 模式：多一顆按鈕，看這一版實際送給各個模型的 prompt。
+  debugUi?: boolean;
 }
 
 // 下載後跟面板模式一樣：成功跳「已下載完成。」，失敗跳「下載失敗，請稍後再試。」。
@@ -150,7 +153,7 @@ function useDownload(): [(job: string, base: string) => void, VNode | null] {
   return [start, el];
 }
 
-export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer }: CanvasProps) {
+export function ResultsCanvas({ caps, photo, versions, current, pending, busy, onSelect, onViewer, debugUi }: CanvasProps) {
   const [showGenerated, setShowGenerated] = useState(true);
   const [download, downloadNotice] = useDownload();
   // 在美化紀錄點了「原圖」：大圖停在原圖，Before/After 比較這時沒有對象，
@@ -164,6 +167,7 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   const [madeWith, setMadeWith] = useState<Record<string, MadeWith>>({});
   // Which read-out the bubble is showing, if any.
   const [open, setOpen] = useState<Detail | null>(null);
+  const [promptsOpen, setPromptsOpen] = useState(false);
   const topRef = useRef<HTMLDivElement>(null);
   const tagsRef = useRef<HTMLDivElement>(null);
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -244,18 +248,21 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
   // was on screen when it opened.
   useEffect(() => setOpen(null), [current?.version_id, showGenerated, originPicked]);
 
+  useEffect(() => setPromptsOpen(false), [current?.version_id, photo.photo_id, busy]);
+
   useEffect(() => {
-    if (!fullscreen && !open) return;
+    if (!fullscreen && !open && !promptsOpen) return;
     // One Escape chain, innermost first: the bubble floats over the photo, so
     // dismissing it should not also drop the fullscreen view behind it.
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (open) setOpen(null);
+      if (promptsOpen) setPromptsOpen(false);
+      else if (open) setOpen(null);
       else setFullscreen(false);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [fullscreen, open]);
+  }, [fullscreen, open, promptsOpen]);
 
   // Dismiss the bubble by clicking anywhere outside it. The row's buttons are
   // excluded because mousedown lands before their own click, which would
@@ -424,6 +431,20 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
                       />
                     </svg>
                   </button>
+                  {debugUi && job && !busy && !originPicked && (
+                    <button
+                      id="show-prompt-btn"
+                      class="canvas-btn"
+                      type="button"
+                      aria-label="顯示 Prompt"
+                      onClick={() => setPromptsOpen(true)}
+                    >
+                      <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+                        <path d="M4 4h16v12H9l-4 4V4Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M8 9h8M8 12.5h5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                      </svg>
+                    </button>
+                  )}
                   {/* 看原圖時這顆下載的還是那一版的成果，對不上畫面 -- 先收起來。 */}
                   {job && !busy && !originPicked && (
                     <div class="canvas-btn-wrap" id="download-menu-wrap">
@@ -655,6 +676,9 @@ export function ResultsCanvas({ caps, photo, versions, current, pending, busy, o
         onClick={() => setFullscreen(false)}
       />
       {downloadNotice}
+      {promptsOpen && job && current && (
+        <PromptsModal job={job} ordinal={current.ordinal} source={source} onClose={() => setPromptsOpen(false)} />
+      )}
     </div>
   );
 }
