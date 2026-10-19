@@ -7407,14 +7407,15 @@
         if (listed) hideCaseGroupSidebar();
         return;
       }
-      let session;
-      try {
-        session = await getChatSession(user, group.session_id);
-      } catch {
-        return; // expired, or a transient failure -- the photo still shows on its own
-      }
+      // A batch uploaded on the chat page is one session per photo, listed
+      // in session_ids in upload order; an older multi-photo upload is one
+      // session holding them all. Either way the photos are those sessions'.
+      const ids = group.session_ids?.length ? group.session_ids : [group.session_id];
+      const sessions = await Promise.all(ids.map((id) => getChatSession(user, id).catch(() => null)));
+      // expired, or a transient failure -- the photo still shows on its own
+      if (!sessions.some(Boolean)) return;
       if (token !== caseGroupSidebarToken || getCurrentUser() !== user) return;
-      const photos = (session.photos || []).filter((p) => p.case_id);
+      const photos = sessions.flatMap((s) => s?.photos || []).filter((p) => p.case_id);
       if (photos.length < 2) return;
       renderCaseGroupSidebar(group.session_id, photos, caseKey);
     })();
