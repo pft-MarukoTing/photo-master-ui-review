@@ -426,6 +426,21 @@ export function UploadBubble({ src, text, onOpen }: { src: string; text: string;
   );
 }
 
+// 多張一起上傳：前幾張並排示意，多的寫 +N，不能點。
+export function BatchUploadBubble({ srcs, text }: { srcs: string[]; text: string }) {
+  const shown = srcs.slice(0, 4);
+  const more = srcs.length - shown.length;
+  return (
+    <div class="chat-upload is-batch">
+      <div class="chat-upload-stack" aria-hidden="true">
+        {shown.map((s) => <img key={s} src={s} alt="" />)}
+        {more > 0 && <span>+{more}</span>}
+      </div>
+      <div class="chat-bubble">{text}</div>
+    </div>
+  );
+}
+
 // The photo on its own over the page. Tapping anywhere but the photo, the
 // close button or Esc puts it away.
 export function PhotoViewer({ src, onClose }: { src: string | null; onClose: () => void }) {

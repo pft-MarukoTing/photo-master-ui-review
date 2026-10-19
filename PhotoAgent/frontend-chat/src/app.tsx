@@ -30,6 +30,7 @@ import {
   PhotoViewer,
   SamplePicker,
   UploadBubble,
+  BatchUploadBubble,
   UserMsg,
   WorkingCard,
   useWorkLog,
@@ -502,6 +503,31 @@ type BatchDraft = {
   peopleReady: boolean;
 };
 
+// 多張上傳的總覽頁對話，一輪一筆：一起送的需求、開過的設定、一鍵美化時問的那句、
+// 一起開始的紀錄。需求本身收進每張自己的草稿，這裡只留畫面上那句話。
+type OverviewTurn =
+  | { id: number; kind: "wish"; text: string; count: number; skipped: number }
+  | { id: number; kind: "settings"; settings?: Settings }
+  | { id: number; kind: "ask"; overwrite?: boolean }
+  | { id: number; kind: "start"; mode: "analyze" | "render"; count: number; overwrite?: boolean };
+// 總覽說的需求放進每張對話時，AI 在那張裡回的話。
+const OVERVIEW_NOTE_REPLY = "好，這句是在總覽說的，這張也會照著修。只想改這張的話，直接在這裡說。";
+
+// 「我的照片」每張的狀態：開始了照 session 裡真的跑到哪，還沒開始的看有沒有講過需求。
+function batchItemState(r: BatchRun | undefined, p: Photo | null, wished: boolean): { key: string; text: string } {
+  return p
+    ? photoState(p)
+    : r?.error
+      ? { key: "error", text: "失敗" }
+      : r?.done
+        ? { key: "analyzed", text: "已開始" }
+        : r
+          ? { key: "uploading", text: "上傳中" }
+          : wished
+            ? { key: "", text: "有需求" }
+            : { key: "", text: "未開始" };
+}
+
 // The same words, for the server to find and replace. A position is not a name
 // and the analysis will have one; the box is what survives the handover, so the
 // pick travels alongside the prompt as plan.prompt_faces and the server settles
@@ -695,6 +721,10 @@ export function App() {
   // 剛按開始的那張：傳好就打開它的結果頁。中途切到別張就不跳了。
   const follow = useRef<string | null>(null);
   const batchKey = source ? sourceSrc(source) : null;
+  // 總覽頁（多張、沒有打開哪一張）自己的對話：送出的共用需求、開過的設定、一起開始的紀錄。
+  const [overview, setOverview] = useState<OverviewTurn[]>([]);
+  // 這一輪總覽設定裡，選了「保留自己的」那幾張：同一輪再改就不再問。
+  const keepOwn = useRef(new Set<string>());
 
   // ── The upload page's own face picker ─────────────────────────────────────
   // A separate worker preview starts on selection; feature-off retains the
@@ -1108,6 +1138,8 @@ export function App() {
     setBatchRuns({});
     setBatchLive({});
     setAllSettings(null);
+    setOverview([]);
+    keepOwn.current = new Set();
     batchQueue.current = Promise.resolve();
     batchEpoch.current++;
     batchId.current = null;
@@ -1305,12 +1337,15 @@ export function App() {
     setPhase("chat");
     setBatch(sources);
     batchId.current = `b_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-    // 一進來就打開第一張，跟只上傳一張時一樣從它自己的對話開始。
+    // 一進來先到總覽：可以全部一起開始、一起改設定、講一次套到每張；要個別調整再點那張。
     const base = caps ? defaultSettings(caps, prefs || undefined) : settings;
     if (base) {
       setAllSettings(base);
-      applyDraft(sources[0], freshDraft(base));
+      applyDraft(null, null);
+      setSettings(base);
     }
+    setOverview([]);
+    keepOwn.current = new Set();
     setError(message);
     window.scrollTo(0, 0);
   }
@@ -1335,11 +1370,8 @@ export function App() {
         setBatch(null);
       } else choose(rest[0]);
     } else {
-      // 拿掉的是畫面上這張，就換成它後面那張（拿的是最後一張就前一張）。
-      if (key === batchKey) {
-        const next = rest[Math.min(i, rest.length - 1)];
-        applyDraft(next, drafts.current[sourceSrc(next)] || freshDraft());
-      }
+      // 拿掉的是畫面上這張，就回總覽。
+      if (key === batchKey) applyDraft(null, null);
       setBatch(rest);
     }
     setError("");
@@ -1710,6 +1742,100 @@ export function App() {
     if (key !== batchKey) applyDraft(next, drafts.current[key] || freshDraft());
     window.scrollTo(0, 0);
   }
+  // ── 多張上傳的總覽頁：不打開哪一張，對全部一起下指令 ──
+  // 左邊「總覽」那格：從某一張的對話或結果頁回總覽。
+  function openOverview() {
+    if (!batch || preAsk || busy) return;
+    follow.current = null;
+    if (phase === "session") {
+      setSession(null);
+      setSelected(null);
+      setSessionHash(null);
+      setPhase("chat");
+    } else if (!batchKey) return;
+    else snapshotDraft();
+    applyDraft(null, null);
+    window.scrollTo(0, 0);
+  }
+  // 總覽說的一句需求：放進每張還沒開始的照片自己的個人化需求，之後點那張還能再改。
+  // 它們原本選過的一鍵美化方式跟著作廢，下次一鍵美化再問一次。
+  function overviewWish(text: string) {
+    if (!batch) return;
+    const keys = batch.map(sourceSrc);
+    const open = keys.filter(unstarted);
+    for (const k of open) {
+      const d = drafts.current[k] || freshDraft();
+      const note: Note = { order: nextDisplayOrder(), replyOrder: nextDisplayOrder(), text, persons: [], kept: true, reply: OVERVIEW_NOTE_REPLY };
+      drafts.current[k] = { ...d, notes: [...d.notes, note], renderAsk: null };
+    }
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "wish", text, count: open.length, skipped: keys.length - open.length }]);
+    setError("");
+  }
+  // 總覽的「設定」：開一輪新的，上一輪選過「保留各自的」那幾張這輪再問一次。
+  function overviewEditSettings() {
+    if (!allSettings || overview[overview.length - 1]?.kind === "settings") return;
+    keepOwn.current = new Set();
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "settings", settings: allSettings }]);
+  }
+  // 總覽改的設定套到每張還沒開始的；在單張頁另外改過的，先問要換成總覽的還是留著。
+  function overviewSettings(next: Settings) {
+    const prev = allSettings;
+    if (!batch || !prev) return;
+    setAllSettings(next);
+    setSettings(next);
+    setOverview((t) => t.map((x, i) => (i === t.length - 1 && x.kind === "settings" ? { ...x, settings: next } : x)));
+    const own: { key: string; i: number }[] = [];
+    batch.forEach((s, i) => {
+      const key = sourceSrc(s);
+      const d = drafts.current[key];
+      if (!d || !unstarted(key)) return;
+      if (sameSettings(d.settings, prev)) d.settings = next;
+      else if (!keepOwn.current.has(key)) own.push({ key, i });
+    });
+    if (!own.length) return;
+    setLeaveAsk({
+      message: `第 ${own.map((x) => x.i + 1).join("、")} 張在單張頁改過設定，要換成總覽的設定，還是保留它們自己的？`,
+      confirmLabel: "換成總覽的",
+      cancelLabel: "保留各自的",
+      answer: (yes) => {
+        setLeaveAsk(null);
+        for (const x of own) {
+          const d = drafts.current[x.key];
+          if (yes && d) d.settings = next;
+          else keepOwn.current.add(x.key);
+        }
+      },
+    });
+  }
+  // 總覽的全部分析／全部一鍵美化。一鍵美化時有需求、還沒選怎麼套用的，先在總覽問一次。
+  function overviewStart(mode: "analyze" | "render") {
+    if (!batch || busy || preAsk) return;
+    if (mode === "render") {
+      const unasked = batch.map(sourceSrc).filter((k) => unstarted(k) && batchWished(k) && drafts.current[k]?.renderAsk?.overwrite === undefined);
+      if (unasked.length) {
+        setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "ask" }]);
+        return;
+      }
+    }
+    overviewGo(mode);
+  }
+  function overviewRenderMode(overwrite: boolean) {
+    if (!batch) return;
+    for (const k of batch.map(sourceSrc)) {
+      const d = drafts.current[k];
+      if (d && unstarted(k) && batchWished(k) && d.renderAsk?.overwrite === undefined)
+        d.renderAsk = { later: laterNote(d.notes), log: d.notes, overwrite };
+    }
+    setOverview((t) => t.map((x, i) => (i === t.length - 1 && x.kind === "ask" ? { ...x, overwrite } : x)));
+    overviewGo("render", overwrite);
+  }
+  function overviewGo(mode: "analyze" | "render", overwrite?: boolean) {
+    if (!batch) return;
+    const count = batch.map(sourceSrc).filter((k) => (mode === "render" ? needsRender(k) : unstarted(k))).length;
+    setOverview((t) => [...t, { id: nextDisplayOrder(), kind: "start", mode, count, overwrite }]);
+    startAllBatch(mode, true);
+  }
+
   useEffect(() => {
     const key = follow.current;
     if (!key || phase !== "chat") return;
@@ -2491,11 +2617,146 @@ export function App() {
     </ChatPanel>
   );
 
-  // 多張的上傳頁：左邊是「我的照片」，點一張就是那張自己的對話，跟只上傳一張時一樣；
-  // 一進來就打開第一張。最上面兩顆把還沒開始的每張一起送出。
+  // 多張的上傳頁：左邊是「我的照片」，最上面那格是總覽，點一張就是那張自己的對話，跟只
+  // 上傳一張時一樣；一進來先到總覽。最上面兩顆把還沒開始的每張一起送出。
   if (phase === "chat" && batch && batch.length > 1) {
     const anyRun = Object.keys(batchRuns).length > 0;
     const pending = batch.filter((x) => unstarted(sourceSrc(x))).length;
+    const renderable = batch.filter((x) => needsRender(sourceSrc(x))).length;
+    const pickBatch = (s: Source) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : openBatchPhoto(s));
+    const lastTurn = overview[overview.length - 1];
+    // 一鍵美化正在問怎麼套用：選項就是那兩顆，底下那排先收起來。
+    const askOpen = lastTurn?.kind === "ask" && lastTurn.overwrite === undefined;
+    const overviewHeld = busy || !!preAsk;
+    const settingsLine = (x?: Settings) => x && (
+      <div class="chat-card chat-settings-history"><span class="chat-meta">當時的設定</span>
+        <p>{x.analysis_model} · {x.render_option} · {x.aspect_ratio}</p>
+        <p>詳細解說：{x.detailed_explanation ? "開啟" : "關閉"}</p>
+        {caps && <p>{caps.advanced_options.map((o) => `${o.label}：${x.advanced_options?.[o.key] ?? o.default ? "開啟" : "關閉"}`).join(" · ")}</p>}
+      </div>
+    );
+    // 總覽：沒有中間那格預覽，對話直接佔滿；照片都在左邊「我的照片」。
+    const overviewPanel = !source && (
+      <ChatPanel
+        class="home-chat is-overview"
+        sub="總覽"
+        onDropFiles={busy ? undefined : appendFiles}
+        footer={
+          <Composer
+              onFile={(f) => appendFiles([f])}
+              onFiles={appendFiles}
+              attachTitle="新增照片"
+              onSample={showSamples}
+              disabled={overviewHeld || !pending}
+              onSend={async (text) => {
+                if (!text) return false;
+                overviewWish(text);
+                return true;
+              }}
+              clearKey={preClear}
+              placeholder={pending ? ["想怎麼美化這幾張？會套用到每一張", "想怎麼美化這幾張？"] : "每張都開始了，點左邊照片看結果"}
+            />
+        }
+      >
+        <UserMsg>
+          <BatchUploadBubble srcs={batch.map(sourceSrc)} text={`上傳了 ${batch.length} 張照片`} />
+        </UserMsg>
+        {/* 先說收到幾張、這頁是什麼，再說這裡能做的三件事各是什麼，最後才講「只改一張」
+            和怎麼回來——使用者第一次看到總覽，要先知道這裡講的話會落到每一張上。 */}
+        <AssistantMsg>
+          <p class="chat-text">收到你上傳的 {batch.length} 張照片了。</p>
+          <p class="chat-text">這裡是這批照片的總覽，在這裡做的事會一次套用到每一張，不用一張一張來：</p>
+          <ul class="chat-list">
+            <li><b>全部分析</b>：每張先看過，讓你看我打算各修什麼。</li>
+            <li><b>全部一鍵美化</b>：不用等分析，直接把每張美化好。</li>
+            <li><b>設定</b>：動手前先一起換引擎或長寬比。</li>
+          </ul>
+          <p class="chat-text">想怎麼修也可以直接打在下面，會套用在所有照片上。</p>
+          <p class="chat-text chat-muted">只想調整某一張，就從左邊「我的照片」點那張；之後想回來這裡，點最上面的「總覽」。</p>
+        </AssistantMsg>
+        {overview.map((t, i) => {
+          const latest = i === overview.length - 1;
+          if (t.kind === "wish") return (
+            <div key={t.id} class="note-turn">
+              <AskBubble text={t.text} />
+              <AssistantMsg>
+                <p class="chat-text">
+                  {t.count
+                    ? `好，這句會套用在 ${t.count} 張照片上。${t.skipped ? `已經開始的 ${t.skipped} 張不會套用。` : ""}只想改某一張，點左邊那張調整就好。`
+                    : "每張都已經開始了，這句不會套用；要改哪一張，到那張的結果頁說就好。"}
+                </p>
+              </AssistantMsg>
+            </div>
+          );
+          if (t.kind === "settings") return (
+            <div key={t.id} class="settings-turn">
+              <UserMsg><ClickBubble icon="tune" label="設定" /></UserMsg>
+              <AssistantMsg>
+                <p class="chat-text">好，調整下面的設定，會套用到每張還沒開始的照片。</p>
+                {latest && caps && settings
+                  ? <SettingsEditor caps={caps} settings={settings} onChange={overviewSettings} />
+                  : settingsLine(t.settings)}
+              </AssistantMsg>
+            </div>
+          );
+          if (t.kind === "ask") return (
+            <div key={t.id}>
+              <UserMsg><ClickBubble icon="spark" label="全部一鍵美化" /></UserMsg>
+              <AssistantMsg>
+                <p class="chat-text">有幾張講了需求，要整體美化，還是僅依需求修改？在單張頁已經選過的，照它自己選的。</p>
+                <p class="chat-text chat-muted">
+                  {WITH_ANALYSIS_LABEL}：照需求修改，光線、人像、構圖也一起調整。{ONLY_PROMPT_LABEL}：只動寫到的地方，其他保持原樣。
+                </p>
+                <div class="chat-choices">
+                  {[
+                    { label: WITH_ANALYSIS_LABEL, overwrite: false },
+                    { label: ONLY_PROMPT_LABEL, overwrite: true },
+                  ].map((o) => (
+                    <Chip
+                      label={o.label}
+                      kind={t.overwrite === o.overwrite ? "picked" : undefined}
+                      settled={t.overwrite !== undefined}
+                      disabled={overviewHeld}
+                      onClick={() => overviewRenderMode(o.overwrite)}
+                    />
+                  ))}
+                </div>
+              </AssistantMsg>
+            </div>
+          );
+          // 選了怎麼套用就接著開始，按鈕上面那句已經是使用者的選擇，不再重複一顆。
+          const asked = overview[i - 1]?.kind === "ask";
+          return (
+            <div key={t.id}>
+              {!asked && <UserMsg><ClickBubble icon={t.mode === "analyze" ? "search" : "spark"} label={t.mode === "analyze" ? "全部分析" : "全部一鍵美化"} /></UserMsg>}
+              <AssistantMsg>
+                <p class="chat-text">
+                  {`好，${t.count} 張開始${t.mode === "analyze" ? "分析" : t.overwrite ? "調整" : "美化"}了，每張的進度看左邊「我的照片」，點那張可以看結果。`}
+                </p>
+              </AssistantMsg>
+            </div>
+          );
+        })}
+        {!askOpen && (
+          pending || renderable ? (
+            <div class="prechat-actions">
+              <div class="chat-choices chat-actions">
+                <div class="chat-actions-aux">
+                  {pending ? <Chip label="設定" icon="tune" kind="ghost" disabled={overviewHeld} onClick={overviewEditSettings} /> : null}
+                </div>
+                <div class="chat-actions-main">
+                  {pending ? <Chip label="全部分析" icon="search" kind="primary" disabled={overviewHeld} onClick={() => overviewStart("analyze")} /> : null}
+                  {renderable ? <Chip label="全部一鍵美化" icon="spark" kind="primary" disabled={overviewHeld} onClick={() => overviewStart("render")} /> : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <AssistantMsg><p class="chat-text">每張都開始了，點左邊的照片可以看結果。</p></AssistantMsg>
+          )
+        )}
+        {error && <ErrorMsg text={error} />}
+      </ChatPanel>
+    );
     return (
       <>
         {header}
@@ -2512,20 +2773,25 @@ export function App() {
                     current={batchKey}
                     live={batchLive}
                     pending={pending}
-                    renderable={batch.filter((x) => needsRender(sourceSrc(x))).length}
+                    renderable={renderable}
                     disabled={!!preAsk || busy}
-                    onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : openBatchPhoto(s))}
-                    onStartAll={startAllBatch}
+                    onPick={pickBatch}
+                    overview={!source}
+                    onOverview={openOverview}
+                    // 在總覽按的，跟總覽底下那兩顆一樣記進總覽的對話。
+                    onStartAll={(m) => (source ? startAllBatch(m) : overviewStart(m))}
                     onRemove={busy ? undefined : removeFromBatch}
                     onClear={busy || anyRun ? undefined : clearBatch}
                     onAdd={busy ? undefined : appendFiles}
                     onSamples={busy ? undefined : showSamples}
                   />
-                  {source && (
+                  {source ? (
                     <>
                       <PreStage source={source} />
                       {preChatPanel}
                     </>
+                  ) : (
+                    overviewPanel
                   )}
                 </div>
               </div>
@@ -2592,6 +2858,7 @@ export function App() {
                   renderable={batch.filter((x) => needsRender(sourceSrc(x))).length}
                   disabled={busy}
                   onPick={(s) => (batchRuns[sourceSrc(s)]?.sessionId ? openBatchResult(sourceSrc(s)) : backToBatch(s))}
+                  onOverview={openOverview}
                   onStartAll={startAllBatch}
                 />
               ) : session.photos.length > 1 && (
@@ -2740,6 +3007,9 @@ function BatchPreSidebar(props: {
   renderable?: number;
   disabled: boolean;
   onPick: (s: Source) => void;
+  // 列表最上面那格「總覽」：回到對全部一起下指令的那頁。overview 是現在就在總覽。
+  onOverview?: () => void;
+  overview?: boolean;
   onStartAll: (mode: "analyze" | "render") => void;
   onRemove?: (i: number) => void;
   onClear?: () => void;
@@ -2854,11 +3124,36 @@ function BatchPreSidebar(props: {
           )}
           </div>
         </div>
+        {/* 「總覽」不是一張照片，所以不做成方塊混在照片裡：一條橫的，放在照片列表上面、
+            跟「全部…」那兩顆同一區，一看就知道是整批的入口。 */}
+        {props.onOverview && (
+          <button
+            type="button"
+            aria-current={props.overview ? "page" : undefined}
+            title="回到總覽，全部一起分析、美化或調整設定"
+            class={`batch-overview-entry${props.overview ? " is-on" : ""}`}
+            disabled={props.disabled && !props.overview}
+            onClick={() => {
+              setOpen(false);
+              props.onOverview!();
+            }}
+          >
+            <span class={`batch-overview-mosaic is-${Math.min(sources.length, 4)}`} aria-hidden="true">
+              {sources.slice(0, 4).map((s) => <img key={sourceSrc(s)} src={sourceSrc(s)} alt="" />)}
+            </span>
+            <span class="batch-overview-text">
+              <b>總覽</b>
+            </span>
+            <Icon name="next" size={14} />
+          </button>
+        )}
         {pending || renderable ? (
-          <div class="batch-sidebar-all">
+          // 每次進到總覽重新掛一次，那兩顆就再跳一下，提示這裡可以一次處理全部。
+          <div key={props.overview ? "overview" : "single"} class={`batch-sidebar-all${props.overview && !props.disabled ? " is-nudge" : ""}`}>
             {pending ? <Chip
               label="全部分析"
               icon="search"
+              kind="primary"
               disabled={props.disabled}
               title="還沒分析過的每張照它自己的需求和設定分析，分析過或正在分析的不重送"
               onClick={() => startAll("analyze")}
@@ -2866,6 +3161,7 @@ function BatchPreSidebar(props: {
             {renderable ? <Chip
               label="全部一鍵美化"
               icon="spark"
+              kind="primary"
               disabled={props.disabled}
               title="還沒美化過的每張都送：沒分析的先分析再美化，分析中或分析好的接著美化，美化過或正在美化的不重送"
               onClick={() => startAll("render")}
@@ -2877,17 +3173,7 @@ function BatchPreSidebar(props: {
             const key = sourceSrc(s);
             const r = runs[key];
             const p = live?.[key] || null;
-            const state = p
-              ? photoState(p)
-              : r?.error
-              ? { key: "error", text: "失敗" }
-              : r?.done
-                ? { key: "analyzed", text: "已開始" }
-                : r
-                  ? { key: "uploading", text: "上傳中" }
-                  : props.wished(key)
-                    ? { key: "", text: "有需求" }
-                    : { key: "", text: "未開始" };
+            const state = batchItemState(r, p, props.wished(key));
             const on = key === current;
             return (
               <button
@@ -3040,6 +3326,7 @@ function BatchSidebar(props: {
             <Chip
               label="全部一鍵美化"
               icon="spark"
+              kind="primary"
               disabled={props.busy}
               title="還沒美化的每張照目前的設定美化，美化過的不重送"
               onClick={props.onRenderAll}

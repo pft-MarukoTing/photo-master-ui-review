@@ -684,6 +684,34 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 .batch-area.is-scroll .batch-grid.is-fit{padding:2px 0 var(--sp-3)}
 .batch-grid.is-fit li{flex:0 0 var(--cell);width:var(--cell);height:var(--cell);aspect-ratio:auto;border-radius:var(--radius-lg);
   box-shadow:0 10px 28px rgba(0,0,0,.1),0 2px 6px rgba(0,0,0,.05)}
+/* 總覽：沒有預覽台面，對話佔滿左欄以外的寬度。面板撐開，但字不跟著拉長——
+   對話內容和輸入框收在中間 1040px 一欄，太寬一行讀不完，再窄兩邊又空太多。
+   跟左欄的 40px 欄距不動，跟 session 頁一樣，切過去版面才不會跳。 */
+.upload-content-row>.home-chat.is-overview{flex:1 1 0%;width:auto;max-width:none}
+.home-chat.is-overview .chat-timeline{padding-inline:max(var(--sp-5),calc((100% - 1040px) / 2))}
+.home-chat.is-overview .chat-composer{padding-inline:max(var(--sp-3),calc((100% - 1064px) / 2))}
+.chat-list{margin:0;padding-left:1.2em;font-size:15px;line-height:1.8;color:var(--n84)}
+.chat-list b{font-weight:700;color:var(--n100)}
+/* 側欄的「總覽」入口：橫條，不是照片方塊。小小的 2×2 拼圖 + 「總覽」，選中時跟單張方塊一樣
+   用 accent 框，底色走 tonal（不用實心深色）。 */
+.batch-overview-entry{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding:6px 8px 6px 6px;
+  box-sizing:border-box;border:1px solid var(--n24);border-radius:var(--radius);background:var(--n09);
+  font:inherit;color:var(--n84);text-align:left;cursor:pointer;transition:background .15s,border-color .15s}
+.batch-overview-entry:hover{background:var(--tonal-lo);border-color:var(--tonal-hi)}
+.batch-overview-entry:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.batch-overview-entry.is-on{background:var(--tonal);border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.batch-overview-entry:disabled{cursor:default;opacity:.55}
+.batch-overview-entry>svg{flex:none;color:var(--n54)}
+.batch-overview-entry.is-on>svg{color:var(--accent)}
+.batch-overview-text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;line-height:1.25}
+.batch-overview-text b{font-size:14px;font-weight:700;color:var(--n100)}
+.batch-overview-text small{font-size:11px;color:var(--n54);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.batch-overview-mosaic{flex:none;width:36px;height:36px;display:grid;gap:2px;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
+  border-radius:8px;overflow:hidden;background:var(--n14)}
+.batch-overview-mosaic img{display:block;width:100%;height:100%;min-width:0;min-height:0;object-fit:cover}
+.batch-overview-mosaic.is-1{grid-template-columns:1fr;grid-template-rows:1fr}
+.batch-overview-mosaic.is-2{grid-template-rows:1fr}
+.batch-overview-mosaic.is-3 img:first-child{grid-row:span 2}
 /* 對話裡的多張上傳：幾張縮圖並排，多的寫 +N。 */
 .chat-upload-stack{display:flex;gap:4px;flex:none}
 .chat-upload.is-batch .chat-upload-stack img,
@@ -706,6 +734,18 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
 }
 .batch-sidebar-all{margin:0 0 12px;display:flex;flex-direction:column;gap:6px}
 .batch-sidebar-all .chat-chip{width:100%;justify-content:center}
+/* 進到總覽時那兩顆輕輕跳兩下、外圈亮一下，告訴使用者「從這裡一次處理全部」。
+   只跳一輪就停，不一直動；系統設定減少動態就不跳。 */
+.batch-sidebar-all.is-nudge .chat-chip:not([disabled]){animation:batch-nudge 1.1s cubic-bezier(.3,.7,.4,1) .35s 1 both}
+.batch-sidebar-all.is-nudge .chat-chip:not([disabled])+.chat-chip:not([disabled]){animation-delay:.5s}
+@keyframes batch-nudge{
+  0%,100%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}
+  18%{transform:translateY(-4px)}
+  34%{transform:none;box-shadow:0 0 0 5px rgba(var(--accent-rgb),.22)}
+  50%{transform:translateY(-2px)}
+  66%{transform:none;box-shadow:0 0 0 0 rgba(var(--accent-rgb),0)}
+}
+@media (prefers-reduced-motion:reduce){.batch-sidebar-all.is-nudge .chat-chip{animation:none!important}}
 /* 手機和直拿的平板：跟舊版 ≤900 一樣收成從左邊拉出來的抽屜，左上角那顆開。舊版那組只
    寫到 900，901–1200 直拿也是這套直排版面，所以這裡連那段一起重寫一次（上面那條桌機
    規則比舊版的選擇器重，不在這裡蓋回去就會變回擺在版面裡）。 */
@@ -870,6 +910,7 @@ body{font-family:Inter,'Noto Sans TC',system-ui,-apple-system,'Segoe UI',sans-se
   /* 多張要一個定高，格子才分得出每列多高。 */
   .prechat-stage.is-batch{height:34dvh}
   .upload-content-row>.home-chat{max-width:none;height:56dvh;max-height:none;min-height:360px}
+  .upload-content-row>.home-chat.is-overview{height:calc(56dvh + 34dvh)}
 }
 
 @media (max-width:900px){
@@ -1685,6 +1726,7 @@ div.chat-proposal-row{cursor:default}
   #upload-section .upload-content-row>.prechat-stage{flex:1 1 0%;width:auto;height:100%}
   #upload-section .upload-content-row>.home-chat{flex:0 0 500px;width:500px;max-width:none;height:100%}
   #upload-section .upload-content-row>.home-chat.is-solo{flex:0 1 auto;width:min(100%,720px);max-width:720px}
+  #upload-section .upload-content-row>.home-chat.is-overview{flex:1 1 0%;width:auto}
 }
 
 /* ---------- 平板對話頁（橫拿）----------
